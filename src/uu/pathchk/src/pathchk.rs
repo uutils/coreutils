@@ -8,14 +8,11 @@
 //  * that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) lstat
-
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::display::Quotable;
+use uucore::error::{set_exit_code, UResult, UUsageError};
 use uucore::InvalidEncodingHandling;
 
 // operating mode
@@ -43,7 +40,8 @@ fn usage() -> String {
     format!("{0} [OPTION]... NAME...", uucore::execution_phrase())
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -68,34 +66,26 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     // take necessary actions
     let paths = matches.values_of(options::PATH);
-    let mut res = if paths.is_none() {
-        show_error!(
-            "missing operand\nTry '{} --help' for more information",
-            uucore::execution_phrase()
-        );
-        false
-    } else {
-        true
-    };
+    if paths.is_none() {
+        return Err(UUsageError::new(1, "missing operand"));
+    }
 
-    if res {
-        // free strings are path operands
-        // FIXME: TCS, seems inefficient and overly verbose (?)
-        for p in paths.unwrap() {
-            let mut path = Vec::new();
-            for path_segment in p.split('/') {
-                path.push(path_segment.to_string());
-            }
-            res &= check_path(&mode, &path);
+    // free strings are path operands
+    // FIXME: TCS, seems inefficient and overly verbose (?)
+    let mut res = true;
+    for p in paths.unwrap() {
+        let mut path = Vec::new();
+        for path_segment in p.split('/') {
+            path.push(path_segment.to_string());
         }
+        res &= check_path(&mode, &path);
     }
 
     // determine error code
-    if res {
-        0
-    } else {
-        1
+    if !res {
+        set_exit_code(1);
     }
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
