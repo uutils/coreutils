@@ -3,6 +3,7 @@
 // spell-checker:ignore (ToDO) LONGHELP FORMATSTRING templating parameterizing formatstr
 
 use clap::{crate_version, App, Arg};
+use uucore::error::{UResult, UUsageError};
 use uucore::InvalidEncodingHandling;
 
 mod cli;
@@ -273,18 +274,14 @@ COPYRIGHT :
 
 ";
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
     if args.len() <= 1 {
-        println!(
-            "{0}: missing operand\nTry '{1} --help' for more information.",
-            uucore::util_name(),
-            uucore::execution_phrase()
-        );
-        return 1;
+        return Err(UUsageError::new(1, "missing operand"));
     }
     let formatstr = &args[1];
 
@@ -296,7 +293,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let printf_args = &args[2..];
         memo::Memo::run_all(formatstr, printf_args);
     }
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
