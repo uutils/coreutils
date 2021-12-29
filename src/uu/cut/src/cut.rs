@@ -16,6 +16,7 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult, USimpleError};
 
 use self::searcher::Searcher;
 use uucore::ranges::Range;
@@ -142,7 +143,7 @@ fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
     }
 }
 
-fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
+fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()> {
     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
     let buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
@@ -152,7 +153,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
         .map_or("", String::as_str)
         .as_bytes();
 
-    let res = buf_in.for_byte_record(newline_char, |line| {
+    let result = buf_in.for_byte_record(newline_char, |line| {
         let mut print_delim = false;
         for &Range { low, high } in ranges {
             if low > line.len() {
@@ -171,8 +172,12 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
         out.write_all(&[newline_char])?;
         Ok(true)
     });
-    crash_if_err!(1, res);
-    0
+
+    if let Err(e) = result {
+        return Err(USimpleError::new(1, e.to_string()));
+    }
+
+    Ok(())
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -183,7 +188,7 @@ fn cut_fields_delimiter<R: Read>(
     only_delimited: bool,
     newline_char: u8,
     out_delim: &str,
-) -> i32 {
+) -> UResult<()> {
     let buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
     let input_delim_len = delim.len();
@@ -246,12 +251,16 @@ fn cut_fields_delimiter<R: Read>(
         out.write_all(&[newline_char])?;
         Ok(true)
     });
-    crash_if_err!(1, result);
-    0
+
+    if let Err(e) = result {
+        return Err(USimpleError::new(1, e.to_string()));
+    }
+
+    Ok(())
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 {
+fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> UResult<()> {
     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
     if let Some(ref o_delim) = opts.out_delimiter {
         return cut_fields_delimiter(
@@ -323,13 +332,16 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 
         out.write_all(&[newline_char])?;
         Ok(true)
     });
-    crash_if_err!(1, result);
-    0
+
+    if let Err(e) = result {
+        return Err(USimpleError::new(1, e.to_string()));
+    }
+
+    Ok(())
 }
 
-fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
+fn cut_files(mut filenames: Vec<String>, mode: Mode) -> UResult<()> {
     let mut stdin_read = false;
-    let mut exit_code = 0;
 
     if filenames.is_empty() {
         filenames.push("-".to_owned());
@@ -341,11 +353,11 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
                 continue;
             }
 
-            exit_code |= match mode {
+            show_if_err!(match mode {
                 Mode::Bytes(ref ranges, ref opts) => cut_bytes(stdin(), ranges, opts),
                 Mode::Characters(ref ranges, ref opts) => cut_bytes(stdin(), ranges, opts),
                 Mode::Fields(ref ranges, ref opts) => cut_fields(stdin(), ranges, opts),
-            };
+            });
 
             stdin_read = true;
         } else {
@@ -356,28 +368,19 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
                 continue;
             }
 
-            if path.metadata().is_err() {
-                show_error!("{}: No such file or directory", filename.maybe_quote());
-                continue;
-            }
-
-            let file = match File::open(&path) {
-                Ok(f) => f,
-                Err(e) => {
-                    show_error!("opening {}: {}", filename.quote(), e);
-                    continue;
-                }
-            };
-
-            exit_code |= match mode {
-                Mode::Bytes(ref ranges, ref opts) => cut_bytes(file, ranges, opts),
-                Mode::Characters(ref ranges, ref opts) => cut_bytes(file, ranges, opts),
-                Mode::Fields(ref ranges, ref opts) => cut_fields(file, ranges, opts),
-            };
+            show_if_err!(File::open(&path)
+                .map_err_context(|| filename.maybe_quote().to_string())
+                .and_then(|file| {
+                    match &mode {
+                        Mode::Bytes(ref ranges, ref opts) => cut_bytes(file, ranges, opts),
+                        Mode::Characters(ref ranges, ref opts) => cut_bytes(file, ranges, opts),
+                        Mode::Fields(ref ranges, ref opts) => cut_fields(file, ranges, opts),
+                    }
+                }));
         }
     }
 
-    exit_code
+    Ok(())
 }
 
 mod options {
@@ -392,7 +395,8 @@ mod options {
     pub const FILE: &str = "file";
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -541,10 +545,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     match mode_parse {
         Ok(mode) => cut_files(files, mode),
-        Err(err_msg) => {
-            show_error!("{}", err_msg);
-            1
-        }
+        Err(e) => Err(USimpleError::new(1, e)),
     }
 }
 
