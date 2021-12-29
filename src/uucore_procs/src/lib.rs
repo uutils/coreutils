@@ -1,7 +1,9 @@
 // Copyright (C) ~ Roy Ivy III <rivy.dev@gmail.com>; MIT license
 
 extern crate proc_macro;
-use proc_macro::TokenStream;
+use std::{fs::File, io::Read, path::PathBuf};
+
+use proc_macro::{Literal, TokenStream, TokenTree};
 use quote::quote;
 
 //## rust proc-macro background info
@@ -33,4 +35,41 @@ pub fn main(_args: TokenStream, stream: TokenStream) -> TokenStream {
     );
 
     TokenStream::from(new)
+}
+
+#[proc_macro]
+pub fn help_section(input: TokenStream) -> TokenStream {
+    let input: Vec<TokenTree> = input.into_iter().collect();
+    let value = match &input.get(0) {
+        Some(TokenTree::Literal(literal)) => literal.to_string(),
+        _ => panic!("Input to help_section should be a string literal!"),
+    };
+    let input_str: String = value.parse().unwrap();
+    let input_str = input_str.to_lowercase().trim_matches('"').to_string();
+
+    let mut content = String::new();
+    let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+
+    path.push("help.md");
+
+    File::open(path)
+        .unwrap()
+        .read_to_string(&mut content)
+        .unwrap();
+
+    let text = content
+        .lines()
+        .skip_while(|&l| {
+            l.strip_prefix("##")
+                .map_or(true, |l| l.trim().to_lowercase() != input_str)
+        })
+        .skip(1)
+        .take_while(|l| !l.starts_with("##"))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string();
+
+    let str = TokenTree::Literal(Literal::string(&text));
+    str.into()
 }

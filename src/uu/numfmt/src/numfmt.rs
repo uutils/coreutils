@@ -5,8 +5,6 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore N'th M'th
-
 use crate::errors::*;
 use crate::format::format_and_print;
 use crate::options::*;
@@ -17,47 +15,15 @@ use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::ranges::Range;
-use uucore::{format_usage, InvalidEncodingHandling};
+use uucore::{format_usage, help_section, InvalidEncodingHandling};
 
 pub mod errors;
 pub mod format;
 pub mod options;
 mod units;
 
-static ABOUT: &str = "Convert numbers from/to human-readable strings";
-static LONG_HELP: &str = "UNIT options:
-   none   no auto-scaling is done; suffixes will trigger an error
-
-   auto   accept optional single/two letter suffix:
-
-          1K = 1000, 1Ki = 1024, 1M = 1000000, 1Mi = 1048576,
-
-   si     accept optional single letter suffix:
-
-          1K = 1000, 1M = 1000000, ...
-
-   iec    accept optional single letter suffix:
-
-          1K = 1024, 1M = 1048576, ...
-
-   iec-i  accept optional two-letter suffix:
-
-          1Ki = 1024, 1Mi = 1048576, ...
-
-FIELDS supports cut(1) style field ranges:
-  N    N'th field, counted from 1
-  N-   from N'th field, to end of line
-  N-M  from N'th to M'th field (inclusive)
-  -M   from first to M'th field (inclusive)
-  -    all fields
-Multiple fields/ranges can be separated with commas
-
-FORMAT must be suitable for printing one floating-point argument '%f'.
-Optional quote (%'f) will enable --grouping (if supported by current locale).
-Optional width value (%10f) will pad output. Optional zero (%010f) width
-will zero pad the number. Optional negative values (%-10f) will left align.
-Optional precision (%.1f) will override the input determined precision.
-";
+const ABOUT: &str = help_section!("about");
+const LONG_HELP: &str = help_section!("long help");
 const USAGE: &str = "{} [OPTION]... [NUMBER]...";
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions) -> UResult<()> {
