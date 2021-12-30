@@ -65,12 +65,8 @@ fn test_ls_io_errors() {
     at.mkdir("some-dir2");
     at.symlink_file("does_not_exist", "some-dir2/dangle");
 
-    scene.ccmd("chmod")
-            .arg("000")
-            .arg(format!("{}/", at.subdir.to_string_lossy()))
-            .arg("some-dir1")
-            .succeeds();
-    
+    scene.ccmd("chmod").arg("000").arg("some-dir1").succeeds();
+
     scene
         .ucmd()
         .arg("-1")
@@ -102,7 +98,7 @@ fn test_ls_walk_glob() {
             .to_str()
             .unwrap(),
     );
- 
+
     #[allow(clippy::trivial_regex)]
     let re_pwd = Regex::new(r"^\.\n").unwrap();
 
