@@ -19,6 +19,7 @@ use std::io::prelude::*;
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::{util_name, InvalidEncodingHandling};
 
 #[macro_use]
@@ -266,7 +267,8 @@ pub mod options {
     pub const ZERO: &str = "zero";
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -277,20 +279,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = app.get_matches_from(args);
 
-    let mut errs: Vec<String> = vec![];
-
     if !matches.is_present(options::FILE) {
-        show_error!("Missing an argument");
-        show_error!("For help, try '{} --help'", uucore::execution_phrase());
-        return 0;
+        return Err(UUsageError::new(1, "missing file operand"));
     }
 
     let iterations = match matches.value_of(options::ITERATIONS) {
         Some(s) => match s.parse::<usize>() {
             Ok(u) => u,
             Err(_) => {
-                errs.push(format!("invalid number of passes: {}", s.quote()));
-                0
+                return Err(USimpleError::new(
+                    1,
+                    format!("invalid number of passes: {}", s.quote()),
+                ))
             }
         },
         None => unreachable!(),
@@ -313,21 +313,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let zero = matches.is_present(options::ZERO);
     let verbose = matches.is_present(options::VERBOSE);
 
-    if !errs.is_empty() {
-        show_error!("Invalid arguments supplied.");
-        for message in errs {
-            show_error!("{}", message);
-        }
-        return 1;
-    }
-
     for path_str in matches.values_of(options::FILE).unwrap() {
-        wipe_file(
+        show_if_err!(wipe_file(
             path_str, iterations, remove, size, exact, zero, verbose, force,
-        );
+        ));
     }
-
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -452,34 +443,28 @@ fn wipe_file(
     zero: bool,
     verbose: bool,
     force: bool,
-) {
+) -> UResult<()> {
     // Get these potential errors out of the way first
     let path: &Path = Path::new(path_str);
     if !path.exists() {
-        show_error!("{}: No such file or directory", path.maybe_quote());
-        return;
+        return Err(USimpleError::new(
+            1,
+            format!("{}: No such file or directory", path.maybe_quote()),
+        ));
     }
     if !path.is_file() {
-        show_error!("{}: Not a file", path.maybe_quote());
-        return;
+        return Err(USimpleError::new(
+            1,
+            format!("{}: Not a file", path.maybe_quote()),
+        ));
     }
 
     // If force is true, set file permissions to not-readonly.
     if force {
-        let metadata = match fs::metadata(path) {
-            Ok(m) => m,
-            Err(e) => {
-                show_error!("{}", e);
-                return;
-            }
-        };
-
+        let metadata = fs::metadata(path).map_err_context(String::new)?;
         let mut perms = metadata.permissions();
         perms.set_readonly(false);
-        if let Err(e) = fs::set_permissions(path, perms) {
-            show_error!("{}", e);
-            return;
-        }
+        fs::set_permissions(path, perms).map_err_context(String::new)?;
     }
 
     // Fill up our pass sequence
@@ -521,13 +506,11 @@ fn wipe_file(
 
     {
         let total_passes: usize = pass_sequence.len();
-        let mut file: File = match OpenOptions::new().write(true).truncate(false).open(path) {
-            Ok(f) => f,
-            Err(e) => {
-                show_error!("{}: failed to open for writing: {}", path.maybe_quote(), e);
-                return;
-            }
-        };
+        let mut file: File = OpenOptions::new()
+            .write(true)
+            .truncate(false)
+            .open(path)
+            .map_err_context(|| format!("{}: failed to open for writing", path.maybe_quote()))?;
 
         // NOTE: it does not really matter what we set for total_bytes and gen_type here, so just
         //       use bogus values
@@ -557,24 +540,17 @@ fn wipe_file(
                 }
             }
             // size is an optional argument for exactly how many bytes we want to shred
-            match do_pass(&mut file, path, &mut generator, *pass_type, size) {
-                Ok(_) => {}
-                Err(e) => {
-                    show_error!("{}: File write pass failed: {}", path.maybe_quote(), e);
-                }
-            }
+            show_if_err!(do_pass(&mut file, path, &mut generator, *pass_type, size)
+                .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote())));
             // Ignore failed writes; just keep trying
         }
     }
 
     if remove {
-        match do_remove(path, path_str, verbose) {
-            Ok(_) => {}
-            Err(e) => {
-                show_error!("{}: failed to remove file: {}", path.maybe_quote(), e);
-            }
-        }
+        do_remove(path, path_str, verbose)
+            .map_err_context(|| format!("{}: failed to remove file", path.maybe_quote()))?;
     }
+    Ok(())
 }
 
 fn do_pass<'a>(
