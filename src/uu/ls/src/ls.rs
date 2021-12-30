@@ -1315,9 +1315,7 @@ impl PathData {
 
     fn md(&self) -> Option<&Metadata> {
         self.md
-            .get_or_init(|| {
-                get_metadata(&self.p_buf, self.must_dereference).ok()
-            })
+            .get_or_init(|| get_metadata(&self.p_buf, self.must_dereference).ok())
             .as_ref()
     }
 
@@ -1500,7 +1498,8 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
                     continue;
                 }
                 Ok(dir_ft) => {
-                    let res = PathData::new(unwrapped.path(), Some(Ok(dir_ft)), None, config, false);
+                    let res =
+                        PathData::new(unwrapped.path(), Some(Ok(dir_ft)), None, config, false);
                     if dir_ft.is_symlink() && res.md().is_none() {
                         let _ = out.flush();
                         show!(LsError::IOErrorContext(
@@ -1843,7 +1842,7 @@ fn display_item_long(
         {
             if config.inode {
                 if config.recursive {
-                    let _ = write!(out, "       {} ", "?".to_string());                    
+                    let _ = write!(out, "       {} ", "?".to_string());
                 } else {
                     let _ = write!(out, "{} ", "?".to_string());
                 }
@@ -2198,7 +2197,10 @@ fn display_file_name(
     //     name.push_str(&path.p_buf.read_link().unwrap().to_string_lossy());
     // }
 
-    if config.format == Format::Long && path.file_type().is_some() && path.file_type().unwrap().is_symlink() {
+    if config.format == Format::Long
+        && path.file_type().is_some()
+        && path.file_type().unwrap().is_symlink()
+    {
         if let Ok(target) = path.p_buf.read_link() {
             name.push_str(" -> ");
 

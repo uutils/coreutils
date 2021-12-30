@@ -56,27 +56,25 @@ fn test_ls_ordering() {
         .stdout_matches(&Regex::new("some-dir1:\\ntotal 0").unwrap());
 }
 
+#[cfg(all(feature = "chmod"))]
 #[test]
 fn test_ls_io_errors() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.mkdir("some-dir");
-    at.symlink_file("does_not_exist", "some-dir/dangle");
+    at.mkdir("some-dir1");
+    at.mkdir("some-dir2");
+    at.symlink_file("does_not_exist", "some-dir2/dangle");
 
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    scene.ccmd("chmod")
+            .arg("000")
+            .arg(format!("{}/", at.subdir.to_string_lossy()))
+            .arg("some-dir1")
+            .succeeds();
+    
     scene
         .ucmd()
         .arg("-1")
-        .arg("/var/root")
-        .fails()
-        .stderr_contains("cannot open directory")
-        .stderr_contains("Permission denied");
-
-    #[cfg(target_os = "linux")]
-    scene
-        .ucmd()
-        .arg("-1")
-        .arg("/sys/kernel/tracing")
+        .arg("some-dir1")
         .fails()
         .stderr_contains("cannot open directory")
         .stderr_contains("Permission denied");
@@ -84,7 +82,7 @@ fn test_ls_io_errors() {
     scene
         .ucmd()
         .arg("-Li")
-        .arg("some-dir")
+        .arg("some-dir2")
         .fails()
         .stderr_contains("cannot access")
         .stderr_contains("No such file or directory")
@@ -104,7 +102,7 @@ fn test_ls_walk_glob() {
             .to_str()
             .unwrap(),
     );
-
+ 
     #[allow(clippy::trivial_regex)]
     let re_pwd = Regex::new(r"^\.\n").unwrap();
 
