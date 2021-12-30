@@ -2223,17 +2223,21 @@ fn display_file_name(
                 // Because we use an absolute path, we can assume this is guaranteed to exist.
                 // Otherwise, we use path.md(), which will guarantee we color to the same
                 // color of non-existent symlinks according to style_for_path_with_metadata.
-                let target_metadata = match target_data.md() {
-                    Some(md) => md,
-                    None => path.md().unwrap(),
-                };
+                if path.md().is_none() {
+                    name.push_str(&path.p_buf.read_link().unwrap().to_string_lossy());
+                } else {
+                    let target_metadata = match target_data.md() {
+                        Some(md) => md,
+                        None => path.md().unwrap(),
+                    };
 
-                name.push_str(&color_name(
-                    ls_colors,
-                    &target_data.p_buf,
-                    target.to_string_lossy().into_owned(),
-                    target_metadata,
-                ));
+                    name.push_str(&color_name(
+                        ls_colors,
+                        &target_data.p_buf,
+                        target.to_string_lossy().into_owned(),
+                        target_metadata,
+                    ));
+                }
             } else {
                 // If no coloring is required, we just use target as is.
                 name.push_str(&target.to_string_lossy());
