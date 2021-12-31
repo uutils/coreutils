@@ -155,7 +155,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 .long(OPT_LINES)
                 .takes_value(true)
                 .default_value("1000")
-                .help("write to shell COMMAND file name is $FILE (Currently not implemented for Windows)"),
+                .help("put NUMBER lines/records per output file"),
         )
         // rest of the arguments
         .arg(
