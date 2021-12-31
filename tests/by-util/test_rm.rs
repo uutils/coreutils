@@ -280,7 +280,7 @@ fn test_rm_force_no_operand() {
 fn test_rm_no_operand() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd().fails().stderr_is(&format!(
-        "{0}: missing an argument\n{0}: for help, try '{1} {0} --help'\n",
+        "{0}: missing operand\nTry '{1} {0} --help' for more information.\n",
         ts.util_name,
         ts.bin_path.to_string_lossy()
     ));
