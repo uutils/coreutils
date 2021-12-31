@@ -7,17 +7,18 @@
 
 // spell-checker:ignore (ToDOs) corasick memchr Roff trunc oset iset
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use regex::Regex;
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::default::Default;
+use std::error::Error;
+use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::num::ParseIntError;
 use uucore::display::Quotable;
+use uucore::error::{FromIo, UError, UResult};
 use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "ptx";
@@ -68,17 +69,21 @@ impl Default for Config {
     }
 }
 
-fn read_word_filter_file(matches: &clap::ArgMatches, option: &str) -> HashSet<String> {
+fn read_word_filter_file(
+    matches: &clap::ArgMatches,
+    option: &str,
+) -> std::io::Result<HashSet<String>> {
     let filename = matches
         .value_of(option)
         .expect("parsing options failed!")
         .to_string();
-    let reader = BufReader::new(crash_if_err!(1, File::open(filename)));
+    let file = File::open(filename)?;
+    let reader = BufReader::new(file);
     let mut words: HashSet<String> = HashSet::new();
     for word in reader.lines() {
-        words.insert(crash_if_err!(1, word));
+        words.insert(word?);
     }
-    words
+    Ok(words)
 }
 
 #[derive(Debug)]
@@ -91,19 +96,23 @@ struct WordFilter {
 }
 
 impl WordFilter {
-    fn new(matches: &clap::ArgMatches, config: &Config) -> WordFilter {
+    fn new(matches: &clap::ArgMatches, config: &Config) -> UResult<WordFilter> {
         let (o, oset): (bool, HashSet<String>) = if matches.is_present(options::ONLY_FILE) {
-            (true, read_word_filter_file(matches, options::ONLY_FILE))
+            let words =
+                read_word_filter_file(matches, options::ONLY_FILE).map_err_context(String::new)?;
+            (true, words)
         } else {
             (false, HashSet::new())
         };
         let (i, iset): (bool, HashSet<String>) = if matches.is_present(options::IGNORE_FILE) {
-            (true, read_word_filter_file(matches, options::IGNORE_FILE))
+            let words = read_word_filter_file(matches, options::IGNORE_FILE)
+                .map_err_context(String::new)?;
+            (true, words)
         } else {
             (false, HashSet::new())
         };
         if matches.is_present(options::BREAK_FILE) {
-            crash!(1, "-b not implemented yet");
+            return Err(PtxError::NotImplemented("-b").into());
         }
         // Ignore empty string regex from cmd-line-args
         let arg_reg: Option<String> = if matches.is_present(options::WORD_REGEXP) {
@@ -130,13 +139,13 @@ impl WordFilter {
                 }
             }
         };
-        WordFilter {
+        Ok(WordFilter {
             only_specified: o,
             ignore_specified: i,
             only_set: oset,
             ignore_set: iset,
             word_regex: reg,
-        }
+        })
     }
 }
 
@@ -150,7 +159,29 @@ struct WordRef {
     filename: String,
 }
 
-fn get_config(matches: &clap::ArgMatches) -> Config {
+#[derive(Debug)]
+enum PtxError {
+    DumbFormat,
+    NotImplemented(&'static str),
+    ParseError(ParseIntError),
+}
+
+impl Error for PtxError {}
+impl UError for PtxError {}
+
+impl Display for PtxError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            PtxError::DumbFormat => {
+                write!(f, "There is no dumb format with GNU extensions disabled")
+            }
+            PtxError::NotImplemented(s) => write!(f, "{} not implemented yet", s),
+            PtxError::ParseError(e) => e.fmt(f),
+        }
+    }
+}
+
+fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
     let mut config: Config = Default::default();
     let err_msg = "parsing options failed";
     if matches.is_present(options::TRADITIONAL) {
@@ -158,10 +189,10 @@ fn get_config(matches: &clap::ArgMatches) -> Config {
         config.format = OutFormat::Roff;
         config.context_regex = "[^ \t\n]+".to_owned();
     } else {
-        crash!(1, "GNU extensions not implemented yet");
+        return Err(PtxError::NotImplemented("GNU extensions").into());
     }
     if matches.is_present(options::SENTENCE_REGEXP) {
-        crash!(1, "-S not implemented yet");
+        return Err(PtxError::NotImplemented("-S").into());
     }
     config.auto_ref = matches.is_present(options::AUTO_REFERENCE);
     config.input_ref = matches.is_present(options::REFERENCES);
@@ -180,15 +211,18 @@ fn get_config(matches: &clap::ArgMatches) -> Config {
             .to_string();
     }
     if matches.is_present(options::WIDTH) {
-        let width_str = matches.value_of(options::WIDTH).expect(err_msg).to_string();
-        config.line_width = crash_if_err!(1, (&width_str).parse::<usize>());
+        config.line_width = matches
+            .value_of(options::WIDTH)
+            .expect(err_msg)
+            .parse()
+            .map_err(PtxError::ParseError)?;
     }
     if matches.is_present(options::GAP_SIZE) {
-        let gap_str = matches
+        config.gap_size = matches
             .value_of(options::GAP_SIZE)
             .expect(err_msg)
-            .to_string();
-        config.gap_size = crash_if_err!(1, (&gap_str).parse::<usize>());
+            .parse()
+            .map_err(PtxError::ParseError)?;
     }
     if matches.is_present(options::FORMAT_ROFF) {
         config.format = OutFormat::Roff;
@@ -196,7 +230,7 @@ fn get_config(matches: &clap::ArgMatches) -> Config {
     if matches.is_present(options::FORMAT_TEX) {
         config.format = OutFormat::Tex;
     }
-    config
+    Ok(config)
 }
 
 struct FileContent {
@@ -207,7 +241,7 @@ struct FileContent {
 
 type FileMap = HashMap<String, FileContent>;
 
-fn read_input(input_files: &[String], config: &Config) -> FileMap {
+fn read_input(input_files: &[String], config: &Config) -> std::io::Result<FileMap> {
     let mut file_map: FileMap = HashMap::new();
     let mut files = Vec::new();
     if input_files.is_empty() {
@@ -224,10 +258,10 @@ fn read_input(input_files: &[String], config: &Config) -> FileMap {
         let reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
             Box::new(stdin())
         } else {
-            let file = crash_if_err!(1, File::open(filename));
+            let file = File::open(filename)?;
             Box::new(file)
         });
-        let lines: Vec<String> = reader.lines().map(|x| crash_if_err!(1, x)).collect();
+        let lines: Vec<String> = reader.lines().collect::<std::io::Result<Vec<String>>>()?;
 
         // Indexing UTF-8 string requires walking from the beginning, which can hurts performance badly when the line is long.
         // Since we will be jumping around the line a lot, we dump the content into a Vec<char>, which can be indexed in constant time.
@@ -243,7 +277,7 @@ fn read_input(input_files: &[String], config: &Config) -> FileMap {
         );
         offset += size
     }
-    file_map
+    Ok(file_map)
 }
 
 /// Go through every lines in the input files and record each match occurrence as a `WordRef`.
@@ -571,11 +605,11 @@ fn write_traditional_output(
     file_map: &FileMap,
     words: &BTreeSet<WordRef>,
     output_filename: &str,
-) {
+) -> UResult<()> {
     let mut writer: BufWriter<Box<dyn Write>> = BufWriter::new(if output_filename == "-" {
         Box::new(stdout())
     } else {
-        let file = crash_if_err!(1, File::create(output_filename));
+        let file = File::create(output_filename).map_err_context(String::new)?;
         Box::new(file)
     });
 
@@ -611,10 +645,13 @@ fn write_traditional_output(
                 &chars_lines[word_ref.local_line_nr],
                 &reference,
             ),
-            OutFormat::Dumb => crash!(1, "There is no dumb format with GNU extensions disabled"),
+            OutFormat::Dumb => {
+                return Err(PtxError::DumbFormat.into());
+            }
         };
-        crash_if_err!(1, writeln!(writer, "{}", output_line));
+        writeln!(writer, "{}", output_line).map_err_context(String::new)?;
     }
+    Ok(())
 }
 
 mod options {
@@ -637,7 +674,8 @@ mod options {
     pub static WIDTH: &str = "width";
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -650,17 +688,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         None => vec!["-".to_string()],
     };
 
-    let config = get_config(&matches);
-    let word_filter = WordFilter::new(&matches, &config);
-    let file_map = read_input(&input_files, &config);
+    let config = get_config(&matches)?;
+    let word_filter = WordFilter::new(&matches, &config)?;
+    let file_map = read_input(&input_files, &config).map_err_context(String::new)?;
     let word_set = create_word_set(&config, &word_filter, &file_map);
     let output_file = if !config.gnu_ext && matches.args.len() == 2 {
         matches.value_of(options::FILE).unwrap_or("-").to_string()
     } else {
         "-".to_owned()
     };
-    write_traditional_output(&config, &file_map, &word_set, &output_file);
-    0
+    write_traditional_output(&config, &file_map, &word_set, &output_file)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
