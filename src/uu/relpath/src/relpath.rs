@@ -11,6 +11,7 @@ use clap::{crate_version, App, Arg};
 use std::env;
 use std::path::{Path, PathBuf};
 use uucore::display::println_verbatim;
+use uucore::error::{FromIo, UResult};
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use uucore::InvalidEncodingHandling;
 
@@ -27,7 +28,8 @@ fn usage() -> String {
     format!("{} [-d DIR] TO [FROM]", uucore::execution_phrase())
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -40,17 +42,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         Some(p) => Path::new(p).to_path_buf(),
         None => env::current_dir().unwrap(),
     };
-    let absto = canonicalize(to, MissingHandling::Normal, ResolveMode::Logical).unwrap();
-    let absfrom = canonicalize(from, MissingHandling::Normal, ResolveMode::Logical).unwrap();
+    let absto = canonicalize(to, MissingHandling::Normal, ResolveMode::Logical)
+        .map_err_context(String::new)?;
+    let absfrom = canonicalize(from, MissingHandling::Normal, ResolveMode::Logical)
+        .map_err_context(String::new)?;
 
     if matches.is_present(options::DIR) {
         let base = Path::new(&matches.value_of(options::DIR).unwrap()).to_path_buf();
-        let absbase = canonicalize(base, MissingHandling::Normal, ResolveMode::Logical).unwrap();
+        let absbase = canonicalize(base, MissingHandling::Normal, ResolveMode::Logical)
+            .map_err_context(String::new)?;
         if !absto.as_path().starts_with(absbase.as_path())
             || !absfrom.as_path().starts_with(absbase.as_path())
         {
-            println_verbatim(absto).unwrap();
-            return 0;
+            return println_verbatim(absto).map_err_context(String::new);
         }
     }
 
@@ -75,8 +79,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .map(|x| result.push(x.as_os_str()))
         .last();
 
-    println_verbatim(result).unwrap();
-    0
+    println_verbatim(result).map_err_context(String::new)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
