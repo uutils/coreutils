@@ -14,6 +14,7 @@ use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::PathBuf;
 use uucore::display::Quotable;
+use uucore::error::UResult;
 
 #[cfg(unix)]
 use uucore::libc;
@@ -37,7 +38,8 @@ fn usage() -> String {
     format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
@@ -52,8 +54,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     match tee(options) {
-        Ok(_) => 0,
-        Err(_) => 1,
+        Ok(_) => Ok(()),
+        Err(_) => Err(1.into()),
     }
 }
 
