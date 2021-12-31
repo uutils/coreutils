@@ -68,6 +68,7 @@ mod platform {
     use std::mem;
     use std::os::windows::prelude::*;
     use std::path::Path;
+    use uucore::crash;
     use uucore::wide::{FromWide, ToWide};
 
     unsafe fn flush_volume(name: &str) {
