@@ -2,7 +2,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes asciilowercase fghij klmno pqrst uvwxyz
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes asciilowercase fghij klmno pqrst uvwxyz fivelines
 extern crate rand;
 extern crate regex;
 
@@ -448,4 +448,22 @@ fn test_invalid_suffix_length() {
         .fails()
         .no_stdout()
         .stderr_contains("invalid suffix length: 'xyz'");
+}
+
+#[test]
+fn test_include_newlines() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-l", "2", "fivelines.txt"]).succeeds();
+
+    let mut s = String::new();
+    at.open("xaa").read_to_string(&mut s).unwrap();
+    assert_eq!(s, "1\n2\n");
+
+    let mut s = String::new();
+    at.open("xab").read_to_string(&mut s).unwrap();
+    assert_eq!(s, "3\n4\n");
+
+    let mut s = String::new();
+    at.open("xac").read_to_string(&mut s).unwrap();
+    assert_eq!(s, "5\n");
 }

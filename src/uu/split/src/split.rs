@@ -16,13 +16,14 @@ use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::convert::TryFrom;
 use std::env;
 use std::fmt;
-use std::fs::{metadata, remove_file, File};
+use std::fs::{metadata, File};
 use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::num::ParseIntError;
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::uio_error;
 
 static OPT_BYTES: &str = "bytes";
 static OPT_LINE_BYTES: &str = "line-bytes";
@@ -739,65 +740,47 @@ fn split(settings: &Settings) -> UResult<()> {
         Box::new(r) as Box<dyn Read>
     });
 
-    if let Strategy::Number(num_chunks) = settings.strategy {
-        return split_into_n_chunks_by_byte(settings, &mut reader, num_chunks);
-    }
-
-    let mut splitter: Box<dyn Splitter> = match settings.strategy {
-        Strategy::Lines(chunk_size) => Box::new(LineSplitter::new(chunk_size)),
-        Strategy::Bytes(chunk_size) | Strategy::LineBytes(chunk_size) => {
-            Box::new(ByteSplitter::new(chunk_size))
+    match settings.strategy {
+        Strategy::Number(num_chunks) => {
+            split_into_n_chunks_by_byte(settings, &mut reader, num_chunks)
         }
-        _ => unreachable!(),
-    };
-
-    // This object is responsible for creating the filename for each chunk.
-    let mut filename_iterator = FilenameIterator::new(
-        &settings.prefix,
-        &settings.additional_suffix,
-        settings.suffix_length,
-        settings.numeric_suffix,
-    );
-    loop {
-        // Get a new part file set up, and construct `writer` for it.
-        let filename = filename_iterator
-            .next()
-            .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
-        let mut writer = platform::instantiate_current_writer(&settings.filter, filename.as_str());
-
-        let bytes_consumed = splitter
-            .consume(&mut reader, &mut writer)
-            .map_err_context(|| "input/output error".to_string())?;
-        writer
-            .flush()
-            .map_err_context(|| "error flushing to output file".to_string())?;
-
-        // If we didn't write anything we should clean up the empty file, and
-        // break from the loop.
-        if bytes_consumed == 0 {
-            // The output file is only ever created if --filter isn't used.
-            // Complicated, I know...
-            if settings.filter.is_none() {
-                remove_file(filename)
-                    .map_err_context(|| "error removing empty file".to_string())?;
+        Strategy::Lines(chunk_size) => {
+            let mut writer = LineChunkWriter::new(chunk_size, settings)
+                .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+            match std::io::copy(&mut reader, &mut writer) {
+                Ok(_) => Ok(()),
+                Err(e) => match e.kind() {
+                    // TODO Since the writer object controls the creation of
+                    // new files, we need to rely on the `std::io::Result`
+                    // returned by its `write()` method to communicate any
+                    // errors to this calling scope. If a new file cannot be
+                    // created because we have exceeded the number of
+                    // allowable filenames, we use `ErrorKind::Other` to
+                    // indicate that. A special error message needs to be
+                    // printed in that case.
+                    ErrorKind::Other => Err(USimpleError::new(1, "output file suffixes exhausted")),
+                    _ => Err(uio_error!(e, "input/output error")),
+                },
             }
-            break;
         }
-
-        // TODO It is silly to have the "creating file" message here
-        // after the file has been already created. However, because
-        // of the way the main loop has been written, an extra file
-        // gets created and then deleted in the last iteration of the
-        // loop. So we need to make sure we are not in that case when
-        // printing this message.
-        //
-        // This is only here temporarily while we make some
-        // improvements to the architecture of the main loop in this
-        // function. In the future, it will move to a more appropriate
-        // place---at the point where the file is actually created.
-        if settings.verbose {
-            println!("creating file {}", filename.quote());
+        Strategy::Bytes(chunk_size) | Strategy::LineBytes(chunk_size) => {
+            let mut writer = ByteChunkWriter::new(chunk_size, settings)
+                .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+            match std::io::copy(&mut reader, &mut writer) {
+                Ok(_) => Ok(()),
+                Err(e) => match e.kind() {
+                    // TODO Since the writer object controls the creation of
+                    // new files, we need to rely on the `std::io::Result`
+                    // returned by its `write()` method to communicate any
+                    // errors to this calling scope. If a new file cannot be
+                    // created because we have exceeded the number of
+                    // allowable filenames, we use `ErrorKind::Other` to
+                    // indicate that. A special error message needs to be
+                    // printed in that case.
+                    ErrorKind::Other => Err(USimpleError::new(1, "output file suffixes exhausted")),
+                    _ => Err(uio_error!(e, "input/output error")),
+                },
+            }
         }
     }
-    Ok(())
 }
