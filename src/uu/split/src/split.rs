@@ -236,15 +236,9 @@ struct LineSplitter {
 }
 
 impl LineSplitter {
-    fn new(settings: &Settings) -> LineSplitter {
+    fn new(chunk_size: usize) -> LineSplitter {
         LineSplitter {
-            lines_per_split: settings.strategy_param.parse().unwrap_or_else(|_| {
-                crash!(
-                    1,
-                    "invalid number of lines: {}",
-                    settings.strategy_param.quote()
-                )
-            }),
+            lines_per_split: chunk_size,
         }
     }
 }
@@ -285,15 +279,9 @@ struct ByteSplitter {
 }
 
 impl ByteSplitter {
-    fn new(settings: &Settings) -> ByteSplitter {
-        let size_string = &settings.strategy_param;
-        let size_num = match parse_size(size_string) {
-            Ok(n) => n,
-            Err(e) => crash!(1, "invalid number of bytes: {}", e.to_string()),
-        };
-
+    fn new(chunk_size: usize) -> ByteSplitter {
         ByteSplitter {
-            bytes_per_split: u128::try_from(size_num).unwrap(),
+            bytes_per_split: u128::try_from(chunk_size).unwrap(),
         }
     }
 }
@@ -385,9 +373,22 @@ fn split(settings: &Settings) -> i32 {
         Box::new(r) as Box<dyn Read>
     });
 
+    let size_string = &settings.strategy_param;
+    let chunk_size = match parse_size(size_string) {
+        Ok(n) => n,
+        Err(e) => {
+            let option_type = if settings.strategy == OPT_LINES {
+                "lines"
+            } else {
+                "bytes"
+            };
+            crash!(1, "invalid number of {}: {}", option_type, e.to_string())
+        }
+    };
+
     let mut splitter: Box<dyn Splitter> = match settings.strategy.as_str() {
-        s if s == OPT_LINES => Box::new(LineSplitter::new(settings)),
-        s if (s == OPT_BYTES || s == OPT_LINE_BYTES) => Box::new(ByteSplitter::new(settings)),
+        s if s == OPT_LINES => Box::new(LineSplitter::new(chunk_size)),
+        s if (s == OPT_BYTES || s == OPT_LINE_BYTES) => Box::new(ByteSplitter::new(chunk_size)),
         a => crash!(1, "strategy {} not supported", a.quote()),
     };
 
