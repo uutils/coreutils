@@ -12,7 +12,7 @@ extern crate uucore;
 
 mod platform;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, Arg, ArgMatches};
 use std::convert::TryFrom;
 use std::env;
 use std::fs::File;
@@ -69,8 +69,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         additional_suffix: "".to_owned(),
         input: "".to_owned(),
         filter: None,
-        strategy: "".to_owned(),
-        strategy_param: "".to_owned(),
+        strategy: Strategy::Lines(1000),
         verbose: false,
     };
 
@@ -84,34 +83,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     settings.additional_suffix = matches.value_of(OPT_ADDITIONAL_SUFFIX).unwrap().to_owned();
 
     settings.verbose = matches.occurrences_of("verbose") > 0;
-    // check that the user is not specifying more than one strategy
-    // note: right now, this exact behavior cannot be handled by ArgGroup since ArgGroup
-    // considers a default value Arg as "defined"
-    let explicit_strategies =
-        vec![OPT_LINE_BYTES, OPT_LINES, OPT_BYTES]
-            .into_iter()
-            .fold(0, |count, strategy| {
-                if matches.occurrences_of(strategy) > 0 {
-                    count + 1
-                } else {
-                    count
-                }
-            });
-    if explicit_strategies > 1 {
-        crash!(1, "cannot split in more than one way");
-    }
-
-    // default strategy (if no strategy is passed, use this one)
-    settings.strategy = String::from(OPT_LINES);
-    settings.strategy_param = matches.value_of(OPT_LINES).unwrap().to_owned();
-    // take any (other) defined strategy
-    for &strategy in &[OPT_LINE_BYTES, OPT_BYTES] {
-        if matches.occurrences_of(strategy) > 0 {
-            settings.strategy = String::from(strategy);
-            settings.strategy_param = matches.value_of(strategy).unwrap().to_owned();
-        }
-    }
-
+    settings.strategy = Strategy::from(&matches);
     settings.input = matches.value_of(ARG_INPUT).unwrap().to_owned();
     settings.prefix = matches.value_of(ARG_PREFIX).unwrap().to_owned();
 
@@ -155,7 +127,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 .long(OPT_LINES)
                 .takes_value(true)
                 .default_value("1000")
-                .help("write to shell COMMAND file name is $FILE (Currently not implemented for Windows)"),
+                .help("put NUMBER lines/records per output file"),
         )
         // rest of the arguments
         .arg(
@@ -206,6 +178,56 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
+/// The strategy for breaking up the input file into chunks.
+enum Strategy {
+    /// Each chunk has the specified number of lines.
+    Lines(usize),
+
+    /// Each chunk has the specified number of bytes.
+    Bytes(usize),
+
+    /// Each chunk has as many lines as possible without exceeding the
+    /// specified number of bytes.
+    LineBytes(usize),
+}
+
+impl Strategy {
+    /// Parse a strategy from the command-line arguments.
+    fn from(matches: &ArgMatches) -> Self {
+        // Check that the user is not specifying more than one strategy.
+        //
+        // Note: right now, this exact behavior cannot be handled by
+        // `ArgGroup` since `ArgGroup` considers a default value `Arg`
+        // as "defined".
+        match (
+            matches.occurrences_of(OPT_LINES),
+            matches.occurrences_of(OPT_BYTES),
+            matches.occurrences_of(OPT_LINE_BYTES),
+        ) {
+            (0, 0, 0) => Strategy::Lines(1000),
+            (1, 0, 0) => {
+                let s = matches.value_of(OPT_LINES).unwrap();
+                let n =
+                    parse_size(s).unwrap_or_else(|e| crash!(1, "invalid number of lines: {}", e));
+                Strategy::Lines(n)
+            }
+            (0, 1, 0) => {
+                let s = matches.value_of(OPT_BYTES).unwrap();
+                let n =
+                    parse_size(s).unwrap_or_else(|e| crash!(1, "invalid number of bytes: {}", e));
+                Strategy::Bytes(n)
+            }
+            (0, 0, 1) => {
+                let s = matches.value_of(OPT_LINE_BYTES).unwrap();
+                let n =
+                    parse_size(s).unwrap_or_else(|e| crash!(1, "invalid number of bytes: {}", e));
+                Strategy::LineBytes(n)
+            }
+            _ => crash!(1, "cannot split in more than one way"),
+        }
+    }
+}
+
 #[allow(dead_code)]
 struct Settings {
     prefix: String,
@@ -215,8 +237,7 @@ struct Settings {
     input: String,
     /// When supplied, a shell command to output to instead of xaa, xab …
     filter: Option<String>,
-    strategy: String,
-    strategy_param: String,
+    strategy: Strategy,
     verbose: bool, // TODO: warning: field is never read: `verbose`
 }
 
@@ -236,15 +257,9 @@ struct LineSplitter {
 }
 
 impl LineSplitter {
-    fn new(settings: &Settings) -> LineSplitter {
+    fn new(chunk_size: usize) -> LineSplitter {
         LineSplitter {
-            lines_per_split: settings.strategy_param.parse().unwrap_or_else(|_| {
-                crash!(
-                    1,
-                    "invalid number of lines: {}",
-                    settings.strategy_param.quote()
-                )
-            }),
+            lines_per_split: chunk_size,
         }
     }
 }
@@ -285,15 +300,9 @@ struct ByteSplitter {
 }
 
 impl ByteSplitter {
-    fn new(settings: &Settings) -> ByteSplitter {
-        let size_string = &settings.strategy_param;
-        let size_num = match parse_size(size_string) {
-            Ok(n) => n,
-            Err(e) => crash!(1, "invalid number of bytes: {}", e.to_string()),
-        };
-
+    fn new(chunk_size: usize) -> ByteSplitter {
         ByteSplitter {
-            bytes_per_split: u128::try_from(size_num).unwrap(),
+            bytes_per_split: u128::try_from(chunk_size).unwrap(),
         }
     }
 }
@@ -385,10 +394,11 @@ fn split(settings: &Settings) -> i32 {
         Box::new(r) as Box<dyn Read>
     });
 
-    let mut splitter: Box<dyn Splitter> = match settings.strategy.as_str() {
-        s if s == OPT_LINES => Box::new(LineSplitter::new(settings)),
-        s if (s == OPT_BYTES || s == OPT_LINE_BYTES) => Box::new(ByteSplitter::new(settings)),
-        a => crash!(1, "strategy {} not supported", a.quote()),
+    let mut splitter: Box<dyn Splitter> = match settings.strategy {
+        Strategy::Lines(chunk_size) => Box::new(LineSplitter::new(chunk_size)),
+        Strategy::Bytes(chunk_size) | Strategy::LineBytes(chunk_size) => {
+            Box::new(ByteSplitter::new(chunk_size))
+        }
     };
 
     let mut fileno = 0;
