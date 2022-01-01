@@ -18,7 +18,7 @@ use std::env;
 use std::fs;
 #[cfg(not(windows))]
 use std::fs::Metadata;
-use std::io::{stderr, ErrorKind, Result, Write};
+use std::io::{ErrorKind, Result};
 use std::iter;
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
@@ -292,8 +292,7 @@ fn du(
         let read = match fs::read_dir(&my_stat.path) {
             Ok(read) => read,
             Err(e) => {
-                safe_writeln!(
-                    stderr(),
+                eprintln!(
                     "{}: cannot read directory {}: {}",
                     options.util_name,
                     my_stat.path.quote(),
