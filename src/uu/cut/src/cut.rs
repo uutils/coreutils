@@ -466,12 +466,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             delim = "=";
                         }
                         if delim.chars().count() > 1 {
-                            Err(msg_opt_invalid_should_be!(
-                                "empty or 1 character long",
-                                "a value 2 characters or longer",
-                                "--delimiter",
-                                "-d"
-                            ))
+                            Err("invalid input: The '--delimiter' ('-d') option expects empty or 1 character long, but was provided a value 2 characters or longer".into())
                         } else {
                             let delim = if delim.is_empty() {
                                 "\0".to_owned()
@@ -503,13 +498,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             })
         }
         (ref b, ref c, ref f) if b.is_some() || c.is_some() || f.is_some() => Err(
-            msg_expects_no_more_than_one_of!("--fields (-f)", "--chars (-c)", "--bytes (-b)"),
+            "invalid usage: expects no more than one of --fields (-f), --chars (-c) or --bytes (-b)".into()
         ),
-        _ => Err(msg_expects_one_of!(
-            "--fields (-f)",
-            "--chars (-c)",
-            "--bytes (-b)"
-        )),
+        _ => Err("invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)".into()),
     };
 
     let mode_parse = match mode_parse {
@@ -518,20 +509,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Mode::Bytes(_, _) | Mode::Characters(_, _)
                 if matches.is_present(options::DELIMITER) =>
             {
-                Err(msg_opt_only_usable_if!(
-                    "printing a sequence of fields",
-                    "--delimiter",
-                    "-d"
-                ))
+                Err("invalid input: The '--delimiter' ('-d') option only usable if printing a sequence of fields".into())
             }
             Mode::Bytes(_, _) | Mode::Characters(_, _)
                 if matches.is_present(options::ONLY_DELIMITED) =>
             {
-                Err(msg_opt_only_usable_if!(
-                    "printing a sequence of fields",
-                    "--only-delimited",
-                    "-s"
-                ))
+                Err("invalid input: The '--only-delimited' ('-s') option only usable if printing a sequence of fields".into())
             }
             _ => Ok(mode),
         },
