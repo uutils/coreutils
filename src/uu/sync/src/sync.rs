@@ -9,14 +9,10 @@
 
 extern crate libc;
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use std::path::Path;
 use uucore::display::Quotable;
-
-static EXIT_ERR: i32 = 1;
+use uucore::error::{UResult, USimpleError};
 
 static ABOUT: &str = "Synchronize cached writes to persistent storage";
 pub mod options {
@@ -72,6 +68,7 @@ mod platform {
     use std::mem;
     use std::os::windows::prelude::*;
     use std::path::Path;
+    use uucore::crash;
     use uucore::wide::{FromWide, ToWide};
 
     unsafe fn flush_volume(name: &str) {
@@ -164,7 +161,8 @@ fn usage() -> String {
     format!("{0} [OPTION]... FILE...", uucore::execution_phrase())
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
@@ -176,11 +174,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     for f in &files {
         if !Path::new(&f).exists() {
-            crash!(
-                EXIT_ERR,
-                "cannot stat {}: No such file or directory",
-                f.quote()
-            );
+            return Err(USimpleError::new(
+                1,
+                format!("cannot stat {}: No such file or directory", f.quote()),
+            ));
         }
     }
 
@@ -194,7 +191,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     } else {
         sync();
     }
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
