@@ -20,17 +20,23 @@ mod platform {
 }
 
 fn main() {
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("Could not find manifest dir");
-    let profile = env::var("PROFILE").expect("Could not determine profile");
-
     let out_dir = env::var("OUT_DIR").unwrap();
-    let libstdbuf = format!(
-        "{}/../../../{}/{}/deps/liblibstdbuf{}",
-        manifest_dir,
-        env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".to_string()),
-        profile,
-        platform::DYLIB_EXT
-    );
+    let mut target_dir = Path::new(&out_dir);
+
+    // Depending on how this is util is built, the directory structure. This seems to work for now.
+    // Here are three cases to test when changing this:
+    // - cargo run
+    // - cross run
+    // - cargo install --git
+    let mut name = target_dir.file_name().unwrap().to_string_lossy();
+    while name != "target" && !name.starts_with("cargo-install") {
+        target_dir = target_dir.parent().unwrap();
+        name = target_dir.file_name().unwrap().to_string_lossy();
+    }
+    let mut libstdbuf = target_dir.to_path_buf();
+    libstdbuf.push(env::var("PROFILE").unwrap());
+    libstdbuf.push("deps");
+    libstdbuf.push(format!("liblibstdbuf{}", platform::DYLIB_EXT));
 
     fs::copy(libstdbuf, Path::new(&out_dir).join("libstdbuf.so")).unwrap();
 }
