@@ -1343,7 +1343,6 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
                 std::io::Error::new(ErrorKind::NotFound, "NotFound"),
                 path_data.p_buf.into_os_string()
             ));
-            //show!(err.map_err_context(|| pd.p_buf.to_string_lossy().into_owned()));
             continue;
         };
 
@@ -1487,7 +1486,6 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
                         std::io::Error::new(ErrorKind::NotFound, "NotFound"),
                         unwrapped.file_name()
                     ));
-                    //show!(err.map_err_context(|| pd.p_buf.to_string_lossy().into_owned()));
                     continue;
                 }
                 Ok(dir_ft) => {
@@ -1499,7 +1497,6 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
                             std::io::Error::new(ErrorKind::NotFound, "NotFound"),
                             unwrapped.file_name()
                         ));
-                        //show!(err.map_err_context(|| pd.p_buf.to_string_lossy().into_owned()));
                     }
                     res
                 }
