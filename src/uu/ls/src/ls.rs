@@ -2274,7 +2274,6 @@ fn display_symlink_count(metadata: &Metadata) -> String {
     metadata.nlink().to_string()
 }
 
-#[cfg(unix)]
 fn display_inode(metadata: &Metadata) -> String {
     #[cfg(unix)]
     {
