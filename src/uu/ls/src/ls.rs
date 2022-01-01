@@ -299,6 +299,7 @@ struct PaddingCollection {
     longest_group_len: usize,
     longest_context_len: usize,
     longest_size_len: usize,
+    longest_inode_len: usize,
 }
 
 impl Config {
@@ -1544,7 +1545,7 @@ fn get_metadata(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
     }
 }
 
-fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize, usize, usize) {
+fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize, usize, usize, usize) {
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
     if let Some(md) = entry.md() {
         (
@@ -1552,9 +1553,10 @@ fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize, u
             display_uname(md, config).len(),
             display_group(md, config).len(),
             display_size_or_rdev(md, config).len(),
+            display_inode(md).len(),
         )
     } else {
-        (0, 0, 0, 0)
+        (0, 0, 0, 0, 0)
     }
 }
 
@@ -1584,21 +1586,23 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
 
     if config.format == Format::Long {
         let (
+            mut longest_inode_len,
             mut longest_link_count_len,
             mut longest_uname_len,
             mut longest_group_len,
             mut longest_context_len,
             mut longest_size_len,
-        ) = (1, 1, 1, 1, 1);
+        ) = (1, 1, 1, 1, 1, 1);
 
         for item in items {
             let context_len = item.security_context.len();
-            let (link_count_len, uname_len, group_len, size_len) =
+            let (link_count_len, uname_len, group_len, size_len, inode_len) =
                 display_dir_entry_size(item, config);
             longest_link_count_len = link_count_len.max(longest_link_count_len);
             longest_size_len = size_len.max(longest_size_len);
             longest_uname_len = uname_len.max(longest_uname_len);
             longest_group_len = group_len.max(longest_group_len);
+            longest_inode_len = inode_len.max(longest_inode_len);
             if config.context {
                 longest_context_len = context_len.max(longest_context_len);
             }
@@ -1614,6 +1618,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                     longest_group_len,
                     longest_context_len,
                     longest_size_len,
+                    longest_inode_len,
                 },
                 config,
                 out,
@@ -1775,8 +1780,11 @@ fn display_item_long(
         #[cfg(unix)]
         {
             if config.inode {
-                let _ = write!(out, "{} ", get_inode(md));
-            }
+                let _ = write!(
+                out,
+                "{} ",
+                pad_left(&get_inode(md), padding.longest_inode_len),
+            );}
         }
 
         let _ = write!(
@@ -1841,12 +1849,11 @@ fn display_item_long(
         #[cfg(unix)]
         {
             if config.inode {
-                if config.recursive {
-                    let _ = write!(out, "       {} ", "?".to_string());
-                } else {
-                    let _ = write!(out, "{} ", "?".to_string());
-                }
-            }
+                let _ = write!(
+                out,
+                "{} ",
+                pad_left("?", padding.longest_inode_len),
+            );}
         }
 
         let _ = write!(
@@ -2223,7 +2230,7 @@ fn display_file_name(
                 // Because we use an absolute path, we can assume this is guaranteed to exist.
                 // Otherwise, we use path.md(), which will guarantee we color to the same
                 // color of non-existent symlinks according to style_for_path_with_metadata.
-                if path.md().is_none() {
+                if path.md().is_none() && target_data.md().is_none() {
                     name.push_str(&path.p_buf.read_link().unwrap().to_string_lossy());
                 } else {
                     let target_metadata = match target_data.md() {
@@ -2282,6 +2289,11 @@ fn display_symlink_count(_metadata: &Metadata) -> String {
 #[cfg(unix)]
 fn display_symlink_count(metadata: &Metadata) -> String {
     metadata.nlink().to_string()
+}
+
+#[cfg(unix)]
+fn display_inode(metadata: &Metadata) -> String {
+    metadata.ino().to_string()
 }
 
 // This returns the SELinux security context as UTF8 `String`.
