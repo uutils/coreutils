@@ -536,36 +536,35 @@ fn test_suffix_is_only_applied_to_selected_field() {
 #[test]
 fn test_transform_with_suffix_on_input() {
     new_ucmd!()
-        .args(&["--suffix=TEST", "--to=si"])
-        .pipe_in("2000TEST")
+        .args(&["--suffix=b", "--to=si"])
+        .pipe_in("2000b")
         .succeeds()
-        .stdout_only("2.0KTEST\n");
+        .stdout_only("2.0Kb\n");
 }
 
 #[test]
 fn test_transform_without_suffix_on_input() {
     new_ucmd!()
-        .args(&["--suffix=TEST", "--to=si"])
+        .args(&["--suffix=b", "--to=si"])
         .pipe_in("2000")
         .succeeds()
-        .stdout_only("2.0KTEST\n");
+        .stdout_only("2.0Kb\n");
 }
 
 #[test]
 fn test_transform_with_suffix_and_delimiter() {
     new_ucmd!()
-        .args(&["--suffix=mysuffix", "--to=si", "-d=|"])
-        .pipe_in("1000mysuffix|2000|3000")
+        .args(&["--suffix=b", "--to=si", "-d=|"])
+        .pipe_in("1000b|2000|3000")
         .succeeds()
-        .stdout_only("1.0Kmysuffix|2000|3000\n");
+        .stdout_only("1.0Kb|2000|3000\n");
 }
 
 #[test]
 fn test_suffix_with_padding() {
     new_ucmd!()
-        .args(&["--suffix=padme", "--padding=12"])
+        .args(&["--suffix=pad", "--padding=12"])
         .pipe_in("1000 2000 3000")
         .succeeds()
-        .stdout_only("   1000padme 2000 3000\n");
+        .stdout_only("     1000pad 2000 3000\n");
 }
-
