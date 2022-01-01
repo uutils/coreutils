@@ -661,7 +661,6 @@ impl Config {
 }
 
 #[uucore_procs::gen_uumain]
-#[allow(unused_mut)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
@@ -1299,7 +1298,7 @@ impl PathData {
         };
 
         let security_context = if config.context {
-            get_security_context(config, &p_buf, &must_dereference)
+            get_security_context(config, &p_buf, must_dereference)
         } else {
             String::new()
         };
@@ -1322,11 +1321,7 @@ impl PathData {
 
     fn file_type(&self) -> Option<&FileType> {
         self.ft
-            .get_or_init(|| {
-                get_metadata(&self.p_buf, self.must_dereference)
-                    .ok()
-                    .map(|md| md.file_type())
-            })
+            .get_or_init(|| self.md().map(|md| md.file_type()))
             .as_ref()
     }
 }
@@ -1389,14 +1384,11 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
                 k.md()
-                    .as_ref()
                     .and_then(|md| get_system_time(md, config))
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
-        Sort::Size => {
-            entries.sort_by_key(|k| Reverse(k.md().as_ref().map(|md| md.len()).unwrap_or(0)))
-        }
+        Sort::Size => entries.sort_by_key(|k| Reverse(k.md().map(|md| md.len()).unwrap_or(0))),
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
         Sort::Version => entries
@@ -1894,12 +1886,13 @@ fn display_item_long(
         }
 
         let dfn = display_file_name(item, config, None, out).contents;
+        let date_len = 12;
 
         let _ = writeln!(
             out,
             " {} {} {}",
             pad_left("?", padding.longest_size_len),
-            "           ?",
+            pad_left("?", date_len),
             dfn,
         );
     }
@@ -2197,14 +2190,6 @@ fn display_file_name(
         }
     }
 
-    // if config.format == Format::Long
-    //     && path.file_type().is_some()
-    //     && path.file_type().unwrap().is_symlink()
-    // {
-    //     name.push_str(" -> ");
-    //     name.push_str(&path.p_buf.read_link().unwrap().to_string_lossy());
-    // }
-
     if config.format == Format::Long
         && path.file_type().is_some()
         && path.file_type().unwrap().is_symlink()
@@ -2294,13 +2279,20 @@ fn display_symlink_count(metadata: &Metadata) -> String {
 
 #[cfg(unix)]
 fn display_inode(metadata: &Metadata) -> String {
-    metadata.ino().to_string()
+    #[cfg(unix)]
+    {
+        metadata.ino().to_string()
+    }
+    #[cfg(not(unix))]
+    {
+        "".to_string()
+    }
 }
 
 // This returns the SELinux security context as UTF8 `String`.
 // In the long term this should be changed to `OsStr`, see discussions at #2621/#2656
 #[allow(unused_variables)]
-fn get_security_context(config: &Config, p_buf: &Path, must_dereference: &bool) -> String {
+fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -> String {
     let substitute_string = "?".to_string();
     if config.selinux_supported {
         #[cfg(feature = "selinux")]

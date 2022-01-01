@@ -1315,24 +1315,6 @@ fn test_ls_color() {
             "{}  test-color\nb  {}\n",
             a_with_colors, z_with_colors
         ));
-
-    // link resolution should not contain colors
-    // this is GNU behavior but is not the present behavior uutils
-    // keeping here as we may choose later to make an option
-    // at.mkdir("temp_dir");
-    // at.symlink_file("temp_dir/does_not_exist", "temp_dir/dangle");
-    // let dangle_colors = format!("\x1b[1;40;31m{}\x1b[0m", "dangle");
-    // scene
-    //     .ucmd()
-    //     .arg("--color")
-    //     .arg("-l")
-    //     .arg("temp_dir")
-    //     .succeeds()
-    //     .stdout_contains(format!(
-    //         "{} -> {}/temp_dir/does_not_exist",
-    //         dangle_colors,
-    //         at.subdir.to_string_lossy()
-    //     ));
 }
 
 #[cfg(unix)]
