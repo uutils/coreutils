@@ -20,17 +20,12 @@ mod platform {
 }
 
 fn main() {
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("Could not find manifest dir");
-    let profile = env::var("PROFILE").expect("Could not determine profile");
-
-    let out_dir = env::var("OUT_DIR").unwrap();
-    let libstdbuf = format!(
-        "{}/../../../{}/{}/deps/liblibstdbuf{}",
-        manifest_dir,
-        env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".to_string()),
-        profile,
+    let out_dir = dbg!(env::var("OUT_DIR").unwrap());
+    let libstdbuf = dbg!(format!(
+        "{}/../../../deps/liblibstdbuf{}",
+        out_dir,
         platform::DYLIB_EXT
-    );
+    ));
 
     fs::copy(libstdbuf, Path::new(&out_dir).join("libstdbuf.so")).unwrap();
 }
