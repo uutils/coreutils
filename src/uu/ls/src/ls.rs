@@ -1545,7 +1545,10 @@ fn get_metadata(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
     }
 }
 
-fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize, usize, usize, usize) {
+fn display_dir_entry_size(
+    entry: &PathData,
+    config: &Config,
+) -> (usize, usize, usize, usize, usize) {
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
     if let Some(md) = entry.md() {
         (
@@ -1781,10 +1784,11 @@ fn display_item_long(
         {
             if config.inode {
                 let _ = write!(
-                out,
-                "{} ",
-                pad_left(&get_inode(md), padding.longest_inode_len),
-            );}
+                    out,
+                    "{} ",
+                    pad_left(&get_inode(md), padding.longest_inode_len),
+                );
+            }
         }
 
         let _ = write!(
@@ -1849,11 +1853,8 @@ fn display_item_long(
         #[cfg(unix)]
         {
             if config.inode {
-                let _ = write!(
-                out,
-                "{} ",
-                pad_left("?", padding.longest_inode_len),
-            );}
+                let _ = write!(out, "{} ", pad_left("?", padding.longest_inode_len),);
+            }
         }
 
         let _ = write!(
