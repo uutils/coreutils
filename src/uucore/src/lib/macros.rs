@@ -26,9 +26,7 @@
 //!   - From custom messages: [`show_error!`], [`show_usage_error!`]
 //! - Print warnings: [`show_warning!`]
 //! - Terminate util execution
-//!   - Terminate regularly: [`exit!`], [`return_if_err!`]
-//!   - Crash program: [`crash!`], [`crash_if_err!`], [`safe_unwrap!`]
-//! - Unwrapping result types: [`safe_unwrap!`]
+//!   - Crash program: [`crash!`], [`crash_if_err!`]
 
 // spell-checker:ignore sourcepath targetpath
 
@@ -223,22 +221,10 @@ macro_rules! show_usage_error(
     })
 );
 
-//====
-
-/// Calls [`std::process::exit`] with the provided exit code.
-///
-/// Why not call exit directly?
-#[macro_export]
-macro_rules! exit(
-    ($exit_code:expr) => ({
-        ::std::process::exit($exit_code)
-    })
-);
-
 /// Display an error and [`exit!`]
 ///
 /// Displays the provided error message using [`show_error!`], then invokes
-/// [`exit!`] with the provided exit code.
+/// [`std::process::exit`] with the provided exit code.
 ///
 /// # Examples
 ///
@@ -255,7 +241,7 @@ macro_rules! exit(
 macro_rules! crash(
     ($exit_code:expr, $($args:tt)+) => ({
         $crate::show_error!($($args)+);
-        $crate::exit!($exit_code)
+        std::process::exit($exit_code);
     })
 );
 
@@ -285,52 +271,6 @@ macro_rules! crash_if_err(
         match $exp {
             Ok(m) => m,
             Err(f) => $crate::crash!($exit_code, "{}", f),
-        }
-    )
-);
-
-/// Unwrap some Result, crashing instead of panicking.
-///
-/// Drop this in favor of `crash_if_err!`
-#[macro_export]
-macro_rules! safe_unwrap(
-    ($exp:expr) => (
-        match $exp {
-            Ok(m) => m,
-            Err(f) => $crate::crash!(1, "{}", f.to_string())
-        }
-    )
-);
-
-//====
-
-/// Unwraps the Result. Instead of panicking, it shows the error and then
-/// returns from the function with the provided exit code.
-/// Assumes the current function returns an i32 value.
-///
-/// Replace with `crash_if_err`?
-#[macro_export]
-macro_rules! return_if_err(
-    ($exit_code:expr, $exp:expr) => (
-        match $exp {
-            Ok(m) => m,
-            Err(f) => {
-                $crate::show_error!("{}", f);
-                return $exit_code;
-            }
-        }
-    )
-);
-
-//====
-
-/// This is used exclusively by du...
-#[macro_export]
-macro_rules! safe_writeln(
-    ($fd:expr, $($args:tt)+) => (
-        match writeln!($fd, $($args)+) {
-            Ok(_) => {}
-            Err(f) => panic!("{}", f)
         }
     )
 );

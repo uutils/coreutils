@@ -91,7 +91,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         if cfg!(windows) {
             // see https://github.com/rust-lang/rust/issues/29494
             show_error!("{} is currently not supported in this platform", OPT_FILTER);
-            exit!(-1);
+            std::process::exit(-1);
         } else {
             settings.filter = Some(matches.value_of(OPT_FILTER).unwrap().to_owned());
         }

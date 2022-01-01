@@ -292,13 +292,13 @@ fn du(
         let read = match fs::read_dir(&my_stat.path) {
             Ok(read) => read,
             Err(e) => {
-                safe_writeln!(
+                writeln!(
                     stderr(),
                     "{}: cannot read directory {}: {}",
                     options.util_name,
                     my_stat.path.quote(),
                     e
-                );
+                ).unwrap();
                 return Box::new(iter::once(my_stat));
             }
         };

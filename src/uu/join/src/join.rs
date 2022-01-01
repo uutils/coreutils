@@ -413,7 +413,7 @@ impl<'a> State<'a> {
 
             // This is fatal if the check is enabled.
             if input.check_order == CheckOrder::Enabled {
-                exit!(1);
+                std::process::exit(1);
             }
 
             self.has_failed = true;
