@@ -64,6 +64,12 @@ fn test_ls_io_errors() {
     at.mkdir("some-dir1");
     at.mkdir("some-dir2");
     at.symlink_file("does_not_exist", "some-dir2/dangle");
+    at.mkdir("some-dir3");
+    at.mkdir("some-dir3/some-dir4");
+    at.mkdir("some-dir3/some-dir5");
+    at.mkdir("some-dir3/some-dir6");
+    at.mkdir("some-dir3/some-dir7");
+    at.mkdir("some-dir3/some-dir8");
 
     scene.ccmd("chmod").arg("000").arg("some-dir1").succeeds();
 
@@ -83,6 +89,32 @@ fn test_ls_io_errors() {
         .stderr_contains("cannot access")
         .stderr_contains("No such file or directory")
         .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
+
+    scene
+        .ccmd("chmod")
+        .arg("000")
+        .arg("some-dir3/some-dir4")
+        .succeeds();
+
+    scene
+        .ucmd()
+        .arg("-la")
+        .arg("some-dir3/*")
+        .fails()
+        .stderr_contains("some-dir4")
+        .stderr_contains("cannot open directory")
+        .stderr_contains("Permission denied")
+        .stdout_does_not_contain("some-dir4");
+
+    scene
+        .ucmd()
+        .arg("-laR")
+        .arg("some-dir3")
+        .fails()
+        .stderr_contains("some-dir4")
+        .stderr_contains("cannot open directory")
+        .stderr_contains("Permission denied")
+        .stdout_does_not_contain("some-dir4");
 }
 
 #[test]

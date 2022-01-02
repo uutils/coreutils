@@ -1331,7 +1331,7 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
     let mut out = BufWriter::new(stdout());
-    let locs_len = locs.len();
+    let initial_locs_len = locs.len();
 
     for loc in locs {
         let path_data = PathData::new(PathBuf::from(loc), None, None, &config, true);
@@ -1368,11 +1368,7 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
     display_items(&files, &config, &mut out);
 
     for dir in &dirs {
-        if locs_len > 1 || config.recursive {
-            // FIXME: This should use the quoting style and propagate errors
-            let _ = writeln!(out, "\n{}:", dir.p_buf.display());
-        }
-        enter_directory(dir, &config, &mut out);
+        enter_directory(dir, &config, initial_locs_len, &mut out);
     }
 
     Ok(())
@@ -1442,7 +1438,12 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
     true
 }
 
-fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>) {
+fn enter_directory(
+    dir: &PathData,
+    config: &Config,
+    initial_locs_len: usize,
+    out: &mut BufWriter<Stdout>,
+) {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
         vec![
@@ -1508,6 +1509,11 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
     sort_entries(&mut vec_path_data, config);
     entries.append(&mut vec_path_data);
 
+    // Print dir heading - name...
+    if initial_locs_len > 1 || config.recursive {
+        let _ = writeln!(out, "\n{}:", dir.p_buf.display());
+    }
+    // ...and total
     if config.format == Format::Long {
         display_total(&entries, config, out);
     }
@@ -1520,8 +1526,7 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
             .skip(if config.files == Files::All { 2 } else { 0 })
             .filter(|p| p.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
         {
-            let _ = writeln!(out, "\n{}:", e.p_buf.display());
-            enter_directory(e, config, out);
+            enter_directory(e, config, 0, out);
         }
     }
 }
