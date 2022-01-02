@@ -294,12 +294,13 @@ struct LongFormat {
 }
 
 struct PaddingCollection {
+    #[cfg(unix)]
+    longest_inode_len: usize,
     longest_link_count_len: usize,
     longest_uname_len: usize,
     longest_group_len: usize,
     longest_context_len: usize,
     longest_size_len: usize,
-    longest_inode_len: usize,
 }
 
 impl Config {
@@ -1577,6 +1578,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
     // option, print the security context to the left of the size column.
 
     if config.format == Format::Long {
+        #[cfg(unix)]
         let (
             mut longest_inode_len,
             mut longest_link_count_len,
@@ -1586,15 +1588,27 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             mut longest_size_len,
         ) = (1, 1, 1, 1, 1, 1);
 
+        #[cfg(not(unix))]
+        let (
+            mut longest_link_count_len,
+            mut longest_uname_len,
+            mut longest_group_len,
+            mut longest_context_len,
+            mut longest_size_len,
+        ) = (1, 1, 1, 1, 1);
+
         for item in items {
             let context_len = item.security_context.len();
             let (link_count_len, uname_len, group_len, size_len, inode_len) =
                 display_dir_entry_size(item, config);
+            #[cfg(unix)]
+            {
+                longest_inode_len = inode_len.max(longest_inode_len);
+            }
             longest_link_count_len = link_count_len.max(longest_link_count_len);
             longest_size_len = size_len.max(longest_size_len);
             longest_uname_len = uname_len.max(longest_uname_len);
             longest_group_len = group_len.max(longest_group_len);
-            longest_inode_len = inode_len.max(longest_inode_len);
             if config.context {
                 longest_context_len = context_len.max(longest_context_len);
             }
@@ -1605,12 +1619,13 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             display_item_long(
                 item,
                 PaddingCollection {
+                    #[cfg(unix)]
+                    longest_inode_len,
                     longest_link_count_len,
                     longest_uname_len,
                     longest_group_len,
                     longest_context_len,
                     longest_size_len,
-                    longest_inode_len,
                 },
                 config,
                 out,
