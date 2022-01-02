@@ -381,15 +381,10 @@ atty = "0.2"
 rlimit = "0.4.0"
 
 [target.'cfg(unix)'.dev-dependencies]
-nix = "=0.23.1"
+nix = "0.23.1"
 rust-users = { version="0.10", package="users" }
 unix_socket = "0.5.0"
 
 [[bin]]
 name = "coreutils"
 path = "src/bin/coreutils.rs"
-
-[patch.crates-io]
-# FixME: [2021-11-16; rivy] remove 'nix' patch when MacOS compatibility is restored; ref: <https://github.com/nix-rust/nix/pull/1590>
-# nix = { git = "https://github.com/rivy-t/nix" }
-nix = { path = "vendor/nix-v0.23.1-patched" }
