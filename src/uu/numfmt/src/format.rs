@@ -221,10 +221,9 @@ fn format_string(
     implicit_padding: Option<isize>,
 ) -> Result<String> {
     // strip the (optional) suffix before applying any transformation
-    let source_without_suffix = if let Some(suffix) = &options.suffix {
-        source.strip_suffix(suffix).unwrap_or(source)
-    } else {
-        source
+    let source_without_suffix = match &options.suffix {
+        Some(suffix) => source.strip_suffix(suffix).unwrap_or(source),
+        None => source,
     };
 
     let number = transform_to(
@@ -234,10 +233,9 @@ fn format_string(
     )?;
 
     // bring back the suffix before applying padding
-    let number_with_suffix = if let Some(suffix) = &options.suffix {
-        format!("{}{}", number, suffix)
-    } else {
-        number
+    let number_with_suffix = match &options.suffix {
+        Some(suffix) => format!("{}{}", number, suffix),
+        None => number,
     };
 
     Ok(match implicit_padding.unwrap_or(options.padding) {
