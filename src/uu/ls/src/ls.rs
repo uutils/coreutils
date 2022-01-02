@@ -1347,7 +1347,6 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
             continue;
         };
 
-        // don't do file_type() to save allocating metadata
         let show_dir_contents = match path_data.file_type() {
             Some(ft) => !config.directory && ft.is_dir(),
             None => {
@@ -1415,7 +1414,7 @@ fn is_hidden(file_path: &DirEntry) -> bool {
         let attr = metadata.file_attributes();
         (attr & 0x2) > 0
     }
-    #[cfg(unix)]
+    #[cfg(not(windows))]
     {
         file_path
             .file_name()
@@ -2306,7 +2305,7 @@ fn display_symlink_count(metadata: &Metadata) -> String {
 fn display_inode(metadata: &Metadata) -> String {
     #[cfg(unix)]
     {
-        metadata.ino().to_string()
+        get_inode(metadata)
     }
     #[cfg(not(unix))]
     {
