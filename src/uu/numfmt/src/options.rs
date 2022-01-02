@@ -11,6 +11,7 @@ pub const HEADER_DEFAULT: &str = "1";
 pub const NUMBER: &str = "NUMBER";
 pub const PADDING: &str = "padding";
 pub const ROUND: &str = "round";
+pub const SUFFIX: &str = "suffix";
 pub const TO: &str = "to";
 pub const TO_DEFAULT: &str = "none";
 
@@ -26,6 +27,7 @@ pub struct NumfmtOptions {
     pub fields: Vec<Range>,
     pub delimiter: Option<String>,
     pub round: RoundMethod,
+    pub suffix: Option<String>,
 }
 
 #[derive(Clone, Copy)]
