@@ -25,6 +25,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use uucore::display::{Quotable, Quoted};
+use uucore::error::{UIoError, UResult};
 
 /// The minimum character width for formatting counts when reading from stdin.
 const MINIMUM_WIDTH: usize = 7;
@@ -132,7 +133,8 @@ impl Input {
     }
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
@@ -157,11 +159,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let settings = Settings::new(&matches);
 
-    if wc(inputs, &settings).is_ok() {
-        0
-    } else {
-        1
-    }
+    wc(inputs, &settings)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -326,19 +324,6 @@ fn word_count_from_input(input: &Input, settings: &Settings) -> CountResult {
     }
 }
 
-/// Print a message appropriate for the particular error to `stderr`.
-///
-/// # Examples
-///
-/// This will print `wc: /tmp: Is a directory` to `stderr`.
-///
-/// ```rust,ignore
-/// show_error(Input::Path("/tmp"), WcError::IsDirectory("/tmp"))
-/// ```
-fn show_error(input: &Input, err: io::Error) {
-    show_error!("{}: {}", input.path_display(), err);
-}
-
 /// Compute the number of digits needed to represent any count for this input.
 ///
 /// If `input` is [`Input::Stdin`], then this function returns
@@ -418,7 +403,7 @@ fn max_width(inputs: &[Input]) -> usize {
     result
 }
 
-fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
+fn wc(inputs: Vec<Input>, settings: &Settings) -> UResult<()> {
     // Compute the width, in digits, to use when formatting counts.
     //
     // The width is the number of digits needed to print the number of
@@ -427,7 +412,6 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
     //
     // If we only need to display a single number, set this to 0 to
     // prevent leading spaces.
-    let mut failure = false;
     let max_width = if settings.number_enabled() <= 1 {
         0
     } else {
@@ -442,44 +426,38 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
         let word_count = match word_count_from_input(input, settings) {
             CountResult::Success(word_count) => word_count,
             CountResult::Interrupted(word_count, error) => {
-                show_error(input, error);
-                failure = true;
+                show!(uio_error!(error, "{}", input.path_display()));
                 word_count
             }
             CountResult::Failure(error) => {
-                show_error(input, error);
-                failure = true;
+                show!(uio_error!(error, "{}", input.path_display()));
                 continue;
             }
         };
         total_word_count += word_count;
         let result = word_count.with_title(input.to_title());
         if let Err(err) = print_stats(settings, &result, max_width) {
-            show_warning!(
-                "failed to print result for {}: {}",
+            show!(uio_error!(
+                err,
+                "failed to print result for {}",
                 result
                     .title
                     .unwrap_or_else(|| "<stdin>".as_ref())
                     .maybe_quote(),
-                err
-            );
-            failure = true;
+            ));
         }
     }
 
     if num_inputs > 1 {
         let total_result = total_word_count.with_title(Some("total".as_ref()));
         if let Err(err) = print_stats(settings, &total_result, max_width) {
-            show_warning!("failed to print total: {}", err);
-            failure = true;
+            show!(uio_error!(err, "failed to print total"));
         }
     }
 
-    if failure {
-        Err(1)
-    } else {
-        Ok(())
-    }
+    // Although this appears to be returning `Ok`, the exit code may
+    // have been set to a non-zero value by a call to `show!()` above.
+    Ok(())
 }
 
 fn print_stats(settings: &Settings, result: &TitledWordCount, min_width: usize) -> io::Result<()> {
