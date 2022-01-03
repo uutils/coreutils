@@ -355,23 +355,23 @@ fn num_prefix(i: usize) -> String {
 /// assert_eq!(factory.make(650).unwrap(), "zaaa");
 /// assert_eq!(factory.make(6551).unwrap(), "zaab");
 /// ```
-pub struct FilenameFactory {
-    additional_suffix: String,
-    prefix: String,
+pub struct FilenameFactory<'a> {
+    prefix: &'a str,
+    additional_suffix: &'a str,
     suffix_length: usize,
     use_numeric_suffix: bool,
 }
 
-impl FilenameFactory {
+impl<'a> FilenameFactory<'a> {
     /// Create a new instance of this struct.
     ///
     /// For an explanation of the parameters, see the struct documentation.
     pub fn new(
-        prefix: String,
-        additional_suffix: String,
+        prefix: &'a str,
+        additional_suffix: &'a str,
         suffix_length: usize,
         use_numeric_suffix: bool,
-    ) -> FilenameFactory {
+    ) -> FilenameFactory<'a> {
         FilenameFactory {
             prefix,
             additional_suffix,
@@ -392,8 +392,8 @@ impl FilenameFactory {
     /// ```rust,ignore
     /// use crate::filenames::FilenameFactory;
     ///
-    /// let prefix = String::new();
-    /// let suffix = String::new();
+    /// let prefix = "";
+    /// let suffix = "";
     /// let width = 1;
     /// let use_numeric_suffix = true;
     /// let factory = FilenameFactory::new(prefix, suffix, width, use_numeric_suffix);
@@ -401,15 +401,16 @@ impl FilenameFactory {
     /// assert_eq!(factory.make(10), None);
     /// ```
     pub fn make(&self, i: usize) -> Option<String> {
-        let prefix = self.prefix.clone();
-        let suffix1 = match (self.use_numeric_suffix, self.suffix_length) {
+        let suffix = match (self.use_numeric_suffix, self.suffix_length) {
             (true, 0) => Some(num_prefix(i)),
             (false, 0) => str_prefix(i),
             (true, width) => num_prefix_fixed_width(i, width),
             (false, width) => str_prefix_fixed_width(i, width),
         }?;
-        let suffix2 = &self.additional_suffix;
-        Some(prefix + &suffix1 + suffix2)
+        Some(format!(
+            "{}{}{}",
+            self.prefix, suffix, self.additional_suffix
+        ))
     }
 }
 
@@ -513,7 +514,7 @@ mod tests {
 
     #[test]
     fn test_alphabetic_suffix() {
-        let factory = FilenameFactory::new("123".to_string(), "789".to_string(), 3, false);
+        let factory = FilenameFactory::new("123", "789", 3, false);
         assert_eq!(factory.make(0).unwrap(), "123aaa789");
         assert_eq!(factory.make(1).unwrap(), "123aab789");
         assert_eq!(factory.make(28).unwrap(), "123abc789");
@@ -521,7 +522,7 @@ mod tests {
 
     #[test]
     fn test_numeric_suffix() {
-        let factory = FilenameFactory::new("abc".to_string(), "xyz".to_string(), 3, true);
+        let factory = FilenameFactory::new("abc", "xyz", 3, true);
         assert_eq!(factory.make(0).unwrap(), "abc000xyz");
         assert_eq!(factory.make(1).unwrap(), "abc001xyz");
         assert_eq!(factory.make(123).unwrap(), "abc123xyz");
