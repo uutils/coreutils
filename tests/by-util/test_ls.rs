@@ -104,7 +104,7 @@ fn test_ls_io_errors() {
         .stderr_contains("some-dir4")
         .stderr_contains("cannot open directory")
         .stderr_contains("Permission denied")
-        .stdout_does_contain("some-dir4");
+        .stdout_contains("some-dir4");
 }
 
 #[test]
