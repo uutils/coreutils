@@ -25,7 +25,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use uucore::display::{Quotable, Quoted};
-use uucore::error::{UIoError, UResult};
+use uucore::error::{UResult, USimpleError};
 
 /// The minimum character width for formatting counts when reading from stdin.
 const MINIMUM_WIDTH: usize = 7;
@@ -426,24 +426,33 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> UResult<()> {
         let word_count = match word_count_from_input(input, settings) {
             CountResult::Success(word_count) => word_count,
             CountResult::Interrupted(word_count, error) => {
-                show!(uio_error!(error, "{}", input.path_display()));
+                show!(USimpleError::new(
+                    1,
+                    format!("{}: {}", input.path_display(), error)
+                ));
                 word_count
             }
             CountResult::Failure(error) => {
-                show!(uio_error!(error, "{}", input.path_display()));
+                show!(USimpleError::new(
+                    1,
+                    format!("{}: {}", input.path_display(), error)
+                ));
                 continue;
             }
         };
         total_word_count += word_count;
         let result = word_count.with_title(input.to_title());
         if let Err(err) = print_stats(settings, &result, max_width) {
-            show!(uio_error!(
-                err,
-                "failed to print result for {}",
-                result
-                    .title
-                    .unwrap_or_else(|| "<stdin>".as_ref())
-                    .maybe_quote(),
+            show!(USimpleError::new(
+                1,
+                format!(
+                    "failed to print result for {}: {}",
+                    result
+                        .title
+                        .unwrap_or_else(|| "<stdin>".as_ref())
+                        .maybe_quote(),
+                    err,
+                ),
             ));
         }
     }
@@ -451,7 +460,10 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> UResult<()> {
     if num_inputs > 1 {
         let total_result = total_word_count.with_title(Some("total".as_ref()));
         if let Err(err) = print_stats(settings, &total_result, max_width) {
-            show!(uio_error!(err, "failed to print total"));
+            show!(USimpleError::new(
+                1,
+                format!("failed to print total: {}", err)
+            ));
         }
     }
 
