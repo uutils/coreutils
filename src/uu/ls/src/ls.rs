@@ -143,7 +143,7 @@ const DEFAULT_TERM_WIDTH: u16 = 80;
 enum LsError {
     InvalidLineWidth(String),
     IOError(std::io::Error),
-    IOErrorContext(std::io::Error, OsString),
+    IOErrorContext(std::io::Error, PathBuf),
 }
 
 impl UError for LsError {
@@ -163,35 +163,34 @@ impl Display for LsError {
         match self {
             LsError::InvalidLineWidth(s) => write!(f, "invalid line width: {}", s.quote()),
             LsError::IOError(e) => write!(f, "general io error: {}", e),
-            LsError::IOErrorContext(e, s) => {
-                let path = Path::new(s);
+            LsError::IOErrorContext(e, p) => {
                 let error_kind = e.kind();
 
                 match error_kind {
                     ErrorKind::NotFound => write!(
                         f,
                         "cannot access '{}': No such file or directory",
-                        s.to_string_lossy()
+                        p.to_string_lossy()
                     ),
                     ErrorKind::PermissionDenied => {
-                        if path.is_dir() {
+                        if p.is_dir() {
                             write!(
                                 f,
                                 "cannot open directory '{}': Permission denied",
-                                s.to_string_lossy()
+                                p.to_string_lossy()
                             )
                         } else {
                             write!(
                                 f,
                                 "cannot open file '{}': Permission denied",
-                                s.to_string_lossy()
+                                p.to_string_lossy()
                             )
                         }
                     }
                     _ => write!(
                         f,
                         "unknown io error: '{:?}', '{:?}'",
-                        s.to_string_lossy(),
+                        p.to_string_lossy(),
                         e
                     ),
                 }
@@ -1342,7 +1341,7 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
             let _ = out.flush();
             show!(LsError::IOErrorContext(
                 std::io::Error::new(ErrorKind::NotFound, "NotFound"),
-                path_data.p_buf.into_os_string()
+                path_data.p_buf
             ));
             continue;
         };
@@ -1462,7 +1461,7 @@ fn enter_directory(
         Err(err) => {
             // flush buffer because the error may get printed in the wrong order
             let _ = out.flush();
-            show!(LsError::IOErrorContext(err, dir.display_name.to_owned()));
+            show!(LsError::IOErrorContext(err, dir.p_buf.clone()));
             return;
         }
         Ok(res) => res,
@@ -1485,7 +1484,7 @@ fn enter_directory(
                     let _ = out.flush();
                     show!(LsError::IOErrorContext(
                         std::io::Error::new(ErrorKind::NotFound, "NotFound"),
-                        unwrapped.file_name()
+                        unwrapped.path()
                     ));
                     continue;
                 }
@@ -1496,7 +1495,7 @@ fn enter_directory(
                         let _ = out.flush();
                         show!(LsError::IOErrorContext(
                             std::io::Error::new(ErrorKind::NotFound, "NotFound"),
-                            unwrapped.file_name()
+                            unwrapped.path()
                         ));
                     }
                     res
@@ -2180,7 +2179,7 @@ fn display_file_name(
                 let _ = out.flush();
                 let show_error = show!(LsError::IOErrorContext(
                     std::io::Error::new(ErrorKind::NotFound, "NotFound"),
-                    path.p_buf.as_os_str().to_owned()
+                    path.p_buf.clone(),
                 ));
                 "?".to_string()
             };
