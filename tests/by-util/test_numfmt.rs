@@ -568,3 +568,8 @@ fn test_suffix_with_padding() {
         .succeeds()
         .stdout_only("     1000pad 2000 3000\n");
 }
+
+#[test]
+fn test_invalid_number_returns_status_2() {
+    new_ucmd!().pipe_in("hello").fails().code_is(2);
+}

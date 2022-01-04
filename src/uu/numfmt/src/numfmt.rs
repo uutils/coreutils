@@ -7,15 +7,17 @@
 
 // spell-checker:ignore N'th M'th
 
+use crate::errors::*;
 use crate::format::format_and_print;
 use crate::options::*;
 use crate::units::{Result, Unit};
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::io::{BufRead, Write};
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::UResult;
 use uucore::ranges::Range;
 
+pub mod errors;
 pub mod format;
 pub mod options;
 mod units;
@@ -53,28 +55,35 @@ fn usage() -> String {
     format!("{0} [OPTION]... [NUMBER]...", uucore::execution_phrase())
 }
 
-fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: NumfmtOptions) -> Result<()> {
+fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: NumfmtOptions) -> UResult<()> {
     for l in args {
-        format_and_print(l, &options)?;
+        match format_and_print(l, &options) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(NumfmtError::FormattingError(e.to_string())),
+        }?;
     }
 
     Ok(())
 }
 
-fn handle_stdin(options: NumfmtOptions) -> Result<()> {
+fn handle_stdin(options: NumfmtOptions) -> UResult<()> {
     let stdin = std::io::stdin();
     let locked_stdin = stdin.lock();
 
     let mut lines = locked_stdin.lines();
-    for l in lines.by_ref().take(options.header) {
-        l.map(|s| println!("{}", s)).map_err(|e| e.to_string())?;
+    for (idx, line) in lines.by_ref().enumerate() {
+        match line {
+            Ok(l) if idx < options.header => {
+                println!("{}", l);
+                Ok(())
+            }
+            Ok(l) => match format_and_print(&l, &options) {
+                Ok(_) => Ok(()),
+                Err(e) => Err(NumfmtError::FormattingError(e.to_string())),
+            },
+            Err(e) => Err(NumfmtError::IoError(e.to_string())),
+        }?;
     }
-
-    for l in lines {
-        l.map_err(|e| e.to_string())
-            .and_then(|l| format_and_print(&l, &options))?;
-    }
-
     Ok(())
 }
 
@@ -161,18 +170,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
-    let result =
-        parse_options(&matches).and_then(|options| match matches.values_of(options::NUMBER) {
-            Some(values) => handle_args(values, options),
-            None => handle_stdin(options),
-        });
+    let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
+
+    let result = match matches.values_of(options::NUMBER) {
+        Some(values) => handle_args(values, options),
+        None => handle_stdin(options),
+    };
 
     match result {
         Err(e) => {
             std::io::stdout().flush().expect("error flushing stdout");
-            // TODO Change `handle_args()` and `handle_stdin()` so that
-            // they return `UResult`.
-            return Err(USimpleError::new(1, e));
+            Err(e)
         }
         _ => Ok(()),
     }
