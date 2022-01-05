@@ -11,7 +11,6 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
-
 #[cfg(not(windows))]
 extern crate libc;
 #[cfg(not(windows))]
@@ -37,6 +36,75 @@ fn test_ls_ls() {
 fn test_ls_i() {
     new_ucmd!().arg("-i").succeeds();
     new_ucmd!().arg("-il").succeeds();
+}
+
+#[test]
+fn test_ls_ordering() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("some-dir1");
+    at.mkdir("some-dir2");
+    at.mkdir("some-dir3");
+    at.mkdir("some-dir4");
+    at.mkdir("some-dir5");
+    at.mkdir("some-dir6");
+
+    scene
+        .ucmd()
+        .arg("-Rl")
+        .succeeds()
+        .stdout_matches(&Regex::new("some-dir1:\\ntotal 0").unwrap());
+}
+
+#[cfg(all(feature = "chmod"))]
+#[test]
+fn test_ls_io_errors() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("some-dir1");
+    at.mkdir("some-dir2");
+    at.symlink_file("does_not_exist", "some-dir2/dangle");
+    at.mkdir("some-dir3");
+    at.mkdir("some-dir3/some-dir4");
+    at.mkdir("some-dir3/some-dir5");
+    at.mkdir("some-dir3/some-dir6");
+    at.mkdir("some-dir3/some-dir7");
+    at.mkdir("some-dir3/some-dir8");
+
+    scene.ccmd("chmod").arg("000").arg("some-dir1").succeeds();
+
+    scene
+        .ucmd()
+        .arg("-1")
+        .arg("some-dir1")
+        .fails()
+        .stderr_contains("cannot open directory")
+        .stderr_contains("Permission denied");
+
+    scene
+        .ucmd()
+        .arg("-Li")
+        .arg("some-dir2")
+        .fails()
+        .stderr_contains("cannot access")
+        .stderr_contains("No such file or directory")
+        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
+
+    scene
+        .ccmd("chmod")
+        .arg("000")
+        .arg("some-dir3/some-dir4")
+        .succeeds();
+
+    scene
+        .ucmd()
+        .arg("-laR")
+        .arg("some-dir3")
+        .fails()
+        .stderr_contains("some-dir4")
+        .stderr_contains("cannot open directory")
+        .stderr_contains("Permission denied")
+        .stdout_contains("some-dir4");
 }
 
 #[test]
@@ -2303,8 +2371,16 @@ fn test_ls_dangling_symlinks() {
         .ucmd()
         .arg("-Li")
         .arg("temp_dir")
-        .succeeds() // this should fail, though at the moment, ls lacks a way to propagate errors encountered during display
+        .fails()
+        .stderr_contains("cannot access")
         .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
+
+    scene
+        .ucmd()
+        .arg("-Ll")
+        .arg("temp_dir")
+        .fails()
+        .stdout_contains("l?????????");
 }
 
 #[test]
