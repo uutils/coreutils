@@ -142,6 +142,8 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         _ => unreachable!("Should be restricted by clap"),
     };
 
+    let suffix = args.value_of(options::SUFFIX).map(|s| s.to_owned());
+
     Ok(NumfmtOptions {
         transform,
         padding,
@@ -149,6 +151,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         fields,
         delimiter,
         round,
+        suffix,
     })
 }
 
@@ -241,6 +244,15 @@ pub fn uu_app() -> App<'static, 'static> {
                 .value_name("METHOD")
                 .default_value("from-zero")
                 .possible_values(&["up", "down", "from-zero", "towards-zero", "nearest"]),
+        )
+        .arg(
+            Arg::with_name(options::SUFFIX)
+                .long(options::SUFFIX)
+                .help(
+                    "print SUFFIX after each formatted number, and accept \
+                    inputs optionally ending with SUFFIX",
+                )
+                .value_name("SUFFIX"),
         )
         .arg(Arg::with_name(options::NUMBER).hidden(true).multiple(true))
 }

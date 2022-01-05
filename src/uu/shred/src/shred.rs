@@ -410,7 +410,7 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
                 util_name(),
                 size_str_opt.unwrap().maybe_quote()
             );
-            exit!(1);
+            std::process::exit(1);
         }
     };
 

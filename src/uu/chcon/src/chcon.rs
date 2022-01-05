@@ -2,7 +2,8 @@
 
 #![allow(clippy::upper_case_acronyms)]
 
-use uucore::{display::Quotable, show_error, show_usage_error, show_warning};
+use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::{display::Quotable, show_error, show_warning};
 
 use clap::{App, Arg};
 use selinux::{OpaqueSecurityContext, SecurityContext};
@@ -60,7 +61,8 @@ fn get_usage() -> String {
     )
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
 
     let config = uu_app().usage(usage.as_ref());
@@ -72,14 +74,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 match r.kind {
                     clap::ErrorKind::HelpDisplayed | clap::ErrorKind::VersionDisplayed => {
                         println!("{}", r);
-                        return libc::EXIT_SUCCESS;
+                        return Ok(());
                     }
                     _ => {}
                 }
             }
 
-            show_usage_error!("{}.\n", r);
-            return libc::EXIT_FAILURE;
+            return Err(UUsageError::new(libc::EXIT_FAILURE, format!("{}.\n", r)));
         }
     };
 
@@ -98,8 +99,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
             match result {
                 Err(r) => {
-                    show_error!("{}.", report_full_error(&r));
-                    return libc::EXIT_FAILURE;
+                    return Err(USimpleError::new(
+                        libc::EXIT_FAILURE,
+                        format!("{}.", report_full_error(&r)),
+                    ));
                 }
 
                 Ok(file_context) => SELinuxSecurityContext::File(file_context),
@@ -111,14 +114,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Ok(context) => context,
 
                 Err(_r) => {
-                    show_error!("Invalid security context {}.", context.quote());
-                    return libc::EXIT_FAILURE;
+                    return Err(USimpleError::new(
+                        libc::EXIT_FAILURE,
+                        format!("Invalid security context {}.", context.quote()),
+                    ));
                 }
             };
 
             if SecurityContext::from_c_str(&c_context, false).check() == Some(false) {
-                show_error!("Invalid security context {}.", context.quote());
-                return libc::EXIT_FAILURE;
+                return Err(USimpleError::new(
+                    libc::EXIT_FAILURE,
+                    format!("Invalid security context {}.", context.quote()),
+                ));
             }
 
             SELinuxSecurityContext::String(Some(c_context))
@@ -132,8 +139,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Ok(r) => Some(r),
 
             Err(r) => {
-                show_error!("{}.", report_full_error(&r));
-                return libc::EXIT_FAILURE;
+                return Err(USimpleError::new(
+                    libc::EXIT_FAILURE,
+                    format!("{}.", report_full_error(&r)),
+                ));
             }
         }
     } else {
@@ -142,13 +151,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let results = process_files(&options, &context, root_dev_ino);
     if results.is_empty() {
-        return libc::EXIT_SUCCESS;
+        return Ok(());
     }
 
     for result in &results {
         show_error!("{}.", report_full_error(result));
     }
-    libc::EXIT_FAILURE
+    Err(libc::EXIT_FAILURE.into())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
