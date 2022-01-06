@@ -1468,11 +1468,7 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
     true
 }
 
-fn enter_directory(
-    dir: &PathData,
-    config: &Config,
-    out: &mut BufWriter<Stdout>,
-) {
+fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>) {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
         vec![
@@ -1596,7 +1592,7 @@ fn display_dir_entry_size(
             display_symlink_count(md).len(),
             display_uname(md, config).len(),
             display_group(md, config).len(),
-            match display_size_or_rdev(md, config) { 
+            match display_size_or_rdev(md, config) {
                 SizeOrDeviceId::Device(x, y) => x.len() + y.len() + 3,
                 SizeOrDeviceId::Size(z) => z.len(),
             },
@@ -1920,7 +1916,7 @@ fn display_item_long(
                     display_date(md, config),
                     dfn,
                 );
-            },
+            }
             SizeOrDeviceId::Device(major, minor) => {
                 let _ = writeln!(
                     out,
@@ -1930,7 +1926,7 @@ fn display_item_long(
                     display_date(md, config),
                     dfn,
                 );
-            },
+            }
         };
     } else {
         // this 'else' is expressly for the case of a dangling symlink

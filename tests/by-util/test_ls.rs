@@ -115,12 +115,9 @@ fn test_ls_only_dirs_formatting() {
     at.mkdir("some-dir2");
     at.mkdir("some-dir3");
 
-    scene
-        .ucmd()
-        .arg("-1")
-        .arg("-R")        
-        .succeeds()
-        .stdout_only(".:\nsome-dir1\nsome-dir2\nsome-dir3\n\n./some-dir1:\n\n./some-dir2:\n\n./some-dir3:\n");       
+    scene.ucmd().arg("-1").arg("-R").succeeds().stdout_only(
+        ".:\nsome-dir1\nsome-dir2\nsome-dir3\n\n./some-dir1:\n\n./some-dir2:\n\n./some-dir3:\n",
+    );
 }
 
 //#[cfg(all(feature = "mknod"))]
@@ -130,14 +127,14 @@ fn test_ls_devices() {
     let at = &scene.fixtures;
     at.mkdir("some-dir1");
 
-    // We need superuser privileges to create own devices? 
+    // We need superuser privileges to create own devices?
     // Can we do this in the CI?
     //
     //scene.ccmd("mknod").arg("some-dev1").arg("c").arg("1").arg("3").succeeds();
-    
+
     // scene
     //     .ucmd()
-    //     .arg("-al")        
+    //     .arg("-al")
     //     .succeeds()
     //     .stdout_contains("1,")
     //     .stdout_contains("3");
@@ -147,17 +144,17 @@ fn test_ls_devices() {
         scene
             .ucmd()
             .arg("-al")
-            .arg("/dev/null")        
+            .arg("/dev/null")
             .succeeds()
             .stdout_contains("3, 2");
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         scene
             .ucmd()
             .arg("-al")
-            .arg("/dev/null")        
+            .arg("/dev/null")
             .succeeds()
             .stdout_contains("1, 3");
     }
