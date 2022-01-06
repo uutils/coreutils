@@ -165,26 +165,44 @@ impl Display for LsError {
             LsError::IOError(e) => write!(f, "general io error: {}", e),
             LsError::IOErrorContext(e, p) => {
                 let error_kind = e.kind();
+                let raw_os_error = e.raw_os_error().unwrap_or(13i32);
 
                 match error_kind {
-                    ErrorKind::NotFound => write!(
-                        f,
-                        "cannot access '{}': No such file or directory",
-                        p.to_string_lossy()
-                    ),
-                    ErrorKind::PermissionDenied => {
-                        if p.is_dir() {
-                            write!(
-                                f,
-                                "cannot open directory '{}': Permission denied",
-                                p.to_string_lossy()
-                            )
-                        } else {
-                            write!(
-                                f,
-                                "cannot open file '{}': Permission denied",
-                                p.to_string_lossy()
-                            )
+                    // No such file or directory
+                    ErrorKind::NotFound => {
+                        write!(
+                            f,
+                            "cannot access '{}': No such file or directory",
+                            p.to_string_lossy(),
+                        )
+                    }
+                    // Permission denied and Operation not permitted
+                    ErrorKind::PermissionDenied =>
+                    {
+                        #[allow(clippy::wildcard_in_or_patterns)]
+                        match raw_os_error {
+                            1i32 => {
+                                write!(
+                                    f,
+                                    "cannot access '{}': Operation not permitted",
+                                    p.to_string_lossy(),
+                                )
+                            }
+                            13i32 | _ => {
+                                if p.is_dir() {
+                                    write!(
+                                        f,
+                                        "cannot open directory '{}': Permission denied",
+                                        p.to_string_lossy(),
+                                    )
+                                } else {
+                                    write!(
+                                        f,
+                                        "cannot open file '{}': Permission denied",
+                                        p.to_string_lossy(),
+                                    )
+                                }
+                            }
                         }
                     }
                     _ => write!(
@@ -208,6 +226,7 @@ enum Format {
     Commas,
 }
 
+#[derive(PartialEq, Debug)]
 enum Sort {
     None,
     Name,
@@ -1313,6 +1332,10 @@ impl PathData {
         }
     }
 
+    fn set_md_dir_entry(&self, dir_entry_md: Metadata) {
+        self.md.get_or_init(|| Some(dir_entry_md)).as_ref();
+    }
+
     fn md(&self) -> Option<&Metadata> {
         self.md
             .get_or_init(|| get_metadata(&self.p_buf, self.must_dereference).ok())
@@ -1366,8 +1389,16 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
 
     display_items(&files, &config, &mut out);
 
-    for dir in &dirs {
-        enter_directory(dir, &config, initial_locs_len, &mut out);
+    for (pos, dir) in dirs.iter().enumerate() {
+        // Print dir heading - name... 'total' comes after error display
+        if initial_locs_len > 1 || config.recursive {
+            if pos.eq(&0usize) && files.is_empty() {
+                let _ = writeln!(out, "{}:", dir.p_buf.display());
+            } else {
+                let _ = writeln!(out, "\n{}:", dir.p_buf.display());
+            }
+        }
+        enter_directory(dir, &config, &mut out);
     }
 
     Ok(())
@@ -1440,7 +1471,6 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
 fn enter_directory(
     dir: &PathData,
     config: &Config,
-    initial_locs_len: usize,
     out: &mut BufWriter<Stdout>,
 ) {
     // Create vec of entries with initial dot files
@@ -1470,27 +1500,44 @@ fn enter_directory(
     for entry in read_dir {
         let unwrapped = match entry {
             Ok(path) => path,
-            Err(error) => {
+            Err(err) => {
                 let _ = out.flush();
-                show!(LsError::IOError(error));
+                show!(LsError::IOError(err));
                 continue;
             }
         };
         if should_display(&unwrapped, config) {
-            // why check the DirEntry file_type()?  B/c the call is
+            // why always check the DirEntry file_type()?  B/c the call is
             // nearly free compared to a metadata() or file_type() call on a dir/file
             let path_data = match unwrapped.file_type() {
-                Err(_err) => {
+                Err(err) => {
                     let _ = out.flush();
-                    show!(LsError::IOErrorContext(
-                        std::io::Error::new(ErrorKind::NotFound, "NotFound"),
-                        unwrapped.path()
-                    ));
+                    show!(LsError::IOErrorContext(err, unwrapped.path()));
                     continue;
                 }
                 Ok(dir_ft) => {
                     let res =
                         PathData::new(unwrapped.path(), Some(Ok(dir_ft)), None, config, false);
+                    // List all ops which definitely require metadata
+                    if config.format == Format::Long
+                        || config.inode
+                        || (config.sort != Sort::None && config.sort != Sort::Name)
+                    {
+                        match get_metadata_dir_entry(&unwrapped) {
+                            // Making this error generic is useful for some dirs which exist
+                            // but for which we do not have permission to read the metadata,
+                            // not only for those files/dirs which DNE
+                            Err(err) => {
+                                let _ = out.flush();
+                                show!(LsError::IOErrorContext(err, unwrapped.path()));
+                            }
+                            Ok(md) => {
+                                if !res.must_dereference {
+                                    res.set_md_dir_entry(md);
+                                }
+                            }
+                        };
+                    }
                     if dir_ft.is_symlink() && res.md().is_none() {
                         let _ = out.flush();
                         show!(LsError::IOErrorContext(
@@ -1508,11 +1555,7 @@ fn enter_directory(
     sort_entries(&mut vec_path_data, config);
     entries.append(&mut vec_path_data);
 
-    // Print dir heading - name...
-    if initial_locs_len > 1 || config.recursive {
-        let _ = writeln!(out, "\n{}:", dir.p_buf.display());
-    }
-    // ...and total
+    // Print dir heading - total
     if config.format == Format::Long {
         display_total(&entries, config, out);
     }
@@ -1525,7 +1568,8 @@ fn enter_directory(
             .skip(if config.files == Files::All { 2 } else { 0 })
             .filter(|p| p.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
         {
-            enter_directory(e, config, 0, out);
+            let _ = writeln!(out, "\n{}:", e.p_buf.display());
+            enter_directory(e, config, out);
         }
     }
 }
@@ -1538,6 +1582,10 @@ fn get_metadata(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
     }
 }
 
+fn get_metadata_dir_entry(dir_entry: &DirEntry) -> std::io::Result<Metadata> {
+    dir_entry.metadata()
+}
+
 fn display_dir_entry_size(
     entry: &PathData,
     config: &Config,
@@ -1548,7 +1596,10 @@ fn display_dir_entry_size(
             display_symlink_count(md).len(),
             display_uname(md, config).len(),
             display_group(md, config).len(),
-            display_size_or_rdev(md, config).len(),
+            match display_size_or_rdev(md, config) { 
+                SizeOrDeviceId::Device(x, y) => x.len() + y.len() + 3,
+                SizeOrDeviceId::Size(z) => z.len(),
+            },
             display_inode(md).len(),
         )
     } else {
@@ -1607,7 +1658,6 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                 display_dir_entry_size(item, config);
             longest_inode_len = inode_len.max(longest_inode_len);
             longest_link_count_len = link_count_len.max(longest_link_count_len);
-            longest_size_len = size_len.max(longest_size_len);
             longest_uname_len = uname_len.max(longest_uname_len);
             longest_group_len = group_len.max(longest_group_len);
             if config.context {
@@ -1861,13 +1911,27 @@ fn display_item_long(
 
         let dfn = display_file_name(item, config, None, out).contents;
 
-        let _ = writeln!(
-            out,
-            " {} {} {}",
-            pad_left(&display_size_or_rdev(md, config), padding.longest_size_len),
-            display_date(md, config),
-            dfn,
-        );
+        match display_size_or_rdev(md, config) {
+            SizeOrDeviceId::Size(size) => {
+                let _ = writeln!(
+                    out,
+                    " {} {} {}",
+                    pad_left(&size, padding.longest_size_len),
+                    display_date(md, config),
+                    dfn,
+                );
+            },
+            SizeOrDeviceId::Device(major, minor) => {
+                let _ = writeln!(
+                    out,
+                    " {},{} {} {}",
+                    pad_left(&major, 3 - major.len()),
+                    pad_left(&minor, padding.longest_size_len - 3),
+                    display_date(md, config),
+                    dfn,
+                );
+            },
+        };
     } else {
         // this 'else' is expressly for the case of a dangling symlink
         #[cfg(unix)]
@@ -1888,7 +1952,7 @@ fn display_item_long(
             } else {
                 ""
             },
-            pad_left("", padding.longest_link_count_len),
+            pad_left("?", padding.longest_link_count_len),
         );
 
         if config.long.owner {
@@ -2077,19 +2141,34 @@ fn format_prefixed(prefixed: NumberPrefix<f64>) -> String {
     }
 }
 
-fn display_size_or_rdev(metadata: &Metadata, config: &Config) -> String {
-    #[cfg(unix)]
+enum SizeOrDeviceId {
+    Size(String),
+    Device(String, String),
+}
+
+fn display_size_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     {
         let ft = metadata.file_type();
         if ft.is_char_device() || ft.is_block_device() {
             let dev: u64 = metadata.rdev();
-            let major = (dev >> 8) as u8;
-            let minor = dev as u8;
-            return format!("{}, {}", major, minor,);
+            let major = dev >> 24;
+            let minor = dev & 0xff;
+            return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let ft = metadata.file_type();
+        if ft.is_char_device() || ft.is_block_device() {
+            let dev: u64 = metadata.rdev();
+            let major = dev >> 8;
+            let minor = dev & 0xff;
+            return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
         }
     }
 
-    display_size(metadata.len(), config)
+    SizeOrDeviceId::Size(display_size(metadata.len(), config))
 }
 
 fn display_size(size: u64, config: &Config) -> String {
