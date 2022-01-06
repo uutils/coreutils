@@ -859,6 +859,11 @@ where
 ///
 /// This function returns an error if there is a problem reading from
 /// `reader` or writing to one of the output files.
+///
+/// # See also
+///
+/// * [`kth_chunk_by_line`], which splits its input in the same way,
+///   but writes only one specified chunk to stdout.
 fn split_into_n_chunks_by_line<R>(
     settings: &Settings,
     reader: &mut R,
@@ -915,6 +920,67 @@ where
     Ok(())
 }
 
+/// Print the k-th chunk of a file, splitting by line.
+///
+/// This function is like [`split_into_n_chunks_by_line`], but instead
+/// of writing each chunk to its own file, it only writes to stdout
+/// the contents of the chunk identified by `chunk_number`.
+///
+/// # Errors
+///
+/// This function returns an error if there is a problem reading from
+/// `reader` or writing to one of the output files.
+///
+/// # See also
+///
+/// * [`split_into_n_chunks_by_line`], which splits its input in the
+///   same way, but writes each chunk to its own file.
+fn kth_chunk_by_line<R>(
+    settings: &Settings,
+    reader: &mut R,
+    chunk_number: u64,
+    num_chunks: u64,
+) -> UResult<()>
+where
+    R: BufRead,
+{
+    // Get the size of the input file in bytes and compute the number
+    // of bytes per chunk.
+    let metadata = metadata(&settings.input).unwrap();
+    let num_bytes = metadata.len();
+    let chunk_size = (num_bytes / (num_chunks as u64)) as usize;
+
+    // Write to stdout instead of to a file.
+    let stdout = std::io::stdout();
+    let mut writer = stdout.lock();
+
+    let mut num_bytes_remaining_in_current_chunk = chunk_size;
+    let mut i = 0;
+    for line_result in reader.lines() {
+        let line = line_result?;
+        let bytes = line.as_bytes();
+        if i == chunk_number {
+            writer.write_all(bytes)?;
+            writer.write_all(b"\n")?;
+        }
+
+        // Add one byte for the newline character.
+        let num_bytes = bytes.len() + 1;
+        if num_bytes >= num_bytes_remaining_in_current_chunk {
+            num_bytes_remaining_in_current_chunk = chunk_size;
+            i += 1;
+        } else {
+            num_bytes_remaining_in_current_chunk -= num_bytes;
+        }
+
+        if i > chunk_number {
+            break;
+        }
+    }
+
+    Ok(())
+}
+
 fn split(settings: &Settings) -> UResult<()> {
     let mut reader = BufReader::new(if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
@@ -934,6 +1000,12 @@ fn split(settings: &Settings) -> UResult<()> {
         }
         Strategy::Number(NumberType::Lines(num_chunks)) => {
             split_into_n_chunks_by_line(settings, &mut reader, num_chunks)
+        }
+        Strategy::Number(NumberType::KthLines(chunk_number, num_chunks)) => {
+            // The chunk number is given as a 1-indexed number, but it
+            // is a little easier to deal with a 0-indexed number.
+            let chunk_number = chunk_number - 1;
+            kth_chunk_by_line(settings, &mut reader, chunk_number, num_chunks)
         }
         Strategy::Number(_) => Err(USimpleError::new(1, "-n mode not yet fully implemented")),
         Strategy::Lines(chunk_size) => {
