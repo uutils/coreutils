@@ -115,9 +115,18 @@ fn test_ls_only_dirs_formatting() {
     at.mkdir("some-dir2");
     at.mkdir("some-dir3");
 
-    scene.ucmd().arg("-1").arg("-R").succeeds().stdout_only(
-        ".:\nsome-dir1\nsome-dir2\nsome-dir3\n\n./some-dir1:\n\n./some-dir2:\n\n./some-dir3:\n",
-    );
+    #[cfg(unix)]
+    {
+        scene.ucmd().arg("-1").arg("-R").succeeds().stdout_only(
+            ".:\nsome-dir1\nsome-dir2\nsome-dir3\n\n./some-dir1:\n\n./some-dir2:\n\n./some-dir3:\n",
+        );
+    }
+    #[cfg(windows)]
+    {
+        scene.ucmd().arg("-1").arg("-R").succeeds().stdout_only(
+            ".:\nsome-dir1\nsome-dir2\nsome-dir3\n\n.\\some-dir1:\n\n.\\some-dir2:\n\n.\\some-dir3:\n",
+        );
+    }
 }
 
 #[test]
