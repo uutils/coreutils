@@ -1548,7 +1548,10 @@ fn display_dir_entry_size(
             display_symlink_count(md).len(),
             display_uname(md, config).len(),
             display_group(md, config).len(),
-            display_size_or_rdev(md, config).len(),
+            match display_size_or_rdev(md, config) {
+                SizeOrDeviceId::Device(x, y) => x.len() + y.len() + 3,
+                SizeOrDeviceId::Size(z) => z.len(),
+            },
             display_inode(md).len(),
         )
     } else {
@@ -1607,7 +1610,6 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                 display_dir_entry_size(item, config);
             longest_inode_len = inode_len.max(longest_inode_len);
             longest_link_count_len = link_count_len.max(longest_link_count_len);
-            longest_size_len = size_len.max(longest_size_len);
             longest_uname_len = uname_len.max(longest_uname_len);
             longest_group_len = group_len.max(longest_group_len);
             if config.context {
@@ -1861,13 +1863,27 @@ fn display_item_long(
 
         let dfn = display_file_name(item, config, None, out).contents;
 
-        let _ = writeln!(
-            out,
-            " {} {} {}",
-            pad_left(&display_size_or_rdev(md, config), padding.longest_size_len),
-            display_date(md, config),
-            dfn,
-        );
+        match display_size_or_rdev(md, config) {
+            SizeOrDeviceId::Size(size) => {
+                let _ = writeln!(
+                    out,
+                    " {} {} {}",
+                    pad_left(&size, padding.longest_size_len),
+                    display_date(md, config),
+                    dfn,
+                );
+            }
+            SizeOrDeviceId::Device(major, minor) => {
+                let _ = writeln!(
+                    out,
+                    " {},{} {} {}",
+                    pad_left(&major, 3 - major.len()),
+                    pad_left(&minor, padding.longest_size_len - 3),
+                    display_date(md, config),
+                    dfn,
+                );
+            }
+        };
     } else {
         // this 'else' is expressly for the case of a dangling symlink
         #[cfg(unix)]
@@ -2077,19 +2093,34 @@ fn format_prefixed(prefixed: NumberPrefix<f64>) -> String {
     }
 }
 
-fn display_size_or_rdev(metadata: &Metadata, config: &Config) -> String {
-    #[cfg(unix)]
+enum SizeOrDeviceId {
+    Size(String),
+    Device(String, String),
+}
+
+fn display_size_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
     {
         let ft = metadata.file_type();
         if ft.is_char_device() || ft.is_block_device() {
             let dev: u64 = metadata.rdev();
-            let major = (dev >> 8) as u8;
-            let minor = dev as u8;
-            return format!("{}, {}", major, minor,);
+            let major = dev >> 24;
+            let minor = dev & 0xff;
+            return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let ft = metadata.file_type();
+        if ft.is_char_device() || ft.is_block_device() {
+            let dev: u64 = metadata.rdev();
+            let major = dev >> 8;
+            let minor = dev & 0xff;
+            return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
         }
     }
 
-    display_size(metadata.len(), config)
+    SizeOrDeviceId::Size(display_size(metadata.len(), config))
 }
 
 fn display_size(size: u64, config: &Config) -> String {

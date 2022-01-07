@@ -56,6 +56,46 @@ fn test_ls_ordering() {
         .stdout_matches(&Regex::new("some-dir1:\\ntotal 0").unwrap());
 }
 
+//#[cfg(all(feature = "mknod"))]
+#[test]
+fn test_ls_devices() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("some-dir1");
+
+    // We need superuser privileges to create own devices?
+    // Can we do this in the CI?
+    //
+    //scene.ccmd("mknod").arg("some-dev1").arg("c").arg("1").arg("3").succeeds();
+
+    // scene
+    //     .ucmd()
+    //     .arg("-al")
+    //     .succeeds()
+    //     .stdout_contains("1,")
+    //     .stdout_contains("3");
+
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        scene
+            .ucmd()
+            .arg("-al")
+            .arg("/dev/null")
+            .succeeds()
+            .stdout_contains("3, 2");
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        scene
+            .ucmd()
+            .arg("-al")
+            .arg("/dev/null")
+            .succeeds()
+            .stdout_contains("1, 3");
+    }
+}
+
 #[cfg(all(feature = "chmod"))]
 #[test]
 fn test_ls_io_errors() {
