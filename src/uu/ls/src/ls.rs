@@ -2094,6 +2094,7 @@ fn format_prefixed(prefixed: NumberPrefix<f64>) -> String {
 
 enum SizeOrDeviceId {
     Size(String),
+    #[cfg(not(windows))]
     Device(String, String),
 }
 
