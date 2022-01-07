@@ -1659,6 +1659,9 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             None
         };
 
+        #[cfg(not(unix))]
+        let longest_inode_len = 1;
+        #[cfg(unix)]
         let mut longest_inode_len = 1;
         #[cfg(unix)]
         if config.inode {
