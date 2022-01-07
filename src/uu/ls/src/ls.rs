@@ -1624,7 +1624,6 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             let (link_count_len, uname_len, group_len, size_len, _inode_len) =
                 display_dir_entry_size(item, config);
             longest_link_count_len = link_count_len.max(longest_link_count_len);
-            longest_size_len = size_len.max(longest_size_len);
             longest_uname_len = uname_len.max(longest_uname_len);
             longest_group_len = group_len.max(longest_group_len);
             if config.context {
