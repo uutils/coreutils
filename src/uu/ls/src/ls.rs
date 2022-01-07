@@ -2092,9 +2092,9 @@ fn format_prefixed(prefixed: NumberPrefix<f64>) -> String {
     }
 }
 
+#[allow(dead_code)]
 enum SizeOrDeviceId {
     Size(String),
-    #[cfg(not(windows))]
     Device(String, String),
 }
 
