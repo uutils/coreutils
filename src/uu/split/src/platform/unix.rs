@@ -2,6 +2,8 @@ use std::env;
 use std::io::Write;
 use std::io::{BufWriter, Result};
 use std::process::{Child, Command, Stdio};
+use uucore::crash;
+
 /// A writer that writes to a shell_process' stdin
 ///
 /// We use a shell process (not directly calling a sub-process) so we can forward the name of the
