@@ -1659,9 +1659,22 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             None
         };
 
+        let mut longest_inode_len = 1;
+        #[cfg(unix)]
+        if config.inode {
+            for item in items {
+                let inode_len = if item.md().is_some() {
+                    display_inode(item.md().unwrap()).len()
+                } else {
+                    1usize
+                };
+                longest_inode_len = inode_len.max(longest_inode_len);
+            }
+        }
+
         let names: std::vec::IntoIter<Cell> = items
             .iter()
-            .map(|i| display_file_name(i, config, prefix_context, out))
+            .map(|i| display_file_name(i, config, prefix_context, longest_inode_len, out))
             .collect::<Vec<Cell>>()
             .into_iter();
 
@@ -1859,7 +1872,7 @@ fn display_item_long(
             );
         }
 
-        let dfn = display_file_name(item, config, None, out).contents;
+        let dfn = display_file_name(item, config, None, 0, out).contents;
 
         let _ = writeln!(
             out,
@@ -1888,7 +1901,7 @@ fn display_item_long(
             } else {
                 ""
             },
-            pad_left("", padding.longest_link_count_len),
+            pad_left("?", padding.longest_link_count_len),
         );
 
         if config.long.owner {
@@ -1913,7 +1926,7 @@ fn display_item_long(
             let _ = write!(out, " {}", pad_right("?", padding.longest_uname_len));
         }
 
-        let dfn = display_file_name(item, config, None, out).contents;
+        let dfn = display_file_name(item, config, None, 0, out).contents;
         let date_len = 12;
 
         let _ = writeln!(
@@ -2155,6 +2168,7 @@ fn display_file_name(
     path: &PathData,
     config: &Config,
     prefix_context: Option<usize>,
+    longest_inode_len: usize,
     out: &mut BufWriter<Stdout>,
 ) -> Cell {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
@@ -2181,7 +2195,7 @@ fn display_file_name(
                     std::io::Error::new(ErrorKind::NotFound, "NotFound"),
                     path.p_buf.clone(),
                 ));
-                "?".to_string()
+                pad_left("?", longest_inode_len)
             };
             // increment width here b/c name was given colors and name.width() is now the wrong
             // size for display
