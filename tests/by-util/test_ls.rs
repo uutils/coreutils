@@ -2403,7 +2403,7 @@ fn test_ls_dangling_symlinks() {
             .ok()
             .unwrap()
             .lines()
-            .nth(0)
+            .next()
             .unwrap()
             .strip_suffix("dangle")
             .unwrap()
