@@ -1642,6 +1642,41 @@ fn test_ls_hidden_windows() {
     scene.ucmd().arg("-a").succeeds().stdout_contains(file);
 }
 
+#[cfg(windows)]
+#[test]
+fn test_ls_hidden_link_windows() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file = "visibleWindowsFileNoDot";
+    at.touch(file);
+
+    let link = "hiddenWindowsLinkNoDot";
+    at.symlink_dir(file, link);
+    // hide the link
+    scene.cmd("attrib").arg("/l").arg("+h").arg(link).succeeds();
+
+    scene
+        .ucmd()
+        .succeeds()
+        .stdout_contains(file)
+        .stdout_does_not_contain(link);
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .succeeds()
+        .stdout_contains(file)
+        .stdout_contains(link);
+}
+
+#[cfg(windows)]
+#[test]
+fn test_ls_success_on_c_drv_root_windows() {
+    let scene = TestScenario::new(util_name!());
+    scene.ucmd().arg("C:\\").succeeds();
+}
+
 #[test]
 fn test_ls_version_sort() {
     let scene = TestScenario::new(util_name!());

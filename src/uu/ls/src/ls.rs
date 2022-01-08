@@ -1412,8 +1412,7 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
 fn is_hidden(file_path: &DirEntry) -> bool {
     #[cfg(windows)]
     {
-        let path = file_path.path();
-        let metadata = fs::metadata(&path).unwrap_or_else(|_| fs::symlink_metadata(&path).unwrap());
+        let metadata = file_path.metadata().unwrap();
         let attr = metadata.file_attributes();
         (attr & 0x2) > 0
     }
