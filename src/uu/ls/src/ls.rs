@@ -1393,8 +1393,16 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
 
     display_items(&files, &config, &mut out);
 
-    for dir in &dirs {
-        enter_directory(dir, &config, initial_locs_len, &mut out);
+    for (pos, dir) in dirs.iter().enumerate() {
+        // Print dir heading - name... 'total' comes after error display
+        if initial_locs_len > 1 || config.recursive {
+            if pos.eq(&0usize) && files.is_empty() {
+                let _ = writeln!(out, "{}:", dir.p_buf.display());
+            } else {
+                let _ = writeln!(out, "\n{}:", dir.p_buf.display());
+            }
+        }
+        enter_directory(dir, &config, &mut out);
     }
 
     Ok(())
@@ -1464,12 +1472,7 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
     true
 }
 
-fn enter_directory(
-    dir: &PathData,
-    config: &Config,
-    initial_locs_len: usize,
-    out: &mut BufWriter<Stdout>,
-) {
+fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>) {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
         vec![
@@ -1524,10 +1527,6 @@ fn enter_directory(
     sort_entries(&mut vec_path_data, config, out);
     entries.append(&mut vec_path_data);
 
-    // Print dir heading - name...
-    if initial_locs_len > 1 || config.recursive {
-        let _ = writeln!(out, "\n{}:", dir.p_buf.display());
-    }
     // ...and total
     if config.format == Format::Long {
         display_total(&entries, config, out);
@@ -1544,7 +1543,8 @@ fn enter_directory(
             .filter(|p| p.ft.get().unwrap().is_some())
             .filter(|p| p.ft.get().unwrap().unwrap().is_dir())
         {
-            enter_directory(e, config, 0, out);
+            let _ = writeln!(out, "\n{}:", e.p_buf.display());
+            enter_directory(e, config, out);
         }
     }
 }

@@ -11,8 +11,7 @@ use std::fs::File;
 use std::io::{self, stdin, BufReader, Read};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::UResult;
-use uucore::error::USimpleError;
+use uucore::error::{FromIo, UResult};
 use uucore::show;
 use uucore::InvalidEncodingHandling;
 
@@ -81,27 +80,18 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
     let mut crc = 0u32;
     let mut size = 0usize;
 
-    let file;
     let mut rd: Box<dyn Read> = match fname {
         "-" => Box::new(stdin()),
         _ => {
-            let path = &Path::new(fname);
-            if path.is_dir() {
-                return Err(std::io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "Is a directory",
-                ));
-            };
-            // Silent the warning as we want to the error message
-            #[allow(clippy::question_mark)]
-            if path.metadata().is_err() {
-                return Err(std::io::Error::new(
-                    io::ErrorKind::NotFound,
-                    "No such file or directory",
-                ));
-            };
-            file = File::open(&path)?;
-            Box::new(BufReader::new(file))
+            let p = Path::new(fname);
+
+            // Directories should not give an error, but should be interpreted
+            // as empty files to match GNU semantics.
+            if p.is_dir() {
+                Box::new(BufReader::new(io::empty())) as Box<dyn Read>
+            } else {
+                Box::new(BufReader::new(File::open(p)?)) as Box<dyn Read>
+            }
         }
     };
 
@@ -136,23 +126,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     if files.is_empty() {
-        match cksum("-") {
-            Ok((crc, size)) => println!("{} {}", crc, size),
-            Err(err) => {
-                return Err(USimpleError::new(2, format!("{}", err)));
-            }
-        }
+        let (crc, size) = cksum("-")?;
+        println!("{} {}", crc, size);
         return Ok(());
     }
 
     for fname in &files {
-        match cksum(fname.as_ref()) {
+        match cksum(fname.as_ref()).map_err_context(|| format!("{}", fname.maybe_quote())) {
             Ok((crc, size)) => println!("{} {} {}", crc, size, fname),
-            Err(err) => show!(USimpleError::new(
-                2,
-                format!("{}: {}", fname.maybe_quote(), err)
-            )),
-        }
+            Err(err) => show!(err),
+        };
     }
     Ok(())
 }

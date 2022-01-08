@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) PREFIXaa
 
-#[macro_use]
-extern crate uucore;
-
 mod platform;
 
 use clap::{crate_version, App, Arg, ArgMatches};
@@ -20,6 +17,7 @@ use std::io::{stdin, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use std::{char, fs::remove_file};
 use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parse_size::parse_size;
 
 static OPT_BYTES: &str = "bytes";
@@ -53,7 +51,8 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
     )
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let long_usage = get_long_usage();
 
@@ -83,15 +82,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     settings.additional_suffix = matches.value_of(OPT_ADDITIONAL_SUFFIX).unwrap().to_owned();
 
     settings.verbose = matches.occurrences_of("verbose") > 0;
-    settings.strategy = Strategy::from(&matches);
+    settings.strategy = Strategy::from(&matches)?;
     settings.input = matches.value_of(ARG_INPUT).unwrap().to_owned();
     settings.prefix = matches.value_of(ARG_PREFIX).unwrap().to_owned();
 
     if matches.occurrences_of(OPT_FILTER) > 0 {
         if cfg!(windows) {
             // see https://github.com/rust-lang/rust/issues/29494
-            show_error!("{} is currently not supported in this platform", OPT_FILTER);
-            std::process::exit(-1);
+            return Err(USimpleError::new(
+                -1,
+                format!("{} is currently not supported in this platform", OPT_FILTER),
+            ));
         } else {
             settings.filter = Some(matches.value_of(OPT_FILTER).unwrap().to_owned());
         }
@@ -193,7 +194,7 @@ enum Strategy {
 
 impl Strategy {
     /// Parse a strategy from the command-line arguments.
-    fn from(matches: &ArgMatches) -> Self {
+    fn from(matches: &ArgMatches) -> UResult<Self> {
         // Check that the user is not specifying more than one strategy.
         //
         // Note: right now, this exact behavior cannot be handled by
@@ -204,26 +205,26 @@ impl Strategy {
             matches.occurrences_of(OPT_BYTES),
             matches.occurrences_of(OPT_LINE_BYTES),
         ) {
-            (0, 0, 0) => Strategy::Lines(1000),
+            (0, 0, 0) => Ok(Strategy::Lines(1000)),
             (1, 0, 0) => {
                 let s = matches.value_of(OPT_LINES).unwrap();
-                let n =
-                    parse_size(s).unwrap_or_else(|e| crash!(1, "invalid number of lines: {}", e));
-                Strategy::Lines(n)
+                let n = parse_size(s)
+                    .map_err(|e| USimpleError::new(1, format!("invalid number of lines: {}", e)))?;
+                Ok(Strategy::Lines(n))
             }
             (0, 1, 0) => {
                 let s = matches.value_of(OPT_BYTES).unwrap();
-                let n =
-                    parse_size(s).unwrap_or_else(|e| crash!(1, "invalid number of bytes: {}", e));
-                Strategy::Bytes(n)
+                let n = parse_size(s)
+                    .map_err(|e| USimpleError::new(1, format!("invalid number of bytes: {}", e)))?;
+                Ok(Strategy::Bytes(n))
             }
             (0, 0, 1) => {
                 let s = matches.value_of(OPT_LINE_BYTES).unwrap();
-                let n =
-                    parse_size(s).unwrap_or_else(|e| crash!(1, "invalid number of bytes: {}", e));
-                Strategy::LineBytes(n)
+                let n = parse_size(s)
+                    .map_err(|e| USimpleError::new(1, format!("invalid number of bytes: {}", e)))?;
+                Ok(Strategy::LineBytes(n))
             }
-            _ => crash!(1, "cannot split in more than one way"),
+            _ => Err(UUsageError::new(1, "cannot split in more than one way")),
         }
     }
 }
@@ -249,7 +250,7 @@ trait Splitter {
         &mut self,
         reader: &mut BufReader<Box<dyn Read>>,
         writer: &mut BufWriter<Box<dyn Write>>,
-    ) -> u128;
+    ) -> std::io::Result<u128>;
 }
 
 struct LineSplitter {
@@ -269,21 +270,17 @@ impl Splitter for LineSplitter {
         &mut self,
         reader: &mut BufReader<Box<dyn Read>>,
         writer: &mut BufWriter<Box<dyn Write>>,
-    ) -> u128 {
+    ) -> std::io::Result<u128> {
         let mut bytes_consumed = 0u128;
         let mut buffer = String::with_capacity(1024);
         for _ in 0..self.lines_per_split {
-            let bytes_read = reader
-                .read_line(&mut buffer)
-                .unwrap_or_else(|_| crash!(1, "error reading bytes from input file"));
+            let bytes_read = reader.read_line(&mut buffer)?;
             // If we ever read 0 bytes then we know we've hit EOF.
             if bytes_read == 0 {
-                return bytes_consumed;
+                return Ok(bytes_consumed);
             }
 
-            writer
-                .write_all(buffer.as_bytes())
-                .unwrap_or_else(|_| crash!(1, "error writing bytes to output file"));
+            writer.write_all(buffer.as_bytes())?;
             // Empty out the String buffer since `read_line` appends instead of
             // replaces.
             buffer.clear();
@@ -291,7 +288,7 @@ impl Splitter for LineSplitter {
             bytes_consumed += bytes_read as u128;
         }
 
-        bytes_consumed
+        Ok(bytes_consumed)
     }
 }
 
@@ -312,7 +309,7 @@ impl Splitter for ByteSplitter {
         &mut self,
         reader: &mut BufReader<Box<dyn Read>>,
         writer: &mut BufWriter<Box<dyn Write>>,
-    ) -> u128 {
+    ) -> std::io::Result<u128> {
         // We buffer reads and writes. We proceed until `bytes_consumed` is
         // equal to `self.bytes_per_split` or we reach EOF.
         let mut bytes_consumed = 0u128;
@@ -329,22 +326,18 @@ impl Splitter for ByteSplitter {
                 // than BUFFER_SIZE in this branch.
                 (self.bytes_per_split - bytes_consumed) as usize
             };
-            let bytes_read = reader
-                .read(&mut buffer[0..bytes_desired])
-                .unwrap_or_else(|_| crash!(1, "error reading bytes from input file"));
+            let bytes_read = reader.read(&mut buffer[0..bytes_desired])?;
             // If we ever read 0 bytes then we know we've hit EOF.
             if bytes_read == 0 {
-                return bytes_consumed;
+                return Ok(bytes_consumed);
             }
 
-            writer
-                .write_all(&buffer[0..bytes_read])
-                .unwrap_or_else(|_| crash!(1, "error writing bytes to output file"));
+            writer.write_all(&buffer[0..bytes_read])?;
 
             bytes_consumed += bytes_read as u128;
         }
 
-        bytes_consumed
+        Ok(bytes_consumed)
     }
 }
 
@@ -380,17 +373,16 @@ fn num_prefix(i: usize, width: usize) -> String {
     c
 }
 
-fn split(settings: &Settings) -> i32 {
+fn split(settings: &Settings) -> UResult<()> {
     let mut reader = BufReader::new(if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
-        let r = File::open(Path::new(&settings.input)).unwrap_or_else(|_| {
-            crash!(
-                1,
+        let r = File::open(Path::new(&settings.input)).map_err_context(|| {
+            format!(
                 "cannot open {} for reading: No such file or directory",
                 settings.input.quote()
             )
-        });
+        })?;
         Box::new(r) as Box<dyn Read>
     });
 
@@ -416,10 +408,12 @@ fn split(settings: &Settings) -> i32 {
         filename.push_str(settings.additional_suffix.as_ref());
         let mut writer = platform::instantiate_current_writer(&settings.filter, filename.as_str());
 
-        let bytes_consumed = splitter.consume(&mut reader, &mut writer);
+        let bytes_consumed = splitter
+            .consume(&mut reader, &mut writer)
+            .map_err_context(|| "input/output error".to_string())?;
         writer
             .flush()
-            .unwrap_or_else(|e| crash!(1, "error flushing to output file: {}", e));
+            .map_err_context(|| "error flushing to output file".to_string())?;
 
         // If we didn't write anything we should clean up the empty file, and
         // break from the loop.
@@ -428,12 +422,12 @@ fn split(settings: &Settings) -> i32 {
             // Complicated, I know...
             if settings.filter.is_none() {
                 remove_file(filename)
-                    .unwrap_or_else(|e| crash!(1, "error removing empty file: {}", e));
+                    .map_err_context(|| "error removing empty file".to_string())?;
             }
             break;
         }
 
         fileno += 1;
     }
-    0
+    Ok(())
 }

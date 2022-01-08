@@ -371,7 +371,7 @@ impl UError for UUsageError {
 /// ```
 #[derive(Debug)]
 pub struct UIoError {
-    context: String,
+    context: Option<String>,
     inner: std::io::Error,
 }
 
@@ -379,7 +379,7 @@ impl UIoError {
     #[allow(clippy::new_ret_no_self)]
     pub fn new<S: Into<String>>(kind: std::io::ErrorKind, context: S) -> Box<dyn UError> {
         Box::new(Self {
-            context: context.into(),
+            context: Some(context.into()),
             inner: kind.into(),
         })
     }
@@ -435,7 +435,11 @@ impl Display for UIoError {
             capitalize(&mut message);
             &message
         };
-        write!(f, "{}: {}", self.context, message)
+        if let Some(ctx) = &self.context {
+            write!(f, "{}: {}", ctx, message)
+        } else {
+            write!(f, "{}", message)
+        }
     }
 }
 
@@ -464,7 +468,7 @@ pub trait FromIo<T> {
 impl FromIo<Box<UIoError>> for std::io::Error {
     fn map_err_context(self, context: impl FnOnce() -> String) -> Box<UIoError> {
         Box::new(UIoError {
-            context: (context)(),
+            context: Some((context)()),
             inner: self,
         })
     }
@@ -479,9 +483,25 @@ impl<T> FromIo<UResult<T>> for std::io::Result<T> {
 impl FromIo<Box<UIoError>> for std::io::ErrorKind {
     fn map_err_context(self, context: impl FnOnce() -> String) -> Box<UIoError> {
         Box::new(UIoError {
-            context: (context)(),
+            context: Some((context)()),
             inner: std::io::Error::new(self, ""),
         })
+    }
+}
+
+impl From<std::io::Error> for UIoError {
+    fn from(f: std::io::Error) -> UIoError {
+        UIoError {
+            context: None,
+            inner: f,
+        }
+    }
+}
+
+impl From<std::io::Error> for Box<dyn UError> {
+    fn from(f: std::io::Error) -> Box<dyn UError> {
+        let u_error: UIoError = f.into();
+        Box::new(u_error) as Box<dyn UError>
     }
 }
 

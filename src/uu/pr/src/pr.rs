@@ -25,6 +25,7 @@ use std::io::{stdin, stdout, BufRead, BufReader, Lines, Read, Write};
 use std::os::unix::fs::FileTypeExt;
 
 use uucore::display::Quotable;
+use uucore::error::UResult;
 
 type IOError = std::io::Error;
 
@@ -174,7 +175,8 @@ pub fn uu_app() -> clap::App<'static, 'static> {
     clap::App::new(uucore::util_name())
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(uucore::InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -388,7 +390,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if matches.opt_present("version") {
         println!("{} {}", NAME, VERSION);
-        return 0;
+        return Ok(());
     }
 
     let mut files = matches.free.clone();
@@ -412,7 +414,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Ok(options) => options,
             Err(err) => {
                 print_error(&matches, err);
-                return 1;
+                return Err(1.into());
             }
         };
 
@@ -430,11 +432,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             _ => 0,
         };
         if status != 0 {
-            return status;
+            return Err(status.into());
         }
     }
-
-    0
+    Ok(())
 }
 
 /// Returns re-written arguments which are passed to the program.
@@ -470,7 +471,7 @@ fn print_error(matches: &Matches, err: PrError) {
     }
 }
 
-fn print_usage(opts: &mut getopts::Options, matches: &Matches) -> i32 {
+fn print_usage(opts: &mut getopts::Options, matches: &Matches) -> UResult<()> {
     println!("{} {} -- print files", NAME, VERSION);
     println!();
     println!(
@@ -508,10 +509,9 @@ fn print_usage(opts: &mut getopts::Options, matches: &Matches) -> i32 {
         options::COLUMN_OPTION
     );
     if matches.free.is_empty() {
-        return 1;
+        return Err(1.into());
     }
-
-    0
+    Ok(())
 }
 
 fn parse_usize(matches: &Matches, opt: &str) -> Option<Result<usize, PrError>> {
