@@ -8,9 +8,10 @@
 // spell-checker:ignore (ToDO) PREFIXaa
 
 mod filenames;
+mod number;
 mod platform;
 
-use crate::filenames::FilenameFactory;
+use crate::filenames::FilenameIterator;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::convert::TryFrom;
 use std::env;
@@ -384,7 +385,7 @@ where
     let chunk_size = (num_bytes / (num_chunks as u64)) as usize;
 
     // This object is responsible for creating the filename for each chunk.
-    let filename_factory = FilenameFactory::new(
+    let mut filename_iterator = FilenameIterator::new(
         &settings.prefix,
         &settings.additional_suffix,
         settings.suffix_length,
@@ -394,9 +395,9 @@ where
     // Create one writer for each chunk. This will create each
     // of the underlying files (if not in `--filter` mode).
     let mut writers = vec![];
-    for i in 0..num_chunks {
-        let filename = filename_factory
-            .make(i)
+    for _ in 0..num_chunks {
+        let filename = filename_iterator
+            .next()
             .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
         let writer = platform::instantiate_current_writer(&settings.filter, filename.as_str());
         writers.push(writer);
@@ -462,17 +463,16 @@ fn split(settings: Settings) -> UResult<()> {
     };
 
     // This object is responsible for creating the filename for each chunk.
-    let filename_factory = FilenameFactory::new(
+    let mut filename_iterator = FilenameIterator::new(
         &settings.prefix,
         &settings.additional_suffix,
         settings.suffix_length,
         settings.numeric_suffix,
     );
-    let mut fileno = 0;
     loop {
         // Get a new part file set up, and construct `writer` for it.
-        let filename = filename_factory
-            .make(fileno)
+        let filename = filename_iterator
+            .next()
             .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
         let mut writer = platform::instantiate_current_writer(&settings.filter, filename.as_str());
 
@@ -509,8 +509,6 @@ fn split(settings: Settings) -> UResult<()> {
         if settings.verbose {
             println!("creating file {}", filename.quote());
         }
-
-        fileno += 1;
     }
     Ok(())
 }
