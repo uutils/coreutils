@@ -337,3 +337,12 @@ fn non_line_feeds() {
         .succeeds()
         .stdout_only_fixture("non-line_feeds.expected");
 }
+
+#[test]
+fn non_unicode() {
+    new_ucmd!()
+        .arg("non-unicode_1.bin")
+        .arg("non-unicode_2.bin")
+        .succeeds()
+        .stdout_only_fixture("non-unicode.expected");
+}
