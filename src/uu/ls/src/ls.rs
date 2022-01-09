@@ -1685,8 +1685,8 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         #[cfg(unix)]
         if config.inode {
             for item in items {
-                let inode_len = if item.md().is_some() {
-                    display_inode(item.md().unwrap()).len()
+                let inode_len = if item.md(out).is_some() {
+                    display_inode(item.md(out).unwrap()).len()
                 } else {
                     1usize
                 };
