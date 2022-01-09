@@ -328,3 +328,12 @@ fn single_file_with_header() {
         .succeeds()
         .stdout_is("A 1\n");
 }
+
+#[test]
+fn non_line_feeds() {
+    new_ucmd!()
+        .arg("non-line_feeds_1.txt")
+        .arg("non-line_feeds_2.txt")
+        .succeeds()
+        .stdout_only_fixture("non-line_feeds.expected");
+}
