@@ -111,8 +111,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 .short("b")
                 .long(OPT_BYTES)
                 .takes_value(true)
-                .default_value("2")
-                .help("use suffixes of length N (default 2)"),
+                .help("put SIZE bytes per output file"),
         )
         .arg(
             Arg::with_name(OPT_LINE_BYTES)
