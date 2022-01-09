@@ -56,8 +56,8 @@ fn test_ls_ordering() {
         .stdout_matches(&Regex::new("some-dir1:\\ntotal 0").unwrap());
 }
 
-#[cfg(all(feature = "chmod"))]
 #[test]
+#[cfg(feature = "chmod")]
 fn test_ls_io_errors() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -105,6 +105,16 @@ fn test_ls_io_errors() {
         .stderr_contains("cannot open directory")
         .stderr_contains("Permission denied")
         .stdout_contains("some-dir4");
+
+    // test we don't double print on dangling link metadata errors
+    scene
+        .ucmd()
+        .arg("-iRL")
+        .arg("some-dir2")
+        .fails()
+        .stderr_does_not_contain(
+            "ls: cannot access 'some-dir2/dangle': No such file or directory\nls: cannot access 'some-dir2/dangle': No such file or directory"
+        );
 }
 
 #[test]
@@ -2424,13 +2434,22 @@ fn test_ls_dangling_symlinks() {
         .succeeds()
         .stdout_contains("dangle");
 
+    #[cfg(not(windows))]
     scene
         .ucmd()
         .arg("-Li")
         .arg("temp_dir")
         .fails()
         .stderr_contains("cannot access")
-        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
+        .stdout_contains("? dangle");
+
+    #[cfg(windows)]
+    scene
+        .ucmd()
+        .arg("-Li")
+        .arg("temp_dir")
+        .succeeds()
+        .stdout_contains("dangle");
 
     scene
         .ucmd()
