@@ -145,6 +145,16 @@ fn test_ls_io_errors() {
         .stderr_contains("cannot open directory")
         .stderr_contains("Permission denied")
         .stdout_contains("some-dir4");
+
+    // test we don't double print on dangling link metadata errors
+    scene
+        .ucmd()
+        .arg("-iRL")
+        .arg("some-dir2")
+        .fails()
+        .stderr_does_not_contain(
+            "ls: cannot access 'some-dir2/dangle': No such file or directory\nls: cannot access 'some-dir2/dangle': No such file or directory"
+        );
 }
 
 #[test]
@@ -1682,6 +1692,41 @@ fn test_ls_hidden_windows() {
     scene.ucmd().arg("-a").succeeds().stdout_contains(file);
 }
 
+#[cfg(windows)]
+#[test]
+fn test_ls_hidden_link_windows() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file = "visibleWindowsFileNoDot";
+    at.touch(file);
+
+    let link = "hiddenWindowsLinkNoDot";
+    at.symlink_dir(file, link);
+    // hide the link
+    scene.cmd("attrib").arg("/l").arg("+h").arg(link).succeeds();
+
+    scene
+        .ucmd()
+        .succeeds()
+        .stdout_contains(file)
+        .stdout_does_not_contain(link);
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .succeeds()
+        .stdout_contains(file)
+        .stdout_contains(link);
+}
+
+#[cfg(windows)]
+#[test]
+fn test_ls_success_on_c_drv_root_windows() {
+    let scene = TestScenario::new(util_name!());
+    scene.ucmd().arg("C:\\").succeeds();
+}
+
 #[test]
 fn test_ls_version_sort() {
     let scene = TestScenario::new(util_name!());
@@ -2429,13 +2474,22 @@ fn test_ls_dangling_symlinks() {
         .succeeds()
         .stdout_contains("dangle");
 
+    #[cfg(not(windows))]
     scene
         .ucmd()
         .arg("-Li")
         .arg("temp_dir")
         .fails()
         .stderr_contains("cannot access")
-        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
+        .stdout_contains("? dangle");
+
+    #[cfg(windows)]
+    scene
+        .ucmd()
+        .arg("-Li")
+        .arg("temp_dir")
+        .succeeds()
+        .stdout_contains("dangle");
 
     scene
         .ucmd()

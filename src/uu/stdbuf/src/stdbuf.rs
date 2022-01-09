@@ -19,6 +19,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use tempfile::tempdir;
 use tempfile::TempDir;
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parse_size::parse_size;
 use uucore::InvalidEncodingHandling;
 
@@ -148,7 +149,8 @@ fn get_preload_env(tmp_dir: &mut TempDir) -> io::Result<(String, PathBuf)> {
     Ok((preload.to_owned(), inject_path))
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -156,37 +158,36 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
-    let options = ProgramOptions::try_from(&matches).unwrap_or_else(|e| {
-        crash!(
-            125,
-            "{}\nTry '{} --help' for more information.",
-            e.0,
-            uucore::execution_phrase()
-        )
-    });
+    let options = ProgramOptions::try_from(&matches).map_err(|e| UUsageError::new(125, e.0))?;
 
     let mut command_values = matches.values_of::<&str>(options::COMMAND).unwrap();
     let mut command = Command::new(command_values.next().unwrap());
     let command_params: Vec<&str> = command_values.collect();
 
     let mut tmp_dir = tempdir().unwrap();
-    let (preload_env, libstdbuf) = crash_if_err!(1, get_preload_env(&mut tmp_dir));
+    let (preload_env, libstdbuf) = get_preload_env(&mut tmp_dir).map_err_context(String::new)?;
     command.env(preload_env, libstdbuf);
     set_command_env(&mut command, "_STDBUF_I", options.stdin);
     set_command_env(&mut command, "_STDBUF_O", options.stdout);
     set_command_env(&mut command, "_STDBUF_E", options.stderr);
     command.args(command_params);
 
-    let mut process = match command.spawn() {
-        Ok(p) => p,
-        Err(e) => crash!(1, "failed to execute process: {}", e),
-    };
-    match process.wait() {
-        Ok(status) => match status.code() {
-            Some(i) => i,
-            None => crash!(1, "process killed by signal {}", status.signal().unwrap()),
-        },
-        Err(e) => crash!(1, "{}", e),
+    let mut process = command
+        .spawn()
+        .map_err_context(|| "failed to execute process".to_string())?;
+    let status = process.wait().map_err_context(String::new)?;
+    match status.code() {
+        Some(i) => {
+            if i == 0 {
+                Ok(())
+            } else {
+                Err(i.into())
+            }
+        }
+        None => Err(USimpleError::new(
+            1,
+            format!("process killed by signal {}", status.signal().unwrap()),
+        )),
     }
 }
 
