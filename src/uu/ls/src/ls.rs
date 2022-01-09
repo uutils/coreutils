@@ -1879,29 +1879,23 @@ fn display_item_long(
             );
         }
 
-        let dfn = display_file_name(item, config, None, out).contents;
-
         match display_size_or_rdev(md, config) {
             SizeOrDeviceId::Size(size) => {
-                let _ = writeln!(
-                    out,
-                    " {} {} {}",
-                    pad_left(&size, padding.longest_size_len),
-                    display_date(md, config),
-                    dfn,
-                );
+                let _ = write!(out, " {}", pad_left(&size, padding.longest_size_len),);
             }
             SizeOrDeviceId::Device(major, minor) => {
-                let _ = writeln!(
+                let _ = write!(
                     out,
-                    " {},{} {} {}",
+                    " {},{}",
                     pad_left(&major, 3 - major.len()),
                     pad_left(&minor, padding.longest_size_len - 3),
-                    display_date(md, config),
-                    dfn,
                 );
             }
         };
+
+        let dfn = display_file_name(item, config, None, out).contents;
+
+        let _ = writeln!(out, " {} {}", display_date(md, config), dfn);
     } else {
         // this 'else' is expressly for the case of a dangling symlink
         #[cfg(unix)]
