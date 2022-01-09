@@ -16,6 +16,7 @@ use std::fs::{metadata, OpenOptions};
 use std::io::ErrorKind;
 use std::path::Path;
 use uucore::display::Quotable;
+use uucore::error::{UIoError, UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size, ParseSizeError};
 
 #[derive(Debug, Eq, PartialEq)]
@@ -90,7 +91,8 @@ fn get_long_usage() -> String {
     )
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let long_usage = get_long_usage();
 
@@ -105,32 +107,31 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .unwrap_or_default();
 
     if files.is_empty() {
-        show_error!("Missing an argument");
-        return 1;
+        return Err(UUsageError::new(1, "missing file operand"));
     } else {
         let io_blocks = matches.is_present(options::IO_BLOCKS);
         let no_create = matches.is_present(options::NO_CREATE);
         let reference = matches.value_of(options::REFERENCE).map(String::from);
         let size = matches.value_of(options::SIZE).map(String::from);
-        if let Err(e) = truncate(no_create, io_blocks, reference, size, files) {
+        truncate(no_create, io_blocks, reference, size, files).map_err(|e| {
             match e.kind() {
                 ErrorKind::NotFound => {
                     // TODO Improve error-handling so that the error
                     // returned by `truncate()` provides the necessary
                     // parameter for formatting the error message.
                     let reference = matches.value_of(options::REFERENCE).map(String::from);
-                    crash!(
+                    USimpleError::new(
                         1,
-                        "cannot stat {}: No such file or directory",
-                        reference.as_deref().unwrap_or("").quote()
-                    ); // TODO: fix '--no-create' see test_reference and test_truncate_bytes_size
+                        format!(
+                            "cannot stat {}: No such file or directory",
+                            reference.as_deref().unwrap_or("").quote()
+                        ),
+                    ) // TODO: fix '--no-create' see test_reference and test_truncate_bytes_size
                 }
-                _ => crash!(1, "{}", e.to_string()),
+                _ => uio_error!(e, ""),
             }
-        }
+        })
     }
-
-    0
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -303,7 +304,7 @@ fn truncate(
         }
         (Some(rfilename), None) => truncate_reference_file_only(&rfilename, filenames, create),
         (None, Some(size_string)) => truncate_size_only(&size_string, filenames, create),
-        (None, None) => crash!(1, "you must specify either --reference or --size"), // this case cannot happen anymore because it's handled by clap
+        (None, None) => unreachable!(), // this case cannot happen anymore because it's handled by clap
     }
 }
 

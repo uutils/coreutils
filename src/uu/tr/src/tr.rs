@@ -10,9 +10,6 @@
 
 // spell-checker:ignore (ToDO) allocs bset dflag cflag sflag tflag
 
-#[macro_use]
-extern crate uucore;
-
 mod expand;
 
 use bit_set::BitSet;
@@ -21,6 +18,7 @@ use fnv::FnvHashMap;
 use std::io::{stdin, stdout, BufRead, BufWriter, Write};
 
 use crate::expand::ExpandSet;
+use uucore::error::{UResult, UUsageError};
 use uucore::{display::Quotable, InvalidEncodingHandling};
 
 static ABOUT: &str = "translate or delete characters";
@@ -238,7 +236,8 @@ writing to standard output."
         .to_string()
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -262,20 +261,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .unwrap_or_default();
 
     if sets.is_empty() {
-        show_error!(
-            "missing operand\nTry '{} --help' for more information.",
-            uucore::execution_phrase()
-        );
-        return 1;
+        return Err(UUsageError::new(1, "missing operand"));
     }
 
     if !(delete_flag || squeeze_flag) && sets.len() < 2 {
-        show_error!(
-            "missing operand after {}\nTry '{} --help' for more information.",
-            sets[0].quote(),
-            uucore::execution_phrase()
-        );
-        return 1;
+        return Err(UUsageError::new(
+            1,
+            format!("missing operand after {}", sets[0].quote()),
+        ));
     }
 
     let stdin = stdin();
@@ -307,8 +300,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let op = TranslateOperation::new(set1, &mut set2, truncate_flag, complement_flag);
         translate_input(&mut locked_stdin, &mut buffered_stdout, op);
     }
-
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
