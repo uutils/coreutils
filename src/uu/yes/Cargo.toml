@@ -20,7 +20,7 @@ uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=[
 uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-nix = "=0.23.1"
+nix = "0.23.1"
 
 [[bin]]
 name = "yes"
