@@ -91,7 +91,7 @@ fn test_ls_devices() {
         .arg("/dev/null")
         .arg("/dev/stdout")
         .succeeds();
-    
+
     let null_len = String::from_utf8(res.stdout().to_owned())
         .ok()
         .unwrap()
@@ -111,7 +111,7 @@ fn test_ls_devices() {
         .strip_suffix("/dev/stdout")
         .unwrap()
         .len();
-    
+
     assert_eq!(stdout_len, null_len);
 }
 
