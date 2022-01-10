@@ -85,34 +85,37 @@ fn test_ls_devices() {
     }
 
     // Regex tests alignment against a file (stdout is a link to a tty)
-    let res = scene
-        .ucmd()
-        .arg("-alL")
-        .arg("/dev/null")
-        .arg("/dev/stdout")
-        .succeeds();
+    #[cfg(unix)]
+    {
+        let res = scene
+            .ucmd()
+            .arg("-alL")
+            .arg("/dev/null")
+            .arg("/dev/stdout")
+            .succeeds();
 
-    let null_len = String::from_utf8(res.stdout().to_owned())
-        .ok()
-        .unwrap()
-        .lines()
-        .next()
-        .unwrap()
-        .strip_suffix("/dev/null")
-        .unwrap()
-        .len();
+        let null_len = String::from_utf8(res.stdout().to_owned())
+            .ok()
+            .unwrap()
+            .lines()
+            .next()
+            .unwrap()
+            .strip_suffix("/dev/null")
+            .unwrap()
+            .len();
 
-    let stdout_len = String::from_utf8(res.stdout().to_owned())
-        .ok()
-        .unwrap()
-        .lines()
-        .nth(1)
-        .unwrap()
-        .strip_suffix("/dev/stdout")
-        .unwrap()
-        .len();
+        let stdout_len = String::from_utf8(res.stdout().to_owned())
+            .ok()
+            .unwrap()
+            .lines()
+            .nth(1)
+            .unwrap()
+            .strip_suffix("/dev/stdout")
+            .unwrap()
+            .len();
 
-    assert_eq!(stdout_len, null_len);
+        assert_eq!(stdout_len, null_len);
+    }
 }
 
 #[cfg(all(feature = "chmod"))]

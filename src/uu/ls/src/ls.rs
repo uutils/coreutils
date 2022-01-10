@@ -319,6 +319,8 @@ struct PaddingCollection {
     longest_group_len: usize,
     longest_context_len: usize,
     longest_size_len: usize,
+    longest_major_len: usize,
+    longest_minor_len: usize,
 }
 
 impl Config {
@@ -1560,21 +1562,28 @@ fn display_dir_entry_size(
     entry: &PathData,
     config: &Config,
     out: &mut BufWriter<std::io::Stdout>,
-) -> (usize, usize, usize, usize, usize) {
+) -> (usize, usize, usize, usize, usize, usize, usize) {
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
     if let Some(md) = entry.md(out) {
+        let (size_len, major_len, minor_len) = match display_size_or_rdev(md, config) {
+            SizeOrDeviceId::Device(major, minor) => (
+                (major.len() + minor.len() + 2usize),
+                major.len(),
+                minor.len(),
+            ),
+            SizeOrDeviceId::Size(size) => (size.len(), 0usize, 0usize),
+        };
         (
             display_symlink_count(md).len(),
             display_uname(md, config).len(),
             display_group(md, config).len(),
-            match display_size_or_rdev(md, config) {
-                SizeOrDeviceId::Device(x, y) => x.len() + y.len() + 3,
-                SizeOrDeviceId::Size(z) => z.len(),
-            },
+            size_len,
+            major_len,
+            minor_len,
             display_inode(md).len(),
         )
     } else {
-        (0, 0, 0, 0, 0)
+        (0, 0, 0, 0, 0, 0, 0)
     }
 }
 
@@ -1611,7 +1620,9 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             mut longest_group_len,
             mut longest_context_len,
             mut longest_size_len,
-        ) = (1, 1, 1, 1, 1, 1);
+            mut longest_major_len,
+            mut longest_minor_len,
+        ) = (1, 1, 1, 1, 1, 1, 1, 1);
 
         #[cfg(not(unix))]
         let (
@@ -1625,7 +1636,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         #[cfg(unix)]
         for item in items {
             let context_len = item.security_context.len();
-            let (link_count_len, uname_len, group_len, size_len, inode_len) =
+            let (link_count_len, uname_len, group_len, size_len, major_len, minor_len, inode_len) =
                 display_dir_entry_size(item, config, out);
             longest_inode_len = inode_len.max(longest_inode_len);
             longest_link_count_len = link_count_len.max(longest_link_count_len);
@@ -1634,18 +1645,31 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             if config.context {
                 longest_context_len = context_len.max(longest_context_len);
             }
-            longest_size_len = if items.len() == 1 {
-                0usize
+            if items.len() == 1usize {
+                longest_size_len = 0usize;
+                longest_major_len = 0usize;
+                longest_minor_len = 0usize;
             } else {
-                size_len.max(longest_size_len)
+                longest_major_len = major_len.max(longest_major_len);
+                longest_minor_len = minor_len.max(longest_minor_len);
+                longest_size_len = size_len
+                    .max(longest_size_len)
+                    .max(longest_major_len + longest_minor_len + 2usize);
             }
         }
 
         #[cfg(not(unix))]
         for item in items {
             let context_len = item.security_context.len();
-            let (link_count_len, uname_len, group_len, size_len, _inode_len) =
-                display_dir_entry_size(item, config, out);
+            let (
+                link_count_len,
+                uname_len,
+                group_len,
+                size_len,
+                _major_len,
+                _minor_len,
+                _inode_len,
+            ) = display_dir_entry_size(item, config, out);
             longest_link_count_len = link_count_len.max(longest_link_count_len);
             longest_uname_len = uname_len.max(longest_uname_len);
             longest_group_len = group_len.max(longest_group_len);
@@ -1666,6 +1690,8 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                     longest_group_len,
                     longest_context_len,
                     longest_size_len,
+                    longest_major_len,
+                    longest_minor_len,
                 },
                 config,
                 out,
@@ -1888,17 +1914,11 @@ fn display_item_long(
                 let _ = write!(out, " {}", pad_left(&size, padding.longest_size_len),);
             }
             SizeOrDeviceId::Device(major, minor) => {
-                let mut pad_major = 0usize;
-                let mut pad_minor = 0usize;
-                if padding.longest_size_len != 0 {
-                    pad_major = 3usize.saturating_sub(major.len());
-                    pad_minor = padding.longest_size_len.saturating_sub(4usize);
-                }
                 let _ = write!(
                     out,
                     " {}, {}",
-                    pad_left(&major, pad_major),
-                    pad_left(&minor, pad_minor),
+                    pad_left(&major, padding.longest_major_len),
+                    pad_left(&minor, padding.longest_minor_len),
                 );
             }
         };
