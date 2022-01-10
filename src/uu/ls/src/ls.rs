@@ -1690,7 +1690,9 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                     longest_group_len,
                     longest_context_len,
                     longest_size_len,
+                    #[cfg(unix)]
                     longest_major_len,
+                    #[cfg(unix)]
                     longest_minor_len,
                 },
                 config,
@@ -1917,8 +1919,22 @@ fn display_item_long(
                 let _ = write!(
                     out,
                     " {}, {}",
-                    pad_left(&major, padding.longest_major_len),
-                    pad_left(&minor, padding.longest_minor_len),
+                    pad_left(
+                        &major,
+                        if cfg!(windows) {
+                            0usize
+                        } else {
+                            padding.longest_major_len
+                        }
+                    ),
+                    pad_left(
+                        &minor,
+                        if cfg!(windows) {
+                            0usize
+                        } else {
+                            padding.longest_minor_len
+                        }
+                    ),
                 );
             }
         };
