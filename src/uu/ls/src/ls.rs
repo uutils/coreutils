@@ -319,7 +319,9 @@ struct PaddingCollection {
     longest_group_len: usize,
     longest_context_len: usize,
     longest_size_len: usize,
+    #[cfg(unix)]
     longest_major_len: usize,
+    #[cfg(unix)]
     longest_minor_len: usize,
 }
 
