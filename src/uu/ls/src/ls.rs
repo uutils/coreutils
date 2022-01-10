@@ -1923,19 +1923,17 @@ fn display_item_long(
                     " {}, {}",
                     pad_left(
                         &major,
-                        if cfg!(windows) {
-                            0usize
-                        } else {
-                            padding.longest_major_len
-                        }
+                        #[cfg(not(unix))]
+                        0usize,
+                        #[cfg(unix)]
+                        padding.longest_major_len,
                     ),
                     pad_left(
                         &minor,
-                        if cfg!(windows) {
-                            0usize
-                        } else {
-                            padding.longest_minor_len
-                        }
+                        #[cfg(not(unix))]
+                        0usize,
+                        #[cfg(unix)]
+                        padding.longest_minor_len,
                     ),
                 );
             }
