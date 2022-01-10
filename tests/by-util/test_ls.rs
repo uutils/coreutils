@@ -63,18 +63,7 @@ fn test_ls_devices() {
     let at = &scene.fixtures;
     at.mkdir("some-dir1");
 
-    // We need superuser privileges to create own devices?
-    // Can we do this in the CI?
-    //
-    //scene.ccmd("mknod").arg("some-dev1").arg("c").arg("1").arg("3").succeeds();
-
-    // scene
-    //     .ucmd()
-    //     .arg("-al")
-    //     .succeeds()
-    //     .stdout_contains("1,")
-    //     .stdout_contains("3");
-
+    // Regex tests correct device ID and correct (no pad) spacing for a single file
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     {
         scene
@@ -82,7 +71,7 @@ fn test_ls_devices() {
             .arg("-al")
             .arg("/dev/null")
             .succeeds()
-            .stdout_contains("3, 2");
+            .stdout_matches(&Regex::new("[^ ] 3, 2 [^ ]").unwrap());
     }
 
     #[cfg(target_os = "linux")]
@@ -92,8 +81,38 @@ fn test_ls_devices() {
             .arg("-al")
             .arg("/dev/null")
             .succeeds()
-            .stdout_contains("1, 3");
+            .stdout_matches(&Regex::new("[^ ] 1, 3 [^ ]").unwrap());
     }
+
+    // Regex tests alignment against a file (stdout is a link to a tty)
+    let res = scene
+        .ucmd()
+        .arg("-alL")
+        .arg("/dev/null")
+        .arg("/dev/stdout")
+        .succeeds();
+    
+    let null_len = String::from_utf8(res.stdout().to_owned())
+        .ok()
+        .unwrap()
+        .lines()
+        .next()
+        .unwrap()
+        .strip_suffix("/dev/null")
+        .unwrap()
+        .len();
+
+    let stdout_len = String::from_utf8(res.stdout().to_owned())
+        .ok()
+        .unwrap()
+        .lines()
+        .nth(1)
+        .unwrap()
+        .strip_suffix("/dev/stdout")
+        .unwrap()
+        .len();
+    
+    assert_eq!(stdout_len, null_len);
 }
 
 #[cfg(all(feature = "chmod"))]

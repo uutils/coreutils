@@ -1634,7 +1634,11 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             if config.context {
                 longest_context_len = context_len.max(longest_context_len);
             }
-            longest_size_len = size_len.max(longest_size_len);
+            longest_size_len = if items.len() == 1 {
+                0usize
+            } else {
+                size_len.max(longest_size_len)
+            }
         }
 
         #[cfg(not(unix))]
@@ -1884,11 +1888,17 @@ fn display_item_long(
                 let _ = write!(out, " {}", pad_left(&size, padding.longest_size_len),);
             }
             SizeOrDeviceId::Device(major, minor) => {
+                let mut pad_major = 0usize;
+                let mut pad_minor = 0usize;
+                if padding.longest_size_len != 0 {
+                    pad_major = 3usize.saturating_sub(major.len());
+                    pad_minor = padding.longest_size_len.saturating_sub(4usize);
+                }
                 let _ = write!(
                     out,
-                    " {},{}",
-                    pad_left(&major, 3 - major.len()),
-                    pad_left(&minor, padding.longest_size_len - 3),
+                    " {}, {}",
+                    pad_left(&major, pad_major),
+                    pad_left(&minor, pad_minor),
                 );
             }
         };
