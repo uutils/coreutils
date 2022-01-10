@@ -1685,10 +1685,10 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         #[cfg(unix)]
         if config.inode {
             for item in items {
-                let inode_len = if item.md(out).is_some() {
-                    display_inode(item.md(out).unwrap()).len()
+                let inode_len = if let Some(md) = item.md(out) {
+                    display_inode(md).len()
                 } else {
-                    1usize
+                    continue;
                 };
                 longest_inode_len = inode_len.max(longest_inode_len);
             }
@@ -1904,7 +1904,7 @@ fn display_item_long(
             dfn,
         );
     } else {
-        // this 'else' is expressly for the case of a dangling symlink
+        // this 'else' is expressly for the case of a dangling symlink/restricted file
         #[cfg(unix)]
         {
             if config.inode {
@@ -2210,7 +2210,7 @@ fn display_file_name(
     {
         if config.inode && config.format != Format::Long {
             let inode = match path.md(out) {
-                Some(md) => get_inode(md),
+                Some(md) => pad_left(&get_inode(md), longest_inode_len),
                 None => pad_left("?", longest_inode_len),
             };
             // increment width here b/c name was given colors and name.width() is now the wrong
