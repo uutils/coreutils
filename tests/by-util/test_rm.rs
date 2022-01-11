@@ -328,6 +328,7 @@ fn test_rm_silently_accepts_presume_input_tty1() {
 }
 
 #[test]
+#[ignore]
 fn test_rm_silently_accepts_presume_input_tty2() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_2 = "test_rm_silently_accepts_presume_input_tty2";
@@ -340,6 +341,7 @@ fn test_rm_silently_accepts_presume_input_tty2() {
 }
 
 #[test]
+#[ignore]
 fn test_rm_silently_accepts_presume_input_tty3() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_3 = "test_rm_silently_accepts_presume_input_tty3";
