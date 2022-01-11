@@ -13,6 +13,7 @@ extern crate quick_error;
 
 use chrono::offset::Local;
 use chrono::DateTime;
+use clap::App;
 use getopts::Matches;
 use getopts::{HasArg, Occur};
 use itertools::Itertools;
@@ -170,9 +171,8 @@ quick_error! {
     }
 }
 
-pub fn uu_app() -> clap::App<'static, 'static> {
-    // TODO: migrate to clap to get more shell completions
-    clap::App::new(uucore::util_name())
+pub fn uu_app<'a>() -> App<'a> {
+    App::new(uucore::util_name())
 }
 
 #[uucore_procs::gen_uumain]
