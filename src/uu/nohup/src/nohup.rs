@@ -88,7 +88,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     replace_fds()?;
 
@@ -114,16 +114,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
         .arg(
-            Arg::with_name(options::CMD)
-                .hidden(true)
+            Arg::new(options::CMD)
+                .hide(true)
                 .required(true)
-                .multiple(true),
+                .multiple_occurrences(true),
         )
         .setting(AppSettings::TrailingVarArg)
 }
