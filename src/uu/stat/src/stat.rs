@@ -953,7 +953,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let long_usage = get_long_usage();
 
     let matches = uu_app()
-        .usage(&usage[..])
+        .override_usage(&usage[..])
         .after_help(&long_usage[..])
         .get_matches_from(args);
 
@@ -966,31 +966,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(options::DEREFERENCE)
-                .short("L")
+            Arg::new(options::DEREFERENCE)
+                .short('L')
                 .long(options::DEREFERENCE)
                 .help("follow links"),
         )
         .arg(
-            Arg::with_name(options::FILE_SYSTEM)
-                .short("f")
+            Arg::new(options::FILE_SYSTEM)
+                .short('f')
                 .long(options::FILE_SYSTEM)
                 .help("display file system status instead of file status"),
         )
         .arg(
-            Arg::with_name(options::TERSE)
-                .short("t")
+            Arg::new(options::TERSE)
+                .short('t')
                 .long(options::TERSE)
                 .help("print the information in terse form"),
         )
         .arg(
-            Arg::with_name(options::FORMAT)
-                .short("c")
+            Arg::new(options::FORMAT)
+                .short('c')
                 .long(options::FORMAT)
                 .help(
                     "use the specified FORMAT instead of the default;
@@ -999,7 +999,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 .value_name("FORMAT"),
         )
         .arg(
-            Arg::with_name(options::PRINTF)
+            Arg::new(options::PRINTF)
                 .long(options::PRINTF)
                 .value_name("FORMAT")
                 .help(
@@ -1009,8 +1009,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(ARG_FILES)
-                .multiple(true)
+            Arg::new(ARG_FILES)
+                .multiple_occurrences(true)
                 .takes_value(true)
                 .min_values(1),
         )
