@@ -47,7 +47,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     // set working mode
     let is_posix = matches.values_of(options::POSIX).is_some();
@@ -88,26 +88,30 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(options::POSIX)
-                .short("p")
+            Arg::new(options::POSIX)
+                .short('p')
                 .help("check for most POSIX systems"),
         )
         .arg(
-            Arg::with_name(options::POSIX_SPECIAL)
-                .short("P")
+            Arg::new(options::POSIX_SPECIAL)
+                .short('P')
                 .help(r#"check for empty names and leading "-""#),
         )
         .arg(
-            Arg::with_name(options::PORTABILITY)
+            Arg::new(options::PORTABILITY)
                 .long(options::PORTABILITY)
                 .help("check for all POSIX systems (equivalent to -p -P)"),
         )
-        .arg(Arg::with_name(options::PATH).hidden(true).multiple(true))
+        .arg(
+            Arg::new(options::PATH)
+                .hide(true)
+                .multiple_occurrences(true),
+        )
 }
 
 // check a path, given as a slice of it's components and an operating mode
