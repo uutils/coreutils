@@ -128,44 +128,37 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     execute(no_newline, escaped, values).map_err_context(|| "could not write to stdout".to_string())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         // TrailingVarArg specifies the final positional argument is a VarArg
         // and it doesn't attempts the parse any further args.
         // Final argument must have multiple(true) or the usage string equivalent.
         .setting(clap::AppSettings::TrailingVarArg)
-        .setting(clap::AppSettings::AllowLeadingHyphen)
+        .setting(clap::AppSettings::AllowHyphenValues)
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(AFTER_HELP)
-        .usage(USAGE)
+        .override_usage(USAGE)
         .arg(
-            Arg::with_name(options::NO_NEWLINE)
-                .short("n")
+            Arg::new(options::NO_NEWLINE)
+                .short('n')
                 .help("do not output the trailing newline")
-                .takes_value(false)
-                .display_order(1),
+                .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::ENABLE_BACKSLASH_ESCAPE)
-                .short("e")
+            Arg::new(options::ENABLE_BACKSLASH_ESCAPE)
+                .short('e')
                 .help("enable interpretation of backslash escapes")
-                .takes_value(false)
-                .display_order(2),
+                .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::DISABLE_BACKSLASH_ESCAPE)
-                .short("E")
+            Arg::new(options::DISABLE_BACKSLASH_ESCAPE)
+                .short('E')
                 .help("disable interpretation of backslash escapes (default)")
-                .takes_value(false)
-                .display_order(3),
+                .takes_value(false),
         )
-        .arg(
-            Arg::with_name(options::STRING)
-                .multiple(true)
-                .allow_hyphen_values(true),
-        )
+        .arg(Arg::new(options::STRING).multiple_occurrences(true))
 }
 
 fn execute(no_newline: bool, escaped: bool, free: Vec<String>) -> io::Result<()> {
