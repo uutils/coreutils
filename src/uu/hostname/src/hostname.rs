@@ -61,7 +61,7 @@ fn usage() -> String {
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     #[cfg(windows)]
     let _handle = wsa::start().map_err_context(|| "failed to start Winsock".to_owned())?;
@@ -72,39 +72,39 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(OPT_DOMAIN)
-                .short("d")
+            Arg::new(OPT_DOMAIN)
+                .short('d')
                 .long("domain")
                 .overrides_with_all(&[OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
                 .help("Display the name of the DNS domain if possible"),
         )
         .arg(
-            Arg::with_name(OPT_IP_ADDRESS)
-                .short("i")
+            Arg::new(OPT_IP_ADDRESS)
+                .short('i')
                 .long("ip-address")
                 .overrides_with_all(&[OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
                 .help("Display the network address(es) of the host"),
         )
         .arg(
-            Arg::with_name(OPT_FQDN)
-                .short("f")
+            Arg::new(OPT_FQDN)
+                .short('f')
                 .long("fqdn")
                 .overrides_with_all(&[OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
                 .help("Display the FQDN (Fully Qualified Domain Name) (default)"),
         )
         .arg(
-            Arg::with_name(OPT_SHORT)
-                .short("s")
+            Arg::new(OPT_SHORT)
+                .short('s')
                 .long("short")
                 .overrides_with_all(&[OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
                 .help("Display the short hostname (the portion before the first dot) if possible"),
         )
-        .arg(Arg::with_name(OPT_HOST))
+        .arg(Arg::new(OPT_HOST).allow_invalid_utf8(true))
 }
 
 fn display_hostname(matches: &ArgMatches) -> UResult<()> {
