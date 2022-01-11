@@ -74,9 +74,9 @@ fn is_custom_binary(program: &str) -> bool {
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn detect_algo<'a>(
+fn detect_algo(
     program: &str,
-    matches: &ArgMatches<'a>,
+    matches: &ArgMatches,
 ) -> (&'static str, Box<dyn Digest + 'static>, usize) {
     let mut alg: Option<Box<dyn Digest>> = None;
     let mut name: &'static str = "";
@@ -270,10 +270,8 @@ fn parse_bit_num(arg: &str) -> Result<usize, ParseIntError> {
     arg.parse()
 }
 
-fn is_valid_bit_num(arg: String) -> Result<(), String> {
-    parse_bit_num(&arg)
-        .map(|_| ())
-        .map_err(|e| format!("{}", e))
+fn is_valid_bit_num(arg: &str) -> Result<(), String> {
+    parse_bit_num(arg).map(|_| ()).map_err(|e| format!("{}", e))
 }
 
 #[uucore_procs::gen_uumain]
@@ -333,7 +331,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app_common() -> App<'static, 'static> {
+pub fn uu_app_common<'a>() -> App<'a> {
     #[cfg(windows)]
     const BINARY_HELP: &str = "read in binary mode (default)";
     #[cfg(not(windows))]
@@ -346,55 +344,55 @@ pub fn uu_app_common() -> App<'static, 'static> {
         .version(crate_version!())
         .about("Compute and check message digests.")
         .arg(
-            Arg::with_name("binary")
-                .short("b")
+            Arg::new("binary")
+                .short('b')
                 .long("binary")
                 .help(BINARY_HELP),
         )
         .arg(
-            Arg::with_name("check")
-                .short("c")
+            Arg::new("check")
+                .short('c')
                 .long("check")
                 .help("read hashsums from the FILEs and check them"),
         )
         .arg(
-            Arg::with_name("tag")
+            Arg::new("tag")
                 .long("tag")
                 .help("create a BSD-style checksum"),
         )
         .arg(
-            Arg::with_name("text")
-                .short("t")
+            Arg::new("text")
+                .short('t')
                 .long("text")
                 .help(TEXT_HELP)
                 .conflicts_with("binary"),
         )
         .arg(
-            Arg::with_name("quiet")
-                .short("q")
+            Arg::new("quiet")
+                .short('q')
                 .long("quiet")
                 .help("don't print OK for each successfully verified file"),
         )
         .arg(
-            Arg::with_name("status")
-                .short("s")
+            Arg::new("status")
+                .short('s')
                 .long("status")
                 .help("don't output anything, status code shows success"),
         )
         .arg(
-            Arg::with_name("strict")
+            Arg::new("strict")
                 .long("strict")
                 .help("exit non-zero for improperly formatted checksum lines"),
         )
         .arg(
-            Arg::with_name("warn")
-                .short("w")
+            Arg::new("warn")
+                .short('w')
                 .long("warn")
                 .help("warn about improperly formatted checksum lines"),
         )
         // Needed for variable-length output sums (e.g. SHAKE)
         .arg(
-            Arg::with_name("bits")
+            Arg::new("bits")
                 .long("bits")
                 .help("set the size of the output (only for SHAKE)")
                 .takes_value(true)
@@ -403,14 +401,15 @@ pub fn uu_app_common() -> App<'static, 'static> {
                 .validator(is_valid_bit_num),
         )
         .arg(
-            Arg::with_name("FILE")
+            Arg::new("FILE")
                 .index(1)
-                .multiple(true)
-                .value_name("FILE"),
+                .multiple_occurrences(true)
+                .value_name("FILE")
+                .allow_invalid_utf8(true),
         )
 }
 
-pub fn uu_app_custom() -> App<'static, 'static> {
+pub fn uu_app_custom<'a>() -> App<'a> {
     let mut app = uu_app_common();
     let algorithms = &[
         ("md5", "work with MD5"),
@@ -436,14 +435,14 @@ pub fn uu_app_custom() -> App<'static, 'static> {
     ];
 
     for (name, desc) in algorithms {
-        app = app.arg(Arg::with_name(name).long(name).help(desc));
+        app = app.arg(Arg::new(*name).long(name).help(*desc));
     }
     app
 }
 
 // hashsum is handled differently in build.rs, therefore this is not the same
 // as in other utilities.
-fn uu_app(binary_name: &str) -> App<'static, 'static> {
+fn uu_app<'a>(binary_name: &str) -> App<'a> {
     if !is_custom_binary(binary_name) {
         uu_app_custom()
     } else {
