@@ -58,6 +58,6 @@ fn test_link_three_arguments() {
         "test_link_argument3",
     ];
     ucmd.args(&arguments[..]).fails().stderr_contains(
-        format!("error: The value '{}' was provided to '<FILES>...', but it wasn't expecting any more values", arguments[2]),
+        format!("error: The value '{}' was provided to '<FILES>...' but it wasn't expecting any more values", arguments[2]),
     );
 }

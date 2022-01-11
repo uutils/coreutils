@@ -23,7 +23,7 @@ fn usage() -> String {
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let files: Vec<_> = matches
         .values_of_os(options::FILES)
@@ -36,16 +36,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map_err_context(|| format!("cannot create link {} to {}", new.quote(), old.quote()))
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(options::FILES)
-                .hidden(true)
+            Arg::new(options::FILES)
+                .hide(true)
                 .required(true)
                 .min_values(2)
                 .max_values(2)
-                .takes_value(true),
+                .takes_value(true)
+                .allow_invalid_utf8(true),
         )
 }
