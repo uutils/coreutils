@@ -1678,9 +1678,25 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             None
         };
 
+        #[cfg(not(unix))]
+        let longest_inode_len = 1;
+        #[cfg(unix)]
+        let mut longest_inode_len = 1;
+        #[cfg(unix)]
+        if config.inode {
+            for item in items {
+                let inode_len = if let Some(md) = item.md(out) {
+                    display_inode(md).len()
+                } else {
+                    continue;
+                };
+                longest_inode_len = inode_len.max(longest_inode_len);
+            }
+        }
+
         let names: std::vec::IntoIter<Cell> = items
             .iter()
-            .map(|i| display_file_name(i, config, prefix_context, out))
+            .map(|i| display_file_name(i, config, prefix_context, longest_inode_len, out))
             .collect::<Vec<Cell>>()
             .into_iter();
 
@@ -1878,7 +1894,7 @@ fn display_item_long(
             );
         }
 
-        let dfn = display_file_name(item, config, None, out).contents;
+        let dfn = display_file_name(item, config, None, 0, out).contents;
 
         let _ = writeln!(
             out,
@@ -1888,7 +1904,7 @@ fn display_item_long(
             dfn,
         );
     } else {
-        // this 'else' is expressly for the case of a dangling symlink
+        // this 'else' is expressly for the case of a dangling symlink/restricted file
         #[cfg(unix)]
         {
             if config.inode {
@@ -1932,7 +1948,7 @@ fn display_item_long(
             let _ = write!(out, " {}", pad_right("?", padding.longest_uname_len));
         }
 
-        let dfn = display_file_name(item, config, None, out).contents;
+        let dfn = display_file_name(item, config, None, 0, out).contents;
         let date_len = 12;
 
         let _ = writeln!(
@@ -2174,6 +2190,7 @@ fn display_file_name(
     path: &PathData,
     config: &Config,
     prefix_context: Option<usize>,
+    longest_inode_len: usize,
     out: &mut BufWriter<Stdout>,
 ) -> Cell {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
@@ -2193,8 +2210,8 @@ fn display_file_name(
     {
         if config.inode && config.format != Format::Long {
             let inode = match path.md(out) {
-                Some(md) => get_inode(md),
-                None => "?".to_string(),
+                Some(md) => pad_left(&get_inode(md), longest_inode_len),
+                None => pad_left("?", longest_inode_len),
             };
             // increment width here b/c name was given colors and name.width() is now the wrong
             // size for display
