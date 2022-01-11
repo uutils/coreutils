@@ -340,10 +340,10 @@ fn test_dictionary_order() {
 fn test_dictionary_order2() {
     for non_dictionary_order2_param in &["-d"] {
         new_ucmd!()
-            .pipe_in("a👦🏻aa	b\naaaa	b") // spell-checker:disable-line
+            .pipe_in("a👦🏻aa\tb\naaaa\tb") // spell-checker:disable-line
             .arg(non_dictionary_order2_param) // spell-checker:disable-line
             .succeeds()
-            .stdout_only("a👦🏻aa	b\naaaa	b\n"); // spell-checker:disable-line
+            .stdout_only("a👦🏻aa\tb\naaaa\tb\n"); // spell-checker:disable-line
     }
 }
 
