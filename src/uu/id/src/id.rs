@@ -132,7 +132,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let after_help = get_description();
 
     let matches = uu_app()
-        .usage(&usage[..])
+        .override_usage(&usage[..])
         .after_help(&after_help[..])
         .get_matches_from(args);
 
@@ -347,13 +347,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(options::OPT_AUDIT)
-                .short("A")
+            Arg::new(options::OPT_AUDIT)
+                .short('A')
                 .conflicts_with_all(&[
                     options::OPT_GROUP,
                     options::OPT_EFFECTIVE_USER,
@@ -368,22 +368,22 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::OPT_EFFECTIVE_USER)
-                .short("u")
+            Arg::new(options::OPT_EFFECTIVE_USER)
+                .short('u')
                 .long(options::OPT_EFFECTIVE_USER)
                 .conflicts_with(options::OPT_GROUP)
                 .help("Display only the effective user ID as a number."),
         )
         .arg(
-            Arg::with_name(options::OPT_GROUP)
-                .short("g")
+            Arg::new(options::OPT_GROUP)
+                .short('g')
                 .long(options::OPT_GROUP)
                 .conflicts_with(options::OPT_EFFECTIVE_USER)
                 .help("Display only the effective group ID as a number"),
         )
         .arg(
-            Arg::with_name(options::OPT_GROUPS)
-                .short("G")
+            Arg::new(options::OPT_GROUPS)
+                .short('G')
                 .long(options::OPT_GROUPS)
                 .conflicts_with_all(&[
                     options::OPT_GROUP,
@@ -399,13 +399,13 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::OPT_HUMAN_READABLE)
-                .short("p")
+            Arg::new(options::OPT_HUMAN_READABLE)
+                .short('p')
                 .help("Make the output human-readable. Each display is on a separate line."),
         )
         .arg(
-            Arg::with_name(options::OPT_NAME)
-                .short("n")
+            Arg::new(options::OPT_NAME)
+                .short('n')
                 .long(options::OPT_NAME)
                 .help(
                     "Display the name of the user or group ID for the -G, -g and -u options \
@@ -414,13 +414,13 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::OPT_PASSWORD)
-                .short("P")
+            Arg::new(options::OPT_PASSWORD)
+                .short('P')
                 .help("Display the id as a password file entry."),
         )
         .arg(
-            Arg::with_name(options::OPT_REAL_ID)
-                .short("r")
+            Arg::new(options::OPT_REAL_ID)
+                .short('r')
                 .long(options::OPT_REAL_ID)
                 .help(
                     "Display the real ID for the -G, -g and -u options instead of \
@@ -428,8 +428,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::OPT_ZERO)
-                .short("z")
+            Arg::new(options::OPT_ZERO)
+                .short('z')
                 .long(options::OPT_ZERO)
                 .help(
                     "delimit entries with NUL characters, not whitespace;\n\
@@ -437,15 +437,15 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::OPT_CONTEXT)
-                .short("Z")
+            Arg::new(options::OPT_CONTEXT)
+                .short('Z')
                 .long(options::OPT_CONTEXT)
                 .conflicts_with_all(&[options::OPT_GROUP, options::OPT_EFFECTIVE_USER])
                 .help(CONTEXT_HELP_TEXT),
         )
         .arg(
-            Arg::with_name(options::ARG_USERS)
-                .multiple(true)
+            Arg::new(options::ARG_USERS)
+                .multiple_occurrences(true)
                 .takes_value(true)
                 .value_name(options::ARG_USERS),
         )
