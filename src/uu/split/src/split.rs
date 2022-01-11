@@ -57,7 +57,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let long_usage = get_long_usage();
 
     let matches = uu_app()
-        .usage(&usage[..])
+        .override_usage(&usage[..])
         .after_help(&long_usage[..])
         .get_matches_from(args);
 
@@ -101,30 +101,30 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     split(&settings)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about("Create output files containing consecutive or interleaved sections of input")
         // strategy (mutually exclusive)
         .arg(
-            Arg::with_name(OPT_BYTES)
-                .short("b")
+            Arg::new(OPT_BYTES)
+                .short('b')
                 .long(OPT_BYTES)
                 .takes_value(true)
                 .default_value("2")
                 .help("use suffixes of length N (default 2)"),
         )
         .arg(
-            Arg::with_name(OPT_LINE_BYTES)
-                .short("C")
+            Arg::new(OPT_LINE_BYTES)
+                .short('C')
                 .long(OPT_LINE_BYTES)
                 .takes_value(true)
                 .default_value("2")
                 .help("put at most SIZE bytes of lines per output file"),
         )
         .arg(
-            Arg::with_name(OPT_LINES)
-                .short("l")
+            Arg::new(OPT_LINES)
+                .short('l')
                 .long(OPT_LINES)
                 .takes_value(true)
                 .default_value("1000")
@@ -132,50 +132,52 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         // rest of the arguments
         .arg(
-            Arg::with_name(OPT_ADDITIONAL_SUFFIX)
+            Arg::new(OPT_ADDITIONAL_SUFFIX)
                 .long(OPT_ADDITIONAL_SUFFIX)
                 .takes_value(true)
                 .default_value("")
                 .help("additional suffix to append to output file names"),
         )
         .arg(
-            Arg::with_name(OPT_FILTER)
+            Arg::new(OPT_FILTER)
                 .long(OPT_FILTER)
                 .takes_value(true)
-                .help("write to shell COMMAND file name is $FILE (Currently not implemented for Windows)"),
+                .help(
+                "write to shell COMMAND file name is $FILE (Currently not implemented for Windows)",
+            ),
         )
         .arg(
-            Arg::with_name(OPT_NUMERIC_SUFFIXES)
-                .short("d")
+            Arg::new(OPT_NUMERIC_SUFFIXES)
+                .short('d')
                 .long(OPT_NUMERIC_SUFFIXES)
                 .takes_value(true)
-                .default_value("0")
+                .default_missing_value("0")
                 .help("use numeric suffixes instead of alphabetic"),
         )
         .arg(
-            Arg::with_name(OPT_SUFFIX_LENGTH)
-                .short("a")
+            Arg::new(OPT_SUFFIX_LENGTH)
+                .short('a')
                 .long(OPT_SUFFIX_LENGTH)
                 .takes_value(true)
                 .default_value(OPT_DEFAULT_SUFFIX_LENGTH)
                 .help("use suffixes of length N (default 2)"),
         )
         .arg(
-            Arg::with_name(OPT_VERBOSE)
+            Arg::new(OPT_VERBOSE)
                 .long(OPT_VERBOSE)
                 .help("print a diagnostic just before each output file is opened"),
         )
         .arg(
-            Arg::with_name(ARG_INPUT)
-            .takes_value(true)
-            .default_value("-")
-            .index(1)
+            Arg::new(ARG_INPUT)
+                .takes_value(true)
+                .default_value("-")
+                .index(1),
         )
         .arg(
-            Arg::with_name(ARG_PREFIX)
-            .takes_value(true)
-            .default_value("x")
-            .index(2)
+            Arg::new(ARG_PREFIX)
+                .takes_value(true)
+                .default_value("x")
+                .index(2),
         )
 }
 
