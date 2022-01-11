@@ -29,9 +29,9 @@ fn test_stdbuf_no_buffer_option_fails() {
 
     ts.ucmd().args(&["head"]).fails().stderr_is(&format!(
         "error: The following required arguments were not provided:\n    \
-         --error <MODE>\n    \
          --input <MODE>\n    \
-         --output <MODE>\n\n\
+         --output <MODE>\n    \
+         --error <MODE>\n\n\
          USAGE:\n    \
          {1} {0} OPTION... COMMAND\n\n\
          For more information try --help",
