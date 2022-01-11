@@ -60,34 +60,38 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     tac(files, before, regex, separator)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .usage(USAGE)
+        .override_usage(USAGE)
         .about(SUMMARY)
         .arg(
-            Arg::with_name(options::BEFORE)
-                .short("b")
+            Arg::new(options::BEFORE)
+                .short('b')
                 .long(options::BEFORE)
                 .help("attach the separator before instead of after")
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::REGEX)
-                .short("r")
+            Arg::new(options::REGEX)
+                .short('r')
                 .long(options::REGEX)
                 .help("interpret the sequence as a regular expression")
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::SEPARATOR)
-                .short("s")
+            Arg::new(options::SEPARATOR)
+                .short('s')
                 .long(options::SEPARATOR)
                 .help("use STRING as the separator instead of newline")
                 .takes_value(true),
         )
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+        .arg(
+            Arg::new(options::FILE)
+                .hide(true)
+                .multiple_occurrences(true),
+        )
 }
 
 /// Print lines of a buffer in reverse, with line separator given as a regex.
