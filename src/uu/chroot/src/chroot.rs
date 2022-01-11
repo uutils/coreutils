@@ -91,40 +91,40 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(SYNTAX)
+        .override_usage(SYNTAX)
         .arg(
-            Arg::with_name(options::NEWROOT)
-                .hidden(true)
+            Arg::new(options::NEWROOT)
+                .hide(true)
                 .required(true)
                 .index(1),
         )
         .arg(
-            Arg::with_name(options::USER)
-                .short("u")
+            Arg::new(options::USER)
+                .short('u')
                 .long(options::USER)
                 .help("User (ID or name) to switch before running the program")
                 .value_name("USER"),
         )
         .arg(
-            Arg::with_name(options::GROUP)
-                .short("g")
+            Arg::new(options::GROUP)
+                .short('g')
                 .long(options::GROUP)
                 .help("Group (ID or name) to switch to")
                 .value_name("GROUP"),
         )
         .arg(
-            Arg::with_name(options::GROUPS)
-                .short("G")
+            Arg::new(options::GROUPS)
+                .short('G')
                 .long(options::GROUPS)
                 .help("Comma-separated list of groups to switch to")
                 .value_name("GROUP1,GROUP2..."),
         )
         .arg(
-            Arg::with_name(options::USERSPEC)
+            Arg::new(options::USERSPEC)
                 .long(options::USERSPEC)
                 .help(
                     "Colon-separated user and group to switch to. \
@@ -134,9 +134,9 @@ pub fn uu_app() -> App<'static, 'static> {
                 .value_name("USER:GROUP"),
         )
         .arg(
-            Arg::with_name(options::COMMAND)
-                .hidden(true)
-                .multiple(true)
+            Arg::new(options::COMMAND)
+                .hide(true)
+                .multiple_occurrences(true)
                 .index(2),
         )
 }
