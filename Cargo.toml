@@ -244,7 +244,8 @@ test = [ "uu_test" ]
 [workspace]
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
+clap = { version = "3.0", features = ["wrap_help", "cargo"] }
+clap_complete = "3.0"
 lazy_static = { version="1.3" }
 textwrap = { version="0.14", features=["terminal_size"] }
 uucore = { version=">=0.0.10", package="uucore", path="src/uucore" }
