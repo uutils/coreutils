@@ -996,7 +996,8 @@ fn test_conflict_check_out() {
             .arg("-o=/dev/null")
             .fails()
             .stderr_contains(
-                "error: The argument '--output <FILENAME>' cannot be used with '--check",
+                // the rest of the message might be subject to change
+                "error: The argument",
             );
     }
 }
