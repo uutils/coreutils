@@ -46,8 +46,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    app_from_crate!().arg(Arg::with_name("STRING").index(1).multiple(true))
+pub fn uu_app<'a>() -> App<'a> {
+    app_from_crate!().arg(Arg::new("STRING").index(1).multiple_occurrences(true))
 }
 
 fn prepare_buffer<'a>(input: &'a str, buffer: &'a mut [u8; BUF_SIZE]) -> &'a [u8] {
