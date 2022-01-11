@@ -61,7 +61,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let after_help = get_long_usage();
 
     let matches = uu_app()
-        .usage(&usage[..])
+        .override_usage(&usage[..])
         .after_help(&after_help[..])
         .get_matches_from(args);
 
@@ -132,60 +132,60 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(options::LONG_FORMAT)
-                .short("l")
+            Arg::new(options::LONG_FORMAT)
+                .short('l')
                 .requires(options::USER)
                 .help("produce long format output for the specified USERs"),
         )
         .arg(
-            Arg::with_name(options::OMIT_HOME_DIR)
-                .short("b")
+            Arg::new(options::OMIT_HOME_DIR)
+                .short('b')
                 .help("omit the user's home directory and shell in long format"),
         )
         .arg(
-            Arg::with_name(options::OMIT_PROJECT_FILE)
-                .short("h")
+            Arg::new(options::OMIT_PROJECT_FILE)
+                .short('h')
                 .help("omit the user's project file in long format"),
         )
         .arg(
-            Arg::with_name(options::OMIT_PLAN_FILE)
-                .short("p")
+            Arg::new(options::OMIT_PLAN_FILE)
+                .short('p')
                 .help("omit the user's plan file in long format"),
         )
         .arg(
-            Arg::with_name(options::SHORT_FORMAT)
-                .short("s")
+            Arg::new(options::SHORT_FORMAT)
+                .short('s')
                 .help("do short format output, this is the default"),
         )
         .arg(
-            Arg::with_name(options::OMIT_HEADINGS)
-                .short("f")
+            Arg::new(options::OMIT_HEADINGS)
+                .short('f')
                 .help("omit the line of column headings in short format"),
         )
         .arg(
-            Arg::with_name(options::OMIT_NAME)
-                .short("w")
+            Arg::new(options::OMIT_NAME)
+                .short('w')
                 .help("omit the user's full name in short format"),
         )
         .arg(
-            Arg::with_name(options::OMIT_NAME_HOST)
-                .short("i")
+            Arg::new(options::OMIT_NAME_HOST)
+                .short('i')
                 .help("omit the user's full name and remote host in short format"),
         )
         .arg(
-            Arg::with_name(options::OMIT_NAME_HOST_TIME)
-                .short("q")
+            Arg::new(options::OMIT_NAME_HOST_TIME)
+                .short('q')
                 .help("omit the user's full name, remote host and idle time in short format"),
         )
         .arg(
-            Arg::with_name(options::USER)
+            Arg::new(options::USER)
                 .takes_value(true)
-                .multiple(true),
+                .multiple_occurrences(true),
         )
 }
 
