@@ -14,6 +14,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Err(1.into())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
 }
