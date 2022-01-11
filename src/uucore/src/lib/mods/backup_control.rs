@@ -206,7 +206,7 @@ pub mod arguments {
     pub static OPT_SUFFIX: &str = "backupopt_suffix";
 
     /// '--backup' argument
-    pub fn backup() -> clap::Arg<'static> {
+    pub fn backup<'a>() -> clap::Arg<'a> {
         clap::Arg::new(OPT_BACKUP)
             .long("backup")
             .help("make a backup of each existing destination file")
@@ -217,14 +217,14 @@ pub mod arguments {
     }
 
     /// '-b' argument
-    pub fn backup_no_args() -> clap::Arg<'static> {
+    pub fn backup_no_args<'a>() -> clap::Arg<'a> {
         clap::Arg::new(OPT_BACKUP_NO_ARG)
             .short('b')
             .help("like --backup but does not accept an argument")
     }
 
     /// '-S, --suffix' argument
-    pub fn suffix() -> clap::Arg<'static> {
+    pub fn suffix<'a>() -> clap::Arg<'a> {
         clap::Arg::new(OPT_SUFFIX)
             .short('S')
             .long("suffix")
