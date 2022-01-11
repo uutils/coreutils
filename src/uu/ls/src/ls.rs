@@ -683,7 +683,7 @@ impl Config {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
-    let app = uu_app().usage(&usage[..]);
+    let app = uu_app().override_usage(&usage[..]);
 
     let matches = app.get_matches_from(args);
 
@@ -697,7 +697,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     list(locs, config)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(
@@ -707,7 +707,7 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         // Format arguments
         .arg(
-            Arg::with_name(options::FORMAT)
+            Arg::new(options::FORMAT)
                 .long(options::FORMAT)
                 .help("Set the display format.")
                 .takes_value(true)
@@ -732,8 +732,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::format::COLUMNS)
-                .short(options::format::COLUMNS)
+            Arg::new(options::format::COLUMNS)
+                .short('C')
                 .help("Display the files in columns.")
                 .overrides_with_all(&[
                     options::FORMAT,
@@ -744,8 +744,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::format::LONG)
-                .short("l")
+            Arg::new(options::format::LONG)
+                .short('l')
                 .long(options::format::LONG)
                 .help("Display detailed information.")
                 .overrides_with_all(&[
@@ -757,8 +757,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::format::ACROSS)
-                .short(options::format::ACROSS)
+            Arg::new(options::format::ACROSS)
+                .short('x')
                 .help("List entries in rows instead of in columns.")
                 .overrides_with_all(&[
                     options::FORMAT,
@@ -769,8 +769,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::format::COMMAS)
-                .short(options::format::COMMAS)
+            Arg::new(options::format::COMMAS)
+                .short('m')
                 .help("List entries separated by commas.")
                 .overrides_with_all(&[
                     options::FORMAT,
@@ -787,36 +787,36 @@ pub fn uu_app() -> App<'static, 'static> {
         // ls -1g1
         // even though `ls -11` and `ls -1 -g -1` work.
         .arg(
-            Arg::with_name(options::format::ONE_LINE)
-                .short(options::format::ONE_LINE)
+            Arg::new(options::format::ONE_LINE)
+                .short('1')
                 .help("List one file per line.")
-                .multiple(true),
+                .multiple_occurrences(true),
         )
         .arg(
-            Arg::with_name(options::format::LONG_NO_GROUP)
-                .short(options::format::LONG_NO_GROUP)
+            Arg::new(options::format::LONG_NO_GROUP)
+                .short('o')
                 .help(
                     "Long format without group information. \
                     Identical to --format=long with --no-group.",
                 )
-                .multiple(true),
+                .multiple_occurrences(true),
         )
         .arg(
-            Arg::with_name(options::format::LONG_NO_OWNER)
-                .short(options::format::LONG_NO_OWNER)
+            Arg::new(options::format::LONG_NO_OWNER)
+                .short('g')
                 .help("Long format without owner information.")
-                .multiple(true),
+                .multiple_occurrences(true),
         )
         .arg(
-            Arg::with_name(options::format::LONG_NUMERIC_UID_GID)
-                .short("n")
+            Arg::new(options::format::LONG_NUMERIC_UID_GID)
+                .short('n')
                 .long(options::format::LONG_NUMERIC_UID_GID)
                 .help("-l with numeric UIDs and GIDs.")
-                .multiple(true),
+                .multiple_occurrences(true),
         )
         // Quoting style
         .arg(
-            Arg::with_name(options::QUOTING_STYLE)
+            Arg::new(options::QUOTING_STYLE)
                 .long(options::QUOTING_STYLE)
                 .takes_value(true)
                 .help("Set quoting style.")
@@ -837,8 +837,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::quoting::LITERAL)
-                .short("N")
+            Arg::new(options::quoting::LITERAL)
+                .short('N')
                 .long(options::quoting::LITERAL)
                 .help("Use literal quoting style. Equivalent to `--quoting-style=literal`")
                 .overrides_with_all(&[
@@ -849,8 +849,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::quoting::ESCAPE)
-                .short("b")
+            Arg::new(options::quoting::ESCAPE)
+                .short('b')
                 .long(options::quoting::ESCAPE)
                 .help("Use escape quoting style. Equivalent to `--quoting-style=escape`")
                 .overrides_with_all(&[
@@ -861,8 +861,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::quoting::C)
-                .short("Q")
+            Arg::new(options::quoting::C)
+                .short('Q')
                 .long(options::quoting::C)
                 .help("Use C quoting style. Equivalent to `--quoting-style=c`")
                 .overrides_with_all(&[
@@ -874,21 +874,21 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         // Control characters
         .arg(
-            Arg::with_name(options::HIDE_CONTROL_CHARS)
-                .short("q")
+            Arg::new(options::HIDE_CONTROL_CHARS)
+                .short('q')
                 .long(options::HIDE_CONTROL_CHARS)
                 .help("Replace control characters with '?' if they are not escaped.")
                 .overrides_with_all(&[options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS]),
         )
         .arg(
-            Arg::with_name(options::SHOW_CONTROL_CHARS)
+            Arg::new(options::SHOW_CONTROL_CHARS)
                 .long(options::SHOW_CONTROL_CHARS)
                 .help("Show control characters 'as is' if they are not escaped.")
                 .overrides_with_all(&[options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS]),
         )
         // Time arguments
         .arg(
-            Arg::with_name(options::TIME)
+            Arg::new(options::TIME)
                 .long(options::TIME)
                 .help(
                     "Show time in <field>:\n\
@@ -906,8 +906,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .overrides_with_all(&[options::TIME, options::time::ACCESS, options::time::CHANGE]),
         )
         .arg(
-            Arg::with_name(options::time::CHANGE)
-                .short(options::time::CHANGE)
+            Arg::new(options::time::CHANGE)
+                .short('c')
                 .help(
                     "If the long listing format (e.g., -l, -o) is being used, print the status \
                 change time (the 'ctime' in the inode) instead of the modification time. When \
@@ -917,8 +917,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .overrides_with_all(&[options::TIME, options::time::ACCESS, options::time::CHANGE]),
         )
         .arg(
-            Arg::with_name(options::time::ACCESS)
-                .short(options::time::ACCESS)
+            Arg::new(options::time::ACCESS)
+                .short('u')
                 .help(
                     "If the long listing format (e.g., -l, -o) is being used, print the status \
                 access time instead of the modification time. When explicitly sorting by time \
@@ -929,33 +929,33 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         // Hide and ignore
         .arg(
-            Arg::with_name(options::HIDE)
+            Arg::new(options::HIDE)
                 .long(options::HIDE)
                 .takes_value(true)
-                .multiple(true)
+                .multiple_occurrences(true)
                 .value_name("PATTERN")
                 .help(
                     "do not list implied entries matching shell PATTERN (overridden by -a or -A)",
                 ),
         )
         .arg(
-            Arg::with_name(options::IGNORE)
-                .short("I")
+            Arg::new(options::IGNORE)
+                .short('I')
                 .long(options::IGNORE)
                 .takes_value(true)
-                .multiple(true)
+                .multiple_occurrences(true)
                 .value_name("PATTERN")
                 .help("do not list implied entries matching shell PATTERN"),
         )
         .arg(
-            Arg::with_name(options::IGNORE_BACKUPS)
-                .short("B")
+            Arg::new(options::IGNORE_BACKUPS)
+                .short('B')
                 .long(options::IGNORE_BACKUPS)
                 .help("Ignore entries which end with ~."),
         )
         // Sort arguments
         .arg(
-            Arg::with_name(options::SORT)
+            Arg::new(options::SORT)
                 .long(options::SORT)
                 .help("Sort by <field>: name, none (-U), time (-t), size (-S) or extension (-X)")
                 .value_name("field")
@@ -972,8 +972,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::sort::SIZE)
-                .short(options::sort::SIZE)
+            Arg::new(options::sort::SIZE)
+                .short('S')
                 .help("Sort by file size, largest first.")
                 .overrides_with_all(&[
                     options::SORT,
@@ -985,8 +985,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::sort::TIME)
-                .short(options::sort::TIME)
+            Arg::new(options::sort::TIME)
+                .short('t')
                 .help("Sort by modification time (the 'mtime' in the inode), newest first.")
                 .overrides_with_all(&[
                     options::SORT,
@@ -998,8 +998,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::sort::VERSION)
-                .short(options::sort::VERSION)
+            Arg::new(options::sort::VERSION)
+                .short('v')
                 .help("Natural sort of (version) numbers in the filenames.")
                 .overrides_with_all(&[
                     options::SORT,
@@ -1011,8 +1011,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::sort::EXTENSION)
-                .short(options::sort::EXTENSION)
+            Arg::new(options::sort::EXTENSION)
+                .short('X')
                 .help("Sort alphabetically by entry extension.")
                 .overrides_with_all(&[
                     options::SORT,
@@ -1024,8 +1024,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::sort::NONE)
-                .short(options::sort::NONE)
+            Arg::new(options::sort::NONE)
+                .short('U')
                 .help(
                     "Do not sort; list the files in whatever order they are stored in the \
     directory.  This is especially useful when listing very large directories, \
@@ -1042,8 +1042,8 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         // Dereferencing
         .arg(
-            Arg::with_name(options::dereference::ALL)
-                .short("L")
+            Arg::new(options::dereference::ALL)
+                .short('L')
                 .long(options::dereference::ALL)
                 .help(
                     "When showing file information for a symbolic link, show information for the \
@@ -1056,7 +1056,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::dereference::DIR_ARGS)
+            Arg::new(options::dereference::DIR_ARGS)
                 .long(options::dereference::DIR_ARGS)
                 .help(
                     "Do not dereference symlinks except when they link to directories and are \
@@ -1069,8 +1069,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::dereference::ARGS)
-                .short("H")
+            Arg::new(options::dereference::ARGS)
+                .short('H')
                 .long(options::dereference::ARGS)
                 .help("Do not dereference symlinks except when given as command line arguments.")
                 .overrides_with_all(&[
@@ -1081,25 +1081,25 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         // Long format options
         .arg(
-            Arg::with_name(options::NO_GROUP)
+            Arg::new(options::NO_GROUP)
                 .long(options::NO_GROUP)
-                .short("-G")
+                .short('G')
                 .help("Do not show group in long format."),
         )
-        .arg(Arg::with_name(options::AUTHOR).long(options::AUTHOR).help(
+        .arg(Arg::new(options::AUTHOR).long(options::AUTHOR).help(
             "Show author in long format. \
             On the supported platforms, the author always matches the file owner.",
         ))
         // Other Flags
         .arg(
-            Arg::with_name(options::files::ALL)
-                .short("a")
+            Arg::new(options::files::ALL)
+                .short('a')
                 .long(options::files::ALL)
                 .help("Do not ignore hidden files (files with names that start with '.')."),
         )
         .arg(
-            Arg::with_name(options::files::ALMOST_ALL)
-                .short("A")
+            Arg::new(options::files::ALMOST_ALL)
+                .short('A')
                 .long(options::files::ALMOST_ALL)
                 .help(
                     "In a directory, do not ignore all file names that start with '.', \
@@ -1107,8 +1107,8 @@ only ignore '.' and '..'.",
                 ),
         )
         .arg(
-            Arg::with_name(options::DIRECTORY)
-                .short("d")
+            Arg::new(options::DIRECTORY)
+                .short('d')
                 .long(options::DIRECTORY)
                 .help(
                     "Only list the names of directories, rather than listing directory contents. \
@@ -1118,26 +1118,26 @@ only ignore '.' and '..'.",
                 ),
         )
         .arg(
-            Arg::with_name(options::size::HUMAN_READABLE)
-                .short("h")
+            Arg::new(options::size::HUMAN_READABLE)
+                .short('h')
                 .long(options::size::HUMAN_READABLE)
                 .help("Print human readable file sizes (e.g. 1K 234M 56G).")
                 .overrides_with(options::size::SI),
         )
         .arg(
-            Arg::with_name(options::size::SI)
+            Arg::new(options::size::SI)
                 .long(options::size::SI)
                 .help("Print human readable file sizes using powers of 1000 instead of 1024."),
         )
         .arg(
-            Arg::with_name(options::INODE)
-                .short("i")
+            Arg::new(options::INODE)
+                .short('i')
                 .long(options::INODE)
                 .help("print the index number of each file"),
         )
         .arg(
-            Arg::with_name(options::REVERSE)
-                .short("r")
+            Arg::new(options::REVERSE)
+                .short('r')
                 .long(options::REVERSE)
                 .help(
                     "Reverse whatever the sorting method is e.g., list files in reverse \
@@ -1145,21 +1145,21 @@ only ignore '.' and '..'.",
                 ),
         )
         .arg(
-            Arg::with_name(options::RECURSIVE)
-                .short("R")
+            Arg::new(options::RECURSIVE)
+                .short('R')
                 .long(options::RECURSIVE)
                 .help("List the contents of all directories recursively."),
         )
         .arg(
-            Arg::with_name(options::WIDTH)
+            Arg::new(options::WIDTH)
                 .long(options::WIDTH)
-                .short("w")
+                .short('w')
                 .help("Assume that the terminal is COLS columns wide.")
                 .value_name("COLS")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(options::COLOR)
+            Arg::new(options::COLOR)
                 .long(options::COLOR)
                 .help("Color output based on file type.")
                 .takes_value(true)
@@ -1170,7 +1170,7 @@ only ignore '.' and '..'.",
                 .min_values(0),
         )
         .arg(
-            Arg::with_name(options::INDICATOR_STYLE)
+            Arg::new(options::INDICATOR_STYLE)
                 .long(options::INDICATOR_STYLE)
                 .help(
                     "Append indicator with style WORD to entry names: \
@@ -1186,8 +1186,8 @@ only ignore '.' and '..'.",
                 ]),
         )
         .arg(
-            Arg::with_name(options::indicator_style::CLASSIFY)
-                .short("F")
+            Arg::new(options::indicator_style::CLASSIFY)
+                .short('F')
                 .long(options::indicator_style::CLASSIFY)
                 .help(
                     "Append a character to each file name indicating the file type. Also, for \
@@ -1203,7 +1203,7 @@ only ignore '.' and '..'.",
                 ]),
         )
         .arg(
-            Arg::with_name(options::indicator_style::FILE_TYPE)
+            Arg::new(options::indicator_style::FILE_TYPE)
                 .long(options::indicator_style::FILE_TYPE)
                 .help("Same as --classify, but do not append '*'")
                 .overrides_with_all(&[
@@ -1214,8 +1214,8 @@ only ignore '.' and '..'.",
                 ]),
         )
         .arg(
-            Arg::with_name(options::indicator_style::SLASH)
-                .short(options::indicator_style::SLASH)
+            Arg::new(options::indicator_style::SLASH)
+                .short('p')
                 .help("Append / indicator to directories.")
                 .overrides_with_all(&[
                     options::indicator_style::FILE_TYPE,
@@ -1226,7 +1226,7 @@ only ignore '.' and '..'.",
         )
         .arg(
             //This still needs support for posix-*, +FORMAT
-            Arg::with_name(options::TIME_STYLE)
+            Arg::new(options::TIME_STYLE)
                 .long(options::TIME_STYLE)
                 .help("time/date format with -l; see TIME_STYLE below")
                 .value_name("TIME_STYLE")
@@ -1235,22 +1235,23 @@ only ignore '.' and '..'.",
                 .overrides_with_all(&[options::TIME_STYLE]),
         )
         .arg(
-            Arg::with_name(options::FULL_TIME)
+            Arg::new(options::FULL_TIME)
                 .long(options::FULL_TIME)
                 .overrides_with(options::FULL_TIME)
                 .help("like -l --time-style=full-iso"),
         )
         .arg(
-            Arg::with_name(options::CONTEXT)
-                .short("Z")
+            Arg::new(options::CONTEXT)
+                .short('Z')
                 .long(options::CONTEXT)
                 .help(CONTEXT_HELP_TEXT),
         )
         // Positional arguments
         .arg(
-            Arg::with_name(options::PATHS)
-                .multiple(true)
-                .takes_value(true),
+            Arg::new(options::PATHS)
+                .multiple_occurrences(true)
+                .takes_value(true)
+                .allow_invalid_utf8(true),
         )
         .after_help(
             "The TIME_STYLE argument can be full-iso, long-iso, iso. \
