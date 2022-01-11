@@ -39,7 +39,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let after_help = get_long_usage();
 
     let matches = uu_app()
-        .usage(&usage[..])
+        .override_usage(&usage[..])
         .after_help(&after_help[..])
         .get_matches_from(args);
 
@@ -83,15 +83,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .about(ABOUT)
         .version(crate_version!())
         .arg(
-            Arg::with_name(options::ZERO)
+            Arg::new(options::ZERO)
                 .long(options::ZERO)
-                .short("z")
+                .short('z')
                 .help("separate output with NUL rather than newline"),
         )
-        .arg(Arg::with_name(options::DIR).hidden(true).multiple(true))
+        .arg(Arg::new(options::DIR).hide(true).multiple_occurrences(true))
 }
