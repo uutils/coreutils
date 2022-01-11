@@ -1926,7 +1926,11 @@ fn display_item_long(
                         #[cfg(not(unix))]
                         0usize,
                         #[cfg(unix)]
-                        padding.longest_major_len,
+                        padding.longest_major_len.max(
+                            padding
+                                .longest_size_len
+                                .saturating_sub(padding.longest_minor_len.saturating_add(2usize))
+                        )
                     ),
                     pad_left(
                         &minor,
@@ -2163,8 +2167,8 @@ fn display_size_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId 
         let ft = metadata.file_type();
         if ft.is_char_device() || ft.is_block_device() {
             let dev: u64 = metadata.rdev();
-            let major = dev >> 24;
-            let minor = dev & 0xff;
+            let major = (dev >> 24) as u8;
+            let minor = (dev & 0xff) as u8;
             return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
         }
     }
@@ -2173,8 +2177,8 @@ fn display_size_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId 
         let ft = metadata.file_type();
         if ft.is_char_device() || ft.is_block_device() {
             let dev: u64 = metadata.rdev();
-            let major = dev >> 8;
-            let minor = dev & 0xff;
+            let major = (dev >> 8) as u8;
+            let minor = (dev & 0xff) as u8;
             return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
         }
     }
