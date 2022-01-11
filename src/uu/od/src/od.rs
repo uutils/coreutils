@@ -42,7 +42,7 @@ use crate::parse_nrofbytes::parse_number_of_bytes;
 use crate::partialreader::*;
 use crate::peekreader::*;
 use crate::prn_char::format_ascii_dump;
-use clap::{self, crate_version, AppSettings, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::parse_size::ParseSizeError;
@@ -286,229 +286,227 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     odfunc(&mut input_offset, &mut input_decoder, &output_info)
 }
 
-pub fn uu_app() -> clap::App<'static, 'static> {
-    clap::App::new(uucore::util_name())
+pub fn uu_app<'a>() -> App<'a> {
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(USAGE)
+        .override_usage(USAGE)
         .after_help(LONG_HELP)
+        .setting(
+            AppSettings::TrailingVarArg |
+            AppSettings::DontDelimitTrailingValues |
+            AppSettings::DeriveDisplayOrder
+        )
         .arg(
-            Arg::with_name(options::ADDRESS_RADIX)
-                .short("A")
+            Arg::new(options::ADDRESS_RADIX)
+                .short('A')
                 .long(options::ADDRESS_RADIX)
                 .help("Select the base in which file offsets are printed.")
                 .value_name("RADIX"),
         )
         .arg(
-            Arg::with_name(options::SKIP_BYTES)
-                .short("j")
+            Arg::new(options::SKIP_BYTES)
+                .short('j')
                 .long(options::SKIP_BYTES)
                 .help("Skip bytes input bytes before formatting and writing.")
                 .value_name("BYTES"),
         )
         .arg(
-            Arg::with_name(options::READ_BYTES)
-                .short("N")
+            Arg::new(options::READ_BYTES)
+                .short('N')
                 .long(options::READ_BYTES)
                 .help("limit dump to BYTES input bytes")
                 .value_name("BYTES"),
         )
         .arg(
-            Arg::with_name(options::ENDIAN)
+            Arg::new(options::ENDIAN)
                 .long(options::ENDIAN)
                 .help("byte order to use for multi-byte formats")
                 .possible_values(&["big", "little"])
                 .value_name("big|little"),
         )
         .arg(
-            Arg::with_name(options::STRINGS)
-                .short("S")
+            Arg::new(options::STRINGS)
+                .short('S')
                 .long(options::STRINGS)
                 .help(
                     "NotImplemented: output strings of at least BYTES graphic chars. 3 is assumed when \
                      BYTES is not specified.",
                 )
-                .default_value("3")
+                .default_missing_value("3")
                 .value_name("BYTES"),
         )
         .arg(
-            Arg::with_name("a")
-                .short("a")
+            Arg::new("a")
+                .short('a')
                 .help("named characters, ignoring high-order bit")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("b")
-                .short("b")
+            Arg::new("b")
+                .short('b')
                 .help("octal bytes")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("c")
-                .short("c")
+            Arg::new("c")
+                .short('c')
                 .help("ASCII characters or backslash escapes")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("d")
-                .short("d")
+            Arg::new("d")
+                .short('d')
                 .help("unsigned decimal 2-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("D")
-                .short("D")
+            Arg::new("D")
+                .short('D')
                 .help("unsigned decimal 4-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("o")
-                .short("o")
+            Arg::new("o")
+                .short('o')
                 .help("octal 2-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("I")
-                .short("I")
+            Arg::new("I")
+                .short('I')
                 .help("decimal 8-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("L")
-                .short("L")
+            Arg::new("L")
+                .short('L')
                 .help("decimal 8-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("i")
-                .short("i")
+            Arg::new("i")
+                .short('i')
                 .help("decimal 4-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("l")
-                .short("l")
+            Arg::new("l")
+                .short('l')
                 .help("decimal 8-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("x")
-                .short("x")
+            Arg::new("x")
+                .short('x')
                 .help("hexadecimal 2-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("h")
-                .short("h")
+            Arg::new("h")
+                .short('h')
                 .help("hexadecimal 2-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("O")
-                .short("O")
+            Arg::new("O")
+                .short('O')
                 .help("octal 4-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("s")
-                .short("s")
+            Arg::new("s")
+                .short('s')
                 .help("decimal 2-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("X")
-                .short("X")
+            Arg::new("X")
+                .short('X')
                 .help("hexadecimal 4-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("H")
-                .short("H")
+            Arg::new("H")
+                .short('H')
                 .help("hexadecimal 4-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("e")
-                .short("e")
+            Arg::new("e")
+                .short('e')
                 .help("floating point double precision (64-bit) units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("f")
-                .short("f")
+            Arg::new("f")
+                .short('f')
                 .help("floating point double precision (32-bit) units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("F")
-                .short("F")
+            Arg::new("F")
+                .short('F')
                 .help("floating point double precision (64-bit) units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::FORMAT)
-                .short("t")
-                .long(options::FORMAT)
+            Arg::new(options::FORMAT)
+                .short('t')
+                .long("format")
                 .help("select output format or formats")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .number_of_values(1)
                 .value_name("TYPE"),
         )
         .arg(
-            Arg::with_name(options::OUTPUT_DUPLICATES)
-                .short("v")
+            Arg::new(options::OUTPUT_DUPLICATES)
+                .short('v')
                 .long(options::OUTPUT_DUPLICATES)
                 .help("do not use * to mark line suppression")
-                .takes_value(false)
-                .possible_values(&["big", "little"]),
+                .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::WIDTH)
-                .short("w")
+            Arg::new(options::WIDTH)
+                .short('w')
                 .long(options::WIDTH)
                 .help(
                     "output BYTES bytes per output line. 32 is implied when BYTES is not \
                      specified.",
                 )
-                .default_value("32")
+                .default_missing_value("32")
                 .value_name("BYTES"),
         )
         .arg(
-            Arg::with_name(options::TRADITIONAL)
+            Arg::new(options::TRADITIONAL)
                 .long(options::TRADITIONAL)
                 .help("compatibility mode with one input, offset and label.")
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::FILENAME)
-                .hidden(true)
-                .multiple(true),
+            Arg::new(options::FILENAME)
+                .hide(true)
+                .multiple_occurrences(true),
         )
-        .settings(&[
-            AppSettings::TrailingVarArg,
-            AppSettings::DontDelimitTrailingValues,
-            AppSettings::DisableVersion,
-            AppSettings::DeriveDisplayOrder,
-        ])
 }
 
 /// Loops through the input line by line, calling print_bytes to take care of the output.

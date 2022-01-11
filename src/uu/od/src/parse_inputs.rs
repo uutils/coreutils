@@ -10,7 +10,7 @@ pub trait CommandLineOpts {
 }
 
 /// Implementation for `getopts`
-impl<'a> CommandLineOpts for ArgMatches<'a> {
+impl<'a> CommandLineOpts for ArgMatches {
     fn inputs(&self) -> Vec<&str> {
         self.values_of(options::FILENAME)
             .map(|values| values.collect())
@@ -53,7 +53,14 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
     // fall-through if no (valid) offset is found
     if input_strings.len() == 1 || input_strings.len() == 2 {
         // if any of the options -A, -j, -N, -t, -v or -w are present there is no offset
-        if !matches.opts_present(&["A", "j", "N", "t", "v", "w"]) {
+        if !matches.opts_present(&[
+            options::ADDRESS_RADIX,
+            options::READ_BYTES,
+            options::READ_BYTES,
+            options::FORMAT,
+            options::OUTPUT_DUPLICATES,
+            options::WIDTH,
+        ]) {
             // test if the last input can be parsed as an offset.
             let offset = parse_offset_operand(input_strings[input_strings.len() - 1]);
             if let Ok(n) = offset {
