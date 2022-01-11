@@ -462,7 +462,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let summarize = matches.is_present(options::SUMMARIZE);
 
@@ -625,19 +625,19 @@ fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<u
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(LONG_HELP)
         .arg(
-            Arg::with_name(options::ALL)
-                .short("a")
+            Arg::new(options::ALL)
+                .short('a')
                 .long(options::ALL)
                 .help("write counts for all files, not just directories"),
         )
         .arg(
-            Arg::with_name(options::APPARENT_SIZE)
+            Arg::new(options::APPARENT_SIZE)
                 .long(options::APPARENT_SIZE)
                 .help(
                     "print apparent sizes,  rather  than  disk  usage \
@@ -647,8 +647,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .alias("app") // The GNU test suite uses this alias
         )
         .arg(
-            Arg::with_name(options::BLOCK_SIZE)
-                .short("B")
+            Arg::new(options::BLOCK_SIZE)
+                .short('B')
                 .long(options::BLOCK_SIZE)
                 .value_name("SIZE")
                 .help(
@@ -657,20 +657,20 @@ pub fn uu_app() -> App<'static, 'static> {
                 )
         )
         .arg(
-            Arg::with_name(options::BYTES)
-                .short("b")
+            Arg::new(options::BYTES)
+                .short('b')
                 .long("bytes")
                 .help("equivalent to '--apparent-size --block-size=1'")
         )
         .arg(
-            Arg::with_name(options::TOTAL)
+            Arg::new(options::TOTAL)
                 .long("total")
-                .short("c")
+                .short('c')
                 .help("produce a grand total")
         )
         .arg(
-            Arg::with_name(options::MAX_DEPTH)
-                .short("d")
+            Arg::new(options::MAX_DEPTH)
+                .short('d')
                 .long("max-depth")
                 .value_name("N")
                 .help(
@@ -680,78 +680,78 @@ pub fn uu_app() -> App<'static, 'static> {
                 )
         )
         .arg(
-            Arg::with_name(options::HUMAN_READABLE)
+            Arg::new(options::HUMAN_READABLE)
                 .long("human-readable")
-                .short("h")
+                .short('h')
                 .help("print sizes in human readable format (e.g., 1K 234M 2G)")
         )
         .arg(
-            Arg::with_name(options::INODES)
+            Arg::new(options::INODES)
                 .long(options::INODES)
                 .help(
                     "list inode usage information instead of block usage like --block-size=1K"
                 )
         )
         .arg(
-            Arg::with_name(options::BLOCK_SIZE_1K)
-                .short("k")
+            Arg::new(options::BLOCK_SIZE_1K)
+                .short('k')
                 .help("like --block-size=1K")
         )
         .arg(
-            Arg::with_name(options::COUNT_LINKS)
-                .short("l")
+            Arg::new(options::COUNT_LINKS)
+                .short('l')
                 .long("count-links")
                 .help("count sizes many times if hard linked")
         )
         .arg(
-            Arg::with_name(options::DEREFERENCE)
-                .short("L")
+            Arg::new(options::DEREFERENCE)
+                .short('L')
                 .long(options::DEREFERENCE)
                 .help("dereference all symbolic links")
         )
         // .arg(
-        //     Arg::with_name("no-dereference")
-        //         .short("P")
+        //     Arg::new("no-dereference")
+        //         .short('P')
         //         .long("no-dereference")
         //         .help("don't follow any symbolic links (this is the default)")
         // )
         .arg(
-            Arg::with_name(options::BLOCK_SIZE_1M)
-                .short("m")
+            Arg::new(options::BLOCK_SIZE_1M)
+                .short('m')
                 .help("like --block-size=1M")
         )
         .arg(
-            Arg::with_name(options::NULL)
-                .short("0")
+            Arg::new(options::NULL)
+                .short('0')
                 .long("null")
                 .help("end each output line with 0 byte rather than newline")
         )
         .arg(
-            Arg::with_name(options::SEPARATE_DIRS)
-                .short("S")
+            Arg::new(options::SEPARATE_DIRS)
+                .short('S')
                 .long("separate-dirs")
                 .help("do not include size of subdirectories")
         )
         .arg(
-            Arg::with_name(options::SUMMARIZE)
-                .short("s")
+            Arg::new(options::SUMMARIZE)
+                .short('s')
                 .long("summarize")
                 .help("display only a total for each argument")
         )
         .arg(
-            Arg::with_name(options::SI)
+            Arg::new(options::SI)
                 .long(options::SI)
                 .help("like -h, but use powers of 1000 not 1024")
         )
         .arg(
-            Arg::with_name(options::ONE_FILE_SYSTEM)
-                .short("x")
+            Arg::new(options::ONE_FILE_SYSTEM)
+                .short('x')
                 .long(options::ONE_FILE_SYSTEM)
                 .help("skip directories on different file systems")
         )
         .arg(
-            Arg::with_name(options::THRESHOLD)
-                .short("t")
+            Arg::new(options::THRESHOLD)
+                .short('t')
                 .long(options::THRESHOLD)
                 .alias("th")
                 .value_name("SIZE")
@@ -761,20 +761,20 @@ pub fn uu_app() -> App<'static, 'static> {
                           or entries greater than SIZE if negative")
         )
         // .arg(
-        //     Arg::with_name("")
-        //         .short("x")
+        //     Arg::new("")
+        //         .short('x')
         //         .long("exclude-from")
         //         .value_name("FILE")
         //         .help("exclude files that match any pattern in FILE")
         // )
         // .arg(
-        //     Arg::with_name("exclude")
+        //     Arg::new("exclude")
         //         .long("exclude")
         //         .value_name("PATTERN")
         //         .help("exclude files that match PATTERN")
         // )
         .arg(
-            Arg::with_name(options::TIME)
+            Arg::new(options::TIME)
                 .long(options::TIME)
                 .value_name("WORD")
                 .require_equals(true)
@@ -787,7 +787,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 )
         )
         .arg(
-            Arg::with_name(options::TIME_STYLE)
+            Arg::new(options::TIME_STYLE)
                 .long(options::TIME_STYLE)
                 .value_name("STYLE")
                 .help(
@@ -796,9 +796,9 @@ pub fn uu_app() -> App<'static, 'static> {
                 )
         )
         .arg(
-            Arg::with_name(options::FILE)
-                .hidden(true)
-                .multiple(true)
+            Arg::new(options::FILE)
+                .hide(true)
+                .multiple_occurrences(true)
         )
 }
 
