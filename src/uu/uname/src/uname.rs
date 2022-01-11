@@ -50,7 +50,7 @@ const HOST_OS: &str = "Redox";
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = format!("{} [OPTION]...", uucore::execution_phrase());
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let uname =
         PlatformInfo::new().map_err_context(|| "failed to create PlatformInfo".to_string())?;
@@ -118,46 +118,46 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .arg(Arg::with_name(options::ALL)
-            .short("a")
+        .arg(Arg::new(options::ALL)
+            .short('a')
             .long(options::ALL)
             .help("Behave as though all of the options -mnrsv were specified."))
-        .arg(Arg::with_name(options::KERNELNAME)
-            .short("s")
+        .arg(Arg::new(options::KERNELNAME)
+            .short('s')
             .long(options::KERNELNAME)
             .alias("sysname") // Obsolescent option in GNU uname
             .help("print the kernel name."))
-        .arg(Arg::with_name(options::NODENAME)
-            .short("n")
+        .arg(Arg::new(options::NODENAME)
+            .short('n')
             .long(options::NODENAME)
             .help("print the nodename (the nodename may be a name that the system is known by to a communications network)."))
-        .arg(Arg::with_name(options::KERNELRELEASE)
-            .short("r")
+        .arg(Arg::new(options::KERNELRELEASE)
+            .short('r')
             .long(options::KERNELRELEASE)
             .alias("release") // Obsolescent option in GNU uname
             .help("print the operating system release."))
-        .arg(Arg::with_name(options::KERNELVERSION)
-            .short("v")
+        .arg(Arg::new(options::KERNELVERSION)
+            .short('v')
             .long(options::KERNELVERSION)
             .help("print the operating system version."))
-        .arg(Arg::with_name(options::HWPLATFORM)
-            .short("i")
+        .arg(Arg::new(options::HWPLATFORM)
+            .short('i')
             .long(options::HWPLATFORM)
             .help("print the hardware platform (non-portable)"))
-        .arg(Arg::with_name(options::MACHINE)
-            .short("m")
+        .arg(Arg::new(options::MACHINE)
+            .short('m')
             .long(options::MACHINE)
             .help("print the machine hardware name."))
-        .arg(Arg::with_name(options::PROCESSOR)
-            .short("p")
+        .arg(Arg::new(options::PROCESSOR)
+            .short('p')
             .long(options::PROCESSOR)
             .help("print the processor type (non-portable)"))
-        .arg(Arg::with_name(options::OS)
-            .short("o")
+        .arg(Arg::new(options::OS)
+            .short('o')
             .long(options::OS)
             .help("print the operating system name."))
 }
