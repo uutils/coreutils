@@ -21,7 +21,6 @@ use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
-use std::ffi::OsString;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -39,6 +38,7 @@ use std::{
     os::unix::fs::{FileTypeExt, MetadataExt},
     time::Duration,
 };
+use std::{ffi::OsString, fs::ReadDir};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use uucore::{
     display::Quotable,
@@ -165,7 +165,7 @@ impl Display for LsError {
             LsError::IOError(e) => write!(f, "general io error: {}", e),
             LsError::IOErrorContext(e, p) => {
                 let error_kind = e.kind();
-                let raw_os_error = e.raw_os_error().unwrap_or(13i32);
+                let errno = e.raw_os_error().unwrap_or(1i32);
 
                 match error_kind {
                     // No such file or directory
@@ -180,7 +180,7 @@ impl Display for LsError {
                     ErrorKind::PermissionDenied =>
                     {
                         #[allow(clippy::wildcard_in_or_patterns)]
-                        match raw_os_error {
+                        match errno {
                             1i32 => {
                                 write!(
                                     f,
@@ -205,12 +205,23 @@ impl Display for LsError {
                             }
                         }
                     }
-                    _ => write!(
-                        f,
-                        "unknown io error: '{:?}', '{:?}'",
-                        p.to_string_lossy(),
-                        e
-                    ),
+                    _ => match errno {
+                        9i32 => {
+                            write!(
+                                f,
+                                "cannot access '{}': Bad file descriptor",
+                                p.to_string_lossy(),
+                            )
+                        }
+                        _ => {
+                            write!(
+                                f,
+                                "unknown io error: '{:?}', '{:?}'",
+                                p.to_string_lossy(),
+                                e
+                            )
+                        }
+                    },
                 }
             }
         }
@@ -1337,14 +1348,31 @@ impl PathData {
             .get_or_init(
                 || match get_metadata(self.p_buf.as_path(), self.must_dereference) {
                     Err(err) => {
-                        let _ = out.flush();
-                        show!(LsError::IOErrorContext(err, self.p_buf.clone(),));
-                        None
+                        // never an print error on md calls which result in a bad fd error
+                        // wait to enter the bad fd's "directory" to cleanup stop exec
+                        if !err.raw_os_error().unwrap_or(1i32).eq(&9i32) {
+                            let _ = out.flush();
+                            show!(LsError::IOErrorContext(err, self.p_buf.clone(),));
+                        }
+                        // if not dangling link...
+                        if !(self.p_buf.as_path().is_relative() && self.must_dereference) {
+                            if let Some(pmd) = &self.p_buf.parent() {
+                                get_metadata(pmd, false).ok()
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
                     }
                     Ok(md) => Some(md),
                 },
             )
             .as_ref()
+    }
+
+    fn set_md(&self, md: Metadata) -> Option<&Metadata> {
+        self.md.get_or_init(|| Some(md)).as_ref()
     }
 
     fn file_type(&self, out: &mut BufWriter<Stdout>) -> Option<&FileType> {
@@ -1393,16 +1421,28 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
 
     display_items(&files, &config, &mut out);
 
-    for (pos, dir) in dirs.iter().enumerate() {
+    for (pos, path_data) in dirs.iter().enumerate() {
+        // Do read_dir call here to match GNU semantics by printing
+        // read_dir errors before directory headings, names and totals
+        let read_dir = match fs::read_dir(&path_data.p_buf) {
+            Err(err) => {
+                // flush stdout buffer before the error to preserve formatting and order
+                let _ = out.flush();
+                show!(LsError::IOErrorContext(err, path_data.p_buf.clone()));
+                continue;
+            }
+            Ok(rd) => rd,
+        };
+
         // Print dir heading - name... 'total' comes after error display
         if initial_locs_len > 1 || config.recursive {
             if pos.eq(&0usize) && files.is_empty() {
-                let _ = writeln!(out, "{}:", dir.p_buf.display());
+                let _ = writeln!(out, "{}:", path_data.p_buf.display());
             } else {
-                let _ = writeln!(out, "\n{}:", dir.p_buf.display());
+                let _ = writeln!(out, "\n{}:", path_data.p_buf.display());
             }
         }
-        enter_directory(dir, &config, &mut out);
+        enter_directory(path_data, read_dir, &config, &mut out);
     }
 
     Ok(())
@@ -1471,12 +1511,29 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
     true
 }
 
-fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>) {
+fn enter_directory(
+    path_data: &PathData,
+    read_dir: ReadDir,
+    config: &Config,
+    out: &mut BufWriter<Stdout>,
+) {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
         vec![
-            PathData::new(dir.p_buf.clone(), None, Some(".".into()), config, false),
-            PathData::new(dir.p_buf.join(".."), None, Some("..".into()), config, false),
+            PathData::new(
+                path_data.p_buf.clone(),
+                None,
+                Some(".".into()),
+                config,
+                false,
+            ),
+            PathData::new(
+                path_data.p_buf.join(".."),
+                None,
+                Some("..".into()),
+                config,
+                false,
+            ),
         ]
     } else {
         vec![]
@@ -1485,19 +1542,8 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
     // Convert those entries to the PathData struct
     let mut vec_path_data = Vec::new();
 
-    // check for errors early, and ignore entries with errors
-    let read_dir = match fs::read_dir(&dir.p_buf) {
-        Err(err) => {
-            // flush buffer because the error may get printed in the wrong order
-            let _ = out.flush();
-            show!(LsError::IOErrorContext(err, dir.p_buf.clone()));
-            return;
-        }
-        Ok(res) => res,
-    };
-
-    for entry in read_dir {
-        let unwrapped = match entry {
+    for raw_entry in read_dir {
+        let dir_entry = match raw_entry {
             Ok(path) => path,
             Err(err) => {
                 let _ = out.flush();
@@ -1506,20 +1552,38 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
             }
         };
 
-        if should_display(&unwrapped, config) {
-            // why check the DirEntry file_type()?  B/c the call is
-            // nearly free compared to a metadata() or file_type() call on a dir/file
-            let path_data = match unwrapped.file_type() {
-                Err(err) => {
-                    let _ = out.flush();
-                    show!(LsError::IOErrorContext(err, unwrapped.path()));
-                    continue;
+        if should_display(&dir_entry, config) {
+            // Why prefer to check the DirEntry file_type()?  B/c the call is
+            // nearly free compared to a metadata() or file_type() call on a dir/file.
+            //
+            // But we will make a metadata call if we have to.
+            // Here, in order to match GNU behavior re: bad fds we read the metadata,
+            // in certain cases, to get the filetype instead.
+            let entry_path_data = if (config.format == Format::Long
+                || !(config.sort == Sort::Name || config.sort == Sort::None))
+                && !path_data.must_dereference
+            {
+                match dir_entry.metadata() {
+                    Ok(md) => {
+                        let pd = PathData::new(
+                            dir_entry.path(),
+                            Some(Ok(md.file_type())),
+                            None,
+                            config,
+                            false,
+                        );
+                        let _ = pd.set_md(md);
+                        pd
+                    }
+                    Err(_) => return,
                 }
-                Ok(dir_ft) => {
-                    PathData::new(unwrapped.path(), Some(Ok(dir_ft)), None, config, false)
+            } else {
+                match dir_entry.file_type() {
+                    Ok(ft) => PathData::new(dir_entry.path(), Some(Ok(ft)), None, config, false),
+                    Err(_) => return,
                 }
             };
-            vec_path_data.push(path_data);
+            vec_path_data.push(entry_path_data);
         };
     }
 
@@ -1542,8 +1606,17 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
             .filter(|p| p.ft.get().unwrap().is_some())
             .filter(|p| p.ft.get().unwrap().unwrap().is_dir())
         {
-            let _ = writeln!(out, "\n{}:", e.p_buf.display());
-            enter_directory(e, config, out);
+            match fs::read_dir(&e.p_buf) {
+                Err(err) => {
+                    let _ = out.flush();
+                    show!(LsError::IOErrorContext(err, e.p_buf.clone()));
+                    continue;
+                }
+                Ok(rd) => {
+                    let _ = writeln!(out, "\n{}:", e.p_buf.display());
+                    enter_directory(e, rd, config, out);
+                }
+            }
         }
     }
 }

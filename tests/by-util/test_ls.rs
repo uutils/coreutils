@@ -7,6 +7,9 @@ use crate::common::util::*;
 extern crate regex;
 use self::regex::Regex;
 
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+use std::os::unix::io::AsRawFd;
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::thread::sleep;
@@ -66,10 +69,7 @@ fn test_ls_io_errors() {
     at.symlink_file("does_not_exist", "some-dir2/dangle");
     at.mkdir("some-dir3");
     at.mkdir("some-dir3/some-dir4");
-    at.mkdir("some-dir3/some-dir5");
-    at.mkdir("some-dir3/some-dir6");
-    at.mkdir("some-dir3/some-dir7");
-    at.mkdir("some-dir3/some-dir8");
+    at.mkdir("some-dir4");
 
     scene.ccmd("chmod").arg("000").arg("some-dir1").succeeds();
 
@@ -115,6 +115,39 @@ fn test_ls_io_errors() {
         .stderr_does_not_contain(
             "ls: cannot access 'some-dir2/dangle': No such file or directory\nls: cannot access 'some-dir2/dangle': No such file or directory"
         );
+
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        at.touch("some-dir4/bad-fd.txt");
+        let fd1 = at.open("some-dir4/bad-fd.txt").as_raw_fd();
+        let fd2 = 25000;
+        let _ = unsafe { libc::dup2(fd1, fd2) };
+        let _ = unsafe { libc::close(fd1) };
+
+        scene
+            .ucmd()
+            .arg("-alR")
+            .arg(format!("/dev/fd/{}", fd2.to_string()))
+            .fails()
+            .stderr_contains(format!("/dev/fd/{}", fd2.to_string()))
+            .stderr_contains("cannot access")
+            .stderr_contains("Bad file descriptor")
+            // '' indicates not a dir heading - we don't want to print a heading here
+            .stderr_contains(format!("'/dev/fd/{}':", fd2.to_string()))
+            .stderr_does_not_contain(format!("/dev/fd/{}:\n", fd2.to_string()));
+
+        scene
+            .ucmd()
+            .arg("-RiL")
+            .arg(format!("/dev/fd/{}", fd2.to_string()))
+            .fails()
+            .stderr_contains("cannot access")
+            .stderr_contains("Bad file descriptor")
+            // test we only print bad fd error once
+            .stderr_does_not_contain(format!("ls: cannot access '/dev/fd/{fd}': Bad file descriptor\nls: cannot access '/dev/fd/{fd}': Bad file descriptor", fd = fd2.to_string()));
+
+        let _ = unsafe { libc::close(fd2) };
+    }
 }
 
 #[test]
