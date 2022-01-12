@@ -56,7 +56,7 @@
 //!         .get_matches_from(vec![
 //!             "app", "--backup=t", "--suffix=bak~"
 //!         ]);
-//!    
+//!
 //!     let backup_mode = match backup_control::determine_backup_mode(&matches) {
 //!         Err(e) => {
 //!             show!(e);
@@ -321,7 +321,7 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 ///         .get_matches_from(vec![
 ///             "app", "-b", "--backup=n"
 ///         ]);
-///    
+///
 ///     let backup_mode = backup_control::determine_backup_mode(&matches);
 ///
 ///     assert!(backup_mode.is_err());

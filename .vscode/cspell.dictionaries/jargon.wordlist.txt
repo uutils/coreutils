@@ -59,6 +59,7 @@ kibibytes
 libacl
 lcase
 lossily
+lstat
 mebi
 mebibytes
 mergeable

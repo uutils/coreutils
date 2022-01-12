@@ -17,12 +17,15 @@ use libc::{
 use std::borrow::Cow;
 use std::env;
 use std::fs;
+use std::hash::Hash;
 use std::io::Error as IOError;
 use std::io::Result as IOResult;
 use std::io::{Error, ErrorKind};
-#[cfg(any(unix, target_os = "redox"))]
-use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
+use std::os::unix::{fs::MetadataExt, io::AsRawFd};
 use std::path::{Component, Path, PathBuf};
+#[cfg(target_os = "windows")]
+use winapi_util::AsHandleRef;
 
 #[cfg(unix)]
 #[macro_export]
@@ -30,6 +33,114 @@ macro_rules! has {
     ($mode:expr, $perm:expr) => {
         $mode & $perm != 0
     };
+}
+
+/// Information to uniquely identify a file
+pub struct FileInformation(
+    #[cfg(unix)] nix::sys::stat::FileStat,
+    #[cfg(windows)] winapi_util::file::Information,
+);
+
+impl FileInformation {
+    /// Get information from a currently open file
+    #[cfg(unix)]
+    pub fn from_file(file: &impl AsRawFd) -> Option<Self> {
+        if let Ok(x) = nix::sys::stat::fstat(file.as_raw_fd()) {
+            Some(Self(x))
+        } else {
+            None
+        }
+    }
+
+    /// Get information from a currently open file
+    #[cfg(target_os = "windows")]
+    pub fn from_file(file: &impl AsHandleRef) -> Option<Self> {
+        if let Ok(x) = winapi_util::file::information(file.as_handle_ref()) {
+            Some(Self(x))
+        } else {
+            None
+        }
+    }
+
+    /// Get information for a given path.
+    ///
+    /// If `path` points to a symlink and `dereference` is true, information about
+    /// the link's target will be returned.
+    pub fn from_path(path: impl AsRef<Path>, dereference: bool) -> Option<Self> {
+        #[cfg(unix)]
+        {
+            let stat = if dereference {
+                nix::sys::stat::stat(path.as_ref())
+            } else {
+                nix::sys::stat::lstat(path.as_ref())
+            };
+            if let Ok(stat) = stat {
+                Some(Self(stat))
+            } else {
+                None
+            }
+        }
+        #[cfg(target_os = "windows")]
+        {
+            use std::fs::OpenOptions;
+            use std::os::windows::prelude::*;
+            let mut open_options = OpenOptions::new();
+            if !dereference {
+                open_options.custom_flags(winapi::um::winbase::FILE_FLAG_OPEN_REPARSE_POINT);
+            }
+            open_options
+                .read(true)
+                .open(path.as_ref())
+                .ok()
+                .and_then(|file| Self::from_file(&file))
+        }
+    }
+
+    pub fn file_size(&self) -> u64 {
+        #[cfg(unix)]
+        {
+            use std::convert::TryInto;
+
+            assert!(self.0.st_size >= 0, "File size is negative");
+            self.0.st_size.try_into().unwrap()
+        }
+        #[cfg(target_os = "windows")]
+        {
+            self.0.file_size()
+        }
+    }
+}
+
+#[cfg(unix)]
+impl PartialEq for FileInformation {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl PartialEq for FileInformation {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.volume_serial_number() == other.0.volume_serial_number()
+            && self.0.file_index() == other.0.file_index()
+    }
+}
+
+impl Eq for FileInformation {}
+
+impl Hash for FileInformation {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        #[cfg(unix)]
+        {
+            self.0.st_dev.hash(state);
+            self.0.st_ino.hash(state);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            self.0.volume_serial_number().hash(state);
+            self.0.file_index().hash(state);
+        }
+    }
 }
 
 pub fn resolve_relative_path(path: &Path) -> Cow<Path> {
