@@ -134,7 +134,7 @@ fn test_ls_io_errors() {
             .stderr_contains("Bad file descriptor")
             // '' indicates not a dir heading - we don't want to print a heading here
             .stderr_contains(format!("'/dev/fd/{}':", fd2.to_string()))
-            .stderr_does_not_contain(format!("/dev/fd/{}:\n", fd2.to_string()));
+            .stdout_does_not_contain(format!("/dev/fd/{}:\n", fd2.to_string()));
 
         scene
             .ucmd()
