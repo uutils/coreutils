@@ -217,7 +217,7 @@ pub fn uu_app() -> App<'static, 'static> {
         // This is solely for testing.
         // Do not document.
         // It is relatively difficult to ensure that there is a tty on stdin.
-        // Since rm acts differently depending on that, without this option, 
+        // Since rm acts differently depending on that, without this option,
         // it'd be harder to test the parts of rm that depend on that setting.
         .arg(
             Arg::with_name(PRESUME_INPUT_TTY)

@@ -8,7 +8,7 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ficlone linkgs lstat nlink nlinks pathbuf reflink strs xattrs
+// spell-checker:ignore (ToDO) ficlone linkgs lstat nlink nlinks pathbuf reflink strs xattrs symlinked
 
 #[cfg(target_os = "linux")]
 #[macro_use]
@@ -19,6 +19,7 @@ extern crate quick_error;
 extern crate uucore;
 
 use uucore::display::Quotable;
+use uucore::fs::FileInformation;
 #[cfg(windows)]
 use winapi::um::fileapi::CreateFileW;
 #[cfg(windows)]
@@ -838,8 +839,10 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
 
     let mut non_fatal_errors = false;
     let mut seen_sources = HashSet::with_capacity(sources.len());
+    let mut symlinked_files = HashSet::new();
     for source in sources {
         if seen_sources.contains(source) {
+            // FIXME: compare sources by the actual file they point to, not their path. (e.g. dir/file == dir/../dir/file in most cases)
             show_warning!("source {} specified more than once", source.quote());
         } else {
             let mut found_hard_link = false;
@@ -848,7 +851,9 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
                 preserve_hardlinks(&mut hard_links, source, dest, &mut found_hard_link).unwrap();
             }
             if !found_hard_link {
-                if let Err(error) = copy_source(source, target, &target_type, options) {
+                if let Err(error) =
+                    copy_source(source, target, &target_type, options, &mut symlinked_files)
+                {
                     match error {
                         // When using --no-clobber, we don't want to show
                         // an error message
@@ -909,15 +914,16 @@ fn copy_source(
     target: &TargetSlice,
     target_type: &TargetType,
     options: &Options,
+    symlinked_files: &mut HashSet<FileInformation>,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
     if source_path.is_dir() {
         // Copy as directory
-        copy_directory(source, target, options)
+        copy_directory(source, target, options, symlinked_files)
     } else {
         // Copy as file
         let dest = construct_dest_path(source_path, target, target_type, options)?;
-        copy_file(source_path, dest.as_path(), options)
+        copy_file(source_path, dest.as_path(), options, symlinked_files)
     }
 }
 
@@ -947,14 +953,19 @@ fn adjust_canonicalization(p: &Path) -> Cow<Path> {
 ///
 /// Any errors encountered copying files in the tree will be logged but
 /// will not cause a short-circuit.
-fn copy_directory(root: &Path, target: &TargetSlice, options: &Options) -> CopyResult<()> {
+fn copy_directory(
+    root: &Path,
+    target: &TargetSlice,
+    options: &Options,
+    symlinked_files: &mut HashSet<FileInformation>,
+) -> CopyResult<()> {
     if !options.recursive {
         return Err(format!("omitting directory {}", root.quote()).into());
     }
 
     // if no-dereference is enabled and this is a symlink, copy it as a file
     if !options.dereference && fs::symlink_metadata(root).unwrap().file_type().is_symlink() {
-        return copy_file(root, target, options);
+        return copy_file(root, target, options, symlinked_files);
     }
 
     let current_dir =
@@ -1011,7 +1022,7 @@ fn copy_directory(root: &Path, target: &TargetSlice, options: &Options) -> CopyR
 
         let local_to_target = target.join(&local_to_root_parent);
         if is_symlink && !options.dereference {
-            copy_link(&path, &local_to_target)?;
+            copy_link(&path, &local_to_target, symlinked_files)?;
         } else if path.is_dir() && !local_to_target.exists() {
             or_continue!(fs::create_dir_all(local_to_target));
         } else if !path.is_dir() {
@@ -1021,7 +1032,12 @@ fn copy_directory(root: &Path, target: &TargetSlice, options: &Options) -> CopyR
                 let dest = local_to_target.as_path().to_path_buf();
                 preserve_hardlinks(&mut hard_links, &source, dest, &mut found_hard_link).unwrap();
                 if !found_hard_link {
-                    match copy_file(path.as_path(), local_to_target.as_path(), options) {
+                    match copy_file(
+                        path.as_path(),
+                        local_to_target.as_path(),
+                        options,
+                        symlinked_files,
+                    ) {
                         Ok(_) => Ok(()),
                         Err(err) => {
                             if fs::symlink_metadata(&source)?.file_type().is_symlink() {
@@ -1036,7 +1052,12 @@ fn copy_directory(root: &Path, target: &TargetSlice, options: &Options) -> CopyR
                     }?;
                 }
             } else {
-                copy_file(path.as_path(), local_to_target.as_path(), options)?;
+                copy_file(
+                    path.as_path(),
+                    local_to_target.as_path(),
+                    options,
+                    symlinked_files,
+                )?;
             }
         }
     }
@@ -1145,18 +1166,24 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
     Ok(())
 }
 
-#[cfg(not(windows))]
-#[allow(clippy::unnecessary_wraps)] // needed for windows version
-fn symlink_file(source: &Path, dest: &Path, context: &str) -> CopyResult<()> {
-    match std::os::unix::fs::symlink(source, dest).context(context) {
-        Ok(_) => Ok(()),
-        Err(_) => Ok(()),
+fn symlink_file(
+    source: &Path,
+    dest: &Path,
+    context: &str,
+    symlinked_files: &mut HashSet<FileInformation>,
+) -> CopyResult<()> {
+    #[cfg(not(windows))]
+    {
+        std::os::unix::fs::symlink(source, dest).context(context)?;
     }
-}
-
-#[cfg(windows)]
-fn symlink_file(source: &Path, dest: &Path, context: &str) -> CopyResult<()> {
-    Ok(std::os::windows::fs::symlink_file(source, dest).context(context)?)
+    #[cfg(windows)]
+    {
+        std::os::windows::fs::symlink_file(source, dest).context(context)?;
+    }
+    if let Some(file_info) = FileInformation::from_path(dest, false) {
+        symlinked_files.insert(file_info);
+    }
+    Ok(())
 }
 
 fn context_for(src: &Path, dest: &Path) -> String {
@@ -1183,6 +1210,7 @@ fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyRe
     }
 
     match options.overwrite {
+        // FIXME: print that the file was removed if --verbose is enabled
         OverwriteMode::Clobber(ClobberMode::Force) => {
             if fs::metadata(dest)?.permissions().readonly() {
                 fs::remove_file(dest)?;
@@ -1206,9 +1234,37 @@ fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyRe
 ///
 /// The original permissions of `source` will be copied to `dest`
 /// after a successful copy.
-fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
+fn copy_file(
+    source: &Path,
+    dest: &Path,
+    options: &Options,
+    symlinked_files: &mut HashSet<FileInformation>,
+) -> CopyResult<()> {
     if dest.exists() {
         handle_existing_dest(source, dest, options)?;
+    }
+
+    // Fail if dest is a dangling symlink or a symlink this program created previously
+    if fs::symlink_metadata(dest)
+        .map(|m| m.file_type().is_symlink())
+        .unwrap_or(false)
+    {
+        if FileInformation::from_path(dest, false)
+            .map(|info| symlinked_files.contains(&info))
+            .unwrap_or(false)
+        {
+            return Err(Error::Error(format!(
+                "will not copy '{}' through just-created symlink '{}'",
+                source.display(),
+                dest.display()
+            )));
+        }
+        if !dest.exists() {
+            return Err(Error::Error(format!(
+                "not writing through dangling symlink '{}'",
+                dest.display()
+            )));
+        }
     }
 
     if options.verbose {
@@ -1255,10 +1311,10 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
             fs::hard_link(&source, &dest).context(context)?;
         }
         CopyMode::Copy => {
-            copy_helper(&source, &dest, options, context)?;
+            copy_helper(&source, &dest, options, context, symlinked_files)?;
         }
         CopyMode::SymLink => {
-            symlink_file(&source, &dest, context)?;
+            symlink_file(&source, &dest, context, symlinked_files)?;
         }
         CopyMode::Sparse => return Err(Error::NotImplemented(options::SPARSE.to_string())),
         CopyMode::Update => {
@@ -1271,10 +1327,10 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
                 if src_time <= dest_time {
                     return Ok(());
                 } else {
-                    copy_helper(&source, &dest, options, context)?;
+                    copy_helper(&source, &dest, options, context, symlinked_files)?;
                 }
             } else {
-                copy_helper(&source, &dest, options, context)?;
+                copy_helper(&source, &dest, options, context, symlinked_files)?;
             }
         }
         CopyMode::AttrOnly => {
@@ -1308,7 +1364,13 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
 
 /// Copy the file from `source` to `dest` either using the normal `fs::copy` or a
 /// copy-on-write scheme if --reflink is specified and the filesystem supports it.
-fn copy_helper(source: &Path, dest: &Path, options: &Options, context: &str) -> CopyResult<()> {
+fn copy_helper(
+    source: &Path,
+    dest: &Path,
+    options: &Options,
+    context: &str,
+    symlinked_files: &mut HashSet<FileInformation>,
+) -> CopyResult<()> {
     if options.parents {
         let parent = dest.parent().unwrap_or(dest);
         fs::create_dir_all(parent)?;
@@ -1320,7 +1382,7 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options, context: &str) -> 
          */
         File::create(dest).context(dest.display().to_string())?;
     } else if is_symlink {
-        copy_link(source, dest)?;
+        copy_link(source, dest, symlinked_files)?;
     } else if options.reflink_mode != ReflinkMode::Never {
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         return Err("--reflink is only supported on linux and macOS"
@@ -1338,7 +1400,11 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options, context: &str) -> 
     Ok(())
 }
 
-fn copy_link(source: &Path, dest: &Path) -> CopyResult<()> {
+fn copy_link(
+    source: &Path,
+    dest: &Path,
+    symlinked_files: &mut HashSet<FileInformation>,
+) -> CopyResult<()> {
     // Here, we will copy the symlink itself (actually, just recreate it)
     let link = fs::read_link(&source)?;
     let dest: Cow<'_, Path> = if dest.is_dir() {
@@ -1358,7 +1424,7 @@ fn copy_link(source: &Path, dest: &Path) -> CopyResult<()> {
         }
         dest.into()
     };
-    symlink_file(&link, &dest, &*context_for(&link, &dest))
+    symlink_file(&link, &dest, &*context_for(&link, &dest), symlinked_files)
 }
 
 /// Copies `source` to `dest` using copy-on-write if possible.
