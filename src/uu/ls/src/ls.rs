@@ -1353,18 +1353,18 @@ impl PathData {
                         // Bad fds read as the metadata of their parent dir until dereferenced
                         let _ = out.flush();
                         let errno = &err.raw_os_error().unwrap_or(1i32);
-                        let res = if errno.eq(&9i32) {               
-                            if let Some(parent) = self.p_buf.parent() {            
-                                    get_metadata(parent,false).ok()
-                                } else {
-                                    None
-                                }
+                        let res = if errno.eq(&9i32) {
+                            if let Some(parent) = self.p_buf.parent() {
+                                get_metadata(parent, false).ok()
                             } else {
-                                show!(LsError::IOErrorContext(err, self.p_buf.clone(),));             
                                 None
+                            }
+                        } else {
+                            show!(LsError::IOErrorContext(err, self.p_buf.clone(),));
+                            None
                         };
                         res
-                    },
+                    }
                     Ok(md) => Some(md),
                 },
             )
@@ -1386,7 +1386,7 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
 
     for loc in locs {
         let path_data = PathData::new(PathBuf::from(loc), None, None, &config, true);
-        
+
         // Getting metadata here is no big deal as it's just the CWD
         // and we really just want to know if the strings exist as files/dirs
         //
@@ -1552,9 +1552,9 @@ fn enter_directory(
             // Why prefer to check the DirEntry file_type()?  B/c the call is
             // nearly free compared to a metadata() or file_type() call on a dir/file.
             let entry_path_data = match dir_entry.file_type() {
-                    Ok(ft) => PathData::new(dir_entry.path(), Some(Ok(ft)), None, config, false),
-                    Err(_) => PathData::new(dir_entry.path(), None, None, config, false),
-                };
+                Ok(ft) => PathData::new(dir_entry.path(), Some(Ok(ft)), None, config, false),
+                Err(_) => PathData::new(dir_entry.path(), None, None, config, false),
+            };
             vec_path_data.push(entry_path_data);
         };
     }

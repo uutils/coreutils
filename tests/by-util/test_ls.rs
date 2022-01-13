@@ -8,9 +8,9 @@ extern crate regex;
 use self::regex::Regex;
 
 #[cfg(unix)]
-use std::os::unix::io::AsRawFd;
+use nix::unistd::{close, dup2};
 #[cfg(unix)]
-use nix::unistd::{dup2, close};
+use std::os::unix::io::AsRawFd;
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -130,13 +130,16 @@ fn test_ls_io_errors() {
         // don't want this to fail because dup2 and close don't work on a
         // platform or in a container
         if let Ok(0) = rv1 {
-            if let Ok(_) = rv2 {
+            if rv2.is_ok() {
                 scene
                     .ucmd()
                     .arg("-alR")
                     .arg(format!("/dev/fd/{}", fd2.to_string()))
                     .fails()
-                    .stderr_contains(format!("cannot access '/dev/fd/{}': Bad file descriptor", fd2.to_string()))
+                    .stderr_contains(format!(
+                        "cannot access '/dev/fd/{}': Bad file descriptor",
+                        fd2.to_string()
+                    ))
                     .stdout_does_not_contain(format!("{}:\n", fd2.to_string()));
 
                 scene
@@ -146,7 +149,7 @@ fn test_ls_io_errors() {
                     .fails()
                     .stderr_contains(format!("cannot access '/dev/fd/{}': Bad file descriptor", fd2.to_string()))
                     // test we only print bad fd error once
-                    .stderr_does_not_contain(format!("ls: cannot access '/dev/fd/{fd}': Bad file descriptor\nls: cannot access '/dev/fd/{fd}': Bad file descriptor", fd = fd2.to_string()));   
+                    .stderr_does_not_contain(format!("ls: cannot access '/dev/fd/{fd}': Bad file descriptor\nls: cannot access '/dev/fd/{fd}': Bad file descriptor", fd = fd2.to_string()));
             }
         }
         let _ = close(fd2);
