@@ -7,8 +7,10 @@ use crate::common::util::*;
 extern crate regex;
 use self::regex::Regex;
 
-#[cfg(any(target_os = "macos", target_os = "ios"))]
+#[cfg(unix)]
 use std::os::unix::io::AsRawFd;
+#[cfg(unix)]
+use nix::unistd::{dup2, close};
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -116,37 +118,38 @@ fn test_ls_io_errors() {
             "ls: cannot access 'some-dir2/dangle': No such file or directory\nls: cannot access 'some-dir2/dangle': No such file or directory"
         );
 
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    #[cfg(unix)]
     {
         at.touch("some-dir4/bad-fd.txt");
         let fd1 = at.open("some-dir4/bad-fd.txt").as_raw_fd();
         let fd2 = 25000;
-        let _ = unsafe { libc::dup2(fd1, fd2) };
-        let _ = unsafe { libc::close(fd1) };
+        let rv1 = dup2(fd1, fd2);
+        let rv2 = close(fd1);
 
-        scene
-            .ucmd()
-            .arg("-alR")
-            .arg(format!("/dev/fd/{}", fd2.to_string()))
-            .fails()
-            .stderr_contains(format!("/dev/fd/{}", fd2.to_string()))
-            .stderr_contains("cannot access")
-            .stderr_contains("Bad file descriptor")
-            // '' indicates not a dir heading - we don't want to print a heading here
-            .stderr_contains(format!("'/dev/fd/{}':", fd2.to_string()))
-            .stdout_does_not_contain(format!("/dev/fd/{}:\n", fd2.to_string()));
+        // fails on linux in certain containers for me, works on macos
+        // don't want this to fail because dup2 and close don't work on a
+        // platform or in a container
+        if let Ok(0) = rv1 {
+            if let Ok(_) = rv2 {
+                scene
+                    .ucmd()
+                    .arg("-alR")
+                    .arg(format!("/dev/fd/{}", fd2.to_string()))
+                    .fails()
+                    .stderr_contains(format!("cannot access '/dev/fd/{}': Bad file descriptor", fd2.to_string()))
+                    .stdout_does_not_contain(format!("{}:\n", fd2.to_string()));
 
-        scene
-            .ucmd()
-            .arg("-RiL")
-            .arg(format!("/dev/fd/{}", fd2.to_string()))
-            .fails()
-            .stderr_contains("cannot access")
-            .stderr_contains("Bad file descriptor")
-            // test we only print bad fd error once
-            .stderr_does_not_contain(format!("ls: cannot access '/dev/fd/{fd}': Bad file descriptor\nls: cannot access '/dev/fd/{fd}': Bad file descriptor", fd = fd2.to_string()));
-
-        let _ = unsafe { libc::close(fd2) };
+                scene
+                    .ucmd()
+                    .arg("-RiL")
+                    .arg(format!("/dev/fd/{}", fd2.to_string()))
+                    .fails()
+                    .stderr_contains(format!("cannot access '/dev/fd/{}': Bad file descriptor", fd2.to_string()))
+                    // test we only print bad fd error once
+                    .stderr_does_not_contain(format!("ls: cannot access '/dev/fd/{fd}': Bad file descriptor\nls: cannot access '/dev/fd/{fd}': Bad file descriptor", fd = fd2.to_string()));   
+            }
+        }
+        let _ = close(fd2);
     }
 }
 

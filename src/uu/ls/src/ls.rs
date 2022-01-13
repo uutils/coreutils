@@ -1350,7 +1350,7 @@ impl PathData {
                     Err(err) => {
                         // never an print error on md calls which result in a bad fd error
                         // wait to attempt to enter the bad fds "directory" to print error.
-                        // bad fds read as the metadata of their parent dir until dereferenced
+                        // Bad fds read as the metadata of their parent dir until dereferenced
                         let _ = out.flush();
                         let errno = &err.raw_os_error().unwrap_or(1i32);
                         let res = if errno.eq(&9i32) {               
