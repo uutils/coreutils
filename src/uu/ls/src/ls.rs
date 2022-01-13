@@ -1349,30 +1349,26 @@ impl PathData {
                 || match get_metadata(self.p_buf.as_path(), self.must_dereference) {
                     Err(err) => {
                         // never an print error on md calls which result in a bad fd error
-                        // wait to enter the bad fd's "directory" to cleanup stop exec
-                        if !err.raw_os_error().unwrap_or(1i32).eq(&9i32) {
-                            let _ = out.flush();
-                            show!(LsError::IOErrorContext(err, self.p_buf.clone(),));
-                        }
-                        // if not dangling link...
-                        if !(self.p_buf.as_path().is_relative() && self.must_dereference) {
-                            if let Some(pmd) = &self.p_buf.parent() {
-                                get_metadata(pmd, false).ok()
+                        // wait to attempt to enter the bad fds "directory" to print error.
+                        // bad fds read as the metadata of their parent dir until dereferenced
+                        let _ = out.flush();
+                        let errno = &err.raw_os_error().unwrap_or(1i32);
+                        let res = if errno.eq(&9i32) {               
+                            if let Some(parent) = self.p_buf.parent() {            
+                                    get_metadata(parent,false).ok()
+                                } else {
+                                    None
+                                }
                             } else {
+                                show!(LsError::IOErrorContext(err, self.p_buf.clone(),));             
                                 None
-                            }
-                        } else {
-                            None
-                        }
-                    }
+                        };
+                        res
+                    },
                     Ok(md) => Some(md),
                 },
             )
             .as_ref()
-    }
-
-    fn set_md(&self, md: Metadata) -> Option<&Metadata> {
-        self.md.get_or_init(|| Some(md)).as_ref()
     }
 
     fn file_type(&self, out: &mut BufWriter<Stdout>) -> Option<&FileType> {
@@ -1390,7 +1386,7 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
 
     for loc in locs {
         let path_data = PathData::new(PathBuf::from(loc), None, None, &config, true);
-
+        
         // Getting metadata here is no big deal as it's just the CWD
         // and we really just want to know if the strings exist as files/dirs
         //
@@ -1555,34 +1551,10 @@ fn enter_directory(
         if should_display(&dir_entry, config) {
             // Why prefer to check the DirEntry file_type()?  B/c the call is
             // nearly free compared to a metadata() or file_type() call on a dir/file.
-            //
-            // But we will make a metadata call if we have to.
-            // Here, in order to match GNU behavior re: bad fds we read the metadata,
-            // in certain cases, to get the filetype instead.
-            let entry_path_data = if (config.format == Format::Long
-                || !(config.sort == Sort::Name || config.sort == Sort::None))
-                && !path_data.must_dereference
-            {
-                match dir_entry.metadata() {
-                    Ok(md) => {
-                        let pd = PathData::new(
-                            dir_entry.path(),
-                            Some(Ok(md.file_type())),
-                            None,
-                            config,
-                            false,
-                        );
-                        let _ = pd.set_md(md);
-                        pd
-                    }
-                    Err(_) => return,
-                }
-            } else {
-                match dir_entry.file_type() {
+            let entry_path_data = match dir_entry.file_type() {
                     Ok(ft) => PathData::new(dir_entry.path(), Some(Ok(ft)), None, config, false),
-                    Err(_) => return,
-                }
-            };
+                    Err(_) => PathData::new(dir_entry.path(), None, None, config, false),
+                };
             vec_path_data.push(entry_path_data);
         };
     }
@@ -1590,7 +1562,7 @@ fn enter_directory(
     sort_entries(&mut vec_path_data, config, out);
     entries.append(&mut vec_path_data);
 
-    // ...and total
+    // Print total after any error display
     if config.format == Format::Long {
         display_total(&entries, config, out);
     }
