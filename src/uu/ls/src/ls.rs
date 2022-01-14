@@ -1551,6 +1551,9 @@ fn enter_directory(
         if should_display(&dir_entry, config) {
             // Why prefer to check the DirEntry file_type()?  B/c the call is
             // nearly free compared to a metadata() or file_type() call on a dir/file.
+            //
+            // Why not print an error here?  If we wait for the metadata() call, we make
+            // certain we print the error once.  This also seems to match GNU behavior.
             let entry_path_data = match dir_entry.file_type() {
                 Ok(ft) => PathData::new(dir_entry.path(), Some(Ok(ft)), None, config, false),
                 Err(_) => PathData::new(dir_entry.path(), None, None, config, false),
@@ -1960,7 +1963,16 @@ fn display_item_long(
         let _ = write!(
             out,
             "{}{} {}",
-            "l?????????".to_string(),
+            format_args!(
+                "{}?????????",
+                if item.p_buf.is_symlink() {
+                    "l"
+                } else if item.p_buf.is_file() {
+                    "-"
+                } else {
+                    "d"
+                }
+            ),
             if item.security_context.len() > 1 {
                 // GNU `ls` uses a "." character to indicate a file with a security context,
                 // but not other alternate access method.
