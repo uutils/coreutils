@@ -1965,9 +1965,15 @@ fn display_item_long(
             "{}{} {}",
             format_args!(
                 "{}?????????",
-                if item.p_buf.is_symlink() {
+                if item.ft.get().is_some()
+                    && item.ft.get().unwrap().is_some()
+                    && item.ft.get().unwrap().unwrap().is_symlink()
+                {
                     "l"
-                } else if item.p_buf.is_file() {
+                } else if item.ft.get().is_some()
+                    && item.ft.get().unwrap().is_some()
+                    && item.ft.get().unwrap().unwrap().is_file()
+                {
                     "-"
                 } else {
                     "d"
