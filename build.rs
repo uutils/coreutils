@@ -83,7 +83,7 @@ pub fn main() {
                 mf.write_all(
                     format!(
                         "\tmap.insert(\"{k}\", ({krate}::uumain, {krate}::uu_app));\n",
-                        k = krate[override_prefix.len()..].to_string(),
+                        k = krate[override_prefix.len()..].to_owned(),
                         krate = krate
                     )
                     .as_bytes(),
@@ -92,7 +92,7 @@ pub fn main() {
                 tf.write_all(
                     format!(
                         "#[path=\"{dir}/test_{k}.rs\"]\nmod test_{k};\n",
-                        k = krate[override_prefix.len()..].to_string(),
+                        k = krate[override_prefix.len()..].to_owned(),
                         dir = util_tests_dir,
                     )
                     .as_bytes(),
