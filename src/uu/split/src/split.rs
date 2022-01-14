@@ -7,15 +7,17 @@
 
 // spell-checker:ignore (ToDO) PREFIXaa
 
+mod filenames;
 mod platform;
 
+use crate::filenames::FilenameFactory;
 use clap::{crate_version, App, Arg, ArgMatches};
 use std::convert::TryFrom;
 use std::env;
+use std::fs::remove_file;
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
-use std::{char, fs::remove_file};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parse_size::parse_size;
@@ -27,7 +29,7 @@ static OPT_ADDITIONAL_SUFFIX: &str = "additional-suffix";
 static OPT_FILTER: &str = "filter";
 static OPT_NUMERIC_SUFFIXES: &str = "numeric-suffixes";
 static OPT_SUFFIX_LENGTH: &str = "suffix-length";
-static OPT_DEFAULT_SUFFIX_LENGTH: &str = "2";
+static OPT_DEFAULT_SUFFIX_LENGTH: &str = "0";
 static OPT_VERBOSE: &str = "verbose";
 
 static ARG_INPUT: &str = "input";
@@ -98,7 +100,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    split(&settings)
+    split(settings)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -111,8 +113,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 .short("b")
                 .long(OPT_BYTES)
                 .takes_value(true)
-                .default_value("2")
-                .help("use suffixes of length N (default 2)"),
+                .help("put SIZE bytes per output file"),
         )
         .arg(
             Arg::with_name(OPT_LINE_BYTES)
@@ -341,39 +342,7 @@ impl Splitter for ByteSplitter {
     }
 }
 
-// (1, 3) -> "aab"
-#[allow(clippy::many_single_char_names)]
-fn str_prefix(i: usize, width: usize) -> String {
-    let mut c = "".to_owned();
-    let mut n = i;
-    let mut w = width;
-    while w > 0 {
-        w -= 1;
-        let div = 26usize.pow(w as u32);
-        let r = n / div;
-        n -= r * div;
-        c.push(char::from_u32((r as u32) + 97).unwrap());
-    }
-    c
-}
-
-// (1, 3) -> "001"
-#[allow(clippy::many_single_char_names)]
-fn num_prefix(i: usize, width: usize) -> String {
-    let mut c = "".to_owned();
-    let mut n = i;
-    let mut w = width;
-    while w > 0 {
-        w -= 1;
-        let div = 10usize.pow(w as u32);
-        let r = n / div;
-        n -= r * div;
-        c.push(char::from_digit(r as u32, 10).unwrap());
-    }
-    c
-}
-
-fn split(settings: &Settings) -> UResult<()> {
+fn split(settings: Settings) -> UResult<()> {
     let mut reader = BufReader::new(if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
@@ -393,19 +362,19 @@ fn split(settings: &Settings) -> UResult<()> {
         }
     };
 
+    // This object is responsible for creating the filename for each chunk.
+    let filename_factory = FilenameFactory::new(
+        settings.prefix,
+        settings.additional_suffix,
+        settings.suffix_length,
+        settings.numeric_suffix,
+    );
     let mut fileno = 0;
     loop {
         // Get a new part file set up, and construct `writer` for it.
-        let mut filename = settings.prefix.clone();
-        filename.push_str(
-            if settings.numeric_suffix {
-                num_prefix(fileno, settings.suffix_length)
-            } else {
-                str_prefix(fileno, settings.suffix_length)
-            }
-            .as_ref(),
-        );
-        filename.push_str(settings.additional_suffix.as_ref());
+        let filename = filename_factory
+            .make(fileno)
+            .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
         let mut writer = platform::instantiate_current_writer(&settings.filter, filename.as_str());
 
         let bytes_consumed = splitter
