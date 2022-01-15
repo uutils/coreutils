@@ -570,6 +570,25 @@ fn test_suffix_with_padding() {
 }
 
 #[test]
-fn test_invalid_number_returns_status_2() {
+fn test_invalid_stdin_number_returns_status_2() {
     new_ucmd!().pipe_in("hello").fails().code_is(2);
+}
+
+#[test]
+fn test_invalid_stdin_number_in_middle_of_input() {
+    new_ucmd!().pipe_in("100\nhello\n200").fails().code_is(2);
+}
+
+#[test]
+fn test_invalid_argument_number_returns_status_2() {
+    new_ucmd!().args(&["hello"]).fails().code_is(2);
+}
+
+#[test]
+fn test_invalid_argument_returns_status_1() {
+    new_ucmd!()
+        .args(&["--header=hello"])
+        .pipe_in("53478")
+        .fails()
+        .code_is(1);
 }
