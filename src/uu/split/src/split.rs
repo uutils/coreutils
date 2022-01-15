@@ -57,49 +57,11 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let long_usage = get_long_usage();
-
     let matches = uu_app()
         .usage(&usage[..])
         .after_help(&long_usage[..])
         .get_matches_from(args);
-
-    let mut settings = Settings {
-        prefix: "".to_owned(),
-        numeric_suffix: false,
-        suffix_length: 0,
-        additional_suffix: "".to_owned(),
-        input: "".to_owned(),
-        filter: None,
-        strategy: Strategy::Lines(1000),
-        verbose: false,
-    };
-
-    settings.suffix_length = matches
-        .value_of(OPT_SUFFIX_LENGTH)
-        .unwrap()
-        .parse()
-        .unwrap_or_else(|_| panic!("Invalid number for {}", OPT_SUFFIX_LENGTH));
-
-    settings.numeric_suffix = matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0;
-    settings.additional_suffix = matches.value_of(OPT_ADDITIONAL_SUFFIX).unwrap().to_owned();
-
-    settings.verbose = matches.occurrences_of("verbose") > 0;
-    settings.strategy = Strategy::from(&matches)?;
-    settings.input = matches.value_of(ARG_INPUT).unwrap().to_owned();
-    settings.prefix = matches.value_of(ARG_PREFIX).unwrap().to_owned();
-
-    if matches.occurrences_of(OPT_FILTER) > 0 {
-        if cfg!(windows) {
-            // see https://github.com/rust-lang/rust/issues/29494
-            return Err(USimpleError::new(
-                -1,
-                format!("{} is currently not supported in this platform", OPT_FILTER),
-            ));
-        } else {
-            settings.filter = Some(matches.value_of(OPT_FILTER).unwrap().to_owned());
-        }
-    }
-
+    let settings = Settings::from(matches)?;
     split(settings)
 }
 
@@ -230,6 +192,10 @@ impl Strategy {
     }
 }
 
+/// Parameters that control how a file gets split.
+///
+/// You can convert an [`ArgMatches`] instance into a [`Settings`]
+/// instance by calling [`Settings::from`].
 struct Settings {
     prefix: String,
     numeric_suffix: bool,
@@ -240,6 +206,36 @@ struct Settings {
     filter: Option<String>,
     strategy: Strategy,
     verbose: bool,
+}
+
+impl Settings {
+    /// Parse a strategy from the command-line arguments.
+    fn from(matches: ArgMatches) -> UResult<Self> {
+        let result = Settings {
+            suffix_length: matches
+                .value_of(OPT_SUFFIX_LENGTH)
+                .unwrap()
+                .parse()
+                .unwrap_or_else(|_| panic!("Invalid number for {}", OPT_SUFFIX_LENGTH)),
+            numeric_suffix: matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0,
+            additional_suffix: matches.value_of(OPT_ADDITIONAL_SUFFIX).unwrap().to_owned(),
+            verbose: matches.occurrences_of("verbose") > 0,
+            strategy: Strategy::from(&matches)?,
+            input: matches.value_of(ARG_INPUT).unwrap().to_owned(),
+            prefix: matches.value_of(ARG_PREFIX).unwrap().to_owned(),
+            filter: matches.value_of(OPT_FILTER).map(|s| s.to_owned()),
+        };
+        #[cfg(windows)]
+        if result.filter.is_some() {
+            // see https://github.com/rust-lang/rust/issues/29494
+            return Err(USimpleError::new(
+                -1,
+                format!("{} is currently not supported in this platform", OPT_FILTER),
+            ));
+        }
+
+        Ok(result)
+    }
 }
 
 trait Splitter {
