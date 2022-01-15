@@ -281,7 +281,22 @@ mod tests {
         }
     }
 
-    fn get_options() -> NumfmtOptions {
+    fn get_valid_options() -> NumfmtOptions {
+        NumfmtOptions {
+            transform: TransformOptions {
+                from: Unit::None,
+                to: Unit::None,
+            },
+            padding: 10,
+            header: 0,
+            fields: vec![Range { low: 0, high: 1 }],
+            delimiter: None,
+            round: RoundMethod::Nearest,
+            suffix: None,
+        }
+    }
+
+    fn get_invalid_options() -> NumfmtOptions {
         NumfmtOptions {
             transform: TransformOptions {
                 from: Unit::Auto,
@@ -299,10 +314,35 @@ mod tests {
     #[test]
     fn broken_buffer_returns_io_error() {
         let mock_buffer = MockBuffer {};
-        let result = handle_buffer(BufReader::new(mock_buffer), get_options())
+        let result = handle_buffer(BufReader::new(mock_buffer), get_valid_options())
             .expect_err("returned Ok after receiving IO error");
         let result_debug = format!("{:?}", result);
+        let result_display = format!("{}", result);
         assert_eq!(result_debug, "IoError(\"broken pipe\")");
+        assert_eq!(result_display, "broken pipe");
         assert_eq!(result.code(), 1);
+    }
+
+    #[test]
+    fn non_numeric_returns_formatting_error() {
+        let input_value = b"hello";
+        let result = handle_buffer(BufReader::new(&input_value[..]), get_valid_options())
+            .expect_err("returned Ok after receiving improperly formatted input");
+        let result_debug = format!("{:?}", result);
+        let result_display = format!("{}", result);
+        assert_eq!(
+            result_debug,
+            "FormattingError(\"invalid suffix in input: 'hello'\")"
+        );
+        assert_eq!(result_display, "invalid suffix in input: 'hello'");
+        assert_eq!(result.code(), 2);
+    }
+
+    #[test]
+    fn valid_input_returns_ok() {
+        let input_value = b"165";
+        let result = handle_buffer(BufReader::new(&input_value[..]), get_valid_options());
+        println!("{:?}", result);
+        assert!(result.is_ok(), "did not return Ok for valid input");
     }
 }
