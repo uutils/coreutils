@@ -296,21 +296,6 @@ mod tests {
         }
     }
 
-    fn get_invalid_options() -> NumfmtOptions {
-        NumfmtOptions {
-            transform: TransformOptions {
-                from: Unit::Auto,
-                to: Unit::Auto,
-            },
-            padding: 10,
-            header: 0,
-            fields: vec![Range { low: 0, high: 1 }],
-            delimiter: None,
-            round: RoundMethod::Nearest,
-            suffix: None,
-        }
-    }
-
     #[test]
     fn broken_buffer_returns_io_error() {
         let mock_buffer = MockBuffer {};
