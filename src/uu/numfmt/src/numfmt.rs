@@ -66,11 +66,11 @@ fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: NumfmtOptions) 
     Ok(())
 }
 
-fn handle_stdin(options: NumfmtOptions) -> UResult<()> {
-    let stdin = std::io::stdin();
-    let locked_stdin = stdin.lock();
-
-    let mut lines = locked_stdin.lines();
+fn handle_buffer<R>(input: R, options: NumfmtOptions) -> UResult<()>
+where
+    R: BufRead,
+{
+    let mut lines = input.lines();
     for (idx, line) in lines.by_ref().enumerate() {
         match line {
             Ok(l) if idx < options.header => {
@@ -174,7 +174,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let result = match matches.values_of(options::NUMBER) {
         Some(values) => handle_args(values, options),
-        None => handle_stdin(options),
+        None => {
+            let stdin = std::io::stdin();
+            let mut locked_stdin = stdin.lock();
+            handle_buffer(&mut locked_stdin, options)
+        }
     };
 
     match result {
@@ -263,4 +267,42 @@ pub fn uu_app() -> App<'static, 'static> {
                 .value_name("SUFFIX"),
         )
         .arg(Arg::with_name(options::NUMBER).hidden(true).multiple(true))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{handle_buffer, NumfmtOptions, Range, RoundMethod, TransformOptions, Unit};
+    use std::io::{BufReader, Error, ErrorKind, Read};
+    struct MockBuffer {}
+
+    impl Read for MockBuffer {
+        fn read(&mut self, _: &mut [u8]) -> Result<usize, Error> {
+            Err(Error::new(ErrorKind::BrokenPipe, "broken pipe"))
+        }
+    }
+
+    fn get_options() -> NumfmtOptions {
+        NumfmtOptions {
+            transform: TransformOptions {
+                from: Unit::Auto,
+                to: Unit::Auto,
+            },
+            padding: 10,
+            header: 0,
+            fields: vec![Range { low: 0, high: 1 }],
+            delimiter: None,
+            round: RoundMethod::Nearest,
+            suffix: None,
+        }
+    }
+
+    #[test]
+    fn broken_buffer_returns_io_error() {
+        let mock_buffer = MockBuffer {};
+        let result = handle_buffer(BufReader::new(mock_buffer), get_options())
+            .expect_err("returned Ok after receiving IO error");
+        let result_debug = format!("{:?}", result);
+        assert_eq!(result_debug, "IoError(\"broken pipe\")");
+        assert_eq!(result.code(), 1);
+    }
 }
