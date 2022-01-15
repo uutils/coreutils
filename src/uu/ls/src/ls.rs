@@ -1974,7 +1974,7 @@ fn display_item_long(
         let _ = write!(
             out,
             "{}{} {}",
-            "l?????????".to_string(),
+            "l?????????",
             if item.security_context.len() > 1 {
                 // GNU `ls` uses a "." character to indicate a file with a security context,
                 // but not other alternate access method.
