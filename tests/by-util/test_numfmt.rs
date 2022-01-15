@@ -589,6 +589,7 @@ fn test_invalid_argument_returns_status_1() {
     new_ucmd!()
         .args(&["--header=hello"])
         .pipe_in("53478")
+        .ignore_stdin_write_error()
         .fails()
         .code_is(1);
 }
