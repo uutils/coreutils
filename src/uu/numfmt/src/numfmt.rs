@@ -288,7 +288,7 @@ mod tests {
                 to: Unit::None,
             },
             padding: 10,
-            header: 0,
+            header: 1,
             fields: vec![Range { low: 0, high: 1 }],
             delimiter: None,
             round: RoundMethod::Nearest,
@@ -310,7 +310,7 @@ mod tests {
 
     #[test]
     fn non_numeric_returns_formatting_error() {
-        let input_value = b"hello";
+        let input_value = b"135\nhello";
         let result = handle_buffer(BufReader::new(&input_value[..]), get_valid_options())
             .expect_err("returned Ok after receiving improperly formatted input");
         let result_debug = format!("{:?}", result);
@@ -325,9 +325,8 @@ mod tests {
 
     #[test]
     fn valid_input_returns_ok() {
-        let input_value = b"165";
+        let input_value = b"165\n100\n300\n500";
         let result = handle_buffer(BufReader::new(&input_value[..]), get_valid_options());
-        println!("{:?}", result);
         assert!(result.is_ok(), "did not return Ok for valid input");
     }
 }
