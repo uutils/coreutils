@@ -328,3 +328,21 @@ fn single_file_with_header() {
         .succeeds()
         .stdout_is("A 1\n");
 }
+
+#[test]
+fn non_line_feeds() {
+    new_ucmd!()
+        .arg("non-line_feeds_1.txt")
+        .arg("non-line_feeds_2.txt")
+        .succeeds()
+        .stdout_only_fixture("non-line_feeds.expected");
+}
+
+#[test]
+fn non_unicode() {
+    new_ucmd!()
+        .arg("non-unicode_1.bin")
+        .arg("non-unicode_2.bin")
+        .succeeds()
+        .stdout_only_fixture("non-unicode.expected");
+}
