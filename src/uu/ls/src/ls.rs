@@ -207,9 +207,10 @@ impl Display for LsError {
                     }
                     _ => match errno {
                         9i32 => {
+                            // only should ever occur on a read_dir on a bad fd
                             write!(
                                 f,
-                                "cannot access '{}': Bad file descriptor",
+                                "cannot open directory '{}': Bad file descriptor",
                                 p.to_string_lossy(),
                             )
                         }
@@ -1354,18 +1355,24 @@ impl PathData {
                     Err(err) => {
                         let _ = out.flush();
                         let errno = err.raw_os_error().unwrap_or(1i32);
-                        // Wait to enter "directory" to print error for a bad fd
+                        // Wait to enter "directory" to print error for any bad fd
                         if self.must_dereference && errno.eq(&9i32) {
-                            if let Ok(md) = get_metadata(&self.p_buf, false) {
-                                Some(md)
-                            } else {
-                                show!(LsError::IOErrorContext(err, self.p_buf.clone(),));
-                                None
+                            if let Some(parent) = self.p_buf.parent() {
+                                if let Ok(read_dir) = fs::read_dir(parent) {
+                                    // this dir_entry metadata is different from the metadata call on the path
+                                    let res = read_dir
+                                        .filter_map(|x| x.ok())
+                                        .filter(|x| self.p_buf.eq(&x.path()))
+                                        .filter_map(|x| x.metadata().ok())
+                                        .next();
+                                    if let Some(md) = res {
+                                        return Some(md);
+                                    }
+                                }
                             }
-                        } else {
-                            show!(LsError::IOErrorContext(err, self.p_buf.clone(),));
-                            None
                         }
+                        show!(LsError::IOErrorContext(err, self.p_buf.clone(),));
+                        None
                     }
                     Ok(md) => Some(md),
                 },
@@ -1565,7 +1572,8 @@ fn enter_directory(
                     let res = PathData::new(dir_entry.path(), Some(Ok(ft)), None, config, false);
                     // metadata returned from a DirEntry matches GNU metadata for
                     // non-dereferenced files, and is *different* from the
-                    // metadata call on the path, see, for example, bad fds
+                    // metadata call on the path, see, for example, bad fds,
+                    // so we use here when we will need metadata later anyway
                     if !res.must_dereference
                         && ((config.format == Format::Long)
                             || (config.sort == Sort::Name)

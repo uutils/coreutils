@@ -170,7 +170,7 @@ fn test_ls_io_errors() {
         .stderr_contains("Permission denied")
         .stdout_contains("some-dir4");
 
-    // test we don't double print on dangling link metadata errors
+    // don't double print on dangling link metadata errors
     scene
         .ucmd()
         .arg("-iRL")
@@ -188,26 +188,29 @@ fn test_ls_io_errors() {
         let rv1 = dup2(fd1, fd2);
         let rv2 = close(fd1);
 
-        scene
-            .ucmd()
-            .arg("-alR")
-            .arg(format!("/dev/fd/{}", fd2))
-            .fails()
-            .stderr_contains(format!(
-                "cannot access '/dev/fd/{}': Bad file descriptor",
-                fd2
-            ))
-            .stdout_does_not_contain(format!("{}:\n", fd2));
+        // dup and close work on the mac, but doesn't work in some linux containers
+        // so check to see that return values are non-error before proceeding
+        if rv1.is_ok() && rv2.is_ok() {
+            scene
+                .ucmd()
+                .arg("-alR")
+                .arg(format!("/dev/fd/{}", fd = fd2))
+                .fails()
+                .stderr_contains(format!(
+                    "cannot open directory '/dev/fd/{fd}': Bad file descriptor",
+                    fd = fd2
+                ))
+                .stdout_does_not_contain(format!("{fd}:\n", fd = fd2));
 
-        scene
-            .ucmd()
-            .arg("-RiL")
-            .arg(format!("/dev/fd/{}", fd2))
-            .fails()
-            .stderr_contains(format!("cannot access '/dev/fd/{}': Bad file descriptor", fd2))
-            // test we only print bad fd error once
-            .stderr_does_not_contain(format!("ls: cannot access '/dev/fd/{fd}': Bad file descriptor\nls: cannot access '/dev/fd/{fd}': Bad file descriptor", fd = fd2));
-
+            scene
+                .ucmd()
+                .arg("-RiL")
+                .arg(format!("/dev/fd/{fd}", fd = fd2))
+                .fails()
+                .stderr_contains(format!("cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2))
+                // don't double print bad fd errors
+                .stderr_does_not_contain(format!("ls: cannot open directory '/dev/fd/{fd}': Bad file descriptor\nls: cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2));
+        }
         let _ = close(fd2);
     }
 }
