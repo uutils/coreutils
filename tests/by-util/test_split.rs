@@ -408,3 +408,19 @@ fn test_suffixes_exhausted() {
         .fails()
         .stderr_only("split: output file suffixes exhausted");
 }
+
+#[test]
+fn test_verbose() {
+    new_ucmd!()
+        .args(&["-b", "5", "--verbose", "asciilowercase.txt"])
+        .succeeds()
+        .stdout_only(
+            "creating file 'xaa'
+creating file 'xab'
+creating file 'xac'
+creating file 'xad'
+creating file 'xae'
+creating file 'xaf'
+",
+        );
+}
