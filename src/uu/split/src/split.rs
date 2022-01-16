@@ -32,6 +32,7 @@ static OPT_ADDITIONAL_SUFFIX: &str = "additional-suffix";
 static OPT_FILTER: &str = "filter";
 static OPT_NUMBER: &str = "number";
 static OPT_NUMERIC_SUFFIXES: &str = "numeric-suffixes";
+static OPT_HEX_SUFFIXES: &str = "hex-suffixes";
 static OPT_SUFFIX_LENGTH: &str = "suffix-length";
 static OPT_DEFAULT_SUFFIX_LENGTH: &str = "0";
 static OPT_VERBOSE: &str = "verbose";
@@ -141,6 +142,14 @@ pub fn uu_app<'a>() -> App<'a> {
                 .help("use suffixes of length N (default 2)"),
         )
         .arg(
+            Arg::new(OPT_HEX_SUFFIXES)
+                .short('x')
+                .long(OPT_HEX_SUFFIXES)
+                .takes_value(true)
+                .default_missing_value("0")
+                .help("use hex suffixes starting at 0, not alphabetic"),
+        )
+        .arg(
             Arg::new(OPT_VERBOSE)
                 .long(OPT_VERBOSE)
                 .help("print a diagnostic just before each output file is opened"),
@@ -245,6 +254,8 @@ impl Strategy {
 fn suffix_type_from(matches: &ArgMatches) -> SuffixType {
     if matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0 {
         SuffixType::NumericDecimal
+    } else if matches.occurrences_of(OPT_HEX_SUFFIXES) > 0 {
+        SuffixType::NumericHexadecimal
     } else {
         SuffixType::Alphabetic
     }
