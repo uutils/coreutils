@@ -13,11 +13,10 @@ mod platform;
 
 use crate::filenames::FilenameIterator;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
-use std::convert::TryFrom;
 use std::env;
 use std::fmt;
 use std::fs::{metadata, File};
-use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
+use std::io::{stdin, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::num::ParseIntError;
 use std::path::Path;
 use uucore::display::Quotable;
@@ -547,105 +546,6 @@ impl<'a> Write for LineChunkWriter<'a> {
 
     fn flush(&mut self) -> std::io::Result<()> {
         self.inner.flush()
-    }
-}
-
-trait Splitter {
-    // Consume as much as possible from `reader` so as to saturate `writer`.
-    // Equivalent to finishing one of the part files. Returns the number of
-    // bytes that have been moved.
-    fn consume(
-        &mut self,
-        reader: &mut BufReader<Box<dyn Read>>,
-        writer: &mut BufWriter<Box<dyn Write>>,
-    ) -> std::io::Result<u128>;
-}
-
-struct LineSplitter {
-    lines_per_split: usize,
-}
-
-impl LineSplitter {
-    fn new(chunk_size: usize) -> Self {
-        Self {
-            lines_per_split: chunk_size,
-        }
-    }
-}
-
-impl Splitter for LineSplitter {
-    fn consume(
-        &mut self,
-        reader: &mut BufReader<Box<dyn Read>>,
-        writer: &mut BufWriter<Box<dyn Write>>,
-    ) -> std::io::Result<u128> {
-        let mut bytes_consumed = 0u128;
-        let mut buffer = String::with_capacity(1024);
-        for _ in 0..self.lines_per_split {
-            let bytes_read = reader.read_line(&mut buffer)?;
-            // If we ever read 0 bytes then we know we've hit EOF.
-            if bytes_read == 0 {
-                return Ok(bytes_consumed);
-            }
-
-            writer.write_all(buffer.as_bytes())?;
-            // Empty out the String buffer since `read_line` appends instead of
-            // replaces.
-            buffer.clear();
-
-            bytes_consumed += bytes_read as u128;
-        }
-
-        Ok(bytes_consumed)
-    }
-}
-
-struct ByteSplitter {
-    bytes_per_split: u128,
-}
-
-impl ByteSplitter {
-    fn new(chunk_size: usize) -> Self {
-        Self {
-            bytes_per_split: u128::try_from(chunk_size).unwrap(),
-        }
-    }
-}
-
-impl Splitter for ByteSplitter {
-    fn consume(
-        &mut self,
-        reader: &mut BufReader<Box<dyn Read>>,
-        writer: &mut BufWriter<Box<dyn Write>>,
-    ) -> std::io::Result<u128> {
-        // We buffer reads and writes. We proceed until `bytes_consumed` is
-        // equal to `self.bytes_per_split` or we reach EOF.
-        let mut bytes_consumed = 0u128;
-        const BUFFER_SIZE: usize = 1024;
-        let mut buffer = [0u8; BUFFER_SIZE];
-        while bytes_consumed < self.bytes_per_split {
-            // Don't overshoot `self.bytes_per_split`! Note: Using std::cmp::min
-            // doesn't really work since we have to get types to match which
-            // can't be done in a way that keeps all conversions safe.
-            let bytes_desired = if (BUFFER_SIZE as u128) <= self.bytes_per_split - bytes_consumed {
-                BUFFER_SIZE
-            } else {
-                // This is a safe conversion since the difference must be less
-                // than BUFFER_SIZE in this branch.
-                (self.bytes_per_split - bytes_consumed) as usize
-            };
-            let bytes_read = reader.read(&mut buffer[0..bytes_desired])?;
-            // If we ever read 0 bytes then we know we've hit EOF.
-            if bytes_read == 0 {
-                return Ok(bytes_consumed);
-            }
-
-            writer.write_all(&buffer[0..bytes_read])?;
-
-            bytes_consumed += bytes_read as u128;
-        }
-
-        Ok(bytes_consumed)
     }
 }
 
