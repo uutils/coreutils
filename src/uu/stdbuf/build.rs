@@ -28,15 +28,30 @@ fn main() {
     // - cargo run
     // - cross run
     // - cargo install --git
+    // - cargo publish --dry-run
     let mut name = target_dir.file_name().unwrap().to_string_lossy();
     while name != "target" && !name.starts_with("cargo-install") {
         target_dir = target_dir.parent().unwrap();
         name = target_dir.file_name().unwrap().to_string_lossy();
     }
-    let mut libstdbuf = target_dir.to_path_buf();
-    libstdbuf.push(env::var("PROFILE").unwrap());
-    libstdbuf.push("deps");
-    libstdbuf.push(format!("liblibstdbuf{}", platform::DYLIB_EXT));
+    let mut dir = target_dir.to_path_buf();
+    dir.push(env::var("PROFILE").unwrap());
+    dir.push("deps");
+    let mut path = None;
 
-    fs::copy(libstdbuf, Path::new(&out_dir).join("libstdbuf.so")).unwrap();
+    // When running cargo publish, cargo appends hashes to the filenames of the compiled artifacts.
+    // Therefore, it won't work to just get liblibstdbuf.so. Instead, we look for files with the
+    // glob pattern "liblibstdbuf*.so" (i.e. starts with liblibstdbuf and ends with the extension).
+    for entry in fs::read_dir(dir).unwrap().flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with("liblibstdbuf") && name.ends_with(platform::DYLIB_EXT) {
+            path = Some(entry.path());
+        }
+    }
+    fs::copy(
+        path.expect("liblibstdbuf was not found"),
+        Path::new(&out_dir).join("libstdbuf.so"),
+    )
+    .unwrap();
 }
