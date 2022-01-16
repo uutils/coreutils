@@ -1,6 +1,6 @@
 [package]
 name = "uu_base64"
-version = "0.0.8"
+version = "0.0.9"
 authors = ["uutils developers"]
 license = "MIT"
 description = "base64 ~ (uutils) decode/encode input (base64-encoding)"
@@ -16,8 +16,8 @@ path = "src/base64.rs"
 
 [dependencies]
 clap = { version = "2.33", features = ["wrap_help"] }
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features = ["encoding"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features = ["encoding"] }
+uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 uu_base32 = { version=">=0.0.8", package="uu_base32", path="../base32"}
 
 [[bin]]

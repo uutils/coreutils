@@ -1,6 +1,6 @@
 [package]
 name = "uu_factor"
-version = "0.0.8"
+version = "0.0.9"
 authors = ["uutils developers"]
 license = "MIT"
 description = "factor ~ (uutils) display the prime factors of each NUMBER"
@@ -21,7 +21,7 @@ num-traits = "0.2.13" # Needs at least version 0.2.13 for "OverflowingAdd"
 rand = { version = "0.7", features = ["small_rng"] }
 smallvec = "1.7"  # TODO(nicoo): Use `union` feature, requires Rust 1.49 or later.
 uucore = { version = ">=0.0.8", package = "uucore", path = "../../uucore" }
-uucore_procs = { version=">=0.0.7", package = "uucore_procs", path = "../../uucore_procs" }
+uucore_procs = { version=">=0.0.8", package = "uucore_procs", path = "../../uucore_procs" }
 
 [dev-dependencies]
 paste = "0.1.18"
