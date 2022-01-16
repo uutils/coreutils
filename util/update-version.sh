@@ -2,6 +2,11 @@
 # This is a stupid helper. I will mass replace all versions (including other crates)
 # So, it should be triple-checked
 
+# How to ship a new release:
+# 1) update this script
+# 2) run it: bash util/update-version.sh
+# 3) Do a spot check with "git diff"
+# 4) cargo test --release --features unix
 
 FROM="0.0.7"
 TO="0.0.8"
