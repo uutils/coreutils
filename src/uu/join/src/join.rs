@@ -13,7 +13,7 @@ extern crate uucore;
 use clap::{crate_version, App, Arg};
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{stdin, BufRead, BufReader, Lines, Stdin};
+use std::io::{stdin, stdout, BufRead, BufReader, Split, Stdin, Write};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UResult, USimpleError};
 
@@ -27,7 +27,7 @@ enum FileNum {
 
 #[derive(Copy, Clone)]
 enum Sep {
-    Char(char),
+    Char(u8),
     Line,
     Whitespaces,
 }
@@ -49,7 +49,7 @@ struct Settings {
     separator: Sep,
     autoformat: bool,
     format: Vec<Spec>,
-    empty: String,
+    empty: Vec<u8>,
     check_order: CheckOrder,
     headers: bool,
 }
@@ -66,7 +66,7 @@ impl Default for Settings {
             separator: Sep::Whitespaces,
             autoformat: false,
             format: vec![],
-            empty: String::new(),
+            empty: vec![],
             check_order: CheckOrder::Default,
             headers: false,
         }
@@ -75,13 +75,13 @@ impl Default for Settings {
 
 /// Output representation.
 struct Repr<'a> {
-    separator: char,
+    separator: u8,
     format: &'a [Spec],
-    empty: &'a str,
+    empty: &'a [u8],
 }
 
 impl<'a> Repr<'a> {
-    fn new(separator: char, format: &'a [Spec], empty: &'a str) -> Repr<'a> {
+    fn new(separator: u8, format: &'a [Spec], empty: &'a [u8]) -> Repr<'a> {
         Repr {
             separator,
             format,
@@ -94,32 +94,34 @@ impl<'a> Repr<'a> {
     }
 
     /// Print the field or empty filler if the field is not set.
-    fn print_field(&self, field: Option<&str>) {
+    fn print_field(&self, field: Option<&Vec<u8>>) -> Result<(), std::io::Error> {
         let value = match field {
             Some(field) => field,
             None => self.empty,
         };
 
-        print!("{}", value);
+        stdout().write_all(value)
     }
 
     /// Print each field except the one at the index.
-    fn print_fields(&self, line: &Line, index: usize) {
+    fn print_fields(&self, line: &Line, index: usize) -> Result<(), std::io::Error> {
         for i in 0..line.fields.len() {
             if i != index {
-                print!("{}{}", self.separator, line.fields[i]);
+                stdout().write_all(&[self.separator])?;
+                stdout().write_all(&line.fields[i])?;
             }
         }
+        Ok(())
     }
 
     /// Print each field or the empty filler if the field is not set.
-    fn print_format<F>(&self, f: F)
+    fn print_format<F>(&self, f: F) -> Result<(), std::io::Error>
     where
-        F: Fn(&Spec) -> Option<&'a str>,
+        F: Fn(&Spec) -> Option<&'a Vec<u8>>,
     {
         for i in 0..self.format.len() {
             if i > 0 {
-                print!("{}", self.separator);
+                stdout().write_all(&[self.separator])?;
             }
 
             let field = match f(&self.format[i]) {
@@ -127,8 +129,9 @@ impl<'a> Repr<'a> {
                 None => self.empty,
             };
 
-            print!("{}", field);
+            stdout().write_all(field)?;
         }
+        Ok(())
     }
 }
 
@@ -148,10 +151,12 @@ impl Input {
         }
     }
 
-    fn compare(&self, field1: Option<&str>, field2: Option<&str>) -> Ordering {
+    fn compare(&self, field1: Option<&Vec<u8>>, field2: Option<&Vec<u8>>) -> Ordering {
         if let (Some(field1), Some(field2)) = (field1, field2) {
             if self.ignore_case {
-                field1.to_lowercase().cmp(&field2.to_lowercase())
+                field1
+                    .to_ascii_lowercase()
+                    .cmp(&field2.to_ascii_lowercase())
             } else {
                 field1.cmp(field2)
             }
@@ -209,14 +214,19 @@ impl Spec {
 }
 
 struct Line {
-    fields: Vec<String>,
+    fields: Vec<Vec<u8>>,
 }
 
 impl Line {
-    fn new(string: String, separator: Sep) -> Line {
+    fn new(string: Vec<u8>, separator: Sep) -> Line {
         let fields = match separator {
-            Sep::Whitespaces => string.split_whitespace().map(String::from).collect(),
-            Sep::Char(sep) => string.split(sep).map(String::from).collect(),
+            Sep::Whitespaces => string
+                // GNU join uses Bourne shell field splitters by default
+                .split(|c| matches!(*c, b' ' | b'\t' | b'\n'))
+                .filter(|f| !f.is_empty())
+                .map(Vec::from)
+                .collect(),
+            Sep::Char(sep) => string.split(|c| *c == sep).map(Vec::from).collect(),
             Sep::Line => vec![string],
         };
 
@@ -224,7 +234,7 @@ impl Line {
     }
 
     /// Get field at index.
-    fn get_field(&self, index: usize) -> Option<&str> {
+    fn get_field(&self, index: usize) -> Option<&Vec<u8>> {
         if index < self.fields.len() {
             Some(&self.fields[index])
         } else {
@@ -238,7 +248,7 @@ struct State<'a> {
     file_name: &'a str,
     file_num: FileNum,
     print_unpaired: bool,
-    lines: Lines<Box<dyn BufRead + 'a>>,
+    lines: Split<Box<dyn BufRead + 'a>>,
     seq: Vec<Line>,
     line_num: usize,
     has_failed: bool,
@@ -266,7 +276,7 @@ impl<'a> State<'a> {
             file_name: name,
             file_num,
             print_unpaired,
-            lines: f.lines(),
+            lines: f.split(b'\n'),
             seq: Vec::new(),
             line_num: 0,
             has_failed: false,
@@ -274,12 +284,13 @@ impl<'a> State<'a> {
     }
 
     /// Skip the current unpaired line.
-    fn skip_line(&mut self, input: &Input, repr: &Repr) {
+    fn skip_line(&mut self, input: &Input, repr: &Repr) -> Result<(), std::io::Error> {
         if self.print_unpaired {
-            self.print_first_line(repr);
+            self.print_first_line(repr)?;
         }
 
         self.reset_next_line(input);
+        Ok(())
     }
 
     /// Keep reading line sequence until the key does not change, return
@@ -299,20 +310,22 @@ impl<'a> State<'a> {
     }
 
     /// Print lines in the buffers as headers.
-    fn print_headers(&self, other: &State, repr: &Repr) {
+    fn print_headers(&self, other: &State, repr: &Repr) -> Result<(), std::io::Error> {
         if self.has_line() {
             if other.has_line() {
-                self.combine(other, repr);
+                self.combine(other, repr)?;
             } else {
-                self.print_first_line(repr);
+                self.print_first_line(repr)?;
             }
         } else if other.has_line() {
-            other.print_first_line(repr);
+            other.print_first_line(repr)?;
         }
+
+        Ok(())
     }
 
     /// Combine two line sequences.
-    fn combine(&self, other: &State, repr: &Repr) {
+    fn combine(&self, other: &State, repr: &Repr) -> Result<(), std::io::Error> {
         let key = self.get_current_key();
 
         for line1 in &self.seq {
@@ -331,16 +344,18 @@ impl<'a> State<'a> {
 
                             None
                         }
-                    });
+                    })?;
                 } else {
-                    repr.print_field(key);
-                    repr.print_fields(line1, self.key);
-                    repr.print_fields(line2, other.key);
+                    repr.print_field(key)?;
+                    repr.print_fields(line1, self.key)?;
+                    repr.print_fields(line2, other.key)?;
                 }
 
-                println!();
+                stdout().write_all(&[b'\n'])?;
             }
         }
+
+        Ok(())
     }
 
     /// Reset with the next line.
@@ -377,14 +392,16 @@ impl<'a> State<'a> {
         0
     }
 
-    fn finalize(&mut self, input: &Input, repr: &Repr) {
+    fn finalize(&mut self, input: &Input, repr: &Repr) -> Result<(), std::io::Error> {
         if self.has_line() && self.print_unpaired {
-            self.print_first_line(repr);
+            self.print_first_line(repr)?;
 
             while let Some(line) = self.next_line(input) {
-                self.print_line(&line, repr);
+                self.print_line(&line, repr)?;
             }
         }
+
+        Ok(())
     }
 
     /// Get the next line without the order check.
@@ -423,11 +440,11 @@ impl<'a> State<'a> {
     }
 
     /// Gets the key value of the lines stored in seq.
-    fn get_current_key(&self) -> Option<&str> {
+    fn get_current_key(&self) -> Option<&Vec<u8>> {
         self.seq[0].get_field(self.key)
     }
 
-    fn print_line(&self, line: &Line, repr: &Repr) {
+    fn print_line(&self, line: &Line, repr: &Repr) -> Result<(), std::io::Error> {
         if repr.uses_format() {
             repr.print_format(|spec| match *spec {
                 Spec::Key => line.get_field(self.key),
@@ -438,17 +455,17 @@ impl<'a> State<'a> {
                         None
                     }
                 }
-            });
+            })?;
         } else {
-            repr.print_field(line.get_field(self.key));
-            repr.print_fields(line, self.key);
+            repr.print_field(line.get_field(self.key))?;
+            repr.print_fields(line, self.key)?;
         }
 
-        println!();
+        stdout().write_all(&[b'\n'])
     }
 
-    fn print_first_line(&self, repr: &Repr) {
-        self.print_line(&self.seq[0], repr);
+    fn print_first_line(&self, repr: &Repr) -> Result<(), std::io::Error> {
+        self.print_line(&self.seq[0], repr)
     }
 }
 
@@ -481,14 +498,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.key1 = get_field_number(keys, key1)?;
     settings.key2 = get_field_number(keys, key2)?;
 
-    if let Some(value) = matches.value_of("t") {
+    if let Some(value_str) = matches.value_of("t") {
+        let value = value_str.as_bytes();
         settings.separator = match value.len() {
             0 => Sep::Line,
-            1 => Sep::Char(value.chars().next().unwrap()),
+            1 => Sep::Char(value[0]),
             _ => {
                 return Err(USimpleError::new(
                     1,
-                    format!("multi-character tab {}", value),
+                    format!("multi-character tab {}", value_str),
                 ))
             }
         };
@@ -507,7 +525,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     if let Some(empty) = matches.value_of("e") {
-        settings.empty = empty.to_string();
+        settings.empty = empty.as_bytes().to_vec();
     }
 
     if matches.is_present("nocheck-order") {
@@ -529,7 +547,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(USimpleError::new(1, "both files cannot be standard input"));
     }
 
-    exec(file1, file2, settings)
+    match exec(file1, file2, settings) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(USimpleError::new(1, format!("{}", e))),
+    }
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -639,7 +660,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
         )
 }
 
-fn exec(file1: &str, file2: &str, settings: Settings) -> UResult<()> {
+fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), std::io::Error> {
     let stdin = stdin();
 
     let mut state1 = State::new(
@@ -686,14 +707,14 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> UResult<()> {
     let repr = Repr::new(
         match settings.separator {
             Sep::Char(sep) => sep,
-            _ => ' ',
+            _ => b' ',
         },
         &format,
         &settings.empty,
     );
 
     if settings.headers {
-        state1.print_headers(&state2, &repr);
+        state1.print_headers(&state2, &repr)?;
         state1.reset_read_line(&input);
         state2.reset_read_line(&input);
     }
@@ -703,17 +724,17 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> UResult<()> {
 
         match diff {
             Ordering::Less => {
-                state1.skip_line(&input, &repr);
+                state1.skip_line(&input, &repr)?;
             }
             Ordering::Greater => {
-                state2.skip_line(&input, &repr);
+                state2.skip_line(&input, &repr)?;
             }
             Ordering::Equal => {
                 let next_line1 = state1.extend(&input);
                 let next_line2 = state2.extend(&input);
 
                 if settings.print_joined {
-                    state1.combine(&state2, &repr);
+                    state1.combine(&state2, &repr)?;
                 }
 
                 state1.reset(next_line1);
@@ -722,8 +743,8 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> UResult<()> {
         }
     }
 
-    state1.finalize(&input, &repr);
-    state2.finalize(&input, &repr);
+    state1.finalize(&input, &repr)?;
+    state2.finalize(&input, &repr)?;
 
     if state1.has_failed || state2.has_failed {
         set_exit_code(1);
