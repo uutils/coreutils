@@ -7,7 +7,9 @@
 # 2) run it: bash util/update-version.sh
 # 3) Do a spot check with "git diff"
 # 4) cargo test --release --features unix
-
+# 5) Run util/publish.sh in dry mode (it will fail as packages needs more recent version of uucore)
+# 6) Run util/publish.sh --do-it
+# 7) In some cases, you might have to fix dependencies and run import
 
 FROM="0.0.8"
 TO="0.0.9"
