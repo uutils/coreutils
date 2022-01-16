@@ -37,6 +37,9 @@ pub enum SuffixType {
 
     /// Decimal numbers.
     NumericDecimal,
+
+    /// Hexadecimal numbers.
+    NumericHexadecimal,
 }
 
 impl SuffixType {
@@ -45,6 +48,7 @@ impl SuffixType {
         match self {
             SuffixType::Alphabetic => 26,
             SuffixType::NumericDecimal => 10,
+            SuffixType::NumericHexadecimal => 16,
         }
     }
 }
@@ -86,7 +90,7 @@ impl SuffixType {
 /// assert_eq!(it.next().unwrap(), "chunk_ac.txt");
 /// ```
 ///
-/// For numeric filenames, use `SuffixType::NumericDecimal`:
+/// For decimal numeric filenames, use `SuffixType::NumericDecimal`:
 ///
 /// ```rust,ignore
 /// use crate::filenames::FilenameIterator;
