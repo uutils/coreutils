@@ -1230,14 +1230,7 @@ pub fn check_coreutil_version(
         .output()
     {
         Ok(s) => s,
-        Err(e) => {
-            return Err(format!(
-                "{}: '{}' {}",
-                UUTILS_WARNING,
-                util_name,
-                e.to_string()
-            ))
-        }
+        Err(e) => return Err(format!("{}: '{}' {}", UUTILS_WARNING, util_name, e)),
     };
     std::str::from_utf8(&version_check.stdout).unwrap()
         .split('\n')
@@ -1247,7 +1240,7 @@ pub fn check_coreutil_version(
             || Err(format!("{}: unexpected output format for reference coreutil: '{} --version'", UUTILS_WARNING, util_name)),
             |s| {
                 if s.contains(&format!("(GNU coreutils) {}", version_expected)) {
-                    Ok(format!("{}: {}", UUTILS_INFO, s.to_string()))
+                    Ok(format!("{}: {}", UUTILS_INFO, s))
                 } else if s.contains("(GNU coreutils)") {
                     let version_found = parse_coreutil_version(s);
                     let version_expected = version_expected.parse::<f32>().unwrap_or_default();
