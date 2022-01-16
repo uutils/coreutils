@@ -1573,27 +1573,27 @@ fn enter_directory(
                     // metadata returned from a DirEntry matches GNU metadata for
                     // non-dereferenced files, and is *different* from the
                     // metadata call on the path, see, for example, bad fds,
-                    // so we use dir_entry metadata here when we know we 
+                    // so we use dir_entry metadata here when we know we
                     // will need metadata later anyway
-                    #[cfg(unix)] 
+                    #[cfg(unix)]
                     {
                         if !res.must_dereference
-                        && ((config.format == Format::Long)
-                        || (config.sort == Sort::Name) 
-                        || (config.sort == Sort::None)
-                        || config.inode)
+                            && ((config.format == Format::Long)
+                                || (config.sort == Sort::Name)
+                                || (config.sort == Sort::None)
+                                || config.inode)
                         {
                             if let Ok(md) = dir_entry.metadata() {
                                 res.set_md(md)
                             }
                         }
                     }
-                    #[cfg(not(unix))] 
+                    #[cfg(not(unix))]
                     {
                         if !res.must_dereference
-                        && ((config.format == Format::Long)
-                        || (config.sort == Sort::Name) 
-                        || (config.sort == Sort::None))
+                            && ((config.format == Format::Long)
+                                || (config.sort == Sort::Name)
+                                || (config.sort == Sort::None))
                         {
                             if let Ok(md) = dir_entry.metadata() {
                                 res.set_md(md)
@@ -2097,10 +2097,7 @@ fn display_item_long(
         let _ = write!(
             out,
             "{}{} {}",
-            format_args!(
-                "{}?????????", leading_char
-
-            ),
+            format_args!("{}?????????", leading_char),
             if item.security_context.len() > 1 {
                 // GNU `ls` uses a "." character to indicate a file with a security context,
                 // but not other alternate access method.
