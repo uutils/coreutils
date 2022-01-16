@@ -1573,15 +1573,31 @@ fn enter_directory(
                     // metadata returned from a DirEntry matches GNU metadata for
                     // non-dereferenced files, and is *different* from the
                     // metadata call on the path, see, for example, bad fds,
-                    // so we use here when we will need metadata later anyway
-                    if !res.must_dereference
-                        && ((config.format == Format::Long)
-                            || (config.sort == Sort::Name)
-                            || (config.sort == Sort::None)
-                            || config.inode)
+                    // so we use dir_entry metadata here when we know we 
+                    // will need metadata later anyway
+                    #[cfg(unix)] 
                     {
-                        if let Ok(md) = dir_entry.metadata() {
-                            res.set_md(md)
+                        if !res.must_dereference
+                        && ((config.format == Format::Long)
+                        || (config.sort == Sort::Name) 
+                        || (config.sort == Sort::None)
+                        || config.inode)
+                        {
+                            if let Ok(md) = dir_entry.metadata() {
+                                res.set_md(md)
+                            }
+                        }
+                    }
+                    #[cfg(not(unix))] 
+                    {
+                        if !res.must_dereference
+                        && ((config.format == Format::Long)
+                        || (config.sort == Sort::Name) 
+                        || (config.sort == Sort::None))
+                        {
+                            if let Ok(md) = dir_entry.metadata() {
+                                res.set_md(md)
+                            }
                         }
                     }
                     res
@@ -2045,26 +2061,45 @@ fn display_item_long(
             }
         }
 
+        #[cfg(unix)]
+        let leading_char = {
+            if item.ft.get().is_some() && item.ft.get().unwrap().is_some() {
+                if item.ft.get().unwrap().unwrap().is_char_device() {
+                    "c"
+                } else if item.ft.get().unwrap().unwrap().is_block_device() {
+                    "b"
+                } else if item.ft.get().unwrap().unwrap().is_symlink() {
+                    "l"
+                } else if item.ft.get().unwrap().unwrap().is_dir() {
+                    "d"
+                } else {
+                    "-"
+                }
+            } else {
+                "-"
+            }
+        };
+        #[cfg(not(unix))]
+        let leading_char = {
+            if item.ft.get().is_some() && item.ft.get().unwrap().is_some() {
+                if item.ft.get().unwrap().unwrap().is_symlink() {
+                    "l"
+                } else if item.ft.get().unwrap().unwrap().is_dir() {
+                    "d"
+                } else {
+                    "-"
+                }
+            } else {
+                "-"
+            }
+        };
+
         let _ = write!(
             out,
             "{}{} {}",
             format_args!(
-                "{}?????????",
-                if item.ft.get().is_some() && item.ft.get().unwrap().is_some() {
-                    if item.ft.get().unwrap().unwrap().is_char_device() {
-                        "c"
-                    } else if item.ft.get().unwrap().unwrap().is_block_device() {
-                        "b"
-                    } else if item.ft.get().unwrap().unwrap().is_symlink() {
-                        "l"
-                    } else if item.ft.get().unwrap().unwrap().is_dir() {
-                        "d"
-                    } else {
-                        "-"
-                    }
-                } else {
-                    "-"
-                },
+                "{}?????????", leading_char
+
             ),
             if item.security_context.len() > 1 {
                 // GNU `ls` uses a "." character to indicate a file with a security context,
