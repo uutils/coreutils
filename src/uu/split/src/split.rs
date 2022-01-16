@@ -230,7 +230,6 @@ impl Strategy {
     }
 }
 
-#[allow(dead_code)]
 struct Settings {
     prefix: String,
     numeric_suffix: bool,
@@ -240,7 +239,7 @@ struct Settings {
     /// When supplied, a shell command to output to instead of xaa, xab …
     filter: Option<String>,
     strategy: Strategy,
-    verbose: bool, // TODO: warning: field is never read: `verbose`
+    verbose: bool,
 }
 
 trait Splitter {
@@ -394,6 +393,21 @@ fn split(settings: Settings) -> UResult<()> {
                     .map_err_context(|| "error removing empty file".to_string())?;
             }
             break;
+        }
+
+        // TODO It is silly to have the "creating file" message here
+        // after the file has been already created. However, because
+        // of the way the main loop has been written, an extra file
+        // gets created and then deleted in the last iteration of the
+        // loop. So we need to make sure we are not in that case when
+        // printing this message.
+        //
+        // This is only here temporarily while we make some
+        // improvements to the architecture of the main loop in this
+        // function. In the future, it will move to a more appropriate
+        // place---at the point where the file is actually created.
+        if settings.verbose {
+            println!("creating file {}", filename.quote());
         }
 
         fileno += 1;
