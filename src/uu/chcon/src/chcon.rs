@@ -72,7 +72,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Err(r) => {
             if let Error::CommandLine(r) = &r {
                 match r.kind {
-                    clap::ErrorKind::HelpDisplayed | clap::ErrorKind::VersionDisplayed => {
+                    clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion => {
                         println!("{}", r);
                         return Ok(());
                     }

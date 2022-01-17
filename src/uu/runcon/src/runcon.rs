@@ -48,14 +48,14 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
 
-    let config = uu_app().usage(usage.as_ref());
+    let config = uu_app().override_usage(usage.as_ref());
 
     let options = match parse_command_line(config, args) {
         Ok(r) => r,
         Err(r) => {
             if let Error::CommandLine(ref r) = r {
                 match r.kind {
-                    clap::ErrorKind::HelpDisplayed | clap::ErrorKind::VersionDisplayed => {
+                    clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion => {
                         println!("{}", r);
                         return Ok(());
                     }
