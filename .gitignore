@@ -9,7 +9,6 @@ target/
 .*.swp
 .*.swo
 .idea
-Cargo.lock
 lib*.a
 /docs/_build
 *.iml
