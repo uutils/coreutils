@@ -210,6 +210,12 @@ fn test_ls_io_errors() {
                 .stderr_contains(format!("cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2))
                 // don't double print bad fd errors
                 .stderr_does_not_contain(format!("ls: cannot open directory '/dev/fd/{fd}': Bad file descriptor\nls: cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2));
+
+            scene
+                .ucmd()
+                .arg("-alL")
+                .arg(format!("/dev/fd/{fd}", fd = fd2))
+                .succeeds();
         }
         let _ = close(fd2);
     }
