@@ -16,9 +16,11 @@ extern crate clap;
 extern crate uucore;
 
 mod chunks;
+mod lines;
 mod parse;
 mod platform;
 use chunks::ReverseChunks;
+use lines::lines;
 
 use clap::{App, Arg};
 use std::collections::VecDeque;
@@ -482,8 +484,8 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
     // data in the ringbuf.
     match settings.mode {
         FilterMode::Lines(count, _) => {
-            for line in unbounded_tail_collect(reader.lines(), count, settings.beginning) {
-                println!("{}", line);
+            for line in unbounded_tail_collect(lines(reader), count, settings.beginning) {
+                print!("{}", line);
             }
         }
         FilterMode::Bytes(count) => {

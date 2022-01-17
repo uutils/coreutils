@@ -484,3 +484,8 @@ fn test_no_such_file() {
         .no_stdout()
         .stderr_contains("cannot open 'bogusfile' for reading: No such file or directory");
 }
+
+#[test]
+fn test_no_trailing_newline() {
+    new_ucmd!().pipe_in("x").succeeds().stdout_only("x");
+}
