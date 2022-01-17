@@ -31,6 +31,9 @@ pub enum TacError {
     /// The parameter is the underlying [`std::io::Error`] that caused
     /// this error.
     WriteError(std::io::Error),
+
+    // Stdin is not a tty
+    StdinIsClosed(String),
 }
 
 impl UError for TacError {
@@ -55,6 +58,11 @@ impl Display for TacError {
             ),
             TacError::ReadError(s, e) => write!(f, "failed to read from {}: {}", s, e),
             TacError::WriteError(e) => write!(f, "failed to write to stdout: {}", e),
+            TacError::StdinIsClosed(s) => write!(
+                f,
+                "'standard input': read error: Bad file descriptor\ntac: {}: Bad file descriptor",
+                s
+            ),
         }
     }
 }

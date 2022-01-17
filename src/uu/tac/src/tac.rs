@@ -42,7 +42,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .accept_any();
 
     let matches = uu_app().get_matches_from(args);
-
     let before = matches.is_present(options::BEFORE);
     let regex = matches.is_present(options::REGEX);
     let raw_separator = matches.value_of(options::SEPARATOR).unwrap_or("\n");
@@ -234,6 +233,9 @@ fn tac(filenames: Vec<&str>, before: bool, regex: bool, separator: &str) -> URes
         let buf;
 
         let data: &[u8] = if filename == "-" {
+            if !is_stdin_open()? {
+                return Err(TacError::StdinIsClosed(String::from(filename)).into());
+            }
             if let Some(mmap1) = try_mmap_stdin() {
                 mmap = mmap1;
                 &mmap
@@ -309,4 +311,8 @@ fn try_mmap_path(path: &Path) -> Option<Mmap> {
     let mmap = unsafe { Mmap::map(&file).ok()? };
 
     Some(mmap)
+}
+
+fn is_stdin_open() -> UResult<bool> {
+    unsafe { Ok(libc::isatty(0) != 0) }
 }
