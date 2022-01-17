@@ -76,6 +76,27 @@ fn different_field() {
 }
 
 #[test]
+fn out_of_bounds_fields() {
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_4.txt")
+        .arg("-1")
+        .arg("3")
+        .arg("-2")
+        .arg("5")
+        .succeeds()
+        .stdout_only_fixture("out_of_bounds_fields.expected");
+
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_4.txt")
+        .arg("-j")
+        .arg("100000000000000000000") // > usize::MAX for 64 bits
+        .succeeds()
+        .stdout_only_fixture("out_of_bounds_fields.expected");
+}
+
+#[test]
 fn unpaired_lines() {
     new_ucmd!()
         .arg("fields_2.txt")
