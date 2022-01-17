@@ -25,6 +25,13 @@ enum FileNum {
     File2,
 }
 
+#[repr(u8)]
+#[derive(Copy, Clone)]
+enum LineEnding {
+    Nul = 0,
+    Newline = b'\n',
+}
+
 #[derive(Copy, Clone)]
 enum Sep {
     Char(u8),
@@ -46,6 +53,7 @@ struct Settings {
     print_unpaired2: bool,
     print_joined: bool,
     ignore_case: bool,
+    line_ending: LineEnding,
     separator: Sep,
     autoformat: bool,
     format: Vec<Spec>,
@@ -63,6 +71,7 @@ impl Default for Settings {
             print_unpaired2: false,
             print_joined: true,
             ignore_case: false,
+            line_ending: LineEnding::Newline,
             separator: Sep::Whitespaces,
             autoformat: false,
             format: vec![],
@@ -75,14 +84,21 @@ impl Default for Settings {
 
 /// Output representation.
 struct Repr<'a> {
+    line_ending: LineEnding,
     separator: u8,
     format: &'a [Spec],
     empty: &'a [u8],
 }
 
 impl<'a> Repr<'a> {
-    fn new(separator: u8, format: &'a [Spec], empty: &'a [u8]) -> Repr<'a> {
+    fn new(
+        line_ending: LineEnding,
+        separator: u8,
+        format: &'a [Spec],
+        empty: &'a [u8],
+    ) -> Repr<'a> {
         Repr {
+            line_ending,
             separator,
             format,
             empty,
@@ -132,6 +148,10 @@ impl<'a> Repr<'a> {
             stdout().write_all(field)?;
         }
         Ok(())
+    }
+
+    fn print_line_ending(&self) -> Result<(), std::io::Error> {
+        stdout().write_all(&[self.line_ending as u8])
     }
 }
 
@@ -260,6 +280,7 @@ impl<'a> State<'a> {
         name: &'a str,
         stdin: &'a Stdin,
         key: usize,
+        line_ending: LineEnding,
         print_unpaired: bool,
     ) -> State<'a> {
         let f = if name == "-" {
@@ -276,7 +297,7 @@ impl<'a> State<'a> {
             file_name: name,
             file_num,
             print_unpaired,
-            lines: f.split(b'\n'),
+            lines: f.split(line_ending as u8),
             seq: Vec::new(),
             line_num: 0,
             has_failed: false,
@@ -351,7 +372,7 @@ impl<'a> State<'a> {
                     repr.print_fields(line2, other.key)?;
                 }
 
-                stdout().write_all(&[b'\n'])?;
+                repr.print_line_ending()?;
             }
         }
 
@@ -461,7 +482,7 @@ impl<'a> State<'a> {
             repr.print_fields(line, self.key)?;
         }
 
-        stdout().write_all(&[b'\n'])
+        repr.print_line_ending()
     }
 
     fn print_first_line(&self, repr: &Repr) -> Result<(), std::io::Error> {
@@ -538,6 +559,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if matches.is_present("header") {
         settings.headers = true;
+    }
+
+    if matches.is_present("z") {
+        settings.line_ending = LineEnding::Nul;
     }
 
     let file1 = matches.value_of("file1").unwrap();
@@ -647,6 +672,12 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
              print them without trying to pair them",
         ))
         .arg(
+            Arg::with_name("z")
+                .short("z")
+                .long("zero-terminated")
+                .help("line delimiter is NUL, not newline"),
+        )
+        .arg(
             Arg::with_name("file1")
                 .required(true)
                 .value_name("FILE1")
@@ -668,6 +699,7 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), std::io::Err
         file1,
         &stdin,
         settings.key1,
+        settings.line_ending,
         settings.print_unpaired1,
     );
 
@@ -676,6 +708,7 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), std::io::Err
         file2,
         &stdin,
         settings.key2,
+        settings.line_ending,
         settings.print_unpaired2,
     );
 
@@ -705,6 +738,7 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), std::io::Err
     };
 
     let repr = Repr::new(
+        settings.line_ending,
         match settings.separator {
             Sep::Char(sep) => sep,
             _ => b' ',

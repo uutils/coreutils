@@ -346,3 +346,13 @@ fn non_unicode() {
         .succeeds()
         .stdout_only_fixture("non-unicode.expected");
 }
+
+#[test]
+fn null_line_endings() {
+    new_ucmd!()
+        .arg("-z")
+        .arg("non-unicode_1.bin")
+        .arg("non-unicode_2.bin")
+        .succeeds()
+        .stdout_only_fixture("z.expected");
+}
