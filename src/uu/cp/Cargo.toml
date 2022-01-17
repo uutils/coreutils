@@ -1,6 +1,6 @@
 [package]
 name = "uu_cp"
-version = "0.0.8"
+version = "0.0.9"
 authors = [
     "Jordy Dickinson <jordy.dickinson@gmail.com>",
     "Joshua S. Miller <jsmiller@uchicago.edu>",
@@ -24,8 +24,8 @@ filetime = "0.2"
 libc = "0.2.85"
 quick-error = "1.2.3"
 selinux = { version="0.2.3", optional=true }
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["entries", "fs", "perms", "mode"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["entries", "fs", "perms", "mode"] }
+uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 walkdir = "2.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]

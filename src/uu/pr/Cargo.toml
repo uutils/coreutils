@@ -1,6 +1,6 @@
 [package]
 name = "uu_pr"
-version = "0.0.8"
+version = "0.0.9"
 authors = ["uutils developers"]
 license = "MIT"
 description = "pr ~ (uutils) convert text files for printing"
@@ -17,7 +17,7 @@ path = "src/pr.rs"
 [dependencies]
 clap = { version = "3.0", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.7", package="uucore", path="../../uucore", features=["entries"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 getopts = "0.2.21"
 chrono = "0.4.19"
 quick-error = "2.0.1"

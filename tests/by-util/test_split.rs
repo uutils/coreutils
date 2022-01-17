@@ -2,7 +2,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes asciilowercase
 extern crate rand;
 extern crate regex;
 
@@ -16,7 +16,7 @@ use std::io::Write;
 use std::path::Path;
 use std::{
     fs::{read_dir, File},
-    io::BufWriter,
+    io::{BufWriter, Read},
 };
 
 fn random_chars(n: usize) -> String {
@@ -339,4 +339,88 @@ fn test_split_invalid_bytes_size() {
                 ));
         }
     }
+}
+
+fn file_read(at: &AtPath, filename: &str) -> String {
+    let mut s = String::new();
+    at.open(filename).read_to_string(&mut s).unwrap();
+    s
+}
+
+// TODO Use char::from_digit() in Rust v1.51.0 or later.
+fn char_from_digit(n: usize) -> char {
+    (b'a' + n as u8) as char
+}
+
+/// Test for the default suffix length behavior: dynamically increasing size.
+#[test]
+fn test_alphabetic_dynamic_suffix_length() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // Split into chunks of one byte each.
+    //
+    // The input file has (26^2) - 26 + 1 = 651 bytes. This is just
+    // enough to force `split` to dynamically increase the length of
+    // the filename for the very last chunk.
+    //
+    // We expect the output files to be named
+    //
+    //     xaa, xab, xac, ..., xyx, xyy, xyz, xzaaa
+    //
+    ucmd.args(&["-b", "1", "sixhundredfiftyonebytes.txt"])
+        .succeeds();
+    for i in 0..25 {
+        for j in 0..26 {
+            let filename = format!("x{}{}", char_from_digit(i), char_from_digit(j),);
+            let contents = file_read(&at, &filename);
+            assert_eq!(contents, "a");
+        }
+    }
+    assert_eq!(file_read(&at, "xzaaa"), "a");
+}
+
+/// Test for the default suffix length behavior: dynamically increasing size.
+#[test]
+fn test_numeric_dynamic_suffix_length() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // Split into chunks of one byte each, use numbers instead of
+    // letters as file suffixes.
+    //
+    // The input file has (10^2) - 10 + 1 = 91 bytes. This is just
+    // enough to force `split` to dynamically increase the length of
+    // the filename for the very last chunk.
+    //
+    //     x00, x01, x02, ..., x87, x88, x89, x9000
+    //
+    ucmd.args(&["-d", "-b", "1", "ninetyonebytes.txt"])
+        .succeeds();
+    for i in 0..90 {
+        let filename = format!("x{:02}", i);
+        let contents = file_read(&at, &filename);
+        assert_eq!(contents, "a");
+    }
+    assert_eq!(file_read(&at, "x9000"), "a");
+}
+
+#[test]
+fn test_suffixes_exhausted() {
+    new_ucmd!()
+        .args(&["-b", "1", "-a", "1", "asciilowercase.txt"])
+        .fails()
+        .stderr_only("split: output file suffixes exhausted");
+}
+
+#[test]
+fn test_verbose() {
+    new_ucmd!()
+        .args(&["-b", "5", "--verbose", "asciilowercase.txt"])
+        .succeeds()
+        .stdout_only(
+            "creating file 'xaa'
+creating file 'xab'
+creating file 'xac'
+creating file 'xad'
+creating file 'xae'
+creating file 'xaf'
+",
+        );
 }

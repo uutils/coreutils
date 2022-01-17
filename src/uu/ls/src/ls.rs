@@ -319,6 +319,10 @@ struct PaddingCollection {
     longest_group_len: usize,
     longest_context_len: usize,
     longest_size_len: usize,
+    #[cfg(unix)]
+    longest_major_len: usize,
+    #[cfg(unix)]
+    longest_minor_len: usize,
 }
 
 impl Config {
@@ -1561,18 +1565,28 @@ fn display_dir_entry_size(
     entry: &PathData,
     config: &Config,
     out: &mut BufWriter<std::io::Stdout>,
-) -> (usize, usize, usize, usize, usize) {
+) -> (usize, usize, usize, usize, usize, usize, usize) {
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
     if let Some(md) = entry.md(out) {
+        let (size_len, major_len, minor_len) = match display_size_or_rdev(md, config) {
+            SizeOrDeviceId::Device(major, minor) => (
+                (major.len() + minor.len() + 2usize),
+                major.len(),
+                minor.len(),
+            ),
+            SizeOrDeviceId::Size(size) => (size.len(), 0usize, 0usize),
+        };
         (
             display_symlink_count(md).len(),
             display_uname(md, config).len(),
             display_group(md, config).len(),
-            display_size_or_rdev(md, config).len(),
+            size_len,
+            major_len,
+            minor_len,
             display_inode(md).len(),
         )
     } else {
-        (0, 0, 0, 0, 0)
+        (0, 0, 0, 0, 0, 0, 0)
     }
 }
 
@@ -1609,7 +1623,9 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             mut longest_group_len,
             mut longest_context_len,
             mut longest_size_len,
-        ) = (1, 1, 1, 1, 1, 1);
+            mut longest_major_len,
+            mut longest_minor_len,
+        ) = (1, 1, 1, 1, 1, 1, 1, 1);
 
         #[cfg(not(unix))]
         let (
@@ -1623,26 +1639,41 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         #[cfg(unix)]
         for item in items {
             let context_len = item.security_context.len();
-            let (link_count_len, uname_len, group_len, size_len, inode_len) =
+            let (link_count_len, uname_len, group_len, size_len, major_len, minor_len, inode_len) =
                 display_dir_entry_size(item, config, out);
             longest_inode_len = inode_len.max(longest_inode_len);
             longest_link_count_len = link_count_len.max(longest_link_count_len);
-            longest_size_len = size_len.max(longest_size_len);
             longest_uname_len = uname_len.max(longest_uname_len);
             longest_group_len = group_len.max(longest_group_len);
             if config.context {
                 longest_context_len = context_len.max(longest_context_len);
             }
-            longest_size_len = size_len.max(longest_size_len);
+            if items.len() == 1usize {
+                longest_size_len = 0usize;
+                longest_major_len = 0usize;
+                longest_minor_len = 0usize;
+            } else {
+                longest_major_len = major_len.max(longest_major_len);
+                longest_minor_len = minor_len.max(longest_minor_len);
+                longest_size_len = size_len
+                    .max(longest_size_len)
+                    .max(longest_major_len + longest_minor_len + 2usize);
+            }
         }
 
         #[cfg(not(unix))]
         for item in items {
             let context_len = item.security_context.len();
-            let (link_count_len, uname_len, group_len, size_len, _inode_len) =
-                display_dir_entry_size(item, config, out);
+            let (
+                link_count_len,
+                uname_len,
+                group_len,
+                size_len,
+                _major_len,
+                _minor_len,
+                _inode_len,
+            ) = display_dir_entry_size(item, config, out);
             longest_link_count_len = link_count_len.max(longest_link_count_len);
-            longest_size_len = size_len.max(longest_size_len);
             longest_uname_len = uname_len.max(longest_uname_len);
             longest_group_len = group_len.max(longest_group_len);
             if config.context {
@@ -1662,6 +1693,10 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                     longest_group_len,
                     longest_context_len,
                     longest_size_len,
+                    #[cfg(unix)]
+                    longest_major_len,
+                    #[cfg(unix)]
+                    longest_minor_len,
                 },
                 config,
                 out,
@@ -1679,9 +1714,25 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             None
         };
 
+        #[cfg(not(unix))]
+        let longest_inode_len = 1;
+        #[cfg(unix)]
+        let mut longest_inode_len = 1;
+        #[cfg(unix)]
+        if config.inode {
+            for item in items {
+                let inode_len = if let Some(md) = item.md(out) {
+                    display_inode(md).len()
+                } else {
+                    continue;
+                };
+                longest_inode_len = inode_len.max(longest_inode_len);
+            }
+        }
+
         let names: std::vec::IntoIter<Cell> = items
             .iter()
-            .map(|i| display_file_name(i, config, prefix_context, out))
+            .map(|i| display_file_name(i, config, prefix_context, longest_inode_len, out))
             .collect::<Vec<Cell>>()
             .into_iter();
 
@@ -1879,17 +1930,41 @@ fn display_item_long(
             );
         }
 
-        let dfn = display_file_name(item, config, None, out).contents;
+        match display_size_or_rdev(md, config) {
+            SizeOrDeviceId::Size(size) => {
+                let _ = write!(out, " {}", pad_left(&size, padding.longest_size_len),);
+            }
+            SizeOrDeviceId::Device(major, minor) => {
+                let _ = write!(
+                    out,
+                    " {}, {}",
+                    pad_left(
+                        &major,
+                        #[cfg(not(unix))]
+                        0usize,
+                        #[cfg(unix)]
+                        padding.longest_major_len.max(
+                            padding
+                                .longest_size_len
+                                .saturating_sub(padding.longest_minor_len.saturating_add(2usize))
+                        )
+                    ),
+                    pad_left(
+                        &minor,
+                        #[cfg(not(unix))]
+                        0usize,
+                        #[cfg(unix)]
+                        padding.longest_minor_len,
+                    ),
+                );
+            }
+        };
 
-        let _ = writeln!(
-            out,
-            " {} {} {}",
-            pad_left(&display_size_or_rdev(md, config), padding.longest_size_len),
-            display_date(md, config),
-            dfn,
-        );
+        let dfn = display_file_name(item, config, None, 0, out).contents;
+
+        let _ = writeln!(out, " {} {}", display_date(md, config), dfn);
     } else {
-        // this 'else' is expressly for the case of a dangling symlink
+        // this 'else' is expressly for the case of a dangling symlink/restricted file
         #[cfg(unix)]
         {
             if config.inode {
@@ -1900,7 +1975,7 @@ fn display_item_long(
         let _ = write!(
             out,
             "{}{} {}",
-            "l?????????".to_string(),
+            "l?????????",
             if item.security_context.len() > 1 {
                 // GNU `ls` uses a "." character to indicate a file with a security context,
                 // but not other alternate access method.
@@ -1933,7 +2008,7 @@ fn display_item_long(
             let _ = write!(out, " {}", pad_right("?", padding.longest_uname_len));
         }
 
-        let dfn = display_file_name(item, config, None, out).contents;
+        let dfn = display_file_name(item, config, None, 0, out).contents;
         let date_len = 12;
 
         let _ = writeln!(
@@ -2097,19 +2172,35 @@ fn format_prefixed(prefixed: NumberPrefix<f64>) -> String {
     }
 }
 
-fn display_size_or_rdev(metadata: &Metadata, config: &Config) -> String {
-    #[cfg(unix)]
+#[allow(dead_code)]
+enum SizeOrDeviceId {
+    Size(String),
+    Device(String, String),
+}
+
+fn display_size_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        let ft = metadata.file_type();
+        if ft.is_char_device() || ft.is_block_device() {
+            let dev: u64 = metadata.rdev();
+            let major = (dev >> 24) as u8;
+            let minor = (dev & 0xff) as u8;
+            return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
+        }
+    }
+    #[cfg(target_os = "linux")]
     {
         let ft = metadata.file_type();
         if ft.is_char_device() || ft.is_block_device() {
             let dev: u64 = metadata.rdev();
             let major = (dev >> 8) as u8;
-            let minor = dev as u8;
-            return format!("{}, {}", major, minor,);
+            let minor = (dev & 0xff) as u8;
+            return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
         }
     }
 
-    display_size(metadata.len(), config)
+    SizeOrDeviceId::Size(display_size(metadata.len(), config))
 }
 
 fn display_size(size: u64, config: &Config) -> String {
@@ -2175,6 +2266,7 @@ fn display_file_name(
     path: &PathData,
     config: &Config,
     prefix_context: Option<usize>,
+    longest_inode_len: usize,
     out: &mut BufWriter<Stdout>,
 ) -> Cell {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
@@ -2194,8 +2286,8 @@ fn display_file_name(
     {
         if config.inode && config.format != Format::Long {
             let inode = match path.md(out) {
-                Some(md) => get_inode(md),
-                None => "?".to_string(),
+                Some(md) => pad_left(&get_inode(md), longest_inode_len),
+                None => pad_left("?", longest_inode_len),
             };
             // increment width here b/c name was given colors and name.width() is now the wrong
             // size for display
