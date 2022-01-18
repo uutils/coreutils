@@ -1995,48 +1995,42 @@ fn test_ls_ignore_hide() {
 
     scene
         .ucmd()
-        .arg("--hide")
-        .arg("*")
+        .arg("--hide=*")
         .arg("-1")
         .succeeds()
         .stdout_only("");
 
     scene
         .ucmd()
-        .arg("--ignore")
-        .arg("*")
+        .arg("--ignore=*")
         .arg("-1")
         .succeeds()
         .stdout_only("");
 
     scene
         .ucmd()
-        .arg("--ignore")
-        .arg("irrelevant pattern")
+        .arg("--ignore=irrelevant pattern")
         .arg("-1")
         .succeeds()
         .stdout_only("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
 
     scene
         .ucmd()
-        .arg("--ignore")
-        .arg("README*.md")
+        .arg("--ignore=README*.md")
         .arg("-1")
         .succeeds()
         .stdout_only("CONTRIBUTING.md\nsome_other_file\n");
 
     scene
         .ucmd()
-        .arg("--hide")
-        .arg("README*.md")
+        .arg("--hide=README*.md")
         .arg("-1")
         .succeeds()
         .stdout_only("CONTRIBUTING.md\nsome_other_file\n");
 
     scene
         .ucmd()
-        .arg("--ignore")
-        .arg("*.md")
+        .arg("--ignore=*.md")
         .arg("-1")
         .succeeds()
         .stdout_only("some_other_file\n");
@@ -2044,8 +2038,7 @@ fn test_ls_ignore_hide() {
     scene
         .ucmd()
         .arg("-a")
-        .arg("--ignore")
-        .arg("*.md")
+        .arg("--ignore=*.md")
         .arg("-1")
         .succeeds()
         .stdout_only(".\n..\nsome_other_file\n");
@@ -2053,8 +2046,7 @@ fn test_ls_ignore_hide() {
     scene
         .ucmd()
         .arg("-a")
-        .arg("--hide")
-        .arg("*.md")
+        .arg("--hide=*.md")
         .arg("-1")
         .succeeds()
         .stdout_only(".\n..\nCONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
@@ -2062,8 +2054,7 @@ fn test_ls_ignore_hide() {
     scene
         .ucmd()
         .arg("-A")
-        .arg("--ignore")
-        .arg("*.md")
+        .arg("--ignore=*.md")
         .arg("-1")
         .succeeds()
         .stdout_only("some_other_file\n");
@@ -2071,8 +2062,7 @@ fn test_ls_ignore_hide() {
     scene
         .ucmd()
         .arg("-A")
-        .arg("--hide")
-        .arg("*.md")
+        .arg("--hide=*.md")
         .arg("-1")
         .succeeds()
         .stdout_only("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
@@ -2080,30 +2070,24 @@ fn test_ls_ignore_hide() {
     // Stacking multiple patterns
     scene
         .ucmd()
-        .arg("--ignore")
-        .arg("README*")
-        .arg("--ignore")
-        .arg("CONTRIBUTING*")
+        .arg("--ignore=README*")
+        .arg("--ignore=CONTRIBUTING*")
         .arg("-1")
         .succeeds()
         .stdout_only("some_other_file\n");
 
     scene
         .ucmd()
-        .arg("--hide")
-        .arg("README*")
-        .arg("--ignore")
-        .arg("CONTRIBUTING*")
+        .arg("--hide=README*")
+        .arg("--ignore=CONTRIBUTING*")
         .arg("-1")
         .succeeds()
         .stdout_only("some_other_file\n");
 
     scene
         .ucmd()
-        .arg("--hide")
-        .arg("README*")
-        .arg("--hide")
-        .arg("CONTRIBUTING*")
+        .arg("--hide=README*")
+        .arg("--hide=CONTRIBUTING*")
         .arg("-1")
         .succeeds()
         .stdout_only("some_other_file\n");
@@ -2111,8 +2095,7 @@ fn test_ls_ignore_hide() {
     // Invalid patterns
     scene
         .ucmd()
-        .arg("--ignore")
-        .arg("READ[ME")
+        .arg("--ignore=READ[ME")
         .arg("-1")
         .succeeds()
         .stderr_contains(&"Invalid pattern")
@@ -2120,8 +2103,7 @@ fn test_ls_ignore_hide() {
 
     scene
         .ucmd()
-        .arg("--hide")
-        .arg("READ[ME")
+        .arg("--hide=READ[ME")
         .arg("-1")
         .succeeds()
         .stderr_contains(&"Invalid pattern")
