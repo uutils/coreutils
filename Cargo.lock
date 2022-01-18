@@ -268,15 +268,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cloudabi"
-version = "0.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddfc5b9aa5d4507acaf872de71051dfd0e309860e88966e1051e462a077aac4f"
-dependencies = [
- "bitflags",
-]
-
-[[package]]
 name = "compare"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -312,7 +303,7 @@ dependencies = [
  "libc",
  "nix 0.23.1",
  "pretty_assertions",
- "rand 0.7.3",
+ "rand 0.8.4",
  "regex",
  "rlimit",
  "selinux",
@@ -791,12 +782,6 @@ dependencies = [
  "bindgen",
  "libc",
 ]
-
-[[package]]
-name = "fuchsia-cprng"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a06f77d526c1a601b7c4cdd98f54b5eaabffc14d5f2f0296febdc7f357c6d3ba"
 
 [[package]]
 name = "gcd"
@@ -1497,19 +1482,6 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.5.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c618c47cd3ebd209790115ab837de41425723956ad3ce2e6a7f09890947cacb9"
-dependencies = [
- "cloudabi",
- "fuchsia-cprng",
- "libc",
- "rand_core 0.3.1",
- "winapi 0.3.9",
-]
-
-[[package]]
-name = "rand"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a6b1679d49b24bbfe0c803429aa1874472f50d9b363131f0e89fc356b544d03"
@@ -1519,7 +1491,6 @@ dependencies = [
  "rand_chacha 0.2.2",
  "rand_core 0.5.1",
  "rand_hc 0.2.0",
- "rand_pcg",
 ]
 
 [[package]]
@@ -1556,21 +1527,6 @@ dependencies = [
 
 [[package]]
 name = "rand_core"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a6fdeb83b075e8266dcc8762c22776f6877a63111121f5f8c7411e5be7eed4b"
-dependencies = [
- "rand_core 0.4.2",
-]
-
-[[package]]
-name = "rand_core"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c33a3c44ca05fa6f1807d8e6743f3824e8509beca625669633be0acbdf509dc"
-
-[[package]]
-name = "rand_core"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90bde5296fc891b0cef12a6d03ddccc162ce7b2aff54160af9338f8d40df6d19"
@@ -1603,15 +1559,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d51e9f596de227fda2ea6c84607f5558e196eeaf43c986b724ba4fb8fdf497e7"
 dependencies = [
  "rand_core 0.6.3",
-]
-
-[[package]]
-name = "rand_pcg"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16abd0c1b639e9eb4d7c50c0b8100b0d0f849be2349829c740fe8e6eb4816429"
-dependencies = [
- "rand_core 0.5.1",
 ]
 
 [[package]]
@@ -2429,7 +2376,7 @@ dependencies = [
  "num-traits",
  "paste 0.1.18",
  "quickcheck",
- "rand 0.7.3",
+ "rand 0.8.4",
  "smallvec",
  "uucore",
  "uucore_procs",
@@ -2652,7 +2599,7 @@ name = "uu_mktemp"
 version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
- "rand 0.5.6",
+ "rand 0.8.4",
  "tempfile",
  "uucore",
  "uucore_procs",
@@ -2917,7 +2864,7 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "libc",
- "rand 0.7.3",
+ "rand 0.8.4",
  "uucore",
  "uucore_procs",
 ]
@@ -2927,7 +2874,8 @@ name = "uu_shuf"
 version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
- "rand 0.5.6",
+ "rand",
+ "rand_core",
  "uucore",
  "uucore_procs",
 ]
@@ -2953,7 +2901,7 @@ dependencies = [
  "itertools 0.10.3",
  "memchr 2.4.1",
  "ouroboros",
- "rand 0.7.3",
+ "rand 0.8.4",
  "rayon",
  "tempfile",
  "unicode-width",
