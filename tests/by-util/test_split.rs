@@ -22,6 +22,7 @@ use std::{
 fn random_chars(n: usize) -> String {
     thread_rng()
         .sample_iter(&rand::distributions::Alphanumeric)
+        .map(char::from)
         .take(n)
         .collect::<String>()
 }
