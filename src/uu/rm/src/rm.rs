@@ -51,7 +51,7 @@ static OPT_PROMPT_MORE: &str = "prompt-more";
 static OPT_RECURSIVE: &str = "recursive";
 static OPT_RECURSIVE_R: &str = "recursive_R";
 static OPT_VERBOSE: &str = "verbose";
-static PRESUME_INPUT_TTY: &str = "presume-input-tty";
+static PRESUME_INPUT_TTY: &str = "-presume-input-tty";
 
 static ARG_FILES: &str = "files";
 
@@ -219,9 +219,12 @@ pub fn uu_app<'a>() -> App<'a> {
         // It is relatively difficult to ensure that there is a tty on stdin.
         // Since rm acts differently depending on that, without this option,
         // it'd be harder to test the parts of rm that depend on that setting.
+        // In contrast with Arg::long, Arg::alias does not strip leading
+        // hyphens. Therefore it supports 3 leading hyphens.
         .arg(
             Arg::new(PRESUME_INPUT_TTY)
             .long(PRESUME_INPUT_TTY)
+            .alias(PRESUME_INPUT_TTY)
             .hide(true)
         )
         .arg(
