@@ -290,7 +290,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
 
     let app = uu_app(&binary_name);
 
-    // FIXME: this should use get_matches_from_safe() and crash!(), but at the moment that just
+    // FIXME: this should use try_get_matches_from() and crash!(), but at the moment that just
     //        causes "error: " to be printed twice (once from crash!() and once from clap).  With
     //        the current setup, the name of the utility is not printed, but I think this is at
     //        least somewhat better from a user's perspective.

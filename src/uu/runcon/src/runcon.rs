@@ -210,7 +210,7 @@ struct Options {
 }
 
 fn parse_command_line(config: App, args: impl uucore::Args) -> Result<Options> {
-    let matches = config.get_matches_from_safe(args)?;
+    let matches = config.try_get_matches_from(args)?;
 
     let compute_transition_context = matches.is_present(options::COMPUTE);
 
