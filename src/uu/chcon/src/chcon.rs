@@ -308,7 +308,7 @@ struct Options {
 }
 
 fn parse_command_line(config: clap::App, args: impl uucore::Args) -> Result<Options> {
-    let matches = config.get_matches_from_safe(args)?;
+    let matches = config.try_get_matches_from(args)?;
 
     let verbose = matches.is_present(options::VERBOSE);
 
