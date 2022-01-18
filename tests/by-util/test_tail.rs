@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile
+// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile bogusfile
 
 extern crate tail;
 
@@ -474,4 +474,13 @@ fn test_tail_bytes_for_funny_files() {
             .stderr_is(exp_result.stderr_str())
             .code_is(exp_result.code());
     }
+}
+
+#[test]
+fn test_no_such_file() {
+    new_ucmd!()
+        .arg("bogusfile")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cannot open 'bogusfile' for reading: No such file or directory");
 }

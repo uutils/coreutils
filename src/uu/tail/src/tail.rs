@@ -30,7 +30,7 @@ use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::ringbuffer::RingBuffer;
 
@@ -220,7 +220,8 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
             if path.is_dir() {
                 continue;
             }
-            let mut file = File::open(&path).unwrap();
+            let mut file = File::open(&path)
+                .map_err_context(|| format!("cannot open {} for reading", filename.quote()))?;
             let md = file.metadata().unwrap();
             if is_seekable(&mut file) && get_block_size(&md) > 0 {
                 bounded_tail(&mut file, settings);
