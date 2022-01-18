@@ -258,7 +258,7 @@ impl Distribution<Factors> for Standard {
         // See Generating Random Factored Numbers, Easily, J. Cryptology (2003)
         'attempt: loop {
             while n > 1 {
-                n = rng.gen_range(1, n);
+                n = rng.gen_range(1..n);
                 if miller_rabin::is_prime(n) {
                     if let Some(h) = g.checked_mul(n) {
                         f.push(n);
