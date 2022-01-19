@@ -726,6 +726,21 @@ fn test_cp_parents_dest_not_directory() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_cp_writable_special_file_permissions() {
+    new_ucmd!().arg("/dev/null").arg("/dev/zero").succeeds();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_issue_1665() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("/dev/null").arg("foo").succeeds();
+    assert!(at.file_exists("foo"));
+    assert_eq!(at.read("foo"), "");
+}
+
+#[test]
 fn test_cp_preserve_no_args() {
     new_ucmd!()
         .arg(TEST_COPY_FROM_FOLDER_FILE)
@@ -1363,4 +1378,43 @@ fn test_canonicalize_symlink() {
         .succeeds()
         .no_stderr()
         .no_stdout();
+}
+
+#[test]
+fn test_copy_through_just_created_symlink() {
+    for &create_t in &[true, false] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("a");
+        at.mkdir("b");
+        at.mkdir("c");
+        #[cfg(unix)]
+        fs::symlink("../t", at.plus("a/1")).unwrap();
+        #[cfg(target_os = "windows")]
+        symlink_file("../t", at.plus("a/1")).unwrap();
+        at.touch("b/1");
+        if create_t {
+            at.touch("t");
+        }
+        ucmd.arg("--no-dereference")
+            .arg("a/1")
+            .arg("b/1")
+            .arg("c")
+            .fails()
+            .stderr_only(if cfg!(not(target_os = "windows")) {
+                "cp: will not copy 'b/1' through just-created symlink 'c/1'"
+            } else {
+                "cp: will not copy 'b/1' through just-created symlink 'c\\1'"
+            });
+    }
+}
+
+#[test]
+fn test_copy_through_dangling_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.symlink_file("nonexistent", "target");
+    ucmd.arg("file")
+        .arg("target")
+        .fails()
+        .stderr_only("cp: not writing through dangling symlink 'target'");
 }

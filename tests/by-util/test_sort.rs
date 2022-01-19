@@ -340,10 +340,10 @@ fn test_dictionary_order() {
 fn test_dictionary_order2() {
     for non_dictionary_order2_param in &["-d"] {
         new_ucmd!()
-            .pipe_in("a👦🏻aa	b\naaaa	b") // spell-checker:disable-line
+            .pipe_in("a👦🏻aa\tb\naaaa\tb") // spell-checker:disable-line
             .arg(non_dictionary_order2_param) // spell-checker:disable-line
             .succeeds()
-            .stdout_only("a👦🏻aa	b\naaaa	b\n"); // spell-checker:disable-line
+            .stdout_only("a👦🏻aa\tb\naaaa\tb\n"); // spell-checker:disable-line
     }
 }
 
@@ -918,6 +918,7 @@ fn test_compress_merge() {
 
 #[test]
 fn test_compress_fail() {
+    #[cfg(not(windows))]
     TestScenario::new(util_name!())
         .ucmd_keepenv()
         .args(&[
@@ -930,6 +931,21 @@ fn test_compress_fail() {
         ])
         .fails()
         .stderr_only("sort: couldn't execute compress program: errno 2");
+    // With coverage, it fails with a different error:
+    // "thread 'main' panicked at 'called `Option::unwrap()` on ...
+    // So, don't check the output
+    #[cfg(windows)]
+    TestScenario::new(util_name!())
+        .ucmd_keepenv()
+        .args(&[
+            "ext_sort.txt",
+            "-n",
+            "--compress-program",
+            "nonexistent-program",
+            "-S",
+            "10",
+        ])
+        .fails();
 }
 
 #[test]

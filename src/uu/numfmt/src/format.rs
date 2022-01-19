@@ -45,13 +45,13 @@ impl<'a> Iterator for WhitespaceSplitter<'a> {
         let (prefix, field) = haystack.split_at(
             haystack
                 .find(|c: char| !c.is_whitespace())
-                .unwrap_or_else(|| haystack.len()),
+                .unwrap_or(haystack.len()),
         );
 
         let (field, rest) = field.split_at(
             field
                 .find(|c: char| c.is_whitespace())
-                .unwrap_or_else(|| field.len()),
+                .unwrap_or(field.len()),
         );
 
         self.s = if !rest.is_empty() { Some(rest) } else { None };
@@ -220,16 +220,32 @@ fn format_string(
     options: &NumfmtOptions,
     implicit_padding: Option<isize>,
 ) -> Result<String> {
+    // strip the (optional) suffix before applying any transformation
+    let source_without_suffix = match &options.suffix {
+        Some(suffix) => source.strip_suffix(suffix).unwrap_or(source),
+        None => source,
+    };
+
     let number = transform_to(
-        transform_from(source, &options.transform.from)?,
+        transform_from(source_without_suffix, &options.transform.from)?,
         &options.transform.to,
         options.round,
     )?;
 
+    // bring back the suffix before applying padding
+    let number_with_suffix = match &options.suffix {
+        Some(suffix) => format!("{}{}", number, suffix),
+        None => number,
+    };
+
     Ok(match implicit_padding.unwrap_or(options.padding) {
-        0 => number,
-        p if p > 0 => format!("{:>padding$}", number, padding = p as usize),
-        p => format!("{:<padding$}", number, padding = p.abs() as usize),
+        0 => number_with_suffix,
+        p if p > 0 => format!("{:>padding$}", number_with_suffix, padding = p as usize),
+        p => format!(
+            "{:<padding$}",
+            number_with_suffix,
+            padding = p.abs() as usize
+        ),
     })
 }
 
@@ -269,7 +285,7 @@ fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<()> {
                 print!(" ");
                 &prefix[1..]
             } else {
-                &prefix
+                prefix
             };
 
             let implicit_padding = if !empty_prefix && options.padding == 0 {

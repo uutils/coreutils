@@ -1,6 +1,6 @@
 [package]
 name = "uu_wc"
-version = "0.0.8"
+version = "0.0.9"
 authors = ["uutils developers"]
 license = "MIT"
 description = "wc ~ (uutils) display newline, word, and byte counts for input"
@@ -16,14 +16,14 @@ path = "src/wc.rs"
 
 [dependencies]
 clap = { version = "2.33", features = ["wrap_help"] }
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["pipes"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["pipes"] }
+uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 bytecount = "0.6.2"
 utf-8 = "0.7.6"
 unicode-width = "0.1.8"
 
 [target.'cfg(unix)'.dependencies]
-nix = "=0.23.1"
+nix = "0.23.1"
 libc = "0.2"
 
 [[bin]]

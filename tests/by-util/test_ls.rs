@@ -11,7 +11,6 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
-
 #[cfg(not(windows))]
 extern crate libc;
 #[cfg(not(windows))]
@@ -40,6 +39,198 @@ fn test_ls_i() {
 }
 
 #[test]
+fn test_ls_ordering() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("some-dir1");
+    at.mkdir("some-dir2");
+    at.mkdir("some-dir3");
+    at.mkdir("some-dir4");
+    at.mkdir("some-dir5");
+    at.mkdir("some-dir6");
+
+    scene
+        .ucmd()
+        .arg("-Rl")
+        .succeeds()
+        .stdout_matches(&Regex::new("some-dir1:\\ntotal 0").unwrap());
+}
+
+//#[cfg(all(feature = "mknod"))]
+#[test]
+fn test_ls_devices() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("some-dir1");
+
+    // Regex tests correct device ID and correct (no pad) spacing for a single file
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        scene
+            .ucmd()
+            .arg("-al")
+            .arg("/dev/null")
+            .succeeds()
+            .stdout_matches(&Regex::new("[^ ] 3, 2 [^ ]").unwrap());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        scene
+            .ucmd()
+            .arg("-al")
+            .arg("/dev/null")
+            .succeeds()
+            .stdout_matches(&Regex::new("[^ ] 1, 3 [^ ]").unwrap());
+    }
+
+    // Regex tests alignment against a file (stdout is a link to a tty)
+    #[cfg(unix)]
+    {
+        let res = scene
+            .ucmd()
+            .arg("-alL")
+            .arg("/dev/null")
+            .arg("/dev/stdout")
+            .succeeds();
+
+        let null_len = String::from_utf8(res.stdout().to_owned())
+            .ok()
+            .unwrap()
+            .lines()
+            .next()
+            .unwrap()
+            .strip_suffix("/dev/null")
+            .unwrap()
+            .len();
+
+        let stdout_len = String::from_utf8(res.stdout().to_owned())
+            .ok()
+            .unwrap()
+            .lines()
+            .nth(1)
+            .unwrap()
+            .strip_suffix("/dev/stdout")
+            .unwrap()
+            .len();
+
+        assert_eq!(stdout_len, null_len);
+    }
+}
+
+#[cfg(all(feature = "chmod"))]
+#[test]
+fn test_ls_io_errors() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("some-dir1");
+    at.mkdir("some-dir2");
+    at.symlink_file("does_not_exist", "some-dir2/dangle");
+    at.mkdir("some-dir3");
+    at.mkdir("some-dir3/some-dir4");
+    at.mkdir("some-dir3/some-dir5");
+    at.mkdir("some-dir3/some-dir6");
+    at.mkdir("some-dir3/some-dir7");
+    at.mkdir("some-dir3/some-dir8");
+
+    scene.ccmd("chmod").arg("000").arg("some-dir1").succeeds();
+
+    scene
+        .ucmd()
+        .arg("-1")
+        .arg("some-dir1")
+        .fails()
+        .stderr_contains("cannot open directory")
+        .stderr_contains("Permission denied");
+
+    scene
+        .ucmd()
+        .arg("-Li")
+        .arg("some-dir2")
+        .fails()
+        .stderr_contains("cannot access")
+        .stderr_contains("No such file or directory")
+        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
+
+    scene
+        .ccmd("chmod")
+        .arg("000")
+        .arg("some-dir3/some-dir4")
+        .succeeds();
+
+    scene
+        .ucmd()
+        .arg("-laR")
+        .arg("some-dir3")
+        .fails()
+        .stderr_contains("some-dir4")
+        .stderr_contains("cannot open directory")
+        .stderr_contains("Permission denied")
+        .stdout_contains("some-dir4");
+
+    // test we don't double print on dangling link metadata errors
+    scene
+        .ucmd()
+        .arg("-iRL")
+        .arg("some-dir2")
+        .fails()
+        .stderr_does_not_contain(
+            "ls: cannot access 'some-dir2/dangle': No such file or directory\nls: cannot access 'some-dir2/dangle': No such file or directory"
+        );
+}
+
+#[test]
+fn test_ls_only_dirs_formatting() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("some-dir1");
+    at.mkdir("some-dir2");
+    at.mkdir("some-dir3");
+
+    #[cfg(unix)]
+    {
+        scene.ucmd().arg("-1").arg("-R").succeeds().stdout_only(
+            ".:\nsome-dir1\nsome-dir2\nsome-dir3\n\n./some-dir1:\n\n./some-dir2:\n\n./some-dir3:\n",
+        );
+    }
+    #[cfg(windows)]
+    {
+        scene.ucmd().arg("-1").arg("-R").succeeds().stdout_only(
+            ".:\nsome-dir1\nsome-dir2\nsome-dir3\n\n.\\some-dir1:\n\n.\\some-dir2:\n\n.\\some-dir3:\n",
+        );
+    }
+}
+
+#[test]
+fn test_ls_walk_glob() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(".test-1");
+    at.mkdir("some-dir");
+    at.touch(
+        Path::new("some-dir")
+            .join("test-2~")
+            .as_os_str()
+            .to_str()
+            .unwrap(),
+    );
+
+    #[allow(clippy::trivial_regex)]
+    let re_pwd = Regex::new(r"^\.\n").unwrap();
+
+    scene
+        .ucmd()
+        .arg("-1")
+        .arg("--ignore-backups")
+        .arg("some-dir")
+        .succeeds()
+        .stdout_does_not_contain("test-2~")
+        .stdout_does_not_contain("..")
+        .stdout_does_not_match(&re_pwd);
+}
+
+#[test]
+#[cfg(unix)]
 fn test_ls_a() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1523,6 +1714,41 @@ fn test_ls_hidden_windows() {
     scene.ucmd().arg("-a").succeeds().stdout_contains(file);
 }
 
+#[cfg(windows)]
+#[test]
+fn test_ls_hidden_link_windows() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file = "visibleWindowsFileNoDot";
+    at.touch(file);
+
+    let link = "hiddenWindowsLinkNoDot";
+    at.symlink_dir(file, link);
+    // hide the link
+    scene.cmd("attrib").arg("/l").arg("+h").arg(link).succeeds();
+
+    scene
+        .ucmd()
+        .succeeds()
+        .stdout_contains(file)
+        .stdout_does_not_contain(link);
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .succeeds()
+        .stdout_contains(file)
+        .stdout_contains(link);
+}
+
+#[cfg(windows)]
+#[test]
+fn test_ls_success_on_c_drv_root_windows() {
+    let scene = TestScenario::new(util_name!());
+    scene.ucmd().arg("C:\\").succeeds();
+}
+
 #[test]
 fn test_ls_version_sort() {
     let scene = TestScenario::new(util_name!());
@@ -1903,6 +2129,7 @@ fn test_ls_ignore_hide() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_ls_ignore_backups() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2269,12 +2496,59 @@ fn test_ls_dangling_symlinks() {
         .succeeds()
         .stdout_contains("dangle");
 
+    #[cfg(not(windows))]
     scene
         .ucmd()
         .arg("-Li")
         .arg("temp_dir")
-        .succeeds() // this should fail, though at the moment, ls lacks a way to propagate errors encountered during display
-        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
+        .fails()
+        .stderr_contains("cannot access")
+        .stdout_contains("? dangle");
+
+    #[cfg(windows)]
+    scene
+        .ucmd()
+        .arg("-Li")
+        .arg("temp_dir")
+        .succeeds()
+        .stdout_contains("dangle");
+
+    scene
+        .ucmd()
+        .arg("-Ll")
+        .arg("temp_dir")
+        .fails()
+        .stdout_contains("l?????????");
+
+    #[cfg(unix)]
+    {
+        // Check padding is the same for real files and dangling links, in non-long formats
+        at.touch("temp_dir/real_file");
+
+        let real_file_res = scene.ucmd().arg("-Li1").arg("temp_dir").fails();
+        let real_file_stdout_len = String::from_utf8(real_file_res.stdout().to_owned())
+            .ok()
+            .unwrap()
+            .lines()
+            .nth(1)
+            .unwrap()
+            .strip_suffix("real_file")
+            .unwrap()
+            .len();
+
+        let dangle_file_res = scene.ucmd().arg("-Li1").arg("temp_dir").fails();
+        let dangle_stdout_len = String::from_utf8(dangle_file_res.stdout().to_owned())
+            .ok()
+            .unwrap()
+            .lines()
+            .next()
+            .unwrap()
+            .strip_suffix("dangle")
+            .unwrap()
+            .len();
+
+        assert_eq!(real_file_stdout_len, dangle_stdout_len);
+    }
 }
 
 #[test]

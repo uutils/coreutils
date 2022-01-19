@@ -7,15 +7,13 @@
 
 // spell-checker:ignore N'th M'th
 
-#[macro_use]
-extern crate uucore;
-
 use crate::format::format_and_print;
 use crate::options::*;
 use crate::units::{Result, Unit};
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::io::{BufRead, Write};
 use uucore::display::Quotable;
+use uucore::error::{UResult, USimpleError};
 use uucore::ranges::Range;
 
 pub mod format;
@@ -144,6 +142,8 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         _ => unreachable!("Should be restricted by clap"),
     };
 
+    let suffix = args.value_of(options::SUFFIX).map(|s| s.to_owned());
+
     Ok(NumfmtOptions {
         transform,
         padding,
@@ -151,10 +151,12 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         fields,
         delimiter,
         round,
+        suffix,
     })
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
@@ -168,10 +170,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     match result {
         Err(e) => {
             std::io::stdout().flush().expect("error flushing stdout");
-            show_error!("{}", e);
-            1
+            // TODO Change `handle_args()` and `handle_stdin()` so that
+            // they return `UResult`.
+            return Err(USimpleError::new(1, e));
         }
-        _ => 0,
+        _ => Ok(()),
     }
 }
 
@@ -241,6 +244,15 @@ pub fn uu_app() -> App<'static, 'static> {
                 .value_name("METHOD")
                 .default_value("from-zero")
                 .possible_values(&["up", "down", "from-zero", "towards-zero", "nearest"]),
+        )
+        .arg(
+            Arg::with_name(options::SUFFIX)
+                .long(options::SUFFIX)
+                .help(
+                    "print SUFFIX after each formatted number, and accept \
+                    inputs optionally ending with SUFFIX",
+                )
+                .value_name("SUFFIX"),
         )
         .arg(Arg::with_name(options::NUMBER).hidden(true).multiple(true))
 }

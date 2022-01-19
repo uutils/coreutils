@@ -11,6 +11,8 @@ use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, stdin, BufRead, BufReader, Stdin};
 use std::path::Path;
+use uucore::error::FromIo;
+use uucore::error::UResult;
 use uucore::InvalidEncodingHandling;
 
 use clap::{crate_version, App, Arg, ArgMatches};
@@ -128,20 +130,21 @@ fn open_file(name: &str) -> io::Result<LineReader> {
     }
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
-
-    let mut f1 = open_file(matches.value_of(options::FILE_1).unwrap()).unwrap();
-    let mut f2 = open_file(matches.value_of(options::FILE_2).unwrap()).unwrap();
+    let filename1 = matches.value_of(options::FILE_1).unwrap();
+    let filename2 = matches.value_of(options::FILE_2).unwrap();
+    let mut f1 = open_file(filename1).map_err_context(|| filename1.to_string())?;
+    let mut f2 = open_file(filename2).map_err_context(|| filename2.to_string())?;
 
     comm(&mut f1, &mut f2, &matches);
-
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {

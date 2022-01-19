@@ -7,9 +7,8 @@
 
 // spell-checker:ignore (ToDO) BUFSIZE gecos fullname, mesg iobuf
 
-#[macro_use]
-extern crate uucore;
 use uucore::entries::{Locate, Passwd};
+use uucore::error::{FromIo, UResult};
 use uucore::libc::S_IWGRP;
 use uucore::utmpx::{self, time, Utmpx};
 
@@ -52,7 +51,8 @@ fn get_long_usage() -> String {
     )
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -122,10 +122,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     if do_short_format {
-        pk.short_pinky();
-        0
+        match pk.short_pinky() {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e.map_err_context(String::new)),
+        }
     } else {
-        pk.long_pinky()
+        pk.long_pinky();
+        Ok(())
     }
 }
 
@@ -242,7 +245,7 @@ fn time_string(ut: &Utmpx) -> String {
 }
 
 impl Pinky {
-    fn print_entry(&self, ut: &Utmpx) {
+    fn print_entry(&self, ut: &Utmpx) -> std::io::Result<()> {
         let mut pts_path = PathBuf::from("/dev");
         pts_path.push(ut.tty_device().as_str());
 
@@ -267,11 +270,11 @@ impl Pinky {
 
         if self.include_fullname {
             if let Ok(pw) = Passwd::locate(ut.user().as_ref()) {
-                let mut gecos = pw.user_info().into_owned();
+                let mut gecos = pw.user_info;
                 if let Some(n) = gecos.find(',') {
                     gecos.truncate(n + 1);
                 }
-                print!(" {:<19.19}", gecos.replace("&", &pw.name().capitalize()));
+                print!(" {:<19.19}", gecos.replace("&", &pw.name.capitalize()));
             } else {
                 print!(" {:19}", "        ???");
             }
@@ -291,11 +294,12 @@ impl Pinky {
 
         let mut s = ut.host();
         if self.include_where && !s.is_empty() {
-            s = crash_if_err!(1, ut.canon_host());
+            s = ut.canon_host()?;
             print!(" {}", s);
         }
 
         println!();
+        Ok(())
     }
 
     fn print_heading(&self) {
@@ -314,32 +318,33 @@ impl Pinky {
         println!();
     }
 
-    fn short_pinky(&self) {
+    fn short_pinky(&self) -> std::io::Result<()> {
         if self.include_heading {
             self.print_heading();
         }
         for ut in Utmpx::iter_all_records() {
             if ut.is_user_process() {
                 if self.names.is_empty() {
-                    self.print_entry(&ut)
+                    self.print_entry(&ut)?
                 } else if self.names.iter().any(|n| n.as_str() == ut.user()) {
-                    self.print_entry(&ut);
+                    self.print_entry(&ut)?;
                 }
             }
         }
+        Ok(())
     }
 
-    fn long_pinky(&self) -> i32 {
+    fn long_pinky(&self) {
         for u in &self.names {
             print!("Login name: {:<28}In real life: ", u);
             if let Ok(pw) = Passwd::locate(u.as_str()) {
-                println!(" {}", pw.user_info().replace("&", &pw.name().capitalize()));
+                println!(" {}", pw.user_info.replace("&", &pw.name.capitalize()));
                 if self.include_home_and_shell {
-                    print!("Directory: {:<29}", pw.user_dir());
-                    println!("Shell:  {}", pw.user_shell());
+                    print!("Directory: {:<29}", pw.user_dir);
+                    println!("Shell:  {}", pw.user_shell);
                 }
                 if self.include_project {
-                    let mut p = PathBuf::from(pw.user_dir().as_ref());
+                    let mut p = PathBuf::from(&pw.user_dir);
                     p.push(".project");
                     if let Ok(f) = File::open(p) {
                         print!("Project: ");
@@ -347,7 +352,7 @@ impl Pinky {
                     }
                 }
                 if self.include_plan {
-                    let mut p = PathBuf::from(pw.user_dir().as_ref());
+                    let mut p = PathBuf::from(&pw.user_dir);
                     p.push(".plan");
                     if let Ok(f) = File::open(p) {
                         println!("Plan:");
@@ -359,7 +364,6 @@ impl Pinky {
                 println!(" ???");
             }
         }
-        0
     }
 }
 

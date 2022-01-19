@@ -7,14 +7,12 @@
 
 // spell-checker:ignore (ToDO) delim
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
 use std::path::Path;
+use uucore::error::{FromIo, UResult};
 
 static ABOUT: &str = "Write lines consisting of the sequentially corresponding lines from each
 FILE, separated by TABs, to standard output.";
@@ -36,7 +34,8 @@ fn read_line<R: Read>(
     }
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let serial = matches.is_present(options::SERIAL);
@@ -46,9 +45,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .unwrap()
         .map(|s| s.to_owned())
         .collect();
-    paste(files, serial, delimiters);
-
-    0
+    paste(files, serial, delimiters)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -78,18 +75,18 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
-fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
-    let mut files: Vec<_> = filenames
-        .into_iter()
-        .map(|name| {
-            if name == "-" {
-                None
-            } else {
-                let r = crash_if_err!(1, File::open(Path::new(&name)));
-                Some(BufReader::new(r))
-            }
-        })
-        .collect();
+fn paste(filenames: Vec<String>, serial: bool, delimiters: String) -> UResult<()> {
+    let mut files = vec![];
+    for name in filenames {
+        let file = if name == "-" {
+            None
+        } else {
+            let path = Path::new(&name);
+            let r = File::open(path).map_err_context(String::new)?;
+            Some(BufReader::new(r))
+        };
+        files.push(file);
+    }
 
     let delimiters: Vec<String> = unescape(delimiters)
         .chars()
@@ -108,7 +105,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
                         output.push_str(line.trim_end());
                         output.push_str(&delimiters[delim_count % delimiters.len()]);
                     }
-                    Err(e) => crash!(1, "{}", e.to_string()),
+                    Err(e) => return Err(e.map_err_context(String::new)),
                 }
                 delim_count += 1;
             }
@@ -130,7 +127,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
                             eof_count += 1;
                         }
                         Ok(_) => output.push_str(line.trim_end()),
-                        Err(e) => crash!(1, "{}", e.to_string()),
+                        Err(e) => return Err(e.map_err_context(String::new)),
                     }
                 }
                 output.push_str(&delimiters[delim_count % delimiters.len()]);
@@ -143,6 +140,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
             delim_count = 0;
         }
     }
+    Ok(())
 }
 
 // Unescape all special characters
@@ -151,5 +149,5 @@ fn unescape(s: String) -> String {
     s.replace("\\n", "\n")
         .replace("\\t", "\t")
         .replace("\\\\", "\\")
-        .replace("\\", "")
+        .replace('\\', "")
 }

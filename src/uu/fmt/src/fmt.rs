@@ -16,18 +16,10 @@ use std::fs::File;
 use std::io::{stdin, stdout, Write};
 use std::io::{BufReader, BufWriter, Read};
 use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult, USimpleError};
 
 use self::linebreak::break_lines;
 use self::parasplit::ParagraphStream;
-
-macro_rules! silent_unwrap(
-    ($exp:expr) => (
-        match $exp {
-            Ok(_) => (),
-            Err(_) => ::std::process::exit(1),
-        }
-    )
-);
 
 mod linebreak;
 mod parasplit;
@@ -74,8 +66,9 @@ pub struct FmtOptions {
     tabwidth: usize,
 }
 
+#[uucore_procs::gen_uumain]
 #[allow(clippy::cognitive_complexity)]
-pub fn uumain(args: impl uucore::Args) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
@@ -133,15 +126,20 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         fmt_opts.width = match s.parse::<usize>() {
             Ok(t) => t,
             Err(e) => {
-                crash!(1, "Invalid WIDTH specification: {}: {}", s.quote(), e);
+                return Err(USimpleError::new(
+                    1,
+                    format!("Invalid WIDTH specification: {}: {}", s.quote(), e),
+                ));
             }
         };
         if fmt_opts.width > MAX_WIDTH {
-            crash!(
+            return Err(USimpleError::new(
                 1,
-                "invalid width: '{}': Numerical result out of range",
-                fmt_opts.width
-            );
+                format!(
+                    "invalid width: '{}': Numerical result out of range",
+                    fmt_opts.width,
+                ),
+            ));
         }
         fmt_opts.goal = cmp::min(fmt_opts.width * 94 / 100, fmt_opts.width - 3);
     };
@@ -150,13 +148,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         fmt_opts.goal = match s.parse::<usize>() {
             Ok(t) => t,
             Err(e) => {
-                crash!(1, "Invalid GOAL specification: {}: {}", s.quote(), e);
+                return Err(USimpleError::new(
+                    1,
+                    format!("Invalid GOAL specification: {}: {}", s.quote(), e),
+                ));
             }
         };
         if !matches.is_present(OPT_WIDTH) {
             fmt_opts.width = cmp::max(fmt_opts.goal * 100 / 94, fmt_opts.goal + 3);
         } else if fmt_opts.goal > fmt_opts.width {
-            crash!(1, "GOAL cannot be greater than WIDTH.");
+            return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
         }
     };
 
@@ -164,7 +165,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         fmt_opts.tabwidth = match s.parse::<usize>() {
             Ok(t) => t,
             Err(e) => {
-                crash!(1, "Invalid TABWIDTH specification: {}: {}", s.quote(), e);
+                return Err(USimpleError::new(
+                    1,
+                    format!("Invalid TABWIDTH specification: {}: {}", s.quote(), e),
+                ));
             }
         };
     };
@@ -197,18 +201,25 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         for para_result in p_stream {
             match para_result {
                 Err(s) => {
-                    silent_unwrap!(ostream.write_all(s.as_bytes()));
-                    silent_unwrap!(ostream.write_all(b"\n"));
+                    ostream
+                        .write_all(s.as_bytes())
+                        .map_err_context(|| "failed to write output".to_string())?;
+                    ostream
+                        .write_all(b"\n")
+                        .map_err_context(|| "failed to write output".to_string())?;
                 }
-                Ok(para) => break_lines(&para, &fmt_opts, &mut ostream),
+                Ok(para) => break_lines(&para, &fmt_opts, &mut ostream)
+                    .map_err_context(|| "failed to write output".to_string())?,
             }
         }
 
         // flush the output after each file
-        silent_unwrap!(ostream.flush());
+        ostream
+            .flush()
+            .map_err_context(|| "failed to write output".to_string())?;
     }
 
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {

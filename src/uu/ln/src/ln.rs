@@ -462,7 +462,7 @@ fn numbered_backup_path(path: &Path) -> PathBuf {
 }
 
 fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
-    let test_path = simple_backup_path(path, &".~1~".to_owned());
+    let test_path = simple_backup_path(path, ".~1~");
     if test_path.exists() {
         return numbered_backup_path(path);
     }

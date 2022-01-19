@@ -13,7 +13,8 @@ mod parser;
 use clap::{crate_version, App, AppSettings};
 use parser::{parse, Operator, Symbol, UnaryOperator};
 use std::ffi::{OsStr, OsString};
-use uucore::{display::Quotable, show_error};
+use uucore::display::Quotable;
+use uucore::error::{UResult, USimpleError};
 
 const USAGE: &str = "test EXPRESSION
 or:  test
@@ -91,7 +92,8 @@ pub fn uu_app() -> App<'static, 'static> {
         .setting(AppSettings::DisableVersion)
 }
 
-pub fn uumain(mut args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     let program = args.next().unwrap_or_else(|| OsString::from("test"));
     let binary_name = uucore::util_name();
     let mut args: Vec<_> = args.collect();
@@ -109,13 +111,12 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
                 .setting(AppSettings::NeedsLongHelp)
                 .setting(AppSettings::NeedsLongVersion)
                 .get_matches_from(std::iter::once(program).chain(args.into_iter()));
-            return 0;
+            return Ok(());
         }
         // If invoked via name '[', matching ']' must be in the last arg
         let last = args.pop();
         if last.as_deref() != Some(OsStr::new("]")) {
-            show_error!("missing ']'");
-            return 2;
+            return Err(USimpleError::new(2, "missing ']'"));
         }
     }
 
@@ -124,15 +125,12 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
     match result {
         Ok(result) => {
             if result {
-                0
+                Ok(())
             } else {
-                1
+                Err(1.into())
             }
         }
-        Err(e) => {
-            show_error!("{}", e);
-            2
-        }
+        Err(e) => Err(USimpleError::new(2, e)),
     }
 }
 

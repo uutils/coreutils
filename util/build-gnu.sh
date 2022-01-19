@@ -5,7 +5,7 @@
 set -e
 if test ! -d ../gnu; then
     echo "Could not find ../gnu"
-    echo "git clone https://github.com:coreutils/coreutils.git gnu"
+    echo "git clone https://github.com/coreutils/coreutils.git gnu"
     exit 1
 fi
 if test ! -d ../gnulib; then
@@ -40,7 +40,7 @@ done
 ./bootstrap --gnulib-srcdir="$GNULIB_SRCDIR"
 ./configure --quiet --disable-gcc-warnings
 #Add timeout to to protect against hangs
-sed -i 's|"\$@|/usr/bin/timeout 600 "\$@|' build-aux/test-driver
+sed -i 's|^"\$@|/usr/bin/timeout 600 "\$@|' build-aux/test-driver
 # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
 sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${BUILDDIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
 sed -i 's| tr | /usr/bin/tr |' tests/init.sh
@@ -95,11 +95,11 @@ sed -i 's|paste |/usr/bin/paste |' tests/misc/od-endian.sh
 sed -i 's|seq |/usr/bin/seq |' tests/misc/sort-discrim.sh
 
 # Add specific timeout to tests that currently hang to limit time spent waiting
-sed -i 's|seq \$|/usr/bin/timeout 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh
+sed -i 's|\(^\s*\)seq \$|\1/usr/bin/timeout 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh
 
 
 # Remove dup of /usr/bin/ when executed several times
-grep -rl '/usr/bin//usr/bin/' tests/* | xargs --no-run-if-empty sed -i 's|/usr/bin//usr/bin/|/usr/bin/|g'
+grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs --no-run-if-empty sed -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
 
 
 #### Adjust tests to make them work with Rust/coreutils

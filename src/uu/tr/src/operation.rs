@@ -16,9 +16,11 @@ use nom::{
 };
 use std::{
     collections::{HashMap, HashSet},
+    error::Error,
     fmt::{Debug, Display},
     io::{BufRead, Write},
 };
+use uucore::error::UError;
 
 use crate::unicode_table;
 
@@ -54,6 +56,9 @@ impl Display for BadSequence {
         }
     }
 }
+
+impl Error for BadSequence {}
+impl UError for BadSequence {}
 
 #[derive(Debug, Clone, Copy)]
 pub enum Sequence {

@@ -18,6 +18,7 @@ use std::io::{stderr, stdin, BufRead, Write};
 use std::ops::BitOr;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
+use uucore::error::{UResult, USimpleError, UUsageError};
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
@@ -75,7 +76,8 @@ fn get_long_usage() -> String {
     )
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let long_usage = get_long_usage();
 
@@ -94,9 +96,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if files.is_empty() && !force {
         // Still check by hand and not use clap
         // Because "rm -f" is a thing
-        show_error!("missing an argument");
-        show_error!("for help, try '{0} --help'", uucore::execution_phrase());
-        return 1;
+        return Err(UUsageError::new(1, "missing operand"));
     } else {
         let options = Options {
             force,
@@ -110,7 +110,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                         "none" => InteractiveMode::None,
                         "once" => InteractiveMode::Once,
                         "always" => InteractiveMode::Always,
-                        val => crash!(1, "Invalid argument to interactive ({})", val),
+                        val => {
+                            return Err(USimpleError::new(
+                                1,
+                                format!("Invalid argument to interactive ({})", val),
+                            ))
+                        }
                     }
                 } else {
                     InteractiveMode::None
@@ -129,16 +134,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 "Remove all arguments? "
             };
             if !prompt(msg) {
-                return 0;
+                return Ok(());
             }
         }
 
         if remove(files, options) {
-            return 1;
+            return Err(1.into());
         }
     }
-
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -213,7 +217,7 @@ pub fn uu_app() -> App<'static, 'static> {
         // This is solely for testing.
         // Do not document.
         // It is relatively difficult to ensure that there is a tty on stdin.
-        // Since rm acts differently depending on that, without this option, 
+        // Since rm acts differently depending on that, without this option,
         // it'd be harder to test the parts of rm that depend on that setting.
         .arg(
             Arg::with_name(PRESUME_INPUT_TTY)

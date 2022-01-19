@@ -47,12 +47,12 @@ BUSYBOX_VER  := 1.32.1
 BUSYBOX_SRC  := $(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER)
 
 ifeq ($(SELINUX_ENABLED),)
-    SELINUX_ENABLED := 0
-    ifneq ($(OS),Windows_NT)
-        ifeq ($(shell /sbin/selinuxenabled 2>/dev/null ; echo $$?),0)
-            SELINUX_ENABLED := 1
-        endif
-    endif
+	SELINUX_ENABLED := 0
+	ifneq ($(OS),Windows_NT)
+		ifeq ($(shell /sbin/selinuxenabled 2>/dev/null ; echo $$?),0)
+			SELINUX_ENABLED := 1
+		endif
+	endif
 endif
 
 # Possible programs
@@ -161,11 +161,11 @@ SELINUX_PROGS := \
 	runcon
 
 ifneq ($(OS),Windows_NT)
-	PROGS    := $(PROGS) $(UNIX_PROGS)
+	PROGS := $(PROGS) $(UNIX_PROGS)
 endif
 
 ifeq ($(SELINUX_ENABLED),1)
-    PROGS := $(PROGS) $(SELINUX_PROGS)
+	PROGS := $(PROGS) $(SELINUX_PROGS)
 endif
 
 UTILS ?= $(PROGS)

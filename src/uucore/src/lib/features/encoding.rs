@@ -125,11 +125,13 @@ impl<R: Read> Data<R> {
         }
     }
 
+    #[must_use]
     pub fn line_wrap(mut self, wrap: usize) -> Self {
         self.line_wrap = wrap;
         self
     }
 
+    #[must_use]
     pub fn ignore_garbage(mut self, ignore: bool) -> Self {
         self.ignore_garbage = ignore;
         self

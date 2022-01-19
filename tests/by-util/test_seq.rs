@@ -1,3 +1,4 @@
+// spell-checker:ignore lmnop xlmnop
 use crate::common::util::*;
 use std::io::Read;
 
@@ -474,11 +475,68 @@ fn test_width_decimal_scientific_notation_trailing_zeros_increment() {
 }
 
 #[test]
+fn test_width_negative_decimal_notation() {
+    new_ucmd!()
+        .args(&["-w", "-.1", ".1", ".11"])
+        .succeeds()
+        .stdout_is("-0.1\n00.0\n00.1\n")
+        .no_stderr();
+}
+
+#[test]
 fn test_width_negative_scientific_notation() {
     new_ucmd!()
         .args(&["-w", "-1e-3", "1"])
         .succeeds()
         .stdout_is("-0.001\n00.999\n")
+        .no_stderr();
+    new_ucmd!()
+        .args(&["-w", "-1.e-3", "1"])
+        .succeeds()
+        .stdout_is("-0.001\n00.999\n")
+        .no_stderr();
+    new_ucmd!()
+        .args(&["-w", "-1.0e-4", "1"])
+        .succeeds()
+        .stdout_is("-0.00010\n00.99990\n")
+        .no_stderr();
+    new_ucmd!()
+        .args(&["-w", "-.1e2", "10", "100"])
+        .succeeds()
+        .stdout_is(
+            "-010
+0000
+0010
+0020
+0030
+0040
+0050
+0060
+0070
+0080
+0090
+0100
+",
+        )
+        .no_stderr();
+    new_ucmd!()
+        .args(&["-w", "-0.1e2", "10", "100"])
+        .succeeds()
+        .stdout_is(
+            "-010
+0000
+0010
+0020
+0030
+0040
+0050
+0060
+0070
+0080
+0090
+0100
+",
+        )
         .no_stderr();
 }
 
@@ -618,4 +676,20 @@ fn test_rounding_end() {
         .succeeds()
         .stdout_is("1\n")
         .no_stderr();
+}
+
+#[test]
+fn test_parse_error_float() {
+    new_ucmd!()
+        .arg("lmnop")
+        .fails()
+        .usage_error("invalid floating point argument: 'lmnop'");
+}
+
+#[test]
+fn test_parse_error_hex() {
+    new_ucmd!()
+        .arg("0xlmnop")
+        .fails()
+        .usage_error("invalid hexadecimal argument: '0xlmnop'");
 }

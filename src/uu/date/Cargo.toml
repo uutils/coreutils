@@ -1,6 +1,6 @@
 [package]
 name = "uu_date"
-version = "0.0.8"
+version = "0.0.9"
 authors = ["uutils developers"]
 license = "MIT"
 description = "date ~ (uutils) display or set the current time"
@@ -15,10 +15,10 @@ edition = "2018"
 path = "src/date.rs"
 
 [dependencies]
-chrono = "0.4.4"
+chrono = "^0.4.11"
 clap = { version = "2.33", features = ["wrap_help"] }
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
+uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

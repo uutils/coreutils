@@ -170,3 +170,11 @@ fn no_arguments() {
 fn one_argument() {
     new_ucmd!().arg("a").fails().no_stdout().no_stderr();
 }
+
+#[test]
+fn test_no_such_file() {
+    new_ucmd!()
+        .args(&["bogus_file_1", "bogus_file_2"])
+        .fails()
+        .stderr_only("comm: bogus_file_1: No such file or directory");
+}

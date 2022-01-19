@@ -15,6 +15,7 @@ use std::fs;
 use std::io::{stdout, Write};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 
 const ABOUT: &str = "Print value of a symbolic link or canonical file name.";
@@ -33,7 +34,8 @@ fn usage() -> String {
     format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
@@ -64,11 +66,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
     if files.is_empty() {
-        crash!(
-            1,
-            "missing operand\nTry '{} --help' for more information",
-            uucore::execution_phrase()
-        );
+        return Err(UUsageError::new(1, "missing operand"));
     }
 
     if no_newline && files.len() > 1 && !silent {
@@ -78,30 +76,26 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     for f in &files {
         let p = PathBuf::from(f);
-        if res_mode == ResolveMode::None {
-            match fs::read_link(&p) {
-                Ok(path) => show(&path, no_newline, use_zero),
-                Err(err) => {
-                    if verbose {
-                        show_error!("{}: errno {}", f.maybe_quote(), err.raw_os_error().unwrap());
-                    }
-                    return 1;
-                }
-            }
+        let path_result = if res_mode == ResolveMode::None {
+            fs::read_link(&p)
         } else {
-            match canonicalize(&p, can_mode, res_mode) {
-                Ok(path) => show(&path, no_newline, use_zero),
-                Err(err) => {
-                    if verbose {
-                        show_error!("{}: errno {}", f.maybe_quote(), err.raw_os_error().unwrap());
-                    }
-                    return 1;
+            canonicalize(&p, can_mode, res_mode)
+        };
+        match path_result {
+            Ok(path) => show(&path, no_newline, use_zero).map_err_context(String::new)?,
+            Err(err) => {
+                if verbose {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("{}: errno {}", f.maybe_quote(), err.raw_os_error().unwrap()),
+                    ));
+                } else {
+                    return Err(1.into());
                 }
             }
         }
     }
-
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -168,7 +162,7 @@ pub fn uu_app() -> App<'static, 'static> {
         .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
 }
 
-fn show(path: &Path, no_newline: bool, use_zero: bool) {
+fn show(path: &Path, no_newline: bool, use_zero: bool) -> std::io::Result<()> {
     let path = path.to_str().unwrap();
     if use_zero {
         print!("{}\0", path);
@@ -177,5 +171,5 @@ fn show(path: &Path, no_newline: bool, use_zero: bool) {
     } else {
         println!("{}", path);
     }
-    crash_if_err!(1, stdout().flush());
+    stdout().flush()
 }

@@ -5,8 +5,6 @@
 
 // spell-checker:ignore (ToDO) allocs bset dflag cflag sflag tflag
 
-#[macro_use]
-extern crate uucore;
 extern crate nom;
 
 mod convert;
@@ -17,9 +15,11 @@ use clap::{crate_version, App, Arg};
 use nom::AsBytes;
 use operation::{translate_input, Sequence, SqueezeOperation, TranslateOperation};
 use std::io::{stdin, stdout, BufReader, BufWriter};
+use uucore::show;
 
 use crate::operation::DeleteOperation;
-use uucore::InvalidEncodingHandling;
+use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::{display::Quotable, InvalidEncodingHandling};
 
 static ABOUT: &str = "translate or delete characters";
 
@@ -36,12 +36,13 @@ fn get_usage() -> String {
 }
 
 fn get_long_usage() -> String {
-    "Translate, squeeze, and/or delete characters from standard input,
-writing to standard output."
+    "Translate, squeeze, and/or delete characters from standard input, \
+     writing to standard output."
         .to_string()
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -70,34 +71,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let sets_len = sets.len();
 
     if sets.is_empty() {
-        show_error!(
-            "missing operand\nTry '{} --help' for more information.",
-            uucore::execution_phrase()
-        );
-        return 1;
+        return Err(UUsageError::new(1, "missing operand"));
     }
 
     if !(delete_flag || squeeze_flag) && sets_len < 2 {
-        show_error!(
-            "missing operand after '{}'\nTry '{} --help' for more information.",
-            sets[0],
-            uucore::execution_phrase()
-        );
-        return 1;
-    }
-
-    if sets_len > 2 {
-        show_error!(
-            "extra operand '{}'\nTry '{} --help' for more information.",
-            sets[0],
-            uucore::execution_phrase()
-        );
-        return 1;
+        return Err(UUsageError::new(
+            1,
+            format!("missing operand after {}", sets[0].quote()),
+        ));
     }
 
     if let Some(first) = sets.get(0) {
         if first.ends_with('\\') {
-            show_error!("warning: an unescaped backslash at end of string is not portable");
+            show!(USimpleError::new(
+                0,
+                "warning: an unescaped backslash at end of string is not portable"
+            ));
         }
     }
 
@@ -108,17 +97,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let mut buffered_stdout = BufWriter::new(locked_stdout);
 
     let mut sets_iter = sets.iter().map(|c| c.as_str());
-    let (set1, set2) = match Sequence::solve_set_characters(
+    let (set1, set2) = Sequence::solve_set_characters(
         sets_iter.next().unwrap_or_default(),
         sets_iter.next().unwrap_or_default(),
         truncate_set1_flag,
-    ) {
-        Ok(r) => r,
-        Err(s) => {
-            show_error!("{}", s);
-            return 1;
-        }
-    };
+    )?;
 
     if delete_flag {
         if squeeze_flag {
@@ -145,13 +128,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let mut translate_buffer = vec![];
             {
                 let mut writer = BufWriter::new(&mut translate_buffer);
-                match TranslateOperation::new(set1, set2.clone(), complement_flag) {
-                    Ok(op) => translate_input(&mut locked_stdin, &mut writer, op),
-                    Err(s) => {
-                        show_error!("{}", s);
-                        return 1;
-                    }
-                };
+                let op = TranslateOperation::new(set1, set2.clone(), complement_flag)?;
+                translate_input(&mut locked_stdin, &mut writer, op);
             }
             {
                 let mut reader = BufReader::new(translate_buffer.as_bytes());
@@ -160,16 +138,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
         }
     } else {
-        match TranslateOperation::new(set1, set2, complement_flag) {
-            Ok(op) => translate_input(&mut locked_stdin, &mut buffered_stdout, op),
-            Err(s) => {
-                show_error!("{}", s);
-                return 1;
-            }
-        };
+        let op = TranslateOperation::new(set1, set2, complement_flag)?;
+        translate_input(&mut locked_stdin, &mut buffered_stdout, op);
     }
-
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -199,9 +171,9 @@ pub fn uu_app() -> App<'static, 'static> {
                 .long(options::SQUEEZE)
                 .short("s")
                 .help(
-                    "replace each sequence  of  a  repeated  character  that  is
-  listed  in the last specified SET, with a single occurrence
-  of that character",
+                    "replace each sequence of a repeated character that is \
+                     listed in the last specified SET, with a single occurrence \
+                     of that character",
                 ),
         )
         .arg(

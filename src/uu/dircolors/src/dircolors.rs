@@ -8,9 +8,6 @@
 
 // spell-checker:ignore (ToDO) clrtoeol dircolors eightbit endcode fnmatch leftcode multihardlink rightcode setenv sgid suid
 
-#[macro_use]
-extern crate uucore;
-
 use std::borrow::Borrow;
 use std::env;
 use std::fs::File;
@@ -18,6 +15,7 @@ use std::io::{BufRead, BufReader};
 
 use clap::{crate_version, App, Arg};
 use uucore::display::Quotable;
+use uucore::error::{UResult, USimpleError, UUsageError};
 
 mod options {
     pub const BOURNE_SHELL: &str = "bourne-shell";
@@ -67,7 +65,8 @@ fn usage() -> String {
     format!("{0} {1}", uucore::execution_phrase(), SYNTAX)
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -85,24 +84,26 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if (matches.is_present(options::C_SHELL) || matches.is_present(options::BOURNE_SHELL))
         && matches.is_present(options::PRINT_DATABASE)
     {
-        show_usage_error!(
+        return Err(UUsageError::new(
+            1,
             "the options to output dircolors' internal database and\nto select a shell \
-             syntax are mutually exclusive"
-        );
-        return 1;
+             syntax are mutually exclusive",
+        ));
     }
 
     if matches.is_present(options::PRINT_DATABASE) {
         if !files.is_empty() {
-            show_usage_error!(
-                "extra operand {}\nfile operands cannot be combined with \
-                 --print-database (-p)",
-                files[0].quote()
-            );
-            return 1;
+            return Err(UUsageError::new(
+                1,
+                format!(
+                    "extra operand {}\nfile operands cannot be combined with \
+                     --print-database (-p)",
+                    files[0].quote()
+                ),
+            ));
         }
         println!("{}", INTERNAL_DB);
-        return 0;
+        return Ok(());
     }
 
     let mut out_format = OutputFmt::Unknown;
@@ -115,8 +116,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if out_format == OutputFmt::Unknown {
         match guess_syntax() {
             OutputFmt::Unknown => {
-                show_error!("no SHELL environment variable, and no shell type option given");
-                return 1;
+                return Err(USimpleError::new(
+                    1,
+                    "no SHELL environment variable, and no shell type option given",
+                ));
             }
             fmt => out_format = fmt,
         }
@@ -127,8 +130,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         result = parse(INTERNAL_DB.lines(), out_format, "")
     } else {
         if files.len() > 1 {
-            show_usage_error!("extra operand {}", files[1].quote());
-            return 1;
+            return Err(UUsageError::new(
+                1,
+                format!("extra operand {}", files[1].quote()),
+            ));
         }
         match File::open(files[0]) {
             Ok(f) => {
@@ -136,19 +141,21 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 result = parse(fin.lines().filter_map(Result::ok), out_format, files[0])
             }
             Err(e) => {
-                show_error!("{}: {}", files[0].maybe_quote(), e);
-                return 1;
+                return Err(USimpleError::new(
+                    1,
+                    format!("{}: {}", files[0].maybe_quote(), e),
+                ));
             }
         }
     }
+
     match result {
         Ok(s) => {
             println!("{}", s);
-            0
+            Ok(())
         }
         Err(s) => {
-            show_error!("{}", s);
-            1
+            return Err(USimpleError::new(1, s));
         }
     }
 }

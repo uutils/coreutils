@@ -5,16 +5,13 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::InvalidEncodingHandling;
 
 static SUMMARY: &str = "Topological sort the strings in FILE.
@@ -26,7 +23,8 @@ mod options {
     pub const FILE: &str = "file";
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -43,13 +41,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         stdin_buf = stdin();
         &mut stdin_buf as &mut dyn Read
     } else {
-        file_buf = match File::open(Path::new(&input)) {
-            Ok(a) => a,
-            _ => {
-                show_error!("{}: No such file or directory", input.maybe_quote());
-                return 1;
-            }
-        };
+        file_buf = File::open(Path::new(&input)).map_err_context(|| input.to_string())?;
         &mut file_buf as &mut dyn Read
     });
 
@@ -69,11 +61,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 for ab in tokens.chunks(2) {
                     match ab.len() {
                         2 => g.add_edge(&ab[0], &ab[1]),
-                        _ => crash!(
-                            1,
-                            "{}: input contains an odd number of tokens",
-                            input.maybe_quote()
-                        ),
+                        _ => {
+                            return Err(USimpleError::new(
+                                1,
+                                format!(
+                                    "{}: input contains an odd number of tokens",
+                                    input.maybe_quote()
+                                ),
+                            ))
+                        }
                     }
                 }
             }
@@ -84,14 +80,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     g.run_tsort();
 
     if !g.is_acyclic() {
-        crash!(1, "{}, input contains a loop:", input);
+        return Err(USimpleError::new(
+            1,
+            format!("{}, input contains a loop:", input),
+        ));
     }
 
     for x in &g.result {
         println!("{}", x);
     }
 
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {

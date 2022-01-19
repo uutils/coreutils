@@ -17,6 +17,7 @@ use std::{
 };
 use uucore::{
     display::{print_verbatim, Quotable},
+    error::{FromIo, UResult},
     fs::{canonicalize, MissingHandling, ResolveMode},
 };
 
@@ -36,7 +37,8 @@ fn usage() -> String {
     format!("{0} [OPTION]... FILE...", uucore::execution_phrase())
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
@@ -60,16 +62,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     } else {
         MissingHandling::Normal
     };
-    let mut retcode = 0;
     for path in &paths {
-        if let Err(e) = resolve_path(path, strip, zero, logical, can_mode) {
-            if !quiet {
-                show_error!("{}: {}", path.maybe_quote(), e);
-            }
-            retcode = 1
-        };
+        let result = resolve_path(path, strip, zero, logical, can_mode);
+        if !quiet {
+            show_if_err!(result.map_err_context(|| path.maybe_quote().to_string()));
+        }
     }
-    retcode
+    // Although we return `Ok`, it is possible that a call to
+    // `show!()` above has set the exit code for the program to a
+    // non-zero integer.
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {

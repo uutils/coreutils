@@ -9,6 +9,7 @@
 extern crate uucore;
 use uucore::display::Quotable;
 use uucore::entries;
+use uucore::error::{UResult, USimpleError};
 use uucore::fs::display_permissions;
 use uucore::fsext::{
     pretty_filetype, pretty_fstype, pretty_time, read_fs_list, statfs, BirthTime, FsMeta,
@@ -25,7 +26,10 @@ use std::{cmp, fs, iter};
 macro_rules! check_bound {
     ($str: ident, $bound:expr, $beg: expr, $end: expr) => {
         if $end >= $bound {
-            return Err(format!("{}: invalid directive", $str[$beg..$end].quote()));
+            return Err(USimpleError::new(
+                1,
+                format!("{}: invalid directive", $str[$beg..$end].quote()),
+            ));
         }
     };
 }
@@ -332,7 +336,7 @@ fn print_it(arg: &str, output_type: OutputType, flag: u8, width: usize, precisio
 }
 
 impl Stater {
-    pub fn generate_tokens(format_str: &str, use_printf: bool) -> Result<Vec<Token>, String> {
+    pub fn generate_tokens(format_str: &str, use_printf: bool) -> UResult<Vec<Token>> {
         let mut tokens = Vec::new();
         let bound = format_str.len();
         let chars = format_str.chars().collect::<Vec<char>>();
@@ -457,7 +461,7 @@ impl Stater {
         Ok(tokens)
     }
 
-    fn new(matches: ArgMatches) -> Result<Stater, String> {
+    fn new(matches: ArgMatches) -> UResult<Stater> {
         let files: Vec<String> = matches
             .values_of(ARG_FILES)
             .map(|v| v.map(ToString::to_string).collect())
@@ -476,14 +480,12 @@ impl Stater {
         let show_fs = matches.is_present(options::FILE_SYSTEM);
 
         let default_tokens = if format_str.is_empty() {
-            Stater::generate_tokens(&Stater::default_format(show_fs, terse, false), use_printf)
-                .unwrap()
+            Stater::generate_tokens(&Stater::default_format(show_fs, terse, false), use_printf)?
         } else {
             Stater::generate_tokens(format_str, use_printf)?
         };
         let default_dev_tokens =
-            Stater::generate_tokens(&Stater::default_format(show_fs, terse, true), use_printf)
-                .unwrap();
+            Stater::generate_tokens(&Stater::default_format(show_fs, terse, true), use_printf)?;
 
         let mount_list = if show_fs {
             // mount points aren't displayed when showing filesystem information
@@ -945,7 +947,8 @@ for details about the options it supports.
     )
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let long_usage = get_long_usage();
 
@@ -954,12 +957,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .after_help(&long_usage[..])
         .get_matches_from(args);
 
-    match Stater::new(matches) {
-        Ok(stater) => stater.exec(),
-        Err(e) => {
-            show_error!("{}", e);
-            1
-        }
+    let stater = Stater::new(matches)?;
+    let exit_status = stater.exec();
+    if exit_status == 0 {
+        Ok(())
+    } else {
+        Err(exit_status.into())
     }
 }
 
