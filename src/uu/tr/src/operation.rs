@@ -8,9 +8,9 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{anychar, one_of},
-    combinator::{map, recognize},
-    multi::{many0, many1},
+    character::complete::{anychar, digit1},
+    combinator::{map, peek, value},
+    multi::many0,
     sequence::{delimited, preceded, separated_pair},
     IResult,
 };
@@ -24,7 +24,7 @@ use uucore::error::UError;
 
 use crate::unicode_table;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BadSequence {
     MissingCharClassName,
     MissingEquivalentClassChar,
@@ -220,32 +220,11 @@ impl Sequence {
 impl Sequence {
     pub fn from_str(input: &str) -> Result<Vec<Sequence>, BadSequence> {
         many0(alt((
-            alt((
-                Sequence::parse_char_range,
-                Sequence::parse_char_star,
-                Sequence::parse_char_repeat,
-            )),
-            alt((
-                Sequence::parse_alnum,
-                Sequence::parse_alpha,
-                Sequence::parse_blank,
-                Sequence::parse_control,
-                Sequence::parse_digit,
-                Sequence::parse_graph,
-                Sequence::parse_lower,
-                Sequence::parse_print,
-                Sequence::parse_punct,
-                Sequence::parse_space,
-                Sequence::parse_upper,
-                Sequence::parse_xdigit,
-                Sequence::parse_char_equal,
-            )),
-            // NOTE: Specific error cases
-            alt((
-                Sequence::error_parse_char_repeat,
-                Sequence::error_parse_empty_bracket,
-                Sequence::error_parse_empty_equivalent_char,
-            )),
+            Sequence::parse_char_range,
+            Sequence::parse_char_star,
+            Sequence::parse_char_repeat,
+            Sequence::parse_class,
+            Sequence::parse_char_equal,
             // NOTE: This must be the last one
             map(Sequence::parse_backslash_or_char, |s| Ok(Sequence::Char(s))),
         )))(input)
@@ -297,102 +276,60 @@ impl Sequence {
     fn parse_char_repeat(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
         delimited(
             tag("["),
-            separated_pair(
-                Sequence::parse_backslash_or_char,
-                tag("*"),
-                recognize(many1(one_of("01234567"))),
-            ),
+            separated_pair(Sequence::parse_backslash_or_char, tag("*"), digit1),
             tag("]"),
         )(input)
         .map(|(l, (c, str))| {
             (
                 l,
-                match usize::from_str_radix(str, 8)
-                    .expect("This should not fail because we only parse against 0-7")
-                {
-                    0 => Ok(Sequence::CharStar(c)),
-                    count => Ok(Sequence::CharRepeat(c, count)),
+                match usize::from_str_radix(str, 8) {
+                    Ok(0) => Ok(Sequence::CharStar(c)),
+                    Ok(count) => Ok(Sequence::CharRepeat(c, count)),
+                    Err(_) => Err(BadSequence::InvalidRepeatCount(str.to_string())),
                 },
             )
         })
     }
 
-    fn parse_alnum(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
-        tag("[:alnum:]")(input).map(|(l, _)| (l, Ok(Sequence::Alnum)))
-    }
-
-    fn parse_alpha(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
-        tag("[:alpha:]")(input).map(|(l, _)| (l, Ok(Sequence::Alpha)))
-    }
-
-    fn parse_blank(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
-        tag("[:blank:]")(input).map(|(l, _)| (l, Ok(Sequence::Blank)))
-    }
-
-    fn parse_control(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
-        tag("[:cntrl:]")(input).map(|(l, _)| (l, Ok(Sequence::Control)))
-    }
-
-    fn parse_digit(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
-        tag("[:digit:]")(input).map(|(l, _)| (l, Ok(Sequence::Digit)))
-    }
-
-    fn parse_graph(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
-        tag("[:graph:]")(input).map(|(l, _)| (l, Ok(Sequence::Graph)))
-    }
-
-    fn parse_lower(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
-        tag("[:lower:]")(input).map(|(l, _)| (l, Ok(Sequence::Lower)))
-    }
-
-    fn parse_print(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
-        tag("[:print:]")(input).map(|(l, _)| (l, Ok(Sequence::Print)))
-    }
-
-    fn parse_punct(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
-        tag("[:punct:]")(input).map(|(l, _)| (l, Ok(Sequence::Punct)))
-    }
-
-    fn parse_space(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
-        tag("[:space:]")(input).map(|(l, _)| (l, Ok(Sequence::Space)))
-    }
-
-    fn parse_upper(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
-        tag("[:upper:]")(input).map(|(l, _)| (l, Ok(Sequence::Upper)))
-    }
-
-    fn parse_xdigit(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
-        tag("[:xdigit:]")(input).map(|(l, _)| (l, Ok(Sequence::Xdigit)))
+    fn parse_class(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+        delimited(
+            tag("[:"),
+            alt((
+                map(
+                    alt((
+                        value(Sequence::Alnum, tag("alnum")),
+                        value(Sequence::Alpha, tag("alpha")),
+                        value(Sequence::Blank, tag("blank")),
+                        value(Sequence::Control, tag("cntrl")),
+                        value(Sequence::Digit, tag("digit")),
+                        value(Sequence::Graph, tag("graph")),
+                        value(Sequence::Lower, tag("lower")),
+                        value(Sequence::Print, tag("print")),
+                        value(Sequence::Punct, tag("punct")),
+                        value(Sequence::Space, tag("space")),
+                        value(Sequence::Upper, tag("upper")),
+                        value(Sequence::Xdigit, tag("xdigit")),
+                    )),
+                    Ok,
+                ),
+                value(Err(BadSequence::MissingCharClassName), tag("")),
+            )),
+            tag(":]"),
+        )(input)
     }
 
     fn parse_char_equal(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
-        delimited(tag("[="), Sequence::parse_backslash_or_char, tag("=]"))(input)
-            .map(|(l, c)| (l, Ok(Sequence::Char(c))))
-    }
-}
-
-impl Sequence {
-    fn error_parse_char_repeat(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
         delimited(
-            tag("["),
-            separated_pair(
-                Sequence::parse_backslash_or_char,
-                tag("*"),
-                recognize(many1(one_of("0123456789"))),
-            ),
-            tag("]"),
+            tag("[="),
+            alt((
+                value(
+                    Err(BadSequence::MissingEquivalentClassChar),
+                    peek(tag("=]")),
+                ),
+                map(Sequence::parse_backslash_or_char, |c| Ok(Sequence::Char(c))),
+            )),
+            tag("=]"),
         )(input)
-        .map(|(l, (_, n))| (l, Err(BadSequence::InvalidRepeatCount(n.to_string()))))
-    }
-
-    fn error_parse_empty_bracket(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
-        tag("[::]")(input).map(|(l, _)| (l, Err(BadSequence::MissingCharClassName)))
-    }
-
-    fn error_parse_empty_equivalent_char(
-        input: &str,
-    ) -> IResult<&str, Result<Sequence, BadSequence>> {
-        tag("[==]")(input).map(|(l, _)| (l, Err(BadSequence::MissingEquivalentClassChar)))
     }
 }
 
