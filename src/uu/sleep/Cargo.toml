@@ -1,6 +1,6 @@
 [package]
 name = "uu_sleep"
-version = "0.0.9"
+version = "0.0.12"
 authors = ["uutils developers"]
 license = "MIT"
 description = "sleep ~ (uutils) pause for DURATION"
