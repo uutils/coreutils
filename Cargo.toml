@@ -389,3 +389,7 @@ unix_socket = "0.5.0"
 [[bin]]
 name = "coreutils"
 path = "src/bin/coreutils.rs"
+
+[[bin]]
+name = "uudoc"
+path = "src/bin/uudoc.rs"
