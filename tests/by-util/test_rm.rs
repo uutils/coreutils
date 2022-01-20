@@ -316,18 +316,6 @@ fn test_rm_verbose_slash() {
 }
 
 #[test]
-fn test_rm_silently_accepts_presume_input_tty1() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_1 = "test_rm_silently_accepts_presume_input_tty1";
-
-    at.touch(file_1);
-
-    ucmd.arg("--presume-input-tty").arg(file_1).succeeds();
-
-    assert!(!at.file_exists(file_1));
-}
-
-#[test]
 fn test_rm_silently_accepts_presume_input_tty2() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_2 = "test_rm_silently_accepts_presume_input_tty2";
@@ -337,16 +325,4 @@ fn test_rm_silently_accepts_presume_input_tty2() {
     ucmd.arg("---presume-input-tty").arg(file_2).succeeds();
 
     assert!(!at.file_exists(file_2));
-}
-
-#[test]
-fn test_rm_silently_accepts_presume_input_tty3() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_3 = "test_rm_silently_accepts_presume_input_tty3";
-
-    at.touch(file_3);
-
-    ucmd.arg("----presume-input-tty").arg(file_3).succeeds();
-
-    assert!(!at.file_exists(file_3));
 }

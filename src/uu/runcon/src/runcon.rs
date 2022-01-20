@@ -48,14 +48,14 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
 
-    let config = uu_app().usage(usage.as_ref());
+    let config = uu_app().override_usage(usage.as_ref());
 
     let options = match parse_command_line(config, args) {
         Ok(r) => r,
         Err(r) => {
             if let Error::CommandLine(ref r) = r {
                 match r.kind {
-                    clap::ErrorKind::HelpDisplayed | clap::ErrorKind::VersionDisplayed => {
+                    clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion => {
                         println!("{}", r);
                         return Ok(());
                     }
@@ -109,51 +109,59 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
         .after_help(DESCRIPTION)
         .arg(
-            Arg::with_name(options::COMPUTE)
-                .short("c")
+            Arg::new(options::COMPUTE)
+                .short('c')
                 .long(options::COMPUTE)
                 .takes_value(false)
                 .help("Compute process transition context before modifying."),
         )
         .arg(
-            Arg::with_name(options::USER)
-                .short("u")
+            Arg::new(options::USER)
+                .short('u')
                 .long(options::USER)
                 .takes_value(true)
                 .value_name("USER")
-                .help("Set user USER in the target security context."),
+                .help("Set user USER in the target security context.")
+                .allow_invalid_utf8(true),
         )
         .arg(
-            Arg::with_name(options::ROLE)
-                .short("r")
+            Arg::new(options::ROLE)
+                .short('r')
                 .long(options::ROLE)
                 .takes_value(true)
                 .value_name("ROLE")
-                .help("Set role ROLE in the target security context."),
+                .help("Set role ROLE in the target security context.")
+                .allow_invalid_utf8(true),
         )
         .arg(
-            Arg::with_name(options::TYPE)
-                .short("t")
+            Arg::new(options::TYPE)
+                .short('t')
                 .long(options::TYPE)
                 .takes_value(true)
                 .value_name("TYPE")
-                .help("Set type TYPE in the target security context."),
+                .help("Set type TYPE in the target security context.")
+                .allow_invalid_utf8(true),
         )
         .arg(
-            Arg::with_name(options::RANGE)
-                .short("l")
+            Arg::new(options::RANGE)
+                .short('l')
                 .long(options::RANGE)
                 .takes_value(true)
                 .value_name("RANGE")
-                .help("Set range RANGE in the target security context."),
+                .help("Set range RANGE in the target security context.")
+                .allow_invalid_utf8(true),
         )
-        .arg(Arg::with_name("ARG").multiple(true))
+        .arg(
+            Arg::new("ARG")
+                .multiple_occurrences(true)
+                .allow_invalid_utf8(true),
+        )
         // Once "ARG" is parsed, everything after that belongs to it.
         //
         // This is not how POSIX does things, but this is how the GNU implementation
@@ -202,7 +210,7 @@ struct Options {
 }
 
 fn parse_command_line(config: App, args: impl uucore::Args) -> Result<Options> {
-    let matches = config.get_matches_from_safe(args)?;
+    let matches = config.try_get_matches_from(args)?;
 
     let compute_transition_context = matches.is_present(options::COMPUTE);
 

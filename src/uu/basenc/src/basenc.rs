@@ -45,17 +45,17 @@ fn usage() -> String {
     format!("{0} [OPTION]... [FILE]", uucore::execution_phrase())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     let mut app = base_common::base_app(ABOUT);
     for encoding in ENCODINGS {
-        app = app.arg(Arg::with_name(encoding.0).long(encoding.0));
+        app = app.arg(Arg::new(encoding.0).long(encoding.0));
     }
     app
 }
 
 fn parse_cmd_args(args: impl uucore::Args) -> UResult<(Config, Format)> {
     let usage = usage();
-    let matches = uu_app().usage(&usage[..]).get_matches_from(
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(
         args.collect_str(InvalidEncodingHandling::ConvertLossy)
             .accept_any(),
     );

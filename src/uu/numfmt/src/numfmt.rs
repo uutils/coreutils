@@ -159,7 +159,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let result =
         parse_options(&matches).and_then(|options| match matches.values_of(options::NUMBER) {
@@ -178,42 +178,42 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
         .setting(AppSettings::AllowNegativeNumbers)
         .arg(
-            Arg::with_name(options::DELIMITER)
-                .short("d")
+            Arg::new(options::DELIMITER)
+                .short('d')
                 .long(options::DELIMITER)
                 .value_name("X")
                 .help("use X instead of whitespace for field delimiter"),
         )
         .arg(
-            Arg::with_name(options::FIELD)
+            Arg::new(options::FIELD)
                 .long(options::FIELD)
                 .help("replace the numbers in these input fields (default=1) see FIELDS below")
                 .value_name("FIELDS")
                 .default_value(options::FIELD_DEFAULT),
         )
         .arg(
-            Arg::with_name(options::FROM)
+            Arg::new(options::FROM)
                 .long(options::FROM)
                 .help("auto-scale input numbers to UNITs; see UNIT below")
                 .value_name("UNIT")
                 .default_value(options::FROM_DEFAULT),
         )
         .arg(
-            Arg::with_name(options::TO)
+            Arg::new(options::TO)
                 .long(options::TO)
                 .help("auto-scale output numbers to UNITs; see UNIT below")
                 .value_name("UNIT")
                 .default_value(options::TO_DEFAULT),
         )
         .arg(
-            Arg::with_name(options::PADDING)
+            Arg::new(options::PADDING)
                 .long(options::PADDING)
                 .help(
                     "pad the output to N characters; positive N will \
@@ -224,18 +224,18 @@ pub fn uu_app() -> App<'static, 'static> {
                 .value_name("N"),
         )
         .arg(
-            Arg::with_name(options::HEADER)
+            Arg::new(options::HEADER)
                 .long(options::HEADER)
                 .help(
                     "print (without converting) the first N header lines; \
                      N defaults to 1 if not specified",
                 )
                 .value_name("N")
-                .default_value(options::HEADER_DEFAULT)
+                .default_missing_value(options::HEADER_DEFAULT)
                 .hide_default_value(true),
         )
         .arg(
-            Arg::with_name(options::ROUND)
+            Arg::new(options::ROUND)
                 .long(options::ROUND)
                 .help(
                     "use METHOD for rounding when scaling; METHOD can be: up,\
@@ -246,7 +246,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 .possible_values(&["up", "down", "from-zero", "towards-zero", "nearest"]),
         )
         .arg(
-            Arg::with_name(options::SUFFIX)
+            Arg::new(options::SUFFIX)
                 .long(options::SUFFIX)
                 .help(
                     "print SUFFIX after each formatted number, and accept \
@@ -254,5 +254,9 @@ pub fn uu_app() -> App<'static, 'static> {
                 )
                 .value_name("SUFFIX"),
         )
-        .arg(Arg::with_name(options::NUMBER).hidden(true).multiple(true))
+        .arg(
+            Arg::new(options::NUMBER)
+                .hide(true)
+                .multiple_occurrences(true),
+        )
 }

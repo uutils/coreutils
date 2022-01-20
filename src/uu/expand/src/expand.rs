@@ -174,39 +174,39 @@ impl Options {
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     expand(Options::new(&matches)).map_err_context(|| "failed to write output".to_string())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
         .arg(
-            Arg::with_name(options::INITIAL)
+            Arg::new(options::INITIAL)
                 .long(options::INITIAL)
-                .short("i")
+                .short('i')
                 .help("do not convert tabs after non blanks"),
         )
         .arg(
-            Arg::with_name(options::TABS)
+            Arg::new(options::TABS)
                 .long(options::TABS)
-                .short("t")
+                .short('t')
                 .value_name("N, LIST")
                 .takes_value(true)
                 .help("have tabs N characters apart, not 8 or use comma separated list of explicit tab positions"),
         )
         .arg(
-            Arg::with_name(options::NO_UTF8)
+            Arg::new(options::NO_UTF8)
                 .long(options::NO_UTF8)
-                .short("U")
+                .short('U')
                 .help("interpret input file as 8-bit ASCII rather than UTF-8"),
         ).arg(
-            Arg::with_name(options::FILES)
-                .multiple(true)
-                .hidden(true)
+            Arg::new(options::FILES)
+                .multiple_occurrences(true)
+                .hide(true)
                 .takes_value(true)
         )
 }

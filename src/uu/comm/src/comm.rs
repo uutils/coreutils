@@ -137,7 +137,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
     let filename1 = matches.value_of(options::FILE_1).unwrap();
     let filename2 = matches.value_of(options::FILE_2).unwrap();
     let mut f1 = open_file(filename1).map_err_context(|| filename1.to_string())?;
@@ -147,34 +147,34 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
         .arg(
-            Arg::with_name(options::COLUMN_1)
-                .short(options::COLUMN_1)
+            Arg::new(options::COLUMN_1)
+                .short('1')
                 .help("suppress column 1 (lines unique to FILE1)"),
         )
         .arg(
-            Arg::with_name(options::COLUMN_2)
-                .short(options::COLUMN_2)
+            Arg::new(options::COLUMN_2)
+                .short('2')
                 .help("suppress column 2 (lines unique to FILE2)"),
         )
         .arg(
-            Arg::with_name(options::COLUMN_3)
-                .short(options::COLUMN_3)
+            Arg::new(options::COLUMN_3)
+                .short('3')
                 .help("suppress column 3 (lines that appear in both files)"),
         )
         .arg(
-            Arg::with_name(options::DELIMITER)
+            Arg::new(options::DELIMITER)
                 .long(options::DELIMITER)
                 .help("separate columns with STR")
                 .value_name("STR")
                 .default_value(options::DELIMITER_DEFAULT)
                 .hide_default_value(true),
         )
-        .arg(Arg::with_name(options::FILE_1).required(true))
-        .arg(Arg::with_name(options::FILE_2).required(true))
+        .arg(Arg::new(options::FILE_1).required(true))
+        .arg(Arg::new(options::FILE_2).required(true))
 }

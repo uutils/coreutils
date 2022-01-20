@@ -82,7 +82,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             LONG_HELP,
             backup_control::BACKUP_CONTROL_LONG_HELP
         ))
-        .usage(&usage[..])
+        .override_usage(&usage[..])
         .get_matches_from(args);
 
     let files: Vec<OsString> = matches
@@ -119,7 +119,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     exec(&files[..], behavior)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -130,24 +130,24 @@ pub fn uu_app() -> App<'static, 'static> {
         backup_control::arguments::backup_no_args()
     )
     .arg(
-            Arg::with_name(OPT_FORCE)
-            .short("f")
+            Arg::new(OPT_FORCE)
+            .short('f')
             .long(OPT_FORCE)
             .help("do not prompt before overwriting")
     )
     .arg(
-            Arg::with_name(OPT_INTERACTIVE)
-            .short("i")
+            Arg::new(OPT_INTERACTIVE)
+            .short('i')
             .long(OPT_INTERACTIVE)
             .help("prompt before override")
     )
     .arg(
-            Arg::with_name(OPT_NO_CLOBBER).short("n")
+            Arg::new(OPT_NO_CLOBBER).short('n')
             .long(OPT_NO_CLOBBER)
             .help("do not overwrite an existing file")
     )
     .arg(
-            Arg::with_name(OPT_STRIP_TRAILING_SLASHES)
+            Arg::new(OPT_STRIP_TRAILING_SLASHES)
             .long(OPT_STRIP_TRAILING_SLASHES)
             .help("remove any trailing slashes from each SOURCE argument")
     )
@@ -155,37 +155,39 @@ pub fn uu_app() -> App<'static, 'static> {
         backup_control::arguments::suffix()
     )
     .arg(
-        Arg::with_name(OPT_TARGET_DIRECTORY)
-        .short("t")
+        Arg::new(OPT_TARGET_DIRECTORY)
+        .short('t')
         .long(OPT_TARGET_DIRECTORY)
         .help("move all SOURCE arguments into DIRECTORY")
         .takes_value(true)
         .value_name("DIRECTORY")
         .conflicts_with(OPT_NO_TARGET_DIRECTORY)
+        .allow_invalid_utf8(true)
     )
     .arg(
-            Arg::with_name(OPT_NO_TARGET_DIRECTORY)
-            .short("T")
+            Arg::new(OPT_NO_TARGET_DIRECTORY)
+            .short('T')
             .long(OPT_NO_TARGET_DIRECTORY).
             help("treat DEST as a normal file")
     )
     .arg(
-            Arg::with_name(OPT_UPDATE)
-            .short("u")
+            Arg::new(OPT_UPDATE)
+            .short('u')
             .long(OPT_UPDATE)
             .help("move only when the SOURCE file is newer than the destination file or when the destination file is missing")
     )
     .arg(
-            Arg::with_name(OPT_VERBOSE)
-            .short("v")
+            Arg::new(OPT_VERBOSE)
+            .short('v')
             .long(OPT_VERBOSE).help("explain what is being done")
     )
     .arg(
-        Arg::with_name(ARG_FILES)
-            .multiple(true)
+        Arg::new(ARG_FILES)
+            .multiple_occurrences(true)
             .takes_value(true)
             .min_values(2)
             .required(true)
+            .allow_invalid_utf8(true)
         )
 }
 

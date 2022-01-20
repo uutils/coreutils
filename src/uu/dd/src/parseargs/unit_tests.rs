@@ -25,7 +25,7 @@ fn unimplemented_flags_should_error_non_linux() {
             format!("--iflag={}", flag),
             format!("--oflag={}", flag),
         ];
-        let matches = uu_app().get_matches_from_safe(args).unwrap();
+        let matches = uu_app().try_get_matches_from(args).unwrap();
 
         if parse_iflags(&matches).is_ok() {
             succeeded.push(format!("iflag={}", flag));
@@ -53,7 +53,7 @@ fn unimplemented_flags_should_error() {
             format!("--iflag={}", flag),
             format!("--oflag={}", flag),
         ];
-        let matches = uu_app().get_matches_from_safe(args).unwrap();
+        let matches = uu_app().try_get_matches_from(args).unwrap();
 
         if parse_iflags(&matches).is_ok() {
             succeeded.push(format!("iflag={}", flag))
@@ -78,7 +78,7 @@ fn test_status_level_absent() {
         String::from("--of=bar.file"),
     ];
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
     let st = parse_status_level(&matches).unwrap();
 
     assert_eq!(st, None);
@@ -93,7 +93,7 @@ fn test_status_level_none() {
         String::from("--of=bar.file"),
     ];
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
     let st = parse_status_level(&matches).unwrap().unwrap();
 
     assert_eq!(st, StatusLevel::None);
@@ -121,7 +121,7 @@ fn test_all_top_level_args_no_leading_dashes() {
         .into_iter()
         .fold(Vec::new(), append_dashes_if_not_present);
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     assert_eq!(100, parse_ibs(&matches).unwrap());
     assert_eq!(100, parse_obs(&matches).unwrap());
@@ -205,7 +205,7 @@ fn test_all_top_level_args_with_leading_dashes() {
         .into_iter()
         .fold(Vec::new(), append_dashes_if_not_present);
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     assert_eq!(100, parse_ibs(&matches).unwrap());
     assert_eq!(100, parse_obs(&matches).unwrap());
@@ -276,7 +276,7 @@ fn test_status_level_progress() {
         String::from("--status=progress"),
     ];
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
     let st = parse_status_level(&matches).unwrap().unwrap();
 
     assert_eq!(st, StatusLevel::Progress);
@@ -291,7 +291,7 @@ fn test_status_level_noxfer() {
         String::from("--of=bar.file"),
     ];
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
     let st = parse_status_level(&matches).unwrap().unwrap();
 
     assert_eq!(st, StatusLevel::Noxfer);
@@ -304,7 +304,7 @@ fn test_status_level_noxfer() {
 fn icf_ctable_error() {
     let args = vec![String::from("dd"), String::from("--conv=ascii,ebcdic,ibm")];
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let _ = parse_conv_flag_input(&matches).unwrap();
 }
@@ -314,7 +314,7 @@ fn icf_ctable_error() {
 fn icf_case_error() {
     let args = vec![String::from("dd"), String::from("--conv=ucase,lcase")];
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let _ = parse_conv_flag_input(&matches).unwrap();
 }
@@ -324,7 +324,7 @@ fn icf_case_error() {
 fn icf_block_error() {
     let args = vec![String::from("dd"), String::from("--conv=block,unblock")];
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let _ = parse_conv_flag_input(&matches).unwrap();
 }
@@ -334,7 +334,7 @@ fn icf_block_error() {
 fn icf_creat_error() {
     let args = vec![String::from("dd"), String::from("--conv=excl,nocreat")];
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let _ = parse_conv_flag_output(&matches).unwrap();
 }
@@ -344,7 +344,7 @@ fn parse_icf_token_ibm() {
     let exp = vec![ConvFlag::FmtAtoI];
 
     let args = vec![String::from("dd"), String::from("--conv=ibm")];
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
 
@@ -362,7 +362,7 @@ fn parse_icf_tokens_elu() {
         String::from("dd"),
         String::from("--conv=ebcdic,lcase,unblock"),
     ];
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
     let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
 
     assert_eq!(exp.len(), act.len());
@@ -393,7 +393,7 @@ fn parse_icf_tokens_remaining() {
         String::from("dd"),
         String::from("--conv=ascii,ucase,block,sparse,swab,sync,noerror,excl,nocreat,notrunc,noerror,fdatasync,fsync"),
     ];
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
 
@@ -417,7 +417,7 @@ fn parse_iflag_tokens() {
         String::from("dd"),
         String::from("--iflag=fullblock,count_bytes,skip_bytes,append,seek_bytes"),
     ];
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let act = parse_flag_list::<Flag>("iflag", &matches).unwrap();
 
@@ -441,7 +441,7 @@ fn parse_oflag_tokens() {
         String::from("dd"),
         String::from("--oflag=fullblock,count_bytes,skip_bytes,append,seek_bytes"),
     ];
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let act = parse_flag_list::<Flag>("oflag", &matches).unwrap();
 
@@ -469,7 +469,7 @@ fn parse_iflag_tokens_linux() {
         String::from("dd"),
         String::from("--iflag=direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow"),
     ];
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let act = parse_flag_list::<Flag>("iflag", &matches).unwrap();
 
@@ -497,7 +497,7 @@ fn parse_oflag_tokens_linux() {
         String::from("dd"),
         String::from("--oflag=direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow"),
     ];
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let act = parse_flag_list::<Flag>("oflag", &matches).unwrap();
 

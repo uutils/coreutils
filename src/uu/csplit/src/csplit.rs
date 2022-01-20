@@ -722,7 +722,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     // get the file to split
     let file_name = matches.value_of(options::FILE).unwrap();
@@ -751,60 +751,60 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
         .arg(
-            Arg::with_name(options::SUFFIX_FORMAT)
-                .short("b")
+            Arg::new(options::SUFFIX_FORMAT)
+                .short('b')
                 .long(options::SUFFIX_FORMAT)
                 .value_name("FORMAT")
                 .help("use sprintf FORMAT instead of %02d"),
         )
         .arg(
-            Arg::with_name(options::PREFIX)
-                .short("f")
+            Arg::new(options::PREFIX)
+                .short('f')
                 .long(options::PREFIX)
                 .value_name("PREFIX")
                 .help("use PREFIX instead of 'xx'"),
         )
         .arg(
-            Arg::with_name(options::KEEP_FILES)
-                .short("k")
+            Arg::new(options::KEEP_FILES)
+                .short('k')
                 .long(options::KEEP_FILES)
                 .help("do not remove output files on errors"),
         )
         .arg(
-            Arg::with_name(options::SUPPRESS_MATCHED)
+            Arg::new(options::SUPPRESS_MATCHED)
                 .long(options::SUPPRESS_MATCHED)
                 .help("suppress the lines matching PATTERN"),
         )
         .arg(
-            Arg::with_name(options::DIGITS)
-                .short("n")
+            Arg::new(options::DIGITS)
+                .short('n')
                 .long(options::DIGITS)
                 .value_name("DIGITS")
                 .help("use specified number of digits instead of 2"),
         )
         .arg(
-            Arg::with_name(options::QUIET)
-                .short("s")
+            Arg::new(options::QUIET)
+                .short('s')
                 .long(options::QUIET)
                 .visible_alias("silent")
                 .help("do not print counts of output file sizes"),
         )
         .arg(
-            Arg::with_name(options::ELIDE_EMPTY_FILES)
-                .short("z")
+            Arg::new(options::ELIDE_EMPTY_FILES)
+                .short('z')
                 .long(options::ELIDE_EMPTY_FILES)
                 .help("remove empty output files"),
         )
-        .arg(Arg::with_name(options::FILE).hidden(true).required(true))
+        .arg(Arg::new(options::FILE).hide(true).required(true))
         .arg(
-            Arg::with_name(options::PATTERN)
-                .hidden(true)
-                .multiple(true)
+            Arg::new(options::PATTERN)
+                .hide(true)
+                .multiple_occurrences(true)
                 .required(true),
         )
         .after_help(LONG_HELP)

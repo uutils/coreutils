@@ -36,7 +36,7 @@ use std::thread;
 use std::time;
 
 use byte_unit::Byte;
-use clap::{self, crate_version};
+use clap::{crate_version, App, Arg, ArgMatches};
 use gcd::Gcd;
 #[cfg(target_os = "linux")]
 use signal_hook::consts::signal;
@@ -932,12 +932,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> clap::App<'static, 'static> {
-    clap::App::new(uucore::util_name())
+pub fn uu_app<'a>() -> App<'a> {
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            clap::Arg::with_name(options::INFILE)
+            Arg::new(options::INFILE)
                 .long(options::INFILE)
                 .takes_value(true)
                 .require_equals(true)
@@ -945,7 +945,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .help("(alternatively if=FILE) specifies the file used for input. When not specified, stdin is used instead")
         )
         .arg(
-            clap::Arg::with_name(options::OUTFILE)
+            Arg::new(options::OUTFILE)
                 .long(options::OUTFILE)
                 .takes_value(true)
                 .require_equals(true)
@@ -953,7 +953,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .help("(alternatively of=FILE) specifies the file used for output. When not specified, stdout is used instead")
         )
         .arg(
-            clap::Arg::with_name(options::IBS)
+            Arg::new(options::IBS)
                 .long(options::IBS)
                 .takes_value(true)
                 .require_equals(true)
@@ -961,7 +961,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .help("(alternatively ibs=N) specifies the size of buffer used for reads (default: 512). Multiplier strings permitted.")
         )
         .arg(
-            clap::Arg::with_name(options::OBS)
+            Arg::new(options::OBS)
                 .long(options::OBS)
                 .takes_value(true)
                 .require_equals(true)
@@ -969,7 +969,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .help("(alternatively obs=N) specifies the size of buffer used for writes (default: 512). Multiplier strings permitted.")
         )
         .arg(
-            clap::Arg::with_name(options::BS)
+            Arg::new(options::BS)
                 .long(options::BS)
                 .takes_value(true)
                 .require_equals(true)
@@ -977,7 +977,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .help("(alternatively bs=N) specifies ibs=N and obs=N (default: 512). If ibs or obs are also specified, bs=N takes precedence. Multiplier strings permitted.")
         )
         .arg(
-            clap::Arg::with_name(options::CBS)
+            Arg::new(options::CBS)
                 .long(options::CBS)
                 .takes_value(true)
                 .require_equals(true)
@@ -985,7 +985,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .help("(alternatively cbs=BYTES) specifies the 'conversion block size' in bytes. Applies to the conv=block, and conv=unblock operations. Multiplier strings permitted.")
         )
         .arg(
-            clap::Arg::with_name(options::SKIP)
+            Arg::new(options::SKIP)
                 .long(options::SKIP)
                 .takes_value(true)
                 .require_equals(true)
@@ -993,7 +993,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .help("(alternatively skip=N) causes N ibs-sized records of input to be skipped before beginning copy/convert operations. See iflag=count_bytes if skipping N bytes is preferred. Multiplier strings permitted.")
         )
         .arg(
-            clap::Arg::with_name(options::SEEK)
+            Arg::new(options::SEEK)
                 .long(options::SEEK)
                 .takes_value(true)
                 .require_equals(true)
@@ -1001,7 +1001,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .help("(alternatively seek=N) seeks N obs-sized records into output before beginning copy/convert operations. See oflag=seek_bytes if seeking N bytes is preferred. Multiplier strings permitted.")
         )
         .arg(
-            clap::Arg::with_name(options::COUNT)
+            Arg::new(options::COUNT)
                 .long(options::COUNT)
                 .takes_value(true)
                 .require_equals(true)
@@ -1009,7 +1009,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .help("(alternatively count=N) stop reading input after N ibs-sized read operations rather than proceeding until EOF. See iflag=count_bytes if stopping after N bytes is preferred. Multiplier strings permitted.")
         )
         .arg(
-            clap::Arg::with_name(options::STATUS)
+            Arg::new(options::STATUS)
                 .long(options::STATUS)
                 .takes_value(true)
                 .require_equals(true)
@@ -1033,7 +1033,7 @@ Printing performance stats is also triggered by the INFO signal (where supported
 ")
         )
         .arg(
-            clap::Arg::with_name(options::CONV)
+            Arg::new(options::CONV)
                 .long(options::CONV)
                 .takes_value(true)
                 .require_equals(true)
@@ -1070,7 +1070,7 @@ Conversion Flags:
 ")
         )
         .arg(
-            clap::Arg::with_name(options::IFLAG)
+            Arg::new(options::IFLAG)
                 .long(options::IFLAG)
                 .takes_value(true)
                 .require_equals(true)
@@ -1096,7 +1096,7 @@ General-Flags
 ")
         )
         .arg(
-            clap::Arg::with_name(options::OFLAG)
+            Arg::new(options::OFLAG)
                 .long(options::OFLAG)
                 .takes_value(true)
                 .require_equals(true)

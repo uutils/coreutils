@@ -86,33 +86,33 @@ impl Config {
 }
 
 pub fn parse_base_cmd_args(args: impl uucore::Args, about: &str, usage: &str) -> UResult<Config> {
-    let app = base_app(about).usage(usage);
+    let app = base_app(about).override_usage(usage);
     let arg_list = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
     Config::from(&app.get_matches_from(arg_list))
 }
 
-pub fn base_app<'a>(about: &'a str) -> App<'static, 'a> {
+pub fn base_app(about: &str) -> App {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(about)
         // Format arguments.
         .arg(
-            Arg::with_name(options::DECODE)
-                .short("d")
+            Arg::new(options::DECODE)
+                .short('d')
                 .long(options::DECODE)
                 .help("decode data"),
         )
         .arg(
-            Arg::with_name(options::IGNORE_GARBAGE)
-                .short("i")
+            Arg::new(options::IGNORE_GARBAGE)
+                .short('i')
                 .long(options::IGNORE_GARBAGE)
                 .help("when decoding, ignore non-alphabetic characters"),
         )
         .arg(
-            Arg::with_name(options::WRAP)
-                .short("w")
+            Arg::new(options::WRAP)
+                .short('w')
                 .long(options::WRAP)
                 .takes_value(true)
                 .help(
@@ -121,7 +121,7 @@ pub fn base_app<'a>(about: &'a str) -> App<'static, 'a> {
         )
         // "multiple" arguments are used to check whether there is more than one
         // file passed in.
-        .arg(Arg::with_name(options::FILE).index(1).multiple(true))
+        .arg(Arg::new(options::FILE).index(1).multiple_occurrences(true))
 }
 
 pub fn get_input<'a>(config: &Config, stdin_ref: &'a Stdin) -> UResult<Box<dyn Read + 'a>> {

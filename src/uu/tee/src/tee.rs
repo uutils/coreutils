@@ -42,7 +42,7 @@ fn usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let options = Options {
         append: matches.is_present(options::APPEND),
@@ -59,24 +59,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help("If a FILE is -, it refers to a file named - .")
         .arg(
-            Arg::with_name(options::APPEND)
+            Arg::new(options::APPEND)
                 .long(options::APPEND)
-                .short("a")
+                .short('a')
                 .help("append to the given FILEs, do not overwrite"),
         )
         .arg(
-            Arg::with_name(options::IGNORE_INTERRUPTS)
+            Arg::new(options::IGNORE_INTERRUPTS)
                 .long(options::IGNORE_INTERRUPTS)
-                .short("i")
+                .short('i')
                 .help("ignore interrupt signals (ignored on non-Unix platforms)"),
         )
-        .arg(Arg::with_name(options::FILE).multiple(true))
+        .arg(Arg::new(options::FILE).multiple_occurrences(true))
 }
 
 #[cfg(unix)]

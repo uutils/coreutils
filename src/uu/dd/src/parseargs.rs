@@ -13,7 +13,7 @@ use super::*;
 use std::error::Error;
 use uucore::error::UError;
 
-pub type Matches = clap::ArgMatches<'static>;
+pub type Matches = ArgMatches;
 
 /// Parser Errors describe errors with parser input
 #[derive(Debug, PartialEq)]

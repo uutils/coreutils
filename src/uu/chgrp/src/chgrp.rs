@@ -56,7 +56,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
 
     chown_base(
-        uu_app().usage(&usage[..]),
+        uu_app().override_usage(&usage[..]),
         args,
         options::ARG_GROUP,
         parse_gid_and_uid,
@@ -64,82 +64,82 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     )
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
         .arg(
-            Arg::with_name(options::verbosity::CHANGES)
-                .short("c")
+            Arg::new(options::verbosity::CHANGES)
+                .short('c')
                 .long(options::verbosity::CHANGES)
                 .help("like verbose but report only when a change is made"),
         )
         .arg(
-            Arg::with_name(options::verbosity::SILENT)
-                .short("f")
+            Arg::new(options::verbosity::SILENT)
+                .short('f')
                 .long(options::verbosity::SILENT),
         )
         .arg(
-            Arg::with_name(options::verbosity::QUIET)
+            Arg::new(options::verbosity::QUIET)
                 .long(options::verbosity::QUIET)
                 .help("suppress most error messages"),
         )
         .arg(
-            Arg::with_name(options::verbosity::VERBOSE)
-                .short("v")
+            Arg::new(options::verbosity::VERBOSE)
+                .short('v')
                 .long(options::verbosity::VERBOSE)
                 .help("output a diagnostic for every file processed"),
         )
         .arg(
-            Arg::with_name(options::dereference::DEREFERENCE)
+            Arg::new(options::dereference::DEREFERENCE)
                 .long(options::dereference::DEREFERENCE),
         )
         .arg(
-           Arg::with_name(options::dereference::NO_DEREFERENCE)
-               .short("h")
+           Arg::new(options::dereference::NO_DEREFERENCE)
+               .short('h')
                .long(options::dereference::NO_DEREFERENCE)
                .help(
                    "affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)",
                ),
         )
         .arg(
-            Arg::with_name(options::preserve_root::PRESERVE)
+            Arg::new(options::preserve_root::PRESERVE)
                 .long(options::preserve_root::PRESERVE)
                 .help("fail to operate recursively on '/'"),
         )
         .arg(
-            Arg::with_name(options::preserve_root::NO_PRESERVE)
+            Arg::new(options::preserve_root::NO_PRESERVE)
                 .long(options::preserve_root::NO_PRESERVE)
                 .help("do not treat '/' specially (the default)"),
         )
         .arg(
-            Arg::with_name(options::REFERENCE)
+            Arg::new(options::REFERENCE)
                 .long(options::REFERENCE)
                 .value_name("RFILE")
                 .help("use RFILE's group rather than specifying GROUP values")
                 .takes_value(true)
-                .multiple(false),
+                .multiple_occurrences(false),
         )
         .arg(
-            Arg::with_name(options::RECURSIVE)
-                .short("R")
+            Arg::new(options::RECURSIVE)
+                .short('R')
                 .long(options::RECURSIVE)
                 .help("operate on files and directories recursively"),
         )
         .arg(
-            Arg::with_name(options::traverse::TRAVERSE)
-                .short(options::traverse::TRAVERSE)
+            Arg::new(options::traverse::TRAVERSE)
+                .short(options::traverse::TRAVERSE.chars().next().unwrap())
                 .help("if a command line argument is a symbolic link to a directory, traverse it"),
         )
         .arg(
-            Arg::with_name(options::traverse::NO_TRAVERSE)
-                .short(options::traverse::NO_TRAVERSE)
+            Arg::new(options::traverse::NO_TRAVERSE)
+                .short(options::traverse::NO_TRAVERSE.chars().next().unwrap())
                 .help("do not traverse any symbolic links (default)")
                 .overrides_with_all(&[options::traverse::TRAVERSE, options::traverse::EVERY]),
         )
         .arg(
-            Arg::with_name(options::traverse::EVERY)
-                .short(options::traverse::EVERY)
+            Arg::new(options::traverse::EVERY)
+                .short(options::traverse::EVERY.chars().next().unwrap())
                 .help("traverse every symbolic link to a directory encountered"),
         )
 }

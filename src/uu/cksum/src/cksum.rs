@@ -140,11 +140,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
         .about(SUMMARY)
-        .usage(SYNTAX)
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+        .override_usage(SYNTAX)
+        .arg(
+            Arg::new(options::FILE)
+                .hide(true)
+                .multiple_occurrences(true),
+        )
 }

@@ -58,7 +58,7 @@ type RangeFloat = (ExtendedBigDecimal, ExtendedBigDecimal, ExtendedBigDecimal);
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let numbers = matches.values_of(ARG_NUMBERS).unwrap().collect::<Vec<_>>();
 
@@ -137,38 +137,38 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
-        .setting(AppSettings::AllowLeadingHyphen)
+        .setting(AppSettings::TrailingVarArg)
+        .setting(AppSettings::AllowHyphenValues)
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(OPT_SEPARATOR)
-                .short("s")
+            Arg::new(OPT_SEPARATOR)
+                .short('s')
                 .long("separator")
                 .help("Separator character (defaults to \\n)")
                 .takes_value(true)
                 .number_of_values(1),
         )
         .arg(
-            Arg::with_name(OPT_TERMINATOR)
-                .short("t")
+            Arg::new(OPT_TERMINATOR)
+                .short('t')
                 .long("terminator")
                 .help("Terminator character (defaults to \\n)")
                 .takes_value(true)
                 .number_of_values(1),
         )
         .arg(
-            Arg::with_name(OPT_WIDTHS)
-                .short("w")
+            Arg::new(OPT_WIDTHS)
+                .short('w')
                 .long("widths")
                 .help("Equalize widths of all numbers by padding with zeros"),
         )
         .arg(
-            Arg::with_name(ARG_NUMBERS)
-                .multiple(true)
+            Arg::new(ARG_NUMBERS)
+                .multiple_occurrences(true)
                 .takes_value(true)
-                .allow_hyphen_values(true)
                 .max_values(3)
                 .required(true),
         )

@@ -15,10 +15,10 @@ mod tokens;
 const VERSION: &str = "version";
 const HELP: &str = "help";
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
-        .arg(Arg::with_name(VERSION).long(VERSION))
-        .arg(Arg::with_name(HELP).long(HELP))
+        .arg(Arg::new(VERSION).long(VERSION))
+        .arg(Arg::new(HELP).long(HELP))
 }
 
 #[uucore_procs::gen_uumain]

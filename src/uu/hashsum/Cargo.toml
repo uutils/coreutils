@@ -16,7 +16,7 @@ path = "src/hashsum.rs"
 
 [dependencies]
 digest = "0.6.1"
-clap = { version = "2.33", features = ["wrap_help"] }
+clap = { version = "3.0", features = ["wrap_help", "cargo"] }
 hex = "0.2.0"
 libc = "0.2.42"
 memchr = "2"

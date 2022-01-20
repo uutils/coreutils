@@ -42,14 +42,14 @@ use lines::zlines;
 use take::take_all_but;
 use take::take_lines;
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(USAGE)
+        .override_usage(USAGE)
         .arg(
-            Arg::with_name(options::BYTES_NAME)
-                .short("c")
+            Arg::new(options::BYTES_NAME)
+                .short('c')
                 .long("bytes")
                 .value_name("[-]NUM")
                 .takes_value(true)
@@ -64,8 +64,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .allow_hyphen_values(true),
         )
         .arg(
-            Arg::with_name(options::LINES_NAME)
-                .short("n")
+            Arg::new(options::LINES_NAME)
+                .short('n')
                 .long("lines")
                 .value_name("[-]NUM")
                 .takes_value(true)
@@ -80,28 +80,28 @@ pub fn uu_app() -> App<'static, 'static> {
                 .allow_hyphen_values(true),
         )
         .arg(
-            Arg::with_name(options::QUIET_NAME)
-                .short("q")
+            Arg::new(options::QUIET_NAME)
+                .short('q')
                 .long("quiet")
                 .visible_alias("silent")
                 .help("never print headers giving file names")
                 .overrides_with_all(&[options::VERBOSE_NAME, options::QUIET_NAME]),
         )
         .arg(
-            Arg::with_name(options::VERBOSE_NAME)
-                .short("v")
+            Arg::new(options::VERBOSE_NAME)
+                .short('v')
                 .long("verbose")
                 .help("always print headers giving file names")
                 .overrides_with_all(&[options::QUIET_NAME, options::VERBOSE_NAME]),
         )
         .arg(
-            Arg::with_name(options::ZERO_NAME)
-                .short("z")
+            Arg::new(options::ZERO_NAME)
+                .short('z')
                 .long("zero-terminated")
                 .help("line delimiter is NUL, not newline")
                 .overrides_with(options::ZERO_NAME),
         )
-        .arg(Arg::with_name(options::FILES_NAME).multiple(true))
+        .arg(Arg::new(options::FILES_NAME).multiple_occurrences(true))
 }
 #[derive(PartialEq, Debug, Clone, Copy)]
 enum Modes {

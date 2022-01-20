@@ -119,46 +119,46 @@ fn build_command<'a, 'b>(args: &'a mut Vec<&'b str>) -> (Cow<'b, str>, &'a [&'b 
     (progname, &args[..])
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(crate_name!())
         .version(crate_version!())
         .author(crate_authors!())
         .about(crate_description!())
-        .usage(USAGE)
+        .override_usage(USAGE)
         .after_help(AFTER_HELP)
         .setting(AppSettings::AllowExternalSubcommands)
-        .arg(Arg::with_name("ignore-environment")
-            .short("i")
+        .arg(Arg::new("ignore-environment")
+            .short('i')
             .long("ignore-environment")
             .help("start with an empty environment"))
-        .arg(Arg::with_name("chdir")
-            .short("C") // GNU env compatibility
+        .arg(Arg::new("chdir")
+            .short('C') // GNU env compatibility
             .long("chdir")
             .takes_value(true)
             .number_of_values(1)
             .value_name("DIR")
             .help("change working directory to DIR"))
-        .arg(Arg::with_name("null")
-            .short("0")
+        .arg(Arg::new("null")
+            .short('0')
             .long("null")
             .help("end each output line with a 0 byte rather than a newline (only valid when \
                     printing the environment)"))
-        .arg(Arg::with_name("file")
-            .short("f")
+        .arg(Arg::new("file")
+            .short('f')
             .long("file")
             .takes_value(true)
             .number_of_values(1)
             .value_name("PATH")
-            .multiple(true)
+            .multiple_occurrences(true)
             .help("read and set variables from a \".env\"-style configuration file (prior to any \
                     unset and/or set)"))
-        .arg(Arg::with_name("unset")
-            .short("u")
+        .arg(Arg::new("unset")
+            .short('u')
             .long("unset")
             .takes_value(true)
             .number_of_values(1)
             .value_name("NAME")
-            .multiple(true)
+            .multiple_occurrences(true)
             .help("remove variable from the environment"))
 }
 
@@ -203,7 +203,7 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
 
     // we handle the name, value pairs and the program to be executed by treating them as external
     // subcommands in clap
-    if let (external, Some(matches)) = matches.subcommand() {
+    if let Some((external, matches)) = matches.subcommand() {
         let mut begin_prog_opts = false;
 
         if external == "-" {
