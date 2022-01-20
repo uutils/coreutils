@@ -6,7 +6,7 @@ Linux, Windows, Mac and other platforms.
 
 The API reference for `uucore`, the library of functions shared between
 various utils, is hosted at at
-[docs.rs](https://docs.rs/uucore/0.0.10/uucore/).
+[docs.rs](https://docs.rs/uucore/0.0.12/uucore/).
 
 uutils is licensed under the [MIT License](https://github.com/uutils/coreutils/LICENSE.md).
 

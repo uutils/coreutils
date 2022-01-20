@@ -3,6 +3,9 @@
 [Introduction](index.md)
 * [Installation](installation.md)
 * [Contributing](contributing.md)
+
+# Reference
+* [Multi-call binary](multicall.md)
 * [Utils](utils/index.md)
   * [arch](utils/arch.md)
   * [base32](utils/base32.md)
