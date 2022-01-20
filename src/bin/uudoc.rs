@@ -14,8 +14,6 @@ use std::io::Write;
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
 fn main() {
-    uucore::panic::mute_sigpipe_panic();
-
     let utils = util_map::<Box<dyn Iterator<Item = OsString>>>();
 
     for (name, (_, app)) in utils {
@@ -23,18 +21,28 @@ fn main() {
         if let Ok(f) = File::create(&p) {
             write_markdown(f, &mut app());
             println!("Wrote to '{}'", p);
+        } else {
+            println!("Error writing to {}", p);
         }
     }
 }
 
 fn write_markdown(mut w: impl Write, app: &mut App) {
+    write_version(&mut w, app);
     write_summary(&mut w, app);
     write_options(&mut w, app);
 }
 
+fn write_version(w: &mut impl Write, app: &App) {
+    let _ = writeln!(
+        w,
+        "<div class=\"version\">version: {}</div>",
+        app.render_version().split_once(' ').unwrap().1
+    );
+}
+
 fn write_summary(w: &mut impl Write, app: &App) {
     if let Some(about) = app.get_long_about().or_else(|| app.get_about()) {
-        let _ = writeln!(w, "<h2>Summary</h2>");
         let _ = writeln!(w, "{}", about);
     }
 }
