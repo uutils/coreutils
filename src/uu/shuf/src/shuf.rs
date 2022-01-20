@@ -15,6 +15,8 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::InvalidEncodingHandling;
 
+mod rand_read_adapter;
+
 enum Mode {
     Default(String),
     Echo(Vec<String>),
@@ -244,7 +246,7 @@ fn shuf_bytes(input: &mut Vec<&[u8]>, opts: Options) -> UResult<()> {
         Some(r) => {
             let file = File::open(&r[..])
                 .map_err_context(|| format!("failed to open random source {}", r.quote()))?;
-            WrappedRng::RngFile(rand::rngs::adapter::ReadRng::new(file))
+            WrappedRng::RngFile(rand_read_adapter::ReadRng::new(file))
         }
         None => WrappedRng::RngDefault(rand::thread_rng()),
     };
@@ -302,7 +304,7 @@ fn parse_range(input_range: &str) -> Result<(usize, usize), String> {
 }
 
 enum WrappedRng {
-    RngFile(rand::rngs::adapter::ReadRng<File>),
+    RngFile(rand_read_adapter::ReadRng<File>),
     RngDefault(rand::rngs::ThreadRng),
 }
 
