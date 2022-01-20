@@ -3,7 +3,7 @@ authors = ["uutils contributors"]
 language = "en"
 multilingual = false
 src = "src"
-title = "Uutils Documentation"
+title = "uutils Documentation"
 
 [output.html]
 git-repository-url = "https://github.com/rust-lang/cargo/tree/master/src/doc/src"

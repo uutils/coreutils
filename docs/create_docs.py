@@ -7,7 +7,7 @@ import os
 with open('src/utils/index.md', 'w') as index:
     with open('src/SUMMARY.md', 'w') as summary:
         summary.write("# Summary\n\n")
-        summary.write("* [Introduction](introduction.md)\n")
+        summary.write("[Introduction](index.md)\n")
         summary.write("* [Contributing](contributing.md)\n")
         summary.write("* [Utils](utils/index.md)\n")
         index.write("# Utils\n\n")

@@ -1,6 +1,7 @@
 # Summary
 
-* [Introduction](introduction.md)
+[Introduction](index.md)
+* [Installation](installation.md)
 * [Contributing](contributing.md)
 * [Utils](utils/index.md)
   * [arch](utils/arch.md)
