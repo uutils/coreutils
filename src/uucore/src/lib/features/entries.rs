@@ -6,7 +6,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (vars) Passwd cstr fnam gecos ngroups egid
-
+`<https://man7.org/linux/man-pages/man2/getgroups.2.html>`
 //! Get password/group file entry
 //!
 //! # Examples:
@@ -52,7 +52,7 @@ use std::sync::Mutex;
 use once_cell::sync::Lazy;
 
 extern "C" {
-    /// From: https://man7.org/linux/man-pages/man3/getgrouplist.3.html
+    /// From: `<https://man7.org/linux/man-pages/man3/getgrouplist.3.html>`
     /// > The getgrouplist() function scans the group database to obtain
     /// > the list of groups that user belongs to.
     fn getgrouplist(
@@ -63,7 +63,7 @@ extern "C" {
     ) -> c_int;
 }
 
-/// From: https://man7.org/linux/man-pages/man2/getgroups.2.html
+/// From: `<https://man7.org/linux/man-pages/man2/getgroups.2.html>`
 /// > getgroups() returns the supplementary group IDs of the calling
 /// > process in list.
 /// > If size is zero, list is not modified, but the total number of
@@ -110,7 +110,7 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
 /// to the first entry in the returned Vector. This might be necessary
 /// for `id --groups --real` if `gid` and `egid` are not equal.
 ///
-/// From: https://www.man7.org/linux/man-pages/man3/getgroups.3p.html
+/// From: `<https://www.man7.org/linux/man-pages/man3/getgroups.3p.html>`
 /// > As implied by the definition of supplementary groups, the
 /// > effective group ID may appear in the array returned by
 /// > getgroups() or it may be returned only by getegid().  Duplication
@@ -194,7 +194,7 @@ impl Passwd {
 
     /// This is a wrapper function for `libc::getgrouplist`.
     ///
-    /// From: https://man7.org/linux/man-pages/man3/getgrouplist.3.html
+    /// From: `<https://man7.org/linux/man-pages/man3/getgrouplist.3.html>`
     /// > If the number of groups of which user is a member is less than or
     /// > equal to *ngroups, then the value *ngroups is returned.
     /// > If the user is a member of more than *ngroups groups, then
