@@ -29,6 +29,7 @@ have other issues.
 Rust provides a good, platform-agnostic way of writing systems utilities that are easy
 to compile anywhere, and this is as good a way as any to try and learn it.
 
+<!-- ANCHOR: installation (this mark is needed for mdbook) -->
 ## Requirements
 
 * Rust (`cargo`, `rustc`)
@@ -252,6 +253,7 @@ To uninstall from a custom parent directory:
 # DESTDIR is also supported
 $ make PREFIX=/my/path uninstall
 ```
+<!-- ANCHOR_END: installation (this mark is needed for mdbook) -->
 
 ## Test Instructions
 
