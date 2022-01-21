@@ -2562,7 +2562,7 @@ fn test_ls_context2() {
         ts.ucmd()
             .args(&[c_flag, &"/"])
             .succeeds()
-            .stdout_only(unwrap_or_return!(expected_result(&ts, &[c_flag, &"/"])).stdout_str());
+            .stdout_only(unwrap_or_return!(expected_result(&ts, &[c_flag, "/"])).stdout_str());
     }
 }
 
@@ -2592,8 +2592,7 @@ fn test_ls_context_format() {
             .args(&[&"-Z", &format.as_str(), &"/"])
             .succeeds()
             .stdout_only(
-                unwrap_or_return!(expected_result(&ts, &[&"-Z", &format.as_str(), &"/"]))
-                    .stdout_str(),
+                unwrap_or_return!(expected_result(&ts, &["-Z", format.as_str(), "/"])).stdout_str(),
             );
     }
 }
