@@ -226,7 +226,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
                 .map_err_context(|| format!("cannot open {} for reading", filename.quote()))?;
             let md = file.metadata().unwrap();
             if is_seekable(&mut file) && get_block_size(&md) > 0 {
-                bounded_tail(&mut file, settings);
+                bounded_tail(&mut file, &settings.mode, settings.beginning);
                 if settings.follow {
                     let reader = BufReader::new(file);
                     readers.push((Box::new(reader), filename));
@@ -509,14 +509,24 @@ fn backwards_thru_file(file: &mut File, num_delimiters: usize, delimiter: u8) {
 /// end of the file, and then read the file "backwards" in blocks of size
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
-fn bounded_tail(file: &mut File, settings: &Settings) {
+fn bounded_tail(file: &mut File, mode: &FilterMode, beginning: bool) {
     // Find the position in the file to start printing from.
-    match settings.mode {
-        FilterMode::Lines(count, delimiter) => {
-            backwards_thru_file(file, count as usize, delimiter);
+    match (mode, beginning) {
+        (FilterMode::Lines(count, delimiter), false) => {
+            backwards_thru_file(file, *count, *delimiter);
         }
-        FilterMode::Bytes(count) => {
-            file.seek(SeekFrom::End(-(count as i64))).unwrap();
+        (FilterMode::Lines(count, delimiter), true) => {
+            let i = forwards_thru_file(file, (*count).max(1) - 1, *delimiter).unwrap();
+            file.seek(SeekFrom::Start(i as u64)).unwrap();
+        }
+        (FilterMode::Bytes(count), false) => {
+            file.seek(SeekFrom::End(-(*count as i64))).unwrap();
+        }
+        (FilterMode::Bytes(count), true) => {
+            // GNU `tail` seems to index bytes and lines starting at 1, not
+            // at 0. It seems to treat `+0` and `+1` as the same thing.
+            file.seek(SeekFrom::Start(((*count).max(1) - 1) as u64))
+                .unwrap();
         }
     }
 
