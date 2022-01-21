@@ -13,11 +13,14 @@ use std::io::Write;
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
-fn main() {
+fn main() -> std::io::Result<()> {
     let utils = util_map::<Box<dyn Iterator<Item = OsString>>>();
-
+    match std::fs::create_dir("docs/src/utils/") {
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        x => x,
+    }?;
     for (name, (_, app)) in utils {
-        let p = format!("docs/_generated/{}-help.md", name);
+        let p = format!("docs/src/utils/{}.md", name);
         if let Ok(f) = File::create(&p) {
             write_markdown(f, &mut app(), name);
             println!("Wrote to '{}'", p);
@@ -25,9 +28,11 @@ fn main() {
             println!("Error writing to {}", p);
         }
     }
+    Ok(())
 }
 
 fn write_markdown(mut w: impl Write, app: &mut App, name: &str) {
+    let _ = write!(w, "# {}\n\n", name);
     write_version(&mut w, app);
     write_usage(&mut w, app, name);
     write_summary(&mut w, app);
