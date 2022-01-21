@@ -386,6 +386,83 @@ fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) -> URes
     Ok(())
 }
 
+/// Find the index after the given number of instances of a given byte.
+///
+/// This function reads through a given reader until `num_delimiters`
+/// instances of `delimiter` have been seen, returning the index of
+/// the byte immediately following that delimiter. If there are fewer
+/// than `num_delimiters` instances of `delimiter`, this returns the
+/// total number of bytes read from the `reader` until EOF.
+///
+/// # Errors
+///
+/// This function returns an error if there is an error during reading
+/// from `reader`.
+///
+/// # Examples
+///
+/// Basic usage:
+///
+/// ```rust,ignore
+/// use std::io::Cursor;
+///
+/// let mut reader = Cursor::new("a\nb\nc\nd\ne\n");
+/// let i = forwards_thru_file(&mut reader, 2, b'\n').unwrap();
+/// assert_eq!(i, 4);
+/// ```
+///
+/// If `num_delimiters` is zero, then this function always returns
+/// zero:
+///
+/// ```rust,ignore
+/// use std::io::Cursor;
+///
+/// let mut reader = Cursor::new("a\n");
+/// let i = forwards_thru_file(&mut reader, 0, b'\n').unwrap();
+/// assert_eq!(i, 0);
+/// ```
+///
+/// If there are fewer than `num_delimiters` instances of `delimiter`
+/// in the reader, then this function returns the total number of
+/// bytes read:
+///
+/// ```rust,ignore
+/// use std::io::Cursor;
+///
+/// let mut reader = Cursor::new("a\n");
+/// let i = forwards_thru_file(&mut reader, 2, b'\n').unwrap();
+/// assert_eq!(i, 2);
+/// ```
+fn forwards_thru_file<R>(
+    reader: &mut R,
+    num_delimiters: usize,
+    delimiter: u8,
+) -> std::io::Result<usize>
+where
+    R: Read,
+{
+    let mut reader = BufReader::new(reader);
+
+    let mut buf = vec![];
+    let mut total = 0;
+    for _ in 0..num_delimiters {
+        match reader.read_until(delimiter, &mut buf) {
+            Ok(0) => {
+                return Ok(total);
+            }
+            Ok(n) => {
+                total += n;
+                buf.clear();
+                continue;
+            }
+            Err(e) => {
+                return Err(e);
+            }
+        }
+    }
+    Ok(total)
+}
+
 /// Iterate over bytes in the file, in reverse, until we find the
 /// `num_delimiters` instance of `delimiter`. The `file` is left seek'd to the
 /// position just after that delimiter.
@@ -532,5 +609,34 @@ fn get_block_size(md: &Metadata) -> u64 {
     #[cfg(not(unix))]
     {
         md.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::forwards_thru_file;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_forwards_thru_file_zero() {
+        let mut reader = Cursor::new("a\n");
+        let i = forwards_thru_file(&mut reader, 0, b'\n').unwrap();
+        assert_eq!(i, 0);
+    }
+
+    #[test]
+    fn test_forwards_thru_file_basic() {
+        //                   01 23 45 67 89
+        let mut reader = Cursor::new("a\nb\nc\nd\ne\n");
+        let i = forwards_thru_file(&mut reader, 2, b'\n').unwrap();
+        assert_eq!(i, 4);
+    }
+
+    #[test]
+    fn test_forwards_thru_file_past_end() {
+        let mut reader = Cursor::new("x\n");
+        let i = forwards_thru_file(&mut reader, 2, b'\n').unwrap();
+        assert_eq!(i, 2);
     }
 }
