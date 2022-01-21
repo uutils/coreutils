@@ -235,6 +235,7 @@ impl Spec {
 
 struct Line {
     fields: Vec<Vec<u8>>,
+    string: Vec<u8>,
 }
 
 impl Line {
@@ -247,10 +248,10 @@ impl Line {
                 .map(Vec::from)
                 .collect(),
             Sep::Char(sep) => string.split(|c| *c == sep).map(Vec::from).collect(),
-            Sep::Line => vec![string],
+            Sep::Line => vec![string.clone()],
         };
 
-        Line { fields }
+        Line { fields, string }
     }
 
     /// Get field at index.
@@ -444,9 +445,11 @@ impl<'a> State<'a> {
 
         if diff == Ordering::Greater {
             eprintln!(
-                "{}:{}: is not sorted",
+                "{}: {}:{}: is not sorted: {}",
+                uucore::execution_phrase(),
                 self.file_name.maybe_quote(),
-                self.line_num
+                self.line_num,
+                String::from_utf8_lossy(&line.string)
             );
 
             // This is fatal if the check is enabled.
