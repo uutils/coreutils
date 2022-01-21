@@ -489,3 +489,17 @@ fn test_no_such_file() {
 fn test_no_trailing_newline() {
     new_ucmd!().pipe_in("x").succeeds().stdout_only("x");
 }
+
+#[test]
+fn test_lines_zero_terminated() {
+    new_ucmd!()
+        .args(&["-z", "-n", "2"])
+        .pipe_in("a\0b\0c\0d\0e\0")
+        .succeeds()
+        .stdout_only("d\0e\0");
+    new_ucmd!()
+        .args(&["-z", "-n", "+2"])
+        .pipe_in("a\0b\0c\0d\0e\0")
+        .succeeds()
+        .stdout_only("b\0c\0d\0e\0");
+}
