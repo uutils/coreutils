@@ -14,6 +14,8 @@ use clap::{crate_version, App, AppSettings, Arg};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Split, Stdin, Write};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UResult, USimpleError};
 
@@ -532,8 +534,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.key1 = get_field_number(keys, key1)?;
     settings.key2 = get_field_number(keys, key2)?;
 
-    if let Some(value_str) = matches.value_of("t") {
-        let value = value_str.as_bytes();
+    if let Some(value_os) = matches.value_of_os("t") {
+        #[cfg(unix)]
+        let value = value_os.as_bytes();
+        #[cfg(not(unix))]
+        let value = match value_os.to_str() {
+            Some(value) => value.as_bytes(),
+            None => {
+                return Err(USimpleError::new(
+                    1,
+                    "unprintable field separators are only supported on unix-like platforms",
+                ))
+            }
+        };
         settings.separator = match value.len() {
             0 => Sep::Line,
             1 => Sep::Char(value[0]),
@@ -541,7 +554,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             _ => {
                 return Err(USimpleError::new(
                     1,
-                    format!("multi-character tab {}", value_str),
+                    format!("multi-character tab {}", value_os.to_string_lossy()),
                 ))
             }
         };
@@ -655,6 +668,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
                 .short('t')
                 .takes_value(true)
                 .value_name("CHAR")
+                .allow_invalid_utf8(true)
                 .help("use CHAR as input and output field separator"),
         )
         .arg(
