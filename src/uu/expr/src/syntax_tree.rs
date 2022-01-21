@@ -7,7 +7,7 @@
 
 //!
 //! Here we employ shunting-yard algorithm for building AST from tokens according to operators' precedence and associative-ness.
-//! * https://en.wikipedia.org/wiki/Shunting-yard_algorithm
+//! * `<https://en.wikipedia.org/wiki/Shunting-yard_algorithm>`
 //!
 
 // spell-checker:ignore (ToDO) binop binops ints paren prec
