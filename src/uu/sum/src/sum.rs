@@ -19,9 +19,9 @@ use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "sum";
-static USAGE: &str =
-    "[OPTION]... [FILE]...\nWith no FILE, or when  FILE is -, read standard input.";
-static SUMMARY: &str = "Checksum and count the blocks in a file.";
+static USAGE: &str = "sum [OPTION]... [FILE]...";
+static SUMMARY: &str = "Checksum and count the blocks in a file.\n\
+                        With no FILE, or when  FILE is -, read standard input.";
 
 fn bsd_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
     let mut buf = [0; 1024];

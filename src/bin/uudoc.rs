@@ -19,7 +19,7 @@ fn main() {
     for (name, (_, app)) in utils {
         let p = format!("docs/_generated/{}-help.md", name);
         if let Ok(f) = File::create(&p) {
-            write_markdown(f, &mut app());
+            write_markdown(f, &mut app(), name);
             println!("Wrote to '{}'", p);
         } else {
             println!("Error writing to {}", p);
@@ -27,8 +27,9 @@ fn main() {
     }
 }
 
-fn write_markdown(mut w: impl Write, app: &mut App) {
+fn write_markdown(mut w: impl Write, app: &mut App, name: &str) {
     write_version(&mut w, app);
+    write_usage(&mut w, app, name);
     write_summary(&mut w, app);
     write_options(&mut w, app);
 }
@@ -39,6 +40,14 @@ fn write_version(w: &mut impl Write, app: &App) {
         "<div class=\"version\">version: {}</div>",
         app.render_version().split_once(' ').unwrap().1
     );
+}
+
+fn write_usage(w: &mut impl Write, app: &mut App, name: &str) {
+    let _ = writeln!(w, "\n```");
+    let mut usage: String = app.render_usage().lines().nth(1).unwrap().trim().into();
+    usage = usage.replace(app.get_name(), name);
+    let _ = writeln!(w, "{}", usage);
+    let _ = writeln!(w, "```");
 }
 
 fn write_summary(w: &mut impl Write, app: &App) {
@@ -59,18 +68,43 @@ fn write_options(w: &mut impl Write, app: &App) {
             } else {
                 first = false;
             }
-            let _ = write!(w, "<code>--{}</code>", l);
+            let _ = write!(w, "<code>");
+            let _ = write!(w, "--{}", l);
+            if let Some(names) = arg.get_value_names() {
+                let _ = write!(
+                    w,
+                    "={}",
+                    names
+                        .iter()
+                        .map(|x| format!("&lt;{}&gt;", x))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                );
+            }
+            let _ = write!(w, "</code>");
         }
-        for l in arg.get_short_and_visible_aliases().unwrap_or_default() {
+        for s in arg.get_short_and_visible_aliases().unwrap_or_default() {
             if !first {
                 let _ = write!(w, ", ");
             } else {
                 first = false;
             }
-            let _ = write!(w, "<code>-{}</code>", l);
+            let _ = write!(w, "<code>");
+            let _ = write!(w, "-{}", s);
+            if let Some(names) = arg.get_value_names() {
+                let _ = write!(
+                    w,
+                    " {}",
+                    names
+                        .iter()
+                        .map(|x| format!("&lt;{}&gt;", x))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                );
+            }
+            let _ = write!(w, "</code>");
         }
         let _ = writeln!(w, "</dt>");
-
         let _ = writeln!(w, "<dd>{}</dd>", arg.get_help().unwrap_or_default());
     }
     let _ = writeln!(w, "</dl>");
