@@ -312,6 +312,7 @@ optopt
 ccmd
 coreopts
 coreutils
+uudoc
 keepenv
 libc
 libstdbuf
