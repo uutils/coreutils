@@ -6,7 +6,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (vars) Passwd cstr fnam gecos ngroups egid
-`<https://man7.org/linux/man-pages/man2/getgroups.2.html>`
+
 //! Get password/group file entry
 //!
 //! # Examples:
