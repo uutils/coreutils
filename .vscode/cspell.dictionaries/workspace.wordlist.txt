@@ -25,6 +25,7 @@ getrandom
 globset
 itertools
 lscolors
+mdbook
 memchr
 multifilereader
 onig
@@ -312,7 +313,6 @@ optopt
 ccmd
 coreopts
 coreutils
-uudoc
 keepenv
 libc
 libstdbuf
@@ -323,6 +323,7 @@ ucommand
 utmpx
 uucore
 uucore_procs
+uudoc
 uumain
 uutil
 uutils
