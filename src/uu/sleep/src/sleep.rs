@@ -35,7 +35,7 @@ fn usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     if let Some(values) = matches.values_of(options::NUMBER) {
         let numbers = values.collect();
@@ -45,18 +45,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
         .arg(
-            Arg::with_name(options::NUMBER)
-                .long(options::NUMBER)
+            Arg::new(options::NUMBER)
                 .help("pause for NUMBER seconds")
                 .value_name(options::NUMBER)
                 .index(1)
-                .multiple(true)
+                .multiple_occurrences(true)
                 .required(true),
         )
 }

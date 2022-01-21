@@ -97,7 +97,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let long_usage = get_long_usage();
 
     let matches = uu_app()
-        .usage(&usage[..])
+        .override_usage(&usage[..])
         .after_help(&long_usage[..])
         .get_matches_from(args);
 
@@ -134,41 +134,41 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(options::IO_BLOCKS)
-            .short("o")
+            Arg::new(options::IO_BLOCKS)
+            .short('o')
             .long(options::IO_BLOCKS)
             .help("treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)")
         )
         .arg(
-            Arg::with_name(options::NO_CREATE)
-            .short("c")
+            Arg::new(options::NO_CREATE)
+            .short('c')
             .long(options::NO_CREATE)
             .help("do not create files that do not exist")
         )
         .arg(
-            Arg::with_name(options::REFERENCE)
-            .short("r")
+            Arg::new(options::REFERENCE)
+            .short('r')
             .long(options::REFERENCE)
-            .required_unless(options::SIZE)
+            .required_unless_present(options::SIZE)
             .help("base the size of each file on the size of RFILE")
             .value_name("RFILE")
         )
         .arg(
-            Arg::with_name(options::SIZE)
-            .short("s")
+            Arg::new(options::SIZE)
+            .short('s')
             .long(options::SIZE)
-            .required_unless(options::REFERENCE)
+            .required_unless_present(options::REFERENCE)
             .help("set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified")
             .value_name("SIZE")
         )
-        .arg(Arg::with_name(options::ARG_FILES)
+        .arg(Arg::new(options::ARG_FILES)
              .value_name("FILE")
-             .multiple(true)
+             .multiple_occurrences(true)
              .takes_value(true)
              .required(true)
              .min_values(1))

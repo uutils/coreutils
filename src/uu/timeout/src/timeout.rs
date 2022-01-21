@@ -108,7 +108,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let usage = usage();
 
-    let app = uu_app().usage(&usage[..]);
+    let app = uu_app().override_usage(&usage[..]);
 
     let matches = app.get_matches_from(args);
 
@@ -124,47 +124,47 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     )
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new("timeout")
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(options::FOREGROUND)
+            Arg::new(options::FOREGROUND)
                 .long(options::FOREGROUND)
                 .help("when not running timeout directly from a shell prompt, allow COMMAND to read from the TTY and get TTY signals; in this mode, children of COMMAND will not be timed out")
         )
         .arg(
-            Arg::with_name(options::KILL_AFTER)
-                .short("k")
+            Arg::new(options::KILL_AFTER)
+                .short('k')
                 .takes_value(true))
         .arg(
-            Arg::with_name(options::PRESERVE_STATUS)
+            Arg::new(options::PRESERVE_STATUS)
                 .long(options::PRESERVE_STATUS)
                 .help("exit with the same status as COMMAND, even when the command times out")
         )
         .arg(
-            Arg::with_name(options::SIGNAL)
-                .short("s")
+            Arg::new(options::SIGNAL)
+                .short('s')
                 .long(options::SIGNAL)
                 .help("specify the signal to be sent on timeout; SIGNAL may be a name like 'HUP' or a number; see 'kill -l' for a list of signals")
                 .takes_value(true)
         )
         .arg(
-            Arg::with_name(options::VERBOSE)
-              .short("v")
+            Arg::new(options::VERBOSE)
+              .short('v')
               .long(options::VERBOSE)
               .help("diagnose to stderr any signal sent upon timeout")
         )
         .arg(
-            Arg::with_name(options::DURATION)
+            Arg::new(options::DURATION)
                 .index(1)
                 .required(true)
         )
         .arg(
-            Arg::with_name(options::COMMAND)
+            Arg::new(options::COMMAND)
                 .index(2)
                 .required(true)
-                .multiple(true)
+                .multiple_occurrences(true)
         )
         .setting(AppSettings::TrailingVarArg)
 }

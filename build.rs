@@ -43,7 +43,7 @@ pub fn main() {
     let mut tf = File::create(Path::new(&out_dir).join("test_modules.rs")).unwrap();
 
     mf.write_all(
-        "type UtilityMap<T> = HashMap<&'static str, (fn(T) -> i32, fn() -> App<'static, 'static>)>;\n\
+        "type UtilityMap<T> = HashMap<&'static str, (fn(T) -> i32, fn() -> App<'static>)>;\n\
          \n\
          fn util_map<T: uucore::Args>() -> UtilityMap<T> {\n\
          \t#[allow(unused_mut)]\n\

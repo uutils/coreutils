@@ -48,29 +48,29 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     paste(files, serial, delimiters)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(options::SERIAL)
+            Arg::new(options::SERIAL)
                 .long(options::SERIAL)
-                .short("s")
+                .short('s')
                 .help("paste one file at a time instead of in parallel"),
         )
         .arg(
-            Arg::with_name(options::DELIMITER)
+            Arg::new(options::DELIMITER)
                 .long(options::DELIMITER)
-                .short("d")
+                .short('d')
                 .help("reuse characters from LIST instead of TABs")
                 .value_name("LIST")
                 .default_value("\t")
                 .hide_default_value(true),
         )
         .arg(
-            Arg::with_name(options::FILE)
+            Arg::new(options::FILE)
                 .value_name("FILE")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .default_value("-"),
         )
 }

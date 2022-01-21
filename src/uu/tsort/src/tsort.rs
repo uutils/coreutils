@@ -93,16 +93,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
-        .usage(USAGE)
+        .override_usage(USAGE)
         .about(SUMMARY)
-        .arg(
-            Arg::with_name(options::FILE)
-                .default_value("-")
-                .hidden(true),
-        )
+        .arg(Arg::new(options::FILE).default_value("-").hide(true))
 }
 
 // We use String as a representation of node here

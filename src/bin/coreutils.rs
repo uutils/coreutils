@@ -5,9 +5,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::App;
-use clap::Arg;
-use clap::Shell;
+use clap::{App, Arg};
+use clap_complete::Shell;
 use std::cmp;
 use std::collections::hash_map::HashMap;
 use std::ffi::OsStr;
@@ -143,13 +142,13 @@ fn gen_completions<T: uucore::Args>(
     let matches = App::new("completion")
         .about("Prints completions to stdout")
         .arg(
-            Arg::with_name("utility")
-                .possible_values(&all_utilities)
+            Arg::new("utility")
+                .possible_values(all_utilities)
                 .required(true),
         )
         .arg(
-            Arg::with_name("shell")
-                .possible_values(&Shell::variants())
+            Arg::new("shell")
+                .possible_values(Shell::possible_values())
                 .required(true),
         )
         .get_matches_from(std::iter::once(OsString::from("completion")).chain(args));
@@ -165,12 +164,12 @@ fn gen_completions<T: uucore::Args>(
     let shell: Shell = shell.parse().unwrap();
     let bin_name = std::env::var("PROG_PREFIX").unwrap_or_default() + utility;
 
-    app.gen_completions_to(bin_name, shell, &mut io::stdout());
+    clap_complete::generate(shell, &mut app, bin_name, &mut io::stdout());
     io::stdout().flush().unwrap();
     process::exit(0);
 }
 
-fn gen_coreutils_app<T: uucore::Args>(util_map: UtilityMap<T>) -> App<'static, 'static> {
+fn gen_coreutils_app<T: uucore::Args>(util_map: UtilityMap<T>) -> App<'static> {
     let mut app = App::new("coreutils");
     for (_, (_, sub_app)) in util_map {
         app = app.subcommand(sub_app());

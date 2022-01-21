@@ -86,10 +86,10 @@ NOTE: your shell may have its own version of test and/or [, which usually supers
 the version described here.  Please refer to your shell's documentation
 for details about the options it supports.";
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
-        .setting(AppSettings::DisableHelpFlags)
-        .setting(AppSettings::DisableVersion)
+        .setting(AppSettings::DisableHelpFlag)
+        .setting(AppSettings::DisableVersionFlag)
 }
 
 #[uucore_procs::gen_uumain]
@@ -104,12 +104,10 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
             // Let clap pretty-print help and version
             App::new(binary_name)
                 .version(crate_version!())
-                .usage(USAGE)
+                .override_usage(USAGE)
                 .after_help(AFTER_HELP)
                 // Disable printing of -h and -v as valid alternatives for --help and --version,
                 // since we don't recognize -h and -v as help/version flags.
-                .setting(AppSettings::NeedsLongHelp)
-                .setting(AppSettings::NeedsLongVersion)
                 .get_matches_from(std::iter::once(program).chain(args.into_iter()));
             return Ok(());
         }

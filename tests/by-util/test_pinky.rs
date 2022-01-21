@@ -58,7 +58,7 @@ fn test_long_format_multiple_users() {
 #[test]
 fn test_long_format_wo_user() {
     // "no username specified; at least one must be specified when using -l"
-    new_ucmd!().arg("-l").fails().code_is(1);
+    new_ucmd!().arg("-l").fails();
 }
 
 #[cfg(unix)]

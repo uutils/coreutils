@@ -43,7 +43,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let obs_signal = handle_obsolete(&mut args);
 
     let usage = format!("{} [OPTIONS]... PID...", uucore::execution_phrase());
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let mode = if matches.is_present(options::TABLE) || matches.is_present(options::TABLE_OLD) {
         Mode::Table
@@ -78,36 +78,36 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(options::LIST)
-                .short("l")
+            Arg::new(options::LIST)
+                .short('l')
                 .long(options::LIST)
                 .help("Lists signals")
                 .conflicts_with(options::TABLE)
                 .conflicts_with(options::TABLE_OLD),
         )
         .arg(
-            Arg::with_name(options::TABLE)
-                .short("t")
+            Arg::new(options::TABLE)
+                .short('t')
                 .long(options::TABLE)
                 .help("Lists table of signals"),
         )
-        .arg(Arg::with_name(options::TABLE_OLD).short("L").hidden(true))
+        .arg(Arg::new(options::TABLE_OLD).short('L').hide(true))
         .arg(
-            Arg::with_name(options::SIGNAL)
-                .short("s")
+            Arg::new(options::SIGNAL)
+                .short('s')
                 .long(options::SIGNAL)
                 .help("Sends given signal")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(options::PIDS_OR_SIGNALS)
-                .hidden(true)
-                .multiple(true),
+            Arg::new(options::PIDS_OR_SIGNALS)
+                .hide(true)
+                .multiple_occurrences(true),
         )
 }
 

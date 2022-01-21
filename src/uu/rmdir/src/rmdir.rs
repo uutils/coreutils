@@ -33,7 +33,7 @@ fn usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let opts = Opts {
         ignore: matches.is_present(OPT_IGNORE_FAIL_NON_EMPTY),
@@ -175,35 +175,31 @@ struct Opts {
     verbose: bool,
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(OPT_IGNORE_FAIL_NON_EMPTY)
+            Arg::new(OPT_IGNORE_FAIL_NON_EMPTY)
                 .long(OPT_IGNORE_FAIL_NON_EMPTY)
                 .help("ignore each failure that is solely because a directory is non-empty"),
         )
-        .arg(
-            Arg::with_name(OPT_PARENTS)
-                .short("p")
-                .long(OPT_PARENTS)
-                .help(
-                    "remove DIRECTORY and its ancestors; e.g.,
+        .arg(Arg::new(OPT_PARENTS).short('p').long(OPT_PARENTS).help(
+            "remove DIRECTORY and its ancestors; e.g.,
                   'rmdir -p a/b/c' is similar to rmdir a/b/c a/b a",
-                ),
-        )
+        ))
         .arg(
-            Arg::with_name(OPT_VERBOSE)
-                .short("v")
+            Arg::new(OPT_VERBOSE)
+                .short('v')
                 .long(OPT_VERBOSE)
                 .help("output a diagnostic for every directory processed"),
         )
         .arg(
-            Arg::with_name(ARG_DIRS)
-                .multiple(true)
+            Arg::new(ARG_DIRS)
+                .multiple_occurrences(true)
                 .takes_value(true)
                 .min_values(1)
-                .required(true),
+                .required(true)
+                .allow_invalid_utf8(true),
         )
 }

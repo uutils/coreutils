@@ -175,7 +175,7 @@ fn usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let paths: Vec<String> = matches
         .values_of(ARG_FILES)
@@ -192,7 +192,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -203,67 +203,67 @@ pub fn uu_app() -> App<'static, 'static> {
             backup_control::arguments::backup_no_args()
         )
         .arg(
-            Arg::with_name(OPT_IGNORED)
-            .short("c")
+            Arg::new(OPT_IGNORED)
+            .short('c')
             .help("ignored")
         )
         .arg(
-            Arg::with_name(OPT_COMPARE)
-            .short("C")
+            Arg::new(OPT_COMPARE)
+            .short('C')
             .long(OPT_COMPARE)
             .help("compare each pair of source and destination files, and in some cases, do not modify the destination at all")
         )
         .arg(
-            Arg::with_name(OPT_DIRECTORY)
-                .short("d")
+            Arg::new(OPT_DIRECTORY)
+                .short('d')
                 .long(OPT_DIRECTORY)
                 .help("treat all arguments as directory names. create all components of the specified directories")
         )
 
         .arg(
             // TODO implement flag
-            Arg::with_name(OPT_CREATE_LEADING)
-                .short("D")
+            Arg::new(OPT_CREATE_LEADING)
+                .short('D')
                 .help("create all leading components of DEST except the last, then copy SOURCE to DEST")
         )
         .arg(
-            Arg::with_name(OPT_GROUP)
-                .short("g")
+            Arg::new(OPT_GROUP)
+                .short('g')
                 .long(OPT_GROUP)
                 .help("set group ownership, instead of process's current group")
                 .value_name("GROUP")
                 .takes_value(true)
         )
         .arg(
-            Arg::with_name(OPT_MODE)
-                .short("m")
+            Arg::new(OPT_MODE)
+                .short('m')
                 .long(OPT_MODE)
                 .help("set permission mode (as in chmod), instead of rwxr-xr-x")
                 .value_name("MODE")
                 .takes_value(true)
         )
         .arg(
-            Arg::with_name(OPT_OWNER)
-                .short("o")
+            Arg::new(OPT_OWNER)
+                .short('o')
                 .long(OPT_OWNER)
                 .help("set ownership (super-user only)")
                 .value_name("OWNER")
                 .takes_value(true)
         )
         .arg(
-            Arg::with_name(OPT_PRESERVE_TIMESTAMPS)
-                .short("p")
+            Arg::new(OPT_PRESERVE_TIMESTAMPS)
+                .short('p')
                 .long(OPT_PRESERVE_TIMESTAMPS)
                 .help("apply access/modification times of SOURCE files to corresponding destination files")
         )
         .arg(
-            Arg::with_name(OPT_STRIP)
-                .short("s")
+            Arg::new(OPT_STRIP)
+                .short('s')
                 .long(OPT_STRIP)
                 .help("strip symbol tables (no action Windows)")
         )
         .arg(
-            Arg::with_name(OPT_STRIP_PROGRAM)
+            Arg::new(OPT_STRIP_PROGRAM)
                 .long(OPT_STRIP_PROGRAM)
                 .help("program used to strip binaries (no action Windows)")
                 .value_name("PROGRAM")
@@ -273,42 +273,42 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         .arg(
             // TODO implement flag
-            Arg::with_name(OPT_TARGET_DIRECTORY)
-                .short("t")
+            Arg::new(OPT_TARGET_DIRECTORY)
+                .short('t')
                 .long(OPT_TARGET_DIRECTORY)
                 .help("move all SOURCE arguments into DIRECTORY")
                 .value_name("DIRECTORY")
         )
         .arg(
             // TODO implement flag
-            Arg::with_name(OPT_NO_TARGET_DIRECTORY)
-                .short("T")
+            Arg::new(OPT_NO_TARGET_DIRECTORY)
+                .short('T')
                 .long(OPT_NO_TARGET_DIRECTORY)
                 .help("(unimplemented) treat DEST as a normal file")
 
         )
         .arg(
-            Arg::with_name(OPT_VERBOSE)
-            .short("v")
+            Arg::new(OPT_VERBOSE)
+            .short('v')
             .long(OPT_VERBOSE)
             .help("explain what is being done")
         )
         .arg(
             // TODO implement flag
-            Arg::with_name(OPT_PRESERVE_CONTEXT)
-                .short("P")
+            Arg::new(OPT_PRESERVE_CONTEXT)
+                .short('P')
                 .long(OPT_PRESERVE_CONTEXT)
                 .help("(unimplemented) preserve security context")
         )
         .arg(
             // TODO implement flag
-            Arg::with_name(OPT_CONTEXT)
-                .short("Z")
+            Arg::new(OPT_CONTEXT)
+                .short('Z')
                 .long(OPT_CONTEXT)
                 .help("(unimplemented) set security context of files and directories")
                 .value_name("CONTEXT")
         )
-        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true).min_values(1))
+        .arg(Arg::new(ARG_FILES).multiple_occurrences(true).takes_value(true).min_values(1))
 }
 
 /// Check for unimplemented command line arguments.

@@ -16,9 +16,11 @@ extern crate clap;
 extern crate uucore;
 
 mod chunks;
+mod lines;
 mod parse;
 mod platform;
 use chunks::ReverseChunks;
+use lines::lines;
 
 use clap::{App, Arg};
 use std::collections::VecDeque;
@@ -30,7 +32,7 @@ use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::ringbuffer::RingBuffer;
 
@@ -220,7 +222,8 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
             if path.is_dir() {
                 continue;
             }
-            let mut file = File::open(&path).unwrap();
+            let mut file = File::open(&path)
+                .map_err_context(|| format!("cannot open {} for reading", filename.quote()))?;
             let md = file.metadata().unwrap();
             if is_seekable(&mut file) && get_block_size(&md) > 0 {
                 bounded_tail(&mut file, settings);
@@ -271,14 +274,14 @@ fn arg_iterate<'a>(
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(USAGE)
+        .override_usage(USAGE)
         .arg(
-            Arg::with_name(options::BYTES)
-                .short("c")
+            Arg::new(options::BYTES)
+                .short('c')
                 .long(options::BYTES)
                 .takes_value(true)
                 .allow_hyphen_values(true)
@@ -286,14 +289,14 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("Number of bytes to print"),
         )
         .arg(
-            Arg::with_name(options::FOLLOW)
-                .short("f")
+            Arg::new(options::FOLLOW)
+                .short('f')
                 .long(options::FOLLOW)
                 .help("Print the file as it grows"),
         )
         .arg(
-            Arg::with_name(options::LINES)
-                .short("n")
+            Arg::new(options::LINES)
+                .short('n')
                 .long(options::LINES)
                 .takes_value(true)
                 .allow_hyphen_values(true)
@@ -301,42 +304,42 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("Number of lines to print"),
         )
         .arg(
-            Arg::with_name(options::PID)
+            Arg::new(options::PID)
                 .long(options::PID)
                 .takes_value(true)
                 .help("with -f, terminate after process ID, PID dies"),
         )
         .arg(
-            Arg::with_name(options::verbosity::QUIET)
-                .short("q")
+            Arg::new(options::verbosity::QUIET)
+                .short('q')
                 .long(options::verbosity::QUIET)
                 .visible_alias("silent")
                 .overrides_with_all(&[options::verbosity::QUIET, options::verbosity::VERBOSE])
                 .help("never output headers giving file names"),
         )
         .arg(
-            Arg::with_name(options::SLEEP_INT)
-                .short("s")
+            Arg::new(options::SLEEP_INT)
+                .short('s')
                 .takes_value(true)
                 .long(options::SLEEP_INT)
                 .help("Number or seconds to sleep between polling the file when running with -f"),
         )
         .arg(
-            Arg::with_name(options::verbosity::VERBOSE)
-                .short("v")
+            Arg::new(options::verbosity::VERBOSE)
+                .short('v')
                 .long(options::verbosity::VERBOSE)
                 .overrides_with_all(&[options::verbosity::QUIET, options::verbosity::VERBOSE])
                 .help("always output headers giving file names"),
         )
         .arg(
-            Arg::with_name(options::ZERO_TERM)
-                .short("z")
+            Arg::new(options::ZERO_TERM)
+                .short('z')
                 .long(options::ZERO_TERM)
                 .help("Line delimiter is NUL, not newline"),
         )
         .arg(
-            Arg::with_name(options::ARG_FILES)
-                .multiple(true)
+            Arg::new(options::ARG_FILES)
+                .multiple_occurrences(true)
                 .takes_value(true)
                 .min_values(1),
         )
@@ -481,8 +484,8 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
     // data in the ringbuf.
     match settings.mode {
         FilterMode::Lines(count, _) => {
-            for line in unbounded_tail_collect(reader.lines(), count, settings.beginning) {
-                println!("{}", line);
+            for line in unbounded_tail_collect(lines(reader), count, settings.beginning) {
+                print!("{}", line);
             }
         }
         FilterMode::Bytes(count) => {

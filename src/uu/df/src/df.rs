@@ -280,7 +280,7 @@ impl UError for DfError {
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let paths: Vec<String> = matches
         .values_of(OPT_PATHS)
@@ -421,19 +421,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(OPT_ALL)
-                .short("a")
+            Arg::new(OPT_ALL)
+                .short('a')
                 .long("all")
                 .help("include dummy file systems"),
         )
         .arg(
-            Arg::with_name(OPT_BLOCKSIZE)
-                .short("B")
+            Arg::new(OPT_BLOCKSIZE)
+                .short('B')
                 .long("block-size")
                 .takes_value(true)
                 .help(
@@ -442,54 +442,50 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_DIRECT)
+            Arg::new(OPT_DIRECT)
                 .long("direct")
                 .help("show statistics for a file instead of mount point"),
         )
         .arg(
-            Arg::with_name(OPT_TOTAL)
+            Arg::new(OPT_TOTAL)
                 .long("total")
                 .help("produce a grand total"),
         )
         .arg(
-            Arg::with_name(OPT_HUMAN_READABLE)
-                .short("h")
+            Arg::new(OPT_HUMAN_READABLE)
+                .short('h')
                 .long("human-readable")
                 .conflicts_with(OPT_HUMAN_READABLE_2)
                 .help("print sizes in human readable format (e.g., 1K 234M 2G)"),
         )
         .arg(
-            Arg::with_name(OPT_HUMAN_READABLE_2)
-                .short("H")
+            Arg::new(OPT_HUMAN_READABLE_2)
+                .short('H')
                 .long("si")
                 .conflicts_with(OPT_HUMAN_READABLE)
                 .help("likewise, but use powers of 1000 not 1024"),
         )
         .arg(
-            Arg::with_name(OPT_INODES)
-                .short("i")
+            Arg::new(OPT_INODES)
+                .short('i')
                 .long("inodes")
                 .help("list inode information instead of block usage"),
         )
+        .arg(Arg::new(OPT_KILO).short('k').help("like --block-size=1K"))
         .arg(
-            Arg::with_name(OPT_KILO)
-                .short("k")
-                .help("like --block-size=1K"),
-        )
-        .arg(
-            Arg::with_name(OPT_LOCAL)
-                .short("l")
+            Arg::new(OPT_LOCAL)
+                .short('l')
                 .long("local")
                 .help("limit listing to local file systems"),
         )
         .arg(
-            Arg::with_name(OPT_NO_SYNC)
+            Arg::new(OPT_NO_SYNC)
                 .long("no-sync")
                 .conflicts_with(OPT_SYNC)
                 .help("do not invoke sync before getting usage info (default)"),
         )
         .arg(
-            Arg::with_name(OPT_OUTPUT)
+            Arg::new(OPT_OUTPUT)
                 .long("output")
                 .takes_value(true)
                 .use_delimiter(true)
@@ -499,39 +495,40 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_PORTABILITY)
-                .short("P")
+            Arg::new(OPT_PORTABILITY)
+                .short('P')
                 .long("portability")
                 .help("use the POSIX output format"),
         )
         .arg(
-            Arg::with_name(OPT_SYNC)
+            Arg::new(OPT_SYNC)
                 .long("sync")
                 .conflicts_with(OPT_NO_SYNC)
                 .help("invoke sync before getting usage info"),
         )
         .arg(
-            Arg::with_name(OPT_TYPE)
-                .short("t")
+            Arg::new(OPT_TYPE)
+                .short('t')
                 .long("type")
+                .allow_invalid_utf8(true)
                 .takes_value(true)
                 .use_delimiter(true)
                 .help("limit listing to file systems of type TYPE"),
         )
         .arg(
-            Arg::with_name(OPT_PRINT_TYPE)
-                .short("T")
+            Arg::new(OPT_PRINT_TYPE)
+                .short('T')
                 .long("print-type")
                 .help("print file system type"),
         )
         .arg(
-            Arg::with_name(OPT_EXCLUDE_TYPE)
-                .short("x")
+            Arg::new(OPT_EXCLUDE_TYPE)
+                .short('x')
                 .long("exclude-type")
                 .takes_value(true)
                 .use_delimiter(true)
                 .help("limit listing to file systems not of type TYPE"),
         )
-        .arg(Arg::with_name(OPT_PATHS).multiple(true))
-        .help("Filesystem(s) to list")
+        .arg(Arg::new(OPT_PATHS).multiple_occurrences(true))
+        .override_help("Filesystem(s) to list")
 }

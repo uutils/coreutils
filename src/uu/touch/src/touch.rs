@@ -56,7 +56,7 @@ fn usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let files = matches.values_of_os(ARG_FILES).unwrap();
 
@@ -129,43 +129,43 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(options::ACCESS)
-                .short("a")
+            Arg::new(options::ACCESS)
+                .short('a')
                 .help("change only the access time"),
         )
         .arg(
-            Arg::with_name(options::sources::CURRENT)
-                .short("t")
+            Arg::new(options::sources::CURRENT)
+                .short('t')
                 .help("use [[CC]YY]MMDDhhmm[.ss] instead of the current time")
                 .value_name("STAMP")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(options::sources::DATE)
-                .short("d")
+            Arg::new(options::sources::DATE)
+                .short('d')
                 .long(options::sources::DATE)
                 .help("parse argument and use it instead of current time")
                 .value_name("STRING"),
         )
         .arg(
-            Arg::with_name(options::MODIFICATION)
-                .short("m")
+            Arg::new(options::MODIFICATION)
+                .short('m')
                 .help("change only the modification time"),
         )
         .arg(
-            Arg::with_name(options::NO_CREATE)
-                .short("c")
+            Arg::new(options::NO_CREATE)
+                .short('c')
                 .long(options::NO_CREATE)
                 .help("do not create any files"),
         )
         .arg(
-            Arg::with_name(options::NO_DEREF)
-                .short("h")
+            Arg::new(options::NO_DEREF)
+                .short('h')
                 .long(options::NO_DEREF)
                 .help(
                     "affect each symbolic link instead of any referenced file \
@@ -173,15 +173,16 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::sources::REFERENCE)
-                .short("r")
+            Arg::new(options::sources::REFERENCE)
+                .short('r')
                 .long(options::sources::REFERENCE)
                 .alias("ref") // clapv3
                 .help("use this file's times instead of the current time")
-                .value_name("FILE"),
+                .value_name("FILE")
+                .allow_invalid_utf8(true),
         )
         .arg(
-            Arg::with_name(options::TIME)
+            Arg::new(options::TIME)
                 .long(options::TIME)
                 .help(
                     "change only the specified time: \"access\", \"atime\", or \
@@ -193,12 +194,13 @@ pub fn uu_app() -> App<'static, 'static> {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(ARG_FILES)
-                .multiple(true)
+            Arg::new(ARG_FILES)
+                .multiple_occurrences(true)
                 .takes_value(true)
-                .min_values(1),
+                .min_values(1)
+                .allow_invalid_utf8(true),
         )
-        .group(ArgGroup::with_name(options::SOURCES).args(&[
+        .group(ArgGroup::new(options::SOURCES).args(&[
             options::sources::CURRENT,
             options::sources::DATE,
             options::sources::REFERENCE,

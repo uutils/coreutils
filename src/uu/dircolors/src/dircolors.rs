@@ -73,7 +73,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(&args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(&args);
 
     let files = matches
         .values_of(options::FILE)
@@ -160,35 +160,39 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(LONG_HELP)
         .arg(
-            Arg::with_name(options::BOURNE_SHELL)
+            Arg::new(options::BOURNE_SHELL)
                 .long("sh")
-                .short("b")
+                .short('b')
                 .visible_alias("bourne-shell")
                 .help("output Bourne shell code to set LS_COLORS")
                 .display_order(1),
         )
         .arg(
-            Arg::with_name(options::C_SHELL)
+            Arg::new(options::C_SHELL)
                 .long("csh")
-                .short("c")
+                .short('c')
                 .visible_alias("c-shell")
                 .help("output C shell code to set LS_COLORS")
                 .display_order(2),
         )
         .arg(
-            Arg::with_name(options::PRINT_DATABASE)
+            Arg::new(options::PRINT_DATABASE)
                 .long("print-database")
-                .short("p")
+                .short('p')
                 .help("print the byte counts")
                 .display_order(3),
         )
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+        .arg(
+            Arg::new(options::FILE)
+                .hide(true)
+                .multiple_occurrences(true),
+        )
 }
 
 pub trait StrUtils {

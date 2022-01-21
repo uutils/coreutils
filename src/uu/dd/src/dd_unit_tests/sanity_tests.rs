@@ -311,6 +311,6 @@ fn test_nocreat_causes_failure_when_ofile_doesnt_exist() {
         String::from("--of=not-a-real.file"),
     ];
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
     let _ = Output::<File>::new(&matches).unwrap();
 }

@@ -35,7 +35,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .accept_any();
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let to = Path::new(matches.value_of(options::TO).unwrap()).to_path_buf(); // required
     let from = match matches.value_of(options::FROM) {
@@ -82,23 +82,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     println_verbatim(result).map_err_context(String::new)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .arg(
-            Arg::with_name(options::DIR)
-                .short("d")
-                .takes_value(true)
-                .help("If any of FROM and TO is not subpath of DIR, output absolute path instead of relative"),
-        )
-        .arg(
-            Arg::with_name(options::TO)
-                .required(true)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name(options::FROM)
-                .takes_value(true),
-        )
+        .arg(Arg::new(options::DIR).short('d').takes_value(true).help(
+            "If any of FROM and TO is not subpath of DIR, output absolute path instead of relative",
+        ))
+        .arg(Arg::new(options::TO).required(true).takes_value(true))
+        .arg(Arg::new(options::FROM).takes_value(true))
 }

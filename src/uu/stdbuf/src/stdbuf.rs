@@ -40,11 +40,11 @@ static LONG_HELP: &str = "If MODE is 'L' the corresponding stream will be line b
 
 mod options {
     pub const INPUT: &str = "input";
-    pub const INPUT_SHORT: &str = "i";
+    pub const INPUT_SHORT: char = 'i';
     pub const OUTPUT: &str = "output";
-    pub const OUTPUT_SHORT: &str = "o";
+    pub const OUTPUT_SHORT: char = 'o';
     pub const ERROR: &str = "error";
-    pub const ERROR_SHORT: &str = "e";
+    pub const ERROR_SHORT: char = 'e';
     pub const COMMAND: &str = "command";
 }
 
@@ -66,7 +66,7 @@ struct ProgramOptions {
     stderr: BufferType,
 }
 
-impl<'a> TryFrom<&ArgMatches<'a>> for ProgramOptions {
+impl<'a> TryFrom<&ArgMatches> for ProgramOptions {
     type Error = ProgramOptionsError;
 
     fn try_from(matches: &ArgMatches) -> Result<Self, Self::Error> {
@@ -156,7 +156,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .accept_any();
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let options = ProgramOptions::try_from(&matches).map_err(|e| UUsageError::new(125, e.0))?;
 
@@ -191,41 +191,41 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
         .setting(AppSettings::TrailingVarArg)
         .arg(
-            Arg::with_name(options::INPUT)
+            Arg::new(options::INPUT)
                 .long(options::INPUT)
                 .short(options::INPUT_SHORT)
                 .help("adjust standard input stream buffering")
                 .value_name("MODE")
-                .required_unless_one(&[options::OUTPUT, options::ERROR]),
+                .required_unless_present_any(&[options::OUTPUT, options::ERROR]),
         )
         .arg(
-            Arg::with_name(options::OUTPUT)
+            Arg::new(options::OUTPUT)
                 .long(options::OUTPUT)
                 .short(options::OUTPUT_SHORT)
                 .help("adjust standard output stream buffering")
                 .value_name("MODE")
-                .required_unless_one(&[options::INPUT, options::ERROR]),
+                .required_unless_present_any(&[options::INPUT, options::ERROR]),
         )
         .arg(
-            Arg::with_name(options::ERROR)
+            Arg::new(options::ERROR)
                 .long(options::ERROR)
                 .short(options::ERROR_SHORT)
                 .help("adjust standard error stream buffering")
                 .value_name("MODE")
-                .required_unless_one(&[options::INPUT, options::OUTPUT]),
+                .required_unless_present_any(&[options::INPUT, options::OUTPUT]),
         )
         .arg(
-            Arg::with_name(options::COMMAND)
-                .multiple(true)
+            Arg::new(options::COMMAND)
+                .multiple_occurrences(true)
                 .takes_value(true)
-                .hidden(true)
+                .hide(true)
                 .required(true),
         )
 }

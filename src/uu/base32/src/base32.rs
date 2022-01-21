@@ -47,6 +47,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     )
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     base_common::base_app(ABOUT)
 }

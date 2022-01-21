@@ -102,36 +102,36 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     unexpand(Options::new(matches)).map_err_context(String::new)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .usage(USAGE)
+        .override_usage(USAGE)
         .about(SUMMARY)
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+        .arg(Arg::new(options::FILE).hide(true).multiple_occurrences(true))
         .arg(
-            Arg::with_name(options::ALL)
-                .short("a")
+            Arg::new(options::ALL)
+                .short('a')
                 .long(options::ALL)
                 .help("convert all blanks, instead of just initial blanks")
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::FIRST_ONLY)
+            Arg::new(options::FIRST_ONLY)
                 .long(options::FIRST_ONLY)
                 .help("convert only leading sequences of blanks (overrides -a)")
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::TABS)
-                .short("t")
+            Arg::new(options::TABS)
+                .short('t')
                 .long(options::TABS)
                 .long_help("use comma separated LIST of tab positions or have tabs N characters apart instead of 8 (enables -a)")
                 .takes_value(true)
         )
         .arg(
-            Arg::with_name(options::NO_UTF8)
-                .short("U")
+            Arg::new(options::NO_UTF8)
+                .short('U')
                 .long(options::NO_UTF8)
                 .takes_value(false)
                 .help("interpret input file as 8-bit ASCII rather than UTF-8"))
