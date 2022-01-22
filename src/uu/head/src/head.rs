@@ -3,10 +3,10 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (vars) zlines BUFWRITER
+// spell-checker:ignore (vars) zlines BUFWRITER seekable
 
 use clap::{crate_version, App, Arg};
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::ffi::OsString;
 use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::display::Quotable;
@@ -291,16 +291,95 @@ fn read_but_last_n_lines(
     Ok(())
 }
 
-fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
-    assert!(options.all_but_last);
+/// Return the index in `input` just after the `n`th line from the end.
+///
+/// If `n` exceeds the number of lines in this file, then return 0.
+///
+/// The cursor must be at the start of the seekable input before
+/// calling this function. This function rewinds the cursor to the
+/// beginning of the input just before returning unless there is an
+/// I/O error.
+///
+/// If `zeroed` is `false`, interpret the newline character `b'\n'` as
+/// a line ending. If `zeroed` is `true`, interpret the null character
+/// `b'\0'` as a line ending instead.
+///
+/// # Errors
+///
+/// This function returns an error if there is a problem seeking
+/// through or reading the input.
+///
+/// # Examples
+///
+/// The function returns the index of the byte immediately following
+/// the line ending character of the `n`th line from the end of the
+/// input:
+///
+/// ```rust,ignore
+/// let mut input = Cursor::new("x\ny\nz\n");
+/// assert_eq!(find_nth_line_from_end(&mut input, 0, false).unwrap(), 6);
+/// assert_eq!(find_nth_line_from_end(&mut input, 1, false).unwrap(), 4);
+/// assert_eq!(find_nth_line_from_end(&mut input, 2, false).unwrap(), 2);
+/// ```
+///
+/// If `n` exceeds the number of lines in the file, always return 0:
+///
+/// ```rust,ignore
+/// let mut input = Cursor::new("x\ny\nz\n");
+/// assert_eq!(find_nth_line_from_end(&mut input, 3, false).unwrap(), 0);
+/// assert_eq!(find_nth_line_from_end(&mut input, 4, false).unwrap(), 0);
+/// assert_eq!(find_nth_line_from_end(&mut input, 1000, false).unwrap(), 0);
+/// ```
+fn find_nth_line_from_end<R>(input: &mut R, n: usize, zeroed: bool) -> std::io::Result<usize>
+where
+    R: Read + Seek,
+{
     let size = input.seek(SeekFrom::End(0))?;
     let size = usize::try_from(size).unwrap();
+
+    let mut buffer = [0u8; BUF_SIZE];
+    let buffer = &mut buffer[..BUF_SIZE.min(size)];
+    let mut i = 0usize;
+    let mut lines = 0usize;
+
+    loop {
+        // the casts here are ok, `buffer.len()` should never be above a few k
+        input.seek(SeekFrom::Current(
+            -((buffer.len() as i64).min((size - i) as i64)),
+        ))?;
+        input.read_exact(buffer)?;
+        for byte in buffer.iter().rev() {
+            match byte {
+                b'\n' if !zeroed => {
+                    lines += 1;
+                }
+                0u8 if zeroed => {
+                    lines += 1;
+                }
+                _ => {}
+            }
+            // if it were just `n`,
+            if lines == n + 1 {
+                input.seek(SeekFrom::Start(0))?;
+                return Ok(size - i);
+            }
+            i += 1;
+        }
+        if size - i == 0 {
+            input.seek(SeekFrom::Start(0))?;
+            return Ok(0);
+        }
+    }
+}
+
+fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
+    assert!(options.all_but_last);
     match options.mode {
         Modes::Bytes(n) => {
+            let size = input.metadata()?.len().try_into().unwrap();
             if n >= size {
                 return Ok(());
             } else {
-                input.seek(SeekFrom::Start(0))?;
                 read_n_bytes(
                     &mut std::io::BufReader::with_capacity(BUF_SIZE, input),
                     size - n,
@@ -308,41 +387,10 @@ fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std:
             }
         }
         Modes::Lines(n) => {
-            let mut buffer = [0u8; BUF_SIZE];
-            let buffer = &mut buffer[..BUF_SIZE.min(size)];
-            let mut i = 0usize;
-            let mut lines = 0usize;
-
-            let found = 'o: loop {
-                // the casts here are ok, `buffer.len()` should never be above a few k
-                input.seek(SeekFrom::Current(
-                    -((buffer.len() as i64).min((size - i) as i64)),
-                ))?;
-                input.read_exact(buffer)?;
-                for byte in buffer.iter().rev() {
-                    match byte {
-                        b'\n' if !options.zeroed => {
-                            lines += 1;
-                        }
-                        0u8 if options.zeroed => {
-                            lines += 1;
-                        }
-                        _ => {}
-                    }
-                    // if it were just `n`,
-                    if lines == n + 1 {
-                        break 'o i;
-                    }
-                    i += 1;
-                }
-                if size - i == 0 {
-                    return Ok(());
-                }
-            };
-            input.seek(SeekFrom::Start(0))?;
+            let found = find_nth_line_from_end(input, n, options.zeroed)?;
             read_n_bytes(
                 &mut std::io::BufReader::with_capacity(BUF_SIZE, input),
-                size - found,
+                found,
             )?;
         }
     }
@@ -459,6 +507,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
+    use std::io::Cursor;
 
     use super::*;
     fn options(args: &str) -> Result<HeadOptions, String> {
@@ -579,5 +628,16 @@ mod tests {
         let mut empty = std::io::BufReader::new(std::io::Cursor::new(Vec::new()));
         assert!(read_n_bytes(&mut empty, 0).is_ok());
         assert!(read_n_lines(&mut empty, 0, false).is_ok());
+    }
+
+    #[test]
+    fn test_find_nth_line_from_end() {
+        let mut input = Cursor::new("x\ny\nz\n");
+        assert_eq!(find_nth_line_from_end(&mut input, 0, false).unwrap(), 6);
+        assert_eq!(find_nth_line_from_end(&mut input, 1, false).unwrap(), 4);
+        assert_eq!(find_nth_line_from_end(&mut input, 2, false).unwrap(), 2);
+        assert_eq!(find_nth_line_from_end(&mut input, 3, false).unwrap(), 0);
+        assert_eq!(find_nth_line_from_end(&mut input, 4, false).unwrap(), 0);
+        assert_eq!(find_nth_line_from_end(&mut input, 1000, false).unwrap(), 0);
     }
 }

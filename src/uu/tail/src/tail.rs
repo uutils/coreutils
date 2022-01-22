@@ -16,9 +16,11 @@ extern crate clap;
 extern crate uucore;
 
 mod chunks;
+mod lines;
 mod parse;
 mod platform;
 use chunks::ReverseChunks;
+use lines::lines;
 
 use clap::{App, Arg};
 use std::collections::VecDeque;
@@ -30,7 +32,7 @@ use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::ringbuffer::RingBuffer;
 
@@ -220,7 +222,8 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
             if path.is_dir() {
                 continue;
             }
-            let mut file = File::open(&path).unwrap();
+            let mut file = File::open(&path)
+                .map_err_context(|| format!("cannot open {} for reading", filename.quote()))?;
             let md = file.metadata().unwrap();
             if is_seekable(&mut file) && get_block_size(&md) > 0 {
                 bounded_tail(&mut file, settings);
@@ -481,8 +484,8 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
     // data in the ringbuf.
     match settings.mode {
         FilterMode::Lines(count, _) => {
-            for line in unbounded_tail_collect(reader.lines(), count, settings.beginning) {
-                println!("{}", line);
+            for line in unbounded_tail_collect(lines(reader), count, settings.beginning) {
+                print!("{}", line);
             }
         }
         FilterMode::Bytes(count) => {
