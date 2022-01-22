@@ -93,7 +93,7 @@ mod test {
     use std::println;
 
     use super::ReadRng;
-    use crate::RngCore;
+    use rand::RngCore;
 
     #[test]
     fn test_reader_rng_u64() {
