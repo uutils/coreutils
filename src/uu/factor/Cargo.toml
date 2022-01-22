@@ -25,7 +25,7 @@ uucore_procs = { version=">=0.0.8", package = "uucore_procs", path = "../../uuco
 
 [dev-dependencies]
 paste = "0.1.18"
-quickcheck = "0.9.2"
+quickcheck = "1.0.3"
 
 
 [[bin]]
