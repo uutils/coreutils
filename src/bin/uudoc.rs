@@ -45,7 +45,7 @@ fn main() -> io::Result<()> {
         } else {
             println!("Error writing to {}", p);
         }
-        write!(summary, "* [{0}](utils/{0}.md)\n", name)?
+        writeln!(summary, "* [{0}](utils/{0}.md)", name)?
     }
     Ok(())
 }
