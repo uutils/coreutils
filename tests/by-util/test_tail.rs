@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile bogusfile
+// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile bogusfile siette ocho nueve diez
 
 extern crate tail;
 
@@ -356,6 +356,37 @@ fn test_positive_lines() {
         .pipe_in("a\nb\nc\nd\ne\n")
         .succeeds()
         .stdout_is("c\nd\ne\n");
+}
+
+/// Test for reading all but the first NUM lines of a file: `tail -n +3 infile`.
+#[test]
+fn test_positive_lines_file() {
+    new_ucmd!()
+        .args(&["-n", "+7", "foobar.txt"])
+        .succeeds()
+        .stdout_is(
+            "siette
+ocho
+nueve
+diez
+once
+",
+        );
+}
+
+/// Test for reading all but the first NUM bytes of a file: `tail -c +3 infile`.
+#[test]
+fn test_positive_bytes_file() {
+    new_ucmd!()
+        .args(&["-c", "+42", "foobar.txt"])
+        .succeeds()
+        .stdout_is(
+            "ho
+nueve
+diez
+once
+",
+        );
 }
 
 /// Test for reading all but the first NUM lines: `tail -3`.
