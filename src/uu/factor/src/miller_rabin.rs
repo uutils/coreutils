@@ -200,7 +200,11 @@ mod tests {
 
     quickcheck! {
         fn composites(i: u64, j: u64) -> bool {
-            i < 2 || j < 2 || !is_prime(i*j)
+            // TODO: #1559 factor n > 2^64 - 1
+            match i.checked_mul(j) {
+                Some(n) => i < 2 || j < 2 || !is_prime(n),
+                _ => true,
+            }
         }
     }
 }

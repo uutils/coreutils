@@ -6,6 +6,8 @@
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
 
+// spell-checker:ignore (vars) kgcdab gcdac gcdbc
+
 use std::cmp::min;
 use std::mem::swap;
 
@@ -93,16 +95,35 @@ mod tests {
         }
 
         fn scalar_multiplication(a: u64, b: u64, k: u64) -> bool {
-            gcd(k * a, k * b) == k * gcd(a, b)
+            // TODO: #1559 factor n > 2^64 - 1
+            match (k.checked_mul(a), k.checked_mul(b), k.checked_mul(gcd(a, b))) {
+                (Some(ka), Some(kb), Some(kgcdab)) => gcd(ka, kb) == kgcdab,
+                _ => true
+            }
         }
 
         fn multiplicative(a: u64, b: u64, c: u64) -> bool {
-            // gcd(ab, c) = gcd(a, c) gcd(b, c) when a and b coprime
-            gcd(a, b) != 1 || gcd(a * b, c) == gcd(a, c) * gcd(b, c)
+            // TODO: #1559 factor n > 2^64 - 1
+            match (a.checked_mul(b), gcd(a, c).checked_mul(gcd(b, c))) {
+                (Some(ab), Some(gcdac_gcdbc)) => {
+                    // gcd(ab, c) = gcd(a, c) gcd(b, c) when a and b coprime
+                    gcd(a, b) != 1 || gcd(ab, c) == gcdac_gcdbc
+                },
+                _ => true,
+            }
         }
 
         fn linearity(a: u64, b: u64, k: u64) -> bool {
-            gcd(a + k * b, b) == gcd(a, b)
+            // TODO: #1559 factor n > 2^64 - 1
+            match k.checked_mul(b) {
+                Some(kb) => {
+                    match a.checked_add(kb) {
+                        Some(a_plus_kb) => gcd(a_plus_kb, b) == gcd(a, b),
+                        _ => true,
+                    }
+                }
+                _ => true,
+            }
         }
     }
 }
