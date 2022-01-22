@@ -28,6 +28,7 @@ devs
 discoverability
 duplicative
 dsync
+endianness
 enqueue
 errored
 executable
