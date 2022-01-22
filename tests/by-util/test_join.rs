@@ -289,7 +289,21 @@ fn wrong_line_order() {
         .arg("fields_4.txt")
         .fails()
         .stderr_is(&format!(
-            "{0} {1}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0} {1}: input is not in sorted order",
+        "{0} {1}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0} {1}: input is not in sorted order",
+        ts.bin_path.to_string_lossy(),
+        ts.util_name
+    ));
+}
+
+#[test]
+fn both_files_wrong_line_order() {
+    let ts = TestScenario::new(util_name!());
+    new_ucmd!()
+        .arg("fields_4.txt")
+        .arg("fields_5.txt")
+        .fails()
+        .stderr_is(&format!(
+            "{0} {1}: fields_5.txt:4: is not sorted: 3\n{0} {1}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0} {1}: input is not in sorted order",
             ts.bin_path.to_string_lossy(),
             ts.util_name
         ));
