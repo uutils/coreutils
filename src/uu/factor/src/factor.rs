@@ -277,8 +277,8 @@ impl Distribution<Factors> for Standard {
 
 #[cfg(test)]
 impl quickcheck::Arbitrary for Factors {
-    fn arbitrary<G: quickcheck::Gen>(g: &mut G) -> Self {
-        g.gen()
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        factor(u64::arbitrary(g))
     }
 }
 
