@@ -273,6 +273,7 @@ struct State<'a> {
     seq: Vec<Line>,
     line_num: usize,
     has_failed: bool,
+    has_unpaired: bool,
 }
 
 impl<'a> State<'a> {
@@ -302,6 +303,7 @@ impl<'a> State<'a> {
             seq: Vec::new(),
             line_num: 0,
             has_failed: false,
+            has_unpaired: false,
         }
     }
 
@@ -415,11 +417,18 @@ impl<'a> State<'a> {
     }
 
     fn finalize(&mut self, input: &Input, repr: &Repr) -> Result<(), std::io::Error> {
-        if self.has_line() && self.print_unpaired {
-            self.print_first_line(repr)?;
+        if self.has_line() {
+            if self.print_unpaired {
+                self.print_first_line(repr)?;
+            }
 
-            while let Some(line) = self.next_line(input) {
-                self.print_line(&line, repr)?;
+            let mut next_line = self.next_line(input);
+            while let Some(line) = &next_line {
+                if self.print_unpaired {
+                    self.print_line(line, repr)?;
+                }
+                self.reset(next_line);
+                next_line = self.next_line(input);
             }
         }
 
@@ -444,20 +453,21 @@ impl<'a> State<'a> {
         let diff = input.compare(self.get_current_key(), line.get_field(self.key));
 
         if diff == Ordering::Greater {
-            eprintln!(
-                "{}: {}:{}: is not sorted: {}",
-                uucore::execution_phrase(),
-                self.file_name.maybe_quote(),
-                self.line_num,
-                String::from_utf8_lossy(&line.string)
-            );
+            if input.check_order == CheckOrder::Enabled || (self.has_unpaired && !self.has_failed) {
+                eprintln!(
+                    "{}: {}:{}: is not sorted: {}",
+                    uucore::execution_phrase(),
+                    self.file_name.maybe_quote(),
+                    self.line_num,
+                    String::from_utf8_lossy(&line.string)
+                );
 
+                self.has_failed = true;
+            }
             // This is fatal if the check is enabled.
             if input.check_order == CheckOrder::Enabled {
                 std::process::exit(1);
             }
-
-            self.has_failed = true;
         }
 
         Some(line)
@@ -760,9 +770,13 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), std::io::Err
         match diff {
             Ordering::Less => {
                 state1.skip_line(&input, &repr)?;
+                state1.has_unpaired = true;
+                state2.has_unpaired = true;
             }
             Ordering::Greater => {
                 state2.skip_line(&input, &repr)?;
+                state1.has_unpaired = true;
+                state2.has_unpaired = true;
             }
             Ordering::Equal => {
                 let next_line1 = state1.extend(&input);
@@ -782,6 +796,10 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), std::io::Err
     state2.finalize(&input, &repr)?;
 
     if state1.has_failed || state2.has_failed {
+        eprintln!(
+            "{}: input is not in sorted order",
+            uucore::execution_phrase()
+        );
         set_exit_code(1);
     }
     Ok(())

@@ -289,7 +289,7 @@ fn wrong_line_order() {
         .arg("fields_4.txt")
         .fails()
         .stderr_is(&format!(
-            "{} {}: fields_4.txt:5: is not sorted: 11 g 5 gh",
+            "{0} {1}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0} {1}: input is not in sorted order",
             ts.bin_path.to_string_lossy(),
             ts.util_name
         ));
