@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat seekable
 
 #[cfg(test)]
 mod dd_unit_tests;
@@ -294,8 +294,17 @@ impl OutputTrait for Output<io::Stdout> {
     fn new(matches: &Matches) -> UResult<Self> {
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
+        let oflags = parseargs::parse_oflags(matches)?;
+        let seek = parseargs::parse_seek_amt(&obs, &oflags, matches)?;
 
-        let dst = io::stdout();
+        let mut dst = io::stdout();
+
+        // stdout is not seekable, so we just write null bytes.
+        if let Some(amt) = seek {
+            let bytes = vec![b'\0'; amt];
+            dst.write_all(&bytes)
+                .map_err_context(|| String::from("write error"))?;
+        }
 
         Ok(Output { dst, obs, cflags })
     }

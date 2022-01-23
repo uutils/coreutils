@@ -1,4 +1,4 @@
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm
 
 use crate::common::util::*;
 
@@ -590,6 +590,18 @@ fn test_conv_ebcdic_implies_block() {
         .pipe_in(" A A\n A\n")
         .succeeds()
         .stdout_is_bytes(b"\x40\xc1\x40\xc1\x40\xc1\x40\x40");
+}
+
+/// Test for seeking forward N bytes in the output file before copying.
+#[test]
+fn test_seek_bytes() {
+    // Since the output file is stdout, seeking forward by eight bytes
+    // results in a prefix of eight null bytes.
+    new_ucmd!()
+        .args(&["seek=8", "oflag=seek_bytes"])
+        .pipe_in("abcdefghijklm\n")
+        .succeeds()
+        .stdout_is("\0\0\0\0\0\0\0\0abcdefghijklm\n");
 }
 
 // conv=[ascii,ebcdic,ibm], conv=[ucase,lcase], conv=[block,unblock], conv=sync
