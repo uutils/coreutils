@@ -269,3 +269,8 @@ fn test_regex_before() {
         //          |--------||----||---|
         .stdout_is("+---+c+d-e+--++b+-+a+");
 }
+
+#[test]
+fn closed_stdin() {
+    new_ucmd!().close_stdin().fails();
+}

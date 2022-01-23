@@ -867,6 +867,7 @@ pub struct UCommand {
     bytes_into_stdin: Option<Vec<u8>>,
     #[cfg(target_os = "linux")]
     limits: Vec<(rlimit::Resource, rlim, rlim)>,
+    close_stdin: bool,
 }
 
 impl UCommand {
@@ -913,6 +914,7 @@ impl UCommand {
             stderr: None,
             #[cfg(target_os = "linux")]
             limits: vec![],
+            close_stdin: false,
         };
 
         if let Some(un) = util_name {
@@ -979,6 +981,12 @@ impl UCommand {
         self
     }
 
+    // Immediately close stdin when the command is run.
+    pub fn close_stdin(&mut self) -> &mut UCommand {
+        self.close_stdin = true;
+        self
+    }
+
     /// provides standard input to feed in to the command when spawned
     pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut UCommand {
         assert!(
@@ -1039,6 +1047,13 @@ impl UCommand {
             .stderr(self.stderr.take().unwrap_or_else(Stdio::piped))
             .spawn()
             .unwrap();
+
+        // From the [`ChildStdin`] documentation:
+        // When an instance of ChildStdin is dropped, the ChildStdin’s
+        // underlying file handle will be closed.
+        if self.close_stdin {
+            drop(child.stdin.take());
+        }
 
         #[cfg(target_os = "linux")]
         for &(resource, soft_limit, hard_limit) in &self.limits {
