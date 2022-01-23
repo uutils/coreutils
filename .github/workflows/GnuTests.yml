@@ -128,4 +128,16 @@ jobs:
       shell: bash
       run: |
         mv dl/gnu-result.json master-gnu-result.json
-        python uutils/util/compare_gnu_result.py
+        RES=$(python uutils/util/compare_gnu_result.py)
+        echo $RES
+        echo "RESULT=$RES" >> $GITHUB_ENV
+    - name: publish comment
+      uses: actions/github-script@v5
+      with:
+        script: |
+            github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+             body: '${{ env.RESULT }}'
+          })
