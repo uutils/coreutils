@@ -278,9 +278,16 @@ fn truncate_size_only(
         Err(e) => crash!(1, "Invalid number: {}", e.to_string()),
     };
     for filename in &filenames {
-        let fsize = usize::try_from(metadata(filename)?.len()).unwrap();
-        let tsize = mode.to_size(fsize);
-        file_truncate(filename, create, tsize)?;
+        let fsize = match metadata(filename) {
+            Ok(m) => m.len(),
+            Err(_) => 0,
+        };
+        let tsize = mode.to_size(fsize as usize);
+        match file_truncate(filename, create, tsize) {
+            Ok(_) => continue,
+            Err(e) if e.kind() == ErrorKind::NotFound && !create => continue,
+            Err(e) => return Err(e),
+        }
     }
     Ok(())
 }
