@@ -183,7 +183,7 @@ fn test_final_stats_noxfer() {
     new_ucmd!()
         .args(&["status=noxfer"])
         .succeeds()
-        .stderr_only("");
+        .stderr_only("0+0 records in\n0+0 records out\n");
 }
 
 #[test]
