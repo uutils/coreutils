@@ -604,5 +604,21 @@ fn test_seek_bytes() {
         .stdout_is("\0\0\0\0\0\0\0\0abcdefghijklm\n");
 }
 
+/// Test for writing zero input blocks to a file plus seeking.
+#[test]
+fn test_seek_and_count_zero_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let filename = "outfile";
+    ucmd.args(&[
+        "bs=8",
+        "seek=8",
+        "oflag=seek_bytes",
+        "count=0",
+        &format!("of={}", filename),
+    ])
+    .succeeds();
+    assert_eq!(at.read_bytes(filename), b"\0\0\0\0\0\0\0\0");
+}
+
 // conv=[ascii,ebcdic,ibm], conv=[ucase,lcase], conv=[block,unblock], conv=sync
 // TODO: Move conv tests from unit test module

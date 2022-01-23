@@ -493,6 +493,18 @@ impl OutputTrait for Output<File> {
                 let amt: u64 = amt
                     .try_into()
                     .map_err(|_| USimpleError::new(1, "failed to parse seek amount"))?;
+                // Here we need to deal with the possibility that
+                // `amt` is greater than the number of bytes in the
+                // file. In that case, we pad the file with null bytes
+                // so that it is the same size as `amt`.
+                let metadata = dst.metadata().map_err_context(|| {
+                    format!("failed to get metadata of file {}", fname.quote())
+                })?;
+                if amt > metadata.len() {
+                    dst.set_len(amt).map_err_context(|| {
+                        format!("failed to extend length of file: {}", fname.quote())
+                    })?;
+                }
                 dst.seek(io::SeekFrom::Start(amt))
                     .map_err_context(|| "failed to seek in output file".to_string())?;
             }
