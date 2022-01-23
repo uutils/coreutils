@@ -9,7 +9,7 @@
 mod error;
 
 use clap::{crate_version, App, Arg};
-use libc::{isatty, lseek, SEEK_END};
+use libc::{lseek, SEEK_END};
 
 use memchr::memmem;
 use memmap2::Mmap;
@@ -239,25 +239,19 @@ fn tac(filenames: Vec<&str>, before: bool, regex: bool, separator: &str) -> URes
         let buf;
 
         let data: &[u8] = if filename == "-" {
+            if !is_stdin_open()? {
+                return Err(TacError::StdinIsClosed(String::from(filename)).into());
+            }
             if let Some(mmap1) = try_mmap_stdin() {
                 mmap = mmap1;
                 &mmap
             } else {
                 let mut buf1 = Vec::new();
-                match stdin().read_to_end(&mut buf1) {
-                    Ok(0) => {
-                        if !is_stdin_open()? {
-                            return Err(TacError::StdinIsClosed(String::from(filename)).into());
-                        }
-                        continue;
-                    }
-                    Ok(_) => &buf1,
-                    Err(e) => {
-                        let e: Box<dyn UError> = TacError::ReadError("stdin".to_string(), e).into();
-                        show!(e);
-                        continue;
-                    }
-                };
+                if let Err(e) = stdin().read_to_end(&mut buf1) {
+                    let e: Box<dyn UError> = TacError::ReadError("stdin".to_string(), e).into();
+                    show!(e);
+                    continue;
+                }
                 buf = buf1;
                 &buf
             }
@@ -326,7 +320,7 @@ fn try_mmap_path(path: &Path) -> Option<Mmap> {
 
 fn is_stdin_open() -> UResult<bool> {
     unsafe {
-        let is_tty = isatty(0) != 0;
+        let is_tty = atty::is(atty::Stream::Stdin);
         let is_stdin_empty = lseek(0, 0, SEEK_END) == 0;
         Ok(!is_tty && !is_stdin_empty)
     }

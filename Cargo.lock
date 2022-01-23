@@ -3040,6 +3040,7 @@ dependencies = [
 name = "uu_tac"
 version = "0.0.12"
 dependencies = [
+ "atty",
  "clap 3.0.9",
  "libc",
  "memchr 2.4.1",
