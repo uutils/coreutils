@@ -33,8 +33,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .accept_any();
 
     let matches = uu_app()
-        .usage(&usage[..])
-        .get_matches_from_safe(args)
+        .override_usage(&usage[..])
+        .try_get_matches_from(args)
         .map_err(|e| UUsageError::new(2, format!("{}", e)))?;
 
     let silent = matches.is_present(options::SILENT);
@@ -71,15 +71,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(options::SILENT)
+            Arg::new(options::SILENT)
                 .long(options::SILENT)
                 .visible_alias("quiet")
-                .short("s")
+                .short('s')
                 .help("print nothing, only return an exit status")
                 .required(false),
         )

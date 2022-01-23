@@ -140,21 +140,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .usage(USAGE)
+        .override_usage(USAGE)
         .about(SUMMARY)
-        .arg(Arg::with_name(options::FILE).multiple(true).hidden(true))
         .arg(
-            Arg::with_name(options::BSD_COMPATIBLE)
-                .short(options::BSD_COMPATIBLE)
+            Arg::new(options::FILE)
+                .multiple_occurrences(true)
+                .hide(true),
+        )
+        .arg(
+            Arg::new(options::BSD_COMPATIBLE)
+                .short('r')
                 .help("use the BSD sum algorithm, use 1K blocks (default)"),
         )
         .arg(
-            Arg::with_name(options::SYSTEM_V_COMPATIBLE)
-                .short("s")
+            Arg::new(options::SYSTEM_V_COMPATIBLE)
+                .short('s')
                 .long(options::SYSTEM_V_COMPATIBLE)
                 .help("use System V sum algorithm, use 512 bytes blocks"),
         )

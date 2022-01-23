@@ -235,6 +235,7 @@ impl Spec {
 
 struct Line {
     fields: Vec<Vec<u8>>,
+    string: Vec<u8>,
 }
 
 impl Line {
@@ -247,10 +248,10 @@ impl Line {
                 .map(Vec::from)
                 .collect(),
             Sep::Char(sep) => string.split(|c| *c == sep).map(Vec::from).collect(),
-            Sep::Line => vec![string],
+            Sep::Line => vec![string.clone()],
         };
 
-        Line { fields }
+        Line { fields, string }
     }
 
     /// Get field at index.
@@ -444,9 +445,11 @@ impl<'a> State<'a> {
 
         if diff == Ordering::Greater {
             eprintln!(
-                "{}:{}: is not sorted",
+                "{}: {}:{}: is not sorted: {}",
+                uucore::execution_phrase(),
                 self.file_name.maybe_quote(),
-                self.line_num
+                self.line_num,
+                String::from_utf8_lossy(&line.string)
             );
 
             // This is fatal if the check is enabled.
@@ -578,7 +581,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(NAME)
         .version(crate_version!())
         .about(
@@ -587,12 +590,10 @@ standard output. The default join field is the first, delimited by blanks.
 
 When FILE1 or FILE2 (not both) is -, read standard input.",
         )
-        .help_message("display this help and exit")
-        .version_message("display version and exit")
         .arg(
-            Arg::with_name("a")
-                .short("a")
-                .multiple(true)
+            Arg::new("a")
+                .short('a')
+                .multiple_occurrences(true)
                 .number_of_values(1)
                 .possible_values(&["1", "2"])
                 .value_name("FILENUM")
@@ -602,92 +603,92 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
                 ),
         )
         .arg(
-            Arg::with_name("v")
-                .short("v")
-                .multiple(true)
+            Arg::new("v")
+                .short('v')
+                .multiple_occurrences(true)
                 .number_of_values(1)
                 .possible_values(&["1", "2"])
                 .value_name("FILENUM")
                 .help("like -a FILENUM, but suppress joined output lines"),
         )
         .arg(
-            Arg::with_name("e")
-                .short("e")
+            Arg::new("e")
+                .short('e')
                 .takes_value(true)
                 .value_name("EMPTY")
                 .help("replace missing input fields with EMPTY"),
         )
         .arg(
-            Arg::with_name("i")
-                .short("i")
+            Arg::new("i")
+                .short('i')
                 .long("ignore-case")
                 .help("ignore differences in case when comparing fields"),
         )
         .arg(
-            Arg::with_name("j")
-                .short("j")
+            Arg::new("j")
+                .short('j')
                 .takes_value(true)
                 .value_name("FIELD")
                 .help("equivalent to '-1 FIELD -2 FIELD'"),
         )
         .arg(
-            Arg::with_name("o")
-                .short("o")
+            Arg::new("o")
+                .short('o')
                 .takes_value(true)
                 .value_name("FORMAT")
                 .help("obey FORMAT while constructing output line"),
         )
         .arg(
-            Arg::with_name("t")
-                .short("t")
+            Arg::new("t")
+                .short('t')
                 .takes_value(true)
                 .value_name("CHAR")
                 .help("use CHAR as input and output field separator"),
         )
         .arg(
-            Arg::with_name("1")
-                .short("1")
+            Arg::new("1")
+                .short('1')
                 .takes_value(true)
                 .value_name("FIELD")
                 .help("join on this FIELD of file 1"),
         )
         .arg(
-            Arg::with_name("2")
-                .short("2")
+            Arg::new("2")
+                .short('2')
                 .takes_value(true)
                 .value_name("FIELD")
                 .help("join on this FIELD of file 2"),
         )
-        .arg(Arg::with_name("check-order").long("check-order").help(
+        .arg(Arg::new("check-order").long("check-order").help(
             "check that the input is correctly sorted, \
              even if all input lines are pairable",
         ))
         .arg(
-            Arg::with_name("nocheck-order")
+            Arg::new("nocheck-order")
                 .long("nocheck-order")
                 .help("do not check that the input is correctly sorted"),
         )
-        .arg(Arg::with_name("header").long("header").help(
+        .arg(Arg::new("header").long("header").help(
             "treat the first line in each file as field headers, \
              print them without trying to pair them",
         ))
         .arg(
-            Arg::with_name("z")
-                .short("z")
+            Arg::new("z")
+                .short('z')
                 .long("zero-terminated")
                 .help("line delimiter is NUL, not newline"),
         )
         .arg(
-            Arg::with_name("file1")
+            Arg::new("file1")
                 .required(true)
                 .value_name("FILE1")
-                .hidden(true),
+                .hide(true),
         )
         .arg(
-            Arg::with_name("file2")
+            Arg::new("file2")
                 .required(true)
                 .value_name("FILE2")
-                .hidden(true),
+                .hide(true),
         )
 }
 

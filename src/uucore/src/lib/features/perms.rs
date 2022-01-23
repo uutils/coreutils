@@ -410,7 +410,7 @@ pub mod options {
     pub const ARG_FILES: &str = "FILE";
 }
 
-type GidUidFilterParser<'a> = fn(&ArgMatches<'a>) -> UResult<(Option<u32>, Option<u32>, IfFrom)>;
+type GidUidFilterParser = fn(&ArgMatches) -> UResult<(Option<u32>, Option<u32>, IfFrom)>;
 
 /// Base implementation for `chgrp` and `chown`.
 ///
@@ -420,10 +420,10 @@ type GidUidFilterParser<'a> = fn(&ArgMatches<'a>) -> UResult<(Option<u32>, Optio
 /// from `ArgMatches`.
 /// `groups_only` determines whether verbose output will only mention the group.
 pub fn chown_base<'a>(
-    mut app: App<'a, 'a>,
+    mut app: App<'a>,
     args: impl crate::Args,
     add_arg_if_not_reference: &'a str,
-    parse_gid_uid_and_filter: GidUidFilterParser<'a>,
+    parse_gid_uid_and_filter: GidUidFilterParser,
     groups_only: bool,
 ) -> UResult<()> {
     let args: Vec<_> = args.collect();
@@ -445,17 +445,17 @@ pub fn chown_base<'a>(
         // add both positional arguments
         // arg_group is only required if
         app = app.arg(
-            Arg::with_name(add_arg_if_not_reference)
+            Arg::new(add_arg_if_not_reference)
                 .value_name(add_arg_if_not_reference)
                 .required(true)
                 .takes_value(true)
-                .multiple(false),
+                .multiple_occurrences(false),
         )
     }
     app = app.arg(
-        Arg::with_name(options::ARG_FILES)
+        Arg::new(options::ARG_FILES)
             .value_name(options::ARG_FILES)
-            .multiple(true)
+            .multiple_occurrences(true)
             .takes_value(true)
             .required(true)
             .min_values(1),

@@ -1046,8 +1046,8 @@ With no FILE, or when FILE is -, read standard input.",
 }
 
 /// Creates an `Arg` that conflicts with all other sort modes.
-fn make_sort_mode_arg<'a, 'b>(mode: &'a str, short: &'b str, help: &'b str) -> Arg<'a, 'b> {
-    let mut arg = Arg::with_name(mode).short(short).long(mode).help(help);
+fn make_sort_mode_arg<'a>(mode: &'a str, short: char, help: &'a str) -> Arg<'a> {
+    let mut arg = Arg::new(mode).short(short).long(mode).help(help);
     for possible_mode in &options::modes::ALL_SORT_MODES {
         if *possible_mode != mode {
             arg = arg.conflicts_with(possible_mode);
@@ -1064,7 +1064,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let mut settings: GlobalSettings = Default::default();
 
-    let matches = match uu_app().usage(&usage[..]).get_matches_from_safe(args) {
+    let matches = match uu_app()
+        .override_usage(&usage[..])
+        .try_get_matches_from(args)
+    {
         Ok(t) => t,
         Err(e) => {
             // not all clap "Errors" are because of a failure to parse arguments.
@@ -1072,11 +1075,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // nor return with a non-zero exit code in this case (we should print to stdout and return 0).
             // This logic is similar to the code in clap, but we return 2 as the exit code in case of real failure
             // (clap returns 1).
+            e.print().unwrap();
             if e.use_stderr() {
-                eprintln!("{}", e.message);
                 set_exit_code(2);
-            } else {
-                println!("{}", e.message);
             }
             return Ok(());
         }
@@ -1209,11 +1210,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    if let Some(arg) = matches.args.get(options::SEPARATOR) {
-        let mut separator = arg.vals[0].to_str().ok_or_else(|| {
+    if let Some(arg) = matches.value_of_os(options::SEPARATOR) {
+        let mut separator = arg.to_str().ok_or_else(|| {
             UUsageError::new(
                 2,
-                format!("separator is not valid unicode: {}", arg.vals[0].quote()),
+                format!("separator is not valid unicode: {}", arg.quote()),
             )
         })?;
         if separator == "\\0" {
@@ -1276,12 +1277,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     exec(&mut files, &settings, output, &mut tmp_dir)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(options::modes::SORT)
+            Arg::new(options::modes::SORT)
                 .long(options::modes::SORT)
                 .takes_value(true)
                 .possible_values(&[
@@ -1296,37 +1297,37 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         .arg(make_sort_mode_arg(
             options::modes::HUMAN_NUMERIC,
-            "h",
+            'h',
             "compare according to human readable sizes, eg 1M > 100k",
         ))
         .arg(make_sort_mode_arg(
             options::modes::MONTH,
-            "M",
+            'M',
             "compare according to month name abbreviation",
         ))
         .arg(make_sort_mode_arg(
             options::modes::NUMERIC,
-            "n",
+            'n',
             "compare according to string numerical value",
         ))
         .arg(make_sort_mode_arg(
             options::modes::GENERAL_NUMERIC,
-            "g",
+            'g',
             "compare according to string general numerical value",
         ))
         .arg(make_sort_mode_arg(
             options::modes::VERSION,
-            "V",
+            'V',
             "Sort by SemVer version number, eg 1.12.2 > 1.1.2",
         ))
         .arg(make_sort_mode_arg(
             options::modes::RANDOM,
-            "R",
+            'R',
             "shuffle in random order",
         ))
         .arg(
-            Arg::with_name(options::DICTIONARY_ORDER)
-                .short("d")
+            Arg::new(options::DICTIONARY_ORDER)
+                .short('d')
                 .long(options::DICTIONARY_ORDER)
                 .help("consider only blanks and alphanumeric characters")
                 .conflicts_with_all(&[
@@ -1337,14 +1338,14 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::MERGE)
-                .short("m")
+            Arg::new(options::MERGE)
+                .short('m')
                 .long(options::MERGE)
                 .help("merge already sorted files; do not sort"),
         )
         .arg(
-            Arg::with_name(options::check::CHECK)
-                .short("c")
+            Arg::new(options::check::CHECK)
+                .short('c')
                 .long(options::check::CHECK)
                 .takes_value(true)
                 .require_equals(true)
@@ -1358,8 +1359,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("check for sorted input; do not sort"),
         )
         .arg(
-            Arg::with_name(options::check::CHECK_SILENT)
-                .short("C")
+            Arg::new(options::check::CHECK_SILENT)
+                .short('C')
                 .long(options::check::CHECK_SILENT)
                 .conflicts_with(options::OUTPUT)
                 .help(
@@ -1368,14 +1369,14 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::IGNORE_CASE)
-                .short("f")
+            Arg::new(options::IGNORE_CASE)
+                .short('f')
                 .long(options::IGNORE_CASE)
                 .help("fold lower case to upper case characters"),
         )
         .arg(
-            Arg::with_name(options::IGNORE_NONPRINTING)
-                .short("i")
+            Arg::new(options::IGNORE_NONPRINTING)
+                .short('i')
                 .long(options::IGNORE_NONPRINTING)
                 .help("ignore nonprinting characters")
                 .conflicts_with_all(&[
@@ -1386,113 +1387,116 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::IGNORE_LEADING_BLANKS)
-                .short("b")
+            Arg::new(options::IGNORE_LEADING_BLANKS)
+                .short('b')
                 .long(options::IGNORE_LEADING_BLANKS)
                 .help("ignore leading blanks when finding sort keys in each line"),
         )
         .arg(
-            Arg::with_name(options::OUTPUT)
-                .short("o")
+            Arg::new(options::OUTPUT)
+                .short('o')
                 .long(options::OUTPUT)
                 .help("write output to FILENAME instead of stdout")
                 .takes_value(true)
                 .value_name("FILENAME"),
         )
         .arg(
-            Arg::with_name(options::REVERSE)
-                .short("r")
+            Arg::new(options::REVERSE)
+                .short('r')
                 .long(options::REVERSE)
                 .help("reverse the output"),
         )
         .arg(
-            Arg::with_name(options::STABLE)
-                .short("s")
+            Arg::new(options::STABLE)
+                .short('s')
                 .long(options::STABLE)
                 .help("stabilize sort by disabling last-resort comparison"),
         )
         .arg(
-            Arg::with_name(options::UNIQUE)
-                .short("u")
+            Arg::new(options::UNIQUE)
+                .short('u')
                 .long(options::UNIQUE)
                 .help("output only the first of an equal run"),
         )
         .arg(
-            Arg::with_name(options::KEY)
-                .short("k")
+            Arg::new(options::KEY)
+                .short('k')
                 .long(options::KEY)
                 .help("sort by a key")
                 .long_help(LONG_HELP_KEYS)
-                .multiple(true)
+                .multiple_occurrences(true)
                 .number_of_values(1)
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(options::SEPARATOR)
-                .short("t")
+            Arg::new(options::SEPARATOR)
+                .short('t')
                 .long(options::SEPARATOR)
                 .help("custom separator for -k")
-                .takes_value(true),
+                .takes_value(true)
+                .allow_invalid_utf8(true),
         )
         .arg(
-            Arg::with_name(options::ZERO_TERMINATED)
-                .short("z")
+            Arg::new(options::ZERO_TERMINATED)
+                .short('z')
                 .long(options::ZERO_TERMINATED)
                 .help("line delimiter is NUL, not newline"),
         )
         .arg(
-            Arg::with_name(options::PARALLEL)
+            Arg::new(options::PARALLEL)
                 .long(options::PARALLEL)
                 .help("change the number of threads running concurrently to NUM_THREADS")
                 .takes_value(true)
                 .value_name("NUM_THREADS"),
         )
         .arg(
-            Arg::with_name(options::BUF_SIZE)
-                .short("S")
+            Arg::new(options::BUF_SIZE)
+                .short('S')
                 .long(options::BUF_SIZE)
                 .help("sets the maximum SIZE of each segment in number of sorted items")
                 .takes_value(true)
                 .value_name("SIZE"),
         )
         .arg(
-            Arg::with_name(options::TMP_DIR)
-                .short("T")
+            Arg::new(options::TMP_DIR)
+                .short('T')
                 .long(options::TMP_DIR)
                 .help("use DIR for temporaries, not $TMPDIR or /tmp")
                 .takes_value(true)
                 .value_name("DIR"),
         )
         .arg(
-            Arg::with_name(options::COMPRESS_PROG)
+            Arg::new(options::COMPRESS_PROG)
                 .long(options::COMPRESS_PROG)
                 .help("compress temporary files with PROG, decompress with PROG -d")
                 .long_help("PROG has to take input from stdin and output to stdout")
                 .value_name("PROG"),
         )
         .arg(
-            Arg::with_name(options::BATCH_SIZE)
+            Arg::new(options::BATCH_SIZE)
                 .long(options::BATCH_SIZE)
                 .help("Merge at most N_MERGE inputs at once.")
                 .value_name("N_MERGE"),
         )
         .arg(
-            Arg::with_name(options::FILES0_FROM)
+            Arg::new(options::FILES0_FROM)
                 .long(options::FILES0_FROM)
                 .help("read input from the files specified by NUL-terminated NUL_FILES")
                 .takes_value(true)
                 .value_name("NUL_FILES")
-                .multiple(true),
+                .multiple_occurrences(true)
+                .allow_invalid_utf8(true),
         )
         .arg(
-            Arg::with_name(options::DEBUG)
+            Arg::new(options::DEBUG)
                 .long(options::DEBUG)
                 .help("underline the parts of the line that are actually used for sorting"),
         )
         .arg(
-            Arg::with_name(options::FILES)
-                .multiple(true)
-                .takes_value(true),
+            Arg::new(options::FILES)
+                .multiple_occurrences(true)
+                .takes_value(true)
+                .allow_invalid_utf8(true),
         )
 }
 

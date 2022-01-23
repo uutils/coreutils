@@ -73,7 +73,7 @@ fn infallible_gid2grp(gid: &u32) -> String {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let users: Vec<String> = matches
         .values_of(options::USERS)
@@ -105,13 +105,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(options::USERS)
-                .multiple(true)
+            Arg::new(options::USERS)
+                .multiple_occurrences(true)
                 .takes_value(true)
                 .value_name(options::USERS),
         )

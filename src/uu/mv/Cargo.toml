@@ -1,6 +1,6 @@
 [package]
 name = "uu_mv"
-version = "0.0.9"
+version = "0.0.12"
 authors = ["uutils developers"]
 license = "MIT"
 description = "mv ~ (uutils) move (rename) SOURCE to DESTINATION"
@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/mv.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
+clap = { version = "3.0", features = ["wrap_help", "cargo"] }
 fs_extra = "1.1.0"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }

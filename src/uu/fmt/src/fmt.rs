@@ -71,7 +71,7 @@ pub struct FmtOptions {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let mut files: Vec<String> = matches
         .values_of(ARG_FILES)
@@ -222,13 +222,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(OPT_CROWN_MARGIN)
-                .short("c")
+            Arg::new(OPT_CROWN_MARGIN)
+                .short('c')
                 .long(OPT_CROWN_MARGIN)
                 .help(
                     "First and second line of paragraph \
@@ -238,8 +238,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_TAGGED_PARAGRAPH)
-                .short("t")
+            Arg::new(OPT_TAGGED_PARAGRAPH)
+                .short('t')
                 .long("tagged-paragraph")
                 .help(
                     "Like -c, except that the first and second line of a paragraph *must* \
@@ -247,8 +247,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_PRESERVE_HEADERS)
-                .short("m")
+            Arg::new(OPT_PRESERVE_HEADERS)
+                .short('m')
                 .long("preserve-headers")
                 .help(
                     "Attempt to detect and preserve mail headers in the input. \
@@ -256,14 +256,14 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_SPLIT_ONLY)
-                .short("s")
+            Arg::new(OPT_SPLIT_ONLY)
+                .short('s')
                 .long("split-only")
                 .help("Split lines only, do not reflow."),
         )
         .arg(
-            Arg::with_name(OPT_UNIFORM_SPACING)
-                .short("u")
+            Arg::new(OPT_UNIFORM_SPACING)
+                .short('u')
                 .long("uniform-spacing")
                 .help(
                     "Insert exactly one \
@@ -274,8 +274,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_PREFIX)
-                .short("p")
+            Arg::new(OPT_PREFIX)
+                .short('p')
                 .long("prefix")
                 .help(
                     "Reformat only lines \
@@ -286,8 +286,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .value_name("PREFIX"),
         )
         .arg(
-            Arg::with_name(OPT_SKIP_PREFIX)
-                .short("P")
+            Arg::new(OPT_SKIP_PREFIX)
+                .short('P')
                 .long("skip-prefix")
                 .help(
                     "Do not reformat lines \
@@ -297,8 +297,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .value_name("PSKIP"),
         )
         .arg(
-            Arg::with_name(OPT_EXACT_PREFIX)
-                .short("x")
+            Arg::new(OPT_EXACT_PREFIX)
+                .short('x')
                 .long("exact-prefix")
                 .help(
                     "PREFIX must match at the \
@@ -306,8 +306,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_EXACT_SKIP_PREFIX)
-                .short("X")
+            Arg::new(OPT_EXACT_SKIP_PREFIX)
+                .short('X')
                 .long("exact-skip-prefix")
                 .help(
                     "PSKIP must match at the \
@@ -315,26 +315,26 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_WIDTH)
-                .short("w")
+            Arg::new(OPT_WIDTH)
+                .short('w')
                 .long("width")
                 .help("Fill output lines up to a maximum of WIDTH columns, default 79.")
                 .value_name("WIDTH"),
         )
         .arg(
-            Arg::with_name(OPT_GOAL)
-                .short("g")
+            Arg::new(OPT_GOAL)
+                .short('g')
                 .long("goal")
                 .help("Goal width, default ~0.94*WIDTH. Must be less than WIDTH.")
                 .value_name("GOAL"),
         )
-        .arg(Arg::with_name(OPT_QUICK).short("q").long("quick").help(
+        .arg(Arg::new(OPT_QUICK).short('q').long("quick").help(
             "Break lines more quickly at the \
             expense of a potentially more ragged appearance.",
         ))
         .arg(
-            Arg::with_name(OPT_TAB_WIDTH)
-                .short("T")
+            Arg::new(OPT_TAB_WIDTH)
+                .short('T')
                 .long("tab-width")
                 .help(
                     "Treat tabs as TABWIDTH spaces for \
@@ -343,5 +343,9 @@ pub fn uu_app() -> App<'static, 'static> {
                 )
                 .value_name("TABWIDTH"),
         )
-        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
+        .arg(
+            Arg::new(ARG_FILES)
+                .multiple_occurrences(true)
+                .takes_value(true),
+        )
 }

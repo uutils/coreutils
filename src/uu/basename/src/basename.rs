@@ -40,7 +40,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     //
     // Argument parsing
     //
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     // too few arguments
     if !matches.is_present(options::NAME) {
@@ -93,27 +93,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
         .arg(
-            Arg::with_name(options::MULTIPLE)
-                .short("a")
+            Arg::new(options::MULTIPLE)
+                .short('a')
                 .long(options::MULTIPLE)
                 .help("support multiple arguments and treat each as a NAME"),
         )
-        .arg(Arg::with_name(options::NAME).multiple(true).hidden(true))
         .arg(
-            Arg::with_name(options::SUFFIX)
-                .short("s")
+            Arg::new(options::NAME)
+                .multiple_occurrences(true)
+                .hide(true),
+        )
+        .arg(
+            Arg::new(options::SUFFIX)
+                .short('s')
                 .long(options::SUFFIX)
                 .value_name("SUFFIX")
                 .help("remove a trailing SUFFIX; implies -a"),
         )
         .arg(
-            Arg::with_name(options::ZERO)
-                .short("z")
+            Arg::new(options::ZERO)
+                .short('z')
                 .long(options::ZERO)
                 .help("end each output line with NUL, not newline"),
         )

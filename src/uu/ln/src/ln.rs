@@ -135,7 +135,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let long_usage = long_usage();
 
     let matches = uu_app()
-        .usage(&usage[..])
+        .override_usage(&usage[..])
         .after_help(&*format!(
             "{}\n{}",
             long_usage,
@@ -179,30 +179,30 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     exec(&paths[..], &settings)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
         // TODO: opts.arg(
-        //    Arg::with_name(("d", "directory", "allow users with appropriate privileges to attempt \
+        //    Arg::new(("d", "directory", "allow users with appropriate privileges to attempt \
         //                                       to make hard links to directories");
         .arg(
-            Arg::with_name(options::FORCE)
-                .short("f")
+            Arg::new(options::FORCE)
+                .short('f')
                 .long(options::FORCE)
                 .help("remove existing destination files"),
         )
         .arg(
-            Arg::with_name(options::INTERACTIVE)
-                .short("i")
+            Arg::new(options::INTERACTIVE)
+                .short('i')
                 .long(options::INTERACTIVE)
                 .help("prompt whether to remove existing destination files"),
         )
         .arg(
-            Arg::with_name(options::NO_DEREFERENCE)
-                .short("n")
+            Arg::new(options::NO_DEREFERENCE)
+                .short('n')
                 .long(options::NO_DEREFERENCE)
                 .help(
                     "treat LINK_NAME as a normal file if it is a \
@@ -210,13 +210,13 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         // TODO: opts.arg(
-        //    Arg::with_name(("L", "logical", "dereference TARGETs that are symbolic links");
+        //    Arg::new(("L", "logical", "dereference TARGETs that are symbolic links");
         //
         // TODO: opts.arg(
-        //    Arg::with_name(("P", "physical", "make hard links directly to symbolic links");
+        //    Arg::new(("P", "physical", "make hard links directly to symbolic links");
         .arg(
-            Arg::with_name(options::SYMBOLIC)
-                .short("s")
+            Arg::new(options::SYMBOLIC)
+                .short('s')
                 .long("symbolic")
                 .help("make symbolic links instead of hard links")
                 // override added for https://github.com/uutils/coreutils/issues/2359
@@ -224,35 +224,35 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         .arg(backup_control::arguments::suffix())
         .arg(
-            Arg::with_name(options::TARGET_DIRECTORY)
-                .short("t")
+            Arg::new(options::TARGET_DIRECTORY)
+                .short('t')
                 .long(options::TARGET_DIRECTORY)
                 .help("specify the DIRECTORY in which to create the links")
                 .value_name("DIRECTORY")
                 .conflicts_with(options::NO_TARGET_DIRECTORY),
         )
         .arg(
-            Arg::with_name(options::NO_TARGET_DIRECTORY)
-                .short("T")
+            Arg::new(options::NO_TARGET_DIRECTORY)
+                .short('T')
                 .long(options::NO_TARGET_DIRECTORY)
                 .help("treat LINK_NAME as a normal file always"),
         )
         .arg(
-            Arg::with_name(options::RELATIVE)
-                .short("r")
+            Arg::new(options::RELATIVE)
+                .short('r')
                 .long(options::RELATIVE)
                 .help("create symbolic links relative to link location")
                 .requires(options::SYMBOLIC),
         )
         .arg(
-            Arg::with_name(options::VERBOSE)
-                .short("v")
+            Arg::new(options::VERBOSE)
+                .short('v')
                 .long(options::VERBOSE)
                 .help("print name of each linked file"),
         )
         .arg(
-            Arg::with_name(ARG_FILES)
-                .multiple(true)
+            Arg::new(ARG_FILES)
+                .multiple_occurrences(true)
                 .takes_value(true)
                 .required(true)
                 .min_values(1),

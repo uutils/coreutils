@@ -78,7 +78,7 @@ impl Display for MkTempError {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let template = matches.value_of(ARG_TEMPLATE).unwrap();
     let tmpdir = matches.value_of(OPT_TMPDIR).unwrap_or_default();
@@ -135,30 +135,30 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(OPT_DIRECTORY)
-                .short("d")
+            Arg::new(OPT_DIRECTORY)
+                .short('d')
                 .long(OPT_DIRECTORY)
                 .help("Make a directory instead of a file"),
         )
         .arg(
-            Arg::with_name(OPT_DRY_RUN)
-                .short("u")
+            Arg::new(OPT_DRY_RUN)
+                .short('u')
                 .long(OPT_DRY_RUN)
                 .help("do not create anything; merely print a name (unsafe)"),
         )
         .arg(
-            Arg::with_name(OPT_QUIET)
-                .short("q")
+            Arg::new(OPT_QUIET)
+                .short('q')
                 .long("quiet")
                 .help("Fail silently if an error occurs."),
         )
         .arg(
-            Arg::with_name(OPT_SUFFIX)
+            Arg::new(OPT_SUFFIX)
                 .long(OPT_SUFFIX)
                 .help(
                     "append SUFFIX to TEMPLATE; SUFFIX must not contain a path separator. \
@@ -167,8 +167,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .value_name("SUFFIX"),
         )
         .arg(
-            Arg::with_name(OPT_TMPDIR)
-                .short("p")
+            Arg::new(OPT_TMPDIR)
+                .short('p')
                 .long(OPT_TMPDIR)
                 .help(
                     "interpret TEMPLATE relative to DIR; if DIR is not specified, use \
@@ -178,13 +178,13 @@ pub fn uu_app() -> App<'static, 'static> {
                 )
                 .value_name("DIR"),
         )
-        .arg(Arg::with_name(OPT_T).short(OPT_T).help(
+        .arg(Arg::new(OPT_T).short('t').help(
             "Generate a template (using the supplied prefix and TMPDIR (TMP on windows) if set) \
              to create a filename template [deprecated]",
         ))
         .arg(
-            Arg::with_name(ARG_TEMPLATE)
-                .multiple(false)
+            Arg::new(ARG_TEMPLATE)
+                .multiple_occurrences(false)
                 .takes_value(true)
                 .max_values(1)
                 .default_value(DEFAULT_TEMPLATE),

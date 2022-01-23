@@ -37,7 +37,7 @@ fn usage() -> String {
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let mut no_newline = matches.is_present(OPT_NO_NEWLINE);
     let use_zero = matches.is_present(OPT_ZERO);
@@ -98,13 +98,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(OPT_CANONICALIZE)
-                .short("f")
+            Arg::new(OPT_CANONICALIZE)
+                .short('f')
                 .long(OPT_CANONICALIZE)
                 .help(
                     "canonicalize by following every symlink in every component of the \
@@ -112,8 +112,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_CANONICALIZE_EXISTING)
-                .short("e")
+            Arg::new(OPT_CANONICALIZE_EXISTING)
+                .short('e')
                 .long("canonicalize-existing")
                 .help(
                     "canonicalize by following every symlink in every component of the \
@@ -121,8 +121,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_CANONICALIZE_MISSING)
-                .short("m")
+            Arg::new(OPT_CANONICALIZE_MISSING)
+                .short('m')
                 .long(OPT_CANONICALIZE_MISSING)
                 .help(
                     "canonicalize by following every symlink in every component of the \
@@ -130,36 +130,40 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_NO_NEWLINE)
-                .short("n")
+            Arg::new(OPT_NO_NEWLINE)
+                .short('n')
                 .long(OPT_NO_NEWLINE)
                 .help("do not output the trailing delimiter"),
         )
         .arg(
-            Arg::with_name(OPT_QUIET)
-                .short("q")
+            Arg::new(OPT_QUIET)
+                .short('q')
                 .long(OPT_QUIET)
                 .help("suppress most error messages"),
         )
         .arg(
-            Arg::with_name(OPT_SILENT)
-                .short("s")
+            Arg::new(OPT_SILENT)
+                .short('s')
                 .long(OPT_SILENT)
                 .help("suppress most error messages"),
         )
         .arg(
-            Arg::with_name(OPT_VERBOSE)
-                .short("v")
+            Arg::new(OPT_VERBOSE)
+                .short('v')
                 .long(OPT_VERBOSE)
                 .help("report error message"),
         )
         .arg(
-            Arg::with_name(OPT_ZERO)
-                .short("z")
+            Arg::new(OPT_ZERO)
+                .short('z')
                 .long(OPT_ZERO)
                 .help("separate output with NUL rather than newline"),
         )
-        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
+        .arg(
+            Arg::new(ARG_FILES)
+                .multiple_occurrences(true)
+                .takes_value(true),
+        )
 }
 
 fn show(path: &Path, no_newline: bool, use_zero: bool) -> std::io::Result<()> {

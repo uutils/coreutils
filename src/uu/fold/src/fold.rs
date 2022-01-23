@@ -63,16 +63,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     fold(files, bytes, spaces, width)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .usage(SYNTAX)
+        .override_usage(SYNTAX)
         .about(SUMMARY)
         .arg(
-            Arg::with_name(options::BYTES)
+            Arg::new(options::BYTES)
                 .long(options::BYTES)
-                .short("b")
+                .short('b')
                 .help(
                     "count using bytes rather than columns (meaning control characters \
                      such as newline are not treated specially)",
@@ -80,22 +80,26 @@ pub fn uu_app() -> App<'static, 'static> {
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::SPACES)
+            Arg::new(options::SPACES)
                 .long(options::SPACES)
-                .short("s")
+                .short('s')
                 .help("break lines at word boundaries rather than a hard cut-off")
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::WIDTH)
+            Arg::new(options::WIDTH)
                 .long(options::WIDTH)
-                .short("w")
+                .short('w')
                 .help("set WIDTH as the maximum line width rather than 80")
                 .value_name("WIDTH")
                 .allow_hyphen_values(true)
                 .takes_value(true),
         )
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+        .arg(
+            Arg::new(options::FILE)
+                .hide(true)
+                .multiple_occurrences(true),
+        )
 }
 
 fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {

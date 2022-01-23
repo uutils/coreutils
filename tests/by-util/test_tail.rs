@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile
+// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile bogusfile siette ocho nueve diez
 
 extern crate tail;
 
@@ -358,6 +358,37 @@ fn test_positive_lines() {
         .stdout_is("c\nd\ne\n");
 }
 
+/// Test for reading all but the first NUM lines of a file: `tail -n +3 infile`.
+#[test]
+fn test_positive_lines_file() {
+    new_ucmd!()
+        .args(&["-n", "+7", "foobar.txt"])
+        .succeeds()
+        .stdout_is(
+            "siette
+ocho
+nueve
+diez
+once
+",
+        );
+}
+
+/// Test for reading all but the first NUM bytes of a file: `tail -c +3 infile`.
+#[test]
+fn test_positive_bytes_file() {
+    new_ucmd!()
+        .args(&["-c", "+42", "foobar.txt"])
+        .succeeds()
+        .stdout_is(
+            "ho
+nueve
+diez
+once
+",
+        );
+}
+
 /// Test for reading all but the first NUM lines: `tail -3`.
 #[test]
 fn test_obsolete_syntax_positive_lines() {
@@ -474,4 +505,18 @@ fn test_tail_bytes_for_funny_files() {
             .stderr_is(exp_result.stderr_str())
             .code_is(exp_result.code());
     }
+}
+
+#[test]
+fn test_no_such_file() {
+    new_ucmd!()
+        .arg("bogusfile")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cannot open 'bogusfile' for reading: No such file or directory");
+}
+
+#[test]
+fn test_no_trailing_newline() {
+    new_ucmd!().pipe_in("x").succeeds().stdout_only("x");
 }

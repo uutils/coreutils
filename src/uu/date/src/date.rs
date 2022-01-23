@@ -147,7 +147,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
  {0} [OPTION]... [MMDDhhmm[[CC]YY][.ss]]",
         NAME
     );
-    let matches = uu_app().usage(&syntax[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&syntax[..]).get_matches_from(args);
 
     let format = if let Some(form) = matches.value_of(OPT_FORMAT) {
         if !form.starts_with('+') {
@@ -257,70 +257,70 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(OPT_DATE)
-                .short("d")
+            Arg::new(OPT_DATE)
+                .short('d')
                 .long(OPT_DATE)
                 .takes_value(true)
                 .help("display time described by STRING, not 'now'"),
         )
         .arg(
-            Arg::with_name(OPT_FILE)
-                .short("f")
+            Arg::new(OPT_FILE)
+                .short('f')
                 .long(OPT_FILE)
                 .takes_value(true)
                 .help("like --date; once for each line of DATEFILE"),
         )
         .arg(
-            Arg::with_name(OPT_ISO_8601)
-                .short("I")
+            Arg::new(OPT_ISO_8601)
+                .short('I')
                 .long(OPT_ISO_8601)
                 .takes_value(true)
                 .help(ISO_8601_HELP_STRING),
         )
         .arg(
-            Arg::with_name(OPT_RFC_EMAIL)
-                .short("R")
+            Arg::new(OPT_RFC_EMAIL)
+                .short('R')
                 .long(OPT_RFC_EMAIL)
                 .help(RFC_5322_HELP_STRING),
         )
         .arg(
-            Arg::with_name(OPT_RFC_3339)
+            Arg::new(OPT_RFC_3339)
                 .long(OPT_RFC_3339)
                 .takes_value(true)
                 .help(RFC_3339_HELP_STRING),
         )
         .arg(
-            Arg::with_name(OPT_DEBUG)
+            Arg::new(OPT_DEBUG)
                 .long(OPT_DEBUG)
                 .help("annotate the parsed date, and warn about questionable usage to stderr"),
         )
         .arg(
-            Arg::with_name(OPT_REFERENCE)
-                .short("r")
+            Arg::new(OPT_REFERENCE)
+                .short('r')
                 .long(OPT_REFERENCE)
                 .takes_value(true)
                 .help("display the last modification time of FILE"),
         )
         .arg(
-            Arg::with_name(OPT_SET)
-                .short("s")
+            Arg::new(OPT_SET)
+                .short('s')
                 .long(OPT_SET)
                 .takes_value(true)
                 .help(OPT_SET_HELP_STRING),
         )
         .arg(
-            Arg::with_name(OPT_UNIVERSAL)
-                .short("u")
+            Arg::new(OPT_UNIVERSAL)
+                .short('u')
                 .long(OPT_UNIVERSAL)
                 .alias(OPT_UNIVERSAL_2)
                 .help("print or set Coordinated Universal Time (UTC)"),
         )
-        .arg(Arg::with_name(OPT_FORMAT).multiple(false))
+        .arg(Arg::new(OPT_FORMAT).multiple_occurrences(false))
 }
 
 /// Return the appropriate format string for the given settings.

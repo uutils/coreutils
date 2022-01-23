@@ -69,27 +69,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .usage(USAGE)
+        .override_usage(USAGE)
         .about(SUMMARY)
         .arg(
-            Arg::with_name(options::MODE)
-                .short("m")
+            Arg::new(options::MODE)
+                .short('m')
                 .long(options::MODE)
                 .help("file permissions for the fifo")
                 .default_value("0666")
                 .value_name("0666"),
         )
         .arg(
-            Arg::with_name(options::SE_LINUX_SECURITY_CONTEXT)
-                .short(options::SE_LINUX_SECURITY_CONTEXT)
+            Arg::new(options::SE_LINUX_SECURITY_CONTEXT)
+                .short('Z')
                 .help("set the SELinux security context to default type"),
         )
         .arg(
-            Arg::with_name(options::CONTEXT)
+            Arg::new(options::CONTEXT)
                 .long(options::CONTEXT)
                 .value_name("CTX")
                 .help(
@@ -97,5 +97,9 @@ pub fn uu_app() -> App<'static, 'static> {
                     or SMACK security context to CTX",
                 ),
         )
-        .arg(Arg::with_name(options::FIFO).hidden(true).multiple(true))
+        .arg(
+            Arg::new(options::FIFO)
+                .hide(true)
+                .multiple_occurrences(true),
+        )
 }

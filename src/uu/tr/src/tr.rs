@@ -246,7 +246,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let after_help = get_long_usage();
 
     let matches = uu_app()
-        .usage(&usage[..])
+        .override_usage(&usage[..])
         .after_help(&after_help[..])
         .get_matches_from(args);
 
@@ -303,32 +303,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(options::COMPLEMENT)
+            Arg::new(options::COMPLEMENT)
                 // .visible_short_alias('C')  // TODO: requires clap "3.0.0-beta.2"
-                .short("c")
+                .short('c')
                 .long(options::COMPLEMENT)
                 .help("use the complement of SET1"),
         )
         .arg(
-            Arg::with_name("C") // work around for `Arg::visible_short_alias`
-                .short("C")
+            Arg::new("C") // work around for `Arg::visible_short_alias`
+                .short('C')
                 .help("same as -c"),
         )
         .arg(
-            Arg::with_name(options::DELETE)
-                .short("d")
+            Arg::new(options::DELETE)
+                .short('d')
                 .long(options::DELETE)
                 .help("delete characters in SET1, do not translate"),
         )
         .arg(
-            Arg::with_name(options::SQUEEZE)
+            Arg::new(options::SQUEEZE)
                 .long(options::SQUEEZE)
-                .short("s")
+                .short('s')
                 .help(
                     "replace each sequence  of  a  repeated  character  that  is
   listed  in the last specified SET, with a single occurrence
@@ -336,14 +336,14 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::TRUNCATE)
+            Arg::new(options::TRUNCATE)
                 .long(options::TRUNCATE)
-                .short("t")
+                .short('t')
                 .help("first truncate SET1 to length of SET2"),
         )
         .arg(
-            Arg::with_name(options::SETS)
-                .multiple(true)
+            Arg::new(options::SETS)
+                .multiple_occurrences(true)
                 .takes_value(true)
                 .min_values(1)
                 .max_values(2),

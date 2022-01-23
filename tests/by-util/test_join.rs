@@ -283,11 +283,16 @@ fn missing_format_fields() {
 
 #[test]
 fn wrong_line_order() {
+    let ts = TestScenario::new(util_name!());
     new_ucmd!()
         .arg("fields_2.txt")
         .arg("fields_4.txt")
         .fails()
-        .stderr_is("fields_4.txt:5: is not sorted");
+        .stderr_is(&format!(
+            "{} {}: fields_4.txt:5: is not sorted: 11 g 5 gh",
+            ts.bin_path.to_string_lossy(),
+            ts.util_name
+        ));
 }
 
 #[test]

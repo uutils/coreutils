@@ -47,7 +47,7 @@
 //!         .arg(backup_control::arguments::backup())
 //!         .arg(backup_control::arguments::backup_no_args())
 //!         .arg(backup_control::arguments::suffix())
-//!         .usage(&usage[..])
+//!         .override_usage(&usage[..])
 //!         .after_help(&*format!(
 //!             "{}\n{}",
 //!             long_usage,
@@ -206,8 +206,8 @@ pub mod arguments {
     pub static OPT_SUFFIX: &str = "backupopt_suffix";
 
     /// '--backup' argument
-    pub fn backup() -> clap::Arg<'static, 'static> {
-        clap::Arg::with_name(OPT_BACKUP)
+    pub fn backup<'a>() -> clap::Arg<'a> {
+        clap::Arg::new(OPT_BACKUP)
             .long("backup")
             .help("make a backup of each existing destination file")
             .takes_value(true)
@@ -217,16 +217,16 @@ pub mod arguments {
     }
 
     /// '-b' argument
-    pub fn backup_no_args() -> clap::Arg<'static, 'static> {
-        clap::Arg::with_name(OPT_BACKUP_NO_ARG)
-            .short("b")
+    pub fn backup_no_args<'a>() -> clap::Arg<'a> {
+        clap::Arg::new(OPT_BACKUP_NO_ARG)
+            .short('b')
             .help("like --backup but does not accept an argument")
     }
 
     /// '-S, --suffix' argument
-    pub fn suffix() -> clap::Arg<'static, 'static> {
-        clap::Arg::with_name(OPT_SUFFIX)
-            .short("S")
+    pub fn suffix<'a>() -> clap::Arg<'a> {
+        clap::Arg::new(OPT_SUFFIX)
+            .short('S')
             .long("suffix")
             .help("override the usual backup suffix")
             .takes_value(true)
@@ -462,7 +462,7 @@ mod tests {
     // Environment variable for "VERSION_CONTROL"
     static ENV_VERSION_CONTROL: &str = "VERSION_CONTROL";
 
-    fn make_app() -> clap::App<'static, 'static> {
+    fn make_app() -> clap::App<'static> {
         App::new("app")
             .arg(arguments::backup())
             .arg(arguments::backup_no_args())

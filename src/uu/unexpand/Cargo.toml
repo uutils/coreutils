@@ -1,6 +1,6 @@
 [package]
 name = "uu_unexpand"
-version = "0.0.9"
+version = "0.0.12"
 authors = ["uutils developers"]
 license = "MIT"
 description = "unexpand ~ (uutils) convert input spaces to tabs"
@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/unexpand.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
+clap = { version = "3.0", features = ["wrap_help", "cargo"] }
 unicode-width = "0.1.5"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }

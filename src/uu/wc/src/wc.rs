@@ -137,7 +137,7 @@ impl Input {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let mut inputs: Vec<Input> = matches
         .values_of_os(ARG_FILES)
@@ -162,41 +162,46 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     wc(inputs, &settings)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(options::BYTES)
-                .short("c")
+            Arg::new(options::BYTES)
+                .short('c')
                 .long(options::BYTES)
                 .help("print the byte counts"),
         )
         .arg(
-            Arg::with_name(options::CHAR)
-                .short("m")
+            Arg::new(options::CHAR)
+                .short('m')
                 .long(options::CHAR)
                 .help("print the character counts"),
         )
         .arg(
-            Arg::with_name(options::LINES)
-                .short("l")
+            Arg::new(options::LINES)
+                .short('l')
                 .long(options::LINES)
                 .help("print the newline counts"),
         )
         .arg(
-            Arg::with_name(options::MAX_LINE_LENGTH)
-                .short("L")
+            Arg::new(options::MAX_LINE_LENGTH)
+                .short('L')
                 .long(options::MAX_LINE_LENGTH)
                 .help("print the length of the longest line"),
         )
         .arg(
-            Arg::with_name(options::WORDS)
-                .short("w")
+            Arg::new(options::WORDS)
+                .short('w')
                 .long(options::WORDS)
                 .help("print the word counts"),
         )
-        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
+        .arg(
+            Arg::new(ARG_FILES)
+                .multiple_occurrences(true)
+                .takes_value(true)
+                .allow_invalid_utf8(true),
+        )
 }
 
 fn word_count_from_reader<T: WordCountable>(

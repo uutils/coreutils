@@ -10,16 +10,6 @@ use std::process::Command;
 use std::thread::sleep;
 
 #[test]
-fn test_install_help() {
-    let (_, mut ucmd) = at_and_ucmd!();
-
-    ucmd.arg("--help")
-        .succeeds()
-        .no_stderr()
-        .stdout_contains("FLAGS:");
-}
-
-#[test]
 fn test_install_basic() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "target_dir";

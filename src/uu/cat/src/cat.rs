@@ -239,64 +239,68 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     cat_files(files, &options)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .usage(SYNTAX)
+        .override_usage(SYNTAX)
         .about(SUMMARY)
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
         .arg(
-            Arg::with_name(options::SHOW_ALL)
-                .short("A")
+            Arg::new(options::FILE)
+                .hide(true)
+                .multiple_occurrences(true),
+        )
+        .arg(
+            Arg::new(options::SHOW_ALL)
+                .short('A')
                 .long(options::SHOW_ALL)
                 .help("equivalent to -vET"),
         )
         .arg(
-            Arg::with_name(options::NUMBER_NONBLANK)
-                .short("b")
+            Arg::new(options::NUMBER_NONBLANK)
+                .short('b')
                 .long(options::NUMBER_NONBLANK)
                 .help("number nonempty output lines, overrides -n")
                 .overrides_with(options::NUMBER),
         )
         .arg(
-            Arg::with_name(options::SHOW_NONPRINTING_ENDS)
-                .short("e")
+            Arg::new(options::SHOW_NONPRINTING_ENDS)
+                .short('e')
                 .help("equivalent to -vE"),
         )
         .arg(
-            Arg::with_name(options::SHOW_ENDS)
-                .short("E")
+            Arg::new(options::SHOW_ENDS)
+                .short('E')
                 .long(options::SHOW_ENDS)
                 .help("display $ at end of each line"),
         )
         .arg(
-            Arg::with_name(options::NUMBER)
-                .short("n")
+            Arg::new(options::NUMBER)
+                .short('n')
                 .long(options::NUMBER)
                 .help("number all output lines"),
         )
         .arg(
-            Arg::with_name(options::SQUEEZE_BLANK)
-                .short("s")
+            Arg::new(options::SQUEEZE_BLANK)
+                .short('s')
                 .long(options::SQUEEZE_BLANK)
                 .help("suppress repeated empty output lines"),
         )
         .arg(
-            Arg::with_name(options::SHOW_NONPRINTING_TABS)
-                .short("t")
+            Arg::new(options::SHOW_NONPRINTING_TABS)
+                .short('t')
                 .long(options::SHOW_NONPRINTING_TABS)
                 .help("equivalent to -vT"),
         )
         .arg(
-            Arg::with_name(options::SHOW_TABS)
-                .short("T")
+            Arg::new(options::SHOW_TABS)
+                .short('T')
                 .long(options::SHOW_TABS)
                 .help("display TAB characters at ^I"),
         )
         .arg(
-            Arg::with_name(options::SHOW_NONPRINTING)
-                .short("v")
+            Arg::new(options::SHOW_NONPRINTING)
+                .short('v')
                 .long(options::SHOW_NONPRINTING)
                 .help("use ^ and M- notation, except for LF (\\n) and TAB (\\t)"),
         )

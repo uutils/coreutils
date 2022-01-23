@@ -29,7 +29,7 @@ Write a random permutation of the input lines to standard output.
 
 With no FILE, or when FILE is -, read standard input.
 "#;
-static TEMPLATE: &str = "Usage: {usage}\nMandatory arguments to long options are mandatory for short options too.\n{unified}";
+static TEMPLATE: &str = "Usage: {usage}\nMandatory arguments to long options are mandatory for short options too.\n{options}";
 
 struct Options {
     head_count: usize,
@@ -116,27 +116,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .template(TEMPLATE)
-        .usage(USAGE)
+        .help_template(TEMPLATE)
+        .override_usage(USAGE)
         .arg(
-            Arg::with_name(options::ECHO)
-                .short("e")
+            Arg::new(options::ECHO)
+                .short('e')
                 .long(options::ECHO)
                 .takes_value(true)
                 .value_name("ARG")
                 .help("treat each ARG as an input line")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .use_delimiter(false)
                 .min_values(0)
                 .conflicts_with(options::INPUT_RANGE),
         )
         .arg(
-            Arg::with_name(options::INPUT_RANGE)
-                .short("i")
+            Arg::new(options::INPUT_RANGE)
+                .short('i')
                 .long(options::INPUT_RANGE)
                 .takes_value(true)
                 .value_name("LO-HI")
@@ -144,41 +144,41 @@ pub fn uu_app() -> App<'static, 'static> {
                 .conflicts_with(options::FILE),
         )
         .arg(
-            Arg::with_name(options::HEAD_COUNT)
-                .short("n")
+            Arg::new(options::HEAD_COUNT)
+                .short('n')
                 .long(options::HEAD_COUNT)
                 .takes_value(true)
                 .value_name("COUNT")
                 .help("output at most COUNT lines"),
         )
         .arg(
-            Arg::with_name(options::OUTPUT)
-                .short("o")
+            Arg::new(options::OUTPUT)
+                .short('o')
                 .long(options::OUTPUT)
                 .takes_value(true)
                 .value_name("FILE")
                 .help("write result to FILE instead of standard output"),
         )
         .arg(
-            Arg::with_name(options::RANDOM_SOURCE)
+            Arg::new(options::RANDOM_SOURCE)
                 .long(options::RANDOM_SOURCE)
                 .takes_value(true)
                 .value_name("FILE")
                 .help("get random bytes from FILE"),
         )
         .arg(
-            Arg::with_name(options::REPEAT)
-                .short("r")
+            Arg::new(options::REPEAT)
+                .short('r')
                 .long(options::REPEAT)
                 .help("output lines can be repeated"),
         )
         .arg(
-            Arg::with_name(options::ZERO_TERMINATED)
-                .short("z")
+            Arg::new(options::ZERO_TERMINATED)
+                .short('z')
                 .long(options::ZERO_TERMINATED)
                 .help("line delimiter is NUL, not newline"),
         )
-        .arg(Arg::with_name(options::FILE).takes_value(true))
+        .arg(Arg::new(options::FILE).takes_value(true))
 }
 
 fn read_input_file(filename: &str) -> UResult<Vec<u8>> {
