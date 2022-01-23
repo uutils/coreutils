@@ -9,6 +9,8 @@
 mod error;
 
 use clap::{crate_version, App, Arg};
+use libc::{isatty, lseek, SEEK_END};
+
 use memchr::memmem;
 use memmap2::Mmap;
 use std::io::{stdin, stdout, BufWriter, Read, Write};
@@ -42,7 +44,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .accept_any();
 
     let matches = uu_app().get_matches_from(args);
-
     let before = matches.is_present(options::BEFORE);
     let regex = matches.is_present(options::REGEX);
     let raw_separator = matches.value_of(options::SEPARATOR).unwrap_or("\n");
@@ -239,11 +240,20 @@ fn tac(filenames: Vec<&str>, before: bool, regex: bool, separator: &str) -> URes
                 &mmap
             } else {
                 let mut buf1 = Vec::new();
-                if let Err(e) = stdin().read_to_end(&mut buf1) {
-                    let e: Box<dyn UError> = TacError::ReadError("stdin".to_string(), e).into();
-                    show!(e);
-                    continue;
-                }
+                match stdin().read_to_end(&mut buf1) {
+                    Ok(0) => {
+                        if !is_stdin_open()? {
+                            return Err(TacError::StdinIsClosed(String::from(filename)).into());
+                        }
+                        continue;
+                    }
+                    Ok(_) => &buf1,
+                    Err(e) => {
+                        let e: Box<dyn UError> = TacError::ReadError("stdin".to_string(), e).into();
+                        show!(e);
+                        continue;
+                    }
+                };
                 buf = buf1;
                 &buf
             }
@@ -279,7 +289,6 @@ fn tac(filenames: Vec<&str>, before: bool, regex: bool, separator: &str) -> URes
                 }
             }
         };
-
         // Select the appropriate `tac` algorithm based on whether the
         // separator is given as a regular expression or a fixed string.
         let result = match maybe_pattern {
@@ -309,4 +318,12 @@ fn try_mmap_path(path: &Path) -> Option<Mmap> {
     let mmap = unsafe { Mmap::map(&file).ok()? };
 
     Some(mmap)
+}
+
+fn is_stdin_open() -> UResult<bool> {
+    unsafe {
+        let is_tty = isatty(0) != 0;
+        let is_stdin_empty = lseek(0, 0, SEEK_END) == 0;
+        Ok(!is_tty && !is_stdin_empty)
+    }
 }

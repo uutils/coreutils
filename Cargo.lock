@@ -2987,6 +2987,7 @@ name = "uu_tac"
 version = "0.0.9"
 dependencies = [
  "clap",
+ "libc",
  "memchr 2.4.1",
  "memmap2",
  "regex",
