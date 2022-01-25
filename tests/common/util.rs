@@ -1117,6 +1117,13 @@ impl UCommand {
 /// Wrapper for `child.stdout.read_exact()`.
 /// Careful, this blocks indefinitely if `size` bytes is never reached.
 pub fn read_size(child: &mut Child, size: usize) -> String {
+    String::from_utf8(read_size_bytes(child, size)).unwrap()
+}
+
+/// Read the specified number of bytes from the stdout of the child process.
+///
+/// Careful, this blocks indefinitely if `size` bytes is never reached.
+pub fn read_size_bytes(child: &mut Child, size: usize) -> Vec<u8> {
     let mut output = Vec::new();
     output.resize(size, 0);
     sleep(Duration::from_secs(1));
@@ -1126,7 +1133,7 @@ pub fn read_size(child: &mut Child, size: usize) -> String {
         .unwrap()
         .read_exact(output.as_mut_slice())
         .unwrap();
-    String::from_utf8(output).unwrap()
+    output
 }
 
 pub fn vec_of_size(n: usize) -> Vec<u8> {
