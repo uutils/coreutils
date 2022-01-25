@@ -398,8 +398,13 @@ where
         }
 
         match i.print_level {
-            Some(StatusLevel::Noxfer) | Some(StatusLevel::None) => {}
-            _ => print_transfer_stats(&ProgUpdate {
+            Some(StatusLevel::None) => {}
+            Some(StatusLevel::Noxfer) => print_io_lines(&ProgUpdate {
+                read_stat: rstat,
+                write_stat: wstat,
+                duration: start.elapsed(),
+            }),
+            Some(StatusLevel::Progress) | None => print_transfer_stats(&ProgUpdate {
                 read_stat: rstat,
                 write_stat: wstat,
                 duration: start.elapsed(),
