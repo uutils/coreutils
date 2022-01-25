@@ -77,6 +77,34 @@ fn test_follow() {
     child.kill().unwrap();
 }
 
+/// Test for following when bytes are written that are not valid UTF-8.
+#[test]
+fn test_follow_non_utf8_bytes() {
+    // Tail the test file and start following it.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut child = ucmd.arg("-f").arg(FOOBAR_TXT).run_no_wait();
+    let expected = at.read("foobar_single_default.expected");
+    assert_eq!(read_size(&mut child, expected.len()), expected);
+
+    // Now append some bytes that are not valid UTF-8.
+    //
+    // The binary integer "10000000" is *not* a valid UTF-8 encoding
+    // of a character: https://en.wikipedia.org/wiki/UTF-8#Encoding
+    //
+    // We also write the newline character because our implementation
+    // of `tail` is attempting to read a line of input, so the
+    // presence of a newline character will force the `follow()`
+    // function to conclude reading input bytes and start writing them
+    // to output. The newline character is not fundamental to this
+    // test, it is just a requirement of the current implementation.
+    let expected = [0b10000000, b'\n'];
+    at.append_bytes(FOOBAR_TXT, &expected);
+    let actual = read_size_bytes(&mut child, expected.len());
+    assert_eq!(actual, expected.to_vec());
+
+    child.kill().unwrap();
+}
+
 #[test]
 fn test_follow_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();

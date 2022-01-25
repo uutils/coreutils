@@ -345,6 +345,7 @@ pub fn uu_app<'a>() -> App<'a> {
         )
 }
 
+/// Continually check for new data in the given readers, writing any to stdout.
 fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) -> UResult<()> {
     if readers.is_empty() || !settings.follow {
         return Ok(());
@@ -353,6 +354,7 @@ fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) -> URes
     let mut last = readers.len() - 1;
     let mut read_some = false;
     let mut process = platform::ProcessChecker::new(settings.pid);
+    let mut stdout = stdout();
 
     loop {
         sleep(Duration::new(0, settings.sleep_msec * 1000));
@@ -363,8 +365,8 @@ fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) -> URes
         for (i, (reader, filename)) in readers.iter_mut().enumerate() {
             // Print all new content since the last pass
             loop {
-                let mut datum = String::new();
-                match reader.read_line(&mut datum) {
+                let mut datum = vec![];
+                match reader.read_until(b'\n', &mut datum) {
                     Ok(0) => break,
                     Ok(_) => {
                         read_some = true;
@@ -372,7 +374,9 @@ fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) -> URes
                             println!("\n==> {} <==", filename);
                             last = i;
                         }
-                        print!("{}", datum);
+                        stdout
+                            .write_all(&datum)
+                            .map_err_context(|| String::from("write error"))?;
                     }
                     Err(err) => return Err(USimpleError::new(1, err.to_string())),
                 }
