@@ -22,8 +22,8 @@ use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "unexpand";
 static USAGE: &str = "unexpand [OPTION]... [FILE]...";
-static SUMMARY: &str = "Convert blanks in each FILE to tabs, writing to standard output.\n
-                 With no FILE, or when FILE is -, read standard input.";
+static SUMMARY: &str = "Convert blanks in each FILE to tabs, writing to standard output.\n\
+                        With no FILE, or when FILE is -, read standard input.";
 
 const DEFAULT_TABSTOP: usize = 8;
 

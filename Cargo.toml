@@ -9,6 +9,7 @@ version = "0.0.12"
 authors = ["uutils developers"]
 license = "MIT"
 description = "coreutils ~ GNU coreutils (updated); implemented as universal (cross-platform) utils, written in Rust"
+default-run = "coreutils"
 
 homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils"
@@ -389,3 +390,7 @@ unix_socket = "0.5.0"
 [[bin]]
 name = "coreutils"
 path = "src/bin/coreutils.rs"
+
+[[bin]]
+name = "uudoc"
+path = "src/bin/uudoc.rs"
