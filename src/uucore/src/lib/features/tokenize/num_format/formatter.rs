@@ -1,9 +1,9 @@
 //! Primitives used by num_format and sub_modules.
 //! never dealt with above (e.g. Sub Tokenizer never uses these)
 
+use crate::{display::Quotable, show_error};
 use itertools::{put_back_n, PutBackN};
 use std::str::Chars;
-use uucore::{display::Quotable, show_error};
 
 use super::format_field::FormatField;
 

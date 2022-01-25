@@ -5,23 +5,24 @@
 //! it is created by Sub's implementation of the Tokenizer trait
 //! Subs which have numeric field chars make use of the num_format
 //! submodule
+use crate::show_error;
 use itertools::{put_back_n, PutBackN};
 use std::iter::Peekable;
 use std::process::exit;
 use std::slice::Iter;
 use std::str::Chars;
-use uucore::show_error;
 // use std::collections::HashSet;
 
 use super::num_format::format_field::{FieldType, FormatField};
 use super::num_format::num_format;
 use super::token;
 use super::unescaped_text::UnescapedText;
-use crate::cli;
+
+const EXIT_ERR: i32 = 1;
 
 fn err_conv(sofar: &str) {
     show_error!("%{}: invalid conversion specification", sofar);
-    exit(cli::EXIT_ERR);
+    exit(EXIT_ERR);
 }
 
 fn convert_asterisk_arg_int(asterisk_arg: &str) -> isize {
@@ -80,7 +81,7 @@ impl Sub {
             _ => {
                 // should be unreachable.
                 println!("Invalid field type");
-                exit(cli::EXIT_ERR);
+                exit(EXIT_ERR);
             }
         };
         Sub {

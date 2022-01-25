@@ -7,8 +7,8 @@
 use std::env;
 use std::vec::Vec;
 
-use uucore::display::Quotable;
-use uucore::{show_error, show_warning};
+use crate::display::Quotable;
+use crate::{show_error, show_warning};
 
 use super::format_field::{FieldType, FormatField};
 use super::formatter::{Base, FormatPrimitive, Formatter, InitialPrefix};

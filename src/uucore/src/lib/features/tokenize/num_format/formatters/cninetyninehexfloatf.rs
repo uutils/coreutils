@@ -9,6 +9,7 @@ use super::base_conv::RadixDef;
 use super::float_common::{primitive_to_str_common, FloatAnalysis};
 
 pub struct CninetyNineHexFloatf {
+    #[allow(dead_code)]
     as_num: f64,
 }
 impl CninetyNineHexFloatf {
@@ -91,6 +92,7 @@ fn get_primitive_hex(
     }
 }
 
+#[allow(dead_code)]
 fn to_hex(src: &str, before_decimal: bool) -> String {
     let radix_ten = base_conv::RadixTen;
     let radix_hex = base_conv::RadixHex;

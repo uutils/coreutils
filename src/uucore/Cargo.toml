@@ -21,6 +21,7 @@ dns-lookup = { version="1.0.5", optional=true }
 dunce = "1.0.0"
 wild = "2.0"
 # * optional
+itertools = { version="0.8", optional=true }
 thiserror = { version="1.0", optional=true }
 time = { version="<= 0.1.43", optional=true }
 # * "problem" dependencies (pinned)
@@ -53,6 +54,7 @@ encoding = ["data-encoding", "data-encoding-macro", "z85", "thiserror"]
 entries = ["libc"]
 fs = ["libc", "nix", "winapi-util"]
 fsext = ["libc", "time"]
+memo = ["itertools"]
 mode = ["libc"]
 perms = ["libc", "walkdir"]
 process = ["libc"]
