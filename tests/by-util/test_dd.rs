@@ -559,5 +559,38 @@ fn test_unicode_filenames() {
     );
 }
 
+#[test]
+fn test_conv_ascii_implies_unblock() {
+    // 0x40 = 0o100 =  64, which gets converted to ' '
+    // 0xc1 = 0o301 = 193, which gets converted to 'A'
+    //
+    // `conv=ascii` implies `conv=unblock`, which means trailing paces
+    // are stripped and a newline is appended at the end of each
+    // block.
+    //
+    // `cbs=4` means use a conversion block size of 4 bytes per block.
+    new_ucmd!()
+        .args(&["conv=ascii", "cbs=4"])
+        .pipe_in(b"\x40\xc1\x40\xc1\x40\xc1\x40\x40".to_vec())
+        .succeeds()
+        .stdout_is(" A A\n A\n");
+}
+
+#[test]
+fn test_conv_ebcdic_implies_block() {
+    // 0x40 = 0o100 =  64, which is the result of converting from ' '
+    // 0xc1 = 0o301 = 193, which is the result of converting from 'A'
+    //
+    // `conv=ebcdic` implies `conv=block`, which means trailing spaces
+    // are added to pad each block.
+    //
+    // `cbs=4` means use a conversion block size of 4 bytes per block.
+    new_ucmd!()
+        .args(&["conv=ebcdic", "cbs=4"])
+        .pipe_in(" A A\n A\n")
+        .succeeds()
+        .stdout_is_bytes(b"\x40\xc1\x40\xc1\x40\xc1\x40\x40");
+}
+
 // conv=[ascii,ebcdic,ibm], conv=[ucase,lcase], conv=[block,unblock], conv=sync
 // TODO: Move conv tests from unit test module

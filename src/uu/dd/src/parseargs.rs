@@ -444,6 +444,20 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
                     return Err(ParseError::MultipleFmtTable);
                 } else {
                     fmt = Some(flag);
+                    // From the GNU documentation:
+                    //
+                    // > ‘ascii’
+                    // >
+                    // > Convert EBCDIC to ASCII, using the conversion
+                    // > table specified by POSIX. This provides a 1:1
+                    // > translation for all 256 bytes. This implies
+                    // > ‘conv=unblock’; input is converted to ASCII
+                    // > before trailing spaces are deleted.
+                    //
+                    // -- https://www.gnu.org/software/coreutils/manual/html_node/dd-invocation.html
+                    if cbs.is_some() {
+                        iconvflags.unblock = cbs;
+                    }
                 }
             }
             ConvFlag::FmtAtoE => {
@@ -451,6 +465,19 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
                     return Err(ParseError::MultipleFmtTable);
                 } else {
                     fmt = Some(flag);
+                    // From the GNU documentation:
+                    //
+                    // > ‘ebcdic’
+                    // >
+                    // > Convert ASCII to EBCDIC. This is the inverse
+                    // > of the ‘ascii’ conversion. This implies
+                    // > ‘conv=block’; trailing spaces are added before
+                    // > being converted to EBCDIC.
+                    //
+                    // -- https://www.gnu.org/software/coreutils/manual/html_node/dd-invocation.html
+                    if cbs.is_some() {
+                        iconvflags.block = cbs;
+                    }
                 }
             }
             ConvFlag::FmtAtoI => {
