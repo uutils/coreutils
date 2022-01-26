@@ -313,7 +313,7 @@ busytest: $(BUILDDIR)/busybox $(addprefix test_busybox_,$(filter-out $(SKIP_UTIL
 endif
 
 clean:
-	$(RM) $(BUILDDIR)
+	cargo clean
 	cd $(DOCSDIR) && $(MAKE) clean
 
 distclean: clean
