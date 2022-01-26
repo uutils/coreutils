@@ -1378,7 +1378,7 @@ impl PathData {
                     }
                 }
 
-                // if not, check if we can use path metadata
+                // if not, check if we can use Path metadata
                 match get_metadata(self.p_buf.as_path(), self.must_dereference) {
                     Err(err) => {
                         let _ = out.flush();
