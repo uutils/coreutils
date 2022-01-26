@@ -1283,6 +1283,7 @@ struct PathData {
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
     // Name of the file - will be empty for . or ..
+    de: OnceCell<Option<DirEntry>>,
     display_name: OsString,
     // PathBuf that all above data corresponds to
     p_buf: PathBuf,
@@ -1295,6 +1296,7 @@ impl PathData {
         p_buf: PathBuf,
         file_type: Option<std::io::Result<FileType>>,
         metadata: Option<std::io::Result<Metadata>>,
+        dir_entry: Option<std::io::Result<DirEntry>>,
         file_name: Option<OsString>,
         config: &Config,
         command_line: bool,
@@ -1328,6 +1330,11 @@ impl PathData {
             Dereference::None => false,
         };
 
+        let de = match dir_entry {
+            Some(de) => OnceCell::from(de.ok()),
+            None => OnceCell::new(),
+        };
+
         let ft = match file_type {
             Some(ft) => OnceCell::from(ft.ok()),
             None => OnceCell::new(),
@@ -1353,6 +1360,7 @@ impl PathData {
         Self {
             ft,
             md,
+            de,
             display_name,
             p_buf,
             must_dereference,
@@ -1362,33 +1370,30 @@ impl PathData {
 
     fn md(&self, out: &mut BufWriter<Stdout>) -> Option<&Metadata> {
         self.md
-            .get_or_init(
-                || match get_metadata(self.p_buf.as_path(), self.must_dereference) {
+            .get_or_init(|| {
+                // check if we can use DirEntry metadata
+                if !self.must_dereference {
+                    if let Some(Some(dir_entry)) = self.de.get() {
+                        return dir_entry.metadata().ok();
+                    }
+                }
+
+                // if not, check if we can use path metadata
+                match get_metadata(self.p_buf.as_path(), self.must_dereference) {
                     Err(err) => {
                         let _ = out.flush();
                         let errno = err.raw_os_error().unwrap_or(1i32);
-                        // Wait to enter "directory" to print error for any bad fd
                         if self.must_dereference && errno.eq(&9i32) {
-                            if let Some(parent) = self.p_buf.parent() {
-                                if let Ok(read_dir) = fs::read_dir(parent) {
-                                    // this dir_entry metadata is different from the metadata call on the path
-                                    let res = read_dir
-                                        .filter_map(|x| x.ok())
-                                        .filter(|x| self.p_buf.eq(&x.path()))
-                                        .filter_map(|x| x.metadata().ok())
-                                        .next();
-                                    if let Some(md) = res {
-                                        return Some(md);
-                                    }
-                                }
+                            if let Some(Some(dir_entry)) = self.de.get() {
+                                return dir_entry.metadata().ok();
                             }
                         }
                         show!(LsError::IOErrorContext(err, self.p_buf.clone(),));
                         None
                     }
                     Ok(md) => Some(md),
-                },
-            )
+                }
+            })
             .as_ref()
     }
 
@@ -1406,7 +1411,7 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
     let initial_locs_len = locs.len();
 
     for loc in locs {
-        let path_data = PathData::new(PathBuf::from(loc), None, None, None, &config, true);
+        let path_data = PathData::new(PathBuf::from(loc), None, None, None, None, &config, true);
 
         // Getting metadata here is no big deal as it's just the CWD
         // and we really just want to know if the strings exist as files/dirs
@@ -1541,12 +1546,14 @@ fn enter_directory(
                 path_data.p_buf.clone(),
                 None,
                 None,
+                None,
                 Some(".".into()),
                 config,
                 false,
             ),
             PathData::new(
                 path_data.p_buf.join(".."),
+                None,
                 None,
                 None,
                 Some("..".into()),
@@ -1579,58 +1586,37 @@ fn enter_directory(
             // certain we print the error once.  This also seems to match GNU behavior.
             let entry_path_data = match dir_entry.file_type() {
                 Ok(ft) => {
-                    // metadata returned from a DirEntry matches GNU metadata for
-                    // non-dereferenced files, and is *different* from the
-                    // metadata call on the path, see, for example, bad fds,
-                    // so we use dir_entry metadata here when we know we
-                    // will need metadata later anyway
-                    #[cfg(unix)]
-                    {
-                        if (config.format == Format::Long)
-                            || (config.sort == Sort::Name)
-                            || (config.sort == Sort::None)
-                            || config.inode
-                        {
-                            if let Ok(md) = dir_entry.metadata() {
-                                PathData::new(
-                                    dir_entry.path(),
-                                    Some(Ok(ft)),
-                                    Some(Ok(md)),
-                                    None,
-                                    config,
-                                    false,
-                                )
-                            } else {
-                                PathData::new(dir_entry.path(), None, None, None, config, false)
-                            }
-                        } else {
-                            PathData::new(dir_entry.path(), None, None, None, config, false)
-                        }
-                    }
-                    #[cfg(not(unix))]
-                    {
-                        if (config.format == Format::Long)
-                            || (config.sort == Sort::Name)
-                            || (config.sort == Sort::None)
-                        {
-                            if let Ok(md) = dir_entry.metadata() {
-                                PathData::new(
-                                    dir_entry.path(),
-                                    Some(Ok(ft)),
-                                    Some(Ok(md)),
-                                    None,
-                                    config,
-                                    false,
-                                )
-                            } else {
-                                PathData::new(dir_entry.path(), None, None, None, config, false)
-                            }
-                        } else {
-                            PathData::new(dir_entry.path(), None, None, None, config, false)
-                        }
+                    if let Ok(md) = dir_entry.metadata() {
+                        PathData::new(
+                            dir_entry.path(),
+                            Some(Ok(ft)),
+                            Some(Ok(md)),
+                            Some(Ok(dir_entry)),
+                            None,
+                            config,
+                            false,
+                        )
+                    } else {
+                        PathData::new(
+                            dir_entry.path(),
+                            Some(Ok(ft)),
+                            None,
+                            Some(Ok(dir_entry)),
+                            None,
+                            config,
+                            false,
+                        )
                     }
                 }
-                Err(_) => PathData::new(dir_entry.path(), None, None, None, config, false),
+                Err(_) => PathData::new(
+                    dir_entry.path(),
+                    None,
+                    None,
+                    Some(Ok(dir_entry)),
+                    None,
+                    config,
+                    false,
+                ),
             };
             vec_path_data.push(entry_path_data);
         };
@@ -2494,7 +2480,8 @@ fn display_file_name(
                     }
                 }
 
-                let target_data = PathData::new(absolute_target, None, None, None, config, false);
+                let target_data =
+                    PathData::new(absolute_target, None, None, None, None, config, false);
 
                 // If we have a symlink to a valid file, we use the metadata of said file.
                 // Because we use an absolute path, we can assume this is guaranteed to exist.
