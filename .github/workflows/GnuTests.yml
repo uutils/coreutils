@@ -18,7 +18,7 @@ jobs:
       with:
         repository: 'coreutils/coreutils'
         path: 'gnu'
-        ref: v8.32
+        ref: v9.0
     - name: Checkout GNU coreutils library (gnulib)
       uses: actions/checkout@v2
       with:
