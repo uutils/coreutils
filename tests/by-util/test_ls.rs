@@ -191,25 +191,41 @@ fn test_ls_io_errors() {
         // dup and close work on the mac, but doesn't work in some linux containers
         // so check to see that return values are non-error before proceeding
         if rv1.is_ok() && rv2.is_ok() {
-            scene
-                .ucmd()
-                .arg("-alR")
-                .arg(format!("/dev/fd/{}", fd = fd2))
-                .fails()
-                .stderr_contains(format!(
-                    "cannot open directory '/dev/fd/{fd}': Bad file descriptor",
-                    fd = fd2
-                ))
-                .stdout_does_not_contain(format!("{fd}:\n", fd = fd2));
+            // on the mac and in certain Linux containers bad fds are typed as dirs,
+            // however sometimes bad fds are typed as links and directory entry on links won't fail
+            if PathBuf::from(format!("/dev/fd/{fd}", fd = fd2)).is_dir() {
+                scene
+                    .ucmd()
+                    .arg("-alR")
+                    .arg(format!("/dev/fd/{fd}", fd = fd2))
+                    .fails()
+                    .stderr_contains(format!(
+                        "cannot open directory '/dev/fd/{fd}': Bad file descriptor",
+                        fd = fd2
+                    ))
+                    .stdout_does_not_contain(format!("{fd}:\n", fd = fd2));
 
-            scene
-                .ucmd()
-                .arg("-RiL")
-                .arg(format!("/dev/fd/{fd}", fd = fd2))
-                .fails()
-                .stderr_contains(format!("cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2))
-                // don't double print bad fd errors
-                .stderr_does_not_contain(format!("ls: cannot open directory '/dev/fd/{fd}': Bad file descriptor\nls: cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2));
+                scene
+                    .ucmd()
+                    .arg("-RiL")
+                    .arg(format!("/dev/fd/{fd}", fd = fd2))
+                    .fails()
+                    .stderr_contains(format!("cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2))
+                    // don't double print bad fd errors
+                    .stderr_does_not_contain(format!("ls: cannot open directory '/dev/fd/{fd}': Bad file descriptor\nls: cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2));
+            } else {
+                scene
+                    .ucmd()
+                    .arg("-alR")
+                    .arg(format!("/dev/fd/{fd}", fd = fd2))
+                    .succeeds();
+
+                scene
+                    .ucmd()
+                    .arg("-RiL")
+                    .arg(format!("/dev/fd/{fd}", fd = fd2))
+                    .succeeds();
+            }
 
             scene
                 .ucmd()
