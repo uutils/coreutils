@@ -1333,6 +1333,8 @@ impl PathData {
             None => None,
         };
 
+        // Why prefer to check the DirEntry file_type()?  B/c the call is
+        // nearly free compared to a metadata() or file_type() call on a dir/file.
         let ft = match de {
             Some(ref de) => {
                 if let Ok(ft_de) = de.file_type() {
@@ -1572,11 +1574,6 @@ fn enter_directory(
         };
 
         if should_display(&dir_entry, config) {
-            // Why prefer to check the DirEntry file_type()?  B/c the call is
-            // nearly free compared to a metadata() or file_type() call on a dir/file.
-            //
-            // Why not print an error here?  If we wait for the metadata() call, we make
-            // certain we print the error once.  This also seems to match GNU behavior.
             let entry_path_data =
                 PathData::new(dir_entry.path(), Some(Ok(dir_entry)), None, config, false);
             vec_path_data.push(entry_path_data);
