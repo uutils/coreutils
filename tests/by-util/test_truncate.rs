@@ -321,3 +321,28 @@ fn test_truncate_bytes_size() {
         }
     }
 }
+
+/// Test that truncating a non-existent file creates that file.
+#[test]
+fn test_new_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let filename = "new_file_that_does_not_exist_yet";
+    ucmd.args(&["-s", "8", filename])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(at.file_exists(filename));
+    assert_eq!(at.read_bytes(filename), vec![b'\0'; 8]);
+}
+
+/// Test for not creating a non-existent file.
+#[test]
+fn test_new_file_no_create() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let filename = "new_file_that_does_not_exist_yet";
+    ucmd.args(&["-s", "8", "-c", filename])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(!at.file_exists(filename));
+}
