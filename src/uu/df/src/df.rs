@@ -531,5 +531,4 @@ pub fn uu_app<'a>() -> App<'a> {
                 .help("limit listing to file systems not of type TYPE"),
         )
         .arg(Arg::new(OPT_PATHS).multiple_occurrences(true))
-        .override_help("Filesystem(s) to list")
 }
