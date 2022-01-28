@@ -202,6 +202,9 @@ fn truncate_reference_and_size(
         }
         Ok(m) => m,
     };
+    if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = mode {
+        return Err(USimpleError::new(1, "division by zero"));
+    }
     let metadata = metadata(rfilename).map_err(|e| match e.kind() {
         ErrorKind::NotFound => USimpleError::new(
             1,
@@ -271,6 +274,9 @@ fn truncate_reference_file_only(
 fn truncate_size_only(size_string: &str, filenames: Vec<String>, create: bool) -> UResult<()> {
     let mode = parse_mode_and_size(size_string)
         .map_err(|e| USimpleError::new(1, format!("Invalid number: {}", e)))?;
+    if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = mode {
+        return Err(USimpleError::new(1, "division by zero"));
+    }
     for filename in &filenames {
         let fsize = match metadata(filename) {
             Ok(m) => m.len(),
