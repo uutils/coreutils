@@ -1328,17 +1328,19 @@ impl PathData {
             Dereference::None => false,
         };
 
-        let de = match dir_entry {
+        let de: Option<DirEntry> = match dir_entry {
             Some(de) => de.ok(),
             None => None,
         };
 
         // Why prefer to check the DirEntry file_type()?  B/c the call is
-        // nearly free compared to a metadata() or file_type() call on a dir/file.
+        // nearly free compared to a metadata() call on a Path
         let ft = match de {
             Some(ref de) => {
                 if let Ok(ft_de) = de.file_type() {
                     OnceCell::from(Some(ft_de))
+                } else if let Ok(md_pb) = p_buf.metadata() {
+                    OnceCell::from(Some(md_pb.file_type()))
                 } else {
                     OnceCell::new()
                 }
@@ -1353,8 +1355,8 @@ impl PathData {
         };
 
         Self {
-            ft,
             md: OnceCell::new(),
+            ft,
             de,
             display_name,
             p_buf,
@@ -1594,8 +1596,7 @@ fn enter_directory(
         for e in entries
             .iter()
             .skip(if config.files == Files::All { 2 } else { 0 })
-            // Already requested file_type for the dir_entries above. So we know the OnceCell is set.
-            // And can unwrap again because we tested whether path has is_some here
+            .filter(|p| p.ft.get().is_some())
             .filter(|p| p.ft.get().unwrap().is_some())
             .filter(|p| p.ft.get().unwrap().unwrap().is_dir())
         {
