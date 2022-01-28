@@ -33,6 +33,9 @@ use std::collections::VecDeque;
 /// let expected = VecDeque::from_iter([1, 2].iter());
 /// assert_eq!(expected, actual);
 /// ```
+///
+/// [`push_back`]: struct.RingBuffer.html#method.push_back
+/// [`from_iter`]: struct.RingBuffer.html#method.from_iter
 pub struct RingBuffer<T> {
     pub data: VecDeque<T>,
     size: usize,

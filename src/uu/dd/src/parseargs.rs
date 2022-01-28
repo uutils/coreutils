@@ -86,7 +86,7 @@ impl UError for ParseError {
     }
 }
 
-/// Some flags specified as part of a conv=CONV[,CONV]... block
+/// Some flags specified as part of a conv=CONV\[,CONV\]... block
 /// relate to the input file, others to the output file.
 #[derive(Debug, PartialEq)]
 enum ConvFlag {

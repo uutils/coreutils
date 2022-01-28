@@ -88,7 +88,7 @@ impl Iterator for ExecutePatternIter {
 ///
 /// # Errors
 ///
-/// If a pattern is incorrect, a [`::CsplitError::InvalidPattern`] error is returned, which may be
+/// If a pattern is incorrect, a [`CsplitError::InvalidPattern`] error is returned, which may be
 /// due to, e.g.,:
 /// - an invalid regular expression;
 /// - an invalid number for, e.g., the offset.

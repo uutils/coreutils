@@ -65,7 +65,7 @@ where
 /// Like `std::io::Take`, but for lines instead of bytes.
 ///
 /// This struct is generally created by calling [`take_lines`] on a
-/// reader. Please see the documentation of [`take`] for more
+/// reader. Please see the documentation of [`take_lines`] for more
 /// details.
 pub struct TakeLines<T> {
     inner: T,

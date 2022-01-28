@@ -681,7 +681,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
 /// Return true if a file is necessary to copy. This is the case when:
 ///
 /// - _from_ or _to_ is nonexistent;
-/// - either file has a sticky bit or set[ug]id bit, or the user specified one;
+/// - either file has a sticky bit or set\[ug\]id bit, or the user specified one;
 /// - either file isn't a regular file;
 /// - the sizes of _from_ and _to_ differ;
 /// - _to_'s owner differs from intended; or

@@ -26,11 +26,11 @@ fn is_broken_pipe(info: &PanicInfo) -> bool {
 ///
 /// For background discussions on `SIGPIPE` handling, see
 ///
-/// * https://github.com/uutils/coreutils/issues/374
-/// * https://github.com/uutils/coreutils/pull/1106
-/// * https://github.com/rust-lang/rust/issues/62569
-/// * https://github.com/BurntSushi/ripgrep/issues/200
-/// * https://github.com/crev-dev/cargo-crev/issues/287
+/// * `<https://github.com/uutils/coreutils/issues/374>`
+/// * `<https://github.com/uutils/coreutils/pull/1106>`
+/// * `<https://github.com/rust-lang/rust/issues/62569>`
+/// * `<https://github.com/BurntSushi/ripgrep/issues/200>`
+/// * `<https://github.com/crev-dev/cargo-crev/issues/287>`
 ///
 pub fn mute_sigpipe_panic() {
     let hook = panic::take_hook();

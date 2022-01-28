@@ -1,4 +1,5 @@
 #![crate_name = "uu_csplit"]
+#![allow(rustdoc::private_intra_doc_links)]
 
 #[macro_use]
 extern crate uucore;
@@ -83,12 +84,12 @@ impl CsplitOptions {
 /// # Errors
 ///
 /// - [`io::Error`] if there is some problem reading/writing from/to a file.
-/// - [`::CsplitError::LineOutOfRange`] if the line number pattern is larger than the number of input
+/// - [`CsplitError::LineOutOfRange`] if the line number pattern is larger than the number of input
 ///   lines.
-/// - [`::CsplitError::LineOutOfRangeOnRepetition`], like previous but after applying the pattern
+/// - [`CsplitError::LineOutOfRangeOnRepetition`], like previous but after applying the pattern
 ///   more than once.
-/// - [`::CsplitError::MatchNotFound`] if no line matched a regular expression.
-/// - [`::CsplitError::MatchNotFoundOnRepetition`], like previous but after applying the pattern
+/// - [`CsplitError::MatchNotFound`] if no line matched a regular expression.
+/// - [`CsplitError::MatchNotFoundOnRepetition`], like previous but after applying the pattern
 ///   more than once.
 pub fn csplit<T>(
     options: &CsplitOptions,
@@ -243,7 +244,7 @@ impl<'a> SplitWriter<'a> {
     }
 
     /// Writes the line to the current split, appending a newline character.
-    /// If [`dev_null`] is true, then the line is discarded.
+    /// If [`self.dev_null`] is true, then the line is discarded.
     ///
     /// # Errors
     ///
@@ -264,8 +265,8 @@ impl<'a> SplitWriter<'a> {
     }
 
     /// Perform some operations after completing a split, i.e., either remove it
-    /// if the [`::ELIDE_EMPTY_FILES_OPT`] option is enabled, or print how much bytes were written
-    /// to it if [`::QUIET_OPT`] is disabled.
+    /// if the [`options::ELIDE_EMPTY_FILES`] option is enabled, or print how much bytes were written
+    /// to it if [`options::QUIET`] is disabled.
     ///
     /// # Errors
     ///
@@ -305,7 +306,7 @@ impl<'a> SplitWriter<'a> {
     ///
     /// In addition to errors reading/writing from/to a file, if the line number
     /// `n` is greater than the total available lines, then a
-    /// [`::CsplitError::LineOutOfRange`] error is returned.
+    /// [`CsplitError::LineOutOfRange`] error is returned.
     fn do_to_line<I>(
         &mut self,
         pattern_as_str: &str,
@@ -354,9 +355,9 @@ impl<'a> SplitWriter<'a> {
     /// # Errors
     ///
     /// In addition to errors reading/writing from/to a file, the following errors may be returned:
-    /// - if no line matched, an [`::CsplitError::MatchNotFound`].
+    /// - if no line matched, an [`CsplitError::MatchNotFound`].
     /// - if there are not enough lines to accommodate the offset, an
-    /// [`::CsplitError::LineOutOfRange`].
+    /// [`CsplitError::LineOutOfRange`].
     fn do_to_match<I>(
         &mut self,
         pattern_as_str: &str,
@@ -512,7 +513,7 @@ where
         self.size = size;
     }
 
-    /// Add a line to the buffer. If the buffer has [`size`] elements, then its head is removed and
+    /// Add a line to the buffer. If the buffer has [`self.size`] elements, then its head is removed and
     /// the new line is pushed to the buffer. The removed head is then available in the returned
     /// option.
     fn add_line_to_buffer(&mut self, ln: usize, line: String) -> Option<String> {
