@@ -37,6 +37,8 @@ exponentiate
 eval
 falsey
 fileio
+filesystem
+filesystems
 flamegraph
 fullblock
 getfacl
