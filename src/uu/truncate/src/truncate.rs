@@ -6,17 +6,13 @@
 //  * file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) RFILE refsize rfilename fsize tsize
-
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use std::convert::TryFrom;
 use std::fs::{metadata, OpenOptions};
 use std::io::ErrorKind;
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{UIoError, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size, ParseSizeError};
 
 #[derive(Debug, Eq, PartialEq)]
@@ -113,24 +109,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let no_create = matches.is_present(options::NO_CREATE);
         let reference = matches.value_of(options::REFERENCE).map(String::from);
         let size = matches.value_of(options::SIZE).map(String::from);
-        truncate(no_create, io_blocks, reference, size, files).map_err(|e| {
-            match e.kind() {
-                ErrorKind::NotFound => {
-                    // TODO Improve error-handling so that the error
-                    // returned by `truncate()` provides the necessary
-                    // parameter for formatting the error message.
-                    let reference = matches.value_of(options::REFERENCE).map(String::from);
-                    USimpleError::new(
-                        1,
-                        format!(
-                            "cannot stat {}: No such file or directory",
-                            reference.as_deref().unwrap_or("").quote()
-                        ),
-                    ) // TODO: fix '--no-create' see test_reference and test_truncate_bytes_size
-                }
-                _ => uio_error!(e, ""),
-            }
-        })
+        truncate(no_create, io_blocks, reference, size, files)
     }
 }
 
@@ -212,20 +191,31 @@ fn truncate_reference_and_size(
     size_string: &str,
     filenames: Vec<String>,
     create: bool,
-) -> std::io::Result<()> {
+) -> UResult<()> {
     let mode = match parse_mode_and_size(size_string) {
-        Ok(m) => match m {
-            TruncateMode::Absolute(_) => {
-                crash!(1, "you must specify a relative '--size' with '--reference'")
-            }
-            _ => m,
-        },
-        Err(e) => crash!(1, "Invalid number: {}", e.to_string()),
+        Err(e) => return Err(USimpleError::new(1, format!("Invalid number: {}", e))),
+        Ok(TruncateMode::Absolute(_)) => {
+            return Err(USimpleError::new(
+                1,
+                String::from("you must specify a relative '--size' with '--reference'"),
+            ))
+        }
+        Ok(m) => m,
     };
-    let fsize = usize::try_from(metadata(rfilename)?.len()).unwrap();
+    let metadata = metadata(rfilename).map_err(|e| match e.kind() {
+        ErrorKind::NotFound => USimpleError::new(
+            1,
+            format!(
+                "cannot stat {}: No such file or directory",
+                rfilename.quote()
+            ),
+        ),
+        _ => e.map_err_context(String::new),
+    })?;
+    let fsize = metadata.len() as usize;
     let tsize = mode.to_size(fsize);
     for filename in &filenames {
-        file_truncate(filename, create, tsize)?;
+        file_truncate(filename, create, tsize).map_err_context(String::new)?;
     }
     Ok(())
 }
@@ -245,10 +235,20 @@ fn truncate_reference_file_only(
     rfilename: &str,
     filenames: Vec<String>,
     create: bool,
-) -> std::io::Result<()> {
-    let tsize = usize::try_from(metadata(rfilename)?.len()).unwrap();
+) -> UResult<()> {
+    let metadata = metadata(rfilename).map_err(|e| match e.kind() {
+        ErrorKind::NotFound => USimpleError::new(
+            1,
+            format!(
+                "cannot stat {}: No such file or directory",
+                rfilename.quote()
+            ),
+        ),
+        _ => e.map_err_context(String::new),
+    })?;
+    let tsize = metadata.len() as usize;
     for filename in &filenames {
-        file_truncate(filename, create, tsize)?;
+        file_truncate(filename, create, tsize).map_err_context(String::new)?;
     }
     Ok(())
 }
@@ -268,15 +268,9 @@ fn truncate_reference_file_only(
 ///
 /// If the any file could not be opened, or there was a problem setting
 /// the size of at least one file.
-fn truncate_size_only(
-    size_string: &str,
-    filenames: Vec<String>,
-    create: bool,
-) -> std::io::Result<()> {
-    let mode = match parse_mode_and_size(size_string) {
-        Ok(m) => m,
-        Err(e) => crash!(1, "Invalid number: {}", e.to_string()),
-    };
+fn truncate_size_only(size_string: &str, filenames: Vec<String>, create: bool) -> UResult<()> {
+    let mode = parse_mode_and_size(size_string)
+        .map_err(|e| USimpleError::new(1, format!("Invalid number: {}", e)))?;
     for filename in &filenames {
         let fsize = match metadata(filename) {
             Ok(m) => m.len(),
@@ -286,7 +280,7 @@ fn truncate_size_only(
         match file_truncate(filename, create, tsize) {
             Ok(_) => continue,
             Err(e) if e.kind() == ErrorKind::NotFound && !create => continue,
-            Err(e) => return Err(e),
+            Err(e) => return Err(e.map_err_context(String::new)),
         }
     }
     Ok(())
@@ -298,7 +292,7 @@ fn truncate(
     reference: Option<String>,
     size: Option<String>,
     filenames: Vec<String>,
-) -> std::io::Result<()> {
+) -> UResult<()> {
     let create = !no_create;
     // There are four possibilities
     // - reference file given and size given,
