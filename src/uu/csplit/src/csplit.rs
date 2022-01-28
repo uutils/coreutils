@@ -1,4 +1,5 @@
 #![crate_name = "uu_csplit"]
+// spell-checker:ignore rustdoc
 #![allow(rustdoc::private_intra_doc_links)]
 
 #[macro_use]
