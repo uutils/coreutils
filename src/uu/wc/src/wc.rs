@@ -17,7 +17,7 @@ use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
 use word_count::{TitledWordCount, WordCount};
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
 use std::cmp::max;
 use std::fs::{self, File};
@@ -166,6 +166,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::BYTES)
                 .short('c')

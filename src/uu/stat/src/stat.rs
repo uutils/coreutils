@@ -16,7 +16,7 @@ use uucore::fsext::{
 };
 use uucore::libc::mode_t;
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::borrow::Cow;
 use std::convert::AsRef;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
@@ -970,6 +970,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::DEREFERENCE)
                 .short('L')

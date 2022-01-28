@@ -6,7 +6,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::io::{self, Write};
 use std::iter::Peekable;
 use std::str::Chars;
@@ -134,8 +134,9 @@ pub fn uu_app<'a>() -> App<'a> {
         // TrailingVarArg specifies the final positional argument is a VarArg
         // and it doesn't attempts the parse any further args.
         // Final argument must have multiple(true) or the usage string equivalent.
-        .setting(clap::AppSettings::TrailingVarArg)
-        .setting(clap::AppSettings::AllowHyphenValues)
+        .setting(AppSettings::TrailingVarArg)
+        .setting(AppSettings::AllowHyphenValues)
+        .setting(AppSettings::InferLongArgs)
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(AFTER_HELP)

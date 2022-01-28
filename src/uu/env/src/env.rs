@@ -127,6 +127,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .override_usage(USAGE)
         .after_help(AFTER_HELP)
         .setting(AppSettings::AllowExternalSubcommands)
+        .setting(AppSettings::InferLongArgs)
         .arg(Arg::new("ignore-environment")
             .short('i')
             .long("ignore-environment")

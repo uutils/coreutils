@@ -5,7 +5,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
@@ -98,6 +98,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .override_usage(USAGE)
         .about(SUMMARY)
+        .setting(AppSettings::InferLongArgs)
         .arg(Arg::new(options::FILE).default_value("-").hide(true))
 }
 

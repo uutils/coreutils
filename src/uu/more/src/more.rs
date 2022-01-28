@@ -17,7 +17,7 @@ use std::{
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 extern crate nix;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute, queue,
@@ -100,6 +100,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .about("A file perusal filter for CRT viewing.")
         .version(crate_version!())
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::SILENT)
                 .short('d')

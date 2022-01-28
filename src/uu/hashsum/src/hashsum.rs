@@ -20,7 +20,7 @@ mod digest;
 use self::digest::Digest;
 use self::digest::DigestWriter;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{App, AppSettings, Arg, ArgMatches};
 use hex::ToHex;
 use md5::Context as Md5;
 use regex::Regex;
@@ -343,6 +343,7 @@ pub fn uu_app_common<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about("Compute and check message digests.")
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new("binary")
                 .short('b')

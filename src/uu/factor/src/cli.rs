@@ -14,7 +14,7 @@ use std::fmt::Write as FmtWrite;
 use std::io::{self, stdin, stdout, BufRead, Write};
 
 mod factor;
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 pub use factor::*;
 use uucore::display::Quotable;
 use uucore::error::UResult;
@@ -81,5 +81,6 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
+        .setting(AppSettings::InferLongArgs)
         .arg(Arg::new(options::NUMBER).multiple_occurrences(true))
 }

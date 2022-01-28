@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) fullname
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::path::{is_separator, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError};
@@ -97,6 +97,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::MULTIPLE)
                 .short('a')

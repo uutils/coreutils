@@ -12,7 +12,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App};
+use clap::{crate_version, App, AppSettings};
 use std::ffi::CStr;
 use uucore::error::UResult;
 use uucore::InvalidEncodingHandling;
@@ -59,4 +59,5 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
+        .setting(AppSettings::InferLongArgs)
 }

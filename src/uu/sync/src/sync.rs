@@ -9,7 +9,7 @@
 
 extern crate libc;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
@@ -198,6 +198,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::FILE_SYSTEM)
                 .short('f')

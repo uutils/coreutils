@@ -13,7 +13,7 @@ use uucore::perms::{chown_base, options, IfFrom};
 
 use uucore::error::{FromIo, UResult, USimpleError};
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
 use std::fs;
 use std::os::unix::fs::MetadataExt;
@@ -71,6 +71,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::verbosity::CHANGES)
                 .short('c')

@@ -12,7 +12,7 @@ use std::{
     io::{BufRead, BufWriter, Write},
 };
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use regex::Regex;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
@@ -757,6 +757,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::SUFFIX_FORMAT)
                 .short('b')

@@ -9,7 +9,7 @@
 
 // spell-checker:ignore (ToDO) ttyname filedesc
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::ffi::CStr;
 use std::io::Write;
 use uucore::error::{UResult, UUsageError};
@@ -75,6 +75,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::SILENT)
                 .long(options::SILENT)

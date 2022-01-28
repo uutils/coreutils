@@ -2,7 +2,7 @@
 
 use uucore::error::{UResult, UUsageError};
 
-use clap::{App, Arg};
+use clap::{App, AppSettings, Arg};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
 
 use std::borrow::Cow;
@@ -114,6 +114,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(VERSION)
         .about(ABOUT)
         .after_help(DESCRIPTION)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::COMPUTE)
                 .short('c')

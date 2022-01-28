@@ -11,7 +11,7 @@
 extern crate uucore;
 
 use bstr::io::BufReadExt;
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use std::path::Path;
@@ -539,6 +539,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .override_usage(SYNTAX)
         .about(SUMMARY)
         .after_help(LONG_HELP)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::BYTES)
                 .short('b')

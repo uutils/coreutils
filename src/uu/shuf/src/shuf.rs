@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) cmdline evec seps rvec fdata
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use rand::Rng;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
@@ -124,6 +124,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .help_template(TEMPLATE)
         .override_usage(USAGE)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::ECHO)
                 .short('e')

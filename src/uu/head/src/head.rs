@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (vars) zlines BUFWRITER seekable
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::convert::{TryFrom, TryInto};
 use std::ffi::OsString;
 use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
@@ -47,6 +47,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(USAGE)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::BYTES_NAME)
                 .short('c')

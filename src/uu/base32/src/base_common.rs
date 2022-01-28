@@ -18,7 +18,7 @@ use std::fs::File;
 use std::io::{BufReader, Stdin};
 use std::path::Path;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 
 pub static BASE_CMD_PARSE_ERROR: i32 = 1;
 
@@ -97,6 +97,7 @@ pub fn base_app(about: &str) -> App {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(about)
+        .setting(AppSettings::InferLongArgs)
         // Format arguments.
         .arg(
             Arg::new(options::DECODE)

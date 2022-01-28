@@ -18,7 +18,7 @@ use std::io::BufReader;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::path::PathBuf;
 use uucore::InvalidEncodingHandling;
 
@@ -136,6 +136,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::LONG_FORMAT)
                 .short('l')

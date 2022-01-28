@@ -25,7 +25,7 @@ mod numeric_str_cmp;
 mod tmp_dir;
 
 use chunks::LineData;
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
@@ -1281,6 +1281,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::modes::SORT)
                 .long(options::modes::SORT)

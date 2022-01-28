@@ -13,7 +13,7 @@ extern crate quick_error;
 
 use chrono::offset::Local;
 use chrono::DateTime;
-use clap::App;
+use clap::{App, AppSettings};
 use getopts::Matches;
 use getopts::{HasArg, Occur};
 use itertools::Itertools;
@@ -172,7 +172,7 @@ quick_error! {
 }
 
 pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+    App::new(uucore::util_name()).setting(AppSettings::InferLongArgs)
 }
 
 #[uucore_procs::gen_uumain]

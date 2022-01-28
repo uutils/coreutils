@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDOs) corasick memchr Roff trunc oset iset
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use regex::Regex;
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -705,6 +705,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .name(NAME)
         .version(crate_version!())
         .override_usage(BRIEF)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
