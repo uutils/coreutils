@@ -537,6 +537,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.separator = match value.len() {
             0 => Sep::Line,
             1 => Sep::Char(value[0]),
+            2 if value[0] == b'\\' && value[1] == b'0' => Sep::Char(0),
             _ => {
                 return Err(USimpleError::new(
                     1,

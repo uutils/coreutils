@@ -367,6 +367,17 @@ fn non_unicode() {
 }
 
 #[test]
+fn null_field_separators() {
+    new_ucmd!()
+        .arg("-t")
+        .arg("\\0")
+        .arg("non-unicode_1.bin")
+        .arg("non-unicode_2.bin")
+        .succeeds()
+        .stdout_only_fixture("null-sep.expected");
+}
+
+#[test]
 fn null_line_endings() {
     new_ucmd!()
         .arg("-z")
