@@ -29,13 +29,20 @@ have other issues.
 Rust provides a good, platform-agnostic way of writing systems utilities that are easy
 to compile anywhere, and this is as good a way as any to try and learn it.
 
+## Documentation
+uutils has both user and developer documentation available:
+
+- [User Manual](https://uutils.github.io/coreutils-docs/user/)
+- [Developer Documentation](https://uutils.github.io/coreutils-docs/dev/)
+
+Both can also be generated locally, the instructions for that can be found in the
+[coreutils docs](https://github.com/uutils/coreutils-docs) repository.
+
 <!-- ANCHOR: installation (this mark is needed for mdbook) -->
 ## Requirements
 
 * Rust (`cargo`, `rustc`)
-* GNU Make (required to build documentation)
-* [Sphinx](http://www.sphinx-doc.org/) (for documentation)
-* gzip (for installing documentation)
+* GNU Make (optional)
 
 ### Rust Version
 
