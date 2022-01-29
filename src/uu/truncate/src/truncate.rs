@@ -239,7 +239,8 @@ fn truncate_reference_and_size(
     let fsize = metadata.len() as usize;
     let tsize = mode.to_size(fsize);
     for filename in &filenames {
-        file_truncate(filename, create, tsize).map_err_context(String::new)?;
+        file_truncate(filename, create, tsize)
+            .map_err_context(|| format!("cannot open {} for writing", filename.quote()))?;
     }
     Ok(())
 }
@@ -272,7 +273,8 @@ fn truncate_reference_file_only(
     })?;
     let tsize = metadata.len() as usize;
     for filename in &filenames {
-        file_truncate(filename, create, tsize).map_err_context(String::new)?;
+        file_truncate(filename, create, tsize)
+            .map_err_context(|| format!("cannot open {} for writing", filename.quote()))?;
     }
     Ok(())
 }
@@ -307,7 +309,11 @@ fn truncate_size_only(size_string: &str, filenames: Vec<String>, create: bool) -
         match file_truncate(filename, create, tsize) {
             Ok(_) => continue,
             Err(e) if e.kind() == ErrorKind::NotFound && !create => continue,
-            Err(e) => return Err(e.map_err_context(String::new)),
+            Err(e) => {
+                return Err(
+                    e.map_err_context(|| format!("cannot open {} for writing", filename.quote()))
+                )
+            }
         }
     }
     Ok(())

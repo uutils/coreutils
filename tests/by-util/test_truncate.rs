@@ -378,6 +378,15 @@ fn test_division_by_zero_reference_and_size() {
         .stderr_contains("division by zero");
 }
 
+#[test]
+fn test_no_such_dir() {
+    new_ucmd!()
+        .args(&["-s", "0", "a/b"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("cannot open 'a/b' for writing: No such file or directory");
+}
+
 /// Test that truncate with a relative size less than 0 is not an error.
 #[test]
 fn test_underflow_relative_size() {
