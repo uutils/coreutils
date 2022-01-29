@@ -250,7 +250,7 @@ clap_complete = "3.0"
 lazy_static = { version="1.3" }
 textwrap = { version="0.14", features=["terminal_size"] }
 uucore = { version=">=0.0.11", package="uucore", path="src/uucore" }
-selinux = { version="0.2.3", optional = true }
+selinux = { version="0.2", optional = true }
 # * uutils
 uu_test  = { optional=true, version="0.0.12", package="uu_test", path="src/uu/test" }
 #
