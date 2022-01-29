@@ -377,3 +377,12 @@ fn test_division_by_zero_reference_and_size() {
         .no_stdout()
         .stderr_contains("division by zero");
 }
+
+#[test]
+fn test_no_such_dir() {
+    new_ucmd!()
+        .args(&["-s", "0", "a/b"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("cannot open 'a/b' for writing: No such file or directory");
+}
