@@ -15,19 +15,15 @@
 <!-- spell-checker:ignore markdownlint ; (options) DESTDIR RUNTEST UTILNAME -->
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
-utilities in [Rust](http://www.rust-lang.org). This repository is intended to
-aggregate GNU coreutils rewrites.
+utilities in [Rust](http://www.rust-lang.org).
 
 ## Why?
 
-Many GNU, Linux and other utilities are useful, and obviously
-[some](http://gnuwin32.sourceforge.net) [effort](http://unxutils.sourceforge.net)
-has been spent in the past to port them to Windows. However, those projects
-are written in platform-specific C, a language considered unsafe compared to Rust, and
-have other issues.
-
-Rust provides a good, platform-agnostic way of writing systems utilities that are easy
-to compile anywhere, and this is as good a way as any to try and learn it.
+uutils aims to work on as many platforms as possible, to be able to use the
+same utils on Linux, Mac, Windows and other platforms. This ensures, for
+example, that scripts can be easily transferred between platforms. Rust was
+chosen not only because it is fast and safe, but is also excellent for
+writing cross-platform code.
 
 ## Documentation
 uutils has both user and developer documentation available:
