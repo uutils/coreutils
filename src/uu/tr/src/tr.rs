@@ -11,7 +11,7 @@ mod convert;
 mod operation;
 mod unicode_table;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use nom::AsBytes;
 use operation::{translate_input, Sequence, SqueezeOperation, TranslateOperation};
 use std::io::{stdin, stdout, BufReader, BufWriter};
@@ -56,7 +56,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_matches_from(args);
 
     let delete_flag = matches.is_present(options::DELETE);
-    let complement_flag = matches.is_present(options::COMPLEMENT) || matches.is_present("C");
+    let complement_flag = matches.is_present(options::COMPLEMENT);
     let squeeze_flag = matches.is_present(options::SQUEEZE);
     let truncate_set1_flag = matches.is_present(options::TRUNCATE_SET1);
 
@@ -148,17 +148,14 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::COMPLEMENT)
-                // .visible_short_alias('C')  // TODO: requires clap "3.0.0-beta.2"
+                .visible_short_alias('C')
                 .short('c')
                 .long(options::COMPLEMENT)
                 .help("use the complement of SET1"),
-        )
-        .arg(
-            Arg::new("C") // work around for `Arg::visible_short_alias`
-                .short('C')
-                .help("same as -c"),
         )
         .arg(
             Arg::new(options::DELETE)

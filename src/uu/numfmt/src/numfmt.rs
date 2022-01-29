@@ -196,6 +196,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .about(ABOUT)
         .after_help(LONG_HELP)
         .setting(AppSettings::AllowNegativeNumbers)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::DELIMITER)
                 .short('d')

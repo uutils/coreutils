@@ -36,9 +36,6 @@ const ENCODINGS: &[(&str, Format)] = &[
     ("base2lsbf", Format::Base2Lsbf),
     ("base2msbf", Format::Base2Msbf),
     ("z85", Format::Z85),
-    // common abbreviations. TODO: once we have clap 3.0 we can use `AppSettings::InferLongArgs` to get all abbreviations automatically
-    ("base2l", Format::Base2Lsbf),
-    ("base2m", Format::Base2Msbf),
 ];
 
 fn usage() -> String {

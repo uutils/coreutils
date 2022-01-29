@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDOs) ncount routput
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
@@ -69,6 +69,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .override_usage(SYNTAX)
         .about(SUMMARY)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::BYTES)
                 .long(options::BYTES)

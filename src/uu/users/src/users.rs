@@ -10,7 +10,7 @@
 
 use std::path::Path;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use uucore::error::UResult;
 use uucore::utmpx::{self, Utmpx};
 
@@ -68,5 +68,6 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(Arg::new(ARG_FILES).takes_value(true).max_values(1))
 }

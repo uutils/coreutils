@@ -22,7 +22,7 @@ mod platform;
 use chunks::ReverseChunks;
 use lines::lines;
 
-use clap::{App, Arg};
+use clap::{App, AppSettings, Arg};
 use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::fmt;
@@ -279,6 +279,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(USAGE)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::BYTES)
                 .short('c')

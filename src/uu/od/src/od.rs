@@ -295,7 +295,8 @@ pub fn uu_app<'a>() -> App<'a> {
         .setting(
             AppSettings::TrailingVarArg |
             AppSettings::DontDelimitTrailingValues |
-            AppSettings::DeriveDisplayOrder
+            AppSettings::DeriveDisplayOrder |
+            AppSettings::InferLongArgs
         )
         .arg(
             Arg::new(options::ADDRESS_RADIX)

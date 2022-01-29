@@ -197,6 +197,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .about(ABOUT)
         .after_help(LONG_HELP)
         .setting(AppSettings::TrailingVarArg)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::INPUT)
                 .long(options::INPUT)

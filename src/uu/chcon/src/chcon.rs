@@ -5,7 +5,7 @@
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::{display::Quotable, show_error, show_warning};
 
-use clap::{App, Arg};
+use clap::{App, AppSettings, Arg};
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
 use std::borrow::Cow;
@@ -164,6 +164,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::dereference::DEREFERENCE)
                 .long(options::dereference::DEREFERENCE)

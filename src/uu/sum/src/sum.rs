@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::fs::File;
 use std::io::{stdin, Read};
 use std::path::Path;
@@ -146,6 +146,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .override_usage(USAGE)
         .about(SUMMARY)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::FILE)
                 .multiple_occurrences(true)

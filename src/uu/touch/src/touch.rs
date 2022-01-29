@@ -13,7 +13,7 @@ pub extern crate filetime;
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg, ArgGroup};
+use clap::{crate_version, App, AppSettings, Arg, ArgGroup};
 use filetime::*;
 use std::fs::{self, File};
 use std::path::Path;
@@ -133,6 +133,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::ACCESS)
                 .short('a')
@@ -176,7 +177,6 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(options::sources::REFERENCE)
                 .short('r')
                 .long(options::sources::REFERENCE)
-                .alias("ref") // clapv3
                 .help("use this file's times instead of the current time")
                 .value_name("FILE")
                 .allow_invalid_utf8(true),

@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
 
@@ -183,6 +183,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
         // TODO: opts.arg(

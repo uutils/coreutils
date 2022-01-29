@@ -34,7 +34,7 @@ fn test_base32_encode_file() {
 
 #[test]
 fn test_decode() {
-    for decode_param in &["-d", "--decode"] {
+    for decode_param in &["-d", "--decode", "--dec"] {
         let input = "JBSWY3DPFQQFO33SNRSCC===\n"; // spell-checker:disable-line
         new_ucmd!()
             .arg(decode_param)
@@ -56,7 +56,7 @@ fn test_garbage() {
 
 #[test]
 fn test_ignore_garbage() {
-    for ignore_garbage_param in &["-i", "--ignore-garbage"] {
+    for ignore_garbage_param in &["-i", "--ignore-garbage", "--ig"] {
         let input = "JBSWY\x013DPFQ\x02QFO33SNRSCC===\n"; // spell-checker:disable-line
         new_ucmd!()
             .arg("-d")
@@ -69,7 +69,7 @@ fn test_ignore_garbage() {
 
 #[test]
 fn test_wrap() {
-    for wrap_param in &["-w", "--wrap"] {
+    for wrap_param in &["-w", "--wrap", "--wr"] {
         let input = "The quick brown fox jumps over the lazy dog.";
         new_ucmd!()
             .arg(wrap_param)

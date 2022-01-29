@@ -13,7 +13,7 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 
@@ -165,6 +165,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(LONG_HELP)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::BOURNE_SHELL)
                 .long("sh")

@@ -36,7 +36,7 @@ use std::thread;
 use std::time;
 
 use byte_unit::Byte;
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use gcd::Gcd;
 #[cfg(target_os = "linux")]
 use signal_hook::consts::signal;
@@ -941,6 +941,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::INFILE)
                 .long(options::INFILE)
