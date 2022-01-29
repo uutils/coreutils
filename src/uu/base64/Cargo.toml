@@ -16,12 +16,8 @@ path = "src/base64.rs"
 
 [dependencies]
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features = ["encoding"] }
-uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 uu_base32 = { version=">=0.0.8", package="uu_base32", path="../base32"}
 
 [[bin]]
 name = "base64"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

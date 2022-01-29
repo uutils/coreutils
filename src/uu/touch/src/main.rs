@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_touch);
+uucore::bin!(uu_touch);

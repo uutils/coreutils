@@ -25,7 +25,6 @@ libc = "0.2.85"
 quick-error = "1.2.3"
 selinux = { version="0.2", optional=true }
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["entries", "fs", "perms", "mode"] }
-uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 walkdir = "2.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -45,6 +44,3 @@ path = "src/main.rs"
 [features]
 feat_selinux = ["selinux"]
 feat_acl = ["exacl"]
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

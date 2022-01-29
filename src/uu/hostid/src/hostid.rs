@@ -18,7 +18,7 @@ extern "C" {
     pub fn gethostid() -> c_long;
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     uu_app().get_matches_from(args);
     hostid();

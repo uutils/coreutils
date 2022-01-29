@@ -30,7 +30,7 @@ If FILE is not specified, use {}.  /var/log/wtmp as FILE is common.",
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let after_help = get_long_usage();

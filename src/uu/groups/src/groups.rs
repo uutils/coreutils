@@ -69,7 +69,7 @@ fn infallible_gid2grp(gid: &u32) -> String {
     }
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 

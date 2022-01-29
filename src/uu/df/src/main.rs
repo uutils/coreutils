@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_df);
+uucore::bin!(uu_df);

@@ -158,7 +158,7 @@ impl Settings {
 }
 
 #[allow(clippy::cognitive_complexity)]
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = match Settings::get_from(args) {
         Ok(o) => o,

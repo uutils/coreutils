@@ -19,7 +19,6 @@ clap = { version = "3.0", features = ["wrap_help", "cargo"] }
 walkdir = "2.2"
 remove_dir_all = "0.5.1"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["fs"] }
-uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version="0.3", features=[] }
@@ -27,6 +26,3 @@ winapi = { version="0.3", features=[] }
 [[bin]]
 name = "rm"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

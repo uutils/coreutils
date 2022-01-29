@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_stdbuf);
+uucore::bin!(uu_stdbuf);

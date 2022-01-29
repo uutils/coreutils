@@ -22,7 +22,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(Arg::new(HELP).long(HELP))
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)

@@ -51,7 +51,7 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>,
     Ok((dest_gid, None, IfFrom::All))
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
 

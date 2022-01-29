@@ -139,7 +139,7 @@ pub type UResult<T> = Result<T, Box<dyn UError>>;
 /// The main routine would look like this:
 ///
 /// ```ignore
-/// #[uucore_procs::gen_uumain]
+/// #[uucore::main]
 /// pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 ///     // Perform computations here ...
 ///     return Err(LsError::InvalidLineWidth(String::from("test")).into())

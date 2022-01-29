@@ -20,7 +20,6 @@ crate-type = ["cdylib", "rlib"] # XXX: note: the rlib is just to prevent Cargo f
 cpp = "0.5"
 libc = "0.2"
 uucore = { version=">=0.0.11", package="uucore", path="../../../../uucore" }
-uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../../../uucore_procs" }
 
 [build-dependencies]
 cpp_build = "0.4"

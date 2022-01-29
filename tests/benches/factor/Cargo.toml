@@ -16,7 +16,6 @@ criterion = "0.3"
 rand = "0.8"
 rand_chacha = "0.2.2"
 
-
 [[bench]]
 name = "gcd"
 harness = false
