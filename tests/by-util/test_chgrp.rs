@@ -60,7 +60,7 @@ fn test_1() {
 #[test]
 fn test_fail_silently() {
     if get_effective_gid() != 0 {
-        for opt in &["-f", "--silent", "--quiet"] {
+        for opt in &["-f", "--silent", "--quiet", "--sil", "--qui"] {
             new_ucmd!()
                 .arg(opt)
                 .arg("bin")
