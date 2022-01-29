@@ -346,3 +346,34 @@ fn test_new_file_no_create() {
         .no_stderr();
     assert!(!at.file_exists(filename));
 }
+
+#[test]
+fn test_division_by_zero_size_only() {
+    new_ucmd!()
+        .args(&["-s", "/0", "file"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("division by zero");
+    new_ucmd!()
+        .args(&["-s", "%0", "file"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("division by zero");
+}
+
+#[test]
+fn test_division_by_zero_reference_and_size() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.make_file(FILE1);
+    ucmd.args(&["-r", FILE1, "-s", "/0", "file"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("division by zero");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.make_file(FILE1);
+    ucmd.args(&["-r", FILE1, "-s", "%0", "file"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("division by zero");
+}
