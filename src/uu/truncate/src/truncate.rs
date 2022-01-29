@@ -207,7 +207,7 @@ fn file_truncate(filename: &str, create: bool, size: usize) -> std::io::Result<(
 ///
 /// # Errors
 ///
-/// If the any file could not be opened, or there was a problem setting
+/// If any file could not be opened, or there was a problem setting
 /// the size of at least one file.
 ///
 /// If at least one file is a named pipe (also known as a fifo).
@@ -269,7 +269,7 @@ fn truncate_reference_and_size(
 ///
 /// # Errors
 ///
-/// If the any file could not be opened, or there was a problem setting
+/// If any file could not be opened, or there was a problem setting
 /// the size of at least one file.
 ///
 /// If at least one file is a named pipe (also known as a fifo).
@@ -319,7 +319,7 @@ fn truncate_reference_file_only(
 ///
 /// # Errors
 ///
-/// If the any file could not be opened, or there was a problem setting
+/// If any file could not be opened, or there was a problem setting
 /// the size of at least one file.
 ///
 /// If at least one file is a named pipe (also known as a fifo).
