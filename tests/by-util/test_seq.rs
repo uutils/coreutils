@@ -701,3 +701,13 @@ fn test_format_option() {
         .succeeds()
         .stdout_only("0.00\n0.10\n0.20\n0.30\n0.40\n0.50\n");
 }
+
+#[test]
+fn test_invalid_zero_increment_value() {
+    new_ucmd!()
+        .args(&["0", "0", "1"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid Zero increment value: '0'")
+        .stderr_contains("for more information.");
+}
