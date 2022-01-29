@@ -15,27 +15,30 @@
 <!-- spell-checker:ignore markdownlint ; (options) DESTDIR RUNTEST UTILNAME -->
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
-utilities in [Rust](http://www.rust-lang.org). This repository is intended to
-aggregate GNU coreutils rewrites.
+utilities in [Rust](http://www.rust-lang.org).
 
 ## Why?
 
-Many GNU, Linux and other utilities are useful, and obviously
-[some](http://gnuwin32.sourceforge.net) [effort](http://unxutils.sourceforge.net)
-has been spent in the past to port them to Windows. However, those projects
-are written in platform-specific C, a language considered unsafe compared to Rust, and
-have other issues.
+uutils aims to work on as many platforms as possible, to be able to use the
+same utils on Linux, Mac, Windows and other platforms. This ensures, for
+example, that scripts can be easily transferred between platforms. Rust was
+chosen not only because it is fast and safe, but is also excellent for
+writing cross-platform code.
 
-Rust provides a good, platform-agnostic way of writing systems utilities that are easy
-to compile anywhere, and this is as good a way as any to try and learn it.
+## Documentation
+uutils has both user and developer documentation available:
+
+- [User Manual](https://uutils.github.io/coreutils-docs/user/)
+- [Developer Documentation](https://uutils.github.io/coreutils-docs/dev/)
+
+Both can also be generated locally, the instructions for that can be found in the
+[coreutils docs](https://github.com/uutils/coreutils-docs) repository.
 
 <!-- ANCHOR: installation (this mark is needed for mdbook) -->
 ## Requirements
 
 * Rust (`cargo`, `rustc`)
-* GNU Make (required to build documentation)
-* [Sphinx](http://www.sphinx-doc.org/) (for documentation)
-* gzip (for installing documentation)
+* GNU Make (optional)
 
 ### Rust Version
 
@@ -44,7 +47,7 @@ The current oldest supported version of the Rust compiler is `1.54`.
 
 On both Windows and Redox, only the nightly version is tested currently.
 
-## Build Instructions
+## Building
 
 There are currently two methods to build the uutils binaries: either Cargo
 or GNU Make.
@@ -123,7 +126,7 @@ To build only a few of the available utilities:
 $ make UTILS='UTILITY_1 UTILITY_2'
 ```
 
-## Installation Instructions
+## Installation
 
 ### Cargo
 
@@ -213,7 +216,7 @@ run:
 cargo run completion ls bash > /usr/local/share/bash-completion/completions/ls
 ```
 
-## Un-installation Instructions
+## Un-installation
 
 Un-installation differs depending on how you have installed uutils.  If you used
 Cargo to install, use Cargo to uninstall.  If you used GNU Make to install, use
@@ -255,7 +258,7 @@ $ make PREFIX=/my/path uninstall
 ```
 <!-- ANCHOR_END: installation (this mark is needed for mdbook) -->
 
-## Test Instructions
+## Testing
 
 Testing can be done using either Cargo or `make`.
 
@@ -321,7 +324,7 @@ To include tests for unimplemented behavior:
 $ make UTILS='UTILITY_1 UTILITY_2' SPEC=y test
 ```
 
-## Run Busybox Tests
+### Run Busybox Tests
 
 This testing functionality is only available on *nix operating systems and
 requires `make`.
@@ -344,7 +347,7 @@ To pass an argument like "-v" to the busybox test runtime
 $ make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
 ```
 
-## Comparing with GNU
+### Comparing with GNU
 
 ![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
 
@@ -359,7 +362,7 @@ $ bash util/run-gnu-test.sh tests/touch/not-owner.sh # for example
 
 Note that it relies on individual utilities (not the multicall binary).
 
-## Contribute
+## Contributing
 
 To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 
