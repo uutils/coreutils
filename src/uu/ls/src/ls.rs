@@ -14,7 +14,9 @@ extern crate uucore;
 extern crate lazy_static;
 
 mod quoting_style;
+mod url_escaper;
 
+use ascii::AsciiChar;
 use clap::{crate_version, App, AppSettings, Arg};
 use glob::Pattern;
 use lscolors::LsColors;
@@ -38,11 +40,13 @@ use std::{
     os::unix::fs::{FileTypeExt, MetadataExt},
     time::Duration,
 };
-use std::{ffi::OsString, fs::ReadDir};
+use std::{env, ffi::OsString, fs::ReadDir};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
+use url_escaper::UrlEscaper;
 use uucore::{
     display::Quotable,
     error::{set_exit_code, UError, UResult},
+    fs::{canonicalize, MissingHandling, ResolveMode},
 };
 
 use unicode_width::UnicodeWidthStr;
@@ -128,6 +132,7 @@ pub mod options {
     pub static REVERSE: &str = "reverse";
     pub static RECURSIVE: &str = "recursive";
     pub static COLOR: &str = "color";
+    pub static HYPERLINK: &str = "hyperlink";
     pub static PATHS: &str = "paths";
     pub static INDICATOR_STYLE: &str = "indicator-style";
     pub static TIME_STYLE: &str = "time-style";
@@ -290,6 +295,40 @@ enum IndicatorStyle {
     Classify,
 }
 
+struct HyperlinkData {
+    prefix: String,
+    url_escaper: UrlEscaper,
+    current_dir: OnceCell<Option<PathBuf>>,
+}
+
+impl HyperlinkData {
+    fn from_env() -> Self {
+        const PREFIX: &str = "\x1B]8;;file://";
+
+        let hostname_url_escaper = UrlEscaper::new();
+        let prefix = [
+            PREFIX,
+            hostname_url_escaper
+                .escape_os(&hostname::get().unwrap_or_default())
+                .unwrap_or_default()
+                .as_str(),
+        ]
+        .concat();
+        let url_escaper = hostname_url_escaper.into_path_escaper();
+
+        Self {
+            prefix,
+            current_dir: OnceCell::new(),
+            url_escaper,
+        }
+    }
+}
+
+#[derive(Default)]
+struct HyperlinkConfig {
+    data: OnceCell<HyperlinkData>,
+}
+
 struct Config {
     format: Format,
     files: Files,
@@ -304,6 +343,7 @@ struct Config {
     #[cfg(unix)]
     inode: bool,
     color: Option<LsColors>,
+    hyperlink: Option<HyperlinkConfig>,
     long: LongFormat,
     width: u16,
     quoting_style: QuotingStyle,
@@ -465,6 +505,21 @@ impl Config {
 
         let color = if needs_color {
             Some(LsColors::from_env().unwrap_or_default())
+        } else {
+            None
+        };
+
+        let needs_hyperlink = match options.value_of(options::HYPERLINK) {
+            None => options.is_present(options::HYPERLINK),
+            Some(val) => match val {
+                "" | "always" | "yes" | "force" => true,
+                "auto" | "tty" | "if-tty" => atty::is(atty::Stream::Stdout),
+                /* "never" | "no" | "none" | */ _ => false,
+            },
+        };
+
+        let hyperlink = if needs_hyperlink {
+            Some(HyperlinkConfig::default())
         } else {
             None
         };
@@ -672,6 +727,7 @@ impl Config {
             directory: options.is_present(options::DIRECTORY),
             time,
             color,
+            hyperlink,
             #[cfg(unix)]
             inode: options.is_present(options::INODE),
             long,
@@ -1178,6 +1234,17 @@ only ignore '.' and '..'.",
             Arg::new(options::COLOR)
                 .long(options::COLOR)
                 .help("Color output based on file type.")
+                .takes_value(true)
+                .possible_values(&[
+                    "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
+                ])
+                .require_equals(true)
+                .min_values(0),
+        )
+        .arg(
+            Arg::new(options::HYPERLINK)
+                .long(options::HYPERLINK)
+                .help("Hyperlink file names.")
                 .takes_value(true)
                 .possible_values(&[
                     "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
@@ -2371,6 +2438,10 @@ fn display_file_name(
     // infer it because the color codes mess up term_grid's width calculation.
     let mut width = name.width();
 
+    if let Some(hyperlink_config) = &config.hyperlink {
+        name = hyperlink_name(hyperlink_config, &path.p_buf, name);
+    }
+
     if let Some(ls_colors) = &config.color {
         if let Ok(metadata) = path.p_buf.symlink_metadata() {
             name = color_name(ls_colors, &path.p_buf, name, &metadata);
@@ -2493,6 +2564,57 @@ fn display_file_name(
         contents: name,
         width,
     }
+}
+
+fn hyperlink_name(hyperlink_config: &HyperlinkConfig, path: &Path, name: String) -> String {
+    let hyperlink_data = hyperlink_config.data.get_or_init(HyperlinkData::from_env);
+    let abs_path_buf;
+    let maybe_abs_path = if path.is_absolute() {
+        path
+    } else if let Some(current_dir) = &hyperlink_data
+        .current_dir
+        .get_or_init(|| env::current_dir().ok())
+    {
+        // we do this ourselves instead of letting canonicalize do it so that we only query the current directory once
+        abs_path_buf = current_dir.join(path);
+        &abs_path_buf
+    } else {
+        path
+    };
+    let canonical_path = canonicalize(
+        maybe_abs_path,
+        MissingHandling::Missing,
+        ResolveMode::Physical,
+    );
+    let link_path = canonical_path
+        .as_ref()
+        .map(|x| x.as_ref())
+        .unwrap_or(maybe_abs_path);
+
+    if link_path.is_absolute() {
+        if let Some(esc_link_path) = hyperlink_data.url_escaper.escape_os(link_path.as_os_str()) {
+            const SEPARATOR: &str = "\x07";
+            const SUFFIX: &str = "\x1B]8;;\x07";
+
+            // for Windows where absolute paths start with C: or other drive letters
+            let slash = if esc_link_path.as_ref().into_iter().next() == Some(&AsciiChar::Slash) {
+                ""
+            } else {
+                "/"
+            };
+
+            return [
+                &hyperlink_data.prefix,
+                slash,
+                esc_link_path.as_str(),
+                SEPARATOR,
+                &name,
+                SUFFIX,
+            ]
+            .concat();
+        }
+    }
+    name
 }
 
 fn color_name(ls_colors: &LsColors, path: &Path, name: String, md: &Metadata) -> String {

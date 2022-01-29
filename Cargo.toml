@@ -368,6 +368,7 @@ chrono = "^0.4.11"
 conv = "0.3"
 filetime = "0.2"
 glob = "0.3.0"
+hostname_lib = {package = "hostname", version = "0.3"}
 libc = "0.2"
 pretty_assertions = "1"
 rand = "0.8"

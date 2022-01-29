@@ -2,6 +2,8 @@
 
 #[cfg(unix)]
 extern crate unix_socket;
+use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
+
 use crate::common::util::*;
 
 extern crate regex;
@@ -1486,6 +1488,123 @@ fn test_ls_color() {
             "{}  test-color\nb  {}\n",
             a_with_colors, z_with_colors
         ));
+}
+
+#[test]
+fn test_ls_hyperlinks() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let abc = ("abc", "abc");
+    let special = ("xY3-_.~禧", "xY3-_.~%e7%a6%a7");
+
+    #[cfg(unix)]
+    let files = [abc, special, ("xY3-_.~\x07\n禧", "xY3-_.~%07%0a%e7%a6%a7")];
+
+    #[cfg(not(unix))]
+    let files = [abc, special];
+
+    for (name, _) in &files {
+        at.touch(name);
+    }
+
+    fn url_escape(x: &[u8], path: bool) -> String {
+        let mut res = String::new();
+        for b in x.iter().copied() {
+            if b.is_ascii_alphanumeric() || b == b'_' || b == b'-' || b == b'.' || b == b'~' {
+                res.push(b as char);
+            } else if path && (b == b'/' || b as char == std::path::MAIN_SEPARATOR) {
+                res.push('/');
+            } else {
+                use std::fmt::Write;
+                write!(res, "%{:2x}", b).unwrap();
+            }
+        }
+        res
+    }
+
+    use std::ffi::OsStr;
+    #[cfg(unix)]
+    fn url_escape_os(x: &OsStr, path: bool) -> Option<String> {
+        use std::os::unix::ffi::OsStrExt;
+        Some(url_escape(x.as_bytes(), path))
+    }
+
+    #[cfg(not(unix))]
+    fn url_escape_os(x: &OsStr, path: bool) -> Option<String> {
+        x.to_str().map(|x| url_escape(x.as_bytes(), path))
+    }
+
+    let path = url_escape_os(
+        &canonicalize(&at.subdir, MissingHandling::Missing, ResolveMode::Physical)
+            .unwrap()
+            .into_os_string(),
+        true,
+    )
+    .unwrap();
+
+    let prefix = &[
+        "\x1B]8;;file://",
+        &url_escape_os(&hostname_lib::get().unwrap_or_default(), false).unwrap_or_default(),
+        if path.starts_with('/') { "" } else { "/" },
+        &path,
+        "/",
+    ]
+    .concat();
+
+    fn hyperlink_re(prefix: &str, esc_name: &str) -> Regex {
+        Regex::new(
+            &[
+                &regex::escape(&[prefix, esc_name, "\x07"].concat()),
+                "[^\\x1B]*",
+                &regex::escape("\x1B]8;;\x07"),
+            ]
+            .concat(),
+        )
+        .unwrap()
+    }
+
+    for absolute in [false, true] {
+        let scene_ucmd = || {
+            let mut ucmd = scene.ucmd();
+            if absolute {
+                for (name, _) in files {
+                    ucmd.arg(at.subdir.join(name));
+                }
+            }
+            ucmd
+        };
+
+        let hyperlinks: Vec<_> = files
+            .iter()
+            .map(|(_, esc_name)| hyperlink_re(prefix, esc_name))
+            .collect();
+
+        // hyperlink is disabled by default
+        let result = scene_ucmd().succeeds();
+        for i in &hyperlinks {
+            result.stdout_does_not_match(i);
+        }
+
+        // Hyperlink should be enabled
+        for param in &[
+            "--hyperlink",
+            "--hyper",
+            "--hyperlink=always",
+            "--hyper=always",
+        ] {
+            let result = scene_ucmd().arg(param).succeeds();
+
+            for i in &hyperlinks {
+                result.stdout_matches(i);
+            }
+        }
+
+        // Hyperlink should be disabled
+        let result = scene_ucmd().arg("--hyperlink=never").succeeds();
+        for i in &hyperlinks {
+            result.stdout_does_not_match(i);
+        }
+    }
 }
 
 #[cfg(unix)]
