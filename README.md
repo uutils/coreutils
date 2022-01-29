@@ -47,7 +47,7 @@ The current oldest supported version of the Rust compiler is `1.54`.
 
 On both Windows and Redox, only the nightly version is tested currently.
 
-## Build Instructions
+## Building
 
 There are currently two methods to build the uutils binaries: either Cargo
 or GNU Make.
@@ -126,7 +126,7 @@ To build only a few of the available utilities:
 $ make UTILS='UTILITY_1 UTILITY_2'
 ```
 
-## Installation Instructions
+## Installation
 
 ### Cargo
 
@@ -216,7 +216,7 @@ run:
 cargo run completion ls bash > /usr/local/share/bash-completion/completions/ls
 ```
 
-## Un-installation Instructions
+## Un-installation
 
 Un-installation differs depending on how you have installed uutils.  If you used
 Cargo to install, use Cargo to uninstall.  If you used GNU Make to install, use
@@ -258,7 +258,7 @@ $ make PREFIX=/my/path uninstall
 ```
 <!-- ANCHOR_END: installation (this mark is needed for mdbook) -->
 
-## Test Instructions
+## Testing
 
 Testing can be done using either Cargo or `make`.
 
@@ -324,7 +324,7 @@ To include tests for unimplemented behavior:
 $ make UTILS='UTILITY_1 UTILITY_2' SPEC=y test
 ```
 
-## Run Busybox Tests
+### Run Busybox Tests
 
 This testing functionality is only available on *nix operating systems and
 requires `make`.
@@ -347,7 +347,7 @@ To pass an argument like "-v" to the busybox test runtime
 $ make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
 ```
 
-## Comparing with GNU
+### Comparing with GNU
 
 ![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
 
@@ -362,7 +362,7 @@ $ bash util/run-gnu-test.sh tests/touch/not-owner.sh # for example
 
 Note that it relies on individual utilities (not the multicall binary).
 
-## Contribute
+## Contributing
 
 To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 
