@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_chown);
+uucore::bin!(uu_chown);

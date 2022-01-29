@@ -1056,7 +1056,7 @@ fn make_sort_mode_arg<'a>(mode: &'a str, short: char, help: &'a str) -> Arg<'a> 
     arg
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)

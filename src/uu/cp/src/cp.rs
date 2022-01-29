@@ -454,7 +454,7 @@ pub fn uu_app<'a>() -> App<'a> {
              .multiple_occurrences(true))
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let matches = uu_app()

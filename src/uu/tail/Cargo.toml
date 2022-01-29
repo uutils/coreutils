@@ -18,7 +18,6 @@ path = "src/tail.rs"
 clap = { version = "3.0", features = ["wrap_help", "cargo"] }
 libc = "0.2.42"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["ringbuffer"] }
-uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version="0.3", features=["fileapi", "handleapi", "processthreadsapi", "synchapi", "winbase"] }
@@ -32,6 +31,3 @@ nix = "0.23.1"
 [[bin]]
 name = "tail"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_mkfifo);
+uucore::bin!(uu_mkfifo);

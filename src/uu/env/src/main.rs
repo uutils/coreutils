@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_env);
+uucore::bin!(uu_env);

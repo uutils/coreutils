@@ -16,6 +16,7 @@ edition = "2018"
 path="src/lib/lib.rs"
 
 [dependencies]
+uucore_procs = { version=">=0.0.12", path="../uucore_procs" }
 clap = "3.0"
 dns-lookup = { version="1.0.5", optional=true }
 dunce = "1.0.0"

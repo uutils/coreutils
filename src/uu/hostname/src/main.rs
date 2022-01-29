@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_hostname);
+uucore::bin!(uu_hostname);

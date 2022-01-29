@@ -18,12 +18,8 @@ path = "src/chmod.rs"
 clap = { version = "3.0", features = ["wrap_help", "cargo"] }
 libc = "0.2.42"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["fs", "mode"] }
-uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 walkdir = "2.2"
 
 [[bin]]
 name = "chmod"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

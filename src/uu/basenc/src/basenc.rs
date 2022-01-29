@@ -65,7 +65,7 @@ fn parse_cmd_args(args: impl uucore::Args) -> UResult<(Config, Format)> {
     Ok((config, format))
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (config, format) = parse_cmd_args(args)?;
     // Create a reference to stdin so we can return a locked stdin from

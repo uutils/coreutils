@@ -53,7 +53,7 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let long_usage = get_long_usage();

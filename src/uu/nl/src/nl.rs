@@ -81,7 +81,7 @@ pub mod options {
     pub const NUMBER_WIDTH: &str = "number-width";
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
