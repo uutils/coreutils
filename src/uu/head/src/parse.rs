@@ -12,7 +12,7 @@ pub enum ParseError {
     Overflow,
 }
 /// Parses obsolete syntax
-/// head -NUM[kmzv] // spell-checker:disable-line
+/// head -NUM\[kmzv\] // spell-checker:disable-line
 pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>, ParseError>> {
     let mut chars = src.char_indices();
     if let Some((_, '-')) = chars.next() {

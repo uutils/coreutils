@@ -377,9 +377,9 @@ fn set_system_datetime(_date: DateTime<Utc>) -> UResult<()> {
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 /// System call to set date (unix).
 /// See here for more:
-/// https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html
-/// https://linux.die.net/man/3/clock_settime
-/// https://www.gnu.org/software/libc/manual/html_node/Time-Types.html
+/// `<https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html>`
+/// `<https://linux.die.net/man/3/clock_settime>`
+/// `<https://www.gnu.org/software/libc/manual/html_node/Time-Types.html>`
 fn set_system_datetime(date: DateTime<Utc>) -> UResult<()> {
     let timespec = timespec {
         tv_sec: date.timestamp() as _,

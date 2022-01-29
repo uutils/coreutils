@@ -29,7 +29,7 @@ use rand_core::{impls, Error, RngCore};
 /// have enough data, will only be reported through [`try_fill_bytes`].
 /// The other [`RngCore`] methods will panic in case of an error.
 ///
-/// [`OsRng`]: crate::rngs::OsRng
+/// [`OsRng`]: rand::rngs::OsRng
 /// [`try_fill_bytes`]: RngCore::try_fill_bytes
 #[derive(Debug)]
 pub struct ReadRng<R> {

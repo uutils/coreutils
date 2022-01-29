@@ -13,7 +13,7 @@ pub const BLOCK_SIZE: u64 = 1 << 16;
 ///
 /// Each chunk is a [`Vec`]<[`u8`]> of size [`BLOCK_SIZE`] (except
 /// possibly the last chunk, which might be smaller). Each call to
-/// [`next`] will seek backwards through the given file.
+/// [`ReverseChunks::next`] will seek backwards through the given file.
 pub struct ReverseChunks<'a> {
     /// The file to iterate over, by blocks, from the end to the beginning.
     file: &'a File,

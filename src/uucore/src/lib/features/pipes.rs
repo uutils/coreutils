@@ -9,7 +9,7 @@ use nix::{fcntl::SpliceFFlags, sys::uio::IoVec};
 
 pub use nix::{Error, Result};
 
-/// A wrapper around [`nix::unistd::Pipe`] that ensures the pipe is cleaned up.
+/// A wrapper around [`nix::unistd::pipe`] that ensures the pipe is cleaned up.
 ///
 /// Returns two `File` objects: everything written to the second can be read
 /// from the first.

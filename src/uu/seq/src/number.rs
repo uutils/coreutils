@@ -4,7 +4,7 @@
 //! The [`Number`] enumeration represents the possible values for the
 //! start, increment, and end values for `seq`. These may be integers,
 //! floating point numbers, negative zero, etc. A [`Number`] can be
-//! parsed from a string by calling [`parse`].
+//! parsed from a string by calling [`str::parse`].
 use num_traits::Zero;
 
 use crate::extendedbigdecimal::ExtendedBigDecimal;
@@ -77,7 +77,7 @@ impl Number {
 ///
 /// This struct can be used to represent a number along with information
 /// on how many significant digits to use when displaying the number.
-/// The [`num_integral_digits`] field also includes the width needed to
+/// The [`PreciseNumber::num_integral_digits`] field also includes the width needed to
 /// display the "-" character for a negative number.
 ///
 /// You can get an instance of this struct by calling [`str::parse`].

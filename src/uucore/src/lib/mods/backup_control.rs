@@ -129,7 +129,7 @@ pub enum BackupMode {
 /// Backup error types.
 ///
 /// Errors are currently raised by [`determine_backup_mode`] only. All errors
-/// are implemented as [`UCustomError`] for uniform handling across utilities.
+/// are implemented as [`UError`] for uniform handling across utilities.
 #[derive(Debug, Eq, PartialEq)]
 pub enum BackupError {
     /// An invalid argument (e.g. 'foo') was given as backup type. First
