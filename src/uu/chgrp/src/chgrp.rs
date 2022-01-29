@@ -12,7 +12,7 @@ pub use uucore::entries;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::perms::{chown_base, options, IfFrom};
 
-use clap::{App, Arg, ArgMatches};
+use clap::{App, AppSettings, Arg, ArgMatches};
 
 use std::fs;
 use std::os::unix::fs::MetadataExt;
@@ -68,6 +68,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::verbosity::CHANGES)
                 .short('c')

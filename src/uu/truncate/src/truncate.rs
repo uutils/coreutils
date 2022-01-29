@@ -6,7 +6,7 @@
 //  * file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) RFILE refsize rfilename fsize tsize
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::convert::TryFrom;
 use std::fs::{metadata, OpenOptions};
 use std::io::ErrorKind;
@@ -31,18 +31,38 @@ impl TruncateMode {
     ///
     /// `fsize` is the size of the reference file, in bytes.
     ///
+    /// If the mode is [`TruncateMode::Reduce`] and the value to
+    /// reduce by is greater than `fsize`, then this function returns
+    /// 0 (since it cannot return a negative number).
+    ///
     /// # Examples
+    ///
+    /// Extending a file of 10 bytes by 5 bytes:
     ///
     /// ```rust,ignore
     /// let mode = TruncateMode::Extend(5);
     /// let fsize = 10;
     /// assert_eq!(mode.to_size(fsize), 15);
     /// ```
+    ///
+    /// Reducing a file by more than its size results in 0:
+    ///
+    /// ```rust,ignore
+    /// let mode = TruncateMode::Reduce(5);
+    /// let fsize = 3;
+    /// assert_eq!(mode.to_size(fsize), 0);
+    /// ```
     fn to_size(&self, fsize: usize) -> usize {
         match self {
             TruncateMode::Absolute(size) => *size,
             TruncateMode::Extend(size) => fsize + size,
-            TruncateMode::Reduce(size) => fsize - size,
+            TruncateMode::Reduce(size) => {
+                if *size > fsize {
+                    0
+                } else {
+                    fsize - size
+                }
+            }
             TruncateMode::AtMost(size) => fsize.min(*size),
             TruncateMode::AtLeast(size) => fsize.max(*size),
             TruncateMode::RoundDown(size) => fsize - fsize % size,
@@ -117,6 +137,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::IO_BLOCKS)
             .short('o')
@@ -382,5 +403,12 @@ mod tests {
         assert_eq!(parse_mode_and_size(">10"), Ok(TruncateMode::AtLeast(10)));
         assert_eq!(parse_mode_and_size("/10"), Ok(TruncateMode::RoundDown(10)));
         assert_eq!(parse_mode_and_size("%10"), Ok(TruncateMode::RoundUp(10)));
+    }
+
+    #[test]
+    fn test_to_size() {
+        assert_eq!(TruncateMode::Extend(5).to_size(10), 15);
+        assert_eq!(TruncateMode::Reduce(5).to_size(10), 5);
+        assert_eq!(TruncateMode::Reduce(5).to_size(3), 0);
     }
 }

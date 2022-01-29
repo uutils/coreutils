@@ -147,6 +147,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .setting(AppSettings::TrailingVarArg)
         .setting(AppSettings::AllowHyphenValues)
+        .setting(AppSettings::InferLongArgs)
         .version(crate_version!())
         .about(ABOUT)
         .arg(

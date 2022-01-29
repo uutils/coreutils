@@ -10,7 +10,7 @@
 mod error;
 
 use crate::error::ChrootError;
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::ffi::CString;
 use std::io::Error;
 use std::path::Path;
@@ -96,6 +96,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(SYNTAX)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::NEWROOT)
                 .hide(true)

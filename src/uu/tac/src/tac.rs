@@ -8,7 +8,7 @@
 // spell-checker:ignore (ToDO) sbytes slen dlen memmem memmap Mmap mmap SIGBUS
 mod error;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use memchr::memmem;
 use memmap2::Mmap;
 use std::io::{stdin, stdout, BufWriter, Read, Write};
@@ -66,6 +66,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .override_usage(USAGE)
         .about(SUMMARY)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::BEFORE)
                 .short('b')

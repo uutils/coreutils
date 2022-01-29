@@ -11,7 +11,7 @@ mod filenames;
 mod platform;
 
 use crate::filenames::FilenameFactory;
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::convert::TryFrom;
 use std::env;
 use std::fs::remove_file;
@@ -107,6 +107,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about("Create output files containing consecutive or interleaved sections of input")
+        .setting(AppSettings::InferLongArgs)
         // strategy (mutually exclusive)
         .arg(
             Arg::new(OPT_BYTES)

@@ -15,7 +15,7 @@ extern crate lazy_static;
 
 mod quoting_style;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use glob::Pattern;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
@@ -709,6 +709,7 @@ pub fn uu_app<'a>() -> App<'a> {
             the command line, expect that it will ignore files and directories \
             whose names start with '.'.",
         )
+        .setting(AppSettings::InferLongArgs)
         // Format arguments
         .arg(
             Arg::new(options::FORMAT)

@@ -167,6 +167,7 @@ pub fn uu_app<'a>() -> App<'a> {
                 .multiple_occurrences(true)
         )
         .setting(AppSettings::TrailingVarArg)
+        .setting(AppSettings::InferLongArgs)
 }
 
 /// Remove pre-existing SIGCHLD handlers that would make waiting for the child's exit code fail.

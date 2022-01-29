@@ -8,7 +8,7 @@
 
 use platform_info::*;
 
-use clap::{crate_version, App};
+use clap::{crate_version, App, AppSettings};
 use uucore::error::{FromIo, UResult};
 
 static ABOUT: &str = "Display machine architecture";
@@ -28,4 +28,5 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .after_help(SUMMARY)
+        .setting(AppSettings::InferLongArgs)
 }

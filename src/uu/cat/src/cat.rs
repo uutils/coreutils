@@ -14,7 +14,7 @@
 extern crate unix_socket;
 
 // last synced with: cat (GNU coreutils) 8.13
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::fs::{metadata, File};
 use std::io::{self, Read, Write};
 use thiserror::Error;
@@ -245,6 +245,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .override_usage(SYNTAX)
         .about(SUMMARY)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)

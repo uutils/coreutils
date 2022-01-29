@@ -27,6 +27,28 @@ lazy_static! {
     static ref UMASK_MUTEX: Mutex<()> = Mutex::new(());
 }
 
+const LONG_ARGS: &[&str] = &[
+    "-l",
+    "--long",
+    "--l",
+    "--format=long",
+    "--for=long",
+    "--format=verbose",
+    "--for=verbose",
+];
+
+const ACROSS_ARGS: &[&str] = &[
+    "-x",
+    "--format=across",
+    "--format=horizontal",
+    "--for=across",
+    "--for=horizontal",
+];
+
+const COMMA_ARGS: &[&str] = &["-m", "--format=commas", "--for=commas"];
+
+const COLUMN_ARGS: &[&str] = &["-C", "--format=columns", "--for=columns"];
+
 #[test]
 fn test_ls_ls() {
     new_ucmd!().succeeds();
@@ -315,7 +337,13 @@ fn test_ls_width() {
     at.touch(&at.plus_as_string("test-width-3"));
     at.touch(&at.plus_as_string("test-width-4"));
 
-    for option in &["-w 100", "-w=100", "--width=100", "--width 100"] {
+    for option in &[
+        "-w 100",
+        "-w=100",
+        "--width=100",
+        "--width 100",
+        "--wid=100",
+    ] {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
@@ -324,7 +352,7 @@ fn test_ls_width() {
             .stdout_only("test-width-1  test-width-2  test-width-3  test-width-4\n");
     }
 
-    for option in &["-w 50", "-w=50", "--width=50", "--width 50"] {
+    for option in &["-w 50", "-w=50", "--width=50", "--width 50", "--wid=50"] {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
@@ -333,7 +361,7 @@ fn test_ls_width() {
             .stdout_only("test-width-1  test-width-3\ntest-width-2  test-width-4\n");
     }
 
-    for option in &["-w 25", "-w=25", "--width=25", "--width 25"] {
+    for option in &["-w 25", "-w=25", "--width=25", "--width 25", "--wid=25"] {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
@@ -342,7 +370,7 @@ fn test_ls_width() {
             .stdout_only("test-width-1\ntest-width-2\ntest-width-3\ntest-width-4\n");
     }
 
-    for option in &["-w 0", "-w=0", "--width=0", "--width 0"] {
+    for option in &["-w 0", "-w=0", "--width=0", "--width 0", "--wid=0"] {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
@@ -358,7 +386,7 @@ fn test_ls_width() {
         .fails()
         .stderr_contains("invalid line width");
 
-    for option in &["-w 1a", "-w=1a", "--width=1a", "--width 1a"] {
+    for option in &["-w 1a", "-w=1a", "--width=1a", "--width 1a", "--wid 1a"] {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
@@ -382,12 +410,12 @@ fn test_ls_columns() {
 
     result.stdout_only("test-columns-1\ntest-columns-2\ntest-columns-3\ntest-columns-4\n");
 
-    for option in &["-C", "--format=columns"] {
+    for option in COLUMN_ARGS {
         let result = scene.ucmd().arg(option).succeeds();
         result.stdout_only("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n");
     }
 
-    for option in &["-C", "--format=columns"] {
+    for option in COLUMN_ARGS {
         scene
             .ucmd()
             .arg("-w=40")
@@ -400,7 +428,7 @@ fn test_ls_columns() {
     // environment variable.
     #[cfg(not(windows))]
     {
-        for option in &["-C", "--format=columns"] {
+        for option in COLUMN_ARGS {
             scene
                 .ucmd()
                 .env("COLUMNS", "40")
@@ -438,14 +466,14 @@ fn test_ls_across() {
     at.touch(&at.plus_as_string("test-across-3"));
     at.touch(&at.plus_as_string("test-across-4"));
 
-    for option in &["-x", "--format=across"] {
+    for option in ACROSS_ARGS {
         let result = scene.ucmd().arg(option).succeeds();
         // Because the test terminal has width 0, this is the same output as
         // the columns option.
         result.stdout_only("test-across-1  test-across-2  test-across-3  test-across-4\n");
     }
 
-    for option in &["-x", "--format=across"] {
+    for option in ACROSS_ARGS {
         // Because the test terminal has width 0, this is the same output as
         // the columns option.
         scene
@@ -466,12 +494,12 @@ fn test_ls_commas() {
     at.touch(&at.plus_as_string("test-commas-3"));
     at.touch(&at.plus_as_string("test-commas-4"));
 
-    for option in &["-m", "--format=commas"] {
+    for option in COMMA_ARGS {
         let result = scene.ucmd().arg(option).succeeds();
         result.stdout_only("test-commas-1, test-commas-2, test-commas-3, test-commas-4\n");
     }
 
-    for option in &["-m", "--format=commas"] {
+    for option in COMMA_ARGS {
         scene
             .ucmd()
             .arg("-w=30")
@@ -479,7 +507,7 @@ fn test_ls_commas() {
             .succeeds()
             .stdout_only("test-commas-1, test-commas-2,\ntest-commas-3, test-commas-4\n");
     }
-    for option in &["-m", "--format=commas"] {
+    for option in COMMA_ARGS {
         scene
             .ucmd()
             .arg("-w=45")
@@ -507,7 +535,7 @@ fn test_ls_long() {
     let at = &scene.fixtures;
     at.touch(&at.plus_as_string("test-long"));
 
-    for arg in &["-l", "--long", "--format=long", "--format=verbose"] {
+    for arg in LONG_ARGS {
         let result = scene.ucmd().arg(arg).arg("test-long").succeeds();
         #[cfg(not(windows))]
         result.stdout_contains("-rw-rw-r--");
@@ -533,7 +561,7 @@ fn test_ls_long_format() {
     at.touch(&at.plus_as_string("test-long-dir/test-long-file"));
     at.mkdir(&at.plus_as_string("test-long-dir/test-long-dir"));
 
-    for arg in &["-l", "--long", "--format=long", "--format=verbose"] {
+    for arg in LONG_ARGS {
         // Assuming sane username do not have spaces within them.
         // A line of the output should be:
         // One of the characters -bcCdDlMnpPsStTx?
@@ -808,7 +836,7 @@ fn test_ls_long_total_size() {
         .collect()
     };
 
-    for arg in &["-l", "--long", "--format=long", "--format=verbose"] {
+    for arg in LONG_ARGS {
         let result = scene.ucmd().arg(arg).succeeds();
         result.stdout_contains(expected_prints["long_vanilla"]);
 
@@ -1383,20 +1411,14 @@ fn test_ls_color() {
     assert!(!result.stdout_str().contains(z_with_colors));
 
     // Color should be enabled
-    scene
-        .ucmd()
-        .arg("--color")
-        .succeeds()
-        .stdout_contains(a_with_colors)
-        .stdout_contains(z_with_colors);
-
-    // Color should be enabled
-    scene
-        .ucmd()
-        .arg("--color=always")
-        .succeeds()
-        .stdout_contains(a_with_colors)
-        .stdout_contains(z_with_colors);
+    for param in &["--color", "--col", "--color=always", "--col=always"] {
+        scene
+            .ucmd()
+            .arg(param)
+            .succeeds()
+            .stdout_contains(a_with_colors)
+            .stdout_contains(z_with_colors);
+    }
 
     // Color should be disabled
     let result = scene.ucmd().arg("--color=never").succeeds();
@@ -1492,24 +1514,21 @@ fn test_ls_indicator_style() {
     assert!(at.is_fifo("named-pipe.fifo"));
 
     // Classify, File-Type, and Slash all contain indicators for directories.
-    let options = vec!["classify", "file-type", "slash"];
-    for opt in options {
+    for opt in [
+        "--indicator-style=classify",
+        "--ind=classify",
+        "--indicator-style=file-type",
+        "--ind=file-type",
+        "--indicator-style=slash",
+        "--ind=slash",
+        "--classify",
+        "--class",
+        "--file-type",
+        "--file",
+        "-p",
+    ] {
         // Verify that classify and file-type both contain indicators for symlinks.
-        scene
-            .ucmd()
-            .arg(format!("--indicator-style={}", opt))
-            .succeeds()
-            .stdout_contains(&"/");
-    }
-
-    // Same test as above, but with the alternate flags.
-    let options = vec!["--classify", "--file-type", "-p"];
-    for opt in options {
-        scene
-            .ucmd()
-            .arg(opt.to_string())
-            .succeeds()
-            .stdout_contains(&"/");
+        scene.ucmd().arg(opt).succeeds().stdout_contains(&"/");
     }
 
     // Classify and File-Type all contain indicators for pipes and links.

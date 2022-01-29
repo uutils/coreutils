@@ -25,7 +25,7 @@ use uucore::{
     error::{UError, UResult},
 };
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 
 mod options {
     pub const USERS: &str = "USERNAME";
@@ -109,6 +109,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::USERS)
                 .multiple_occurrences(true)

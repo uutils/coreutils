@@ -12,7 +12,7 @@ use uucore::error::UResult;
 use uucore::fsext::statfs_fn;
 use uucore::fsext::{read_fs_list, FsUsage, MountInfo};
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 
 use number_prefix::NumberPrefix;
 use std::cell::Cell;
@@ -425,6 +425,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_ALL)
                 .short('a')
@@ -530,5 +531,4 @@ pub fn uu_app<'a>() -> App<'a> {
                 .help("limit listing to file systems not of type TYPE"),
         )
         .arg(Arg::new(OPT_PATHS).multiple_occurrences(true))
-        .override_help("Filesystem(s) to list")
 }

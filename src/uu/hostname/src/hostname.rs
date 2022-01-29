@@ -11,7 +11,7 @@ use std::collections::hash_set::HashSet;
 use std::net::ToSocketAddrs;
 use std::str;
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
 use uucore::error::{FromIo, UResult};
 
@@ -76,6 +76,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_DOMAIN)
                 .short('d')

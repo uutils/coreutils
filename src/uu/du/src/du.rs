@@ -10,8 +10,7 @@ extern crate uucore;
 
 use chrono::prelude::DateTime;
 use chrono::Local;
-use clap::ArgMatches;
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::env;
@@ -630,6 +629,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(LONG_HELP)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::ALL)
                 .short('a')
@@ -644,7 +644,6 @@ pub fn uu_app<'a>() -> App<'a> {
                     although  the apparent  size is usually smaller, it may be larger due to holes \
                     in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like"
                 )
-                .alias("app") // The GNU test suite uses this alias
         )
         .arg(
             Arg::new(options::BLOCK_SIZE)
@@ -753,7 +752,6 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(options::THRESHOLD)
                 .short('t')
                 .long(options::THRESHOLD)
-                .alias("th")
                 .value_name("SIZE")
                 .number_of_values(1)
                 .allow_hyphen_values(true)

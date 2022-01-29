@@ -10,8 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::OsValues;
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches, OsValues};
 use std::fs;
 use std::path::Path;
 use uucore::display::Quotable;
@@ -114,6 +113,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::MODE)
                 .short('m')
@@ -125,7 +125,6 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(options::PARENTS)
                 .short('p')
                 .long(options::PARENTS)
-                .alias("parent")
                 .help("make parent directories as needed"),
         )
         .arg(

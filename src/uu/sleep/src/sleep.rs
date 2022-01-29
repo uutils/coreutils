@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use uucore::error::{UResult, USimpleError};
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 
 static ABOUT: &str = "Pause for NUMBER seconds.";
 static LONG_HELP: &str = "Pause for NUMBER seconds.  SUFFIX may be 's' for seconds (the default),
@@ -50,6 +50,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::NUMBER)
                 .help("pause for NUMBER seconds")

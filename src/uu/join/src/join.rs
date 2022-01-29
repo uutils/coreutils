@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Split, Stdin, Write};
@@ -600,6 +600,7 @@ standard output. The default join field is the first, delimited by blanks.
 
 When FILE1 or FILE2 (not both) is -, read standard input.",
         )
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new("a")
                 .short('a')

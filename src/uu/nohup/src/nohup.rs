@@ -126,6 +126,7 @@ pub fn uu_app<'a>() -> App<'a> {
                 .multiple_occurrences(true),
         )
         .setting(AppSettings::TrailingVarArg)
+        .setting(AppSettings::InferLongArgs)
 }
 
 fn replace_fds() -> UResult<()> {

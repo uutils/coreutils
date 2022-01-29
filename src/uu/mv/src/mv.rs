@@ -13,7 +13,7 @@ mod error;
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -123,6 +123,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
     .arg(
         backup_control::arguments::backup()
     )

@@ -386,3 +386,15 @@ fn test_no_such_dir() {
         .no_stdout()
         .stderr_contains("cannot open 'a/b' for writing: No such file or directory");
 }
+
+/// Test that truncate with a relative size less than 0 is not an error.
+#[test]
+fn test_underflow_relative_size() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-s-1", FILE1])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(at.file_exists(FILE1));
+    assert!(at.read_bytes(FILE1).is_empty());
+}

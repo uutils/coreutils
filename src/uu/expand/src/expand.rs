@@ -12,7 +12,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::str::from_utf8;
@@ -184,6 +184,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::INITIAL)
                 .long(options::INITIAL)
