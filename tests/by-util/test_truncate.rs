@@ -377,3 +377,15 @@ fn test_division_by_zero_reference_and_size() {
         .no_stdout()
         .stderr_contains("division by zero");
 }
+
+/// Test that truncate with a relative size less than 0 is not an error.
+#[test]
+fn test_underflow_relative_size() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-s-1", FILE1])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(at.file_exists(FILE1));
+    assert!(at.read_bytes(FILE1).is_empty());
+}
