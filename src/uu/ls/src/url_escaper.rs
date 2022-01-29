@@ -87,36 +87,48 @@ impl UrlEscaper {
         }
 
         if not_escapes == s.len() && !not_identities {
-            // this won't fail because the string only has ASCII characters (otherwise it would need escapes)
-            Cow::Borrowed(AsciiStr::from_ascii(s).unwrap())
+            // SAFETY: this is safe because the string only has ASCII characters (otherwise it would need escapes)
+            Cow::Borrowed(unsafe { AsciiStr::from_ascii_unchecked(s) })
         } else {
             static ERROR: &str = "escaped string length too large to fit in memory";
             // Vec only supports capacity up to isize::MAX, so we must use isize to do all checks
             let len = isize::try_from(s.len()).expect(ERROR);
             // can't wrap because not_escapes <= s.len
             let escapes = len.wrapping_sub(not_escapes as isize);
-            // check for overflow
+            // must check for overflow since we are using unsafe code
             let size = len
                 .checked_add(escapes)
                 .expect(ERROR)
                 .checked_add(escapes)
                 .expect(ERROR);
 
-            let mut res = AsciiString::with_capacity(size as usize);
+            let mut res = Vec::with_capacity(size as usize);
+            let mut out: *mut AsciiChar = res.as_mut_ptr();
 
             for b in s.iter().copied() {
                 match table[b as usize].classify() {
                     Ok(ch) => {
-                        res.push(ch);
+                        // SAFETY: we precompute the correct size
+                        unsafe {
+                            out.write(ch);
+                            out = out.offset(1);
+                        }
                     }
                     Err(escape) => {
-                        res += (&[AsciiChar::Percent, escape[0], escape[1]] as &[AsciiChar]).into();
+                        // SAFETY: we precompute the correct size
+                        unsafe {
+                            out.write(AsciiChar::Percent);
+                            out.offset(1).write(escape[0]);
+                            out.offset(2).write(escape[1]);
+                            out = out.offset(3);
+                        }
                     }
                 }
             }
-            assert_eq!(res.len(), size as usize);
+            debug_assert_eq!(unsafe { out.offset_from(res.as_mut_ptr()) }, size);
+            unsafe { res.set_len(size as usize) };
 
-            Cow::Owned(res)
+            Cow::Owned(AsciiString::from(res))
         }
     }
 
