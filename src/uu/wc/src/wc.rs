@@ -68,11 +68,11 @@ impl Settings {
 
     fn number_enabled(&self) -> u32 {
         let mut result = 0;
-        result += self.show_bytes as u32;
-        result += self.show_chars as u32;
-        result += self.show_lines as u32;
-        result += self.show_max_line_length as u32;
-        result += self.show_words as u32;
+        result += u32::from(self.show_bytes);
+        result += u32::from(self.show_chars);
+        result += u32::from(self.show_lines);
+        result += u32::from(self.show_max_line_length);
+        result += u32::from(self.show_words);
         result
     }
 }
