@@ -26,6 +26,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 static TEST_EXISTING_FILE: &str = "existing_file.txt";
+static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
 static TEST_HELLO_WORLD_SOURCE: &str = "hello_world.txt";
 static TEST_HELLO_WORLD_SOURCE_SYMLINK: &str = "hello_world.txt.link";
 static TEST_HELLO_WORLD_DEST: &str = "copy_of_hello_world.txt";
@@ -1428,4 +1429,15 @@ fn test_copy_through_dangling_symlink() {
         .arg("target")
         .fails()
         .stderr_only("cp: not writing through dangling symlink 'target'");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_archive_on_nonexistent_file() {
+    new_ucmd!()
+        .arg("-a")
+        .arg(TEST_NONEXISTENT_FILE)
+        .arg(TEST_EXISTING_FILE)
+        .fails()
+        .stderr_only("cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)");
 }

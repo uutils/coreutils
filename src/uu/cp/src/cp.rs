@@ -768,8 +768,8 @@ fn preserve_hardlinks(
                     let mut stat = mem::zeroed();
                     if libc::lstat(src_path.as_ptr(), &mut stat) < 0 {
                         return Err(format!(
-                            "cannot stat {:?}: {}",
-                            src_path,
+                            "cannot stat {}: {}",
+                            source.quote(),
                             std::io::Error::last_os_error()
                         )
                         .into());
@@ -849,7 +849,7 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
             let mut found_hard_link = false;
             if preserve_hard_links {
                 let dest = construct_dest_path(source, target, &target_type, options)?;
-                preserve_hardlinks(&mut hard_links, source, dest, &mut found_hard_link).unwrap();
+                preserve_hardlinks(&mut hard_links, source, dest, &mut found_hard_link)?;
             }
             if !found_hard_link {
                 if let Err(error) =
@@ -1031,7 +1031,7 @@ fn copy_directory(
                 let mut found_hard_link = false;
                 let source = path.to_path_buf();
                 let dest = local_to_target.as_path().to_path_buf();
-                preserve_hardlinks(&mut hard_links, &source, dest, &mut found_hard_link).unwrap();
+                preserve_hardlinks(&mut hard_links, &source, dest, &mut found_hard_link)?;
                 if !found_hard_link {
                     match copy_file(
                         path.as_path(),
