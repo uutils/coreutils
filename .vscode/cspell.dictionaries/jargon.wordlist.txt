@@ -11,6 +11,7 @@ canonicalize
 canonicalizing
 codepoint
 codepoints
+codegen
 colorizable
 colorize
 coprime
