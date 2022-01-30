@@ -19,7 +19,7 @@ use std::env;
 use std::fmt;
 use std::fs::{metadata, File};
 use std::io;
-use std::io::{stdin, BufReader, BufWriter, ErrorKind, Read, Write};
+use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
@@ -845,6 +845,73 @@ where
     .map_err_context(|| "I/O error".to_string())
 }
 
+/// Split a file into a specific number of chunks by line.
+///
+/// This function always creates one output file for each chunk, even
+/// if there is an error reading or writing one of the chunks or if
+/// the input file is truncated. However, if the `filter` option is
+/// being used, then no files are created.
+///
+/// # Errors
+///
+/// This function returns an error if there is a problem reading from
+/// `reader` or writing to one of the output files.
+fn split_into_n_chunks_by_line<R>(
+    settings: &Settings,
+    reader: &mut R,
+    num_chunks: u64,
+) -> UResult<()>
+where
+    R: BufRead,
+{
+    // Get the size of the input file in bytes and compute the number
+    // of bytes per chunk.
+    let metadata = metadata(&settings.input).unwrap();
+    let num_bytes = metadata.len();
+    let chunk_size = (num_bytes / (num_chunks as u64)) as usize;
+
+    // This object is responsible for creating the filename for each chunk.
+    let mut filename_iterator = FilenameIterator::new(
+        &settings.prefix,
+        &settings.additional_suffix,
+        settings.suffix_length,
+        settings.suffix_type,
+    );
+
+    // Create one writer for each chunk. This will create each
+    // of the underlying files (if not in `--filter` mode).
+    let mut writers = vec![];
+    for _ in 0..num_chunks {
+        let filename = filename_iterator
+            .next()
+            .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+        let writer = platform::instantiate_current_writer(&settings.filter, filename.as_str());
+        writers.push(writer);
+    }
+
+    let mut num_bytes_remaining_in_current_chunk = chunk_size;
+    let mut i = 0;
+    for line_result in reader.lines() {
+        let line = line_result.unwrap();
+        let maybe_writer = writers.get_mut(i);
+        let writer = maybe_writer.unwrap();
+        let bytes = line.as_bytes();
+        writer.write_all(bytes)?;
+        writer.write_all(b"\n")?;
+
+        // Add one byte for the newline character.
+        let num_bytes = bytes.len() + 1;
+        if num_bytes > num_bytes_remaining_in_current_chunk {
+            num_bytes_remaining_in_current_chunk = chunk_size;
+            i += 1;
+        } else {
+            num_bytes_remaining_in_current_chunk -= num_bytes;
+        }
+    }
+
+    Ok(())
+}
+
 fn split(settings: &Settings) -> UResult<()> {
     let mut reader = BufReader::new(if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
@@ -861,6 +928,9 @@ fn split(settings: &Settings) -> UResult<()> {
     match settings.strategy {
         Strategy::Number(NumberType::Bytes(num_chunks)) => {
             split_into_n_chunks_by_byte(settings, &mut reader, num_chunks)
+        }
+        Strategy::Number(NumberType::Lines(num_chunks)) => {
+            split_into_n_chunks_by_line(settings, &mut reader, num_chunks)
         }
         Strategy::Number(_) => Err(USimpleError::new(1, "-n mode not yet fully implemented")),
         Strategy::Lines(chunk_size) => {

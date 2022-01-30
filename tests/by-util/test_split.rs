@@ -545,3 +545,20 @@ fn test_elide_empty_files() {
     assert_eq!(at.read("xac"), "c");
     assert!(!at.plus("xad").exists());
 }
+
+#[test]
+fn test_lines() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file_read = |f| {
+        let mut s = String::new();
+        at.open(f).read_to_string(&mut s).unwrap();
+        s
+    };
+
+    // Split into two files without splitting up lines.
+    ucmd.args(&["-n", "l/2", "fivelines.txt"]).succeeds();
+
+    assert_eq!(file_read("xaa"), "1\n2\n3\n");
+    assert_eq!(file_read("xab"), "4\n5\n");
+}
