@@ -1444,3 +1444,17 @@ fn test_cp_archive_on_nonexistent_file() {
             "cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)",
         );
 }
+
+#[test]
+#[cfg(unix)]
+fn test_copy_symlink_with_no_dereference_and_attributes_only() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.symlink_file("file", "sym");
+    ucmd.arg("-d")
+        .arg("--attributes-only")
+        .arg("sym")
+        .arg("sym2")
+        .succeeds();
+    assert!(at.is_symlink("sym2"));
+}
