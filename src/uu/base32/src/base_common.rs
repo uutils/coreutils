@@ -153,7 +153,7 @@ pub fn handle_input<R: Read>(
     if !decode {
         match data.encode() {
             Ok(s) => {
-                wrap_print(&data, s);
+                wrap_print(&data, &s);
                 Ok(())
             }
             Err(_) => Err(USimpleError::new(

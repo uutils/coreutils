@@ -156,12 +156,12 @@ impl<R: Read> Data<R> {
 }
 
 // NOTE: this will likely be phased out at some point
-pub fn wrap_print<R: Read>(data: &Data<R>, res: String) {
+pub fn wrap_print<R: Read>(data: &Data<R>, res: &str) {
     let stdout = io::stdout();
     wrap_write(stdout.lock(), data.line_wrap, res).unwrap();
 }
 
-pub fn wrap_write<W: Write>(mut writer: W, line_wrap: usize, res: String) -> io::Result<()> {
+pub fn wrap_write<W: Write>(mut writer: W, line_wrap: usize, res: &str) -> io::Result<()> {
     use std::cmp::min;
 
     if line_wrap == 0 {

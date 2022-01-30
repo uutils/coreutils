@@ -129,7 +129,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let no_create = matches.is_present(options::NO_CREATE);
         let reference = matches.value_of(options::REFERENCE).map(String::from);
         let size = matches.value_of(options::SIZE).map(String::from);
-        truncate(no_create, io_blocks, reference, size, files)
+        truncate(no_create, io_blocks, reference, size, &files)
     }
 }
 
@@ -210,7 +210,7 @@ fn file_truncate(filename: &str, create: bool, size: usize) -> std::io::Result<(
 fn truncate_reference_and_size(
     rfilename: &str,
     size_string: &str,
-    filenames: Vec<String>,
+    filenames: &[String],
     create: bool,
 ) -> UResult<()> {
     let mode = match parse_mode_and_size(size_string) {
@@ -238,7 +238,7 @@ fn truncate_reference_and_size(
     })?;
     let fsize = metadata.len() as usize;
     let tsize = mode.to_size(fsize);
-    for filename in &filenames {
+    for filename in filenames {
         file_truncate(filename, create, tsize)
             .map_err_context(|| format!("cannot open {} for writing", filename.quote()))?;
     }
@@ -258,7 +258,7 @@ fn truncate_reference_and_size(
 /// the size of at least one file.
 fn truncate_reference_file_only(
     rfilename: &str,
-    filenames: Vec<String>,
+    filenames: &[String],
     create: bool,
 ) -> UResult<()> {
     let metadata = metadata(rfilename).map_err(|e| match e.kind() {
@@ -272,7 +272,7 @@ fn truncate_reference_file_only(
         _ => e.map_err_context(String::new),
     })?;
     let tsize = metadata.len() as usize;
-    for filename in &filenames {
+    for filename in filenames {
         file_truncate(filename, create, tsize)
             .map_err_context(|| format!("cannot open {} for writing", filename.quote()))?;
     }
@@ -294,13 +294,13 @@ fn truncate_reference_file_only(
 ///
 /// If the any file could not be opened, or there was a problem setting
 /// the size of at least one file.
-fn truncate_size_only(size_string: &str, filenames: Vec<String>, create: bool) -> UResult<()> {
+fn truncate_size_only(size_string: &str, filenames: &[String], create: bool) -> UResult<()> {
     let mode = parse_mode_and_size(size_string)
         .map_err(|e| USimpleError::new(1, format!("Invalid number: {}", e)))?;
     if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = mode {
         return Err(USimpleError::new(1, "division by zero"));
     }
-    for filename in &filenames {
+    for filename in filenames {
         let fsize = match metadata(filename) {
             Ok(m) => m.len(),
             Err(_) => 0,
@@ -324,7 +324,7 @@ fn truncate(
     _: bool,
     reference: Option<String>,
     size: Option<String>,
-    filenames: Vec<String>,
+    filenames: &[String],
 ) -> UResult<()> {
     let create = !no_create;
     // There are four possibilities

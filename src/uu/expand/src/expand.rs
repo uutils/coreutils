@@ -67,7 +67,7 @@ fn is_space_or_comma(c: char) -> bool {
 /// in the list. This mode defines the strategy to use for computing the
 /// number of spaces to use for columns beyond the end of the tab stop
 /// list specified here.
-fn tabstops_parse(s: String) -> (RemainingMode, Vec<usize>) {
+fn tabstops_parse(s: &str) -> (RemainingMode, Vec<usize>) {
     // Leading commas and spaces are ignored.
     let s = s.trim_start_matches(is_space_or_comma);
 
@@ -135,7 +135,7 @@ struct Options {
 impl Options {
     fn new(matches: &ArgMatches) -> Options {
         let (remaining_mode, tabstops) = match matches.value_of(options::TABS) {
-            Some(s) => tabstops_parse(s.to_string()),
+            Some(s) => tabstops_parse(s),
             None => (RemainingMode::None, vec![DEFAULT_TABSTOP]),
         };
 
@@ -176,7 +176,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
-    expand(Options::new(&matches)).map_err_context(|| "failed to write output".to_string())
+    expand(&Options::new(&matches)).map_err_context(|| "failed to write output".to_string())
 }
 
 pub fn uu_app<'a>() -> App<'a> {
@@ -212,12 +212,12 @@ pub fn uu_app<'a>() -> App<'a> {
         )
 }
 
-fn open(path: String) -> BufReader<Box<dyn Read + 'static>> {
+fn open(path: &str) -> BufReader<Box<dyn Read + 'static>> {
     let file_buf;
     if path == "-" {
         BufReader::new(Box::new(stdin()) as Box<dyn Read>)
     } else {
-        file_buf = match File::open(&path[..]) {
+        file_buf = match File::open(path) {
             Ok(a) => a,
             Err(e) => crash!(1, "{}: {}\n", path.maybe_quote(), e),
         };
@@ -271,14 +271,14 @@ enum CharType {
     Other,
 }
 
-fn expand(options: Options) -> std::io::Result<()> {
+fn expand(options: &Options) -> std::io::Result<()> {
     use self::CharType::*;
 
     let mut output = BufWriter::new(stdout());
     let ts = options.tabstops.as_ref();
     let mut buf = Vec::new();
 
-    for file in options.files.into_iter() {
+    for file in options.files.iter() {
         let mut fh = open(file);
 
         while match fh.read_until(b'\n', &mut buf) {

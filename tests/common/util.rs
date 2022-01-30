@@ -235,7 +235,7 @@ impl CmdResult {
     }
 
     /// like `stdout_is`, but succeeds if any elements of `expected` matches stdout.
-    pub fn stdout_is_any<T: AsRef<str> + std::fmt::Debug>(&self, expected: Vec<T>) -> &CmdResult {
+    pub fn stdout_is_any<T: AsRef<str> + std::fmt::Debug>(&self, expected: &[T]) -> &CmdResult {
         if !expected.iter().any(|msg| self.stdout_str() == msg.as_ref()) {
             panic!(
                 "stdout was {}\nExpected any of {:#?}",
@@ -294,7 +294,7 @@ impl CmdResult {
             }
             contents
         });
-        self.stdout_is_any(possible_values.collect());
+        self.stdout_is_any(&possible_values.collect::<Vec<_>>());
     }
 
     /// asserts that the command resulted in stderr stream output that equals the
@@ -816,13 +816,13 @@ impl TestScenario {
         util_name: T,
         env_clear: bool,
     ) -> UCommand {
-        UCommand::new_from_tmp(bin, Some(util_name), self.tmpd.clone(), env_clear)
+        UCommand::new_from_tmp(bin, &Some(util_name), self.tmpd.clone(), env_clear)
     }
 
     /// Returns builder for invoking any system command. Paths given are treated
     /// relative to the environment's unique temporary test directory.
     pub fn cmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        UCommand::new_from_tmp::<S, S>(bin, None, self.tmpd.clone(), true)
+        UCommand::new_from_tmp::<S, S>(bin, &None, self.tmpd.clone(), true)
     }
 
     /// Returns builder for invoking any uutils command. Paths given are treated
@@ -842,7 +842,7 @@ impl TestScenario {
     /// Differs from the builder returned by `cmd` in that `cmd_keepenv` does not call
     /// `Command::env_clear` (Clears the entire environment map for the child process.)
     pub fn cmd_keepenv<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        UCommand::new_from_tmp::<S, S>(bin, None, self.tmpd.clone(), false)
+        UCommand::new_from_tmp::<S, S>(bin, &None, self.tmpd.clone(), false)
     }
 }
 
@@ -872,7 +872,7 @@ pub struct UCommand {
 impl UCommand {
     pub fn new<T: AsRef<OsStr>, S: AsRef<OsStr>, U: AsRef<OsStr>>(
         bin_path: T,
-        util_name: Option<S>,
+        util_name: &Option<S>,
         curdir: U,
         env_clear: bool,
     ) -> UCommand {
@@ -924,7 +924,7 @@ impl UCommand {
 
     pub fn new_from_tmp<T: AsRef<OsStr>, S: AsRef<OsStr>>(
         bin_path: T,
-        util_name: Option<S>,
+        util_name: &Option<S>,
         tmpd: Rc<TempDir>,
         env_clear: bool,
     ) -> UCommand {

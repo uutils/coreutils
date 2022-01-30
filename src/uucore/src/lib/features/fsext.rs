@@ -197,7 +197,7 @@ impl MountInfo {
     }
 
     #[cfg(target_os = "linux")]
-    fn new(file_name: &str, raw: Vec<&str>) -> Option<MountInfo> {
+    fn new(file_name: &str, raw: &[&str]) -> Option<MountInfo> {
         match file_name {
             // spell-checker:ignore (word) noatime
             // Format: 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
@@ -410,7 +410,7 @@ pub fn read_fs_list() -> Vec<MountInfo> {
             .filter_map(|line| line.ok())
             .filter_map(|line| {
                 let raw_data = line.split_whitespace().collect::<Vec<&str>>();
-                MountInfo::new(file_name, raw_data)
+                MountInfo::new(file_name, &raw_data)
             })
             .collect::<Vec<_>>()
     }
@@ -902,9 +902,9 @@ mod tests {
         // spell-checker:ignore (word) relatime
         let info = MountInfo::new(
             LINUX_MOUNTINFO,
-            "106 109 253:6 / /mnt rw,relatime - xfs /dev/fs0 rw"
+            &"106 109 253:6 / /mnt rw,relatime - xfs /dev/fs0 rw"
                 .split_ascii_whitespace()
-                .collect(),
+                .collect::<Vec<_>>(),
         )
         .unwrap();
 
@@ -917,9 +917,9 @@ mod tests {
         // Test parsing with different amounts of optional fields.
         let info = MountInfo::new(
             LINUX_MOUNTINFO,
-            "106 109 253:6 / /mnt rw,relatime master:1 - xfs /dev/fs0 rw"
+            &"106 109 253:6 / /mnt rw,relatime master:1 - xfs /dev/fs0 rw"
                 .split_ascii_whitespace()
-                .collect(),
+                .collect::<Vec<_>>(),
         )
         .unwrap();
 
@@ -928,9 +928,9 @@ mod tests {
 
         let info = MountInfo::new(
             LINUX_MOUNTINFO,
-            "106 109 253:6 / /mnt rw,relatime master:1 shared:2 - xfs /dev/fs0 rw"
+            &"106 109 253:6 / /mnt rw,relatime master:1 shared:2 - xfs /dev/fs0 rw"
                 .split_ascii_whitespace()
-                .collect(),
+                .collect::<Vec<_>>(),
         )
         .unwrap();
 

@@ -236,7 +236,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         show_tabs,
         squeeze_blank,
     };
-    cat_files(files, &options)
+    cat_files(&files, &options)
 }
 
 pub fn uu_app<'a>() -> App<'a> {
@@ -365,7 +365,7 @@ fn cat_path(
     }
 }
 
-fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
+fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
     let out_info = FileInformation::from_file(&std::io::stdout());
 
     let mut state = OutputState {
@@ -376,7 +376,7 @@ fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
     };
     let mut error_messages: Vec<String> = Vec::new();
 
-    for path in &files {
+    for path in files {
         if let Err(err) = cat_path(path, options, &mut state, out_info.as_ref()) {
             error_messages.push(format!("{}: {}", path.maybe_quote(), err));
         }

@@ -39,7 +39,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let serial = matches.is_present(options::SERIAL);
-    let delimiters = matches.value_of(options::DELIMITER).unwrap().to_owned();
+    let delimiters = matches.value_of(options::DELIMITER).unwrap();
     let files = matches
         .values_of(options::FILE)
         .unwrap()
@@ -76,7 +76,7 @@ pub fn uu_app<'a>() -> App<'a> {
         )
 }
 
-fn paste(filenames: Vec<String>, serial: bool, delimiters: String) -> UResult<()> {
+fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> {
     let mut files = vec![];
     for name in filenames {
         let file = if name == "-" {
@@ -146,7 +146,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) -> UResult<()
 
 // Unescape all special characters
 // TODO: this will need work to conform to GNU implementation
-fn unescape(s: String) -> String {
+fn unescape(s: &str) -> String {
     s.replace("\\n", "\n")
         .replace("\\t", "\t")
         .replace("\\\\", "\\")

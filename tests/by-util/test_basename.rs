@@ -92,9 +92,9 @@ fn test_zero_param() {
     }
 }
 
-fn expect_error(input: Vec<&str>) {
+fn expect_error(input: &[&str]) {
     assert!(!new_ucmd!()
-        .args(&input)
+        .args(input)
         .fails()
         .no_stdout()
         .stderr_str()
@@ -104,12 +104,12 @@ fn expect_error(input: Vec<&str>) {
 #[test]
 fn test_invalid_option() {
     let path = "/foo/bar/baz";
-    expect_error(vec!["-q", path]);
+    expect_error(&["-q", path]);
 }
 
 #[test]
 fn test_no_args() {
-    expect_error(vec![]);
+    expect_error(&[]);
 }
 
 #[test]
@@ -119,7 +119,7 @@ fn test_no_args_output() {
 
 #[test]
 fn test_too_many_args() {
-    expect_error(vec!["a", "b", "c"]);
+    expect_error(&["a", "b", "c"]);
 }
 
 #[test]

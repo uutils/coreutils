@@ -322,7 +322,7 @@ impl<W: Write> Output<W>
 where
     Self: OutputTrait,
 {
-    fn write_blocks(&mut self, buf: Vec<u8>) -> io::Result<WriteStat> {
+    fn write_blocks(&mut self, buf: &[u8]) -> io::Result<WriteStat> {
         let mut writes_complete = 0;
         let mut writes_partial = 0;
         let mut bytes_total = 0;
@@ -381,7 +381,7 @@ where
                 ) => break,
                 (rstat_update, buf) => {
                     let wstat_update = self
-                        .write_blocks(buf)
+                        .write_blocks(&buf)
                         .map_err_context(|| "failed to write output".to_string())?;
 
                     rstat += rstat_update;
@@ -560,7 +560,7 @@ impl Write for Output<io::Stdout> {
 /// Splits the content of buf into cbs-length blocks
 /// Appends padding as specified by conv=block and cbs=N
 /// Expects ascii encoded data
-fn block(buf: Vec<u8>, cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
+fn block(buf: &[u8], cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
     let mut blocks = buf
         .split(|&e| e == NEWLINE)
         .map(|split| split.to_vec())
@@ -586,7 +586,7 @@ fn block(buf: Vec<u8>, cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
 /// Trims padding from each cbs-length partition of buf
 /// as specified by conv=unblock and cbs=N
 /// Expects ascii encoded data
-fn unblock(buf: Vec<u8>, cbs: usize) -> Vec<u8> {
+fn unblock(buf: &[u8], cbs: usize) -> Vec<u8> {
     buf.chunks(cbs).fold(Vec::new(), |mut acc, block| {
         if let Some(last_char_idx) = block.iter().rposition(|&e| e != SPACE) {
             // Include text up to last space.
@@ -643,7 +643,7 @@ fn conv_block_unblock_helper<R: Read>(
         // ascii input so perform the block first
         let cbs = i.cflags.block.unwrap();
 
-        let mut blocks = block(buf, cbs, rstat);
+        let mut blocks = block(&buf, cbs, rstat);
 
         if let Some(ct) = i.cflags.ctable {
             for buf in blocks.iter_mut() {
@@ -662,14 +662,14 @@ fn conv_block_unblock_helper<R: Read>(
             apply_conversion(&mut buf, ct);
         }
 
-        let blocks = block(buf, cbs, rstat).into_iter().flatten().collect();
+        let blocks = block(&buf, cbs, rstat).into_iter().flatten().collect();
 
         Ok(blocks)
     } else if should_unblock_then_conv(i) {
         // ascii input so perform the unblock first
         let cbs = i.cflags.unblock.unwrap();
 
-        let mut buf = unblock(buf, cbs);
+        let mut buf = unblock(&buf, cbs);
 
         if let Some(ct) = i.cflags.ctable {
             apply_conversion(&mut buf, ct);
@@ -684,7 +684,7 @@ fn conv_block_unblock_helper<R: Read>(
             apply_conversion(&mut buf, ct);
         }
 
-        let buf = unblock(buf, cbs);
+        let buf = unblock(&buf, cbs);
 
         Ok(buf)
     } else {

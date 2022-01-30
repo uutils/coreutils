@@ -40,7 +40,7 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
     let (loaded_sender, loaded_receiver) = sync_channel(2);
     thread::spawn({
         let settings = settings.clone();
-        move || reader(file, recycled_receiver, loaded_sender, &settings)
+        move || reader(file, &recycled_receiver, &loaded_sender, &settings)
     });
     for _ in 0..2 {
         let _ = recycled_sender.send(RecycledChunk::new(if settings.buffer_size < 100 * 1024 {
@@ -102,14 +102,14 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
 /// The function running on the reader thread.
 fn reader(
     mut file: Box<dyn Read + Send>,
-    receiver: Receiver<RecycledChunk>,
-    sender: SyncSender<Chunk>,
+    receiver: &Receiver<RecycledChunk>,
+    sender: &SyncSender<Chunk>,
     settings: &GlobalSettings,
 ) -> UResult<()> {
     let mut carry_over = vec![];
     for recycled_chunk in receiver.iter() {
         let should_continue = chunks::read(
-            &sender,
+            sender,
             recycled_chunk,
             None,
             &mut carry_over,

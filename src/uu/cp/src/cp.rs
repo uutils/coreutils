@@ -752,7 +752,7 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
 fn preserve_hardlinks(
     hard_links: &mut Vec<(String, u64)>,
     source: &std::path::Path,
-    dest: std::path::PathBuf,
+    dest: &std::path::Path,
     found_hard_link: &mut bool,
 ) -> CopyResult<()> {
     // Redox does not currently support hard links
@@ -805,7 +805,7 @@ fn preserve_hardlinks(
 
                 for hard_link in hard_links.iter() {
                     if hard_link.1 == inode {
-                        std::fs::hard_link(hard_link.0.clone(), dest.clone()).unwrap();
+                        std::fs::hard_link(hard_link.0.clone(), dest).unwrap();
                         *found_hard_link = true;
                     }
                 }
@@ -849,7 +849,7 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
             let mut found_hard_link = false;
             if preserve_hard_links {
                 let dest = construct_dest_path(source, target, &target_type, options)?;
-                preserve_hardlinks(&mut hard_links, source, dest, &mut found_hard_link)?;
+                preserve_hardlinks(&mut hard_links, source, &dest, &mut found_hard_link)?;
             }
             if !found_hard_link {
                 if let Err(error) =
@@ -1031,7 +1031,7 @@ fn copy_directory(
                 let mut found_hard_link = false;
                 let source = path.to_path_buf();
                 let dest = local_to_target.as_path().to_path_buf();
-                preserve_hardlinks(&mut hard_links, &source, dest, &mut found_hard_link)?;
+                preserve_hardlinks(&mut hard_links, &source, &dest, &mut found_hard_link)?;
                 if !found_hard_link {
                     match copy_file(
                         path.as_path(),

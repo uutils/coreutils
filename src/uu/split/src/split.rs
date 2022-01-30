@@ -62,7 +62,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .after_help(&long_usage[..])
         .get_matches_from(args);
     let settings = Settings::from(matches)?;
-    split(settings)
+    split(&settings)
 }
 
 pub fn uu_app<'a>() -> App<'a> {
@@ -436,7 +436,7 @@ where
     .map_err_context(|| "I/O error".to_string())
 }
 
-fn split(settings: Settings) -> UResult<()> {
+fn split(settings: &Settings) -> UResult<()> {
     let mut reader = BufReader::new(if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
@@ -450,7 +450,7 @@ fn split(settings: Settings) -> UResult<()> {
     });
 
     if let Strategy::Number(num_chunks) = settings.strategy {
-        return split_into_n_chunks_by_byte(&settings, &mut reader, num_chunks);
+        return split_into_n_chunks_by_byte(settings, &mut reader, num_chunks);
     }
 
     let mut splitter: Box<dyn Splitter> = match settings.strategy {

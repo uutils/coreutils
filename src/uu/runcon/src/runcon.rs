@@ -73,7 +73,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         CommandLineMode::Print => print_current_context().map_err(|e| RunconError::new(e).into()),
         CommandLineMode::PlainContext { context, command } => {
             get_plain_context(context)
-                .and_then(set_next_exec_context)
+                .and_then(|ctx| set_next_exec_context(&ctx))
                 .map_err(RunconError::new)?;
             // On successful execution, the following call never returns,
             // and this process image is replaced.
@@ -97,7 +97,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         range.as_deref(),
                         command,
                     )
-                    .and_then(set_next_exec_context)
+                    .and_then(|ctx| set_next_exec_context(&ctx))
                     .map_err(RunconError::new)?;
                     // On successful execution, the following call never returns,
                     // and this process image is replaced.
@@ -277,7 +277,7 @@ fn print_current_context() -> Result<()> {
     Ok(())
 }
 
-fn set_next_exec_context(context: OpaqueSecurityContext) -> Result<()> {
+fn set_next_exec_context(context: &OpaqueSecurityContext) -> Result<()> {
     let c_context = context
         .to_c_string()
         .map_err(|r| Error::from_selinux("Creating new context", r))?;

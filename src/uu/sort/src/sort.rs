@@ -578,7 +578,7 @@ impl<'a> Line<'a> {
                     // find out which range is used for numeric comparisons
                     let (_, num_range) = NumInfo::parse(
                         &self.line[selection.clone()],
-                        NumInfoParseSettings {
+                        &NumInfoParseSettings {
                             accept_si_units: selector.settings.mode == SortMode::HumanNumeric,
                             ..Default::default()
                         },
@@ -927,7 +927,7 @@ impl FieldSelector {
             // Parse NumInfo for this number.
             let (info, num_range) = NumInfo::parse(
                 range,
-                NumInfoParseSettings {
+                &NumInfoParseSettings {
                     accept_si_units: self.settings.mode == SortMode::HumanNumeric,
                     ..Default::default()
                 },
@@ -1156,7 +1156,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .value_of(options::BUF_SIZE)
             .map_or(Ok(DEFAULT_BUF_SIZE), |s| {
                 GlobalSettings::parse_byte_count(s).map_err(|e| {
-                    USimpleError::new(2, format_error_message(e, s, options::BUF_SIZE))
+                    USimpleError::new(2, format_error_message(&e, s, options::BUF_SIZE))
                 })
             })?;
 
@@ -1829,7 +1829,7 @@ fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
     }
 }
 
-fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
+fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
     // GNU's sort echos affected flag, -S or --buffer-size, depending user's selection
     // GNU's sort does distinguish between "invalid (suffix in) argument"

@@ -53,7 +53,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .unwrap_or_default(),
     };
 
-    match tee(options) {
+    match tee(&options) {
         Ok(_) => Ok(()),
         Err(_) => Err(1.into()),
     }
@@ -95,7 +95,7 @@ fn ignore_interrupts() -> Result<()> {
     Ok(())
 }
 
-fn tee(options: Options) -> Result<()> {
+fn tee(options: &Options) -> Result<()> {
     if options.ignore_interrupts {
         ignore_interrupts()?
     }

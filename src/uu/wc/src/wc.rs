@@ -159,7 +159,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let settings = Settings::new(&matches);
 
-    wc(inputs, &settings)
+    wc(&inputs, &settings)
 }
 
 pub fn uu_app<'a>() -> App<'a> {
@@ -409,7 +409,7 @@ fn max_width(inputs: &[Input]) -> usize {
     result
 }
 
-fn wc(inputs: Vec<Input>, settings: &Settings) -> UResult<()> {
+fn wc(inputs: &[Input], settings: &Settings) -> UResult<()> {
     // Compute the width, in digits, to use when formatting counts.
     //
     // The width is the number of digits needed to print the number of
@@ -421,14 +421,14 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> UResult<()> {
     let max_width = if settings.number_enabled() <= 1 {
         0
     } else {
-        max_width(&inputs)
+        max_width(inputs)
     };
 
     let mut total_word_count = WordCount::default();
 
     let num_inputs = inputs.len();
 
-    for input in &inputs {
+    for input in inputs {
         let word_count = match word_count_from_input(input, settings) {
             CountResult::Success(word_count) => word_count,
             CountResult::Interrupted(word_count, error) => {

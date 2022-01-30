@@ -57,7 +57,7 @@ struct Config {
 }
 
 impl Config {
-    fn from(options: clap::ArgMatches) -> Config {
+    fn from(options: &clap::ArgMatches) -> Config {
         let signal = match options.value_of(options::SIGNAL) {
             Some(signal_) => {
                 let signal_result = signal_by_name_or_value(signal_);
@@ -112,7 +112,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = app.get_matches_from(args);
 
-    let config = Config::from(matches);
+    let config = Config::from(&matches);
     timeout(
         &config.command,
         config.duration,

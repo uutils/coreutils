@@ -46,7 +46,7 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
     let mut input_strings = matches.inputs();
 
     if matches.opts_present(&["traditional"]) {
-        return parse_inputs_traditional(input_strings);
+        return parse_inputs_traditional(&input_strings);
     }
 
     // test if command line contains: [file] <offset>
@@ -91,7 +91,7 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
 ///
 /// normally returns CommandLineInputs::FileAndOffset, but if no offset is found,
 /// it returns CommandLineInputs::FileNames (also to differentiate from the offset == 0)
-pub fn parse_inputs_traditional(input_strings: Vec<&str>) -> Result<CommandLineInputs, String> {
+pub fn parse_inputs_traditional(input_strings: &[&str]) -> Result<CommandLineInputs, String> {
     match input_strings.len() {
         0 => Ok(CommandLineInputs::FileNames(vec!["-".to_string()])),
         1 => {

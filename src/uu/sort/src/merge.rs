@@ -166,7 +166,7 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
         let settings = settings.clone();
         move || {
             reader(
-                request_receiver,
+                &request_receiver,
                 &mut reader_files,
                 &settings,
                 if settings.zero_terminated {
@@ -210,7 +210,7 @@ struct ReaderFile<M: MergeInput> {
 
 /// The function running on the reader thread.
 fn reader(
-    recycled_receiver: Receiver<(usize, RecycledChunk)>,
+    recycled_receiver: &Receiver<(usize, RecycledChunk)>,
     files: &mut [Option<ReaderFile<impl MergeInput>>],
     settings: &GlobalSettings,
     separator: u8,

@@ -247,7 +247,7 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
 fn read_block_size(s: Option<&str>) -> usize {
     if let Some(s) = s {
         parse_size(s)
-            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::BLOCK_SIZE)))
+            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::BLOCK_SIZE)))
     } else {
         for env_var in &["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
             if let Ok(env_size) = env::var(env_var) {
@@ -493,7 +493,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let threshold = matches.value_of(options::THRESHOLD).map(|s| {
         Threshold::from_str(s)
-            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::THRESHOLD)))
+            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::THRESHOLD)))
     });
 
     let multiplier: u64 = if matches.is_present(options::SI) {
@@ -831,7 +831,7 @@ impl Threshold {
     }
 }
 
-fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
+fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
     // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
     // GNU's du does distinguish between "invalid (suffix in) argument"

@@ -125,7 +125,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec!["".to_string()],
     };
 
-    execute(no_newline, escaped, values).map_err_context(|| "could not write to stdout".to_string())
+    execute(no_newline, escaped, &values)
+        .map_err_context(|| "could not write to stdout".to_string())
 }
 
 pub fn uu_app<'a>() -> App<'a> {
@@ -162,7 +163,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(Arg::new(options::STRING).multiple_occurrences(true))
 }
 
-fn execute(no_newline: bool, escaped: bool, free: Vec<String>) -> io::Result<()> {
+fn execute(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<()> {
     let stdout = io::stdout();
     let mut output = stdout.lock();
 

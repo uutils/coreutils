@@ -710,7 +710,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(Path::new).collect())
         .unwrap_or_else(|| vec![Path::new(".")]);
 
-    list(locs, config)
+    list(locs, &config)
 }
 
 pub fn uu_app<'a>() -> App<'a> {
@@ -1407,14 +1407,14 @@ impl PathData {
     }
 }
 
-fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
+fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
     let mut out = BufWriter::new(stdout());
     let initial_locs_len = locs.len();
 
     for loc in locs {
-        let path_data = PathData::new(PathBuf::from(loc), None, None, &config, true);
+        let path_data = PathData::new(PathBuf::from(loc), None, None, config, true);
 
         // Getting metadata here is no big deal as it's just the CWD
         // and we really just want to know if the strings exist as files/dirs
@@ -1441,10 +1441,10 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
         }
     }
 
-    sort_entries(&mut files, &config, &mut out);
-    sort_entries(&mut dirs, &config, &mut out);
+    sort_entries(&mut files, config, &mut out);
+    sort_entries(&mut dirs, config, &mut out);
 
-    display_items(&files, &config, &mut out);
+    display_items(&files, config, &mut out);
 
     for (pos, path_data) in dirs.iter().enumerate() {
         // Do read_dir call here to match GNU semantics by printing
@@ -1467,7 +1467,7 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
                 let _ = writeln!(out, "\n{}:", path_data.p_buf.display());
             }
         }
-        enter_directory(path_data, read_dir, &config, &mut out);
+        enter_directory(path_data, read_dir, config, &mut out);
     }
 
     Ok(())
@@ -1749,7 +1749,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         for item in items {
             display_item_long(
                 item,
-                PaddingCollection {
+                &PaddingCollection {
                     #[cfg(unix)]
                     longest_inode_len,
                     longest_link_count_len,
@@ -1930,7 +1930,7 @@ fn display_grid(
 #[allow(clippy::write_literal)]
 fn display_item_long(
     item: &PathData,
-    padding: PaddingCollection,
+    padding: &PaddingCollection,
     config: &Config,
     out: &mut BufWriter<Stdout>,
 ) {
@@ -2251,7 +2251,7 @@ fn display_date(metadata: &Metadata, config: &Config) -> String {
 // 3. The human-readable format uses powers for 1024, but does not display the "i"
 //    that is commonly used to denote Kibi, Mebi, etc.
 // 4. Kibi and Kilo are denoted differently ("k" and "K", respectively)
-fn format_prefixed(prefixed: NumberPrefix<f64>) -> String {
+fn format_prefixed(prefixed: &NumberPrefix<f64>) -> String {
     match prefixed {
         NumberPrefix::Standalone(bytes) => bytes.to_string(),
         NumberPrefix::Prefixed(prefix, bytes) => {
@@ -2304,8 +2304,8 @@ fn display_size(size: u64, config: &Config) -> String {
     // NOTE: The human-readable behavior deviates from the GNU ls.
     // The GNU ls uses binary prefixes by default.
     match config.size_format {
-        SizeFormat::Binary => format_prefixed(NumberPrefix::binary(size as f64)),
-        SizeFormat::Decimal => format_prefixed(NumberPrefix::decimal(size as f64)),
+        SizeFormat::Binary => format_prefixed(&NumberPrefix::binary(size as f64)),
+        SizeFormat::Decimal => format_prefixed(&NumberPrefix::decimal(size as f64)),
         SizeFormat::Bytes => size.to_string(),
     }
 }

@@ -64,7 +64,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .values_of(options::SETS)
         .map(|v| {
             v.map(ToString::to_string)
-                .map(convert::reduce_octal_to_char)
+                .map(|input| convert::reduce_octal_to_char(&input))
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
