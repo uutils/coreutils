@@ -982,7 +982,7 @@ impl UCommand {
     /// provides standard input to feed in to the command when spawned
     pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut UCommand {
         assert!(
-            !self.bytes_into_stdin.is_some(),
+            self.bytes_into_stdin.is_none(),
             "{}",
             MULTIPLE_STDIN_MEANINGLESS
         );
@@ -1000,7 +1000,7 @@ impl UCommand {
     /// This is typically useful to test non-standard workflows
     /// like feeding something to a command that does not read it
     pub fn ignore_stdin_write_error(&mut self) -> &mut UCommand {
-        assert!(!self.bytes_into_stdin.is_none(), "{}", NO_STDIN_MEANINGLESS);
+        assert!(self.bytes_into_stdin.is_some(), "{}", NO_STDIN_MEANINGLESS);
         self.ignore_stdin_write_error = true;
         self
     }
