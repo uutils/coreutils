@@ -38,6 +38,7 @@ mod options {
 mod lines;
 mod parse;
 mod take;
+use lines::lines;
 use lines::zlines;
 use take::take_all_but;
 use take::take_lines;
@@ -285,8 +286,8 @@ fn read_but_last_n_lines(
             stdout.write_all(&bytes?)?;
         }
     } else {
-        for line in take_all_but(input.lines(), n) {
-            println!("{}", line?);
+        for line in take_all_but(lines(input), n) {
+            print!("{}", line?);
         }
     }
     Ok(())
