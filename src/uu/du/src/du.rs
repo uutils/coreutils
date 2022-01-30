@@ -853,7 +853,7 @@ mod test_du {
             (Some("K".to_string()), 1024),
             (None, 1024),
         ];
-        for it in test_data.iter() {
+        for it in &test_data {
             assert_eq!(read_block_size(it.0.as_deref()), it.1);
         }
     }

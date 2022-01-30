@@ -571,7 +571,7 @@ impl<'a> Line<'a> {
 
         let mut fields = vec![];
         tokenize(self.line, settings.separator, &mut fields);
-        for selector in settings.selectors.iter() {
+        for selector in &settings.selectors {
             let mut selection = selector.get_range(self.line, Some(&fields));
             match selector.settings.mode {
                 SortMode::Numeric | SortMode::HumanNumeric => {

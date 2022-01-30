@@ -500,7 +500,7 @@ mod tests {
 
     #[test]
     fn test_normalize_path() {
-        for test in NORMALIZE_PATH_TESTS.iter() {
+        for test in &NORMALIZE_PATH_TESTS {
             let path = Path::new(test.path);
             let normalized = normalize_path(path);
             assert_eq!(

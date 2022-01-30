@@ -1007,7 +1007,7 @@ fn mpr(paths: &[String], options: &OutputOptions) -> Result<i32, PrError> {
     let mut lines = Vec::new();
     let mut page_counter = start_page;
 
-    for (_key, file_line_group) in file_line_groups.into_iter() {
+    for (_key, file_line_group) in &file_line_groups {
         for file_line in file_line_group {
             if let Err(e) = file_line.line_content {
                 return Err(e.into());

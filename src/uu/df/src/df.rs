@@ -367,7 +367,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
     println!();
-    for fs in fs_list.iter() {
+    for fs in &fs_list {
         print!("{0: <16} ", fs.mount_info.dev_name);
         if opt.show_fs_type {
             print!("{0: <5} ", fs.mount_info.fs_type);

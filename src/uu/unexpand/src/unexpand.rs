@@ -249,7 +249,7 @@ fn unexpand(options: &Options) -> std::io::Result<()> {
     let mut buf = Vec::new();
     let lastcol = if ts.len() > 1 { *ts.last().unwrap() } else { 0 };
 
-    for file in options.files.iter() {
+    for file in &options.files {
         let mut fh = open(file);
 
         while match fh.read_until(b'\n', &mut buf) {

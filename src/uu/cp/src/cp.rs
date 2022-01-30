@@ -741,7 +741,7 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
     };
 
     if options.strip_trailing_slashes {
-        for source in paths.iter_mut() {
+        for source in &mut paths {
             *source = source.components().as_path().to_owned();
         }
     }

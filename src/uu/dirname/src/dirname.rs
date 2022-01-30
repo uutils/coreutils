@@ -56,7 +56,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect();
 
     if !dirnames.is_empty() {
-        for path in dirnames.iter() {
+        for path in &dirnames {
             let p = Path::new(path);
             match p.parent() {
                 Some(d) => {

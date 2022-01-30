@@ -278,7 +278,7 @@ fn expand(options: &Options) -> std::io::Result<()> {
     let ts = options.tabstops.as_ref();
     let mut buf = Vec::new();
 
-    for file in options.files.iter() {
+    for file in &options.files {
         let mut fh = open(file);
 
         while match fh.read_until(b'\n', &mut buf) {

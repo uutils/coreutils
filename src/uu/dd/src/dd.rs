@@ -646,7 +646,7 @@ fn conv_block_unblock_helper<R: Read>(
         let mut blocks = block(&buf, cbs, rstat);
 
         if let Some(ct) = i.cflags.ctable {
-            for buf in blocks.iter_mut() {
+            for buf in &mut blocks {
                 apply_conversion(buf, ct);
             }
         }

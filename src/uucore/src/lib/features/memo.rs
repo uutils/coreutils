@@ -67,7 +67,7 @@ impl Memo {
         pm
     }
     pub fn apply(&self, pf_args_it: &mut Peekable<Iter<String>>) {
-        for tkn in self.tokens.iter() {
+        for tkn in &self.tokens {
             tkn.print(pf_args_it);
         }
     }
