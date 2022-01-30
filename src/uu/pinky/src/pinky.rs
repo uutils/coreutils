@@ -275,7 +275,7 @@ impl Pinky {
                 if let Some(n) = gecos.find(',') {
                     gecos.truncate(n + 1);
                 }
-                print!(" {:<19.19}", gecos.replace("&", &pw.name.capitalize()));
+                print!(" {:<19.19}", gecos.replace('&', &pw.name.capitalize()));
             } else {
                 print!(" {:19}", "        ???");
             }
@@ -339,7 +339,7 @@ impl Pinky {
         for u in &self.names {
             print!("Login name: {:<28}In real life: ", u);
             if let Ok(pw) = Passwd::locate(u.as_str()) {
-                println!(" {}", pw.user_info.replace("&", &pw.name.capitalize()));
+                println!(" {}", pw.user_info.replace('&', &pw.name.capitalize()));
                 if self.include_home_and_shell {
                     print!("Directory: {:<29}", pw.user_dir);
                     println!("Shell:  {}", pw.user_shell);
