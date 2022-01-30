@@ -96,8 +96,8 @@ impl Number {
     #[allow(dead_code)]
     fn digits(&self) -> &Vec<u8> {
         match self {
-            Number::FixedWidth(number) => &number.digits,
-            Number::DynamicWidth(number) => &number.digits,
+            Self::FixedWidth(number) => &number.digits,
+            Self::DynamicWidth(number) => &number.digits,
         }
     }
 
@@ -136,8 +136,8 @@ impl Number {
     /// ```
     pub fn increment(&mut self) -> Result<(), Overflow> {
         match self {
-            Number::FixedWidth(number) => number.increment(),
-            Number::DynamicWidth(number) => number.increment(),
+            Self::FixedWidth(number) => number.increment(),
+            Self::DynamicWidth(number) => number.increment(),
         }
     }
 }
@@ -145,8 +145,8 @@ impl Number {
 impl Display for Number {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Number::FixedWidth(number) => number.fmt(f),
-            Number::DynamicWidth(number) => number.fmt(f),
+            Self::FixedWidth(number) => number.fmt(f),
+            Self::DynamicWidth(number) => number.fmt(f),
         }
     }
 }
@@ -183,8 +183,8 @@ pub struct FixedWidthNumber {
 
 impl FixedWidthNumber {
     /// Instantiate a number of the given radix and width.
-    pub fn new(radix: u8, width: usize) -> FixedWidthNumber {
-        FixedWidthNumber {
+    pub fn new(radix: u8, width: usize) -> Self {
+        Self {
             radix,
             digits: vec![0; width],
         }
@@ -286,8 +286,8 @@ impl DynamicWidthNumber {
     ///
     /// This associated function returns a new instance of the struct
     /// with the given radix and a width of two digits, both 0.
-    pub fn new(radix: u8) -> DynamicWidthNumber {
-        DynamicWidthNumber {
+    pub fn new(radix: u8) -> Self {
+        Self {
             radix,
             digits: vec![0, 0],
         }
@@ -404,7 +404,7 @@ mod tests {
         fn num(n: usize) -> Number {
             let mut number = Number::DynamicWidth(DynamicWidthNumber::new(26));
             for _ in 0..n {
-                number.increment().unwrap()
+                number.increment().unwrap();
             }
             number
         }
@@ -428,7 +428,7 @@ mod tests {
         fn num(n: usize) -> Number {
             let mut number = Number::DynamicWidth(DynamicWidthNumber::new(10));
             for _ in 0..n {
-                number.increment().unwrap()
+                number.increment().unwrap();
             }
             number
         }

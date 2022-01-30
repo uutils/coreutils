@@ -62,7 +62,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .override_usage(&usage[..])
         .after_help(&long_usage[..])
         .get_matches_from(args);
-    let settings = Settings::from(matches)?;
+    let settings = Settings::from(&matches)?;
     split(&settings)
 }
 
@@ -232,7 +232,7 @@ struct Settings {
 
 impl Settings {
     /// Parse a strategy from the command-line arguments.
-    fn from(matches: ArgMatches) -> UResult<Self> {
+    fn from(matches: &ArgMatches) -> UResult<Self> {
         let result = Self {
             suffix_length: matches
                 .value_of(OPT_SUFFIX_LENGTH)
@@ -242,7 +242,7 @@ impl Settings {
             numeric_suffix: matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0,
             additional_suffix: matches.value_of(OPT_ADDITIONAL_SUFFIX).unwrap().to_owned(),
             verbose: matches.occurrences_of("verbose") > 0,
-            strategy: Strategy::from(&matches)?,
+            strategy: Strategy::from(matches)?,
             input: matches.value_of(ARG_INPUT).unwrap().to_owned(),
             prefix: matches.value_of(ARG_PREFIX).unwrap().to_owned(),
             filter: matches.value_of(OPT_FILTER).map(|s| s.to_owned()),
