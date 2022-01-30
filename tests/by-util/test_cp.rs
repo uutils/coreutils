@@ -26,7 +26,6 @@ use std::thread::sleep;
 use std::time::Duration;
 
 static TEST_EXISTING_FILE: &str = "existing_file.txt";
-static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
 static TEST_HELLO_WORLD_SOURCE: &str = "hello_world.txt";
 static TEST_HELLO_WORLD_SOURCE_SYMLINK: &str = "hello_world.txt.link";
 static TEST_HELLO_WORLD_DEST: &str = "copy_of_hello_world.txt";
@@ -44,6 +43,8 @@ static TEST_MOUNT_COPY_FROM_FOLDER: &str = "dir_with_mount";
 static TEST_MOUNT_MOUNTPOINT: &str = "mount";
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
+#[cfg(unix)]
+static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
 
 #[test]
 fn test_cp_cp() {
@@ -1439,5 +1440,7 @@ fn test_cp_archive_on_nonexistent_file() {
         .arg(TEST_NONEXISTENT_FILE)
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_only("cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)");
+        .stderr_only(
+            "cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)",
+        );
 }
