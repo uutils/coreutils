@@ -78,7 +78,7 @@ fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
     mode::strip_minus_from_mode(args)
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)

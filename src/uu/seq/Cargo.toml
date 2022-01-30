@@ -21,11 +21,7 @@ clap = { version = "3.0", features = ["wrap_help", "cargo"] }
 num-bigint = "0.4.0"
 num-traits = "0.2.14"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["memo"] }
-uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "seq"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

@@ -17,7 +17,6 @@ path = "src/cut.rs"
 [dependencies]
 clap = { version = "3.0", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 memchr = "2"
 bstr = "0.2"
 atty = "0.2"
@@ -25,6 +24,3 @@ atty = "0.2"
 [[bin]]
 name = "cut"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

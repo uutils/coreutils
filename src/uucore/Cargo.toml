@@ -16,12 +16,13 @@ edition = "2018"
 path="src/lib/lib.rs"
 
 [dependencies]
+uucore_procs = { version=">=0.0.12", path="../uucore_procs" }
 clap = "3.0"
 dns-lookup = { version="1.0.5", optional=true }
 dunce = "1.0.0"
 wild = "2.0"
 # * optional
-itertools = { version="0.8", optional=true }
+itertools = { version="0.10.0", optional=true }
 thiserror = { version="1.0", optional=true }
 time = { version="<= 0.1.43", optional=true }
 # * "problem" dependencies (pinned)

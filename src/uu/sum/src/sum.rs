@@ -96,7 +96,7 @@ mod options {
     pub static SYSTEM_V_COMPATIBLE: &str = "sysv";
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)

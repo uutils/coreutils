@@ -26,11 +26,6 @@ BINDIR ?= /bin
 MANDIR ?= /man/man1
 
 INSTALLDIR_BIN=$(DESTDIR)$(PREFIX)$(BINDIR)
-INSTALLDIR_MAN=$(DESTDIR)$(PREFIX)/share/$(MANDIR)
-$(shell test -d $(INSTALLDIR_MAN))
-ifneq ($(.SHELLSTATUS),0)
-override INSTALLDIR_MAN=$(DESTDIR)$(PREFIX)$(MANDIR)
-endif
 
 #prefix to apply to coreutils binary and all tool binaries
 PROG_PREFIX ?=
@@ -321,7 +316,6 @@ distclean: clean
 
 install: build
 	mkdir -p $(INSTALLDIR_BIN)
-	mkdir -p $(INSTALLDIR_MAN)
 ifeq (${MULTICALL}, y)
 	$(INSTALL) $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
 	cd $(INSTALLDIR_BIN) && $(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
@@ -345,12 +339,10 @@ uninstall:
 ifeq (${MULTICALL}, y)
 	rm -f $(addprefix $(INSTALLDIR_BIN)/,$(PROG_PREFIX)coreutils)
 endif
-	rm -f $(addprefix $(INSTALLDIR_MAN)/,$(PROG_PREFIX)coreutils.1.gz)
 	rm -f $(addprefix $(INSTALLDIR_BIN)/$(PROG_PREFIX),$(PROGS))
 	rm -f $(INSTALLDIR_BIN)/$(PROG_PREFIX)[
 	rm -f $(addprefix $(DESTDIR)$(PREFIX)/share/zsh/site-functions/_$(PROG_PREFIX),$(PROGS))
 	rm -f $(addprefix $(DESTDIR)$(PREFIX)/share/bash-completion/completions/$(PROG_PREFIX),$(PROGS))
 	rm -f $(addprefix $(DESTDIR)$(PREFIX)/share/fish/vendor_completions.d/$(PROG_PREFIX),$(addsuffix .fish,$(PROGS)))
-	rm -f $(addprefix $(INSTALLDIR_MAN)/$(PROG_PREFIX),$(addsuffix .1.gz,$(PROGS)))
 
 .PHONY: all build build-coreutils build-pkgs test distclean clean busytest install uninstall

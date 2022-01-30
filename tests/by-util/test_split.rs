@@ -2,7 +2,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes asciilowercase
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes asciilowercase fghij klmno pqrst uvwxyz
 extern crate rand;
 extern crate regex;
 
@@ -12,11 +12,10 @@ use crate::common::util::*;
 use rand::SeedableRng;
 #[cfg(not(windows))]
 use std::env;
-use std::io::Write;
 use std::path::Path;
 use std::{
     fs::{read_dir, File},
-    io::{BufWriter, Read},
+    io::{BufWriter, Read, Write},
 };
 
 fn random_chars(n: usize) -> String {
@@ -424,4 +423,20 @@ creating file 'xae'
 creating file 'xaf'
 ",
         );
+}
+
+#[test]
+fn test_number() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_read = |f| {
+        let mut s = String::new();
+        at.open(f).read_to_string(&mut s).unwrap();
+        s
+    };
+    ucmd.args(&["-n", "5", "asciilowercase.txt"]).succeeds();
+    assert_eq!(file_read("xaa"), "abcde");
+    assert_eq!(file_read("xab"), "fghij");
+    assert_eq!(file_read("xac"), "klmno");
+    assert_eq!(file_read("xad"), "pqrst");
+    assert_eq!(file_read("xae"), "uvwxyz");
 }

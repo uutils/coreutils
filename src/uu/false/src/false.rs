@@ -8,7 +8,7 @@
 use clap::App;
 use uucore::error::UResult;
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     uu_app().get_matches_from(args);
     Err(1.into())

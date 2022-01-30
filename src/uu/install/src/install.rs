@@ -171,7 +171,7 @@ fn usage() -> String {
 ///
 /// Returns a program return code.
 ///
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 

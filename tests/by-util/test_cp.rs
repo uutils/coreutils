@@ -43,6 +43,8 @@ static TEST_MOUNT_COPY_FROM_FOLDER: &str = "dir_with_mount";
 static TEST_MOUNT_MOUNTPOINT: &str = "mount";
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
+#[cfg(unix)]
+static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
 
 #[test]
 fn test_cp_cp() {
@@ -1428,4 +1430,17 @@ fn test_copy_through_dangling_symlink() {
         .arg("target")
         .fails()
         .stderr_only("cp: not writing through dangling symlink 'target'");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_archive_on_nonexistent_file() {
+    new_ucmd!()
+        .arg("-a")
+        .arg(TEST_NONEXISTENT_FILE)
+        .arg(TEST_EXISTING_FILE)
+        .fails()
+        .stderr_only(
+            "cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)",
+        );
 }

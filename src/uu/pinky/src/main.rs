@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_pinky);
+uucore::bin!(uu_pinky);

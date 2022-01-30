@@ -485,7 +485,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
     Ok(())
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = match HeadOptions::get_from(args) {
         Ok(o) => o,

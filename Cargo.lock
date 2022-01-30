@@ -923,15 +923,6 @@ checksum = "1c429fffa658f288669529fc26565f728489a2e39bc7b24a428aaaf51355182e"
 
 [[package]]
 name = "itertools"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f56a2d0bc861f9165be4eb3442afd3c236d8a98afd426f65d92324ae1091a484"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a9a9d19fa1e79b6215ff29b9d6880b706147f16e9b1dbb1e4e5947b5b02bc5e3"
@@ -2032,7 +2023,6 @@ dependencies = [
  "clap 3.0.10",
  "platform-info",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2041,7 +2031,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2050,7 +2039,6 @@ version = "0.0.12"
 dependencies = [
  "uu_base32",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2059,7 +2047,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2069,7 +2056,6 @@ dependencies = [
  "clap 3.0.10",
  "uu_base32",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2082,7 +2068,6 @@ dependencies = [
  "thiserror",
  "unix_socket",
  "uucore",
- "uucore_procs",
  "winapi-util",
 ]
 
@@ -2096,7 +2081,6 @@ dependencies = [
  "selinux",
  "thiserror",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2105,7 +2089,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2115,7 +2098,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
  "walkdir",
 ]
 
@@ -2125,7 +2107,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2134,7 +2115,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2144,7 +2124,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2154,7 +2133,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2169,7 +2147,6 @@ dependencies = [
  "quick-error",
  "selinux",
  "uucore",
- "uucore_procs",
  "walkdir",
  "winapi 0.3.9",
  "xattr",
@@ -2183,7 +2160,6 @@ dependencies = [
  "regex",
  "thiserror",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2195,7 +2171,6 @@ dependencies = [
  "clap 3.0.10",
  "memchr 2.4.1",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2206,7 +2181,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
  "winapi 0.3.9",
 ]
 
@@ -2221,7 +2195,6 @@ dependencies = [
  "signal-hook",
  "tempfile",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2231,7 +2204,6 @@ dependencies = [
  "clap 3.0.10",
  "number_prefix",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2241,7 +2213,6 @@ dependencies = [
  "clap 3.0.10",
  "glob",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2251,7 +2222,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2261,7 +2231,6 @@ dependencies = [
  "chrono",
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
  "winapi 0.3.9",
 ]
 
@@ -2271,7 +2240,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2282,7 +2250,6 @@ dependencies = [
  "libc",
  "rust-ini",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2292,7 +2259,6 @@ dependencies = [
  "clap 3.0.10",
  "unicode-width",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2305,7 +2271,6 @@ dependencies = [
  "num-traits",
  "onig",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2320,7 +2285,6 @@ dependencies = [
  "rand",
  "smallvec",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2329,7 +2293,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2340,7 +2303,6 @@ dependencies = [
  "libc",
  "unicode-width",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2349,7 +2311,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2358,7 +2319,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2378,7 +2338,6 @@ dependencies = [
  "sha2",
  "sha3",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2388,7 +2347,6 @@ dependencies = [
  "clap 3.0.10",
  "memchr 2.4.1",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2398,7 +2356,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2409,7 +2366,6 @@ dependencies = [
  "hostname",
  "libc",
  "uucore",
- "uucore_procs",
  "winapi 0.3.9",
 ]
 
@@ -2420,7 +2376,6 @@ dependencies = [
  "clap 3.0.10",
  "selinux",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2433,7 +2388,6 @@ dependencies = [
  "libc",
  "time",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2442,7 +2396,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2452,7 +2405,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2462,7 +2414,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2472,7 +2423,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2482,7 +2432,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2502,7 +2451,6 @@ dependencies = [
  "termsize",
  "unicode-width",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2512,7 +2460,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2522,7 +2469,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2532,7 +2478,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2543,7 +2488,6 @@ dependencies = [
  "rand",
  "tempfile",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2559,7 +2503,6 @@ dependencies = [
  "unicode-segmentation",
  "unicode-width",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2569,7 +2512,6 @@ dependencies = [
  "clap 3.0.10",
  "fs_extra",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2580,7 +2522,6 @@ dependencies = [
  "libc",
  "nix 0.23.1",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2594,7 +2535,6 @@ dependencies = [
  "regex",
  "regex-syntax",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2605,7 +2545,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2616,7 +2555,6 @@ dependencies = [
  "libc",
  "num_cpus",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2625,7 +2563,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2637,7 +2574,6 @@ dependencies = [
  "half",
  "libc",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2646,7 +2582,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2656,7 +2591,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2665,7 +2599,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2675,11 +2608,10 @@ dependencies = [
  "chrono",
  "clap 3.0.10",
  "getopts",
- "itertools 0.10.3",
+ "itertools",
  "quick-error",
  "regex",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2688,7 +2620,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2696,9 +2627,8 @@ name = "uu_printf"
 version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
- "itertools 0.8.2",
+ "itertools",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2712,7 +2642,6 @@ dependencies = [
  "regex",
  "regex-syntax",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2721,7 +2650,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2731,7 +2659,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2740,7 +2667,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2749,7 +2675,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2759,7 +2684,6 @@ dependencies = [
  "clap 3.0.10",
  "remove_dir_all",
  "uucore",
- "uucore_procs",
  "walkdir",
  "winapi 0.3.9",
 ]
@@ -2771,7 +2695,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2784,7 +2707,6 @@ dependencies = [
  "selinux",
  "thiserror",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2796,7 +2718,6 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2807,7 +2728,6 @@ dependencies = [
  "libc",
  "rand",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2818,7 +2738,6 @@ dependencies = [
  "rand",
  "rand_core",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2827,7 +2746,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2839,7 +2757,7 @@ dependencies = [
  "compare",
  "ctrlc",
  "fnv",
- "itertools 0.10.3",
+ "itertools",
  "memchr 2.4.1",
  "ouroboros",
  "rand",
@@ -2847,7 +2765,6 @@ dependencies = [
  "tempfile",
  "unicode-width",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2856,7 +2773,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2865,7 +2781,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2876,7 +2791,6 @@ dependencies = [
  "tempfile",
  "uu_stdbuf_libstdbuf",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2887,7 +2801,6 @@ dependencies = [
  "cpp_build",
  "libc",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2896,7 +2809,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2906,7 +2818,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
  "winapi 0.3.9",
 ]
 
@@ -2919,7 +2830,6 @@ dependencies = [
  "memmap2",
  "regex",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2931,7 +2841,6 @@ dependencies = [
  "nix 0.23.1",
  "redox_syscall",
  "uucore",
- "uucore_procs",
  "winapi 0.3.9",
 ]
 
@@ -2943,7 +2852,6 @@ dependencies = [
  "libc",
  "retain_mut",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2954,7 +2862,6 @@ dependencies = [
  "libc",
  "redox_syscall",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2965,7 +2872,6 @@ dependencies = [
  "libc",
  "nix 0.23.1",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2976,7 +2882,6 @@ dependencies = [
  "filetime",
  "time",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2986,7 +2891,6 @@ dependencies = [
  "clap 3.0.10",
  "nom",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -2995,7 +2899,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -3004,7 +2907,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -3013,7 +2915,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -3024,7 +2925,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -3034,7 +2934,6 @@ dependencies = [
  "clap 3.0.10",
  "platform-info",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -3044,7 +2943,6 @@ dependencies = [
  "clap 3.0.10",
  "unicode-width",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -3055,7 +2953,6 @@ dependencies = [
  "strum",
  "strum_macros",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -3064,7 +2961,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -3074,7 +2970,6 @@ dependencies = [
  "chrono",
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -3083,7 +2978,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -3097,7 +2991,6 @@ dependencies = [
  "unicode-width",
  "utf-8",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -3106,7 +2999,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -3116,7 +3008,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "uucore_procs",
  "winapi 0.3.9",
 ]
 
@@ -3127,7 +3018,6 @@ dependencies = [
  "clap 3.0.10",
  "nix 0.23.1",
  "uucore",
- "uucore_procs",
 ]
 
 [[package]]
@@ -3139,7 +3029,7 @@ dependencies = [
  "data-encoding-macro",
  "dns-lookup",
  "dunce",
- "itertools 0.8.2",
+ "itertools",
  "lazy_static",
  "libc",
  "nix 0.23.1",
@@ -3148,6 +3038,7 @@ dependencies = [
  "termion",
  "thiserror",
  "time",
+ "uucore_procs",
  "walkdir",
  "wild",
  "winapi 0.3.9",
@@ -3161,7 +3052,6 @@ version = "0.0.12"
 dependencies = [
  "proc-macro2",
  "quote 1.0.14",
- "syn",
 ]
 
 [[package]]

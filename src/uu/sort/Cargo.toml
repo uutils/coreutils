@@ -28,7 +28,6 @@ rayon = "1.5"
 tempfile = "3"
 unicode-width = "0.1.8"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["fs"] }
-uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "sort"

@@ -452,7 +452,7 @@ impl UError for DuError {
     }
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args

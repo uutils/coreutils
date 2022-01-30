@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_chcon);
+uucore::bin!(uu_chcon);

@@ -20,11 +20,7 @@ clap = { version = "3.0", features = ["wrap_help", "cargo"] }
 half = "1.6"
 libc = "0.2.42"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "od"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

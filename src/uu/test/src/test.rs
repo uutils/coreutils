@@ -92,7 +92,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .setting(AppSettings::DisableVersionFlag)
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     let program = args.next().unwrap_or_else(|| OsString::from("test"));
     let binary_name = uucore::util_name();
