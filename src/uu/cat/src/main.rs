@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_cat);
+uucore::bin!(uu_cat);

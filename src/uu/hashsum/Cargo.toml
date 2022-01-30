@@ -28,11 +28,7 @@ sha2 = "0.6.0"
 sha3 = "0.6.0"
 blake2b_simd = "0.5.11"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "hashsum"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

@@ -29,7 +29,7 @@ writing cross-platform code.
 uutils has both user and developer documentation available:
 
 - [User Manual](https://uutils.github.io/coreutils-docs/user/)
-- [Developer Documentation](https://uutils.github.io/coreutils-docs/dev/)
+- [Developer Documentation](https://uutils.github.io/coreutils-docs/dev/coreutils/)
 
 Both can also be generated locally, the instructions for that can be found in the
 [coreutils docs](https://github.com/uutils/coreutils-docs) repository.

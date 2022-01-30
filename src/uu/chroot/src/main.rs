@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_chroot);
+uucore::bin!(uu_chroot);

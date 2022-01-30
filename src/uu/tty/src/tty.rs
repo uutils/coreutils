@@ -25,7 +25,7 @@ fn usage() -> String {
     format!("{0} [OPTION]...", uucore::execution_phrase())
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let args = args

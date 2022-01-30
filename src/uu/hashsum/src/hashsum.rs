@@ -274,7 +274,7 @@ fn is_valid_bit_num(arg: &str) -> Result<(), String> {
     parse_bit_num(arg).map(|_| ()).map_err(|e| format!("{}", e))
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     // if there is no program name for some reason, default to "hashsum"
     let program = args.next().unwrap_or_else(|| OsString::from(NAME));

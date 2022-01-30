@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_hashsum);
+uucore::bin!(uu_hashsum);

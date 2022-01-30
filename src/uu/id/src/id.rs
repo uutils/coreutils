@@ -126,7 +126,7 @@ struct State {
     user_specified: bool,
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let after_help = get_description();

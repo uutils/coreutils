@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_mv);
+uucore::bin!(uu_mv);

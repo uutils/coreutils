@@ -319,7 +319,7 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     run_env(args)
 }

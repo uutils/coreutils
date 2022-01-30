@@ -47,7 +47,7 @@ const HOST_OS: &str = "Fuchsia";
 #[cfg(target_os = "redox")]
 const HOST_OS: &str = "Redox";
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = format!("{} [OPTION]...", uucore::execution_phrase());
     let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);

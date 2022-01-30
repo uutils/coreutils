@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_runcon);
+uucore::bin!(uu_runcon);

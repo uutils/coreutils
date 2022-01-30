@@ -23,7 +23,7 @@ mod splice;
 // systems, but honestly this is good enough
 const BUF_SIZE: usize = 16 * 1024;
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 

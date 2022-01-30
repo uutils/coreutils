@@ -175,7 +175,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name()).setting(AppSettings::InferLongArgs)
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(uucore::InvalidEncodingHandling::Ignore)

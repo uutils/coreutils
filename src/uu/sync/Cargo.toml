@@ -18,7 +18,6 @@ path = "src/sync.rs"
 clap = { version = "3.0", features = ["wrap_help", "cargo"] }
 libc = "0.2.42"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["wide"] }
-uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 winapi = { version = "0.3", features = ["errhandlingapi", "fileapi", "handleapi", "std", "winbase", "winerror"] }
 
 [[bin]]

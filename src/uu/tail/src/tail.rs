@@ -158,7 +158,7 @@ impl Settings {
 }
 
 #[allow(clippy::cognitive_complexity)]
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = match Settings::get_from(args) {
         Ok(o) => o,
@@ -575,9 +575,12 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
     // contains count lines/chars. When reaching the end of file, output the
     // data in the ringbuf.
     match settings.mode {
-        FilterMode::Lines(count, _) => {
-            for line in unbounded_tail_collect(lines(reader), count, settings.beginning) {
-                print!("{}", line);
+        FilterMode::Lines(count, sep) => {
+            let mut stdout = stdout();
+            for line in unbounded_tail_collect(lines(reader, sep), count, settings.beginning) {
+                stdout
+                    .write_all(&line)
+                    .map_err_context(|| String::from("IO error"))?;
             }
         }
         FilterMode::Bytes(count) => {

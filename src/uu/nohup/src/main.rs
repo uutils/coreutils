@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_nohup);
+uucore::bin!(uu_nohup);
