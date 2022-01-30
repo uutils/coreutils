@@ -81,11 +81,11 @@ impl Error for LnError {}
 impl UError for LnError {
     fn code(&self) -> i32 {
         match self {
-            Self::TargetIsDirectory(_) => 1,
-            Self::SomeLinksFailed => 1,
-            Self::FailedToLink(_) => 1,
-            Self::MissingDestination(_) => 1,
-            Self::ExtraOperand(_) => 1,
+            Self::TargetIsDirectory(_)
+            | Self::SomeLinksFailed
+            | Self::FailedToLink(_)
+            | Self::MissingDestination(_)
+            | Self::ExtraOperand(_) => 1,
         }
     }
 }

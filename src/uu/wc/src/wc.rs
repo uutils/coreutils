@@ -253,12 +253,7 @@ fn word_count_from_reader<T: WordCountable>(
                     }
                     if settings.show_max_line_length {
                         match ch {
-                            '\n' => {
-                                total.max_line_length = max(current_len, total.max_line_length);
-                                current_len = 0;
-                            }
-                            // '\x0c' = '\f'
-                            '\r' | '\x0c' => {
+                            '\n' | '\r' | '\x0c' => {
                                 total.max_line_length = max(current_len, total.max_line_length);
                                 current_len = 0;
                             }

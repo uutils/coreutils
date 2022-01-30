@@ -487,14 +487,7 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
                     fmt = Some(flag);
                 }
             }
-            ConvFlag::UCase => {
-                if case.is_some() {
-                    return Err(ParseError::MultipleUCaseLCase);
-                } else {
-                    case = Some(flag);
-                }
-            }
-            ConvFlag::LCase => {
+            ConvFlag::UCase | ConvFlag::LCase => {
                 if case.is_some() {
                     return Err(ParseError::MultipleUCaseLCase);
                 } else {
