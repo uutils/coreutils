@@ -50,15 +50,15 @@ pub fn main() {
     )
     .unwrap();
 
-    let mut phf_map = phf_codegen::Map::<String>::new();
-    for krate in crates {
+    let mut phf_map = phf_codegen::Map::<&str>::new();
+    for krate in &crates {
         let map_value = format!("({krate}::uumain, {krate}::uu_app)", krate = krate);
         match krate.as_ref() {
             // 'test' is named uu_test to avoid collision with rust core crate 'test'.
             // It can also be invoked by name '[' for the '[ expr ] syntax'.
             "uu_test" => {
-                phf_map.entry(String::from("test"), &map_value);
-                phf_map.entry(String::from("["), &map_value);
+                phf_map.entry("test", &map_value);
+                phf_map.entry("[", &map_value);
 
                 tf.write_all(
                     format!(
@@ -70,7 +70,7 @@ pub fn main() {
                 .unwrap()
             }
             k if k.starts_with(OVERRIDE_PREFIX) => {
-                phf_map.entry(String::from(&krate[OVERRIDE_PREFIX.len()..]), &map_value);
+                phf_map.entry(&k[OVERRIDE_PREFIX.len()..], &map_value);
                 tf.write_all(
                     format!(
                         "#[path=\"{dir}/test_{k}.rs\"]\nmod test_{k};\n",
@@ -83,7 +83,7 @@ pub fn main() {
             }
             "false" | "true" => {
                 phf_map.entry(
-                    String::from(&krate),
+                    krate,
                     &format!("(r#{krate}::uumain, r#{krate}::uu_app)", krate = krate),
                 );
                 tf.write_all(
@@ -98,24 +98,24 @@ pub fn main() {
             }
             "hashsum" => {
                 phf_map.entry(
-                    String::from(&krate),
+                    krate,
                     &format!("({krate}::uumain, {krate}::uu_app_custom)", krate = krate),
                 );
 
                 let map_value = format!("({krate}::uumain, {krate}::uu_app_common)", krate = krate);
-                phf_map.entry(String::from("md5sum"), &map_value);
-                phf_map.entry(String::from("sha1sum"), &map_value);
-                phf_map.entry(String::from("sha224sum"), &map_value);
-                phf_map.entry(String::from("sha256sum"), &map_value);
-                phf_map.entry(String::from("sha384sum"), &map_value);
-                phf_map.entry(String::from("sha512sum"), &map_value);
-                phf_map.entry(String::from("sha3sum"), &map_value);
-                phf_map.entry(String::from("sha3-224sum"), &map_value);
-                phf_map.entry(String::from("sha3-256sum"), &map_value);
-                phf_map.entry(String::from("sha3-384sum"), &map_value);
-                phf_map.entry(String::from("sha3-512sum"), &map_value);
-                phf_map.entry(String::from("shake128sum"), &map_value);
-                phf_map.entry(String::from("shake256sum"), &map_value);
+                phf_map.entry("md5sum", &map_value);
+                phf_map.entry("sha1sum", &map_value);
+                phf_map.entry("sha224sum", &map_value);
+                phf_map.entry("sha256sum", &map_value);
+                phf_map.entry("sha384sum", &map_value);
+                phf_map.entry("sha512sum", &map_value);
+                phf_map.entry("sha3sum", &map_value);
+                phf_map.entry("sha3-224sum", &map_value);
+                phf_map.entry("sha3-256sum", &map_value);
+                phf_map.entry("sha3-384sum", &map_value);
+                phf_map.entry("sha3-512sum", &map_value);
+                phf_map.entry("shake128sum", &map_value);
+                phf_map.entry("shake256sum", &map_value);
                 tf.write_all(
                     format!(
                         "#[path=\"{dir}/test_{krate}.rs\"]\nmod test_{krate};\n",
@@ -127,7 +127,7 @@ pub fn main() {
                 .unwrap()
             }
             _ => {
-                phf_map.entry(String::from(&krate), &map_value);
+                phf_map.entry(krate, &map_value);
                 tf.write_all(
                     format!(
                         "#[path=\"{dir}/test_{krate}.rs\"]\nmod test_{krate};\n",
