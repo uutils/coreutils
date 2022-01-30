@@ -4,7 +4,6 @@
 // file that was distributed with this source code.
 
 use clap::App;
-use std::collections::hash_map::HashMap;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, Write};
@@ -32,7 +31,7 @@ fn main() -> io::Result<()> {
         * [Multi-call binary](multicall.md)\n",
     );
 
-    let mut utils = utils.iter().collect::<Vec<_>>();
+    let mut utils = utils.entries().collect::<Vec<_>>();
     utils.sort();
     for (&name, (_, app)) in utils {
         if name == "[" {

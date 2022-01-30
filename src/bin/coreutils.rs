@@ -8,7 +8,6 @@
 use clap::{App, Arg};
 use clap_complete::Shell;
 use std::cmp;
-use std::collections::hash_map::HashMap;
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::io::{self, Write};
@@ -171,7 +170,7 @@ fn gen_completions<T: uucore::Args>(
 
 fn gen_coreutils_app<T: uucore::Args>(util_map: UtilityMap<T>) -> App<'static> {
     let mut app = App::new("coreutils");
-    for (_, (_, sub_app)) in util_map {
+    for (_, (_, sub_app)) in &util_map {
         app = app.subcommand(sub_app());
     }
     app
