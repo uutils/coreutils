@@ -178,7 +178,7 @@ fn print_uptime(upsecs: i64) {
     match updays.cmp(&1) {
         std::cmp::Ordering::Equal => print!("up {:1} day, {:2}:{:02},  ", updays, uphours, upmins),
         std::cmp::Ordering::Greater => {
-            print!("up {:1} days, {:2}:{:02},  ", updays, uphours, upmins)
+            print!("up {:1} days, {:2}:{:02},  ", updays, uphours, upmins);
         }
         _ => print!("up  {:2}:{:02}, ", uphours, upmins),
     };

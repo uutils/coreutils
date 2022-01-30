@@ -115,8 +115,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let last = last.round_towards(&first);
             print_seq_integers(
                 (first, increment, last),
-                options.separator,
-                options.terminator,
+                &options.separator,
+                &options.terminator,
                 options.widths,
                 padding,
                 options.format,
@@ -129,8 +129,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 last.into_extended_big_decimal(),
             ),
             largest_dec,
-            options.separator,
-            options.terminator,
+            &options.separator,
+            &options.terminator,
             options.widths,
             padding,
             options.format,
@@ -265,8 +265,8 @@ fn write_value_int(
 fn print_seq(
     range: RangeFloat,
     largest_dec: usize,
-    separator: String,
-    terminator: String,
+    separator: &str,
+    terminator: &str,
     pad: bool,
     padding: usize,
     format: Option<&str>,
@@ -336,8 +336,8 @@ fn print_seq(
 /// numbers). Only set this to `true` if `first` is actually zero.
 fn print_seq_integers(
     range: RangeInt,
-    separator: String,
-    terminator: String,
+    separator: &str,
+    terminator: &str,
     pad: bool,
     padding: usize,
     format: Option<&str>,

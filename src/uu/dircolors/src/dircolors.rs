@@ -127,7 +127,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let result;
     if files.is_empty() {
-        result = parse(INTERNAL_DB.lines(), out_format, "")
+        result = parse(INTERNAL_DB.lines(), &out_format, "");
     } else {
         if files.len() > 1 {
             return Err(UUsageError::new(
@@ -138,7 +138,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         match File::open(files[0]) {
             Ok(f) => {
                 let fin = BufReader::new(f);
-                result = parse(fin.lines().filter_map(Result::ok), out_format, files[0])
+                result = parse(fin.lines().filter_map(Result::ok), &out_format, files[0]);
             }
             Err(e) => {
                 return Err(USimpleError::new(
@@ -259,7 +259,7 @@ enum ParseState {
 use std::collections::HashMap;
 use uucore::InvalidEncodingHandling;
 
-fn parse<T>(lines: T, fmt: OutputFmt, fp: &str) -> Result<String, String>
+fn parse<T>(lines: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
 where
     T: IntoIterator,
     T::Item: Borrow<str>,

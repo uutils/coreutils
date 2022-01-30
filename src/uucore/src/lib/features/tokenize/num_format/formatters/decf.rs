@@ -25,8 +25,8 @@ fn get_len_fmt_primitive(fmt: &FormatPrimitive) -> usize {
 pub struct Decf;
 
 impl Decf {
-    pub fn new() -> Decf {
-        Decf
+    pub fn new() -> Self {
+        Self
     }
 }
 impl Formatter for Decf {

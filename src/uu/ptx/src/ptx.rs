@@ -52,8 +52,8 @@ struct Config {
 }
 
 impl Default for Config {
-    fn default() -> Config {
-        Config {
+    fn default() -> Self {
+        Self {
             format: OutFormat::Dumb,
             gnu_ext: true,
             auto_ref: false,
@@ -96,7 +96,7 @@ struct WordFilter {
 }
 
 impl WordFilter {
-    fn new(matches: &clap::ArgMatches, config: &Config) -> UResult<WordFilter> {
+    fn new(matches: &clap::ArgMatches, config: &Config) -> UResult<Self> {
         let (o, oset): (bool, HashSet<String>) = if matches.is_present(options::ONLY_FILE) {
             let words =
                 read_word_filter_file(matches, options::ONLY_FILE).map_err_context(String::new)?;
@@ -139,7 +139,7 @@ impl WordFilter {
                 }
             }
         };
-        Ok(WordFilter {
+        Ok(Self {
             only_specified: o,
             ignore_specified: i,
             only_set: oset,
@@ -275,7 +275,7 @@ fn read_input(input_files: &[String], config: &Config) -> std::io::Result<FileMa
                 offset,
             },
         );
-        offset += size
+        offset += size;
     }
     Ok(file_map)
 }

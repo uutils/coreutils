@@ -1551,7 +1551,7 @@ fn test_ls_inode() {
     assert!(!re_long.is_match(result.stdout_str()));
     assert!(!result.stdout_str().contains(inode_long));
 
-    assert_eq!(inode_short, inode_long)
+    assert_eq!(inode_short, inode_long);
 }
 
 #[test]
@@ -1901,7 +1901,7 @@ fn test_ls_version_sort() {
     assert_eq!(
         result.stdout_str().split('\n').collect::<Vec<_>>(),
         expected,
-    )
+    );
 }
 
 #[test]

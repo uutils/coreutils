@@ -188,25 +188,25 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
             let f = pop_literal!();
 
             Ok(match op {
-                "-b" => path(&f, PathCondition::BlockSpecial),
-                "-c" => path(&f, PathCondition::CharacterSpecial),
-                "-d" => path(&f, PathCondition::Directory),
-                "-e" => path(&f, PathCondition::Exists),
-                "-f" => path(&f, PathCondition::Regular),
-                "-g" => path(&f, PathCondition::GroupIdFlag),
-                "-G" => path(&f, PathCondition::GroupOwns),
-                "-h" => path(&f, PathCondition::SymLink),
-                "-k" => path(&f, PathCondition::Sticky),
-                "-L" => path(&f, PathCondition::SymLink),
-                "-O" => path(&f, PathCondition::UserOwns),
-                "-p" => path(&f, PathCondition::Fifo),
-                "-r" => path(&f, PathCondition::Readable),
-                "-S" => path(&f, PathCondition::Socket),
-                "-s" => path(&f, PathCondition::NonEmpty),
+                "-b" => path(&f, &PathCondition::BlockSpecial),
+                "-c" => path(&f, &PathCondition::CharacterSpecial),
+                "-d" => path(&f, &PathCondition::Directory),
+                "-e" => path(&f, &PathCondition::Exists),
+                "-f" => path(&f, &PathCondition::Regular),
+                "-g" => path(&f, &PathCondition::GroupIdFlag),
+                "-G" => path(&f, &PathCondition::GroupOwns),
+                "-h" => path(&f, &PathCondition::SymLink),
+                "-k" => path(&f, &PathCondition::Sticky),
+                "-L" => path(&f, &PathCondition::SymLink),
+                "-O" => path(&f, &PathCondition::UserOwns),
+                "-p" => path(&f, &PathCondition::Fifo),
+                "-r" => path(&f, &PathCondition::Readable),
+                "-S" => path(&f, &PathCondition::Socket),
+                "-s" => path(&f, &PathCondition::NonEmpty),
                 "-t" => isatty(&f)?,
-                "-u" => path(&f, PathCondition::UserIdFlag),
-                "-w" => path(&f, PathCondition::Writable),
-                "-x" => path(&f, PathCondition::Executable),
+                "-u" => path(&f, &PathCondition::UserIdFlag),
+                "-w" => path(&f, &PathCondition::Writable),
+                "-x" => path(&f, &PathCondition::Executable),
                 _ => panic!(),
             })
         }
@@ -283,7 +283,7 @@ enum PathCondition {
 }
 
 #[cfg(not(windows))]
-fn path(path: &OsStr, condition: PathCondition) -> bool {
+fn path(path: &OsStr, condition: &PathCondition) -> bool {
     use std::fs::{self, Metadata};
     use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
@@ -325,7 +325,7 @@ fn path(path: &OsStr, condition: PathCondition) -> bool {
         }
     };
 
-    let metadata = if condition == PathCondition::SymLink {
+    let metadata = if condition == &PathCondition::SymLink {
         fs::symlink_metadata(path)
     } else {
         fs::metadata(path)
@@ -362,7 +362,7 @@ fn path(path: &OsStr, condition: PathCondition) -> bool {
 }
 
 #[cfg(windows)]
-fn path(path: &OsStr, condition: PathCondition) -> bool {
+fn path(path: &OsStr, condition: &PathCondition) -> bool {
     use std::fs::metadata;
 
     let stat = match metadata(path) {

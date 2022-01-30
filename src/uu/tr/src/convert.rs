@@ -27,11 +27,10 @@ fn parse_octal(input: &str) -> IResult<&str, char> {
     )(input)
 }
 
-pub fn reduce_octal_to_char(input: String) -> String {
-    let result = many0(alt((parse_octal, anychar)))(input.as_str())
+pub fn reduce_octal_to_char(input: &str) -> String {
+    many0(alt((parse_octal, anychar)))(input)
         .map(|(_, r)| r)
         .unwrap()
         .into_iter()
-        .collect();
-    result
+        .collect()
 }

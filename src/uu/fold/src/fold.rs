@@ -60,7 +60,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec!["-".to_owned()],
     };
 
-    fold(files, bytes, spaces, width)
+    fold(&files, bytes, spaces, width)
 }
 
 pub fn uu_app<'a>() -> App<'a> {
@@ -115,8 +115,8 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     (args.to_vec(), None)
 }
 
-fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: usize) -> UResult<()> {
-    for filename in &filenames {
+fn fold(filenames: &[String], bytes: bool, spaces: bool, width: usize) -> UResult<()> {
+    for filename in filenames {
         let filename: &str = filename;
         let mut stdin_buf;
         let mut file_buf;

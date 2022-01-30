@@ -114,7 +114,7 @@ struct Stat {
 }
 
 impl Stat {
-    fn new(path: PathBuf, options: &Options) -> Result<Stat> {
+    fn new(path: PathBuf, options: &Options) -> Result<Self> {
         let metadata = if options.dereference {
             fs::metadata(&path)?
         } else {
@@ -127,7 +127,7 @@ impl Stat {
             dev_id: metadata.dev(),
         };
         #[cfg(not(windows))]
-        return Ok(Stat {
+        return Ok(Self {
             path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
@@ -247,7 +247,7 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
 fn read_block_size(s: Option<&str>) -> usize {
     if let Some(s) = s {
         parse_size(s)
-            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::BLOCK_SIZE)))
+            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::BLOCK_SIZE)))
     } else {
         for env_var in &["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
             if let Ok(env_size) = env::var(env_var) {
@@ -335,7 +335,7 @@ fn du(
                         ErrorKind::PermissionDenied => {
                             let description = format!("cannot access {}", entry.path().quote());
                             let error_message = "Permission denied";
-                            show_error_custom_description!(description, "{}", error_message)
+                            show_error_custom_description!(description, "{}", error_message);
                         }
                         _ => show_error!("cannot access {}: {}", entry.path().quote(), error),
                     },
@@ -486,14 +486,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if options.inodes
         && (matches.is_present(options::APPARENT_SIZE) || matches.is_present(options::BYTES))
     {
-        show_warning!("options --apparent-size and -b are ineffective with --inodes")
+        show_warning!("options --apparent-size and -b are ineffective with --inodes");
     }
 
     let block_size = u64::try_from(read_block_size(matches.value_of(options::BLOCK_SIZE))).unwrap();
 
     let threshold = matches.value_of(options::THRESHOLD).map(|s| {
         Threshold::from_str(s)
-            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::THRESHOLD)))
+            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::THRESHOLD)))
     });
 
     let multiplier: u64 = if matches.is_present(options::SI) {
@@ -815,9 +815,9 @@ impl FromStr for Threshold {
         let size = u64::try_from(parse_size(&s[offset..])?).unwrap();
 
         if s.starts_with('-') {
-            Ok(Threshold::Upper(size))
+            Ok(Self::Upper(size))
         } else {
-            Ok(Threshold::Lower(size))
+            Ok(Self::Lower(size))
         }
     }
 }
@@ -825,13 +825,13 @@ impl FromStr for Threshold {
 impl Threshold {
     fn should_exclude(&self, size: u64) -> bool {
         match *self {
-            Threshold::Upper(threshold) => size > threshold,
-            Threshold::Lower(threshold) => size < threshold,
+            Self::Upper(threshold) => size > threshold,
+            Self::Lower(threshold) => size < threshold,
         }
     }
 }
 
-fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
+fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
     // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
     // GNU's du does distinguish between "invalid (suffix in) argument"
@@ -853,7 +853,7 @@ mod test_du {
             (Some("K".to_string()), 1024),
             (None, 1024),
         ];
-        for it in test_data.iter() {
+        for it in &test_data {
             assert_eq!(read_block_size(it.0.as_deref()), it.1);
         }
     }

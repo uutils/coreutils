@@ -15,6 +15,7 @@ use std::slice::Iter;
 /// This is a reasonably efficient implementation based on
 /// O'Neill, M. E. "[The Genuine Sieve of Eratosthenes.](http://dx.doi.org/10.1017%2FS0956796808007004)"
 /// Journal of Functional Programming, Volume 19, Issue 1, 2009, pp.  95--106.
+#[derive(Default)]
 pub struct Sieve {
     inner: Wheel,
     filts: PrimeHeap,
@@ -58,23 +59,20 @@ impl Iterator for Sieve {
 }
 
 impl Sieve {
-    fn new() -> Sieve {
-        Sieve {
-            inner: Wheel::new(),
-            filts: PrimeHeap::new(),
-        }
+    fn new() -> Self {
+        Self::default()
     }
 
     #[allow(dead_code)]
     #[inline]
     pub fn primes() -> PrimeSieve {
-        INIT_PRIMES.iter().copied().chain(Sieve::new())
+        INIT_PRIMES.iter().copied().chain(Self::new())
     }
 
     #[allow(dead_code)]
     #[inline]
     pub fn odd_primes() -> PrimeSieve {
-        (&INIT_PRIMES[1..]).iter().copied().chain(Sieve::new())
+        INIT_PRIMES[1..].iter().copied().chain(Self::new())
     }
 }
 
@@ -106,11 +104,17 @@ impl Iterator for Wheel {
 
 impl Wheel {
     #[inline]
-    fn new() -> Wheel {
-        Wheel {
+    fn new() -> Self {
+        Self {
             next: 11u64,
             increment: WHEEL_INCS.iter().cycle(),
         }
+    }
+}
+
+impl Default for Wheel {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -124,16 +128,12 @@ const INIT_PRIMES: &[u64] = &[2, 3, 5, 7];
 
 /// A min-heap of "infinite lists" of prime multiples, where a list is
 /// represented as (head, increment).
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct PrimeHeap {
     data: Vec<(u64, u64)>,
 }
 
 impl PrimeHeap {
-    fn new() -> PrimeHeap {
-        PrimeHeap { data: Vec::new() }
-    }
-
     fn peek(&self) -> Option<(u64, u64)> {
         if let Some(&(x, y)) = self.data.get(0) {
             Some((x, y))

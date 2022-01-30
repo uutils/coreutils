@@ -27,7 +27,7 @@ static SUMMARY: &str = "Convert blanks in each FILE to tabs, writing to standard
 
 const DEFAULT_TABSTOP: usize = 8;
 
-fn tabstops_parse(s: String) -> Vec<usize> {
+fn tabstops_parse(s: &str) -> Vec<usize> {
     let words = s.split(',');
 
     let nums = words
@@ -67,10 +67,10 @@ struct Options {
 }
 
 impl Options {
-    fn new(matches: clap::ArgMatches) -> Options {
+    fn new(matches: &clap::ArgMatches) -> Self {
         let tabstops = match matches.value_of(options::TABS) {
             None => vec![DEFAULT_TABSTOP],
-            Some(s) => tabstops_parse(s.to_string()),
+            Some(s) => tabstops_parse(s),
         };
 
         let aflag = (matches.is_present(options::ALL) || matches.is_present(options::TABS))
@@ -82,7 +82,7 @@ impl Options {
             None => vec!["-".to_owned()],
         };
 
-        Options {
+        Self {
             files,
             tabstops,
             aflag,
@@ -99,7 +99,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().get_matches_from(args);
 
-    unexpand(Options::new(matches)).map_err_context(String::new)
+    unexpand(&Options::new(&matches)).map_err_context(String::new)
 }
 
 pub fn uu_app<'a>() -> App<'a> {
@@ -138,7 +138,7 @@ pub fn uu_app<'a>() -> App<'a> {
                 .help("interpret input file as 8-bit ASCII rather than UTF-8"))
 }
 
-fn open(path: String) -> BufReader<Box<dyn Read + 'static>> {
+fn open(path: &str) -> BufReader<Box<dyn Read + 'static>> {
     let file_buf;
     if path == "-" {
         BufReader::new(Box::new(stdin()) as Box<dyn Read>)
@@ -243,13 +243,13 @@ fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usi
     (ctype, cwidth, nbytes)
 }
 
-fn unexpand(options: Options) -> std::io::Result<()> {
+fn unexpand(options: &Options) -> std::io::Result<()> {
     let mut output = BufWriter::new(stdout());
     let ts = &options.tabstops[..];
     let mut buf = Vec::new();
     let lastcol = if ts.len() > 1 { *ts.last().unwrap() } else { 0 };
 
-    for file in options.files.into_iter() {
+    for file in &options.files {
         let mut fh = open(file);
 
         while match fh.read_until(b'\n', &mut buf) {

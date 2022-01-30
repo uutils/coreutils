@@ -43,7 +43,7 @@ pub struct PeekReader<R> {
 impl<R> PeekReader<R> {
     /// Create a new `PeekReader` wrapping `inner`
     pub fn new(inner: R) -> Self {
-        PeekReader {
+        Self {
             inner,
             temp_buffer: Vec::new(),
         }

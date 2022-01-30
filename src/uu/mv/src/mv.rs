@@ -116,7 +116,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         strip_slashes: matches.is_present(OPT_STRIP_TRAILING_SLASHES),
     };
 
-    exec(&files[..], behavior)
+    exec(&files[..], &behavior)
 }
 
 pub fn uu_app<'a>() -> App<'a> {
@@ -207,7 +207,7 @@ fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
     }
 }
 
-fn exec(files: &[OsString], b: Behavior) -> UResult<()> {
+fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
     let paths: Vec<PathBuf> = {
         let paths = files.iter().map(Path::new);
 
@@ -222,7 +222,7 @@ fn exec(files: &[OsString], b: Behavior) -> UResult<()> {
     };
 
     if let Some(ref name) = b.target_dir {
-        return move_files_into_dir(&paths, &PathBuf::from(name), &b);
+        return move_files_into_dir(&paths, &PathBuf::from(name), b);
     }
     match paths.len() {
         /* case 0/1 are not possible thanks to clap */
@@ -256,12 +256,12 @@ fn exec(files: &[OsString], b: Behavior) -> UResult<()> {
                     if !source.is_dir() {
                         Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
                     } else {
-                        rename(source, target, &b).map_err_context(|| {
+                        rename(source, target, b).map_err_context(|| {
                             format!("cannot move {} to {}", source.quote(), target.quote())
                         })
                     }
                 } else {
-                    move_files_into_dir(&[source.clone()], target, &b)
+                    move_files_into_dir(&[source.clone()], target, b)
                 }
             } else if target.exists() && source.is_dir() {
                 Err(MvError::NonDirectoryToDirectory(
@@ -270,7 +270,7 @@ fn exec(files: &[OsString], b: Behavior) -> UResult<()> {
                 )
                 .into())
             } else {
-                rename(source, target, &b).map_err(|e| USimpleError::new(1, format!("{}", e)))
+                rename(source, target, b).map_err(|e| USimpleError::new(1, format!("{}", e)))
             }
         }
         _ => {
@@ -281,7 +281,7 @@ fn exec(files: &[OsString], b: Behavior) -> UResult<()> {
                 ));
             }
             let target_dir = paths.last().unwrap();
-            move_files_into_dir(&paths[..paths.len() - 1], target_dir, &b)
+            move_files_into_dir(&paths[..paths.len() - 1], target_dir, b)
         }
     }
 }
@@ -305,7 +305,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
                 sourcepath.quote(),
                 targetpath.quote()
             ))
-        )
+        );
     }
     Ok(())
 }
@@ -340,7 +340,7 @@ fn rename(from: &Path, to: &Path, b: &Behavior) -> io::Result<()> {
         // normalize behavior between *nix and windows
         if from.is_dir() {
             if is_empty_dir(to) {
-                fs::remove_dir(to)?
+                fs::remove_dir(to)?;
             } else {
                 return Err(io::Error::new(io::ErrorKind::Other, "Directory not empty"));
             }

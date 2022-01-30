@@ -26,8 +26,8 @@ fn warn_excess_args(first_arg: &str) {
 }
 
 impl Memo {
-    pub fn new(pf_string: &str, pf_args_it: &mut Peekable<Iter<String>>) -> Memo {
-        let mut pm = Memo { tokens: Vec::new() };
+    pub fn new(pf_string: &str, pf_args_it: &mut Peekable<Iter<String>>) -> Self {
+        let mut pm = Self { tokens: Vec::new() };
         let mut tmp_token: Option<Box<dyn Token>>;
         let mut it = put_back_n(pf_string.chars());
         let mut has_sub = false;
@@ -67,13 +67,13 @@ impl Memo {
         pm
     }
     pub fn apply(&self, pf_args_it: &mut Peekable<Iter<String>>) {
-        for tkn in self.tokens.iter() {
+        for tkn in &self.tokens {
             tkn.print(pf_args_it);
         }
     }
     pub fn run_all(pf_string: &str, pf_args: &[String]) {
         let mut arg_it = pf_args.iter().peekable();
-        let pm = Memo::new(pf_string, &mut arg_it);
+        let pm = Self::new(pf_string, &mut arg_it);
         loop {
             if arg_it.peek().is_none() {
                 break;

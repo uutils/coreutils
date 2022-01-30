@@ -104,6 +104,7 @@ pub fn uu_app<'a>() -> App<'a> {
 
 // We use String as a representation of node here
 // but using integer may improve performance.
+#[derive(Default)]
 struct Graph {
     in_edges: HashMap<String, HashSet<String>>,
     out_edges: HashMap<String, Vec<String>>,
@@ -111,12 +112,8 @@ struct Graph {
 }
 
 impl Graph {
-    fn new() -> Graph {
-        Graph {
-            in_edges: HashMap::new(),
-            out_edges: HashMap::new(),
-            result: vec![],
-        }
+    fn new() -> Self {
+        Self::default()
     }
 
     fn has_node(&self, n: &str) -> bool {

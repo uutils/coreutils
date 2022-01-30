@@ -187,8 +187,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let behavior = behavior(&matches)?;
 
     match behavior.main_function {
-        MainFunction::Directory => directory(paths, behavior),
-        MainFunction::Standard => standard(paths, behavior),
+        MainFunction::Directory => directory(&paths, &behavior),
+        MainFunction::Standard => standard(paths, &behavior),
     }
 }
 
@@ -391,7 +391,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 ///
 /// Returns a Result type with the Err variant containing the error message.
 ///
-fn directory(paths: Vec<String>, b: Behavior) -> UResult<()> {
+fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
     if paths.is_empty() {
         Err(InstallError::DirNeedsArg().into())
     } else {
@@ -444,7 +444,7 @@ fn is_new_file_path(path: &Path) -> bool {
 ///
 /// Returns a Result type with the Err variant containing the error message.
 ///
-fn standard(mut paths: Vec<String>, b: Behavior) -> UResult<()> {
+fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
     let target: PathBuf = b
         .target_dir
         .clone()
@@ -454,7 +454,7 @@ fn standard(mut paths: Vec<String>, b: Behavior) -> UResult<()> {
     let sources = &paths.iter().map(PathBuf::from).collect::<Vec<_>>();
 
     if sources.len() > 1 || (target.exists() && target.is_dir()) {
-        copy_files_into_dir(sources, &target, &b)
+        copy_files_into_dir(sources, &target, b)
     } else {
         if let Some(parent) = target.parent() {
             if !parent.exists() && b.create_leading {
@@ -471,7 +471,7 @@ fn standard(mut paths: Vec<String>, b: Behavior) -> UResult<()> {
         }
 
         if target.is_file() || is_new_file_path(&target) {
-            copy(&sources[0], &target, &b)
+            copy(&sources[0], &target, b)
         } else {
             Err(InstallError::InvalidTarget(target).into())
         }

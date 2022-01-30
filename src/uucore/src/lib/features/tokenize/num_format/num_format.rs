@@ -25,7 +25,7 @@ pub fn warn_expected_numeric(pf_arg: &str) {
 
 // when character constant arguments have excess characters
 // issue a warning when POSIXLY_CORRECT is not set
-fn warn_char_constant_ign(remaining_bytes: Vec<u8>) {
+fn warn_char_constant_ign(remaining_bytes: &[u8]) {
     match env::var("POSIXLY_CORRECT") {
         Ok(_) => {}
         Err(e) => {
@@ -59,7 +59,7 @@ fn get_provided(str_in_opt: Option<&String>) -> Option<u8> {
                                     ignored.push(cont);
                                 }
                                 if !ignored.is_empty() {
-                                    warn_char_constant_ign(ignored);
+                                    warn_char_constant_ign(&ignored);
                                 }
                                 second_byte as u8
                             }

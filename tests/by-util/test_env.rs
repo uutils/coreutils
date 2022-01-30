@@ -187,7 +187,7 @@ fn test_change_directory() {
         .arg(pwd)
         .succeeds()
         .stdout_move_str();
-    assert_eq!(out.trim(), temporary_path.as_os_str())
+    assert_eq!(out.trim(), temporary_path.as_os_str());
 }
 
 #[cfg(windows)]

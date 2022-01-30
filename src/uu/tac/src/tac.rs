@@ -57,7 +57,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec!["-"],
     };
 
-    tac(files, before, regex, separator)
+    tac(&files, before, regex, separator)
 }
 
 pub fn uu_app<'a>() -> App<'a> {
@@ -223,7 +223,7 @@ fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()>
     Ok(())
 }
 
-fn tac(filenames: Vec<&str>, before: bool, regex: bool, separator: &str) -> UResult<()> {
+fn tac(filenames: &[&str], before: bool, regex: bool, separator: &str) -> UResult<()> {
     // Compile the regular expression pattern if it is provided.
     let maybe_pattern = if regex {
         match regex::bytes::Regex::new(separator) {
@@ -234,7 +234,7 @@ fn tac(filenames: Vec<&str>, before: bool, regex: bool, separator: &str) -> URes
         None
     };
 
-    for &filename in &filenames {
+    for &filename in filenames {
         let mmap;
         let buf;
 

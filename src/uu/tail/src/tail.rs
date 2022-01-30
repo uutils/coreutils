@@ -72,7 +72,7 @@ enum FilterMode {
 
 impl Default for FilterMode {
     fn default() -> Self {
-        FilterMode::Lines(10, b'\n')
+        Self::Lines(10, b'\n')
     }
 }
 
@@ -92,7 +92,7 @@ impl Settings {
     pub fn get_from(args: impl uucore::Args) -> Result<Self, String> {
         let matches = uu_app().get_matches_from(arg_iterate(args)?);
 
-        let mut settings: Settings = Settings {
+        let mut settings: Self = Self {
             sleep_msec: 1000,
             follow: matches.is_present(options::FOLLOW),
             ..Default::default()
@@ -102,7 +102,7 @@ impl Settings {
             if let Some(n) = matches.value_of(options::SLEEP_INT) {
                 let parsed: Option<u32> = n.parse().ok();
                 if let Some(m) = parsed {
-                    settings.sleep_msec = m * 1000
+                    settings.sleep_msec = m * 1000;
                 }
             }
         }

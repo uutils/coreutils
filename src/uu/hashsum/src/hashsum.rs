@@ -173,28 +173,28 @@ fn detect_algo(
                     };
                     name = n;
                     alg = Some(val);
-                    output_bits = bits
+                    output_bits = bits;
                 };
                 if matches.is_present("md5") {
-                    set_or_crash("MD5", Box::new(Md5::new()), 128)
+                    set_or_crash("MD5", Box::new(Md5::new()), 128);
                 }
                 if matches.is_present("sha1") {
-                    set_or_crash("SHA1", Box::new(Sha1::new()), 160)
+                    set_or_crash("SHA1", Box::new(Sha1::new()), 160);
                 }
                 if matches.is_present("sha224") {
-                    set_or_crash("SHA224", Box::new(Sha224::new()), 224)
+                    set_or_crash("SHA224", Box::new(Sha224::new()), 224);
                 }
                 if matches.is_present("sha256") {
-                    set_or_crash("SHA256", Box::new(Sha256::new()), 256)
+                    set_or_crash("SHA256", Box::new(Sha256::new()), 256);
                 }
                 if matches.is_present("sha384") {
-                    set_or_crash("SHA384", Box::new(Sha384::new()), 384)
+                    set_or_crash("SHA384", Box::new(Sha384::new()), 384);
                 }
                 if matches.is_present("sha512") {
-                    set_or_crash("SHA512", Box::new(Sha512::new()), 512)
+                    set_or_crash("SHA512", Box::new(Sha512::new()), 512);
                 }
                 if matches.is_present("b2sum") {
-                    set_or_crash("BLAKE2", Box::new(blake2b_simd::State::new()), 512)
+                    set_or_crash("BLAKE2", Box::new(blake2b_simd::State::new()), 512);
                 }
                 if matches.is_present("sha3") {
                     match matches.value_of("bits") {
@@ -229,16 +229,16 @@ fn detect_algo(
                     }
                 }
                 if matches.is_present("sha3-224") {
-                    set_or_crash("SHA3-224", Box::new(Sha3_224::new()), 224)
+                    set_or_crash("SHA3-224", Box::new(Sha3_224::new()), 224);
                 }
                 if matches.is_present("sha3-256") {
-                    set_or_crash("SHA3-256", Box::new(Sha3_256::new()), 256)
+                    set_or_crash("SHA3-256", Box::new(Sha3_256::new()), 256);
                 }
                 if matches.is_present("sha3-384") {
-                    set_or_crash("SHA3-384", Box::new(Sha3_384::new()), 384)
+                    set_or_crash("SHA3-384", Box::new(Sha3_384::new()), 384);
                 }
                 if matches.is_present("sha3-512") {
-                    set_or_crash("SHA3-512", Box::new(Sha3_512::new()), 512)
+                    set_or_crash("SHA3-512", Box::new(Sha3_512::new()), 512);
                 }
                 if matches.is_present("shake128") {
                     match matches.value_of("bits") {

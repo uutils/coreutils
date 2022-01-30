@@ -205,13 +205,13 @@ fn test_single_big_args() {
 
     let mut big_input = at.make_file(FILE);
     for i in 0..LINES {
-        writeln!(&mut big_input, "Line {}", i).expect("Could not write to FILE");
+        writeln!(big_input, "Line {}", i).expect("Could not write to FILE");
     }
     big_input.flush().expect("Could not flush FILE");
 
     let mut big_expected = at.make_file(EXPECTED_FILE);
     for i in (LINES - N_ARG)..LINES {
-        writeln!(&mut big_expected, "Line {}", i).expect("Could not write to EXPECTED_FILE");
+        writeln!(big_expected, "Line {}", i).expect("Could not write to EXPECTED_FILE");
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
@@ -254,14 +254,14 @@ fn test_bytes_big() {
     let mut big_input = at.make_file(FILE);
     for i in 0..BYTES {
         let digit = from_digit((i % 10) as u32, 10).unwrap();
-        write!(&mut big_input, "{}", digit).expect("Could not write to FILE");
+        write!(big_input, "{}", digit).expect("Could not write to FILE");
     }
     big_input.flush().expect("Could not flush FILE");
 
     let mut big_expected = at.make_file(EXPECTED_FILE);
     for i in (BYTES - N_ARG)..BYTES {
         let digit = from_digit((i % 10) as u32, 10).unwrap();
-        write!(&mut big_expected, "{}", digit).expect("Could not write to EXPECTED_FILE");
+        write!(big_expected, "{}", digit).expect("Could not write to EXPECTED_FILE");
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
@@ -290,13 +290,13 @@ fn test_lines_with_size_suffix() {
 
     let mut big_input = at.make_file(FILE);
     for i in 0..LINES {
-        writeln!(&mut big_input, "Line {}", i).expect("Could not write to FILE");
+        writeln!(big_input, "Line {}", i).expect("Could not write to FILE");
     }
     big_input.flush().expect("Could not flush FILE");
 
     let mut big_expected = at.make_file(EXPECTED_FILE);
     for i in (LINES - N_ARG)..LINES {
-        writeln!(&mut big_expected, "Line {}", i).expect("Could not write to EXPECTED_FILE");
+        writeln!(big_expected, "Line {}", i).expect("Could not write to EXPECTED_FILE");
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 

@@ -14,7 +14,7 @@ use crate::{miller_rabin, rho, table};
 
 type Exponent = u8;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 struct Decomposition(SmallVec<[(u64, Exponent); NUM_FACTORS_INLINE]>);
 
 // spell-checker:ignore (names) Erdős–Kac * Erdős Kac
@@ -24,8 +24,8 @@ struct Decomposition(SmallVec<[(u64, Exponent); NUM_FACTORS_INLINE]>);
 const NUM_FACTORS_INLINE: usize = 5;
 
 impl Decomposition {
-    fn one() -> Decomposition {
-        Decomposition(SmallVec::new())
+    fn one() -> Self {
+        Self::default()
     }
 
     fn add(&mut self, factor: u64, exp: Exponent) {
@@ -34,7 +34,7 @@ impl Decomposition {
         if let Some((_, e)) = self.0.iter_mut().find(|(f, _)| *f == factor) {
             *e += exp;
         } else {
-            self.0.push((factor, exp))
+            self.0.push((factor, exp));
         }
     }
 
@@ -51,7 +51,7 @@ impl Decomposition {
 }
 
 impl PartialEq for Decomposition {
-    fn eq(&self, other: &Decomposition) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         for p in &self.0 {
             if other.get(p.0) != Some(p) {
                 return false;
@@ -73,17 +73,17 @@ impl Eq for Decomposition {}
 pub struct Factors(RefCell<Decomposition>);
 
 impl Factors {
-    pub fn one() -> Factors {
-        Factors(RefCell::new(Decomposition::one()))
+    pub fn one() -> Self {
+        Self(RefCell::new(Decomposition::one()))
     }
 
     pub fn add(&mut self, prime: u64, exp: Exponent) {
         debug_assert!(miller_rabin::is_prime(prime));
-        self.0.borrow_mut().add(prime, exp)
+        self.0.borrow_mut().add(prime, exp);
     }
 
     pub fn push(&mut self, prime: u64) {
-        self.add(prime, 1)
+        self.add(prime, 1);
     }
 
     #[cfg(test)]
@@ -99,7 +99,7 @@ impl fmt::Display for Factors {
 
         for (p, exp) in v.iter() {
             for _ in 0..*exp {
-                write!(f, " {}", p)?
+                write!(f, " {}", p)?;
             }
         }
 
@@ -286,9 +286,9 @@ impl quickcheck::Arbitrary for Factors {
 impl std::ops::BitXor<Exponent> for Factors {
     type Output = Self;
 
-    fn bitxor(self, rhs: Exponent) -> Factors {
+    fn bitxor(self, rhs: Exponent) -> Self {
         debug_assert_ne!(rhs, 0);
-        let mut r = Factors::one();
+        let mut r = Self::one();
         for (p, e) in self.0.borrow().0.iter() {
             r.add(*p, rhs * e);
         }

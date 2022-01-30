@@ -296,9 +296,9 @@ impl std::str::FromStr for StatusLevel {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "none" => Ok(StatusLevel::None),
-            "noxfer" => Ok(StatusLevel::Noxfer),
-            "progress" => Ok(StatusLevel::Progress),
+            "none" => Ok(Self::None),
+            "noxfer" => Ok(Self::Noxfer),
+            "progress" => Ok(Self::Progress),
             _ => Err(ParseError::StatusLevelNotRecognized(s.to_string())),
         }
     }
@@ -491,14 +491,14 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
                 if case.is_some() {
                     return Err(ParseError::MultipleUCaseLCase);
                 } else {
-                    case = Some(flag)
+                    case = Some(flag);
                 }
             }
             ConvFlag::LCase => {
                 if case.is_some() {
                     return Err(ParseError::MultipleUCaseLCase);
                 } else {
-                    case = Some(flag)
+                    case = Some(flag);
                 }
             }
             ConvFlag::Block => match (cbs, iconvflags.unblock) {

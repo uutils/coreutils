@@ -8,13 +8,14 @@ use super::base_conv;
 use super::base_conv::RadixDef;
 use super::float_common::{primitive_to_str_common, FloatAnalysis};
 
+#[derive(Default)]
 pub struct CninetyNineHexFloatf {
     #[allow(dead_code)]
     as_num: f64,
 }
 impl CninetyNineHexFloatf {
-    pub fn new() -> CninetyNineHexFloatf {
-        CninetyNineHexFloatf { as_num: 0.0 }
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 

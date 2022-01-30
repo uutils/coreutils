@@ -340,7 +340,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> URes
     Ok(())
 }
 
-fn cut_files(mut filenames: Vec<String>, mode: Mode) -> UResult<()> {
+fn cut_files(mut filenames: Vec<String>, mode: &Mode) -> UResult<()> {
     let mut stdin_read = false;
 
     if filenames.is_empty() {
@@ -527,7 +527,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect();
 
     match mode_parse {
-        Ok(mode) => cut_files(files, mode),
+        Ok(mode) => cut_files(files, &mode),
         Err(e) => Err(USimpleError::new(1, e)),
     }
 }

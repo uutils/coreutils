@@ -57,13 +57,13 @@ pub struct CsplitOptions {
 }
 
 impl CsplitOptions {
-    fn new(matches: &ArgMatches) -> CsplitOptions {
+    fn new(matches: &ArgMatches) -> Self {
         let keep_files = matches.is_present(options::KEEP_FILES);
         let quiet = matches.is_present(options::QUIET);
         let elide_empty_files = matches.is_present(options::ELIDE_EMPTY_FILES);
         let suppress_matched = matches.is_present(options::SUPPRESS_MATCHED);
 
-        CsplitOptions {
+        Self {
             split_name: crash_if_err!(
                 1,
                 SplitName::new(
@@ -108,9 +108,9 @@ where
     input_iter.rewind_buffer();
     if let Some((_, line)) = input_iter.next() {
         split_writer.new_writer()?;
-        split_writer.writeln(line?)?;
+        split_writer.writeln(&line?)?;
         for (_, line) in input_iter {
-            split_writer.writeln(line?)?;
+            split_writer.writeln(&line?)?;
         }
         split_writer.finish_split();
     }
@@ -250,7 +250,7 @@ impl<'a> SplitWriter<'a> {
     /// # Errors
     ///
     /// Some [`io::Error`] may occur when attempting to write the line.
-    fn writeln(&mut self, line: String) -> io::Result<()> {
+    fn writeln(&mut self, line: &str) -> io::Result<()> {
         if !self.dev_null {
             match self.current_writer {
                 Some(ref mut current_writer) => {
@@ -343,7 +343,7 @@ impl<'a> SplitWriter<'a> {
                 }
                 Ordering::Greater => (),
             }
-            self.writeln(l)?;
+            self.writeln(&l)?;
         }
         self.finish_split();
         ret
@@ -373,7 +373,7 @@ impl<'a> SplitWriter<'a> {
             // The offset is zero or positive, no need for a buffer on the lines read.
             // NOTE: drain the buffer of input_iter, no match should be done within.
             for line in input_iter.drain_buffer() {
-                self.writeln(line)?;
+                self.writeln(&line)?;
             }
             // retain the matching line
             input_iter.set_size_of_buffer(1);
@@ -390,7 +390,7 @@ impl<'a> SplitWriter<'a> {
                             );
                         }
                         // a positive offset, some more lines need to be added to the current split
-                        (false, _) => self.writeln(l)?,
+                        (false, _) => self.writeln(&l)?,
                         _ => (),
                     };
                     offset -= 1;
@@ -399,7 +399,7 @@ impl<'a> SplitWriter<'a> {
                     while offset > 0 {
                         match input_iter.next() {
                             Some((_, line)) => {
-                                self.writeln(line?)?;
+                                self.writeln(&line?)?;
                             }
                             None => {
                                 self.finish_split();
@@ -413,7 +413,7 @@ impl<'a> SplitWriter<'a> {
                     self.finish_split();
                     return Ok(());
                 }
-                self.writeln(l)?;
+                self.writeln(&l)?;
             }
         } else {
             // With a negative offset we use a buffer to keep the lines within the offset.
@@ -427,7 +427,7 @@ impl<'a> SplitWriter<'a> {
                 let l = line?;
                 if regex.is_match(&l) {
                     for line in input_iter.shrink_buffer_to_size() {
-                        self.writeln(line)?;
+                        self.writeln(&line)?;
                     }
                     if !self.options.suppress_matched {
                         // add 1 to the buffer size to make place for the matched line
@@ -444,12 +444,12 @@ impl<'a> SplitWriter<'a> {
                     return Ok(());
                 }
                 if let Some(line) = input_iter.add_line_to_buffer(ln, l) {
-                    self.writeln(line)?;
+                    self.writeln(&line)?;
                 }
             }
             // no match, drain the buffer into the current split
             for line in input_iter.drain_buffer() {
-                self.writeln(line)?;
+                self.writeln(&line)?;
             }
         }
 
@@ -477,8 +477,8 @@ impl<I> InputSplitter<I>
 where
     I: Iterator<Item = (usize, io::Result<String>)>,
 {
-    fn new(iter: I) -> InputSplitter<I> {
-        InputSplitter {
+    fn new(iter: I) -> Self {
+        Self {
             iter,
             buffer: Vec::new(),
             rewind: false,

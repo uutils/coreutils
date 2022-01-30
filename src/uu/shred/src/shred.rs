@@ -68,9 +68,9 @@ struct FilenameGenerator {
 }
 
 impl FilenameGenerator {
-    fn new(name_len: usize) -> FilenameGenerator {
+    fn new(name_len: usize) -> Self {
         let indices: Vec<usize> = vec![0; name_len];
-        FilenameGenerator {
+        Self {
             name_len,
             name_charset_indices: RefCell::new(indices),
             exhausted: Cell::new(false),
@@ -96,7 +96,7 @@ impl Iterator for FilenameGenerator {
         }
 
         if name_charset_indices[0] == NAME_CHARSET.len() - 1 {
-            self.exhausted.set(true)
+            self.exhausted.set(true);
         }
         // Now increment the least significant index
         for i in (0..self.name_len).rev() {
@@ -478,7 +478,7 @@ fn wipe_file(
     if n_passes <= 3 {
         // Only random passes if n_passes <= 3
         for _ in 0..n_passes {
-            pass_sequence.push(PassType::Random)
+            pass_sequence.push(PassType::Random);
         }
     }
     // First fill it with Patterns, shuffle it, then evenly distribute Random

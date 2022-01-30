@@ -118,7 +118,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         cmode,
     };
 
-    chmoder.chmod(files)
+    chmoder.chmod(&files)
 }
 
 pub fn uu_app<'a>() -> App<'a> {
@@ -193,10 +193,10 @@ struct Chmoder {
 }
 
 impl Chmoder {
-    fn chmod(&self, files: Vec<String>) -> UResult<()> {
+    fn chmod(&self, files: &[String]) -> UResult<()> {
         let mut r = Ok(());
 
-        for filename in &files {
+        for filename in files {
             let filename = &filename[..];
             let file = Path::new(filename);
             if !file.exists() {

@@ -140,10 +140,10 @@ impl Sequence {
         set2_str: &str,
         truncate_set1_flag: bool,
     ) -> Result<(Vec<char>, Vec<char>), BadSequence> {
-        let set1 = Sequence::from_str(set1_str)?;
-        let set2 = Sequence::from_str(set2_str)?;
+        let set1 = Self::from_str(set1_str)?;
+        let set2 = Self::from_str(set2_str)?;
 
-        let is_char_star = |s: &&Sequence| -> bool { matches!(s, Sequence::CharStar(_)) };
+        let is_char_star = |s: &&Self| -> bool { matches!(s, Sequence::CharStar(_)) };
         let set1_star_count = set1.iter().filter(is_char_star).count();
         if set1_star_count == 0 {
             let set2_star_count = set2.iter().filter(is_char_star).count();
@@ -152,17 +152,15 @@ impl Sequence {
                     Sequence::CharStar(c) => Some(c),
                     _ => None,
                 });
-                let mut partition = set2
-                    .as_slice()
-                    .split(|s| matches!(s, Sequence::CharStar(_)));
-                let set1_len = set1.iter().flat_map(Sequence::flatten).count();
+                let mut partition = set2.as_slice().split(|s| matches!(s, Self::CharStar(_)));
+                let set1_len = set1.iter().flat_map(Self::flatten).count();
                 let set2_len = set2
                     .iter()
                     .filter_map(|s| match s {
                         Sequence::CharStar(_) => None,
                         r => Some(r),
                     })
-                    .flat_map(Sequence::flatten)
+                    .flat_map(Self::flatten)
                     .count();
                 let star_compensate_len = set1_len.saturating_sub(set2_len);
                 let (left, right) = (partition.next(), partition.next());
@@ -175,35 +173,35 @@ impl Sequence {
                         if let Some(c) = char_star {
                             std::iter::repeat(*c)
                                 .take(star_compensate_len)
-                                .chain(set2_b.iter().flat_map(Sequence::flatten))
+                                .chain(set2_b.iter().flat_map(Self::flatten))
                                 .collect()
                         } else {
-                            set2_b.iter().flat_map(Sequence::flatten).collect()
+                            set2_b.iter().flat_map(Self::flatten).collect()
                         }
                     }
                     (Some(set2_a), None) => match char_star {
                         Some(c) => set2_a
                             .iter()
-                            .flat_map(Sequence::flatten)
+                            .flat_map(Self::flatten)
                             .chain(std::iter::repeat(*c).take(star_compensate_len))
                             .collect(),
-                        None => set2_a.iter().flat_map(Sequence::flatten).collect(),
+                        None => set2_a.iter().flat_map(Self::flatten).collect(),
                     },
                     (Some(set2_a), Some(set2_b)) => match char_star {
                         Some(c) => set2_a
                             .iter()
-                            .flat_map(Sequence::flatten)
+                            .flat_map(Self::flatten)
                             .chain(std::iter::repeat(*c).take(star_compensate_len))
-                            .chain(set2_b.iter().flat_map(Sequence::flatten))
+                            .chain(set2_b.iter().flat_map(Self::flatten))
                             .collect(),
                         None => set2_a
                             .iter()
                             .chain(set2_b.iter())
-                            .flat_map(Sequence::flatten)
+                            .flat_map(Self::flatten)
                             .collect(),
                     },
                 };
-                let mut set1_solved: Vec<char> = set1.iter().flat_map(Sequence::flatten).collect();
+                let mut set1_solved: Vec<char> = set1.iter().flat_map(Self::flatten).collect();
                 if truncate_set1_flag {
                     set1_solved.truncate(set2_solved.len());
                 }
@@ -218,15 +216,15 @@ impl Sequence {
 }
 
 impl Sequence {
-    pub fn from_str(input: &str) -> Result<Vec<Sequence>, BadSequence> {
+    pub fn from_str(input: &str) -> Result<Vec<Self>, BadSequence> {
         many0(alt((
-            Sequence::parse_char_range,
-            Sequence::parse_char_star,
-            Sequence::parse_char_repeat,
-            Sequence::parse_class,
-            Sequence::parse_char_equal,
+            Self::parse_char_range,
+            Self::parse_char_star,
+            Self::parse_char_repeat,
+            Self::parse_class,
+            Self::parse_char_equal,
             // NOTE: This must be the last one
-            map(Sequence::parse_backslash_or_char, |s| Ok(Sequence::Char(s))),
+            map(Self::parse_backslash_or_char, |s| Ok(Self::Char(s))),
         )))(input)
         .map(|(_, r)| r)
         .unwrap()
@@ -251,64 +249,64 @@ impl Sequence {
     }
 
     fn parse_backslash_or_char(input: &str) -> IResult<&str, char> {
-        alt((Sequence::parse_backslash, anychar))(input)
+        alt((Self::parse_backslash, anychar))(input)
     }
 
-    fn parse_char_range(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+    fn parse_char_range(input: &str) -> IResult<&str, Result<Self, BadSequence>> {
         separated_pair(
-            Sequence::parse_backslash_or_char,
+            Self::parse_backslash_or_char,
             tag("-"),
-            Sequence::parse_backslash_or_char,
+            Self::parse_backslash_or_char,
         )(input)
         .map(|(l, (a, b))| {
             (l, {
                 let (start, end) = (u32::from(a), u32::from(b));
-                Ok(Sequence::CharRange(start, end))
+                Ok(Self::CharRange(start, end))
             })
         })
     }
 
-    fn parse_char_star(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
-        delimited(tag("["), Sequence::parse_backslash_or_char, tag("*]"))(input)
-            .map(|(l, a)| (l, Ok(Sequence::CharStar(a))))
+    fn parse_char_star(input: &str) -> IResult<&str, Result<Self, BadSequence>> {
+        delimited(tag("["), Self::parse_backslash_or_char, tag("*]"))(input)
+            .map(|(l, a)| (l, Ok(Self::CharStar(a))))
     }
 
-    fn parse_char_repeat(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+    fn parse_char_repeat(input: &str) -> IResult<&str, Result<Self, BadSequence>> {
         delimited(
             tag("["),
-            separated_pair(Sequence::parse_backslash_or_char, tag("*"), digit1),
+            separated_pair(Self::parse_backslash_or_char, tag("*"), digit1),
             tag("]"),
         )(input)
         .map(|(l, (c, str))| {
             (
                 l,
                 match usize::from_str_radix(str, 8) {
-                    Ok(0) => Ok(Sequence::CharStar(c)),
-                    Ok(count) => Ok(Sequence::CharRepeat(c, count)),
+                    Ok(0) => Ok(Self::CharStar(c)),
+                    Ok(count) => Ok(Self::CharRepeat(c, count)),
                     Err(_) => Err(BadSequence::InvalidRepeatCount(str.to_string())),
                 },
             )
         })
     }
 
-    fn parse_class(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+    fn parse_class(input: &str) -> IResult<&str, Result<Self, BadSequence>> {
         delimited(
             tag("[:"),
             alt((
                 map(
                     alt((
-                        value(Sequence::Alnum, tag("alnum")),
-                        value(Sequence::Alpha, tag("alpha")),
-                        value(Sequence::Blank, tag("blank")),
-                        value(Sequence::Control, tag("cntrl")),
-                        value(Sequence::Digit, tag("digit")),
-                        value(Sequence::Graph, tag("graph")),
-                        value(Sequence::Lower, tag("lower")),
-                        value(Sequence::Print, tag("print")),
-                        value(Sequence::Punct, tag("punct")),
-                        value(Sequence::Space, tag("space")),
-                        value(Sequence::Upper, tag("upper")),
-                        value(Sequence::Xdigit, tag("xdigit")),
+                        value(Self::Alnum, tag("alnum")),
+                        value(Self::Alpha, tag("alpha")),
+                        value(Self::Blank, tag("blank")),
+                        value(Self::Control, tag("cntrl")),
+                        value(Self::Digit, tag("digit")),
+                        value(Self::Graph, tag("graph")),
+                        value(Self::Lower, tag("lower")),
+                        value(Self::Print, tag("print")),
+                        value(Self::Punct, tag("punct")),
+                        value(Self::Space, tag("space")),
+                        value(Self::Upper, tag("upper")),
+                        value(Self::Xdigit, tag("xdigit")),
                     )),
                     Ok,
                 ),
@@ -318,7 +316,7 @@ impl Sequence {
         )(input)
     }
 
-    fn parse_char_equal(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+    fn parse_char_equal(input: &str) -> IResult<&str, Result<Self, BadSequence>> {
         delimited(
             tag("[="),
             alt((
@@ -326,7 +324,7 @@ impl Sequence {
                     Err(BadSequence::MissingEquivalentClassChar),
                     peek(tag("=]")),
                 ),
-                map(Sequence::parse_backslash_or_char, |c| Ok(Sequence::Char(c))),
+                map(Self::parse_backslash_or_char, |c| Ok(Self::Char(c))),
             )),
             tag("=]"),
         )(input)
@@ -344,8 +342,8 @@ pub struct DeleteOperation {
 }
 
 impl DeleteOperation {
-    pub fn new(set: Vec<char>, complement_flag: bool) -> DeleteOperation {
-        DeleteOperation {
+    pub fn new(set: Vec<char>, complement_flag: bool) -> Self {
+        Self {
             set,
             complement_flag,
         }
@@ -372,8 +370,8 @@ pub struct TranslateOperationComplement {
 }
 
 impl TranslateOperationComplement {
-    fn new(set1: Vec<char>, set2: Vec<char>) -> TranslateOperationComplement {
-        TranslateOperationComplement {
+    fn new(set1: Vec<char>, set2: Vec<char>) -> Self {
+        Self {
             iter: 0,
             set2_iter: 0,
             set1,
@@ -389,16 +387,16 @@ pub struct TranslateOperationStandard {
 }
 
 impl TranslateOperationStandard {
-    fn new(set1: Vec<char>, set2: Vec<char>) -> Result<TranslateOperationStandard, BadSequence> {
+    fn new(set1: Vec<char>, set2: Vec<char>) -> Result<Self, BadSequence> {
         if let Some(fallback) = set2.last().copied() {
-            Ok(TranslateOperationStandard {
+            Ok(Self {
                 translation_map: set1
                     .into_iter()
                     .zip(set2.into_iter().chain(std::iter::repeat(fallback)))
                     .collect::<HashMap<_, _>>(),
             })
         } else if set1.is_empty() && set2.is_empty() {
-            Ok(TranslateOperationStandard {
+            Ok(Self {
                 translation_map: HashMap::new(),
             })
         } else {
@@ -424,19 +422,13 @@ impl TranslateOperation {
 }
 
 impl TranslateOperation {
-    pub fn new(
-        set1: Vec<char>,
-        set2: Vec<char>,
-        complement: bool,
-    ) -> Result<TranslateOperation, BadSequence> {
+    pub fn new(set1: Vec<char>, set2: Vec<char>, complement: bool) -> Result<Self, BadSequence> {
         if complement {
-            Ok(TranslateOperation::Complement(
-                TranslateOperationComplement::new(set1, set2),
-            ))
+            Ok(Self::Complement(TranslateOperationComplement::new(
+                set1, set2,
+            )))
         } else {
-            Ok(TranslateOperation::Standard(
-                TranslateOperationStandard::new(set1, set2)?,
-            ))
+            Ok(Self::Standard(TranslateOperationStandard::new(set1, set2)?))
         }
     }
 }
@@ -444,13 +436,13 @@ impl TranslateOperation {
 impl SymbolTranslator for TranslateOperation {
     fn translate(&mut self, current: char) -> Option<char> {
         match self {
-            TranslateOperation::Standard(TranslateOperationStandard { translation_map }) => Some(
+            Self::Standard(TranslateOperationStandard { translation_map }) => Some(
                 translation_map
                     .iter()
                     .find_map(|(l, r)| if l.eq(&current) { Some(*r) } else { None })
                     .unwrap_or(current),
             ),
-            TranslateOperation::Complement(TranslateOperationComplement {
+            Self::Complement(TranslateOperationComplement {
                 iter,
                 set2_iter,
                 set1,
@@ -467,8 +459,7 @@ impl SymbolTranslator for TranslateOperation {
                 } else {
                     while translation_map.get(&current).is_none() {
                         if let Some(value) = set2.get(*set2_iter) {
-                            let (next_iter, next_key) =
-                                TranslateOperation::next_complement_char(*iter, &*set1);
+                            let (next_iter, next_key) = Self::next_complement_char(*iter, &*set1);
                             *iter = next_iter;
                             *set2_iter = set2_iter.saturating_add(1);
                             translation_map.insert(next_key, *value);
@@ -491,8 +482,8 @@ pub struct SqueezeOperation {
 }
 
 impl SqueezeOperation {
-    pub fn new(set1: Vec<char>, complement: bool) -> SqueezeOperation {
-        SqueezeOperation {
+    pub fn new(set1: Vec<char>, complement: bool) -> Self {
+        Self {
             set1: set1.into_iter().collect(),
             complement,
             previous: None,

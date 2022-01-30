@@ -296,9 +296,9 @@ impl ChownExecutor {
                             } else {
                                 "Too many levels of symbolic links".into()
                             }
-                        )
+                        );
                     } else {
-                        show_error!("{}", e)
+                        show_error!("{}", e);
                     }
                     continue;
                 }
@@ -450,7 +450,7 @@ pub fn chown_base<'a>(
                 .required(true)
                 .takes_value(true)
                 .multiple_occurrences(false),
-        )
+        );
     }
     app = app.arg(
         Arg::new(options::ARG_FILES)

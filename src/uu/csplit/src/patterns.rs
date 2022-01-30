@@ -44,8 +44,8 @@ pub enum ExecutePattern {
 impl ExecutePattern {
     pub fn iter(&self) -> ExecutePatternIter {
         match self {
-            ExecutePattern::Times(n) => ExecutePatternIter::new(Some(*n)),
-            ExecutePattern::Always => ExecutePatternIter::new(None),
+            Self::Times(n) => ExecutePatternIter::new(Some(*n)),
+            Self::Always => ExecutePatternIter::new(None),
         }
     }
 }
@@ -56,8 +56,8 @@ pub struct ExecutePatternIter {
 }
 
 impl ExecutePatternIter {
-    fn new(max: Option<usize>) -> ExecutePatternIter {
-        ExecutePatternIter { max, cur: 0 }
+    fn new(max: Option<usize>) -> Self {
+        Self { max, cur: 0 }
     }
 }
 

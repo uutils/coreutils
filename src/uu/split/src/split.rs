@@ -62,7 +62,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .after_help(&long_usage[..])
         .get_matches_from(args);
     let settings = Settings::from(matches)?;
-    split(settings)
+    split(&settings)
 }
 
 pub fn uu_app<'a>() -> App<'a> {
@@ -182,31 +182,31 @@ impl Strategy {
             matches.occurrences_of(OPT_LINE_BYTES),
             matches.occurrences_of(OPT_NUMBER),
         ) {
-            (0, 0, 0, 0) => Ok(Strategy::Lines(1000)),
+            (0, 0, 0, 0) => Ok(Self::Lines(1000)),
             (1, 0, 0, 0) => {
                 let s = matches.value_of(OPT_LINES).unwrap();
                 let n = parse_size(s)
                     .map_err(|e| USimpleError::new(1, format!("invalid number of lines: {}", e)))?;
-                Ok(Strategy::Lines(n))
+                Ok(Self::Lines(n))
             }
             (0, 1, 0, 0) => {
                 let s = matches.value_of(OPT_BYTES).unwrap();
                 let n = parse_size(s)
                     .map_err(|e| USimpleError::new(1, format!("invalid number of bytes: {}", e)))?;
-                Ok(Strategy::Bytes(n))
+                Ok(Self::Bytes(n))
             }
             (0, 0, 1, 0) => {
                 let s = matches.value_of(OPT_LINE_BYTES).unwrap();
                 let n = parse_size(s)
                     .map_err(|e| USimpleError::new(1, format!("invalid number of bytes: {}", e)))?;
-                Ok(Strategy::LineBytes(n))
+                Ok(Self::LineBytes(n))
             }
             (0, 0, 0, 1) => {
                 let s = matches.value_of(OPT_NUMBER).unwrap();
                 let n = s.parse::<usize>().map_err(|e| {
                     USimpleError::new(1, format!("invalid number of chunks: {}", e))
                 })?;
-                Ok(Strategy::Number(n))
+                Ok(Self::Number(n))
             }
             _ => Err(UUsageError::new(1, "cannot split in more than one way")),
         }
@@ -232,7 +232,7 @@ struct Settings {
 impl Settings {
     /// Parse a strategy from the command-line arguments.
     fn from(matches: ArgMatches) -> UResult<Self> {
-        let result = Settings {
+        let result = Self {
             suffix_length: matches
                 .value_of(OPT_SUFFIX_LENGTH)
                 .unwrap()
@@ -275,8 +275,8 @@ struct LineSplitter {
 }
 
 impl LineSplitter {
-    fn new(chunk_size: usize) -> LineSplitter {
-        LineSplitter {
+    fn new(chunk_size: usize) -> Self {
+        Self {
             lines_per_split: chunk_size,
         }
     }
@@ -314,8 +314,8 @@ struct ByteSplitter {
 }
 
 impl ByteSplitter {
-    fn new(chunk_size: usize) -> ByteSplitter {
-        ByteSplitter {
+    fn new(chunk_size: usize) -> Self {
+        Self {
             bytes_per_split: u128::try_from(chunk_size).unwrap(),
         }
     }
@@ -436,7 +436,7 @@ where
     .map_err_context(|| "I/O error".to_string())
 }
 
-fn split(settings: Settings) -> UResult<()> {
+fn split(settings: &Settings) -> UResult<()> {
     let mut reader = BufReader::new(if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
@@ -450,7 +450,7 @@ fn split(settings: Settings) -> UResult<()> {
     });
 
     if let Strategy::Number(num_chunks) = settings.strategy {
-        return split_into_n_chunks_by_byte(&settings, &mut reader, num_chunks);
+        return split_into_n_chunks_by_byte(settings, &mut reader, num_chunks);
     }
 
     let mut splitter: Box<dyn Splitter> = match settings.strategy {

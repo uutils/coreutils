@@ -55,9 +55,9 @@ fn usage() -> String {
     format!("{0} [OPTION]... [NUMBER]...", uucore::execution_phrase())
 }
 
-fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: NumfmtOptions) -> UResult<()> {
+fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions) -> UResult<()> {
     for l in args {
-        match format_and_print(l, &options) {
+        match format_and_print(l, options) {
             Ok(_) => Ok(()),
             Err(e) => Err(NumfmtError::FormattingError(e.to_string())),
         }?;
@@ -66,7 +66,7 @@ fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: NumfmtOptions) 
     Ok(())
 }
 
-fn handle_buffer<R>(input: R, options: NumfmtOptions) -> UResult<()>
+fn handle_buffer<R>(input: R, options: &NumfmtOptions) -> UResult<()>
 where
     R: BufRead,
 {
@@ -77,7 +77,7 @@ where
                 println!("{}", l);
                 Ok(())
             }
-            Ok(l) => match format_and_print(&l, &options) {
+            Ok(l) => match format_and_print(&l, options) {
                 Ok(_) => Ok(()),
                 Err(e) => Err(NumfmtError::FormattingError(e.to_string())),
             },
@@ -173,11 +173,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
 
     let result = match matches.values_of(options::NUMBER) {
-        Some(values) => handle_args(values, options),
+        Some(values) => handle_args(values, &options),
         None => {
             let stdin = std::io::stdin();
             let mut locked_stdin = stdin.lock();
-            handle_buffer(&mut locked_stdin, options)
+            handle_buffer(&mut locked_stdin, &options)
         }
     };
 
@@ -304,7 +304,7 @@ mod tests {
     #[test]
     fn broken_buffer_returns_io_error() {
         let mock_buffer = MockBuffer {};
-        let result = handle_buffer(BufReader::new(mock_buffer), get_valid_options())
+        let result = handle_buffer(BufReader::new(mock_buffer), &get_valid_options())
             .expect_err("returned Ok after receiving IO error");
         let result_debug = format!("{:?}", result);
         let result_display = format!("{}", result);
@@ -316,7 +316,7 @@ mod tests {
     #[test]
     fn non_numeric_returns_formatting_error() {
         let input_value = b"135\nhello";
-        let result = handle_buffer(BufReader::new(&input_value[..]), get_valid_options())
+        let result = handle_buffer(BufReader::new(&input_value[..]), &get_valid_options())
             .expect_err("returned Ok after receiving improperly formatted input");
         let result_debug = format!("{:?}", result);
         let result_display = format!("{}", result);
@@ -331,7 +331,7 @@ mod tests {
     #[test]
     fn valid_input_returns_ok() {
         let input_value = b"165\n100\n300\n500";
-        let result = handle_buffer(BufReader::new(&input_value[..]), get_valid_options());
+        let result = handle_buffer(BufReader::new(&input_value[..]), &get_valid_options());
         assert!(result.is_ok(), "did not return Ok for valid input");
     }
 }

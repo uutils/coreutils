@@ -49,7 +49,7 @@ fn test_arrnum_int_div_short_circuit() {
     let remainder_position_should_be: usize = 3;
     let remainder_replace_should_be = vec![1, 2];
 
-    let result = arrnum_int_div_step(remainder_passed_in, base_num, base_ten_int_divisor, false);
+    let result = arrnum_int_div_step(&remainder_passed_in, base_num, base_ten_int_divisor, false);
     assert!(quotient_should_be == result.quotient);
     assert!(remainder_position_should_be == result.remainder.position);
     assert!(remainder_replace_should_be == result.remainder.replace);

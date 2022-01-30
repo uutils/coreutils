@@ -121,7 +121,7 @@ struct OdOptions {
 }
 
 impl OdOptions {
-    fn new(matches: ArgMatches, args: Vec<String>) -> UResult<OdOptions> {
+    fn new(matches: &ArgMatches, args: &[String]) -> UResult<Self> {
         let byte_order = match matches.value_of(options::ENDIAN) {
             None => ByteOrder::Native,
             Some("little") => ByteOrder::Little,
@@ -141,7 +141,7 @@ impl OdOptions {
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        format_error_message(e, s, options::SKIP_BYTES),
+                        format_error_message(&e, s, options::SKIP_BYTES),
                     ))
                 }
             },
@@ -149,7 +149,7 @@ impl OdOptions {
 
         let mut label: Option<usize> = None;
 
-        let parsed_input = parse_inputs(&matches)
+        let parsed_input = parse_inputs(matches)
             .map_err(|e| USimpleError::new(1, format!("Invalid inputs: {}", e)))?;
         let input_strings = match parsed_input {
             CommandLineInputs::FileNames(v) => v,
@@ -160,7 +160,7 @@ impl OdOptions {
             }
         };
 
-        let formats = parse_format_flags(&args).map_err(|e| USimpleError::new(1, e))?;
+        let formats = parse_format_flags(args).map_err(|e| USimpleError::new(1, e))?;
 
         let mut line_bytes = match matches.value_of(options::WIDTH) {
             None => 16,
@@ -173,7 +173,7 @@ impl OdOptions {
                         Err(e) => {
                             return Err(USimpleError::new(
                                 1,
-                                format_error_message(e, s, options::WIDTH),
+                                format_error_message(&e, s, options::WIDTH),
                             ))
                         }
                     }
@@ -198,7 +198,7 @@ impl OdOptions {
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        format_error_message(e, s, options::READ_BYTES),
+                        format_error_message(&e, s, options::READ_BYTES),
                     ))
                 }
             },
@@ -232,7 +232,7 @@ impl OdOptions {
             }
         };
 
-        Ok(OdOptions {
+        Ok(Self {
             byte_order,
             skip_bytes,
             read_bytes,
@@ -260,7 +260,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .clone() // Clone to reuse clap_opts to print help
         .get_matches_from(args.clone());
 
-    let od_options = OdOptions::new(clap_matches, args)?;
+    let od_options = OdOptions::new(&clap_matches, &args)?;
 
     let mut input_offset =
         InputOffset::new(od_options.radix, od_options.skip_bytes, od_options.label);
@@ -664,7 +664,7 @@ fn open_input_peek_reader(
     PeekReader::new(pr)
 }
 
-fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
+fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
     // GNU's od echos affected flag, -N or --read-bytes (-j or --skip-bytes, etc.), depending user's selection
     // GNU's od does distinguish between "invalid (suffix in) argument"

@@ -111,11 +111,11 @@ enum Iso8601Format {
 impl<'a> From<&'a str> for Iso8601Format {
     fn from(s: &str) -> Self {
         match s {
-            HOURS | HOUR => Iso8601Format::Hours,
-            MINUTES | MINUTE => Iso8601Format::Minutes,
-            SECONDS | SECOND => Iso8601Format::Seconds,
-            NS => Iso8601Format::Ns,
-            DATE => Iso8601Format::Date,
+            HOURS | HOUR => Self::Hours,
+            MINUTES | MINUTE => Self::Minutes,
+            SECONDS | SECOND => Self::Seconds,
+            NS => Self::Ns,
+            DATE => Self::Date,
             // Should be caught by clap
             _ => panic!("Invalid format: {}", s),
         }
@@ -131,9 +131,9 @@ enum Rfc3339Format {
 impl<'a> From<&'a str> for Rfc3339Format {
     fn from(s: &str) -> Self {
         match s {
-            DATE => Rfc3339Format::Date,
-            SECONDS | SECOND => Rfc3339Format::Seconds,
-            NS => Rfc3339Format::Ns,
+            DATE => Self::Date,
+            SECONDS | SECOND => Self::Seconds,
+            NS => Self::Ns,
             // Should be caught by clap
             _ => panic!("Invalid format: {}", s),
         }

@@ -219,7 +219,7 @@ pub struct Stater {
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn print_it(arg: &str, output_type: OutputType, flag: u8, width: usize, precision: i32) {
+fn print_it(arg: &str, output_type: &OutputType, flag: u8, width: usize, precision: i32) {
     // If the precision is given as just '.', the precision is taken to be zero.
     // A negative precision is taken as if the precision were omitted.
     // This gives the minimum number of digits to appear for d, i, o, u, x, and X conversions,
@@ -250,7 +250,7 @@ fn print_it(arg: &str, output_type: OutputType, flag: u8, width: usize, precisio
     // By default, a sign  is  used only for negative numbers.
     // A + overrides a space if both are used.
 
-    if output_type == OutputType::Unknown {
+    if output_type == &OutputType::Unknown {
         return print!("?");
     }
 
@@ -406,7 +406,7 @@ impl Stater {
                         flag,
                         precision,
                         format: chars[i],
-                    })
+                    });
                 }
                 '\\' => {
                     if !use_printf {
@@ -461,7 +461,7 @@ impl Stater {
         Ok(tokens)
     }
 
-    fn new(matches: ArgMatches) -> UResult<Stater> {
+    fn new(matches: &ArgMatches) -> UResult<Self> {
         let files: Vec<String> = matches
             .values_of(ARG_FILES)
             .map(|v| v.map(ToString::to_string).collect())
@@ -480,12 +480,12 @@ impl Stater {
         let show_fs = matches.is_present(options::FILE_SYSTEM);
 
         let default_tokens = if format_str.is_empty() {
-            Stater::generate_tokens(&Stater::default_format(show_fs, terse, false), use_printf)?
+            Self::generate_tokens(&Self::default_format(show_fs, terse, false), use_printf)?
         } else {
-            Stater::generate_tokens(format_str, use_printf)?
+            Self::generate_tokens(format_str, use_printf)?
         };
         let default_dev_tokens =
-            Stater::generate_tokens(&Stater::default_format(show_fs, terse, true), use_printf)?;
+            Self::generate_tokens(&Self::default_format(show_fs, terse, true), use_printf)?;
 
         let mount_list = if show_fs {
             // mount points aren't displayed when showing filesystem information
@@ -501,7 +501,7 @@ impl Stater {
             Some(mount_list)
         };
 
-        Ok(Stater {
+        Ok(Self {
             follow: matches.is_present(options::DEREFERENCE),
             show_fs,
             from_user: !format_str.is_empty(),
@@ -743,7 +743,7 @@ impl Stater {
                                         output_type = OutputType::Unknown;
                                     }
                                 }
-                                print_it(&arg, output_type, flag, width, precision);
+                                print_it(&arg, &output_type, flag, width, precision);
                             }
                         }
                     }
@@ -836,7 +836,7 @@ impl Stater {
                                     }
                                 }
 
-                                print_it(&arg, output_type, flag, width, precision);
+                                print_it(&arg, &output_type, flag, width, precision);
                             }
                         }
                     }
@@ -957,7 +957,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .after_help(&long_usage[..])
         .get_matches_from(args);
 
-    let stater = Stater::new(matches)?;
+    let stater = Stater::new(&matches)?;
     let exit_status = stater.exec();
     if exit_status == 0 {
         Ok(())

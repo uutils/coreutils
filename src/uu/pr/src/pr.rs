@@ -112,8 +112,8 @@ struct NumberingMode {
 }
 
 impl Default for NumberingMode {
-    fn default() -> NumberingMode {
-        NumberingMode {
+    fn default() -> Self {
+        Self {
             width: 5,
             separator: TAB.to_string(),
             first_number: 1,
@@ -122,8 +122,8 @@ impl Default for NumberingMode {
 }
 
 impl Default for FileLine {
-    fn default() -> FileLine {
-        FileLine {
+    fn default() -> Self {
+        Self {
             file_id: 0,
             line_number: 0,
             page_number: 0,
@@ -136,7 +136,7 @@ impl Default for FileLine {
 
 impl From<IOError> for PrError {
     fn from(err: IOError) -> Self {
-        PrError::EncounteredErrors(err.to_string())
+        Self::EncounteredErrors(err.to_string())
     }
 }
 
@@ -409,11 +409,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     for file_group in file_groups {
-        let result_options = build_options(&matches, &file_group, args.join(" "));
+        let result_options = build_options(&matches, &file_group, &args.join(" "));
         let options = match result_options {
             Ok(options) => options,
             Err(err) => {
-                print_error(&matches, err);
+                print_error(&matches, &err);
                 return Err(1.into());
             }
         };
@@ -426,7 +426,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let status = match cmd_result {
             Err(error) => {
-                print_error(&matches, error);
+                print_error(&matches, &error);
                 1
             }
             _ => 0,
@@ -465,7 +465,7 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
         .collect()
 }
 
-fn print_error(matches: &Matches, err: PrError) {
+fn print_error(matches: &Matches, err: &PrError) {
     if !matches.opt_present(options::SUPPRESS_PRINTING_ERROR) {
         eprintln!("{}", err);
     }
@@ -531,7 +531,7 @@ fn parse_usize(matches: &Matches, opt: &str) -> Option<Result<usize, PrError>> {
 fn build_options(
     matches: &Matches,
     paths: &[String],
-    free_args: String,
+    free_args: &str,
 ) -> Result<OutputOptions, PrError> {
     let form_feed_used = matches.opt_present(options::FORM_FEED_OPTION)
         || matches.opt_present(options::FORM_FEED_OPTION_SMALL);
@@ -617,7 +617,7 @@ fn build_options(
 
     // +page option is less priority than --pages
     let page_plus_re = Regex::new(r"\s*\+(\d+:*\d*)\s*").unwrap();
-    let start_page_in_plus_option = match page_plus_re.captures(&free_args).map(|i| {
+    let start_page_in_plus_option = match page_plus_re.captures(free_args).map(|i| {
         let unparsed_num = i.get(1).unwrap().as_str().trim();
         let x: Vec<_> = unparsed_num.split(':').collect();
         x[0].to_string().parse::<usize>().map_err(|_e| {
@@ -629,7 +629,7 @@ fn build_options(
     };
 
     let end_page_in_plus_option = match page_plus_re
-        .captures(&free_args)
+        .captures(free_args)
         .map(|i| i.get(1).unwrap().as_str().trim())
         .filter(|i| i.contains(':'))
         .map(|unparsed_num| {
@@ -747,7 +747,7 @@ fn build_options(
 
     let re_col = Regex::new(r"\s*-(\d+)\s*").unwrap();
 
-    let start_column_option = match re_col.captures(&free_args).map(|i| {
+    let start_column_option = match re_col.captures(free_args).map(|i| {
         let unparsed_num = i.get(1).unwrap().as_str().trim();
         unparsed_num.parse::<usize>().map_err(|_e| {
             PrError::EncounteredErrors(format!("invalid {} argument {}", "-", unparsed_num.quote()))
@@ -1007,7 +1007,7 @@ fn mpr(paths: &[String], options: &OutputOptions) -> Result<i32, PrError> {
     let mut lines = Vec::new();
     let mut page_counter = start_page;
 
-    for (_key, file_line_group) in file_line_groups.into_iter() {
+    for (_key, file_line_group) in &file_line_groups {
         for file_line in file_line_group {
             if let Err(e) = file_line.line_content {
                 return Err(e.into());

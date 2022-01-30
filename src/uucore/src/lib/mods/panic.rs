@@ -36,7 +36,7 @@ pub fn mute_sigpipe_panic() {
     let hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
         if !is_broken_pipe(info) {
-            hook(info)
+            hook(info);
         }
     }));
 }

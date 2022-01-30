@@ -236,7 +236,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         show_tabs,
         squeeze_blank,
     };
-    cat_files(files, &options)
+    cat_files(&files, &options)
 }
 
 pub fn uu_app<'a>() -> App<'a> {
@@ -365,7 +365,7 @@ fn cat_path(
     }
 }
 
-fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
+fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
     let out_info = FileInformation::from_file(&std::io::stdout());
 
     let mut state = OutputState {
@@ -376,7 +376,7 @@ fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
     };
     let mut error_messages: Vec<String> = Vec::new();
 
-    for path in &files {
+    for path in files {
         if let Err(err) = cat_path(path, options, &mut state, out_info.as_ref()) {
             error_messages.push(format!("{}: {}", path.maybe_quote(), err));
         }
@@ -479,7 +479,7 @@ fn write_lines<R: FdReadable>(
                 if !state.at_line_start || !options.squeeze_blank || !state.one_blank_kept {
                     state.one_blank_kept = true;
                     if state.at_line_start && options.number == NumberingMode::All {
-                        write!(&mut writer, "{0:6}\t", state.line_number)?;
+                        write!(writer, "{0:6}\t", state.line_number)?;
                         state.line_number += 1;
                     }
                     writer.write_all(options.end_of_line().as_bytes())?;
@@ -498,7 +498,7 @@ fn write_lines<R: FdReadable>(
             }
             state.one_blank_kept = false;
             if state.at_line_start && options.number != NumberingMode::None {
-                write!(&mut writer, "{0:6}\t", state.line_number)?;
+                write!(writer, "{0:6}\t", state.line_number)?;
                 state.line_number += 1;
             }
 

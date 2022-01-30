@@ -38,8 +38,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     if let Some(values) = matches.values_of(options::NUMBER) {
-        let numbers = values.collect();
-        return sleep(numbers);
+        let numbers = values.collect::<Vec<_>>();
+        return sleep(&numbers);
     }
 
     Ok(())
@@ -61,7 +61,7 @@ pub fn uu_app<'a>() -> App<'a> {
         )
 }
 
-fn sleep(args: Vec<&str>) -> UResult<()> {
+fn sleep(args: &[&str]) -> UResult<()> {
     let sleep_dur =
         args.iter().try_fold(
             Duration::new(0, 0),

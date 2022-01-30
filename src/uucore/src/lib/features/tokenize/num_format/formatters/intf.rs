@@ -11,6 +11,7 @@ use super::super::formatter::{
 use std::i64;
 use std::u64;
 
+#[derive(Default)]
 pub struct Intf {
     _a: u32,
 }
@@ -24,8 +25,8 @@ struct IntAnalysis {
 }
 
 impl Intf {
-    pub fn new() -> Intf {
-        Intf { _a: 0 }
+    pub fn new() -> Self {
+        Self::default()
     }
     // take a ref to argument string, and basic information
     // about prefix (offset, radix, sign), and analyze string
@@ -166,7 +167,7 @@ impl Intf {
                     fmt_prim.pre_decimal = Some(format!("{}", i));
                     fmt_prim
                 }
-                Err(_) => Intf::get_max(field_char, sign),
+                Err(_) => Self::get_max(field_char, sign),
             },
             _ => match u64::from_str_radix(segment, radix_in as u32) {
                 Ok(u) => {
@@ -180,7 +181,7 @@ impl Intf {
                     });
                     fmt_prim
                 }
-                Err(_) => Intf::get_max(field_char, sign),
+                Err(_) => Self::get_max(field_char, sign),
             },
         }
     }
@@ -196,7 +197,7 @@ impl Formatter for Intf {
 
         // get information about the string. see Intf::Analyze
         // def above.
-        let convert_hints = Intf::analyze(
+        let convert_hints = Self::analyze(
             str_in,
             *field.field_char == 'i' || *field.field_char == 'd',
             initial_prefix,
@@ -226,7 +227,7 @@ impl Formatter for Intf {
             if convert_hints.check_past_max || decrease_from_max || radix_mismatch {
                 // radix of in and out is the same.
                 let segment = String::from(&str_in[begin..end]);
-                Intf::conv_from_segment(
+                Self::conv_from_segment(
                     &segment,
                     initial_prefix.radix_in.clone(),
                     *field.field_char,
@@ -246,7 +247,7 @@ impl Formatter for Intf {
                 fmt_prim
             }
         } else {
-            Intf::get_max(*field.field_char, initial_prefix.sign)
+            Self::get_max(*field.field_char, initial_prefix.sign)
         })
     }
     fn primitive_to_str(&self, prim: &FormatPrimitive, field: FormatField) -> String {

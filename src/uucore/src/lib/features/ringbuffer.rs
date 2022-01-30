@@ -42,15 +42,15 @@ pub struct RingBuffer<T> {
 }
 
 impl<T> RingBuffer<T> {
-    pub fn new(size: usize) -> RingBuffer<T> {
-        RingBuffer {
+    pub fn new(size: usize) -> Self {
+        Self {
             data: VecDeque::new(),
             size,
         }
     }
 
-    pub fn from_iter(iter: impl Iterator<Item = T>, size: usize) -> RingBuffer<T> {
-        let mut ring_buffer = RingBuffer::new(size);
+    pub fn from_iter(iter: impl Iterator<Item = T>, size: usize) -> Self {
+        let mut ring_buffer = Self::new(size);
         for value in iter {
             ring_buffer.push_back(value);
         }

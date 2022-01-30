@@ -32,8 +32,8 @@ struct Glob {
 }
 
 impl Glob {
-    fn new(at: &AtPath, directory: &str, regex: &str) -> Glob {
-        Glob {
+    fn new(at: &AtPath, directory: &str, regex: &str) -> Self {
+        Self {
             directory: AtPath::new(Path::new(&at.plus_as_string(directory))),
             regex: Regex::new(regex).unwrap(),
         }
@@ -83,8 +83,8 @@ impl RandomFile {
     const LINESIZE: usize = 32;
 
     /// `create()` file handle located at `at` / `name`
-    fn new(at: &AtPath, name: &str) -> RandomFile {
-        RandomFile {
+    fn new(at: &AtPath, name: &str) -> Self {
+        Self {
             inner: File::create(&at.plus(name)).unwrap(),
         }
     }
@@ -113,7 +113,7 @@ impl RandomFile {
     fn add_lines(&mut self, lines: usize) {
         let mut n = lines;
         while n > 0 {
-            writeln!(self.inner, "{}", random_chars(RandomFile::LINESIZE)).unwrap();
+            writeln!(self.inner, "{}", random_chars(Self::LINESIZE)).unwrap();
             n -= 1;
         }
     }

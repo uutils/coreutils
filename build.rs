@@ -67,7 +67,7 @@ pub fn main() {
                     )
                     .as_bytes(),
                 )
-                .unwrap()
+                .unwrap();
             }
             k if k.starts_with(OVERRIDE_PREFIX) => {
                 phf_map.entry(&k[OVERRIDE_PREFIX.len()..], &map_value);
@@ -79,7 +79,7 @@ pub fn main() {
                     )
                     .as_bytes(),
                 )
-                .unwrap()
+                .unwrap();
             }
             "false" | "true" => {
                 phf_map.entry(
@@ -94,7 +94,7 @@ pub fn main() {
                     )
                     .as_bytes(),
                 )
-                .unwrap()
+                .unwrap();
             }
             "hashsum" => {
                 phf_map.entry(
@@ -124,7 +124,7 @@ pub fn main() {
                     )
                     .as_bytes(),
                 )
-                .unwrap()
+                .unwrap();
             }
             _ => {
                 phf_map.entry(krate, &map_value);
@@ -136,7 +136,7 @@ pub fn main() {
                     )
                     .as_bytes(),
                 )
-                .unwrap()
+                .unwrap();
             }
         }
     }

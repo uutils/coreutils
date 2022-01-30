@@ -35,10 +35,11 @@ fn flush_bytes(bslice: &[u8]) {
     let _ = stdout().flush();
 }
 
+#[derive(Default)]
 pub struct UnescapedText(Vec<u8>);
 impl UnescapedText {
-    fn new() -> UnescapedText {
-        UnescapedText(Vec::new())
+    fn new() -> Self {
+        Self::default()
     }
     // take an iterator to the format string
     // consume between min and max chars
@@ -133,7 +134,7 @@ impl UnescapedText {
                     _ => {}
                 }
                 if !ignore {
-                    let val = (UnescapedText::base_to_u32(min_len, max_len, base, it) % 256) as u8;
+                    let val = (Self::base_to_u32(min_len, max_len, base, it) % 256) as u8;
                     byte_vec.push(val);
                     let bvec = [val];
                     flush_bytes(&bvec);
@@ -170,8 +171,8 @@ impl UnescapedText {
                             'u' => 4,
                             /* 'U' | */ _ => 8,
                         };
-                        let val = UnescapedText::base_to_u32(len, len, 16, it);
-                        UnescapedText::validate_iec(val, false);
+                        let val = Self::base_to_u32(len, len, 16, it);
+                        Self::validate_iec(val, false);
                         if let Some(c) = from_u32(val) {
                             c
                         } else {
@@ -199,7 +200,7 @@ impl UnescapedText {
         subs_mode: bool,
     ) -> Option<Box<dyn token::Token>> {
         let mut addchar = false;
-        let mut new_text = UnescapedText::new();
+        let mut new_text = Self::new();
         let mut tmp_str = String::new();
         {
             let new_vec: &mut Vec<u8> = &mut (new_text.0);
@@ -227,7 +228,7 @@ impl UnescapedText {
                             new_vec.extend(tmp_str.bytes());
                             tmp_str = String::new();
                         }
-                        UnescapedText::handle_escaped(new_vec, it, subs_mode)
+                        Self::handle_escaped(new_vec, it, subs_mode);
                     }
                     x if x == '%' && !subs_mode => {
                         if let Some(follow) = it.next() {
@@ -266,7 +267,7 @@ impl token::Tokenizer for UnescapedText {
         it: &mut PutBackN<Chars>,
         _: &mut Peekable<Iter<String>>,
     ) -> Option<Box<dyn token::Token>> {
-        UnescapedText::from_it_core(it, false)
+        Self::from_it_core(it, false)
     }
 }
 impl token::Token for UnescapedText {

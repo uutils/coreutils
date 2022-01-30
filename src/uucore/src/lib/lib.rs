@@ -97,7 +97,7 @@ pub fn get_utility_is_second_arg() -> bool {
 }
 
 pub fn set_utility_is_second_arg() {
-    crate::macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst)
+    crate::macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst);
 }
 
 // args_os() can be expensive to call, it copies all of argv before iterating.
