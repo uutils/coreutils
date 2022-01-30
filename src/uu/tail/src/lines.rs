@@ -17,31 +17,45 @@ use std::io::BufRead;
 ///
 /// This function is just like [`BufRead::lines`], but it includes the
 /// line ending characters in each yielded [`String`] if the input
-/// data has them.
+/// data has them. Set the `sep` parameter to the line ending
+/// character; for Unix line endings, use `b'\n'`.
 ///
 /// # Examples
+///
+/// Use `sep` to specify an alternate character for line endings. For
+/// example, if lines are terminated by the null character `b'\0'`:
+///
+/// ```rust,ignore
+/// use std::io::BufRead;
+/// use std::io::Cursor;
+///
+/// let cursor = Cursor::new(b"x\0y\0z\0");
+/// let mut it = lines(cursor, b'\0').map(|l| l.unwrap());
+///
+/// assert_eq!(it.next(), Some(Vec::from("x\0")));
+/// assert_eq!(it.next(), Some(Vec::from("y\0")));
+/// assert_eq!(it.next(), Some(Vec::from("z\0")));
+/// assert_eq!(it.next(), None);
+/// ```
 ///
 /// If the input data does not end with a newline character (`'\n'`),
 /// then the last [`String`] yielded by this iterator also does not
 /// end with a newline:
 ///
 /// ```rust,ignore
-/// use std::io::BufRead;
-/// use std::io::Cursor;
-///
 /// let cursor = Cursor::new(b"x\ny\nz");
-/// let mut it = cursor.lines();
+/// let mut it = lines(cursor, b'\n').map(|l| l.unwrap());
 ///
-/// assert_eq!(it.next(), Some(String::from("x\n")));
-/// assert_eq!(it.next(), Some(String::from("y\n")));
-/// assert_eq!(it.next(), Some(String::from("z")));
+/// assert_eq!(it.next(), Some(Vec::from("x\n")));
+/// assert_eq!(it.next(), Some(Vec::from("y\n")));
+/// assert_eq!(it.next(), Some(Vec::from("z")));
 /// assert_eq!(it.next(), None);
 /// ```
-pub(crate) fn lines<B>(reader: B) -> Lines<B>
+pub(crate) fn lines<B>(reader: B, sep: u8) -> Lines<B>
 where
     B: BufRead,
 {
-    Lines { buf: reader }
+    Lines { buf: reader, sep }
 }
 
 /// An iterator over the lines of an instance of `BufRead`.
@@ -50,14 +64,15 @@ where
 /// Please see the documentation of [`lines`] for more details.
 pub(crate) struct Lines<B> {
     buf: B,
+    sep: u8,
 }
 
 impl<B: BufRead> Iterator for Lines<B> {
-    type Item = std::io::Result<String>;
+    type Item = std::io::Result<Vec<u8>>;
 
-    fn next(&mut self) -> Option<std::io::Result<String>> {
-        let mut buf = String::new();
-        match self.buf.read_line(&mut buf) {
+    fn next(&mut self) -> Option<std::io::Result<Vec<u8>>> {
+        let mut buf = Vec::new();
+        match self.buf.read_until(self.sep, &mut buf) {
             Ok(0) => None,
             Ok(_n) => Some(Ok(buf)),
             Err(e) => Some(Err(e)),
@@ -73,11 +88,24 @@ mod tests {
     #[test]
     fn test_lines() {
         let cursor = Cursor::new(b"x\ny\nz");
-        let mut it = lines(cursor).map(|l| l.unwrap());
+        let mut it = lines(cursor, b'\n').map(|l| l.unwrap());
 
-        assert_eq!(it.next(), Some(String::from("x\n")));
-        assert_eq!(it.next(), Some(String::from("y\n")));
-        assert_eq!(it.next(), Some(String::from("z")));
+        assert_eq!(it.next(), Some(Vec::from("x\n")));
+        assert_eq!(it.next(), Some(Vec::from("y\n")));
+        assert_eq!(it.next(), Some(Vec::from("z")));
+        assert_eq!(it.next(), None);
+    }
+
+    #[test]
+    fn test_lines_zero_terminated() {
+        use std::io::Cursor;
+
+        let cursor = Cursor::new(b"x\0y\0z\0");
+        let mut it = lines(cursor, b'\0').map(|l| l.unwrap());
+
+        assert_eq!(it.next(), Some(Vec::from("x\0")));
+        assert_eq!(it.next(), Some(Vec::from("y\0")));
+        assert_eq!(it.next(), Some(Vec::from("z\0")));
         assert_eq!(it.next(), None);
     }
 }
