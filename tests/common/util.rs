@@ -1363,6 +1363,7 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
 }
 
 /// This is a convenience wrapper to run a ucmd with root permissions.
+/// It can be used to test programs when being root is needed
 /// This runs 'sudo -E --non-interactive target/debug/coreutils util_name args`
 /// This is primarily designed to run in an environment where whoami is in $path
 /// and where non-interactive sudo is possible.
