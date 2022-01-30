@@ -82,34 +82,22 @@ pub fn strings_to_tokens(strings: &[String]) -> Result<Vec<(usize, Token)>, Stri
 
             ":" => Token::new_infix_op(s, true, 6),
 
-            "*" => Token::new_infix_op(s, true, 5),
-            "/" => Token::new_infix_op(s, true, 5),
-            "%" => Token::new_infix_op(s, true, 5),
+            "*" | "/" | "%" => Token::new_infix_op(s, true, 5),
 
-            "+" => Token::new_infix_op(s, true, 4),
-            "-" => Token::new_infix_op(s, true, 4),
+            "+" | "-" => Token::new_infix_op(s, true, 4),
 
-            "=" => Token::new_infix_op(s, true, 3),
-            "!=" => Token::new_infix_op(s, true, 3),
-            "<" => Token::new_infix_op(s, true, 3),
-            ">" => Token::new_infix_op(s, true, 3),
-            "<=" => Token::new_infix_op(s, true, 3),
-            ">=" => Token::new_infix_op(s, true, 3),
+            "=" | "!=" | "<" | ">" | "<=" | ">=" => Token::new_infix_op(s, true, 3),
 
             "&" => Token::new_infix_op(s, true, 2),
 
             "|" => Token::new_infix_op(s, true, 1),
 
-            "match" => Token::PrefixOp {
+            "match" | "index" => Token::PrefixOp {
                 arity: 2,
                 value: s.clone(),
             },
             "substr" => Token::PrefixOp {
                 arity: 3,
-                value: s.clone(),
-            },
-            "index" => Token::PrefixOp {
-                arity: 2,
                 value: s.clone(),
             },
             "length" => Token::PrefixOp {

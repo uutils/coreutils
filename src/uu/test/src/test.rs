@@ -211,14 +211,13 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
             })
         }
         Some(Symbol::Literal(s)) => Ok(!s.is_empty()),
-        Some(Symbol::None) => Ok(false),
+        Some(Symbol::None) | None => Ok(false),
         Some(Symbol::BoolOp(op)) => {
             let b = eval(stack)?;
             let a = eval(stack)?;
 
             Ok(if op == "-a" { a && b } else { a || b })
         }
-        None => Ok(false),
         _ => Err("expected value".to_string()),
     }
 }

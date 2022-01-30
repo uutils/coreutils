@@ -151,8 +151,7 @@ pub enum ConversionResult {
 impl ConversionResult {
     pub fn accept_any(self) -> Vec<String> {
         match self {
-            Self::Complete(result) => result,
-            Self::Lossy(result) => result,
+            Self::Complete(result) | Self::Lossy(result) => result,
         }
     }
 
