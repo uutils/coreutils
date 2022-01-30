@@ -83,7 +83,7 @@ fn test_ls_ordering() {
         .stdout_matches(&Regex::new("some-dir1:\\ntotal 0").unwrap());
 }
 
-#[cfg(all(feature = "truncate"))]
+#[cfg(all(feature = "truncate", feature = "dd"))]
 #[test]
 fn test_ls_allocation_size() {
     let scene = TestScenario::new(util_name!());
@@ -103,16 +103,14 @@ fn test_ls_allocation_size() {
         scene
             .ucmd()
             .arg("-s1")
-            .arg("some-dir1/empty-file")
+            .arg("some-dir1")
             .succeeds()
-            .stdout_contains("0 some-dir1/empty-file")
-            // block size is 0 whereas size/len is 4194304
-            .stdout_contains("0 some-dir1/file-with-holes");
+            .stdout_is("total 0\n0 empty-file\n0 file-with-holes\n");
 
         scene
             .ucmd()
             .arg("-sl")
-            .arg("some-dir1/empty-file")
+            .arg("some-dir1")
             .succeeds()
             // block size is 0 whereas size/len is 4194304
             .stdout_contains("4194304");
@@ -120,8 +118,8 @@ fn test_ls_allocation_size() {
         // fill empty file with zeros
         scene
             .ccmd("dd")
-            .arg("if=/dev/zero")
-            .arg("some-dir1/file-with-holes")
+            .arg("--if=/dev/zero")
+            .arg("--of=some-dir1/file-with-holes")
             .arg("bs=1024")
             .arg("count=4096")
             .succeeds();
@@ -129,27 +127,22 @@ fn test_ls_allocation_size() {
         scene
             .ucmd()
             .arg("-s1")
-            .arg("some-dir1/empty-file")
+            .arg("some-dir1")
             .succeeds()
-            .stdout_contains("0 some-dir1/empty-file")
-            // block size is 0 whereas size/len is 4194304
-            .stdout_contains("4160 some-dir1/file-with-holes");
+            .stdout_contains("0 empty-file")
+            // block size is 0 for a file with holes, whereas its len is 4194304
+            .stdout_contains("4096 file-with-holes");
 
-        // Test alignment of different sized files
-        let res = scene
-            .ucmd()
-            .arg("-si1h")
-            .arg("some-dir1/empty-file")
-            .arg("some-dir1/file-with-holes")
-            .succeeds();
+        // Test alignment of different block sized files
+        let res = scene.ucmd().arg("-si1").arg("some-dir1").succeeds();
 
         let empty_file_len = String::from_utf8(res.stdout().to_owned())
             .ok()
             .unwrap()
             .lines()
-            .next()
+            .nth(1)
             .unwrap()
-            .strip_suffix("some-dir1/empty-file")
+            .strip_suffix("empty-file")
             .unwrap()
             .len();
 
@@ -157,9 +150,9 @@ fn test_ls_allocation_size() {
             .ok()
             .unwrap()
             .lines()
-            .nth(1)
+            .nth(2)
             .unwrap()
-            .strip_suffix("some-dir1/file-with-holes")
+            .strip_suffix("file-with-holes")
             .unwrap()
             .len();
 
