@@ -263,7 +263,7 @@ fn test_mv_same_file_dot_dir() {
     ucmd.arg(".")
         .arg(".")
         .fails()
-        .stderr_is("mv: '.' and '.' are the same file\n".to_string());
+        .stderr_is("mv: '.' and '.' are the same file\n");
 }
 
 #[test]

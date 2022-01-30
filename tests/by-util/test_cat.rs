@@ -172,7 +172,7 @@ fn test_piped_to_dev_full() {
                 .set_stdout(dev_full)
                 .pipe_in_fixture("alpha.txt")
                 .fails()
-                .stderr_contains(&"No space left on device".to_owned());
+                .stderr_contains("No space left on device");
         }
     }
 }
