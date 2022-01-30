@@ -5,7 +5,7 @@ name: CICD
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain
 # spell-checker:ignore (names) CodeCOV MacOS MinGW Peltoche rivy
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rustc rustfmt rustup shopt xargs
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend pell runtest tempfile testsuite uutils
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend pell runtest tempfile testsuite uutils DESTDIR sizemulti
 
 # ToDO: [2021-06; rivy] change from `cargo-tree` to `cargo tree` once MSRV is >= 1.45
 
@@ -421,6 +421,53 @@ jobs:
       shell: bash
       run: |
         make test
+
+
+  compute_size:
+    name: Binary sizes
+    needs: [ min_version, deps ]
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest , features: feat_os_unix }
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install dependencies
+      shell: bash
+      run: |
+        ## Install dependencies
+        sudo apt-get update
+        sudo apt-get install jq
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+    - name: "`make install`"
+      shell: bash
+      run: |
+        make install DESTDIR=target/size-release/
+        make install MULTICALL=y DESTDIR=target/size-multi-release/
+        # strip the results
+        strip target/size*/usr/local/bin/*
+    - name: "Compute sizes"
+      shell: bash
+      run: |
+        SIZE=$(du -s target/size-release/usr/local/bin/|awk '{print $1}')
+        SIZEMULTI=$(du -s target/size-multi-release/usr/local/bin/|awk '{print $1}')
+        jq -n \
+              --arg date "$(date --rfc-email)" \
+              --arg sha "$GITHUB_SHA" \
+              --arg size "$SIZE" \
+              --arg sizemulti "$SIZEMULTI" \
+              '{($date): { sha: $sha, size: $size, sizemulti: $sizemulti, }}' > size-result.json
+    - uses: actions/upload-artifact@v2
+      with:
+        name: size-result
+        path: size-result.json
 
   build:
     name: Build
