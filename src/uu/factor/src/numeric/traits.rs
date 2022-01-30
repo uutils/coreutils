@@ -61,7 +61,7 @@ macro_rules! double_int {
             fn as_double_width(self) -> $y {
                 self as _
             }
-            fn from_double_width(n: $y) -> $x {
+            fn from_double_width(n: $y) -> Self {
                 n as _
             }
         }

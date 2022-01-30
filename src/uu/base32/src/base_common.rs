@@ -38,7 +38,7 @@ pub mod options {
 }
 
 impl Config {
-    pub fn from(options: &clap::ArgMatches) -> UResult<Config> {
+    pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let file: Option<String> = match options.values_of(options::FILE) {
             Some(mut values) => {
                 let name = values.next().unwrap();
@@ -76,7 +76,7 @@ impl Config {
             })
             .transpose()?;
 
-        Ok(Config {
+        Ok(Self {
             decode: options.is_present(options::DECODE),
             ignore_garbage: options.is_present(options::IGNORE_GARBAGE),
             wrap_cols: cols,

@@ -114,7 +114,7 @@ struct Stat {
 }
 
 impl Stat {
-    fn new(path: PathBuf, options: &Options) -> Result<Stat> {
+    fn new(path: PathBuf, options: &Options) -> Result<Self> {
         let metadata = if options.dereference {
             fs::metadata(&path)?
         } else {
@@ -127,7 +127,7 @@ impl Stat {
             dev_id: metadata.dev(),
         };
         #[cfg(not(windows))]
-        return Ok(Stat {
+        return Ok(Self {
             path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
@@ -815,9 +815,9 @@ impl FromStr for Threshold {
         let size = u64::try_from(parse_size(&s[offset..])?).unwrap();
 
         if s.starts_with('-') {
-            Ok(Threshold::Upper(size))
+            Ok(Self::Upper(size))
         } else {
-            Ok(Threshold::Lower(size))
+            Ok(Self::Lower(size))
         }
     }
 }
@@ -825,8 +825,8 @@ impl FromStr for Threshold {
 impl Threshold {
     fn should_exclude(&self, size: u64) -> bool {
         match *self {
-            Threshold::Upper(threshold) => size > threshold,
-            Threshold::Lower(threshold) => size < threshold,
+            Self::Upper(threshold) => size > threshold,
+            Self::Lower(threshold) => size < threshold,
         }
     }
 }

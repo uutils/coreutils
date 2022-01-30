@@ -42,7 +42,7 @@ pub(crate) enum Result {
 
 impl Result {
     pub(crate) fn is_prime(&self) -> bool {
-        *self == Result::Prime
+        *self == Self::Prime
     }
 }
 

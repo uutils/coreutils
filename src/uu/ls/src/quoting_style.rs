@@ -79,8 +79,8 @@ impl Iterator for EscapeOctal {
 }
 
 impl EscapeOctal {
-    fn from(c: char) -> EscapeOctal {
-        EscapeOctal {
+    fn from(c: char) -> Self {
+        Self {
             c,
             idx: 2,
             state: EscapeOctalState::Backslash,

@@ -415,7 +415,7 @@ impl WriteableTmpFile for WriteablePlainTmpFile {
     type InnerWrite = BufWriter<File>;
 
     fn create((file, path): (File, PathBuf), _: Option<&str>) -> UResult<Self> {
-        Ok(WriteablePlainTmpFile {
+        Ok(Self {
             file: BufWriter::new(file),
             path,
         })
@@ -484,7 +484,7 @@ impl WriteableTmpFile for WriteableCompressedTmpFile {
                 code: err.raw_os_error().unwrap(),
             })?;
         let child_stdin = child.stdin.take().unwrap();
-        Ok(WriteableCompressedTmpFile {
+        Ok(Self {
             path,
             compress_prog: compress_prog.to_owned(),
             child,

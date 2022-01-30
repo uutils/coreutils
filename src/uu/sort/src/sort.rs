@@ -323,7 +323,7 @@ pub struct GlobalSettings {
 
 /// Data needed for sorting. Should be computed once before starting to sort
 /// by calling `GlobalSettings::init_precomputed`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 struct Precomputed {
     needs_tokens: bool,
     num_infos_per_line: usize,
@@ -378,8 +378,8 @@ impl GlobalSettings {
 }
 
 impl Default for GlobalSettings {
-    fn default() -> GlobalSettings {
-        GlobalSettings {
+    fn default() -> Self {
+        Self {
             mode: SortMode::Default,
             debug: false,
             ignore_leading_blanks: false,
@@ -400,12 +400,7 @@ impl Default for GlobalSettings {
             buffer_size: DEFAULT_BUF_SIZE,
             compress_prog: None,
             merge_batch_size: 32,
-            precomputed: Precomputed {
-                num_infos_per_line: 0,
-                floats_per_line: 0,
-                selections_per_line: 0,
-                needs_tokens: false,
-            },
+            precomputed: Precomputed::default(),
         }
     }
 }
@@ -784,7 +779,7 @@ impl KeyPosition {
 
 impl Default for KeyPosition {
     fn default() -> Self {
-        KeyPosition {
+        Self {
             field: 1,
             char: 1,
             ignore_blanks: false,

@@ -112,7 +112,7 @@ enum Modes {
 
 impl Default for Modes {
     fn default() -> Self {
-        Modes::Lines(10)
+        Self::Lines(10)
     }
 }
 
@@ -167,7 +167,7 @@ impl HeadOptions {
     pub fn get_from(args: impl uucore::Args) -> Result<Self, String> {
         let matches = uu_app().get_matches_from(arg_iterate(args)?);
 
-        let mut options: HeadOptions = Default::default();
+        let mut options = Self::default();
 
         options.quiet = matches.is_present(options::QUIET_NAME);
         options.verbose = matches.is_present(options::VERBOSE_NAME);

@@ -38,8 +38,8 @@ pub struct ReadRng<R> {
 
 impl<R: Read> ReadRng<R> {
     /// Create a new `ReadRng` from a `Read`.
-    pub fn new(r: R) -> ReadRng<R> {
-        ReadRng { reader: r }
+    pub fn new(r: R) -> Self {
+        Self { reader: r }
     }
 }
 

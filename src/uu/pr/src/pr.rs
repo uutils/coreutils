@@ -112,8 +112,8 @@ struct NumberingMode {
 }
 
 impl Default for NumberingMode {
-    fn default() -> NumberingMode {
-        NumberingMode {
+    fn default() -> Self {
+        Self {
             width: 5,
             separator: TAB.to_string(),
             first_number: 1,
@@ -122,8 +122,8 @@ impl Default for NumberingMode {
 }
 
 impl Default for FileLine {
-    fn default() -> FileLine {
-        FileLine {
+    fn default() -> Self {
+        Self {
             file_id: 0,
             line_number: 0,
             page_number: 0,
@@ -136,7 +136,7 @@ impl Default for FileLine {
 
 impl From<IOError> for PrError {
     fn from(err: IOError) -> Self {
-        PrError::EncounteredErrors(err.to_string())
+        Self::EncounteredErrors(err.to_string())
     }
 }
 

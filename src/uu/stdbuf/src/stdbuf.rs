@@ -70,7 +70,7 @@ impl<'a> TryFrom<&ArgMatches> for ProgramOptions {
     type Error = ProgramOptionsError;
 
     fn try_from(matches: &ArgMatches) -> Result<Self, Self::Error> {
-        Ok(ProgramOptions {
+        Ok(Self {
             stdin: check_option(matches, options::INPUT)?,
             stdout: check_option(matches, options::OUTPUT)?,
             stderr: check_option(matches, options::ERROR)?,

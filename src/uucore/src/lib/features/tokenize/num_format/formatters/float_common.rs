@@ -46,12 +46,12 @@ impl FloatAnalysis {
         max_sd_opt: Option<usize>,
         max_after_dec_opt: Option<usize>,
         hex_output: bool,
-    ) -> FloatAnalysis {
+    ) -> Self {
         // this fn assumes
         // the input string
         // has no leading spaces or 0s
         let str_it = get_it_at(initial_prefix.offset, str_in);
-        let mut ret = FloatAnalysis {
+        let mut ret = Self {
             len_important: 0,
             decimal_pos: None,
             follow: None,

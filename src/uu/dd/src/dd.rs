@@ -69,7 +69,7 @@ impl Input<io::Stdin> {
         let skip = parseargs::parse_skip_amt(&ibs, &iflags, matches)?;
         let count = parseargs::parse_count(&iflags, matches)?;
 
-        let mut i = Input {
+        let mut i = Self {
             src: io::stdin(),
             non_ascii,
             ibs,
@@ -157,7 +157,7 @@ impl Input<File> {
                     .map_err_context(|| "failed to seek in input file".to_string())?;
             }
 
-            let i = Input {
+            let i = Self {
                 src,
                 non_ascii,
                 ibs,
@@ -306,7 +306,7 @@ impl OutputTrait for Output<io::Stdout> {
                 .map_err_context(|| String::from("write error"))?;
         }
 
-        Ok(Output { dst, obs, cflags })
+        Ok(Self { dst, obs, cflags })
     }
 
     fn fsync(&mut self) -> io::Result<()> {
@@ -497,7 +497,7 @@ impl OutputTrait for Output<File> {
                     .map_err_context(|| "failed to seek in output file".to_string())?;
             }
 
-            Ok(Output { dst, obs, cflags })
+            Ok(Self { dst, obs, cflags })
         } else {
             // The following error should only occur if someone
             // mistakenly calls Output::<File>::new() without checking

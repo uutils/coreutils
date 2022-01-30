@@ -495,43 +495,43 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 impl ClobberMode {
-    fn from_matches(matches: &ArgMatches) -> ClobberMode {
+    fn from_matches(matches: &ArgMatches) -> Self {
         if matches.is_present(options::FORCE) {
-            ClobberMode::Force
+            Self::Force
         } else if matches.is_present(options::REMOVE_DESTINATION) {
-            ClobberMode::RemoveDestination
+            Self::RemoveDestination
         } else {
-            ClobberMode::Standard
+            Self::Standard
         }
     }
 }
 
 impl OverwriteMode {
-    fn from_matches(matches: &ArgMatches) -> OverwriteMode {
+    fn from_matches(matches: &ArgMatches) -> Self {
         if matches.is_present(options::INTERACTIVE) {
-            OverwriteMode::Interactive(ClobberMode::from_matches(matches))
+            Self::Interactive(ClobberMode::from_matches(matches))
         } else if matches.is_present(options::NO_CLOBBER) {
-            OverwriteMode::NoClobber
+            Self::NoClobber
         } else {
-            OverwriteMode::Clobber(ClobberMode::from_matches(matches))
+            Self::Clobber(ClobberMode::from_matches(matches))
         }
     }
 }
 
 impl CopyMode {
-    fn from_matches(matches: &ArgMatches) -> CopyMode {
+    fn from_matches(matches: &ArgMatches) -> Self {
         if matches.is_present(options::LINK) {
-            CopyMode::Link
+            Self::Link
         } else if matches.is_present(options::SYMBOLIC_LINK) {
-            CopyMode::SymLink
+            Self::SymLink
         } else if matches.is_present(options::SPARSE) {
-            CopyMode::Sparse
+            Self::Sparse
         } else if matches.is_present(options::UPDATE) {
-            CopyMode::Update
+            Self::Update
         } else if matches.is_present(options::ATTRIBUTES_ONLY) {
-            CopyMode::AttrOnly
+            Self::AttrOnly
         } else {
-            CopyMode::Copy
+            Self::Copy
         }
     }
 }
@@ -539,16 +539,16 @@ impl CopyMode {
 impl FromStr for Attribute {
     type Err = Error;
 
-    fn from_str(value: &str) -> CopyResult<Attribute> {
+    fn from_str(value: &str) -> CopyResult<Self> {
         Ok(match &*value.to_lowercase() {
-            "mode" => Attribute::Mode,
+            "mode" => Self::Mode,
             #[cfg(unix)]
-            "ownership" => Attribute::Ownership,
-            "timestamps" => Attribute::Timestamps,
+            "ownership" => Self::Ownership,
+            "timestamps" => Self::Timestamps,
             #[cfg(feature = "feat_selinux")]
-            "context" => Attribute::Context,
-            "links" => Attribute::Links,
-            "xattr" => Attribute::Xattr,
+            "context" => Self::Context,
+            "links" => Self::Links,
+            "xattr" => Self::Xattr,
             _ => {
                 return Err(Error::InvalidArgument(format!(
                     "invalid attribute {}",
@@ -577,7 +577,7 @@ fn add_all_attributes() -> Vec<Attribute> {
 }
 
 impl Options {
-    fn from_matches(matches: &ArgMatches) -> CopyResult<Options> {
+    fn from_matches(matches: &ArgMatches) -> CopyResult<Self> {
         let not_implemented_opts = vec![
             options::COPY_CONTENTS,
             options::SPARSE,
@@ -646,7 +646,7 @@ impl Options {
         // if not executed first.
         preserve_attributes.sort_unstable();
 
-        let options = Options {
+        let options = Self {
             attributes_only: matches.is_present(options::ATTRIBUTES_ONLY),
             copy_contents: matches.is_present(options::COPY_CONTENTS),
             copy_mode: CopyMode::from_matches(matches),
@@ -703,11 +703,11 @@ impl TargetType {
     ///
     /// Treat target as a dir if we have multiple sources or the target
     /// exists and already is a directory
-    fn determine(sources: &[Source], target: &TargetSlice) -> TargetType {
+    fn determine(sources: &[Source], target: &TargetSlice) -> Self {
         if sources.len() > 1 || target.is_dir() {
-            TargetType::Directory
+            Self::Directory
         } else {
-            TargetType::File
+            Self::File
         }
     }
 }

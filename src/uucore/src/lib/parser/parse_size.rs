@@ -113,7 +113,7 @@ impl fmt::Display for ParseSizeError {
 // but there's a lot of downstream code that constructs these errors manually
 // that would be affected
 impl ParseSizeError {
-    fn parse_failure(s: &str) -> ParseSizeError {
+    fn parse_failure(s: &str) -> Self {
         // stderr on linux (GNU coreutils 8.32) (LC_ALL=C)
         // has to be handled in the respective uutils because strings differ, e.g.:
         //
@@ -145,10 +145,10 @@ impl ParseSizeError {
         //                   --width
         //                   --strings
         // etc.
-        ParseSizeError::ParseFailure(format!("{}", s.quote()))
+        Self::ParseFailure(format!("{}", s.quote()))
     }
 
-    fn size_too_big(s: &str) -> ParseSizeError {
+    fn size_too_big(s: &str) -> Self {
         // stderr on linux (GNU coreutils 8.32) (LC_ALL=C)
         // has to be handled in the respective uutils because strings differ, e.g.:
         //
@@ -165,7 +165,7 @@ impl ParseSizeError {
         // stderr on macos (brew - GNU coreutils 8.32) also differs for the same version, e.g.:
         // ghead:   invalid number of bytes: '1Y': Value too large to be stored in data type
         // gtail:   invalid number of bytes: '1Y': Value too large to be stored in data type
-        ParseSizeError::SizeTooBig(format!(
+        Self::SizeTooBig(format!(
             "{}: Value too large for defined data type",
             s.quote()
         ))

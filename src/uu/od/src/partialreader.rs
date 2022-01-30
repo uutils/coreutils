@@ -24,7 +24,7 @@ impl<R> PartialReader<R> {
     /// `skip` bytes, and limits the output to `limit` bytes. Set `limit`
     /// to `None` if there should be no limit.
     pub fn new(inner: R, skip: usize, limit: Option<usize>) -> Self {
-        PartialReader { inner, skip, limit }
+        Self { inner, skip, limit }
     }
 }
 

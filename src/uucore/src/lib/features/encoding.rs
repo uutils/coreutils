@@ -107,7 +107,7 @@ pub struct Data<R: Read> {
 
 impl<R: Read> Data<R> {
     pub fn new(input: R, format: Format) -> Self {
-        Data {
+        Self {
             line_wrap: 76,
             ignore_garbage: false,
             input,

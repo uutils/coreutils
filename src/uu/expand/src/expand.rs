@@ -133,7 +133,7 @@ struct Options {
 }
 
 impl Options {
-    fn new(matches: &ArgMatches) -> Options {
+    fn new(matches: &ArgMatches) -> Self {
         let (remaining_mode, tabstops) = match matches.value_of(options::TABS) {
             Some(s) => tabstops_parse(s),
             None => (RemainingMode::None, vec![DEFAULT_TABSTOP]),
@@ -160,7 +160,7 @@ impl Options {
             None => vec!["-".to_owned()],
         };
 
-        Options {
+        Self {
             files,
             tabstops,
             tspaces,

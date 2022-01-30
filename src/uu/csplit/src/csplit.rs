@@ -57,13 +57,13 @@ pub struct CsplitOptions {
 }
 
 impl CsplitOptions {
-    fn new(matches: &ArgMatches) -> CsplitOptions {
+    fn new(matches: &ArgMatches) -> Self {
         let keep_files = matches.is_present(options::KEEP_FILES);
         let quiet = matches.is_present(options::QUIET);
         let elide_empty_files = matches.is_present(options::ELIDE_EMPTY_FILES);
         let suppress_matched = matches.is_present(options::SUPPRESS_MATCHED);
 
-        CsplitOptions {
+        Self {
             split_name: crash_if_err!(
                 1,
                 SplitName::new(
@@ -477,8 +477,8 @@ impl<I> InputSplitter<I>
 where
     I: Iterator<Item = (usize, io::Result<String>)>,
 {
-    fn new(iter: I) -> InputSplitter<I> {
-        InputSplitter {
+    fn new(iter: I) -> Self {
+        Self {
             iter,
             buffer: Vec::new(),
             rewind: false,

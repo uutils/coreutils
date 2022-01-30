@@ -63,8 +63,8 @@ struct Settings {
 }
 
 impl Default for Settings {
-    fn default() -> Settings {
-        Settings {
+    fn default() -> Self {
+        Self {
             key1: 0,
             key2: 0,
             print_unpaired1: false,
@@ -163,8 +163,8 @@ struct Input {
 }
 
 impl Input {
-    fn new(separator: Sep, ignore_case: bool, check_order: CheckOrder) -> Input {
-        Input {
+    fn new(separator: Sep, ignore_case: bool, check_order: CheckOrder) -> Self {
+        Self {
             separator,
             ignore_case,
             check_order,
@@ -198,14 +198,14 @@ enum Spec {
 }
 
 impl Spec {
-    fn parse(format: &str) -> UResult<Spec> {
+    fn parse(format: &str) -> UResult<Self> {
         let mut chars = format.chars();
 
         let file_num = match chars.next() {
             Some('0') => {
                 // Must be all alone without a field specifier.
                 if chars.next().is_none() {
-                    return Ok(Spec::Key);
+                    return Ok(Self::Key);
                 }
                 return Err(USimpleError::new(
                     1,
@@ -223,7 +223,7 @@ impl Spec {
         };
 
         if let Some('.') = chars.next() {
-            return Ok(Spec::Field(file_num, parse_field_number(chars.as_str())?));
+            return Ok(Self::Field(file_num, parse_field_number(chars.as_str())?));
         }
 
         Err(USimpleError::new(
@@ -239,7 +239,7 @@ struct Line {
 }
 
 impl Line {
-    fn new(string: Vec<u8>, separator: Sep) -> Line {
+    fn new(string: Vec<u8>, separator: Sep) -> Self {
         let fields = match separator {
             Sep::Whitespaces => string
                 // GNU join uses Bourne shell field splitters by default
@@ -251,7 +251,7 @@ impl Line {
             Sep::Line => vec![string.clone()],
         };
 
-        Line { fields, string }
+        Self { fields, string }
     }
 
     /// Get field at index.

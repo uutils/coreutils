@@ -296,9 +296,9 @@ impl std::str::FromStr for StatusLevel {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "none" => Ok(StatusLevel::None),
-            "noxfer" => Ok(StatusLevel::Noxfer),
-            "progress" => Ok(StatusLevel::Progress),
+            "none" => Ok(Self::None),
+            "noxfer" => Ok(Self::Noxfer),
+            "progress" => Ok(Self::Progress),
             _ => Err(ParseError::StatusLevelNotRecognized(s.to_string())),
         }
     }

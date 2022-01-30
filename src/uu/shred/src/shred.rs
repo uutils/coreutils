@@ -68,9 +68,9 @@ struct FilenameGenerator {
 }
 
 impl FilenameGenerator {
-    fn new(name_len: usize) -> FilenameGenerator {
+    fn new(name_len: usize) -> Self {
         let indices: Vec<usize> = vec![0; name_len];
-        FilenameGenerator {
+        Self {
             name_len,
             name_charset_indices: RefCell::new(indices),
             exhausted: Cell::new(false),

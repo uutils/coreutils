@@ -14,11 +14,8 @@ pub struct ParsedFormatterItemInfo {
 }
 
 impl ParsedFormatterItemInfo {
-    pub fn new(
-        formatter_item_info: FormatterItemInfo,
-        add_ascii_dump: bool,
-    ) -> ParsedFormatterItemInfo {
-        ParsedFormatterItemInfo {
+    pub fn new(formatter_item_info: FormatterItemInfo, add_ascii_dump: bool) -> Self {
+        Self {
             formatter_item_info,
             add_ascii_dump,
         }

@@ -265,7 +265,7 @@ impl<T> From<T> for Box<dyn UError>
 where
     T: UError + 'static,
 {
-    fn from(t: T) -> Box<dyn UError> {
+    fn from(t: T) -> Self {
         Box::new(t)
     }
 }
@@ -490,8 +490,8 @@ impl FromIo<Box<UIoError>> for std::io::ErrorKind {
 }
 
 impl From<std::io::Error> for UIoError {
-    fn from(f: std::io::Error) -> UIoError {
-        UIoError {
+    fn from(f: std::io::Error) -> Self {
+        Self {
             context: None,
             inner: f,
         }
@@ -499,9 +499,9 @@ impl From<std::io::Error> for UIoError {
 }
 
 impl From<std::io::Error> for Box<dyn UError> {
-    fn from(f: std::io::Error) -> Box<dyn UError> {
+    fn from(f: std::io::Error) -> Self {
         let u_error: UIoError = f.into();
-        Box::new(u_error) as Box<dyn UError>
+        Box::new(u_error) as Self
     }
 }
 

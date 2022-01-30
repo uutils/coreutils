@@ -461,7 +461,7 @@ impl Stater {
         Ok(tokens)
     }
 
-    fn new(matches: &ArgMatches) -> UResult<Stater> {
+    fn new(matches: &ArgMatches) -> UResult<Self> {
         let files: Vec<String> = matches
             .values_of(ARG_FILES)
             .map(|v| v.map(ToString::to_string).collect())
@@ -480,12 +480,12 @@ impl Stater {
         let show_fs = matches.is_present(options::FILE_SYSTEM);
 
         let default_tokens = if format_str.is_empty() {
-            Stater::generate_tokens(&Stater::default_format(show_fs, terse, false), use_printf)?
+            Self::generate_tokens(&Self::default_format(show_fs, terse, false), use_printf)?
         } else {
-            Stater::generate_tokens(format_str, use_printf)?
+            Self::generate_tokens(format_str, use_printf)?
         };
         let default_dev_tokens =
-            Stater::generate_tokens(&Stater::default_format(show_fs, terse, true), use_printf)?;
+            Self::generate_tokens(&Self::default_format(show_fs, terse, true), use_printf)?;
 
         let mount_list = if show_fs {
             // mount points aren't displayed when showing filesystem information
@@ -501,7 +501,7 @@ impl Stater {
             Some(mount_list)
         };
 
-        Ok(Stater {
+        Ok(Self {
             follow: matches.is_present(options::DEREFERENCE),
             show_fs,
             from_user: !format_str.is_empty(),

@@ -175,7 +175,7 @@ impl Passwd {
     /// SAFETY: All the pointed-to strings must be valid and not change while
     /// the function runs. That means PW_LOCK must be held.
     unsafe fn from_raw(raw: passwd) -> Self {
-        Passwd {
+        Self {
             name: cstr2string(raw.pw_name),
             uid: raw.pw_uid,
             gid: raw.pw_gid,
@@ -243,7 +243,7 @@ impl Group {
     /// SAFETY: gr_name must be valid and not change while
     /// the function runs. That means PW_LOCK must be held.
     unsafe fn from_raw(raw: group) -> Self {
-        Group {
+        Self {
             name: cstr2string(raw.gr_name),
             gid: raw.gr_gid,
         }

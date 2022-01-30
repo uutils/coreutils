@@ -197,7 +197,7 @@ impl MountInfo {
     }
 
     #[cfg(target_os = "linux")]
-    fn new(file_name: &str, raw: &[&str]) -> Option<MountInfo> {
+    fn new(file_name: &str, raw: &[&str]) -> Option<Self> {
         match file_name {
             // spell-checker:ignore (word) noatime
             // Format: 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
@@ -207,7 +207,7 @@ impl MountInfo {
                 let after_fields = raw[FIELDS_OFFSET..].iter().position(|c| *c == "-").unwrap()
                     + FIELDS_OFFSET
                     + 1;
-                let mut m = MountInfo {
+                let mut m = Self {
                     dev_id: "".to_string(),
                     dev_name: raw[after_fields + 1].to_string(),
                     fs_type: raw[after_fields].to_string(),
@@ -221,7 +221,7 @@ impl MountInfo {
                 Some(m)
             }
             LINUX_MTAB => {
-                let mut m = MountInfo {
+                let mut m = Self {
                     dev_id: "".to_string(),
                     dev_name: raw[0].to_string(),
                     fs_type: raw[2].to_string(),
@@ -496,9 +496,9 @@ pub struct FsUsage {
 
 impl FsUsage {
     #[cfg(unix)]
-    pub fn new(statvfs: StatFs) -> FsUsage {
+    pub fn new(statvfs: StatFs) -> Self {
         {
-            FsUsage {
+            Self {
                 blocksize: statvfs.f_bsize as u64, // or `statvfs.f_frsize` ?
                 blocks: statvfs.f_blocks as u64,
                 bfree: statvfs.f_bfree as u64,
@@ -510,7 +510,7 @@ impl FsUsage {
         }
     }
     #[cfg(not(unix))]
-    pub fn new(path: &Path) -> FsUsage {
+    pub fn new(path: &Path) -> Self {
         let mut root_path = [0u16; MAX_PATH];
         let success = unsafe {
             GetVolumePathNamesForVolumeNameW(

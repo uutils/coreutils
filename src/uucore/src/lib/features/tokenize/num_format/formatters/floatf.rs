@@ -6,10 +6,11 @@ use super::super::format_field::FormatField;
 use super::super::formatter::{FormatPrimitive, Formatter, InitialPrefix};
 use super::float_common::{get_primitive_dec, primitive_to_str_common, FloatAnalysis};
 
+#[derive(Default)]
 pub struct Floatf;
 impl Floatf {
-    pub fn new() -> Floatf {
-        Floatf
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 impl Formatter for Floatf {

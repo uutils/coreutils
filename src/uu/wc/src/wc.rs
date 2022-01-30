@@ -39,8 +39,8 @@ struct Settings {
 }
 
 impl Settings {
-    fn new(matches: &ArgMatches) -> Settings {
-        let settings = Settings {
+    fn new(matches: &ArgMatches) -> Self {
+        let settings = Self {
             show_bytes: matches.is_present(options::BYTES),
             show_chars: matches.is_present(options::CHAR),
             show_lines: matches.is_present(options::LINES),
@@ -57,7 +57,7 @@ impl Settings {
             return settings;
         }
 
-        Settings {
+        Self {
             show_bytes: true,
             show_chars: false,
             show_lines: true,

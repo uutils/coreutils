@@ -339,7 +339,7 @@ struct PaddingCollection {
 
 impl Config {
     #[allow(clippy::cognitive_complexity)]
-    fn from(options: &clap::ArgMatches) -> UResult<Config> {
+    fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let context = options.is_present(options::CONTEXT);
         let (mut format, opt) = if let Some(format_) = options.value_of(options::FORMAT) {
             (
@@ -661,7 +661,7 @@ impl Config {
             Dereference::DirArgs
         };
 
-        Ok(Config {
+        Ok(Self {
             format,
             files,
             sort,

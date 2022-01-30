@@ -42,25 +42,25 @@ pub enum Token {
 }
 impl Token {
     fn new_infix_op(v: &str, left_assoc: bool, precedence: u8) -> Self {
-        Token::InfixOp {
+        Self::InfixOp {
             left_assoc,
             precedence,
             value: v.into(),
         }
     }
     fn new_value(v: &str) -> Self {
-        Token::Value { value: v.into() }
+        Self::Value { value: v.into() }
     }
 
     fn is_infix_plus(&self) -> bool {
         match self {
-            Token::InfixOp { value, .. } => value == "+",
+            Self::InfixOp { value, .. } => value == "+",
             _ => false,
         }
     }
     fn is_a_number(&self) -> bool {
         match self {
-            Token::Value { value, .. } => value.parse::<BigInt>().is_ok(),
+            Self::Value { value, .. } => value.parse::<BigInt>().is_ok(),
             _ => false,
         }
     }

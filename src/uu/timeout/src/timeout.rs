@@ -57,7 +57,7 @@ struct Config {
 }
 
 impl Config {
-    fn from(options: &clap::ArgMatches) -> Config {
+    fn from(options: &clap::ArgMatches) -> Self {
         let signal = match options.value_of(options::SIGNAL) {
             Some(signal_) => {
                 let signal_result = signal_by_name_or_value(signal_);
@@ -88,7 +88,7 @@ impl Config {
             .map(String::from)
             .collect::<Vec<_>>();
 
-        Config {
+        Self {
             foreground,
             kill_after,
             signal,

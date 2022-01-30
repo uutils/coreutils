@@ -42,7 +42,7 @@ impl Number {
         // We would like to implement `num_traits::One`, but it requires
         // a multiplication implementation, and we don't want to
         // implement that here.
-        Number::Int(ExtendedBigInt::one())
+        Self::Int(ExtendedBigInt::one())
     }
 
     /// Round this number towards the given other number.
@@ -89,12 +89,8 @@ pub struct PreciseNumber {
 }
 
 impl PreciseNumber {
-    pub fn new(
-        number: Number,
-        num_integral_digits: usize,
-        num_fractional_digits: usize,
-    ) -> PreciseNumber {
-        PreciseNumber {
+    pub fn new(number: Number, num_integral_digits: usize, num_fractional_digits: usize) -> Self {
+        Self {
             number,
             num_integral_digits,
             num_fractional_digits,
@@ -106,7 +102,7 @@ impl PreciseNumber {
         // We would like to implement `num_traits::One`, but it requires
         // a multiplication implementation, and we don't want to
         // implement that here.
-        PreciseNumber::new(Number::one(), 1, 0)
+        Self::new(Number::one(), 1, 0)
     }
 
     /// Decide whether this number is zero (either positive or negative).

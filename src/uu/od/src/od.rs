@@ -121,7 +121,7 @@ struct OdOptions {
 }
 
 impl OdOptions {
-    fn new(matches: &ArgMatches, args: &[String]) -> UResult<OdOptions> {
+    fn new(matches: &ArgMatches, args: &[String]) -> UResult<Self> {
         let byte_order = match matches.value_of(options::ENDIAN) {
             None => ByteOrder::Native,
             Some("little") => ByteOrder::Little,
@@ -232,7 +232,7 @@ impl OdOptions {
             }
         };
 
-        Ok(OdOptions {
+        Ok(Self {
             byte_order,
             skip_bytes,
             read_bytes,

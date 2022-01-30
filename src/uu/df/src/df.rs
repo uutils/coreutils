@@ -52,6 +52,7 @@ static OPT_EXCLUDE_TYPE: &str = "exclude-type";
 
 /// Store names of file systems as a selector.
 /// Note: `exclude` takes priority over `include`.
+#[derive(Default)]
 struct FsSelector {
     include: HashSet<String>,
     exclude: HashSet<String>,
@@ -79,11 +80,8 @@ fn usage() -> String {
 }
 
 impl FsSelector {
-    fn new() -> FsSelector {
-        FsSelector {
-            include: HashSet::new(),
-            exclude: HashSet::new(),
-        }
+    fn new() -> Self {
+        Self::default()
     }
 
     #[inline(always)]
@@ -105,8 +103,8 @@ impl FsSelector {
 }
 
 impl Options {
-    fn new() -> Options {
-        Options {
+    fn new() -> Self {
+        Self {
             show_local_fs: false,
             show_all_fs: false,
             show_listed_fs: false,
@@ -124,7 +122,7 @@ impl Options {
 
 impl Filesystem {
     // TODO: resolve uuid in `mount_info.dev_name` if exists
-    fn new(mount_info: MountInfo) -> Option<Filesystem> {
+    fn new(mount_info: MountInfo) -> Option<Self> {
         let _stat_path = if !mount_info.mount_dir.is_empty() {
             mount_info.mount_dir.clone()
         } else {
@@ -145,14 +143,14 @@ impl Filesystem {
             if statfs_fn(path.as_ptr(), &mut statvfs) < 0 {
                 None
             } else {
-                Some(Filesystem {
+                Some(Self {
                     mount_info,
                     usage: FsUsage::new(statvfs),
                 })
             }
         }
         #[cfg(windows)]
-        Some(Filesystem {
+        Some(Self {
             mount_info,
             usage: FsUsage::new(Path::new(&_stat_path)),
         })

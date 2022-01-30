@@ -28,7 +28,7 @@ pub struct TakeAllBut<I: Iterator> {
 }
 
 impl<I: Iterator> TakeAllBut<I> {
-    pub fn new(mut iter: I, n: usize) -> TakeAllBut<I> {
+    pub fn new(mut iter: I, n: usize) -> Self {
         // Create a new ring buffer and fill it up.
         //
         // If there are fewer than `n` elements in `iter`, then we
@@ -44,7 +44,7 @@ impl<I: Iterator> TakeAllBut<I> {
             };
             buf.push_back(value);
         }
-        TakeAllBut { iter, buf }
+        Self { iter, buf }
     }
 }
 

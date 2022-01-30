@@ -85,12 +85,12 @@ impl NumInfo {
                     let has_si_unit = parse_settings.accept_si_units
                         && matches!(char, 'K' | 'k' | 'M' | 'G' | 'T' | 'P' | 'E' | 'Z' | 'Y');
                     (
-                        NumInfo { exponent, sign },
+                        Self { exponent, sign },
                         start..if has_si_unit { idx + 1 } else { idx },
                     )
                 } else {
                     (
-                        NumInfo {
+                        Self {
                             sign: Sign::Positive,
                             exponent: 0,
                         },
@@ -127,10 +127,10 @@ impl NumInfo {
             }
         }
         if let Some(start) = start {
-            (NumInfo { exponent, sign }, start..num.len())
+            (Self { exponent, sign }, start..num.len())
         } else {
             (
-                NumInfo {
+                Self {
                     sign: Sign::Positive,
                     exponent: 0,
                 },

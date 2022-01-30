@@ -322,7 +322,7 @@ impl UtmpxIter {
     fn new() -> Self {
         // PoisonErrors can safely be ignored
         let guard = LOCK.lock().unwrap_or_else(|err| err.into_inner());
-        UtmpxIter {
+        Self {
             guard,
             phantom: PhantomData,
         }

@@ -66,23 +66,23 @@ impl AstNode {
         }
     }
 
-    fn new_node(token_idx: usize, op_type: &str, operands: OperandsList) -> Box<AstNode> {
-        Box::new(AstNode::Node {
+    fn new_node(token_idx: usize, op_type: &str, operands: OperandsList) -> Box<Self> {
+        Box::new(Self::Node {
             token_idx,
             op_type: op_type.into(),
             operands,
         })
     }
-    fn new_leaf(token_idx: usize, value: &str) -> Box<AstNode> {
-        Box::new(AstNode::Leaf {
+    fn new_leaf(token_idx: usize, value: &str) -> Box<Self> {
+        Box::new(Self::Leaf {
             token_idx,
             value: value.into(),
         })
     }
     pub fn evaluate(&self) -> Result<String, String> {
         match self {
-            AstNode::Leaf { value, .. } => Ok(value.clone()),
-            AstNode::Node { op_type, .. } => match self.operand_values() {
+            Self::Leaf { value, .. } => Ok(value.clone()),
+            Self::Node { op_type, .. } => match self.operand_values() {
                 Err(reason) => Err(reason),
                 Ok(operand_values) => match op_type.as_ref() {
                     "+" => {

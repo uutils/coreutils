@@ -40,7 +40,7 @@ pub trait Digest {
 
 impl Digest for md5::Context {
     fn new() -> Self {
-        md5::Context::new()
+        Self::new()
     }
 
     fn input(&mut self, input: &[u8]) {
@@ -52,7 +52,7 @@ impl Digest for md5::Context {
     }
 
     fn reset(&mut self) {
-        *self = md5::Context::new();
+        *self = Self::new();
     }
 
     fn output_bits(&self) -> usize {
@@ -85,7 +85,7 @@ impl Digest for blake2b_simd::State {
 
 impl Digest for sha1::Sha1 {
     fn new() -> Self {
-        sha1::Sha1::new()
+        Self::new()
     }
 
     fn input(&mut self, input: &[u8]) {

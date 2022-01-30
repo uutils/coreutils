@@ -25,8 +25,8 @@ pub struct ProcessChecker {
 }
 
 impl ProcessChecker {
-    pub fn new(process_id: self::Pid) -> ProcessChecker {
-        ProcessChecker { pid: process_id }
+    pub fn new(process_id: self::Pid) -> Self {
+        Self { pid: process_id }
     }
 
     // Borrowing mutably to be aligned with Windows implementation

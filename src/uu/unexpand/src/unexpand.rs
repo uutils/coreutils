@@ -67,7 +67,7 @@ struct Options {
 }
 
 impl Options {
-    fn new(matches: &clap::ArgMatches) -> Options {
+    fn new(matches: &clap::ArgMatches) -> Self {
         let tabstops = match matches.value_of(options::TABS) {
             None => vec![DEFAULT_TABSTOP],
             Some(s) => tabstops_parse(s),
@@ -82,7 +82,7 @@ impl Options {
             None => vec!["-".to_owned()],
         };
 
-        Options {
+        Self {
             files,
             tabstops,
             aflag,

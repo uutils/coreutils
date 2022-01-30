@@ -19,8 +19,8 @@ pub struct InputOffset {
 
 impl InputOffset {
     /// creates a new `InputOffset` using the provided values.
-    pub fn new(radix: Radix, byte_pos: usize, label: Option<usize>) -> InputOffset {
-        InputOffset {
+    pub fn new(radix: Radix, byte_pos: usize, label: Option<usize>) -> Self {
+        Self {
             radix,
             byte_pos,
             label,
