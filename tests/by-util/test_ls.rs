@@ -7,6 +7,11 @@ use crate::common::util::*;
 extern crate regex;
 use self::regex::Regex;
 
+#[cfg(unix)]
+use nix::unistd::{close, dup2};
+#[cfg(unix)]
+use std::os::unix::io::AsRawFd;
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::thread::sleep;
@@ -150,10 +155,7 @@ fn test_ls_io_errors() {
     at.symlink_file("does_not_exist", "some-dir2/dangle");
     at.mkdir("some-dir3");
     at.mkdir("some-dir3/some-dir4");
-    at.mkdir("some-dir3/some-dir5");
-    at.mkdir("some-dir3/some-dir6");
-    at.mkdir("some-dir3/some-dir7");
-    at.mkdir("some-dir3/some-dir8");
+    at.mkdir("some-dir4");
 
     scene.ccmd("chmod").arg("000").arg("some-dir1").succeeds();
 
@@ -190,7 +192,7 @@ fn test_ls_io_errors() {
         .stderr_contains("Permission denied")
         .stdout_contains("some-dir4");
 
-    // test we don't double print on dangling link metadata errors
+    // don't double print on dangling link metadata errors
     scene
         .ucmd()
         .arg("-iRL")
@@ -199,6 +201,62 @@ fn test_ls_io_errors() {
         .stderr_does_not_contain(
             "ls: cannot access 'some-dir2/dangle': No such file or directory\nls: cannot access 'some-dir2/dangle': No such file or directory"
         );
+
+    #[cfg(unix)]
+    {
+        at.touch("some-dir4/bad-fd.txt");
+        let fd1 = at.open("some-dir4/bad-fd.txt").as_raw_fd();
+        let fd2 = 25000;
+        let rv1 = dup2(fd1, fd2);
+        let rv2 = close(fd1);
+
+        // dup and close work on the mac, but doesn't work in some linux containers
+        // so check to see that return values are non-error before proceeding
+        if rv1.is_ok() && rv2.is_ok() {
+            // on the mac and in certain Linux containers bad fds are typed as dirs,
+            // however sometimes bad fds are typed as links and directory entry on links won't fail
+            if PathBuf::from(format!("/dev/fd/{fd}", fd = fd2)).is_dir() {
+                scene
+                    .ucmd()
+                    .arg("-alR")
+                    .arg(format!("/dev/fd/{fd}", fd = fd2))
+                    .fails()
+                    .stderr_contains(format!(
+                        "cannot open directory '/dev/fd/{fd}': Bad file descriptor",
+                        fd = fd2
+                    ))
+                    .stdout_does_not_contain(format!("{fd}:\n", fd = fd2));
+
+                scene
+                    .ucmd()
+                    .arg("-RiL")
+                    .arg(format!("/dev/fd/{fd}", fd = fd2))
+                    .fails()
+                    .stderr_contains(format!("cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2))
+                    // don't double print bad fd errors
+                    .stderr_does_not_contain(format!("ls: cannot open directory '/dev/fd/{fd}': Bad file descriptor\nls: cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2));
+            } else {
+                scene
+                    .ucmd()
+                    .arg("-alR")
+                    .arg(format!("/dev/fd/{fd}", fd = fd2))
+                    .succeeds();
+
+                scene
+                    .ucmd()
+                    .arg("-RiL")
+                    .arg(format!("/dev/fd/{fd}", fd = fd2))
+                    .succeeds();
+            }
+
+            scene
+                .ucmd()
+                .arg("-alL")
+                .arg(format!("/dev/fd/{fd}", fd = fd2))
+                .succeeds();
+        }
+        let _ = close(fd2);
+    }
 }
 
 #[test]

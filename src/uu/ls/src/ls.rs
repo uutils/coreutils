@@ -21,7 +21,6 @@ use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
-use std::ffi::OsString;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -39,6 +38,7 @@ use std::{
     os::unix::fs::{FileTypeExt, MetadataExt},
     time::Duration,
 };
+use std::{ffi::OsString, fs::ReadDir};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use uucore::{
     display::Quotable,
@@ -165,7 +165,7 @@ impl Display for LsError {
             LsError::IOError(e) => write!(f, "general io error: {}", e),
             LsError::IOErrorContext(e, p) => {
                 let error_kind = e.kind();
-                let raw_os_error = e.raw_os_error().unwrap_or(13i32);
+                let errno = e.raw_os_error().unwrap_or(1i32);
 
                 match error_kind {
                     // No such file or directory
@@ -180,7 +180,7 @@ impl Display for LsError {
                     ErrorKind::PermissionDenied =>
                     {
                         #[allow(clippy::wildcard_in_or_patterns)]
-                        match raw_os_error {
+                        match errno {
                             1i32 => {
                                 write!(
                                     f,
@@ -205,12 +205,24 @@ impl Display for LsError {
                             }
                         }
                     }
-                    _ => write!(
-                        f,
-                        "unknown io error: '{:?}', '{:?}'",
-                        p.to_string_lossy(),
-                        e
-                    ),
+                    _ => match errno {
+                        9i32 => {
+                            // only should ever occur on a read_dir on a bad fd
+                            write!(
+                                f,
+                                "cannot open directory '{}': Bad file descriptor",
+                                p.to_string_lossy(),
+                            )
+                        }
+                        _ => {
+                            write!(
+                                f,
+                                "unknown io error: '{:?}', '{:?}'",
+                                p.to_string_lossy(),
+                                e
+                            )
+                        }
+                    },
                 }
             }
         }
@@ -1272,6 +1284,7 @@ struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
+    de: Option<DirEntry>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
     // PathBuf that all above data corresponds to
@@ -1283,7 +1296,7 @@ struct PathData {
 impl PathData {
     fn new(
         p_buf: PathBuf,
-        file_type: Option<std::io::Result<FileType>>,
+        dir_entry: Option<std::io::Result<DirEntry>>,
         file_name: Option<OsString>,
         config: &Config,
         command_line: bool,
@@ -1317,8 +1330,23 @@ impl PathData {
             Dereference::None => false,
         };
 
-        let ft = match file_type {
-            Some(ft) => OnceCell::from(ft.ok()),
+        let de: Option<DirEntry> = match dir_entry {
+            Some(de) => de.ok(),
+            None => None,
+        };
+
+        // Why prefer to check the DirEntry file_type()?  B/c the call is
+        // nearly free compared to a metadata() call on a Path
+        let ft = match de {
+            Some(ref de) => {
+                if let Ok(ft_de) = de.file_type() {
+                    OnceCell::from(Some(ft_de))
+                } else if let Ok(md_pb) = p_buf.metadata() {
+                    OnceCell::from(Some(md_pb.file_type()))
+                } else {
+                    OnceCell::new()
+                }
+            }
             None => OnceCell::new(),
         };
 
@@ -1331,6 +1359,7 @@ impl PathData {
         Self {
             md: OnceCell::new(),
             ft,
+            de,
             display_name,
             p_buf,
             must_dereference,
@@ -1340,16 +1369,34 @@ impl PathData {
 
     fn md(&self, out: &mut BufWriter<Stdout>) -> Option<&Metadata> {
         self.md
-            .get_or_init(
-                || match get_metadata(self.p_buf.as_path(), self.must_dereference) {
+            .get_or_init(|| {
+                // check if we can use DirEntry metadata
+                if !self.must_dereference {
+                    if let Some(dir_entry) = &self.de {
+                        return dir_entry.metadata().ok();
+                    }
+                }
+
+                // if not, check if we can use Path metadata
+                match get_metadata(self.p_buf.as_path(), self.must_dereference) {
                     Err(err) => {
                         let _ = out.flush();
+                        let errno = err.raw_os_error().unwrap_or(1i32);
+                        // a bad fd will throw an error when dereferenced,
+                        // but GNU will not throw an error until a bad fd "dir"
+                        // is entered, here we match that GNU behavior, by handing
+                        // back the non-dereferenced metadata upon an EBADF
+                        if self.must_dereference && errno == 9i32 {
+                            if let Some(dir_entry) = &self.de {
+                                return dir_entry.metadata().ok();
+                            }
+                        }
                         show!(LsError::IOErrorContext(err, self.p_buf.clone(),));
                         None
                     }
                     Ok(md) => Some(md),
-                },
-            )
+                }
+            })
             .as_ref()
     }
 
@@ -1399,16 +1446,28 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
 
     display_items(&files, &config, &mut out);
 
-    for (pos, dir) in dirs.iter().enumerate() {
+    for (pos, path_data) in dirs.iter().enumerate() {
+        // Do read_dir call here to match GNU semantics by printing
+        // read_dir errors before directory headings, names and totals
+        let read_dir = match fs::read_dir(&path_data.p_buf) {
+            Err(err) => {
+                // flush stdout buffer before the error to preserve formatting and order
+                let _ = out.flush();
+                show!(LsError::IOErrorContext(err, path_data.p_buf.clone()));
+                continue;
+            }
+            Ok(rd) => rd,
+        };
+
         // Print dir heading - name... 'total' comes after error display
         if initial_locs_len > 1 || config.recursive {
             if pos.eq(&0usize) && files.is_empty() {
-                let _ = writeln!(out, "{}:", dir.p_buf.display());
+                let _ = writeln!(out, "{}:", path_data.p_buf.display());
             } else {
-                let _ = writeln!(out, "\n{}:", dir.p_buf.display());
+                let _ = writeln!(out, "\n{}:", path_data.p_buf.display());
             }
         }
-        enter_directory(dir, &config, &mut out);
+        enter_directory(path_data, read_dir, &config, &mut out);
     }
 
     Ok(())
@@ -1477,12 +1536,29 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
     true
 }
 
-fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>) {
+fn enter_directory(
+    path_data: &PathData,
+    read_dir: ReadDir,
+    config: &Config,
+    out: &mut BufWriter<Stdout>,
+) {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
         vec![
-            PathData::new(dir.p_buf.clone(), None, Some(".".into()), config, false),
-            PathData::new(dir.p_buf.join(".."), None, Some("..".into()), config, false),
+            PathData::new(
+                path_data.p_buf.clone(),
+                None,
+                Some(".".into()),
+                config,
+                false,
+            ),
+            PathData::new(
+                path_data.p_buf.join(".."),
+                None,
+                Some("..".into()),
+                config,
+                false,
+            ),
         ]
     } else {
         vec![]
@@ -1491,19 +1567,8 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
     // Convert those entries to the PathData struct
     let mut vec_path_data = Vec::new();
 
-    // check for errors early, and ignore entries with errors
-    let read_dir = match fs::read_dir(&dir.p_buf) {
-        Err(err) => {
-            // flush buffer because the error may get printed in the wrong order
-            let _ = out.flush();
-            show!(LsError::IOErrorContext(err, dir.p_buf.clone()));
-            return;
-        }
-        Ok(res) => res,
-    };
-
-    for entry in read_dir {
-        let unwrapped = match entry {
+    for raw_entry in read_dir {
+        let dir_entry = match raw_entry {
             Ok(path) => path,
             Err(err) => {
                 let _ = out.flush();
@@ -1512,27 +1577,17 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
             }
         };
 
-        if should_display(&unwrapped, config) {
-            // why check the DirEntry file_type()?  B/c the call is
-            // nearly free compared to a metadata() or file_type() call on a dir/file
-            let path_data = match unwrapped.file_type() {
-                Err(err) => {
-                    let _ = out.flush();
-                    show!(LsError::IOErrorContext(err, unwrapped.path()));
-                    continue;
-                }
-                Ok(dir_ft) => {
-                    PathData::new(unwrapped.path(), Some(Ok(dir_ft)), None, config, false)
-                }
-            };
-            vec_path_data.push(path_data);
+        if should_display(&dir_entry, config) {
+            let entry_path_data =
+                PathData::new(dir_entry.path(), Some(Ok(dir_entry)), None, config, false);
+            vec_path_data.push(entry_path_data);
         };
     }
 
     sort_entries(&mut vec_path_data, config, out);
     entries.append(&mut vec_path_data);
 
-    // ...and total
+    // Print total after any error display
     if config.format == Format::Long {
         display_total(&entries, config, out);
     }
@@ -1543,13 +1598,21 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
         for e in entries
             .iter()
             .skip(if config.files == Files::All { 2 } else { 0 })
-            // Already requested file_type for the dir_entries above. So we know the OnceCell is set.
-            // And can unwrap again because we tested whether path has is_some here
+            .filter(|p| p.ft.get().is_some())
             .filter(|p| p.ft.get().unwrap().is_some())
             .filter(|p| p.ft.get().unwrap().unwrap().is_dir())
         {
-            let _ = writeln!(out, "\n{}:", e.p_buf.display());
-            enter_directory(e, config, out);
+            match fs::read_dir(&e.p_buf) {
+                Err(err) => {
+                    let _ = out.flush();
+                    show!(LsError::IOErrorContext(err, e.p_buf.clone()));
+                    continue;
+                }
+                Ok(rd) => {
+                    let _ = writeln!(out, "\n{}:", e.p_buf.display());
+                    enter_directory(e, rd, config, out);
+                }
+            }
         }
     }
 }
@@ -1973,10 +2036,43 @@ fn display_item_long(
             }
         }
 
+        #[cfg(unix)]
+        let leading_char = {
+            if let Some(Some(ft)) = item.ft.get() {
+                if ft.is_char_device() {
+                    "c"
+                } else if ft.is_block_device() {
+                    "b"
+                } else if ft.is_symlink() {
+                    "l"
+                } else if ft.is_dir() {
+                    "d"
+                } else {
+                    "-"
+                }
+            } else {
+                "-"
+            }
+        };
+        #[cfg(not(unix))]
+        let leading_char = {
+            if let Some(Some(ft)) = item.ft.get() {
+                if ft.is_symlink() {
+                    "l"
+                } else if ft.is_dir() {
+                    "d"
+                } else {
+                    "-"
+                }
+            } else {
+                "-"
+            }
+        };
+
         let _ = write!(
             out,
             "{}{} {}",
-            "l?????????",
+            format_args!("{}?????????", leading_char),
             if item.security_context.len() > 1 {
                 // GNU `ls` uses a "." character to indicate a file with a security context,
                 // but not other alternate access method.
