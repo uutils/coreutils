@@ -370,7 +370,7 @@ fn push_op_to_stack(
                     },
                 )) => {
                     if la && prev_prec >= prec || !la && prev_prec > prec {
-                        out_stack.push(op_stack.pop().unwrap())
+                        out_stack.push(op_stack.pop().unwrap());
                     } else {
                         op_stack.push((token_idx, token.clone()));
                         return Ok(());

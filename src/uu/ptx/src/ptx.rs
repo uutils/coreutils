@@ -275,7 +275,7 @@ fn read_input(input_files: &[String], config: &Config) -> std::io::Result<FileMa
                 offset,
             },
         );
-        offset += size
+        offset += size;
     }
     Ok(file_map)
 }

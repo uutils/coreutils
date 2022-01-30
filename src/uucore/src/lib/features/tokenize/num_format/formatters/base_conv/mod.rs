@@ -16,7 +16,7 @@ pub fn arrnum_int_mult(arr_num: &[u8], basenum: u8, base_ten_int_fact: u8) -> Ve
                 new_amount = (u16::from(*u) * fact) + carry;
                 rem = new_amount % base;
                 carry = (new_amount - rem) / base;
-                ret_rev.push(rem as u8)
+                ret_rev.push(rem as u8);
             }
             None => {
                 while carry != 0 {
@@ -119,7 +119,7 @@ pub fn arrnum_int_add(arrnum: &[u8], basenum: u8, base_ten_int_term: u8) -> Vec<
                 new_amount = u16::from(*u) + carry;
                 rem = new_amount % base;
                 carry = (new_amount - rem) / base;
-                ret_rev.push(rem as u8)
+                ret_rev.push(rem as u8);
             }
             None => {
                 while carry != 0 {
@@ -170,7 +170,7 @@ pub fn base_conv_float(src: &[u8], radix_src: u8, _radix_dest: u8) -> f64 {
             break;
         }
         factor /= radix_src_float;
-        r += factor * f64::from(*u)
+        r += factor * f64::from(*u);
     }
     r
 }

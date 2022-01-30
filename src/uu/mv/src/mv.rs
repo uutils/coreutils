@@ -305,7 +305,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
                 sourcepath.quote(),
                 targetpath.quote()
             ))
-        )
+        );
     }
     Ok(())
 }
@@ -340,7 +340,7 @@ fn rename(from: &Path, to: &Path, b: &Behavior) -> io::Result<()> {
         // normalize behavior between *nix and windows
         if from.is_dir() {
             if is_empty_dir(to) {
-                fs::remove_dir(to)?
+                fs::remove_dir(to)?;
             } else {
                 return Err(io::Error::new(io::ErrorKind::Other, "Directory not empty"));
             }

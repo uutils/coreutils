@@ -57,7 +57,7 @@ impl<R: Read> RngCore for ReadRng<R> {
             panic!(
                 "reading random bytes from Read implementation failed; error: {}",
                 err
-            )
+            );
         });
     }
 

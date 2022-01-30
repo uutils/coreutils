@@ -283,10 +283,10 @@ impl SubParser {
             }
         } else {
             if let Some(x) = n_ch {
-                it.put_back(x)
+                it.put_back(x);
             };
             if let Some(x) = preface {
-                it.put_back(x)
+                it.put_back(x);
             };
             false
         }

@@ -332,7 +332,7 @@ fn expand(options: &Options) -> std::io::Result<()> {
                         // now dump out either spaces if we're expanding, or a literal tab if we're not
                         if init || !options.iflag {
                             if nts <= options.tspaces.len() {
-                                output.write_all(options.tspaces[..nts].as_bytes())?
+                                output.write_all(options.tspaces[..nts].as_bytes())?;
                             } else {
                                 output.write_all(" ".repeat(nts).as_bytes())?;
                             };

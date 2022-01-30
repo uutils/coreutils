@@ -97,7 +97,7 @@ fn ignore_interrupts() -> Result<()> {
 
 fn tee(options: &Options) -> Result<()> {
     if options.ignore_interrupts {
-        ignore_interrupts()?
+        ignore_interrupts()?;
     }
     let mut writers: Vec<NamedWriter> = options
         .files

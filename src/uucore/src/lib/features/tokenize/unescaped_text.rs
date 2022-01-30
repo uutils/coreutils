@@ -227,7 +227,7 @@ impl UnescapedText {
                             new_vec.extend(tmp_str.bytes());
                             tmp_str = String::new();
                         }
-                        UnescapedText::handle_escaped(new_vec, it, subs_mode)
+                        UnescapedText::handle_escaped(new_vec, it, subs_mode);
                     }
                     x if x == '%' && !subs_mode => {
                         if let Some(follow) = it.next() {

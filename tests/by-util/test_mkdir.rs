@@ -75,7 +75,7 @@ fn test_symbolic_mode() {
 
     ucmd.arg("-m").arg("a=rwx").arg(TEST_DIR1).succeeds();
     let perms = at.metadata(TEST_DIR1).permissions().mode();
-    assert_eq!(perms, 0o40777)
+    assert_eq!(perms, 0o40777);
 }
 
 #[test]
@@ -85,7 +85,7 @@ fn test_symbolic_alteration() {
 
     ucmd.arg("-m").arg("-w").arg(TEST_DIR1).succeeds();
     let perms = at.metadata(TEST_DIR1).permissions().mode();
-    assert_eq!(perms, 0o40555)
+    assert_eq!(perms, 0o40555);
 }
 
 #[test]
@@ -98,5 +98,5 @@ fn test_multi_symbolic() {
         .arg(TEST_DIR1)
         .succeeds();
     let perms = at.metadata(TEST_DIR1).permissions().mode();
-    assert_eq!(perms, 0o40750)
+    assert_eq!(perms, 0o40750);
 }

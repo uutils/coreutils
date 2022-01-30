@@ -50,7 +50,7 @@ fn replace_output_file_in_input_files(
                         std::fs::copy(file_path, &copy_path)
                             .map_err(|error| SortError::OpenTmpFileFailed { error })?;
                         *file = copy_path.clone().into_os_string();
-                        copy = Some(copy_path)
+                        copy = Some(copy_path);
                     }
                 }
             }
@@ -187,7 +187,7 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
                 file_number,
                 line_idx: 0,
                 receiver,
-            })
+            });
         }
     }
 

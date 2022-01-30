@@ -118,7 +118,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     if matches.is_present(OPT_T) {
-        tmpdir = env::temp_dir()
+        tmpdir = env::temp_dir();
     }
 
     let res = if dry_run {

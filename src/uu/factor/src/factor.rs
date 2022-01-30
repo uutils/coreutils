@@ -34,7 +34,7 @@ impl Decomposition {
         if let Some((_, e)) = self.0.iter_mut().find(|(f, _)| *f == factor) {
             *e += exp;
         } else {
-            self.0.push((factor, exp))
+            self.0.push((factor, exp));
         }
     }
 
@@ -79,11 +79,11 @@ impl Factors {
 
     pub fn add(&mut self, prime: u64, exp: Exponent) {
         debug_assert!(miller_rabin::is_prime(prime));
-        self.0.borrow_mut().add(prime, exp)
+        self.0.borrow_mut().add(prime, exp);
     }
 
     pub fn push(&mut self, prime: u64) {
-        self.add(prime, 1)
+        self.add(prime, 1);
     }
 
     #[cfg(test)]
@@ -99,7 +99,7 @@ impl fmt::Display for Factors {
 
         for (p, exp) in v.iter() {
             for _ in 0..*exp {
-                write!(f, " {}", p)?
+                write!(f, " {}", p)?;
             }
         }
 

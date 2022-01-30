@@ -335,7 +335,7 @@ fn du(
                         ErrorKind::PermissionDenied => {
                             let description = format!("cannot access {}", entry.path().quote());
                             let error_message = "Permission denied";
-                            show_error_custom_description!(description, "{}", error_message)
+                            show_error_custom_description!(description, "{}", error_message);
                         }
                         _ => show_error!("cannot access {}: {}", entry.path().quote(), error),
                     },
@@ -486,7 +486,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if options.inodes
         && (matches.is_present(options::APPARENT_SIZE) || matches.is_present(options::BYTES))
     {
-        show_warning!("options --apparent-size and -b are ineffective with --inodes")
+        show_warning!("options --apparent-size and -b are ineffective with --inodes");
     }
 
     let block_size = u64::try_from(read_block_size(matches.value_of(options::BLOCK_SIZE))).unwrap();

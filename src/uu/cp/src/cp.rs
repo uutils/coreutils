@@ -742,7 +742,7 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
 
     if options.strip_trailing_slashes {
         for source in paths.iter_mut() {
-            *source = source.components().as_path().to_owned()
+            *source = source.components().as_path().to_owned();
         }
     }
 
@@ -864,7 +864,7 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
                         }
                         _ => {
                             show_error!("{}", error);
-                            non_fatal_errors = true
+                            non_fatal_errors = true;
                         }
                     }
                 }
@@ -1580,5 +1580,5 @@ fn test_cp_localize_to_target() {
         )
         .unwrap()
             == Path::new("target/c.txt")
-    )
+    );
 }

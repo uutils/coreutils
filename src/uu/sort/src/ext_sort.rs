@@ -159,7 +159,7 @@ fn reader_writer<
 fn sorter(receiver: &Receiver<Chunk>, sender: &SyncSender<Chunk>, settings: &GlobalSettings) {
     while let Ok(mut payload) = receiver.recv() {
         payload.with_contents_mut(|contents| {
-            sort_by(&mut contents.lines, settings, &contents.line_data)
+            sort_by(&mut contents.lines, settings, &contents.line_data);
         });
         if sender.send(payload).is_err() {
             // The receiver has gone away, likely because the other thread hit an error.

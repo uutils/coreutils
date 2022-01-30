@@ -491,14 +491,14 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
                 if case.is_some() {
                     return Err(ParseError::MultipleUCaseLCase);
                 } else {
-                    case = Some(flag)
+                    case = Some(flag);
                 }
             }
             ConvFlag::LCase => {
                 if case.is_some() {
                     return Err(ParseError::MultipleUCaseLCase);
                 } else {
-                    case = Some(flag)
+                    case = Some(flag);
                 }
             }
             ConvFlag::Block => match (cbs, iconvflags.unblock) {

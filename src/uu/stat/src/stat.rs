@@ -406,7 +406,7 @@ impl Stater {
                         flag,
                         precision,
                         format: chars[i],
-                    })
+                    });
                 }
                 '\\' => {
                     if !use_printf {

@@ -138,7 +138,7 @@ pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo
                 } else {
                     // not every option is a format
                     if let Some(r) = od_argument_traditional_format(c) {
-                        formats.push(ParsedFormatterItemInfo::new(r, false))
+                        formats.push(ParsedFormatterItemInfo::new(r, false));
                     }
                 }
             }

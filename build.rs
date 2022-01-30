@@ -77,7 +77,7 @@ pub fn main() {
                     )
                     .as_bytes(),
                 )
-                .unwrap()
+                .unwrap();
             }
             k if k.starts_with(override_prefix) => {
                 mf.write_all(
@@ -97,7 +97,7 @@ pub fn main() {
                     )
                     .as_bytes(),
                 )
-                .unwrap()
+                .unwrap();
             }
             "false" | "true" => {
                 mf.write_all(
@@ -116,7 +116,7 @@ pub fn main() {
                     )
                     .as_bytes(),
                 )
-                .unwrap()
+                .unwrap();
             }
             "hashsum" => {
                 mf.write_all(
@@ -150,7 +150,7 @@ pub fn main() {
                     )
                     .as_bytes(),
                 )
-                .unwrap()
+                .unwrap();
             }
             _ => {
                 mf.write_all(
@@ -169,7 +169,7 @@ pub fn main() {
                     )
                     .as_bytes(),
                 )
-                .unwrap()
+                .unwrap();
             }
         }
     }

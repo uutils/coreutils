@@ -241,7 +241,7 @@ impl CmdResult {
                 "stdout was {}\nExpected any of {:#?}",
                 self.stdout_str(),
                 expected
-            )
+            );
         }
         self
     }
@@ -419,14 +419,14 @@ impl CmdResult {
 
     pub fn stdout_matches(&self, regex: &regex::Regex) -> &CmdResult {
         if !regex.is_match(self.stdout_str().trim()) {
-            panic!("Stdout does not match regex:\n{}", self.stdout_str())
+            panic!("Stdout does not match regex:\n{}", self.stdout_str());
         }
         self
     }
 
     pub fn stdout_does_not_match(&self, regex: &regex::Regex) -> &CmdResult {
         if regex.is_match(self.stdout_str().trim()) {
-            panic!("Stdout matches regex:\n{}", self.stdout_str())
+            panic!("Stdout matches regex:\n{}", self.stdout_str());
         }
         self
     }
@@ -1059,7 +1059,7 @@ impl UCommand {
                 .write_all(input);
             if !self.ignore_stdin_write_error {
                 if let Err(e) = write_result {
-                    panic!("failed to write to stdin of child: {}", e)
+                    panic!("failed to write to stdin of child: {}", e);
                 }
             }
         }

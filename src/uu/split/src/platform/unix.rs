@@ -55,7 +55,7 @@ impl Drop for WithEnvVarSet {
         if let Ok(ref prev_value) = self._previous_var_value {
             env::set_var(&self._previous_var_key, &prev_value);
         } else {
-            env::remove_var(&self._previous_var_key)
+            env::remove_var(&self._previous_var_key);
         }
     }
 }

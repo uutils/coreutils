@@ -308,7 +308,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                 if is_symlink(target_dir) {
                     if target_dir.is_file() {
                         if let Err(e) = fs::remove_file(target_dir) {
-                            show_error!("Could not update {}: {}", target_dir.quote(), e)
+                            show_error!("Could not update {}: {}", target_dir.quote(), e);
                         };
                     }
                     if target_dir.is_dir() {
@@ -316,7 +316,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                         // considered as a dir
                         // See test_ln::test_symlink_no_deref_dir
                         if let Err(e) = fs::remove_dir(target_dir) {
-                            show_error!("Could not update {}: {}", target_dir.quote(), e)
+                            show_error!("Could not update {}: {}", target_dir.quote(), e);
                         };
                     }
                 }
@@ -402,7 +402,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
                 if !read_yes() {
                     return Ok(());
                 }
-                fs::remove_file(dst)?
+                fs::remove_file(dst)?;
             }
             OverwriteMode::Force => fs::remove_file(dst)?,
         };

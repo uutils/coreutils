@@ -743,7 +743,7 @@ This almost certainly means that you have a corrupted file system.\n\
 NOTIFY YOUR SYSTEM MANAGER.\n\
 The following directory is part of the cycle {}.",
         file_name.quote()
-    )
+    );
 }
 
 #[derive(Debug)]

@@ -159,7 +159,7 @@ pub fn resolve_relative_path(path: &Path) -> Cow<Path> {
             }
             Component::CurDir => (),
             Component::RootDir | Component::Normal(_) | Component::Prefix(_) => {
-                result.push(comp.as_os_str())
+                result.push(comp.as_os_str());
             }
         }
     }

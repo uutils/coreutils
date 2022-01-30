@@ -44,7 +44,7 @@ impl Digest for md5::Context {
     }
 
     fn input(&mut self, input: &[u8]) {
-        self.consume(input)
+        self.consume(input);
     }
 
     fn result(&mut self, out: &mut [u8]) {

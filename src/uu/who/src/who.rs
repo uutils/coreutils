@@ -351,7 +351,7 @@ impl Who {
             let records = Utmpx::iter_all_records_from(f).peekable();
 
             if self.include_heading {
-                self.print_heading()
+                self.print_heading();
             }
             let cur_tty = if self.my_line_only {
                 current_tty()

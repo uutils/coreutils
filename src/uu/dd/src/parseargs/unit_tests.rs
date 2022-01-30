@@ -56,10 +56,10 @@ fn unimplemented_flags_should_error() {
         let matches = uu_app().try_get_matches_from(args).unwrap();
 
         if parse_iflags(&matches).is_ok() {
-            succeeded.push(format!("iflag={}", flag))
+            succeeded.push(format!("iflag={}", flag));
         }
         if parse_oflags(&matches).is_ok() {
-            succeeded.push(format!("oflag={}", flag))
+            succeeded.push(format!("oflag={}", flag));
         }
     }
 

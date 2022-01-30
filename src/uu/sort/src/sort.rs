@@ -535,7 +535,7 @@ impl<'a> Line<'a> {
                 }
                 Selection::Str(str) => {
                     if selector.needs_selection {
-                        line_data.selections.push(str)
+                        line_data.selections.push(str);
                     }
                 }
             }
@@ -701,9 +701,9 @@ impl<'a> Line<'a> {
 fn tokenize(line: &str, separator: Option<char>, token_buffer: &mut Vec<Field>) {
     assert!(token_buffer.is_empty());
     if let Some(separator) = separator {
-        tokenize_with_separator(line, separator, token_buffer)
+        tokenize_with_separator(line, separator, token_buffer);
     } else {
-        tokenize_default(line, token_buffer)
+        tokenize_default(line, token_buffer);
     }
 }
 
@@ -1232,7 +1232,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ),
             ));
         }
-        settings.separator = Some(separator.chars().next().unwrap())
+        settings.separator = Some(separator.chars().next().unwrap());
     }
 
     if let Some(values) = matches.values_of(options::KEY) {
@@ -1524,9 +1524,9 @@ fn exec(
 
 fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_data: &LineData<'a>) {
     if settings.stable || settings.unique {
-        unsorted.par_sort_by(|a, b| compare_by(a, b, settings, line_data, line_data))
+        unsorted.par_sort_by(|a, b| compare_by(a, b, settings, line_data, line_data));
     } else {
-        unsorted.par_sort_unstable_by(|a, b| compare_by(a, b, settings, line_data, line_data))
+        unsorted.par_sort_unstable_by(|a, b| compare_by(a, b, settings, line_data, line_data));
     }
 }
 

@@ -156,7 +156,7 @@ impl MountInfo {
             // but set dev_id
             if let Ok(stat) = std::fs::metadata(&self.mount_dir) {
                 // Why do we cast this to i32?
-                self.dev_id = (stat.dev() as i32).to_string()
+                self.dev_id = (stat.dev() as i32).to_string();
             } else {
                 self.dev_id = "".to_string();
             }

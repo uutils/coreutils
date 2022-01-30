@@ -155,8 +155,8 @@ fn push_token_if_not_escaped(acc: &mut Vec<(usize, Token)>, tok_idx: usize, toke
 
     if should_use_as_escaped {
         acc.pop();
-        acc.push((tok_idx, Token::new_value(s)))
+        acc.push((tok_idx, Token::new_value(s)));
     } else {
-        acc.push((tok_idx, token))
+        acc.push((tok_idx, token));
     }
 }

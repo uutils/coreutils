@@ -210,9 +210,9 @@ impl Capitalize for str {
         self.char_indices()
             .fold(String::with_capacity(self.len()), |mut acc, x| {
                 if x.0 != 0 {
-                    acc.push(x.1)
+                    acc.push(x.1);
                 } else {
-                    acc.push(x.1.to_ascii_uppercase())
+                    acc.push(x.1.to_ascii_uppercase());
                 }
                 acc
             })
@@ -324,12 +324,10 @@ impl Pinky {
             self.print_heading();
         }
         for ut in Utmpx::iter_all_records() {
-            if ut.is_user_process() {
-                if self.names.is_empty() {
-                    self.print_entry(&ut)?
-                } else if self.names.iter().any(|n| n.as_str() == ut.user()) {
-                    self.print_entry(&ut)?;
-                }
+            if ut.is_user_process()
+                && (self.names.is_empty() || self.names.iter().any(|n| n.as_str() == ut.user()))
+            {
+                self.print_entry(&ut)?;
             }
         }
         Ok(())

@@ -102,7 +102,7 @@ impl Settings {
             if let Some(n) = matches.value_of(options::SLEEP_INT) {
                 let parsed: Option<u32> = n.parse().ok();
                 if let Some(m) = parsed {
-                    settings.sleep_msec = m * 1000
+                    settings.sleep_msec = m * 1000;
                 }
             }
         }

@@ -61,7 +61,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             match p.parent() {
                 Some(d) => {
                     if d.components().next() == None {
-                        print!(".")
+                        print!(".");
                     } else {
                         print_verbatim(d).unwrap();
                     }

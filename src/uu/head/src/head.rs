@@ -424,7 +424,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     if !first {
                         println!();
                     }
-                    println!("==> standard input <==")
+                    println!("==> standard input <==");
                 }
                 let stdin = std::io::stdin();
                 let mut stdin = stdin.lock();
@@ -460,7 +460,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     if !first {
                         println!();
                     }
-                    println!("==> {} <==", name)
+                    println!("==> {} <==", name);
                 }
                 head_file(&mut file, options)
             }
