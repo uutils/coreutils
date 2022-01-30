@@ -438,7 +438,7 @@ fn test_number() {
     assert_eq!(file_read("xab"), "fghij");
     assert_eq!(file_read("xac"), "klmno");
     assert_eq!(file_read("xad"), "pqrst");
-    assert_eq!(file_read("xae"), "uvwxyz");
+    assert_eq!(file_read("xae"), "uvwxyz\n");
 }
 
 #[test]
