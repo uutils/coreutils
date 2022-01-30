@@ -7,19 +7,16 @@ use crate::common::util::*;
 extern crate regex;
 use self::regex::Regex;
 
-#[cfg(unix)]
+#[cfg(all(unix, feature = "chmod"))]
 use nix::unistd::{close, dup2};
-#[cfg(unix)]
-use std::os::unix::io::AsRawFd;
-
 use std::collections::HashMap;
+#[cfg(all(unix, feature = "chmod"))]
+use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 #[cfg(not(windows))]
 extern crate libc;
-#[cfg(not(windows))]
-use self::libc::umask;
 #[cfg(not(windows))]
 use std::path::PathBuf;
 #[cfg(not(windows))]
@@ -577,18 +574,6 @@ fn test_ls_commas() {
 
 #[test]
 fn test_ls_long() {
-    #[cfg(not(windows))]
-    let last;
-    #[cfg(not(windows))]
-    {
-        let _guard = UMASK_MUTEX.lock();
-        last = unsafe { umask(0) };
-
-        unsafe {
-            umask(0o002);
-        }
-    }
-
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch(&at.plus_as_string("test-long"));
@@ -596,17 +581,10 @@ fn test_ls_long() {
     for arg in LONG_ARGS {
         let result = scene.ucmd().arg(arg).arg("test-long").succeeds();
         #[cfg(not(windows))]
-        result.stdout_contains("-rw-rw-r--");
+        result.stdout_matches(&Regex::new(r"[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3}.*").unwrap());
 
         #[cfg(windows)]
         result.stdout_contains("---------- 1 somebody somegroup");
-    }
-
-    #[cfg(not(windows))]
-    {
-        unsafe {
-            umask(last);
-        }
     }
 }
 
