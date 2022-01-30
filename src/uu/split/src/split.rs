@@ -14,8 +14,7 @@ use crate::filenames::FilenameFactory;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::convert::TryFrom;
 use std::env;
-use std::fs::remove_file;
-use std::fs::File;
+use std::fs::{metadata, remove_file, File};
 use std::io::{stdin, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use uucore::display::Quotable;
@@ -27,6 +26,7 @@ static OPT_LINE_BYTES: &str = "line-bytes";
 static OPT_LINES: &str = "lines";
 static OPT_ADDITIONAL_SUFFIX: &str = "additional-suffix";
 static OPT_FILTER: &str = "filter";
+static OPT_NUMBER: &str = "number";
 static OPT_NUMERIC_SUFFIXES: &str = "numeric-suffixes";
 static OPT_SUFFIX_LENGTH: &str = "suffix-length";
 static OPT_DEFAULT_SUFFIX_LENGTH: &str = "0";
@@ -132,6 +132,13 @@ pub fn uu_app<'a>() -> App<'a> {
                 .default_value("1000")
                 .help("put NUMBER lines/records per output file"),
         )
+        .arg(
+            Arg::new(OPT_NUMBER)
+                .short('n')
+                .long(OPT_NUMBER)
+                .takes_value(true)
+                .help("generate CHUNKS output files; see explanation below"),
+        )
         // rest of the arguments
         .arg(
             Arg::new(OPT_ADDITIONAL_SUFFIX)
@@ -194,6 +201,9 @@ enum Strategy {
     /// Each chunk has as many lines as possible without exceeding the
     /// specified number of bytes.
     LineBytes(usize),
+
+    /// Split the file into this many chunks.
+    Number(usize),
 }
 
 impl Strategy {
@@ -208,25 +218,33 @@ impl Strategy {
             matches.occurrences_of(OPT_LINES),
             matches.occurrences_of(OPT_BYTES),
             matches.occurrences_of(OPT_LINE_BYTES),
+            matches.occurrences_of(OPT_NUMBER),
         ) {
-            (0, 0, 0) => Ok(Strategy::Lines(1000)),
-            (1, 0, 0) => {
+            (0, 0, 0, 0) => Ok(Strategy::Lines(1000)),
+            (1, 0, 0, 0) => {
                 let s = matches.value_of(OPT_LINES).unwrap();
                 let n = parse_size(s)
                     .map_err(|e| USimpleError::new(1, format!("invalid number of lines: {}", e)))?;
                 Ok(Strategy::Lines(n))
             }
-            (0, 1, 0) => {
+            (0, 1, 0, 0) => {
                 let s = matches.value_of(OPT_BYTES).unwrap();
                 let n = parse_size(s)
                     .map_err(|e| USimpleError::new(1, format!("invalid number of bytes: {}", e)))?;
                 Ok(Strategy::Bytes(n))
             }
-            (0, 0, 1) => {
+            (0, 0, 1, 0) => {
                 let s = matches.value_of(OPT_LINE_BYTES).unwrap();
                 let n = parse_size(s)
                     .map_err(|e| USimpleError::new(1, format!("invalid number of bytes: {}", e)))?;
                 Ok(Strategy::LineBytes(n))
+            }
+            (0, 0, 0, 1) => {
+                let s = matches.value_of(OPT_NUMBER).unwrap();
+                let n = s.parse::<usize>().map_err(|e| {
+                    USimpleError::new(1, format!("invalid number of chunks: {}", e))
+                })?;
+                Ok(Strategy::Number(n))
             }
             _ => Err(UUsageError::new(1, "cannot split in more than one way")),
         }
@@ -344,6 +362,84 @@ impl Splitter for ByteSplitter {
     }
 }
 
+/// Split a file into a specific number of chunks by byte.
+///
+/// This function always creates one output file for each chunk, even
+/// if there is an error reading or writing one of the chunks or if
+/// the input file is truncated. However, if the `filter` option is
+/// being used, then no files are created.
+///
+/// # Errors
+///
+/// This function returns an error if there is a problem reading from
+/// `reader` or writing to one of the output files.
+fn split_into_n_chunks_by_byte<R>(
+    settings: &Settings,
+    reader: &mut R,
+    num_chunks: usize,
+) -> UResult<()>
+where
+    R: Read,
+{
+    // Get the size of the input file in bytes and compute the number
+    // of bytes per chunk.
+    let metadata = metadata(&settings.input).unwrap();
+    let num_bytes = metadata.len();
+    let chunk_size = (num_bytes / (num_chunks as u64)) as usize;
+
+    // This object is responsible for creating the filename for each chunk.
+    let filename_factory = FilenameFactory::new(
+        &settings.prefix,
+        &settings.additional_suffix,
+        settings.suffix_length,
+        settings.numeric_suffix,
+    );
+
+    // Create one writer for each chunk. This will create each
+    // of the underlying files (if not in `--filter` mode).
+    let mut writers = vec![];
+    for i in 0..num_chunks {
+        let filename = filename_factory
+            .make(i)
+            .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+        let writer = platform::instantiate_current_writer(&settings.filter, filename.as_str());
+        writers.push(writer);
+    }
+
+    // This block evaluates to an object of type `std::io::Result<()>`.
+    {
+        // Write `chunk_size` bytes from the reader into each writer
+        // except the last.
+        //
+        // Re-use the buffer to avoid re-allocating a `Vec` on each
+        // iteration. The contents will be completely overwritten each
+        // time we call `read_exact()`.
+        //
+        // The last writer gets all remaining bytes so that if the number
+        // of bytes in the input file was not evenly divisible by
+        // `num_chunks`, we don't leave any bytes behind.
+        let mut buf = vec![0u8; chunk_size];
+        for writer in writers.iter_mut().take(num_chunks - 1) {
+            reader.read_exact(&mut buf)?;
+            writer.write_all(&buf)?;
+        }
+
+        // Write all the remaining bytes to the last chunk.
+        //
+        // To do this, we resize our buffer to have the necessary number
+        // of bytes.
+        let i = num_chunks - 1;
+        let last_chunk_size = num_bytes as usize - (chunk_size * (num_chunks - 1));
+        buf.resize(last_chunk_size, 0);
+
+        reader.read_exact(&mut buf)?;
+        writers[i].write_all(&buf)?;
+
+        Ok(())
+    }
+    .map_err_context(|| "I/O error".to_string())
+}
+
 fn split(settings: Settings) -> UResult<()> {
     let mut reader = BufReader::new(if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
@@ -357,17 +453,22 @@ fn split(settings: Settings) -> UResult<()> {
         Box::new(r) as Box<dyn Read>
     });
 
+    if let Strategy::Number(num_chunks) = settings.strategy {
+        return split_into_n_chunks_by_byte(&settings, &mut reader, num_chunks);
+    }
+
     let mut splitter: Box<dyn Splitter> = match settings.strategy {
         Strategy::Lines(chunk_size) => Box::new(LineSplitter::new(chunk_size)),
         Strategy::Bytes(chunk_size) | Strategy::LineBytes(chunk_size) => {
             Box::new(ByteSplitter::new(chunk_size))
         }
+        _ => unreachable!(),
     };
 
     // This object is responsible for creating the filename for each chunk.
     let filename_factory = FilenameFactory::new(
-        settings.prefix,
-        settings.additional_suffix,
+        &settings.prefix,
+        &settings.additional_suffix,
         settings.suffix_length,
         settings.numeric_suffix,
     );
