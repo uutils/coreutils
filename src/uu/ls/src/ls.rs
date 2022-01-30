@@ -91,6 +91,7 @@ pub mod options {
     }
 
     pub mod size {
+        pub static ALLOCATION_SIZE: &str = "s";
         pub static HUMAN_READABLE: &str = "human-readable";
         pub static SI: &str = "si";
     }
@@ -306,6 +307,7 @@ struct Config {
     inode: bool,
     color: Option<LsColors>,
     long: LongFormat,
+    alloc_size: bool,
     width: u16,
     quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
@@ -324,6 +326,7 @@ struct LongFormat {
 }
 
 struct PaddingCollection {
+    longest_block_size_len: usize,
     #[cfg(unix)]
     longest_inode_len: usize,
     longest_link_count_len: usize,
@@ -469,6 +472,8 @@ impl Config {
         } else {
             None
         };
+
+        let alloc_size = options.is_present(options::size::ALLOCATION_SIZE);
 
         let size_format = if options.is_present(options::size::HUMAN_READABLE) {
             SizeFormat::Binary
@@ -676,6 +681,7 @@ impl Config {
             #[cfg(unix)]
             inode: options.is_present(options::INODE),
             long,
+            alloc_size,
             width,
             quoting_style,
             indicator_style,
@@ -1176,6 +1182,12 @@ only ignore '.' and '..'.",
                 .takes_value(true),
         )
         .arg(
+            Arg::new(options::size::ALLOCATION_SIZE)
+                .short('s')
+                .long("size")
+                .help("print the allocated size of each file, in blocks"),
+        )
+        .arg(
             Arg::new(options::COLOR)
                 .long(options::COLOR)
                 .help("Color output based on file type.")
@@ -1588,7 +1600,7 @@ fn enter_directory(
     entries.append(&mut vec_path_data);
 
     // Print total after any error display
-    if config.format == Format::Long {
+    if config.format == Format::Long || config.alloc_size {
         display_total(&entries, config, out);
     }
 
@@ -1629,7 +1641,7 @@ fn display_dir_entry_size(
     entry: &PathData,
     config: &Config,
     out: &mut BufWriter<std::io::Stdout>,
-) -> (usize, usize, usize, usize, usize, usize, usize) {
+) -> (usize, usize, usize, usize, usize, usize) {
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
     if let Some(md) = entry.md(out) {
         let (size_len, major_len, minor_len) = match display_size_or_rdev(md, config) {
@@ -1647,10 +1659,9 @@ fn display_dir_entry_size(
             size_len,
             major_len,
             minor_len,
-            display_inode(md).len(),
         )
     } else {
-        (0, 0, 0, 0, 0, 0, 0)
+        (0, 0, 0, 0, 0, 0)
     }
 }
 
@@ -1673,15 +1684,79 @@ fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
     let _ = writeln!(out, "total {}", display_size(total_size, config));
 }
 
+fn display_more_info(
+    item: &PathData,
+    padding: &PaddingCollection,
+    config: &Config,
+    out: &mut BufWriter<Stdout>,
+) -> String {
+    let mut result = String::new();
+    #[cfg(unix)]
+    {
+        if config.inode {
+            let i = if let Some(md) = item.md(out) {
+                get_inode(md)
+            } else {
+                "?".to_owned()
+            };
+            result.push_str(&format!("{} ", pad_left(&i, padding.longest_inode_len)))
+        }
+    }
+    if config.alloc_size {
+        let s = if let Some(md) = item.md(out) {
+            display_size(get_block_size(md, config), config)
+        } else {
+            "?".to_owned()
+        };
+        result.push_str(&format!(
+            "{} ",
+            pad_left(&s, padding.longest_block_size_len),
+        ))
+    }
+    result
+}
+
 fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
     // `-Z`, `--context`:
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
     // option, print the security context to the left of the size column.
 
+    #[cfg(not(unix))]
+    let longest_inode_len = 1;
+    #[cfg(unix)]
+    let mut longest_inode_len = 1;
+    #[cfg(unix)]
+    if config.inode {
+        for item in items {
+            let inode_len = if let Some(md) = item.md(out) {
+                display_inode(md).len()
+            } else {
+                continue;
+            };
+            longest_inode_len = inode_len.max(longest_inode_len);
+        }
+    }
+
+    let mut longest_block_size_len = 1;
+    if config.alloc_size {
+        for item in items {
+            if let Some(md) = item.md(out) {
+                let size_len = match display_size_or_rdev(md, config) {
+                    SizeOrDeviceId::Size(_) => {
+                        display_size(get_block_size(md, config), config).len()
+                    }
+                    SizeOrDeviceId::Device(_, _) => 1usize,
+                };
+                longest_block_size_len = size_len.max(longest_block_size_len);
+            } else {
+                continue;
+            };
+        }
+    }
+
     if config.format == Format::Long {
         #[cfg(unix)]
         let (
-            mut longest_inode_len,
             mut longest_link_count_len,
             mut longest_uname_len,
             mut longest_group_len,
@@ -1689,7 +1764,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             mut longest_size_len,
             mut longest_major_len,
             mut longest_minor_len,
-        ) = (1, 1, 1, 1, 1, 1, 1, 1);
+        ) = (1, 1, 1, 1, 1, 1, 1);
 
         #[cfg(not(unix))]
         let (
@@ -1703,9 +1778,8 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         #[cfg(unix)]
         for item in items {
             let context_len = item.security_context.len();
-            let (link_count_len, uname_len, group_len, size_len, major_len, minor_len, inode_len) =
+            let (link_count_len, uname_len, group_len, size_len, major_len, minor_len) =
                 display_dir_entry_size(item, config, out);
-            longest_inode_len = inode_len.max(longest_inode_len);
             longest_link_count_len = link_count_len.max(longest_link_count_len);
             longest_uname_len = uname_len.max(longest_uname_len);
             longest_group_len = group_len.max(longest_group_len);
@@ -1747,24 +1821,25 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         }
 
         for item in items {
-            display_item_long(
-                item,
-                &PaddingCollection {
-                    #[cfg(unix)]
-                    longest_inode_len,
-                    longest_link_count_len,
-                    longest_uname_len,
-                    longest_group_len,
-                    longest_context_len,
-                    longest_size_len,
-                    #[cfg(unix)]
-                    longest_major_len,
-                    #[cfg(unix)]
-                    longest_minor_len,
-                },
-                config,
-                out,
-            );
+            let padding = &PaddingCollection {
+                longest_block_size_len,
+                #[cfg(unix)]
+                longest_inode_len,
+                longest_link_count_len,
+                longest_uname_len,
+                longest_group_len,
+                longest_context_len,
+                longest_size_len,
+                #[cfg(unix)]
+                longest_major_len,
+                #[cfg(unix)]
+                longest_minor_len,
+            };
+            if config.inode || config.alloc_size {
+                let more_info = display_more_info(item, padding, config, out);
+                let _ = write!(out, "{}", more_info);
+            }
+            display_item_long(item, padding, config, out);
         }
     } else {
         let mut longest_context_len = 1;
@@ -1778,27 +1853,30 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             None
         };
 
-        #[cfg(not(unix))]
-        let longest_inode_len = 1;
-        #[cfg(unix)]
-        let mut longest_inode_len = 1;
-        #[cfg(unix)]
-        if config.inode {
-            for item in items {
-                let inode_len = if let Some(md) = item.md(out) {
-                    display_inode(md).len()
-                } else {
-                    continue;
-                };
-                longest_inode_len = inode_len.max(longest_inode_len);
-            }
+        let padding = PaddingCollection {
+            longest_block_size_len,
+            #[cfg(unix)]
+            longest_inode_len,
+            longest_link_count_len: 0usize,
+            longest_uname_len: 0usize,
+            longest_group_len: 0usize,
+            longest_context_len: 0usize,
+            longest_size_len: 0usize,
+            #[cfg(unix)]
+            longest_major_len: 0usize,
+            #[cfg(unix)]
+            longest_minor_len: 0usize,
+        };
+
+        let mut names_vec = Vec::new();
+
+        for i in items {
+            let more_info = display_more_info(i, &padding, config, out);
+            let cell = display_file_name(i, config, prefix_context, more_info, out);
+            names_vec.push(cell);
         }
 
-        let names: std::vec::IntoIter<Cell> = items
-            .iter()
-            .map(|i| display_file_name(i, config, prefix_context, longest_inode_len, out))
-            .collect::<Vec<Cell>>()
-            .into_iter();
+        let names = names_vec.into_iter();
 
         match config.format {
             Format::Columns => display_grid(names, config.width, Direction::TopToBottom, out),
@@ -1935,17 +2013,6 @@ fn display_item_long(
     out: &mut BufWriter<Stdout>,
 ) {
     if let Some(md) = item.md(out) {
-        #[cfg(unix)]
-        {
-            if config.inode {
-                let _ = write!(
-                    out,
-                    "{} ",
-                    pad_left(&get_inode(md), padding.longest_inode_len),
-                );
-            }
-        }
-
         let _ = write!(
             out,
             "{}{} {}",
@@ -2024,7 +2091,7 @@ fn display_item_long(
             }
         };
 
-        let dfn = display_file_name(item, config, None, 0, out).contents;
+        let dfn = display_file_name(item, config, None, "".to_owned(), out).contents;
 
         let _ = writeln!(out, " {} {}", display_date(md, config), dfn);
     } else {
@@ -2105,7 +2172,7 @@ fn display_item_long(
             let _ = write!(out, " {}", pad_right("?", padding.longest_uname_len));
         }
 
-        let dfn = display_file_name(item, config, None, 0, out).contents;
+        let dfn = display_file_name(item, config, None, "".to_owned(), out).contents;
         let date_len = 12;
 
         let _ = writeln!(
@@ -2120,7 +2187,7 @@ fn display_item_long(
 
 #[cfg(unix)]
 fn get_inode(metadata: &Metadata) -> String {
-    format!("{:8}", metadata.ino())
+    format!("{}", metadata.ino())
 }
 
 // Currently getpwuid is `linux` target only. If it's broken out into
@@ -2363,7 +2430,7 @@ fn display_file_name(
     path: &PathData,
     config: &Config,
     prefix_context: Option<usize>,
-    longest_inode_len: usize,
+    more_info: String,
     out: &mut BufWriter<Stdout>,
 ) -> Cell {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
@@ -2379,18 +2446,11 @@ fn display_file_name(
         }
     }
 
-    #[cfg(unix)]
-    {
-        if config.inode && config.format != Format::Long {
-            let inode = match path.md(out) {
-                Some(md) => pad_left(&get_inode(md), longest_inode_len),
-                None => pad_left("?", longest_inode_len),
-            };
-            // increment width here b/c name was given colors and name.width() is now the wrong
-            // size for display
-            width += inode.width();
-            name = inode + " " + &name;
-        }
+    if config.format != Format::Long && !more_info.is_empty() {
+        // increment width here b/c name was given colors and name.width() is now the wrong
+        // size for display
+        width += more_info.width();
+        name = more_info + &name;
     }
 
     if config.indicator_style != IndicatorStyle::None {

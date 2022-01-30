@@ -83,7 +83,90 @@ fn test_ls_ordering() {
         .stdout_matches(&Regex::new("some-dir1:\\ntotal 0").unwrap());
 }
 
-//#[cfg(all(feature = "mknod"))]
+#[cfg(all(feature = "truncate"))]
+#[test]
+fn test_ls_allocation_size() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("some-dir1");
+    at.mkdir("some-dir1/empty-file");
+
+    scene
+        .ccmd("truncate")
+        .arg("-s")
+        .arg("4M")
+        .arg("some-dir1/file-with-holes")
+        .succeeds();
+
+    #[cfg(unix)]
+    {
+        scene
+            .ucmd()
+            .arg("-s1")
+            .arg("some-dir1/empty-file")
+            .succeeds()
+            .stdout_contains("0 some-dir1/empty-file")
+            // block size is 0 whereas size/len is 4194304
+            .stdout_contains("0 some-dir1/file-with-holes");
+
+        scene
+            .ucmd()
+            .arg("-sl")
+            .arg("some-dir1/empty-file")
+            .succeeds()
+            // block size is 0 whereas size/len is 4194304
+            .stdout_contains("4194304");
+
+        // fill empty file with zeros
+        scene
+            .ccmd("dd")
+            .arg("if=/dev/zero")
+            .arg("some-dir1/file-with-holes")
+            .arg("bs=1024")
+            .arg("count=4096")
+            .succeeds();
+
+        scene
+            .ucmd()
+            .arg("-s1")
+            .arg("some-dir1/empty-file")
+            .succeeds()
+            .stdout_contains("0 some-dir1/empty-file")
+            // block size is 0 whereas size/len is 4194304
+            .stdout_contains("4160 some-dir1/file-with-holes");
+
+        // Test alignment of different sized files
+        let res = scene
+            .ucmd()
+            .arg("-si1h")
+            .arg("some-dir1/empty-file")
+            .arg("some-dir1/file-with-holes")
+            .succeeds();
+
+        let empty_file_len = String::from_utf8(res.stdout().to_owned())
+            .ok()
+            .unwrap()
+            .lines()
+            .next()
+            .unwrap()
+            .strip_suffix("some-dir1/empty-file")
+            .unwrap()
+            .len();
+
+        let file_with_holes_len = String::from_utf8(res.stdout().to_owned())
+            .ok()
+            .unwrap()
+            .lines()
+            .nth(1)
+            .unwrap()
+            .strip_suffix("some-dir1/file-with-holes")
+            .unwrap()
+            .len();
+
+        assert_eq!(empty_file_len, file_with_holes_len);
+    }
+}
+
 #[test]
 fn test_ls_devices() {
     let scene = TestScenario::new(util_name!());
@@ -111,7 +194,7 @@ fn test_ls_devices() {
             .stdout_matches(&Regex::new("[^ ] 1, 3 [^ ]").unwrap());
     }
 
-    // Regex tests alignment against a file (stdout is a link to a tty)
+    // Tests display alignment against a file (stdout is a link to a tty)
     #[cfg(unix)]
     {
         let res = scene
