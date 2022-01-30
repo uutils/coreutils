@@ -74,7 +74,7 @@ impl Sieve {
     #[allow(dead_code)]
     #[inline]
     pub fn odd_primes() -> PrimeSieve {
-        (&INIT_PRIMES[1..]).iter().copied().chain(Sieve::new())
+        INIT_PRIMES[1..].iter().copied().chain(Sieve::new())
     }
 }
 

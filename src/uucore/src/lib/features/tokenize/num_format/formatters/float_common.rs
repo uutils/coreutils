@@ -186,7 +186,7 @@ fn round_terminal_digit(
     if position < after_dec.len() {
         let digit_at_pos: char;
         {
-            digit_at_pos = (&after_dec[position..=position]).chars().next().expect("");
+            digit_at_pos = after_dec[position..=position].chars().next().expect("");
         }
         if let '5'..='9' = digit_at_pos {
             let (new_after_dec, finished_in_dec) = _round_str_from(&after_dec, position);

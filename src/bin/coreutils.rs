@@ -64,7 +64,7 @@ fn main() {
     // * prefix/stem may be any string ending in a non-alphanumeric character
     let util_name = if let Some(util) = utils.keys().find(|util| {
         binary_as_util.ends_with(*util)
-            && !(&binary_as_util[..binary_as_util.len() - (*util).len()])
+            && !binary_as_util[..binary_as_util.len() - (*util).len()]
                 .ends_with(char::is_alphanumeric)
     }) {
         // prefixed util => replace 0th (aka, executable name) argument

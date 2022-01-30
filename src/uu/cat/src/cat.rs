@@ -479,7 +479,7 @@ fn write_lines<R: FdReadable>(
                 if !state.at_line_start || !options.squeeze_blank || !state.one_blank_kept {
                     state.one_blank_kept = true;
                     if state.at_line_start && options.number == NumberingMode::All {
-                        write!(&mut writer, "{0:6}\t", state.line_number)?;
+                        write!(writer, "{0:6}\t", state.line_number)?;
                         state.line_number += 1;
                     }
                     writer.write_all(options.end_of_line().as_bytes())?;
@@ -498,7 +498,7 @@ fn write_lines<R: FdReadable>(
             }
             state.one_blank_kept = false;
             if state.at_line_start && options.number != NumberingMode::None {
-                write!(&mut writer, "{0:6}\t", state.line_number)?;
+                write!(writer, "{0:6}\t", state.line_number)?;
                 state.line_number += 1;
             }
 
