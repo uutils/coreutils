@@ -2,8 +2,8 @@
 name = "uu_printf"
 version = "0.0.12"
 authors = [
-    "Nathan Ross",
-    "uutils developers",
+  "Nathan Ross",
+  "uutils developers",
 ]
 license = "MIT"
 description = "printf ~ (uutils) FORMAT and display ARGUMENTS"
@@ -19,8 +19,8 @@ path = "src/printf.rs"
 
 [dependencies]
 clap = { version = "3.0", features = ["wrap_help", "cargo"] }
-itertools = "0.8.0"
-uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["memo"] }
+itertools = "0.10.0"
+uucore = { version = ">=0.0.11", package = "uucore", path = "../../uucore", features = ["memo"] }
 
 [[bin]]
 name = "printf"
