@@ -402,11 +402,6 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v2
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        ## Install/setup prerequisites
-        sudo apt-get -y update ; sudo apt-get -y install python3-sphinx ;
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
