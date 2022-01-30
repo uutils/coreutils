@@ -1473,7 +1473,7 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
     Ok(())
 }
 
-fn sort_entries(entries: &mut Vec<PathData>, config: &Config, out: &mut BufWriter<Stdout>) {
+fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<Stdout>) {
     match config.sort {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
