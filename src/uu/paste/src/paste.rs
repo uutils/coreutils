@@ -9,7 +9,7 @@
 
 use clap::{crate_version, App, AppSettings, Arg};
 use std::fs::File;
-use std::io::{stdin, BufRead, BufReader, Read, stdout, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
 use std::path::Path;
 use uucore::error::{FromIo, UResult};
 
@@ -76,7 +76,7 @@ pub fn uu_app<'a>() -> App<'a> {
 }
 
 fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> {
-    let mut files = vec![];
+    let mut files = Vec::with_capacity(filenames.len());
     for name in filenames {
         let file = if name == "-" {
             None
