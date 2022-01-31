@@ -88,10 +88,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> 
         files.push(file);
     }
 
-    let delimiters: Vec<String> = unescape(delimiters)
-        .chars()
-        .map(|x| x.to_string())
-        .collect();
+    let delimiters: Vec<char> = unescape(delimiters).chars().collect();
     let mut delim_count = 0;
 
     if serial {
@@ -103,7 +100,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> 
                     Ok(0) => break,
                     Ok(_) => {
                         output.push_str(line.trim_end());
-                        output.push_str(&delimiters[delim_count % delimiters.len()]);
+                        output.push(delimiters[delim_count % delimiters.len()]);
                     }
                     Err(e) => return Err(e.map_err_context(String::new)),
                 }
@@ -131,7 +128,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> 
                         Err(e) => return Err(e.map_err_context(String::new)),
                     }
                 }
-                output.push_str(&delimiters[delim_count % delimiters.len()]);
+                output.push(delimiters[delim_count % delimiters.len()]);
                 delim_count += 1;
             }
             if files.len() == eof_count {
