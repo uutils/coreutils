@@ -23,20 +23,18 @@ use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
+#[cfg(unix)]
 use std::{
     cmp::Reverse,
+    collections::HashMap,
+    env,
     error::Error,
     fmt::Display,
     fs::{self, DirEntry, FileType, Metadata},
     io::{stdout, BufWriter, ErrorKind, Stdout, Write},
-    path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
-};
-#[cfg(unix)]
-use std::{
-    collections::HashMap,
     os::unix::fs::{FileTypeExt, MetadataExt},
-    time::Duration,
+    path::{Path, PathBuf},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use std::{ffi::OsString, fs::ReadDir};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
@@ -93,6 +91,8 @@ pub mod options {
     pub mod size {
         pub static HUMAN_READABLE: &str = "human-readable";
         pub static SI: &str = "si";
+        pub static BLOCK_SIZE: &str = "block-size";
+        pub static KB_BLOCK_SIZE: &str = "kb-block-size";
     }
 
     pub mod quoting {
@@ -311,6 +311,8 @@ struct Config {
     time_style: TimeStyle,
     context: bool,
     selinux_supported: bool,
+    #[cfg(unix)]
+    block_size: u64,
 }
 
 // Fields that can be removed or added to the long format
@@ -334,6 +336,8 @@ struct PaddingCollection {
     longest_major_len: usize,
     #[cfg(unix)]
     longest_minor_len: usize,
+    #[cfg(unix)]
+    longest_blk_len: u64,
 }
 
 impl Config {
@@ -660,6 +664,17 @@ impl Config {
             Dereference::DirArgs
         };
 
+        #[cfg(unix)]
+        let block_size = {
+            if options.is_present(options::size::BLOCK_SIZE)
+                && options.is_present(options::size::KB_BLOCK_SIZE)
+            {
+                1024
+            } else {
+                get_env_block_size()
+            }
+        };
+
         Ok(Self {
             format,
             files,
@@ -690,6 +705,8 @@ impl Config {
                     false
                 }
             },
+            #[cfg(unix)]
+            block_size,
         })
     }
 }
@@ -830,6 +847,24 @@ pub fn uu_app<'a>() -> App<'a> {
                 .help("-l with numeric UIDs and GIDs.")
                 .multiple_occurrences(true),
         )
+        // See `-s` and `--size` section on https://www.gnu.org/software/coreutils/manual/html_node/What-information-is-listed.html
+        .arg(
+            Arg::new(options::size::BLOCK_SIZE)
+                .short('s')
+                .long(options::size::BLOCK_SIZE)
+                .help(
+                    "Display the number of file system blocks actually used by each file, \
+                in units of 512 bytes, where partial units are rounded up to the next integer \
+                value.  If the output is to a terminal, a total sum for all the file sizes is \
+                output on a line before the listing.  The environment variable BLOCKSIZE \
+                overrides the unit size of 512 bytes.",
+                ),
+        )
+        .arg(Arg::new(options::size::KB_BLOCK_SIZE).short('k').help(
+            "If the -s option is specified, print the file size allocation in \
+                     kilobytes, not blocks.  This option overrides the environment \
+                     variable BLOCKSIZE.",
+        ))
         // Quoting style
         .arg(
             Arg::new(options::QUOTING_STYLE)
@@ -1664,10 +1699,7 @@ fn pad_right(string: &str, count: usize) -> String {
 fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
     let mut total_size = 0;
     for item in items {
-        total_size += item
-            .md(out)
-            .as_ref()
-            .map_or(0, |md| get_block_size(md, config));
+        total_size += get_block_size_for_path(item, config, out);
     }
     let _ = writeln!(out, "total {}", display_size(total_size, config));
 }
@@ -1688,7 +1720,8 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             mut longest_size_len,
             mut longest_major_len,
             mut longest_minor_len,
-        ) = (1, 1, 1, 1, 1, 1, 1, 1);
+            mut longest_blk_len,
+        ) = (1, 1, 1, 1, 1, 1, 1, 1, 1);
 
         #[cfg(not(unix))]
         let (
@@ -1722,6 +1755,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                     .max(longest_size_len)
                     .max(longest_major_len + longest_minor_len + 2usize);
             }
+            longest_blk_len = longest_blk_len.max(get_block_size_for_path(item, config, out))
         }
 
         #[cfg(not(unix))]
@@ -1760,6 +1794,8 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                     longest_major_len,
                     #[cfg(unix)]
                     longest_minor_len,
+                    #[cfg(unix)]
+                    longest_blk_len,
                 },
                 config,
                 out,
@@ -1841,11 +1877,10 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
     */
     #[cfg(unix)]
     {
-        // hard-coded for now - enabling setting this remains a TODO
-        let ls_block_size = 1024;
         match config.size_format {
+            //  Multiplies by 512 to recover the bytes because `blocks` returns count 512-bytes
             SizeFormat::Binary | SizeFormat::Decimal => md.blocks() * 512,
-            SizeFormat::Bytes => md.blocks() * 512 / ls_block_size,
+            SizeFormat::Bytes => md.blocks() * 512 / config.block_size,
         }
     }
 
@@ -2563,4 +2598,16 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
     } else {
         substitute_string
     }
+}
+
+#[cfg(unix)]
+fn get_env_block_size() -> u64 {
+    env::var("BLOCKSIZE").map_or(1024, |blk_sz| blk_sz.parse::<u64>().map_or(1024, |v| v))
+}
+
+#[cfg(unix)]
+fn get_block_size_for_path(item: &PathData, config: &Config, out: &mut BufWriter<Stdout>) -> u64 {
+    item.md(out)
+        .as_ref()
+        .map_or(0, |md| get_block_size(md, config))
 }
