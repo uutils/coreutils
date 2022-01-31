@@ -53,6 +53,12 @@ static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not e
 #[cfg(feature = "selinux")]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file";
 
+// `The block size currently defaults to 1024 bytes, but this can be overridden
+// (see [Block size](https://www.gnu.org/software/coreutils/manual/html_node/Block-size.html))`
+// from https://www.gnu.org/software/coreutils/manual/html_node/What-information-is-listed.html#--size
+#[cfg(unix)]
+const DEFAULT_BLOCK_SIZE: u64 = 1024;
+
 fn usage() -> String {
     format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
@@ -312,7 +318,7 @@ struct Config {
     context: bool,
     selinux_supported: bool,
     #[cfg(unix)]
-    block_size: u64,
+    block_size: Option<u64>,
 }
 
 // Fields that can be removed or added to the long format
@@ -669,9 +675,11 @@ impl Config {
             if options.is_present(options::size::BLOCK_SIZE)
                 && options.is_present(options::size::KB_BLOCK_SIZE)
             {
-                1024
+                Some(1024)
+            } else if options.is_present(options::size::BLOCK_SIZE) {
+                Some(get_env_block_size())
             } else {
-                get_env_block_size()
+                None
             }
         };
 
@@ -1622,7 +1630,7 @@ fn enter_directory(
     entries.append(&mut vec_path_data);
 
     // Print total after any error display
-    if config.format == Format::Long {
+    if config.format == Format::Long || config.block_size.is_some() {
         display_total(&entries, config, out);
     }
 
@@ -1663,7 +1671,7 @@ fn display_dir_entry_size(
     entry: &PathData,
     config: &Config,
     out: &mut BufWriter<std::io::Stdout>,
-) -> (usize, usize, usize, usize, usize, usize, usize) {
+) -> (usize, usize, usize, usize, usize, usize, usize, u64) {
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
     if let Some(md) = entry.md(out) {
         let (size_len, major_len, minor_len) = match display_size_or_rdev(md, config) {
@@ -1674,6 +1682,7 @@ fn display_dir_entry_size(
             ),
             SizeOrDeviceId::Size(size) => (size.len(), 0usize, 0usize),
         };
+        let blk_size = format!("{}", get_block_size(md, config)).len() as u64;
         (
             display_symlink_count(md).len(),
             display_uname(md, config).len(),
@@ -1682,9 +1691,10 @@ fn display_dir_entry_size(
             major_len,
             minor_len,
             display_inode(md).len(),
+            blk_size,
         )
     } else {
-        (0, 0, 0, 0, 0, 0, 0)
+        (0, 0, 0, 0, 0, 0, 0, 0)
     }
 }
 
@@ -1735,8 +1745,16 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         #[cfg(unix)]
         for item in items {
             let context_len = item.security_context.len();
-            let (link_count_len, uname_len, group_len, size_len, major_len, minor_len, inode_len) =
-                display_dir_entry_size(item, config, out);
+            let (
+                link_count_len,
+                uname_len,
+                group_len,
+                size_len,
+                major_len,
+                minor_len,
+                inode_len,
+                blk_size_len,
+            ) = display_dir_entry_size(item, config, out);
             longest_inode_len = inode_len.max(longest_inode_len);
             longest_link_count_len = link_count_len.max(longest_link_count_len);
             longest_uname_len = uname_len.max(longest_uname_len);
@@ -1755,7 +1773,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                     .max(longest_size_len)
                     .max(longest_major_len + longest_minor_len + 2usize);
             }
-            longest_blk_len = longest_blk_len.max(get_block_size_for_path(item, config, out))
+            longest_blk_len = longest_blk_len.max(blk_size_len)
         }
 
         #[cfg(not(unix))]
@@ -1814,6 +1832,17 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         };
 
         #[cfg(not(unix))]
+        let longest_blk_len = 1;
+        #[cfg(unix)]
+        let mut longest_blk_len = 1;
+        if config.block_size.is_some() {
+            for item in items {
+                let blk_size = get_block_size_for_path(item, config, out);
+                longest_blk_len = longest_blk_len.max(format!("{}", blk_size).len());
+            }
+        }
+
+        #[cfg(not(unix))]
         let longest_inode_len = 1;
         #[cfg(unix)]
         let mut longest_inode_len = 1;
@@ -1831,13 +1860,22 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
 
         let names: std::vec::IntoIter<Cell> = items
             .iter()
-            .map(|i| display_file_name(i, config, prefix_context, longest_inode_len, out))
+            .map(|i| {
+                display_file_name(
+                    i,
+                    config,
+                    prefix_context,
+                    longest_inode_len,
+                    longest_blk_len as usize,
+                    out,
+                )
+            })
             .collect::<Vec<Cell>>()
             .into_iter();
 
         match config.format {
-            Format::Columns => display_grid(names, config.width, Direction::TopToBottom, out),
-            Format::Across => display_grid(names, config.width, Direction::LeftToRight, out),
+            Format::Columns => display_grid(names, config, Direction::TopToBottom, out),
+            Format::Across => display_grid(names, config, Direction::LeftToRight, out),
             Format::Commas => {
                 let mut current_col = 0;
                 let mut names = names;
@@ -1880,7 +1918,9 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
         match config.size_format {
             //  Multiplies by 512 to recover the bytes because `blocks` returns count 512-bytes
             SizeFormat::Binary | SizeFormat::Decimal => md.blocks() * 512,
-            SizeFormat::Bytes => md.blocks() * 512 / config.block_size,
+            SizeFormat::Bytes => {
+                md.blocks() * 512 / config.block_size.unwrap_or(DEFAULT_BLOCK_SIZE)
+            }
         }
     }
 
@@ -1894,11 +1934,11 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
 
 fn display_grid(
     names: impl Iterator<Item = Cell>,
-    width: u16,
+    config: &Config,
     direction: Direction,
     out: &mut BufWriter<Stdout>,
 ) {
-    if width == 0 {
+    if config.width == 0 {
         // If the width is 0 we print one single line
         let mut printed_something = false;
         for name in names {
@@ -1921,7 +1961,7 @@ fn display_grid(
             grid.add(name);
         }
 
-        match grid.fit_into_width(width as usize) {
+        match grid.fit_into_width(config.width as usize) {
             Some(output) => {
                 let _ = write!(out, "{}", output);
             }
@@ -1970,6 +2010,16 @@ fn display_item_long(
     if let Some(md) = item.md(out) {
         #[cfg(unix)]
         {
+            if let Some(_) = config.block_size {
+                let _ = write!(
+                    out,
+                    "{} ",
+                    pad_left(
+                        &format!("{}", get_block_size(md, config)),
+                        padding.longest_blk_len as usize
+                    ),
+                );
+            }
             if config.inode {
                 let _ = write!(
                     out,
@@ -2057,7 +2107,7 @@ fn display_item_long(
             }
         };
 
-        let dfn = display_file_name(item, config, None, 0, out).contents;
+        let dfn = display_file_name(item, config, None, 0, 0, out).contents;
 
         let _ = writeln!(out, " {} {}", display_date(md, config), dfn);
     } else {
@@ -2138,7 +2188,7 @@ fn display_item_long(
             let _ = write!(out, " {}", pad_right("?", padding.longest_uname_len));
         }
 
-        let dfn = display_file_name(item, config, None, 0, out).contents;
+        let dfn = display_file_name(item, config, None, 0, 0, out).contents;
         let date_len = 12;
 
         let _ = writeln!(
@@ -2397,6 +2447,7 @@ fn display_file_name(
     config: &Config,
     prefix_context: Option<usize>,
     longest_inode_len: usize,
+    longest_blk_len: usize,
     out: &mut BufWriter<Stdout>,
 ) -> Cell {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
@@ -2423,6 +2474,14 @@ fn display_file_name(
             // size for display
             width += inode.width();
             name = inode + " " + &name;
+        }
+        if config.block_size.is_some() {
+            let blk_size = match path.md(out) {
+                Some(md) => pad_left(&get_block_size(md, config).to_string(), longest_blk_len),
+                None => pad_left("?", longest_blk_len),
+            };
+            width += blk_size.width();
+            name = blk_size + " " + &name;
         }
     }
 
@@ -2602,7 +2661,9 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
 
 #[cfg(unix)]
 fn get_env_block_size() -> u64 {
-    env::var("BLOCKSIZE").map_or(1024, |blk_sz| blk_sz.parse::<u64>().map_or(1024, |v| v))
+    env::var("BLOCKSIZE").map_or(DEFAULT_BLOCK_SIZE, |blk_sz| {
+        blk_sz.parse::<u64>().map_or(DEFAULT_BLOCK_SIZE, |v| v)
+    })
 }
 
 #[cfg(unix)]
