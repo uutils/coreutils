@@ -12,6 +12,7 @@ mod number;
 mod platform;
 
 use crate::filenames::FilenameIterator;
+use crate::filenames::SuffixType;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::env;
 use std::fmt;
@@ -250,13 +251,22 @@ impl Strategy {
     }
 }
 
+/// Parse the suffix type from the command-line arguments.
+fn suffix_type_from(matches: &ArgMatches) -> SuffixType {
+    if matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0 {
+        SuffixType::NumericDecimal
+    } else {
+        SuffixType::Alphabetic
+    }
+}
+
 /// Parameters that control how a file gets split.
 ///
 /// You can convert an [`ArgMatches`] instance into a [`Settings`]
 /// instance by calling [`Settings::from`].
 struct Settings {
     prefix: String,
-    numeric_suffix: bool,
+    suffix_type: SuffixType,
     suffix_length: usize,
     additional_suffix: String,
     input: String,
@@ -324,7 +334,7 @@ impl Settings {
             suffix_length: suffix_length_str
                 .parse()
                 .map_err(|_| SettingsError::SuffixLength(suffix_length_str.to_string()))?,
-            numeric_suffix: matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0,
+            suffix_type: suffix_type_from(matches),
             additional_suffix,
             verbose: matches.occurrences_of("verbose") > 0,
             strategy: Strategy::from(matches).map_err(SettingsError::Strategy)?,
@@ -384,7 +394,7 @@ impl<'a> ByteChunkWriter<'a> {
             &settings.prefix,
             &settings.additional_suffix,
             settings.suffix_length,
-            settings.numeric_suffix,
+            settings.suffix_type,
         );
         let filename = filename_iterator.next()?;
         if settings.verbose {
@@ -512,7 +522,7 @@ impl<'a> LineChunkWriter<'a> {
             &settings.prefix,
             &settings.additional_suffix,
             settings.suffix_length,
-            settings.numeric_suffix,
+            settings.suffix_type,
         );
         let filename = filename_iterator.next()?;
         if settings.verbose {
@@ -604,7 +614,7 @@ where
         &settings.prefix,
         &settings.additional_suffix,
         settings.suffix_length,
-        settings.numeric_suffix,
+        settings.suffix_type,
     );
 
     // Create one writer for each chunk. This will create each
