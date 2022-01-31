@@ -1835,7 +1835,13 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                 #[cfg(unix)]
                 longest_minor_len,
             };
+            #[cfg(unix)]
             if config.inode || config.alloc_size {
+                let more_info = display_more_info(item, padding, config, out);
+                let _ = write!(out, "{}", more_info);
+            }
+            #[cfg(not(unix))]
+            if config.alloc_size {
                 let more_info = display_more_info(item, padding, config, out);
                 let _ = write!(out, "{}", more_info);
             }
@@ -2095,14 +2101,6 @@ fn display_item_long(
 
         let _ = writeln!(out, " {} {}", display_date(md, config), dfn);
     } else {
-        // this 'else' is expressly for the case of a dangling symlink/restricted file
-        #[cfg(unix)]
-        {
-            if config.inode {
-                let _ = write!(out, "{} ", pad_left("?", padding.longest_inode_len),);
-            }
-        }
-
         #[cfg(unix)]
         let leading_char = {
             if let Some(Some(ft)) = item.ft.get() {

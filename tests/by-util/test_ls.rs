@@ -89,7 +89,7 @@ fn test_ls_allocation_size() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.mkdir("some-dir1");
-    at.mkdir("some-dir1/empty-file");
+    at.touch("some-dir1/empty-file");
 
     scene
         .ccmd("truncate")
