@@ -94,9 +94,10 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> 
     let mut stdout = stdout.lock();
 
     let mut line = String::new();
+    let mut output = String::new();
     if serial {
         for file in &mut files {
-            let mut output = String::new();
+            output.clear();
             loop {
                 line.clear();
                 match read_line(file.as_mut(), &mut line) {
@@ -115,7 +116,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> 
     } else {
         let mut eof = vec![false; files.len()];
         loop {
-            let mut output = String::new();
+            output.clear();
             let mut eof_count = 0;
             for (i, file) in files.iter_mut().enumerate() {
                 if eof[i] {
