@@ -830,8 +830,13 @@ fn get_field_number(keys: Option<usize>, key: Option<usize>) -> UResult<usize> {
 /// Parse the specified field string as a natural number and return
 /// the zero-based field number.
 fn parse_field_number(value: &str) -> UResult<usize> {
+    // TODO: use ParseIntError.kind() once MSRV >= 1.55
+    // For now, store an overflow Err from parsing a value 10x 64 bit usize::MAX
+    // Adapted from https://github.com/rust-lang/rust/issues/22639
+    let overflow = "184467440737095516150".parse::<usize>().err().unwrap();
     match value.parse::<usize>() {
         Ok(result) if result > 0 => Ok(result - 1),
+        Err(ref e) if *e == overflow => Ok(usize::MAX),
         _ => Err(USimpleError::new(
             1,
             format!("invalid field number: {}", value.quote()),
