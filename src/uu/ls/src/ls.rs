@@ -1720,9 +1720,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
     // `-Z`, `--context`:
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
     // option, print the security context to the left of the size column.
-
-    #[cfg(not(unix))]
-    let longest_inode_len = 1;
+    
     #[cfg(unix)]
     let mut longest_inode_len = 1;
     #[cfg(unix)]
@@ -1809,7 +1807,6 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                 size_len,
                 _major_len,
                 _minor_len,
-                _inode_len,
             ) = display_dir_entry_size(item, config, out);
             longest_link_count_len = link_count_len.max(longest_link_count_len);
             longest_uname_len = uname_len.max(longest_uname_len);
@@ -2574,16 +2571,9 @@ fn display_symlink_count(metadata: &Metadata) -> String {
     metadata.nlink().to_string()
 }
 
-#[allow(unused_variables)]
+#[cfg(unix)]
 fn display_inode(metadata: &Metadata) -> String {
-    #[cfg(unix)]
-    {
-        get_inode(metadata)
-    }
-    #[cfg(not(unix))]
-    {
-        "".to_string()
-    }
+    get_inode(metadata)
 }
 
 // This returns the SELinux security context as UTF8 `String`.
