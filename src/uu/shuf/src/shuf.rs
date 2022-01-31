@@ -9,6 +9,7 @@
 
 use clap::{crate_version, App, AppSettings, Arg};
 use rand::Rng;
+use rand::distributions::Uniform;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use uucore::display::Quotable;
@@ -254,20 +255,11 @@ fn shuf_bytes(input: &mut Vec<&[u8]>, opts: Options) -> UResult<()> {
         None => WrappedRng::RngDefault(rand::thread_rng()),
     };
 
-    // we're generating a random usize. To keep things fair, we take this number mod ceil(log2(length+1))
-    let mut len_mod = 1;
-    let mut len = input.len();
-    while len > 0 {
-        len >>= 1;
-        len_mod <<= 1;
-    }
+    let mut dist = Uniform::new(0, input.len());
 
     let mut count = opts.head_count;
     while count > 0 && !input.is_empty() {
-        let mut r = input.len();
-        while r >= input.len() {
-            r = rng.next_usize() % len_mod;
-        }
+        let r = rng.sample(dist);
 
         // write the randomly chosen value and the separator
         output
@@ -279,11 +271,10 @@ fn shuf_bytes(input: &mut Vec<&[u8]>, opts: Options) -> UResult<()> {
 
         // if we do not allow repeats, remove the chosen value from the input vector
         if !opts.repeat {
-            // shrink the mask if we will drop below a power of 2
-            if input.len() % 2 == 0 && len_mod > 2 {
-                len_mod >>= 1;
-            }
             input.swap_remove(r);
+            if !input.is_empty() {
+                dist = Uniform::new(0, input.len());
+            }
         }
 
         count -= 1;
@@ -312,10 +303,10 @@ enum WrappedRng {
 }
 
 impl WrappedRng {
-    fn next_usize(&mut self) -> usize {
+    fn sample(&mut self, dist: Uniform<usize>) -> usize {
         match *self {
-            WrappedRng::RngFile(ref mut r) => r.gen(),
-            WrappedRng::RngDefault(ref mut r) => r.gen(),
+            WrappedRng::RngFile(ref mut r) => r.sample(dist),
+            WrappedRng::RngDefault(ref mut r) => r.sample(dist),
         }
     }
 }
