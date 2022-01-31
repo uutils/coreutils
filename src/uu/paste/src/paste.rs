@@ -10,7 +10,6 @@
 use clap::{crate_version, App, AppSettings, Arg};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
-use std::iter::repeat;
 use std::path::Path;
 use uucore::error::{FromIo, UResult};
 
@@ -110,10 +109,11 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> 
                 }
                 delim_count += 1;
             }
-            println!("{}", &output[..output.len() - 1]);
+            output.pop();
+            println!("{}", output);
         }
     } else {
-        let mut eof: Vec<bool> = repeat(false).take(files.len()).collect();
+        let mut eof = vec![false; files.len()];
         loop {
             let mut output = String::new();
             let mut eof_count = 0;
@@ -137,7 +137,9 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> 
             if files.len() == eof_count {
                 break;
             }
-            println!("{}", &output[..output.len() - 1]);
+            // Remove final delimiter
+            output.pop();
+            println!("{}", output);
             delim_count = 0;
         }
     }
