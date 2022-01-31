@@ -1720,7 +1720,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
     // `-Z`, `--context`:
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
     // option, print the security context to the left of the size column.
-    
+
     #[cfg(unix)]
     let mut longest_inode_len = 1;
     #[cfg(unix)]
@@ -1800,14 +1800,8 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         #[cfg(not(unix))]
         for item in items {
             let context_len = item.security_context.len();
-            let (
-                link_count_len,
-                uname_len,
-                group_len,
-                size_len,
-                _major_len,
-                _minor_len,
-            ) = display_dir_entry_size(item, config, out);
+            let (link_count_len, uname_len, group_len, size_len, _major_len, _minor_len) =
+                display_dir_entry_size(item, config, out);
             longest_link_count_len = link_count_len.max(longest_link_count_len);
             longest_uname_len = uname_len.max(longest_uname_len);
             longest_group_len = group_len.max(longest_group_len);
