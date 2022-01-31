@@ -93,17 +93,17 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> 
     let stdout = stdout();
     let mut stdout = stdout.lock();
 
-    let mut line = String::new();
     let mut output = String::new();
     if serial {
         for file in &mut files {
             output.clear();
             loop {
-                line.clear();
-                match read_line(file.as_mut(), &mut line) {
+                match read_line(file.as_mut(), &mut output) {
                     Ok(0) => break,
                     Ok(_) => {
-                        output.push_str(line.trim_end());
+                        if output.ends_with('\n') {
+                            output.pop();
+                        }
                         output.push(delimiters[delim_count % delimiters.len()]);
                     }
                     Err(e) => return Err(e.map_err_context(String::new)),
@@ -122,13 +122,16 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> 
                 if eof[i] {
                     eof_count += 1;
                 } else {
-                    line.clear();
-                    match read_line(file.as_mut(), &mut line) {
+                    match read_line(file.as_mut(), &mut output) {
                         Ok(0) => {
                             eof[i] = true;
                             eof_count += 1;
                         }
-                        Ok(_) => output.push_str(line.trim_end()),
+                        Ok(_) => {
+                            if output.ends_with('\n') {
+                                output.pop();
+                            }
+                        }
                         Err(e) => return Err(e.map_err_context(String::new)),
                     }
                 }
