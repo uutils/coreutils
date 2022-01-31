@@ -91,7 +91,7 @@ pub mod options {
     }
 
     pub mod size {
-        pub static ALLOCATION_SIZE: &str = "s";
+        pub static ALLOCATION_SIZE: &str = "size";
         pub static HUMAN_READABLE: &str = "human-readable";
         pub static SI: &str = "si";
     }
@@ -1184,7 +1184,7 @@ only ignore '.' and '..'.",
         .arg(
             Arg::new(options::size::ALLOCATION_SIZE)
                 .short('s')
-                .long("size")
+                .long(options::size::ALLOCATION_SIZE)
                 .help("print the allocated size of each file, in blocks"),
         )
         .arg(

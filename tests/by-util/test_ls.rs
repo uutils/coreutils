@@ -130,7 +130,6 @@ fn test_ls_allocation_size() {
             .arg("some-dir1")
             .succeeds()
             .stdout_contains("0 empty-file")
-            // block size is 0 for a file with holes, whereas its len is 4194304
             .stdout_contains("4096 file-with-holes");
 
         // Test alignment of different block sized files
