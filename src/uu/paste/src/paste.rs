@@ -9,7 +9,7 @@
 
 use clap::{crate_version, App, AppSettings, Arg};
 use std::fs::File;
-use std::io::{stdin, BufRead, BufReader, Read};
+use std::io::{stdin, BufRead, BufReader, Read, stdout, Write};
 use std::path::Path;
 use uucore::error::{FromIo, UResult};
 
@@ -90,12 +90,15 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> 
 
     let delimiters: Vec<char> = unescape(delimiters).chars().collect();
     let mut delim_count = 0;
+    let stdout = stdout();
+    let mut stdout = stdout.lock();
 
+    let mut line = String::new();
     if serial {
         for file in &mut files {
             let mut output = String::new();
             loop {
-                let mut line = String::new();
+                line.clear();
                 match read_line(file.as_mut(), &mut line) {
                     Ok(0) => break,
                     Ok(_) => {
@@ -107,7 +110,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> 
                 delim_count += 1;
             }
             output.pop();
-            println!("{}", output);
+            writeln!(stdout, "{}", output)?;
         }
     } else {
         let mut eof = vec![false; files.len()];
@@ -118,7 +121,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> 
                 if eof[i] {
                     eof_count += 1;
                 } else {
-                    let mut line = String::new();
+                    line.clear();
                     match read_line(file.as_mut(), &mut line) {
                         Ok(0) => {
                             eof[i] = true;
@@ -136,7 +139,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> 
             }
             // Remove final delimiter
             output.pop();
-            println!("{}", output);
+            writeln!(stdout, "{}", output)?;
             delim_count = 0;
         }
     }
