@@ -8,8 +8,8 @@
 // spell-checker:ignore (ToDO) cmdline evec seps rvec fdata
 
 use clap::{crate_version, App, AppSettings, Arg};
-use rand::Rng;
 use rand::distributions::Uniform;
+use rand::Rng;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use uucore::display::Quotable;
