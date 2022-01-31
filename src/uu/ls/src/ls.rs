@@ -1483,7 +1483,11 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
         }),
         Sort::Size => entries.sort_by_key(|k| Reverse(k.md(out).map(|md| md.len()).unwrap_or(0))),
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
+        Sort::Name => entries.sort_by(|a, b| {
+            a.display_name
+                .to_ascii_lowercase()
+                .cmp(&b.display_name.to_ascii_lowercase())
+        }),
         Sort::Version => entries
             .sort_by(|a, b| version_cmp(&a.p_buf.to_string_lossy(), &b.p_buf.to_string_lossy())),
         Sort::Extension => entries.sort_by(|a, b| {
