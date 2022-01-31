@@ -151,8 +151,7 @@ impl UError for LsError {
     fn code(&self) -> i32 {
         match self {
             LsError::InvalidLineWidth(_) => 2,
-            LsError::IOError(_) => 1,
-            LsError::IOErrorContext(_, _) => 1,
+            LsError::IOError(_) | LsError::IOErrorContext(_, _) => 1,
         }
     }
 }
@@ -1920,8 +1919,7 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
         // hard-coded for now - enabling setting this remains a TODO
         let ls_block_size = 1024;
         match config.size_format {
-            SizeFormat::Binary => md.blocks() * 512,
-            SizeFormat::Decimal => md.blocks() * 512,
+            SizeFormat::Binary | SizeFormat::Decimal => md.blocks() * 512,
             SizeFormat::Bytes => md.blocks() * 512 / ls_block_size,
         }
     }

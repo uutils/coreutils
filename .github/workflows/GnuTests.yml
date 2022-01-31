@@ -38,7 +38,7 @@ jobs:
       run: |
         ## Install dependencies
         sudo apt-get update
-        sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify python3-sphinx jq
+        sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify jq
     - name: Build binaries
       shell: bash
       run: |
