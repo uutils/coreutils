@@ -9,6 +9,8 @@ use uucore::InvalidEncodingHandling;
 
 const VERSION: &str = "version";
 const HELP: &str = "help";
+const USAGE: &str = "printf FORMATSTRING [ARGUMENT]...";
+const ABOUT: &str = "Print output based off of the format string and proceeding arguments.";
 static LONGHELP_LEAD: &str = "printf
 
  USAGE: printf FORMATSTRING [ARGUMENT]...
@@ -295,7 +297,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
-        .arg(Arg::new(VERSION).long(VERSION))
-        .arg(Arg::new(HELP).long(HELP))
+        .version(crate_version!())
+        .about(ABOUT)
+        .override_usage(USAGE)
+        .arg(Arg::new(HELP).long(HELP).help("Print help information"))
+        .arg(
+            Arg::new(VERSION)
+                .long(VERSION)
+                .help("Print version information"),
+        )
         .setting(AppSettings::InferLongArgs)
 }
