@@ -25,9 +25,17 @@ fn test_help() {
 
 #[test]
 fn test_short_options() {
-    for option in ["-h", "-v"] {
+    for option in ["-h", "-V"] {
         new_ucmd!().arg(option).succeeds().stdout_is("");
     }
+}
+
+#[test]
+fn test_conflict() {
+    new_ucmd!()
+        .args(&["--help", "--version"])
+        .succeeds()
+        .stdout_is("");
 }
 
 #[test]
