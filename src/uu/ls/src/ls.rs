@@ -315,7 +315,7 @@ struct Config {
     color: Option<LsColors>,
     long: LongFormat,
     alloc_size: bool,
-    block_size: usize,
+    block_size: Option<usize>,
     width: u16,
     quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
@@ -349,27 +349,36 @@ struct PaddingCollection {
 }
 
 impl Config {
-    // From sort.rs
-
     /// Parse a SIZE string into a number of bytes.
     /// A size string comprises an integer and an optional unit.
     /// The unit may be k, K, m, M, g, G, t, T, P, E, Z, Y (powers of 1024), or b which is 1.
-    /// Default is K.
     fn parse_byte_count(input: &str) -> Option<usize> {
         // GNU sort (8.32)   valid: 1b,        k, K, m, M, g, G, t, T, P, E, Z, Y
         // GNU sort (8.32) invalid:  b, B, 1B,                         p, e, z, y
         const ALLOW_LIST: &[char] = &[
             'b', 'k', 'K', 'm', 'M', 'g', 'G', 't', 'T', 'P', 'E', 'Z', 'Y',
         ];
-        let size_string = input.trim().to_string();
 
-        if size_string.ends_with(|c: char| ALLOW_LIST.contains(&c) || c.is_digit(10)) {
-            if let Ok(parsed_size) = parse_size(&size_string) {
-                Some(parsed_size)
-            } else {
-                show!(LsError::ParseError(input.to_owned()));
-                None
+        let start_string = input
+            .trim_start_matches(|c: char| !c.is_digit(10))
+            .to_string();
+        let mut trimmed_string = String::new();
+
+        for (pos, c) in start_string.char_indices() {
+            if c.is_digit(10) {
+                continue;
             }
+            let (ts, _) = if ALLOW_LIST.contains(&c) {
+                start_string.split_at(pos + 1)
+            } else {
+                start_string.split_at(pos)
+            };
+            trimmed_string = ts.to_owned();
+            break;
+        }
+
+        if let Ok(parsed_size) = parse_size(&trimmed_string) {
+            Some(parsed_size)
         } else {
             show!(LsError::ParseError(input.to_owned()));
             None
@@ -511,13 +520,7 @@ impl Config {
         let alloc_size = options.is_present(options::size::ALLOCATION_SIZE);
 
         let block_size = if std::env::var_os("BLOCK_SIZE").is_some() {
-            if let Some(parsed_block_size) =
-                Config::parse_byte_count(&std::env::var_os("BLOCK_SIZE").unwrap().to_string_lossy())
-            {
-                parsed_block_size
-            } else {
-                DEFAULT_BLOCK_SIZE
-            }
+            Config::parse_byte_count(&std::env::var_os("BLOCK_SIZE").unwrap().to_string_lossy())
         } else if std::env::var_os("POSIXLY_CORRECT").is_some() {
             if std::env::var_os("POSIXLY_CORRECT")
                 .unwrap()
@@ -526,12 +529,12 @@ impl Config {
                     .unwrap()
                     .eq(&OsString::from("1"))
             {
-                POSIXLY_CORRECT_BLOCK_SIZE
+                Some(POSIXLY_CORRECT_BLOCK_SIZE)
             } else {
-                DEFAULT_BLOCK_SIZE
+                None
             }
         } else {
-            DEFAULT_BLOCK_SIZE
+            None
         };
 
         let size_format = if options.is_present(options::size::HUMAN_READABLE) {
@@ -1741,7 +1744,7 @@ fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             .as_ref()
             .map_or(0, |md| get_block_size(md, config));
     }
-    let _ = writeln!(out, "total {}", display_size(total_size, config));
+    let _ = writeln!(out, "total {}", display_size(total_size, config, true));
 }
 
 fn display_more_info(
@@ -1764,7 +1767,7 @@ fn display_more_info(
     }
     if config.alloc_size {
         let s = if let Some(md) = item.md(out) {
-            get_block_size(md, config).to_string()
+            display_size(get_block_size(md, config), config, true)
         } else {
             "?".to_owned()
         };
@@ -1799,11 +1802,8 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
     if config.alloc_size {
         for item in items {
             if let Some(md) = item.md(out) {
-                let size_len = match display_size_or_rdev(md, config) {
-                    SizeOrDeviceId::Size(_) => get_block_size(md, config).to_string().len(),
-                    SizeOrDeviceId::Device(_, _) => 1usize,
-                };
-                longest_block_size_len = size_len.max(longest_block_size_len);
+                let block_size_len = display_size(get_block_size(md, config), config, true).len();
+                longest_block_size_len = block_size_len.max(longest_block_size_len);
             } else {
                 continue;
             };
@@ -1975,15 +1975,10 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
     */
     #[cfg(unix)]
     {
-        let ls_block_size = if config.alloc_size && config.block_size != 1024usize {
-            config.block_size as u64
-        } else {
-            1024u64
-        };
         match config.size_format {
             SizeFormat::Binary => md.blocks() * 512,
             SizeFormat::Decimal => md.blocks() * 512,
-            SizeFormat::Bytes => md.blocks() * 512 / ls_block_size,
+            SizeFormat::Bytes => md.blocks() * 512,
         }
     }
 
@@ -2414,15 +2409,24 @@ fn display_size_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId 
         }
     }
 
-    SizeOrDeviceId::Size(display_size(metadata.len(), config))
+    // matches GNU behavior: show size as blocks when config.block_size is set
+    let is_blocks = config.block_size.is_some();
+    SizeOrDeviceId::Size(display_size(metadata.len(), config, is_blocks))
 }
 
-fn display_size(size: u64, config: &Config) -> String {
+fn display_size(size: u64, config: &Config, is_blocks: bool) -> String {
     // NOTE: The human-readable behavior deviates from the GNU ls.
     // The GNU ls uses binary prefixes by default.
-    let ls_block_size = if config.alloc_size && config.block_size != 1024usize {
-        config.block_size as u64
+    let ls_block_size = if config.alloc_size && is_blocks {
+        if let Some(bs) = config.block_size {
+            // custom block_size for when block_size is set
+            bs as u64
+        } else {
+            // size display in default blocks for when config.block_size is unset
+            DEFAULT_BLOCK_SIZE as u64
+        }
     } else {
+        // size display in bytes, most common case
         1u64
     };
     match config.size_format {
