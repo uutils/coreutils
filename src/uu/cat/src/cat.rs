@@ -325,15 +325,15 @@ fn cat_path(
     state: &mut OutputState,
     out_info: Option<&FileInformation>,
 ) -> CatResult<()> {
-    if path == "-" {
-        let stdin = io::stdin();
-        let mut handle = InputHandle {
-            reader: stdin,
-            is_interactive: atty::is(atty::Stream::Stdin),
-        };
-        return cat_handle(&mut handle, options, state);
-    }
     match get_input_type(path)? {
+        InputType::StdIn => {
+            let stdin = io::stdin();
+            let mut handle = InputHandle {
+                reader: stdin,
+                is_interactive: atty::is(atty::Stream::Stdin),
+            };
+            cat_handle(&mut handle, options, state)
+        }
         InputType::Directory => Err(CatError::IsDirectory),
         #[cfg(unix)]
         InputType::Socket => {
