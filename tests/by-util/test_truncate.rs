@@ -250,11 +250,24 @@ fn test_size_and_reference() {
 #[test]
 fn test_error_filename_only() {
     // truncate: you must specify either '--size' or '--reference'
-    new_ucmd!().args(&["file"]).fails().stderr_contains(
-        "error: The following required arguments were not provided:
+    new_ucmd!()
+        .args(&["file"])
+        .fails()
+        .code_is(1)
+        .stderr_contains(
+            "error: The following required arguments were not provided:
     --reference <RFILE>
     --size <SIZE>",
-    );
+        );
+}
+
+#[test]
+fn test_invalid_option() {
+    // truncate: cli parsing error returns 1
+    new_ucmd!()
+        .args(&["--this-arg-does-not-exist"])
+        .fails()
+        .code_is(1);
 }
 
 #[test]
