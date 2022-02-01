@@ -8,12 +8,12 @@ use clap::{App, AppSettings, Arg};
 use std::io::Write;
 use uucore::error::{set_exit_code, UResult};
 
-static ABOUT: &str = "
- Returns false, an unsuccessful exit status.
+static ABOUT: &str = "\
+Returns false, an unsuccessful exit status.
 
- Immediately returns with the exit status `1`. When invoked with one of the recognized options it
- will try to write the help or version text. Any IO error during this operation is diagnosed, yet
- the program will also return `1`.
+Immediately returns with the exit status `1`. When invoked with one of the recognized options it
+will try to write the help or version text. Any IO error during this operation is diagnosed, yet
+the program will also return `1`.
 ";
 
 #[uucore::main]
