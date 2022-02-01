@@ -299,6 +299,118 @@ fn test_status_level_noxfer() {
     assert_eq!(st, StatusLevel::Noxfer);
 }
 
+#[test]
+fn test_override_multiple_levels() {
+    let args = vec![
+        String::from("dd"),
+        String::from("--if=foo.file"),
+        String::from("--if=correct.file"),
+        String::from("--of=bar.file"),
+        String::from("--of=correct.file"),
+        String::from("--ibs=256"),
+        String::from("--ibs=1024"),
+        String::from("--obs=256"),
+        String::from("--obs=1024"),
+        String::from("--cbs=1"),
+        String::from("--cbs=2"),
+        String::from("--skip=0"),
+        String::from("--skip=2"),
+        String::from("--seek=0"),
+        String::from("--seek=2"),
+        String::from("--status=none"),
+        String::from("--status=noxfer"),
+        String::from("--count=512"),
+        String::from("--count=1024"),
+        String::from("--conv=ascii,ucase"),
+        String::from("--conv=ebcdic,lcase,unblock"),
+        String::from("--iflag=direct,nocache"),
+        String::from("--iflag=count_bytes,skip_bytes"),
+        String::from("--oflag=append,direct"),
+        String::from("--oflag=append,seek_bytes"),
+    ];
+
+    let matches = uu_app().try_get_matches_from(args).unwrap();
+
+    // if
+    assert_eq!("correct.file", matches.value_of(options::INFILE).unwrap());
+
+    // of
+    assert_eq!("correct.file", matches.value_of(options::OUTFILE).unwrap());
+
+    // ibs
+    assert_eq!(1024, parse_ibs(&matches).unwrap());
+
+    // obs
+    assert_eq!(1024, parse_obs(&matches).unwrap());
+
+    // cbs
+    assert_eq!(2, parse_cbs(&matches).unwrap().unwrap());
+
+    // status
+    assert_eq!(
+        StatusLevel::Noxfer,
+        parse_status_level(&matches).unwrap().unwrap()
+    );
+
+    // skip
+    assert_eq!(
+        200,
+        parse_skip_amt(&100, &IFlags::default(), &matches)
+            .unwrap()
+            .unwrap()
+    );
+
+    // seek
+    assert_eq!(
+        200,
+        parse_seek_amt(&100, &OFlags::default(), &matches)
+            .unwrap()
+            .unwrap()
+    );
+
+    // conv
+    let exp = vec![ConvFlag::FmtEtoA, ConvFlag::LCase, ConvFlag::Unblock];
+    let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
+    assert_eq!(exp.len(), act.len());
+    for cf in &exp {
+        assert!(exp.contains(cf));
+    }
+
+    // count
+    assert_eq!(
+        CountType::Bytes(1024),
+        parse_count(
+            &IFlags {
+                count_bytes: true,
+                ..IFlags::default()
+            },
+            &matches
+        )
+        .unwrap()
+        .unwrap()
+    );
+
+    // iflag
+    assert_eq!(
+        IFlags {
+            count_bytes: true,
+            skip_bytes: true,
+            ..IFlags::default()
+        },
+        parse_iflags(&matches).unwrap()
+    );
+
+    // oflag
+    assert_eq!(
+        OFlags {
+            seek_bytes: true,
+            append: true,
+            ..OFlags::default()
+        },
+        parse_oflags(&matches).unwrap()
+    );
+}
+
 // ----- IConvFlags/Output -----
 
 #[test]
