@@ -560,13 +560,12 @@ fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
         {
             Some(p) => {
                 writer.write_all(&in_buf[..p]).unwrap();
-                if in_buf[p] == b'\n' {
-                    return count + p;
-                } else if in_buf[p] == b'\t' {
+                if in_buf[p] == b'\t' {
                     writer.write_all(b"^I").unwrap();
                     in_buf = &in_buf[p + 1..];
                     count += p + 1;
                 } else {
+                    // b'\n' or b'\r'
                     return count + p;
                 }
             }
