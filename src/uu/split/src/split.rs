@@ -233,12 +233,14 @@ struct Settings {
 impl Settings {
     /// Parse a strategy from the command-line arguments.
     fn from(matches: &ArgMatches) -> UResult<Self> {
+        let suffix_length_str = matches.value_of(OPT_SUFFIX_LENGTH).unwrap();
         let result = Self {
-            suffix_length: matches
-                .value_of(OPT_SUFFIX_LENGTH)
-                .unwrap()
-                .parse()
-                .unwrap_or_else(|_| panic!("Invalid number for {}", OPT_SUFFIX_LENGTH)),
+            suffix_length: suffix_length_str.parse().map_err(|_| {
+                USimpleError::new(
+                    1,
+                    format!("invalid suffix length: {}", suffix_length_str.quote()),
+                )
+            })?,
             numeric_suffix: matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0,
             additional_suffix: matches.value_of(OPT_ADDITIONAL_SUFFIX).unwrap().to_owned(),
             verbose: matches.occurrences_of("verbose") > 0,
