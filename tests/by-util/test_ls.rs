@@ -153,6 +153,52 @@ fn test_ls_allocation_size() {
             .len();
 
         assert_eq!(empty_file_len, file_with_holes_len);
+
+        scene
+            .ucmd()
+            .env("BLOCK_SIZE", "4K")
+            .arg("-s1")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("0 empty-file")
+            .stdout_contains("1024 file-with-holes");
+
+        scene
+            .ucmd()
+            .env("BLOCK_SIZE", "4K")
+            .arg("-s1h")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("0 empty-file")
+            .stdout_contains("4.0M file-with-holes");
+
+        scene
+            .ucmd()
+            .env("BLOCK_SIZE", "4K")
+            .arg("-s1")
+            .arg("--si")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("0 empty-file")
+            .stdout_contains("4.2M file-with-holes");
+
+        scene
+            .ucmd()
+            .env("BLOCK_SIZE", "4096")
+            .arg("-s1")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("0 empty-file")
+            .stdout_contains("1024 file-with-holes");
+
+        scene
+            .ucmd()
+            .env("POSIXLY_CORRECT", "true")
+            .arg("-s1")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("0 empty-file")
+            .stdout_contains("8192 file-with-holes");
     }
 }
 

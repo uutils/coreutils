@@ -96,6 +96,7 @@ pub mod options {
         pub static BLOCK_SIZE: &str = "block-size";
         pub static HUMAN_READABLE: &str = "human-readable";
         pub static SI: &str = "si";
+        pub static KIBIBYTES: &str = "kibibytes";
     }
 
     pub mod quoting {
@@ -316,6 +317,7 @@ struct Config {
     long: LongFormat,
     alloc_size: bool,
     block_size: Option<usize>,
+    kibibytes: bool,
     width: u16,
     quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
@@ -362,25 +364,23 @@ impl Config {
         let start_string = input
             .trim_start_matches(|c: char| !c.is_digit(10))
             .to_string();
-        let mut trimmed_string = String::new();
+        let mut trimmed_string = start_string.clone();
 
         for (pos, c) in start_string.char_indices() {
             if c.is_digit(10) {
                 continue;
             }
-            let (ts, _) = if ALLOW_LIST.contains(&c) {
-                start_string.split_at(pos + 1)
-            } else {
-                start_string.split_at(pos)
-            };
-            trimmed_string = ts.to_owned();
+            if ALLOW_LIST.contains(&c) {
+                let (ts, _) = start_string.split_at(pos + 1);
+                trimmed_string = ts.to_owned();
+            }
             break;
         }
 
         if let Ok(parsed_size) = parse_size(&trimmed_string) {
             Some(parsed_size)
         } else {
-            show!(LsError::ParseError(input.to_owned()));
+            show!(LsError::ParseError(trimmed_string.to_string()));
             None
         }
     }
@@ -518,6 +518,8 @@ impl Config {
         };
 
         let alloc_size = options.is_present(options::size::ALLOCATION_SIZE);
+
+        let kibibytes = options.is_present(options::size::KIBIBYTES);
 
         let block_size = if std::env::var_os("BLOCK_SIZE").is_some() {
             Config::parse_byte_count(&std::env::var_os("BLOCK_SIZE").unwrap().to_string_lossy())
@@ -745,6 +747,7 @@ impl Config {
             long,
             alloc_size,
             block_size,
+            kibibytes,
             width,
             quoting_style,
             indicator_style,
@@ -1209,6 +1212,12 @@ only ignore '.' and '..'.",
                 .long(options::size::HUMAN_READABLE)
                 .help("Print human readable file sizes (e.g. 1K 234M 56G).")
                 .overrides_with(options::size::SI),
+        )
+        .arg(
+            Arg::new(options::size::KIBIBYTES)
+                .short('k')
+                .long(options::size::KIBIBYTES)
+                .help("default to 1024-byte blocks for file system usage; used only with -s and per directory totals"),
         )
         .arg(
             Arg::new(options::size::SI)
@@ -1744,6 +1753,9 @@ fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             .as_ref()
             .map_or(0, |md| get_block_size(md, config));
     }
+    if config.kibibytes && config.block_size.is_some() {
+        total_size *= (config.block_size.unwrap() / DEFAULT_BLOCK_SIZE) as u64;
+    }
     let _ = writeln!(out, "total {}", display_size(total_size, config, true));
 }
 
@@ -1767,7 +1779,11 @@ fn display_more_info(
     }
     if config.alloc_size {
         let s = if let Some(md) = item.md(out) {
-            display_size(get_block_size(md, config), config, true)
+            let mut size = get_block_size(md, config);
+            if config.kibibytes && config.block_size.is_some() {
+                size *= (config.block_size.unwrap() / DEFAULT_BLOCK_SIZE) as u64;
+            }
+            display_size(size, config, true)
         } else {
             "?".to_owned()
         };
@@ -1802,7 +1818,11 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
     if config.alloc_size {
         for item in items {
             if let Some(md) = item.md(out) {
-                let block_size_len = display_size(get_block_size(md, config), config, true).len();
+                let mut block_size = get_block_size(md, config);
+                if config.kibibytes && config.block_size.is_some() {
+                    block_size *= (config.block_size.unwrap() / DEFAULT_BLOCK_SIZE) as u64;
+                }
+                let block_size_len = display_size(block_size, config, true).len();
                 longest_block_size_len = block_size_len.max(longest_block_size_len);
             } else {
                 continue;
