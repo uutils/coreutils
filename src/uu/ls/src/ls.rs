@@ -2475,7 +2475,7 @@ fn display_file_name(
             width += inode.width();
             name = inode + " " + &name;
         }
-        if config.block_size.is_some() {
+        if config.block_size.is_some() && config.format != Format::Long {
             let blk_size = match path.md(out) {
                 Some(md) => pad_left(&get_block_size(md, config).to_string(), longest_blk_len),
                 None => pad_left("?", longest_blk_len),
