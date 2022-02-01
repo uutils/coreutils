@@ -302,12 +302,7 @@ fn push_token_to_either_stack(
             }
         }
 
-        Token::PrefixOp { .. } => {
-            op_stack.push((token_idx, token.clone()));
-            Ok(())
-        }
-
-        Token::ParOpen => {
+        Token::PrefixOp { .. } | Token::ParOpen => {
             op_stack.push((token_idx, token.clone()));
             Ok(())
         }
@@ -352,12 +347,7 @@ fn push_op_to_stack(
     {
         loop {
             match op_stack.last() {
-                None => {
-                    op_stack.push((token_idx, token.clone()));
-                    return Ok(());
-                }
-
-                Some(&(_, Token::ParOpen)) => {
+                None | Some(&(_, Token::ParOpen)) => {
                     op_stack.push((token_idx, token.clone()));
                     return Ok(());
                 }
