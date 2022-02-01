@@ -40,6 +40,7 @@ use std::{
 };
 use std::{ffi::OsString, fs::ReadDir};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
+use uucore::parse_size::parse_size;
 use uucore::{
     display::Quotable,
     error::{set_exit_code, UError, UResult},
@@ -92,6 +93,7 @@ pub mod options {
 
     pub mod size {
         pub static ALLOCATION_SIZE: &str = "size";
+        pub static BLOCK_SIZE: &str = "block-size";
         pub static HUMAN_READABLE: &str = "human-readable";
         pub static SI: &str = "si";
     }
@@ -138,13 +140,16 @@ pub mod options {
     pub static CONTEXT: &str = "context";
 }
 
-const DEFAULT_TERM_WIDTH: u16 = 80;
+const DEFAULT_TERM_WIDTH: u16 = 80u16;
+const DEFAULT_BLOCK_SIZE: usize = 1024usize;
+const POSIXLY_CORRECT_BLOCK_SIZE: usize = 512usize;
 
 #[derive(Debug)]
 enum LsError {
     InvalidLineWidth(String),
     IOError(std::io::Error),
     IOErrorContext(std::io::Error, PathBuf),
+    ParseError(String),
 }
 
 impl UError for LsError {
@@ -153,6 +158,7 @@ impl UError for LsError {
             LsError::InvalidLineWidth(_) => 2,
             LsError::IOError(_) => 1,
             LsError::IOErrorContext(_, _) => 1,
+            LsError::ParseError(_) => 1,
         }
     }
 }
@@ -162,6 +168,7 @@ impl Error for LsError {}
 impl Display for LsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            LsError::ParseError(s) => write!(f, "unable to parse value: {}", s.quote()),
             LsError::InvalidLineWidth(s) => write!(f, "invalid line width: {}", s.quote()),
             LsError::IOError(e) => write!(f, "general io error: {}", e),
             LsError::IOErrorContext(e, p) => {
@@ -308,6 +315,7 @@ struct Config {
     color: Option<LsColors>,
     long: LongFormat,
     alloc_size: bool,
+    block_size: usize,
     width: u16,
     quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
@@ -341,6 +349,33 @@ struct PaddingCollection {
 }
 
 impl Config {
+    // From sort.rs
+
+    /// Parse a SIZE string into a number of bytes.
+    /// A size string comprises an integer and an optional unit.
+    /// The unit may be k, K, m, M, g, G, t, T, P, E, Z, Y (powers of 1024), or b which is 1.
+    /// Default is K.
+    fn parse_byte_count(input: &str) -> Option<usize> {
+        // GNU sort (8.32)   valid: 1b,        k, K, m, M, g, G, t, T, P, E, Z, Y
+        // GNU sort (8.32) invalid:  b, B, 1B,                         p, e, z, y
+        const ALLOW_LIST: &[char] = &[
+            'b', 'k', 'K', 'm', 'M', 'g', 'G', 't', 'T', 'P', 'E', 'Z', 'Y',
+        ];
+        let size_string = input.trim().to_string();
+
+        if size_string.ends_with(|c: char| ALLOW_LIST.contains(&c) || c.is_digit(10)) {
+            if let Ok(parsed_size) = parse_size(&size_string) {
+                Some(parsed_size)
+            } else {
+                show!(LsError::ParseError(input.to_owned()));
+                None
+            }
+        } else {
+            show!(LsError::ParseError(input.to_owned()));
+            None
+        }
+    }
+
     #[allow(clippy::cognitive_complexity)]
     fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let context = options.is_present(options::CONTEXT);
@@ -474,6 +509,30 @@ impl Config {
         };
 
         let alloc_size = options.is_present(options::size::ALLOCATION_SIZE);
+
+        let block_size = if std::env::var_os("BLOCK_SIZE").is_some() {
+            if let Some(parsed_block_size) =
+                Config::parse_byte_count(&std::env::var_os("BLOCK_SIZE").unwrap().to_string_lossy())
+            {
+                parsed_block_size
+            } else {
+                DEFAULT_BLOCK_SIZE
+            }
+        } else if std::env::var_os("POSIXLY_CORRECT").is_some() {
+            if std::env::var_os("POSIXLY_CORRECT")
+                .unwrap()
+                .eq(&OsString::from("true"))
+                || std::env::var_os("POSIXLY_CORRECT")
+                    .unwrap()
+                    .eq(&OsString::from("1"))
+            {
+                POSIXLY_CORRECT_BLOCK_SIZE
+            } else {
+                DEFAULT_BLOCK_SIZE
+            }
+        } else {
+            DEFAULT_BLOCK_SIZE
+        };
 
         let size_format = if options.is_present(options::size::HUMAN_READABLE) {
             SizeFormat::Binary
@@ -682,6 +741,7 @@ impl Config {
             inode: options.is_present(options::INODE),
             long,
             alloc_size,
+            block_size,
             width,
             quoting_style,
             indicator_style,
@@ -1704,7 +1764,7 @@ fn display_more_info(
     }
     if config.alloc_size {
         let s = if let Some(md) = item.md(out) {
-            display_size(get_block_size(md, config), config)
+            get_block_size(md, config).to_string()
         } else {
             "?".to_owned()
         };
@@ -1740,9 +1800,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         for item in items {
             if let Some(md) = item.md(out) {
                 let size_len = match display_size_or_rdev(md, config) {
-                    SizeOrDeviceId::Size(_) => {
-                        display_size(get_block_size(md, config), config).len()
-                    }
+                    SizeOrDeviceId::Size(_) => get_block_size(md, config).to_string().len(),
                     SizeOrDeviceId::Device(_, _) => 1usize,
                 };
                 longest_block_size_len = size_len.max(longest_block_size_len);
@@ -1917,8 +1975,11 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
     */
     #[cfg(unix)]
     {
-        // hard-coded for now - enabling setting this remains a TODO
-        let ls_block_size = 1024;
+        let ls_block_size = if config.alloc_size && config.block_size != 1024usize {
+            config.block_size as u64
+        } else {
+            1024u64
+        };
         match config.size_format {
             SizeFormat::Binary => md.blocks() * 512,
             SizeFormat::Decimal => md.blocks() * 512,
@@ -2359,10 +2420,15 @@ fn display_size_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId 
 fn display_size(size: u64, config: &Config) -> String {
     // NOTE: The human-readable behavior deviates from the GNU ls.
     // The GNU ls uses binary prefixes by default.
+    let ls_block_size = if config.alloc_size && config.block_size != 1024usize {
+        config.block_size as u64
+    } else {
+        1u64
+    };
     match config.size_format {
         SizeFormat::Binary => format_prefixed(&NumberPrefix::binary(size as f64)),
         SizeFormat::Decimal => format_prefixed(&NumberPrefix::decimal(size as f64)),
-        SizeFormat::Bytes => size.to_string(),
+        SizeFormat::Bytes => (size / ls_block_size).to_string(),
     }
 }
 
