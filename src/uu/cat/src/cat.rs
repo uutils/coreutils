@@ -588,10 +588,10 @@ fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) ->
             9 => writer.write_all(tab),
             0..=8 | 10..=31 => writer.write_all(&[b'^', byte + 64]),
             32..=126 => writer.write_all(&[byte]),
-            127 => writer.write_all(&[b'^', byte - 64]),
+            127 => writer.write_all(&[b'^', b'?']),
             128..=159 => writer.write_all(&[b'M', b'-', b'^', byte - 64]),
             160..=254 => writer.write_all(&[b'M', b'-', byte - 128]),
-            _ => writer.write_all(&[b'M', b'-', b'^', 63]),
+            _ => writer.write_all(&[b'M', b'-', b'^', b'?']),
         }
         .unwrap();
         count += 1;
