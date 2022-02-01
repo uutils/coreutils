@@ -1,2 +1,2 @@
 # Configure GitHub to not mark comments in configuration files as errors
-*.json linguist-language=JSON-with-Comments
+.vscode/*.json linguist-language=JSON-with-Comments
