@@ -6,7 +6,6 @@
 //  * file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) RFILE refsize rfilename fsize tsize
-use clap;
 use clap::{crate_version, App, AppSettings, Arg};
 use std::convert::TryFrom;
 use std::fs::{metadata, OpenOptions};
