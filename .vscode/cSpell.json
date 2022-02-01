@@ -1,7 +1,12 @@
 // `cspell` settings
 {
-  "version": "0.1", // Version of the setting file.  Always 0.1
-  "language": "en", // language - current active spelling language
+  // version of the setting file (always 0.1)
+  "version": "0.1",
+
+  // spelling language
+  "language": "en",
+
+  // custom dictionaries
   "dictionaries": ["acronyms+names", "jargon", "people", "shell", "workspace"],
   "dictionaryDefinitions": [
     { "name": "acronyms+names", "path": "./cspell.dictionaries/acronyms+names.wordlist.txt" },
@@ -10,10 +15,19 @@
     { "name": "shell", "path": "./cspell.dictionaries/shell.wordlist.txt" },
     { "name": "workspace", "path": "./cspell.dictionaries/workspace.wordlist.txt" }
   ],
-  // ignorePaths -  a list of globs to specify which files are to be ignored
-  "ignorePaths": ["Cargo.lock", "target/**", "tests/**/fixtures/**", "src/uu/dd/test-resources/**", "vendor/**"],
-  // ignoreWords - a list of words to be ignored (even if they are in the flagWords)
+
+  // files to ignore (globs supported)
+  "ignorePaths": [
+    "Cargo.lock",
+    "target/**",
+    "tests/**/fixtures/**",
+    "src/uu/dd/test-resources/**",
+    "vendor/**"
+  ],
+
+  // words to ignore (even if they are in the flagWords)
   "ignoreWords": [],
-  // words - list of words to be always considered correct
+
+  // words to always consider correct
   "words": []
 }
