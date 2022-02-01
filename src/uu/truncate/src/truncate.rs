@@ -6,6 +6,7 @@
 //  * file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) RFILE refsize rfilename fsize tsize
+use clap;
 use clap::{crate_version, App, AppSettings, Arg};
 use std::convert::TryFrom;
 use std::fs::{metadata, OpenOptions};
@@ -115,7 +116,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
         .override_usage(&usage[..])
         .after_help(&long_usage[..])
-        .get_matches_from(args);
+        .try_get_matches_from(args)
+        .unwrap_or_else(|e| {
+            e.print();
+            match e.kind {
+                clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion => {
+                    std::process::exit(0)
+                }
+                _ => std::process::exit(1),
+            }
+        });
 
     let files: Vec<String> = matches
         .values_of(options::ARG_FILES)
