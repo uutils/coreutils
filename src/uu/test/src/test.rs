@@ -92,7 +92,8 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .long_about(AFTER_HELP)
+        .override_usage(USAGE)
+        .after_help(AFTER_HELP)
 }
 
 #[uucore::main]
@@ -107,6 +108,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
             // Let clap pretty-print help and version
             App::new(binary_name)
                 .version(crate_version!())
+                .about(ABOUT)
                 .override_usage(USAGE)
                 .after_help(AFTER_HELP)
                 // Disable printing of -h and -v as valid alternatives for --help and --version,
