@@ -2010,7 +2010,7 @@ fn display_item_long(
     if let Some(md) = item.md(out) {
         #[cfg(unix)]
         {
-            if let Some(_) = config.block_size {
+            if config.block_size.is_some() {
                 let _ = write!(
                     out,
                     "{} ",
