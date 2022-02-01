@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 rustup target add x86_64-unknown-redox
 sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys AA12E97F0881517F
