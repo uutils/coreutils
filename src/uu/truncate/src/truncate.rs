@@ -118,7 +118,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .after_help(&long_usage[..])
         .try_get_matches_from(args)
         .unwrap_or_else(|e| {
-            e.print();
+            e.print().expect("Error writing clap::Error");
             match e.kind {
                 clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion => {
                     std::process::exit(0)
