@@ -4,7 +4,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-use clap::{App, AppSettings, ErrorKind};
+use clap::{App, Arg, ArgSettings, ErrorKind};
 use std::io::Write;
 use uucore::error::{set_exit_code, UResult};
 
@@ -42,5 +42,16 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(clap::crate_version!())
         .about(ABOUT)
-        .setting(AppSettings::InferLongArgs)
+        // Hide the default -V and -h for version and help.
+        // This requires us to overwrite short, not short_aliases.
+        .arg(
+            Arg::new("dummy-help")
+                .short('h')
+                .setting(ArgSettings::Hidden),
+        )
+        .arg(
+            Arg::new("dummy-version")
+                .short('V')
+                .setting(ArgSettings::Hidden),
+        )
 }
