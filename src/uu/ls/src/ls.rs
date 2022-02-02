@@ -27,8 +27,9 @@ use std::{
     collections::HashMap,
     env,
     error::Error,
+    ffi::OsString,
     fmt::Display,
-    fs::{self, DirEntry, FileType, Metadata},
+    fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{stdout, BufWriter, ErrorKind, Stdout, Write},
     os::unix::fs::{FileTypeExt, MetadataExt},
     path::{Path, PathBuf},
@@ -1855,11 +1856,10 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             if config.block_size.is_some() {
                 for item in items {
                     let blk_size = get_block_size_for_path(item, config, out);
-                    result = longest_blk_len.max(format!("{}", blk_size).len());
+                    result = result.max(format!("{}", blk_size).len());
                 }
-            } else {
-                result
             }
+            result
         };
 
         #[cfg(not(unix))]
