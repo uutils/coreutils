@@ -1444,3 +1444,17 @@ fn test_cp_archive_on_nonexistent_file() {
             "cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)",
         );
 }
+
+#[test]
+#[cfg(unix)]
+fn test_cp_fifo() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    ucmd.arg("-r")
+        .arg("fifo")
+        .arg("fifo2")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert!(at.is_fifo("fifo2"));
+}

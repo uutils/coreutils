@@ -29,6 +29,8 @@ use std::borrow::Cow;
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use filetime::FileTime;
+#[cfg(unix)]
+use libc::mkfifo;
 use quick_error::ResultExt;
 use std::collections::HashSet;
 use std::env;
@@ -42,6 +44,10 @@ use std::fs::OpenOptions;
 use std::io;
 use std::io::{stdin, stdout, Write};
 use std::mem;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
+#[cfg(unix)]
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 #[cfg(target_os = "linux")]
 use std::os::unix::io::AsRawFd;
 #[cfg(windows)]
@@ -53,9 +59,6 @@ use uucore::backup_control::{self, BackupMode};
 use uucore::error::{set_exit_code, ExitCode, UError, UResult};
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use walkdir::WalkDir;
-
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 
 #[cfg(target_os = "linux")]
 ioctl!(write ficlone with 0x94, 9; std::os::raw::c_int);
@@ -149,7 +152,7 @@ pub type Target = PathBuf;
 pub type TargetSlice = Path;
 
 /// Specifies whether when overwrite files
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum ClobberMode {
     Force,
     RemoveDestination,
@@ -157,7 +160,7 @@ pub enum ClobberMode {
 }
 
 /// Specifies whether when overwrite files
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum OverwriteMode {
     /// [Default] Always overwrite existing files
     Clobber(ClobberMode),
@@ -1376,12 +1379,23 @@ fn copy_helper(
         let parent = dest.parent().unwrap_or(dest);
         fs::create_dir_all(parent)?;
     }
-    let is_symlink = fs::symlink_metadata(&source)?.file_type().is_symlink();
+
+    let file_type = fs::symlink_metadata(&source)?.file_type();
+    let is_symlink = file_type.is_symlink();
+
+    #[cfg(unix)]
+    let is_fifo = file_type.is_fifo();
+    #[cfg(not(unix))]
+    let is_fifo = false;
+
     if source.as_os_str() == "/dev/null" {
         /* workaround a limitation of fs::copy
          * https://github.com/rust-lang/rust/issues/79390
          */
         File::create(dest).context(dest.display().to_string())?;
+    } else if is_fifo && options.recursive {
+        #[cfg(unix)]
+        copy_fifo(dest, options.overwrite)?;
     } else if is_symlink {
         copy_link(source, dest, symlinked_files)?;
     } else if options.reflink_mode != ReflinkMode::Never {
@@ -1398,6 +1412,23 @@ fn copy_helper(
         fs::copy(source, dest).context(context)?;
     }
 
+    Ok(())
+}
+
+// "Copies" a FIFO by creating a new one. This workaround is because Rust's
+// built-in fs::copy does not handle FIFOs (see rust-lang/rust/issues/79390).
+#[cfg(unix)]
+fn copy_fifo(dest: &Path, overwrite: OverwriteMode) -> CopyResult<()> {
+    if dest.exists() {
+        overwrite.verify(&dest)?;
+        fs::remove_file(&dest)?;
+    }
+
+    let name = CString::new(dest.as_os_str().as_bytes()).unwrap();
+    let err = unsafe { mkfifo(name.as_ptr(), 0o666 as libc::mode_t) };
+    if err == -1 {
+        return Err(format!("cannot create fifo {}: File exists", dest.quote()).into());
+    }
     Ok(())
 }
 
