@@ -1069,9 +1069,9 @@ fn test_output_is_input() {
     let (at, mut cmd) = at_and_ucmd!();
     at.touch("file");
     at.append("file", input);
-    cmd.args(&["-m", "-u", "-o", "file", "file", "file", "file"])
+    cmd.args(&["-m", "-u", "-o", "file2", "file", "file", "file"])
         .succeeds();
-    assert_eq!(at.read("file"), input);
+    assert_eq!(at.read("file2"), input);
 }
 
 #[test]
