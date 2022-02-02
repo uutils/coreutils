@@ -517,8 +517,29 @@ impl Config {
             None
         };
 
+        let mut size_format = SizeFormat::Bytes;
 
-        let block_size = if std::env::var_os("BLOCK_SIZE").is_some() {
+        let block_size = if (options.is_present(options::size::BLOCK_SIZE)
+            && options
+                .value_of(options::size::BLOCK_SIZE)
+                .unwrap()
+                .eq("si"))
+            || options.is_present(options::size::SI)
+        {
+            size_format = SizeFormat::Decimal;
+            None
+        } else if (options.is_present(options::size::BLOCK_SIZE)
+            && options
+                .value_of(options::size::BLOCK_SIZE)
+                .unwrap()
+                .eq("human-readable"))
+            || options.is_present(options::size::HUMAN_READABLE)
+        {
+            size_format = SizeFormat::Binary;
+            None
+        } else if options.is_present(options::size::BLOCK_SIZE) {
+            Self::parse_byte_count(options.value_of(options::size::BLOCK_SIZE).unwrap())
+        } else if std::env::var_os("BLOCK_SIZE").is_some() {
             Self::parse_byte_count(&std::env::var_os("BLOCK_SIZE").unwrap().to_string_lossy())
         } else if std::env::var_os("POSIXLY_CORRECT").is_some() {
             if std::env::var_os("POSIXLY_CORRECT")
@@ -534,14 +555,6 @@ impl Config {
             }
         } else {
             None
-        };
-
-        let size_format = if options.is_present(options::size::HUMAN_READABLE) {
-            SizeFormat::Binary
-        } else if options.is_present(options::size::SI) {
-            SizeFormat::Decimal
-        } else {
-            SizeFormat::Bytes
         };
 
         let long = {
@@ -1220,6 +1233,14 @@ only ignore '.' and '..'.",
             Arg::new(options::size::SI)
                 .long(options::size::SI)
                 .help("Print human readable file sizes using powers of 1000 instead of 1024."),
+        )
+        .arg(
+            Arg::new(options::size::BLOCK_SIZE)
+                .long(options::size::BLOCK_SIZE)
+                .takes_value(true)
+                .require_equals(true)
+                .value_name("BLOCK_SIZE")
+                .help("scale sizes by SIZE when printing them"),
         )
         .arg(
             Arg::new(options::INODE)

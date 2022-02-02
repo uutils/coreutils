@@ -209,6 +209,47 @@ fn test_ls_allocation_size() {
             .stdout_contains("total 4096")
             .stdout_contains("0 empty-file")
             .stdout_contains("4096 file-with-holes");
+
+        scene
+            .ucmd()
+            .arg("-s1")
+            .arg("--block-size=4K")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 1024")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("1024 file-with-holes");
+
+        // si option should always trump the human-readable option
+        scene
+            .ucmd()
+            .arg("-s1h")
+            .arg("--si")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 4.2M")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("4.2M file-with-holes");
+
+        scene
+            .ucmd()
+            .arg("-s1")
+            .arg("--block-size=human-readable")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 4.0M")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("4.0M file-with-holes");
+
+        scene
+            .ucmd()
+            .arg("-s1")
+            .arg("--block-size=si")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 4.2M")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("4.2M file-with-holes");
     }
 }
 
