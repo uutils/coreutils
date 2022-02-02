@@ -517,8 +517,9 @@ impl Config {
             None
         };
 
+
         let block_size = if std::env::var_os("BLOCK_SIZE").is_some() {
-            Config::parse_byte_count(&std::env::var_os("BLOCK_SIZE").unwrap().to_string_lossy())
+            Self::parse_byte_count(&std::env::var_os("BLOCK_SIZE").unwrap().to_string_lossy())
         } else if std::env::var_os("POSIXLY_CORRECT").is_some() {
             if std::env::var_os("POSIXLY_CORRECT")
                 .unwrap()
@@ -1769,7 +1770,7 @@ fn display_more_info(
             } else {
                 "?".to_owned()
             };
-            result.push_str(&format!("{} ", pad_left(&i, padding.longest_inode_len)))
+            result.push_str(&format!("{} ", pad_left(&i, padding.longest_inode_len)));
         }
     }
     if config.alloc_size {
@@ -1787,7 +1788,7 @@ fn display_more_info(
         result.push_str(&format!(
             "{} ",
             pad_left(&s, padding.longest_block_size_len),
-        ))
+        ));
     }
     result
 }
