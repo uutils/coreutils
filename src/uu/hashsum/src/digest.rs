@@ -18,8 +18,6 @@ use hex::ToHex;
 #[cfg(windows)]
 use memchr::memmem;
 
-use crate::digest::digest::{ExtendableOutput, Input, XofReader};
-
 pub trait Digest {
     fn new() -> Self
     where
@@ -114,11 +112,11 @@ macro_rules! impl_digest_sha {
             }
 
             fn input(&mut self, input: &[u8]) {
-                digest::Digest::input(self, input);
+                digest::Digest::update(self, input);
             }
 
             fn result(&mut self, out: &mut [u8]) {
-                out.copy_from_slice(digest::Digest::result(*self).as_slice());
+                digest::Digest::finalize_into_reset(self, out.into());
             }
 
             fn reset(&mut self) {
@@ -141,11 +139,11 @@ macro_rules! impl_digest_shake {
             }
 
             fn input(&mut self, input: &[u8]) {
-                self.process(input);
+                digest::Update::update(self, input);
             }
 
             fn result(&mut self, out: &mut [u8]) {
-                self.xof_result().read(out);
+                digest::ExtendableOutputReset::finalize_xof_reset_into(self, out);
             }
 
             fn reset(&mut self) {

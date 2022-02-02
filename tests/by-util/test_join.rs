@@ -1,6 +1,10 @@
 // spell-checker:ignore (words) autoformat
 
 use crate::common::util::*;
+#[cfg(unix)]
+use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+#[cfg(windows)]
+use std::{ffi::OsString, os::windows::ffi::OsStringExt};
 
 #[test]
 fn empty_files() {
@@ -73,6 +77,27 @@ fn different_field() {
         .arg("2")
         .succeeds()
         .stdout_only_fixture("different_field.expected");
+}
+
+#[test]
+fn out_of_bounds_fields() {
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_4.txt")
+        .arg("-1")
+        .arg("3")
+        .arg("-2")
+        .arg("5")
+        .succeeds()
+        .stdout_only_fixture("out_of_bounds_fields.expected");
+
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_4.txt")
+        .arg("-j")
+        .arg("100000000000000000000") // > usize::MAX for 64 bits
+        .succeeds()
+        .stdout_only_fixture("out_of_bounds_fields.expected");
 }
 
 #[test]
@@ -364,6 +389,32 @@ fn non_unicode() {
         .arg("non-unicode_2.bin")
         .succeeds()
         .stdout_only_fixture("non-unicode.expected");
+
+    #[cfg(unix)]
+    {
+        let invalid_utf8: u8 = 167;
+        new_ucmd!()
+            .arg("-t")
+            .arg(OsStr::from_bytes(&[invalid_utf8]))
+            .arg("non-unicode_1.bin")
+            .arg("non-unicode_2.bin")
+            .succeeds()
+            .stdout_only_fixture("non-unicode_sep.expected");
+    }
+
+    #[cfg(windows)]
+    {
+        let invalid_utf16: OsString = OsStringExt::from_wide(&[0xD800]);
+        new_ucmd!()
+            .arg("-t")
+            .arg(&invalid_utf16)
+            .arg("non-unicode_1.bin")
+            .arg("non-unicode_2.bin")
+            .fails()
+            .stderr_is(
+                "join: unprintable field separators are only supported on unix-like platforms",
+            );
+    }
 }
 
 #[test]
