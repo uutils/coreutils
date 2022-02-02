@@ -21,8 +21,6 @@ use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
-#[cfg(windows)]
-use std::os::windows::fs::MetadataExt;
 #[cfg(unix)]
 use std::{
     cmp::Reverse,
@@ -36,7 +34,19 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use std::{ffi::OsString, fs::ReadDir};
+#[cfg(windows)]
+use std::{
+    cmp::Reverse,
+    env,
+    error::Error,
+    ffi::OsString,
+    fmt::Display,
+    fs::{self, DirEntry, FileType, Metadata, ReadDir},
+    io::{stdout, BufWriter, ErrorKind, Stdout, Write},
+    os::windows::prelude::MetadataExt,
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
+};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use uucore::{
     display::Quotable,
@@ -1630,7 +1640,12 @@ fn enter_directory(
     entries.append(&mut vec_path_data);
 
     // Print total after any error display
-    if config.format == Format::Long || config.block_size.is_some() {
+    #[cfg(unix)]
+    let should_display_total = config.format == Format::Long || config.block_size.is_some();
+    #[cfg(windows)]
+    let should_display_total = config.format == Format::Long;
+
+    if should_display_total {
         display_total(&entries, config, out);
     }
 
@@ -1787,6 +1802,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                 _major_len,
                 _minor_len,
                 _inode_len,
+                _blk_len,
             ) = display_dir_entry_size(item, config, out);
             longest_link_count_len = link_count_len.max(longest_link_count_len);
             longest_uname_len = uname_len.max(longest_uname_len);
@@ -1834,13 +1850,17 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         #[cfg(not(unix))]
         let longest_blk_len = 1;
         #[cfg(unix)]
-        let mut longest_blk_len = 1;
-        if config.block_size.is_some() {
-            for item in items {
-                let blk_size = get_block_size_for_path(item, config, out);
-                longest_blk_len = longest_blk_len.max(format!("{}", blk_size).len());
+        let longest_blk_len = {
+            let mut result = 1;
+            if config.block_size.is_some() {
+                for item in items {
+                    let blk_size = get_block_size_for_path(item, config, out);
+                    result = longest_blk_len.max(format!("{}", blk_size).len());
+                }
+            } else {
+                result
             }
-        }
+        };
 
         #[cfg(not(unix))]
         let longest_inode_len = 1;
@@ -2666,7 +2686,6 @@ fn get_env_block_size() -> u64 {
     })
 }
 
-#[cfg(unix)]
 fn get_block_size_for_path(item: &PathData, config: &Config, out: &mut BufWriter<Stdout>) -> u64 {
     item.md(out)
         .as_ref()
