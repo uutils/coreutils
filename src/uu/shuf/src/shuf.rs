@@ -31,6 +31,7 @@ Write a random permutation of the input lines to standard output.
 
 With no FILE, or when FILE is -, read standard input.
 "#;
+static ABOUT: &str = "Shuffle the input by outputting a random permutation of input lines. Each output permutation is equally likely.";
 static TEMPLATE: &str = "Usage: {usage}\nMandatory arguments to long options are mandatory for short options too.\n{options}";
 
 struct Options {
@@ -121,6 +122,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
+        .about(ABOUT)
         .version(crate_version!())
         .help_template(TEMPLATE)
         .override_usage(USAGE)
