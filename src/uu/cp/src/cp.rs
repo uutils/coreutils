@@ -1309,6 +1309,15 @@ fn copy_file(
 
     match options.copy_mode {
         CopyMode::Link => {
+            if dest.exists() {
+                let backup_path =
+                    backup_control::get_backup_path(options.backup, &dest, &options.backup_suffix);
+                if let Some(backup_path) = backup_path {
+                    backup_dest(&dest, &backup_path)?;
+                    fs::remove_file(&dest)?;
+                }
+            }
+
             fs::hard_link(&source, &dest).context(context)?;
         }
         CopyMode::Copy => {
