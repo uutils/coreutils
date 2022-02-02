@@ -74,7 +74,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             table();
             Ok(())
         }
-        Mode::List => list(pids_or_signals.get(0).cloned()),
+        Mode::List => list(pids_or_signals.get(0)),
     }
 }
 
@@ -168,9 +168,9 @@ fn print_signals() {
     println!();
 }
 
-fn list(arg: Option<String>) -> UResult<()> {
+fn list(arg: Option<&String>) -> UResult<()> {
     match arg {
-        Some(ref x) => print_signal(x),
+        Some(x) => print_signal(x),
         None => {
             print_signals();
             Ok(())

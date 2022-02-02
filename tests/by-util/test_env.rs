@@ -219,7 +219,7 @@ fn test_change_directory() {
         .args(&pwd)
         .succeeds()
         .stdout_move_str();
-    assert_eq!(out.trim(), temporary_path.as_os_str())
+    assert_eq!(out.trim(), temporary_path.as_os_str());
 }
 
 #[test]
