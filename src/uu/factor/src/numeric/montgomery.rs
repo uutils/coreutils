@@ -106,7 +106,7 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
         let n = T::from_u64(n);
         let a = modular_inverse(n).wrapping_neg();
         debug_assert_eq!(n.wrapping_mul(&a), T::one().wrapping_neg());
-        Montgomery { a, n }
+        Self { a, n }
     }
 
     fn modulus(&self) -> u64 {

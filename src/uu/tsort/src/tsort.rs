@@ -5,7 +5,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
@@ -23,7 +23,7 @@ mod options {
     pub const FILE: &str = "file";
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -98,11 +98,13 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .override_usage(USAGE)
         .about(SUMMARY)
+        .setting(AppSettings::InferLongArgs)
         .arg(Arg::new(options::FILE).default_value("-").hide(true))
 }
 
 // We use String as a representation of node here
 // but using integer may improve performance.
+#[derive(Default)]
 struct Graph {
     in_edges: HashMap<String, HashSet<String>>,
     out_edges: HashMap<String, Vec<String>>,
@@ -110,12 +112,8 @@ struct Graph {
 }
 
 impl Graph {
-    fn new() -> Graph {
-        Graph {
-            in_edges: HashMap::new(),
-            out_edges: HashMap::new(),
-            result: vec![],
-        }
+    fn new() -> Self {
+        Self::default()
     }
 
     fn has_node(&self, n: &str) -> bool {

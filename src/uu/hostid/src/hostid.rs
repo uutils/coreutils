@@ -7,18 +7,19 @@
 
 // spell-checker:ignore (ToDO) gethostid
 
-use clap::{crate_version, App};
+use clap::{crate_version, App, AppSettings};
 use libc::c_long;
 use uucore::error::UResult;
 
 static SYNTAX: &str = "[options]";
+const SUMMARY: &str = "Print the numeric identifier (in hexadecimal) for the current host";
 
 // currently rust libc interface doesn't include gethostid
 extern "C" {
     pub fn gethostid() -> c_long;
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     uu_app().get_matches_from(args);
     hostid();
@@ -28,7 +29,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
+        .about(SUMMARY)
         .override_usage(SYNTAX)
+        .setting(AppSettings::InferLongArgs)
 }
 
 fn hostid() {

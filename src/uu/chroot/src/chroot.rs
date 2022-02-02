@@ -10,7 +10,7 @@
 mod error;
 
 use crate::error::ChrootError;
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::ffi::CString;
 use std::io::Error;
 use std::path::Path;
@@ -31,7 +31,7 @@ mod options {
     pub const COMMAND: &str = "command";
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -96,6 +96,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(SYNTAX)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::NEWROOT)
                 .hide(true)
@@ -200,12 +201,12 @@ fn set_main_group(group: &str) -> UResult<()> {
 }
 
 #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
-fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
+fn set_groups(groups: &[libc::gid_t]) -> libc::c_int {
     unsafe { setgroups(groups.len() as libc::c_int, groups.as_ptr()) }
 }
 
 #[cfg(target_os = "linux")]
-fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
+fn set_groups(groups: &[libc::gid_t]) -> libc::c_int {
     unsafe { setgroups(groups.len() as libc::size_t, groups.as_ptr()) }
 }
 
@@ -219,7 +220,7 @@ fn set_groups_from_str(groups: &str) -> UResult<()> {
             };
             groups_vec.push(gid);
         }
-        let err = set_groups(groups_vec);
+        let err = set_groups(&groups_vec);
         if err != 0 {
             return Err(ChrootError::SetGroupsFailed(Error::last_os_error()).into());
         }

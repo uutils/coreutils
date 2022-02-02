@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::cmp;
 use std::fs::File;
 use std::io::{stdin, stdout, Write};
@@ -66,7 +66,7 @@ pub struct FmtOptions {
     tabwidth: usize,
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
@@ -226,6 +226,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_CROWN_MARGIN)
                 .short('c')

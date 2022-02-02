@@ -25,7 +25,7 @@ use uucore::{
     error::{UError, UResult},
 };
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 
 mod options {
     pub const USERS: &str = "USERNAME";
@@ -69,7 +69,7 @@ fn infallible_gid2grp(gid: &u32) -> String {
     }
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
@@ -109,6 +109,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::USERS)
                 .multiple_occurrences(true)

@@ -8,7 +8,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use retain_mut::RetainMut;
 use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
@@ -38,7 +38,7 @@ fn usage() -> String {
     format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
@@ -53,7 +53,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .unwrap_or_default(),
     };
 
-    match tee(options) {
+    match tee(&options) {
         Ok(_) => Ok(()),
         Err(_) => Err(1.into()),
     }
@@ -64,6 +64,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .after_help("If a FILE is -, it refers to a file named - .")
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::APPEND)
                 .long(options::APPEND)
@@ -94,9 +95,9 @@ fn ignore_interrupts() -> Result<()> {
     Ok(())
 }
 
-fn tee(options: Options) -> Result<()> {
+fn tee(options: &Options) -> Result<()> {
     if options.ignore_interrupts {
-        ignore_interrupts()?
+        ignore_interrupts()?;
     }
     let mut writers: Vec<NamedWriter> = options
         .files

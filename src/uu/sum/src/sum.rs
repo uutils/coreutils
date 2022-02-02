@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::fs::File;
 use std::io::{stdin, Read};
 use std::path::Path;
@@ -19,9 +19,9 @@ use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "sum";
-static USAGE: &str =
-    "[OPTION]... [FILE]...\nWith no FILE, or when  FILE is -, read standard input.";
-static SUMMARY: &str = "Checksum and count the blocks in a file.";
+static USAGE: &str = "sum [OPTION]... [FILE]...";
+static SUMMARY: &str = "Checksum and count the blocks in a file.\n\
+                        With no FILE, or when  FILE is -, read standard input.";
 
 fn bsd_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
     let mut buf = [0; 1024];
@@ -96,7 +96,7 @@ mod options {
     pub static SYSTEM_V_COMPATIBLE: &str = "sysv";
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -146,6 +146,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .override_usage(USAGE)
         .about(SUMMARY)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::FILE)
                 .multiple_occurrences(true)

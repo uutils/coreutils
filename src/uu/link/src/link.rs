@@ -4,7 +4,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::fs::hard_link;
 use std::path::Path;
 use uucore::display::Quotable;
@@ -20,7 +20,7 @@ fn usage() -> String {
     format!("{0} FILE1 FILE2", uucore::execution_phrase())
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
@@ -40,6 +40,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::FILES)
                 .hide(true)

@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_wc);
+uucore::bin!(uu_wc);

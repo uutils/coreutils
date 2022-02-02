@@ -44,26 +44,26 @@ impl Symbol {
     /// Create a new Symbol from an OsString.
     ///
     /// Returns Symbol::None in place of None
-    fn new(token: Option<OsString>) -> Symbol {
+    fn new(token: Option<OsString>) -> Self {
         match token {
             Some(s) => match s.to_str() {
                 Some(t) => match t {
-                    "(" => Symbol::LParen,
-                    "!" => Symbol::Bang,
-                    "-a" | "-o" => Symbol::BoolOp(s),
-                    "=" | "==" | "!=" => Symbol::Op(Operator::String(s)),
-                    "-eq" | "-ge" | "-gt" | "-le" | "-lt" | "-ne" => Symbol::Op(Operator::Int(s)),
-                    "-ef" | "-nt" | "-ot" => Symbol::Op(Operator::File(s)),
-                    "-n" | "-z" => Symbol::UnaryOp(UnaryOperator::StrlenOp(s)),
+                    "(" => Self::LParen,
+                    "!" => Self::Bang,
+                    "-a" | "-o" => Self::BoolOp(s),
+                    "=" | "==" | "!=" => Self::Op(Operator::String(s)),
+                    "-eq" | "-ge" | "-gt" | "-le" | "-lt" | "-ne" => Self::Op(Operator::Int(s)),
+                    "-ef" | "-nt" | "-ot" => Self::Op(Operator::File(s)),
+                    "-n" | "-z" => Self::UnaryOp(UnaryOperator::StrlenOp(s)),
                     "-b" | "-c" | "-d" | "-e" | "-f" | "-g" | "-G" | "-h" | "-k" | "-L" | "-O"
                     | "-p" | "-r" | "-s" | "-S" | "-t" | "-u" | "-w" | "-x" => {
-                        Symbol::UnaryOp(UnaryOperator::FiletestOp(s))
+                        Self::UnaryOp(UnaryOperator::FiletestOp(s))
                     }
-                    _ => Symbol::Literal(s),
+                    _ => Self::Literal(s),
                 },
-                None => Symbol::Literal(s),
+                None => Self::Literal(s),
             },
-            None => Symbol::None,
+            None => Self::None,
         }
     }
 
@@ -74,18 +74,18 @@ impl Symbol {
     /// # Panics
     ///
     /// Panics if `self` is Symbol::None
-    fn into_literal(self) -> Symbol {
-        Symbol::Literal(match self {
-            Symbol::LParen => OsString::from("("),
-            Symbol::Bang => OsString::from("!"),
-            Symbol::BoolOp(s)
-            | Symbol::Literal(s)
-            | Symbol::Op(Operator::String(s))
-            | Symbol::Op(Operator::Int(s))
-            | Symbol::Op(Operator::File(s))
-            | Symbol::UnaryOp(UnaryOperator::StrlenOp(s))
-            | Symbol::UnaryOp(UnaryOperator::FiletestOp(s)) => s,
-            Symbol::None => panic!(),
+    fn into_literal(self) -> Self {
+        Self::Literal(match self {
+            Self::LParen => OsString::from("("),
+            Self::Bang => OsString::from("!"),
+            Self::BoolOp(s)
+            | Self::Literal(s)
+            | Self::Op(Operator::String(s))
+            | Self::Op(Operator::Int(s))
+            | Self::Op(Operator::File(s))
+            | Self::UnaryOp(UnaryOperator::StrlenOp(s))
+            | Self::UnaryOp(UnaryOperator::FiletestOp(s)) => s,
+            Self::None => panic!(),
         })
     }
 }
@@ -120,8 +120,8 @@ struct Parser {
 
 impl Parser {
     /// Construct a new Parser from a `Vec<OsString>` of tokens.
-    fn new(tokens: Vec<OsString>) -> Parser {
-        Parser {
+    fn new(tokens: Vec<OsString>) -> Self {
+        Self {
             tokens: tokens.into_iter().peekable(),
             stack: vec![],
         }

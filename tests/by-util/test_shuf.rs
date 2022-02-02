@@ -91,7 +91,7 @@ fn test_head_count() {
         result_seq.iter().all(|x| input_seq.contains(x)),
         "Output includes element not from input: {}",
         result.stdout_str()
-    )
+    );
 }
 
 #[test]
@@ -129,7 +129,7 @@ fn test_repeat() {
             .iter()
             .filter(|x| !input_seq.contains(x))
             .collect::<Vec<&i32>>()
-    )
+    );
 }
 
 #[test]

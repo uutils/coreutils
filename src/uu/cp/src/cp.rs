@@ -27,7 +27,7 @@ use winapi::um::fileapi::GetFileInformationByHandle;
 
 use std::borrow::Cow;
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use filetime::FileTime;
 use quick_error::ResultExt;
 use std::collections::HashSet;
@@ -64,14 +64,14 @@ quick_error! {
     #[derive(Debug)]
     pub enum Error {
         /// Simple io::Error wrapper
-        IoErr(err: io::Error) { from() cause(err) display("{}", err)}
+        IoErr(err: io::Error) { from() source(err) display("{}", err)}
 
         /// Wrapper for io::Error with path context
         IoErrContext(err: io::Error, path: String) {
             display("{}: {}", path, err)
             context(path: &'a str, err: io::Error) -> (err, path.to_owned())
             context(context: String, err: io::Error) -> (err, context)
-            cause(err)
+            source(err)
         }
 
         /// General copy error
@@ -86,7 +86,7 @@ quick_error! {
         NotAllFilesCopied {}
 
         /// Simple walkdir::Error wrapper
-        WalkDirErr(err: walkdir::Error) { from() display("{}", err) cause(err) }
+        WalkDirErr(err: walkdir::Error) { from() display("{}", err) source(err) }
 
         /// Simple std::path::StripPrefixError wrapper
         StripPrefixError(err: StripPrefixError) { from() }
@@ -300,6 +300,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(Arg::new(options::TARGET_DIRECTORY)
              .short('t')
              .conflicts_with(options::NO_TARGET_DIRECTORY)
@@ -453,7 +454,7 @@ pub fn uu_app<'a>() -> App<'a> {
              .multiple_occurrences(true))
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let matches = uu_app()
@@ -494,43 +495,43 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 impl ClobberMode {
-    fn from_matches(matches: &ArgMatches) -> ClobberMode {
+    fn from_matches(matches: &ArgMatches) -> Self {
         if matches.is_present(options::FORCE) {
-            ClobberMode::Force
+            Self::Force
         } else if matches.is_present(options::REMOVE_DESTINATION) {
-            ClobberMode::RemoveDestination
+            Self::RemoveDestination
         } else {
-            ClobberMode::Standard
+            Self::Standard
         }
     }
 }
 
 impl OverwriteMode {
-    fn from_matches(matches: &ArgMatches) -> OverwriteMode {
+    fn from_matches(matches: &ArgMatches) -> Self {
         if matches.is_present(options::INTERACTIVE) {
-            OverwriteMode::Interactive(ClobberMode::from_matches(matches))
+            Self::Interactive(ClobberMode::from_matches(matches))
         } else if matches.is_present(options::NO_CLOBBER) {
-            OverwriteMode::NoClobber
+            Self::NoClobber
         } else {
-            OverwriteMode::Clobber(ClobberMode::from_matches(matches))
+            Self::Clobber(ClobberMode::from_matches(matches))
         }
     }
 }
 
 impl CopyMode {
-    fn from_matches(matches: &ArgMatches) -> CopyMode {
+    fn from_matches(matches: &ArgMatches) -> Self {
         if matches.is_present(options::LINK) {
-            CopyMode::Link
+            Self::Link
         } else if matches.is_present(options::SYMBOLIC_LINK) {
-            CopyMode::SymLink
+            Self::SymLink
         } else if matches.is_present(options::SPARSE) {
-            CopyMode::Sparse
+            Self::Sparse
         } else if matches.is_present(options::UPDATE) {
-            CopyMode::Update
+            Self::Update
         } else if matches.is_present(options::ATTRIBUTES_ONLY) {
-            CopyMode::AttrOnly
+            Self::AttrOnly
         } else {
-            CopyMode::Copy
+            Self::Copy
         }
     }
 }
@@ -538,16 +539,16 @@ impl CopyMode {
 impl FromStr for Attribute {
     type Err = Error;
 
-    fn from_str(value: &str) -> CopyResult<Attribute> {
+    fn from_str(value: &str) -> CopyResult<Self> {
         Ok(match &*value.to_lowercase() {
-            "mode" => Attribute::Mode,
+            "mode" => Self::Mode,
             #[cfg(unix)]
-            "ownership" => Attribute::Ownership,
-            "timestamps" => Attribute::Timestamps,
+            "ownership" => Self::Ownership,
+            "timestamps" => Self::Timestamps,
             #[cfg(feature = "feat_selinux")]
-            "context" => Attribute::Context,
-            "links" => Attribute::Links,
-            "xattr" => Attribute::Xattr,
+            "context" => Self::Context,
+            "links" => Self::Links,
+            "xattr" => Self::Xattr,
             _ => {
                 return Err(Error::InvalidArgument(format!(
                     "invalid attribute {}",
@@ -576,7 +577,7 @@ fn add_all_attributes() -> Vec<Attribute> {
 }
 
 impl Options {
-    fn from_matches(matches: &ArgMatches) -> CopyResult<Options> {
+    fn from_matches(matches: &ArgMatches) -> CopyResult<Self> {
         let not_implemented_opts = vec![
             options::COPY_CONTENTS,
             options::SPARSE,
@@ -645,7 +646,7 @@ impl Options {
         // if not executed first.
         preserve_attributes.sort_unstable();
 
-        let options = Options {
+        let options = Self {
             attributes_only: matches.is_present(options::ATTRIBUTES_ONLY),
             copy_contents: matches.is_present(options::COPY_CONTENTS),
             copy_mode: CopyMode::from_matches(matches),
@@ -702,11 +703,11 @@ impl TargetType {
     ///
     /// Treat target as a dir if we have multiple sources or the target
     /// exists and already is a directory
-    fn determine(sources: &[Source], target: &TargetSlice) -> TargetType {
+    fn determine(sources: &[Source], target: &TargetSlice) -> Self {
         if sources.len() > 1 || target.is_dir() {
-            TargetType::Directory
+            Self::Directory
         } else {
-            TargetType::File
+            Self::File
         }
     }
 }
@@ -740,8 +741,8 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
     };
 
     if options.strip_trailing_slashes {
-        for source in paths.iter_mut() {
-            *source = source.components().as_path().to_owned()
+        for source in &mut paths {
+            *source = source.components().as_path().to_owned();
         }
     }
 
@@ -751,7 +752,7 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
 fn preserve_hardlinks(
     hard_links: &mut Vec<(String, u64)>,
     source: &std::path::Path,
-    dest: std::path::PathBuf,
+    dest: &std::path::Path,
     found_hard_link: &mut bool,
 ) -> CopyResult<()> {
     // Redox does not currently support hard links
@@ -767,8 +768,8 @@ fn preserve_hardlinks(
                     let mut stat = mem::zeroed();
                     if libc::lstat(src_path.as_ptr(), &mut stat) < 0 {
                         return Err(format!(
-                            "cannot stat {:?}: {}",
-                            src_path,
+                            "cannot stat {}: {}",
+                            source.quote(),
                             std::io::Error::last_os_error()
                         )
                         .into());
@@ -804,7 +805,7 @@ fn preserve_hardlinks(
 
                 for hard_link in hard_links.iter() {
                     if hard_link.1 == inode {
-                        std::fs::hard_link(hard_link.0.clone(), dest.clone()).unwrap();
+                        std::fs::hard_link(hard_link.0.clone(), dest).unwrap();
                         *found_hard_link = true;
                     }
                 }
@@ -848,7 +849,7 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
             let mut found_hard_link = false;
             if preserve_hard_links {
                 let dest = construct_dest_path(source, target, &target_type, options)?;
-                preserve_hardlinks(&mut hard_links, source, dest, &mut found_hard_link).unwrap();
+                preserve_hardlinks(&mut hard_links, source, &dest, &mut found_hard_link)?;
             }
             if !found_hard_link {
                 if let Err(error) =
@@ -863,7 +864,7 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
                         }
                         _ => {
                             show_error!("{}", error);
-                            non_fatal_errors = true
+                            non_fatal_errors = true;
                         }
                     }
                 }
@@ -1030,7 +1031,7 @@ fn copy_directory(
                 let mut found_hard_link = false;
                 let source = path.to_path_buf();
                 let dest = local_to_target.as_path().to_path_buf();
-                preserve_hardlinks(&mut hard_links, &source, dest, &mut found_hard_link).unwrap();
+                preserve_hardlinks(&mut hard_links, &source, &dest, &mut found_hard_link)?;
                 if !found_hard_link {
                     match copy_file(
                         path.as_path(),
@@ -1579,5 +1580,5 @@ fn test_cp_localize_to_target() {
         )
         .unwrap()
             == Path::new("target/c.txt")
-    )
+    );
 }

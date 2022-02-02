@@ -16,6 +16,8 @@ mod macros; // crate macros (macro_rules-type; exported to `crate::...`)
 mod mods; // core cross-platform modules
 mod parser; // string parsing modules
 
+pub use uucore_procs::*;
+
 // * cross-platform modules
 pub use crate::mods::backup_control;
 pub use crate::mods::display;
@@ -36,6 +38,8 @@ pub use crate::features::encoding;
 pub use crate::features::fs;
 #[cfg(feature = "fsext")]
 pub use crate::features::fsext;
+#[cfg(feature = "memo")]
+pub use crate::features::memo;
 #[cfg(feature = "ringbuffer")]
 pub use crate::features::ringbuffer;
 
@@ -75,12 +79,25 @@ use once_cell::sync::Lazy;
 
 use crate::display::Quotable;
 
+#[macro_export]
+macro_rules! bin {
+    ($util:ident) => {
+        pub fn main() {
+            use std::io::Write;
+            uucore::panic::mute_sigpipe_panic(); // suppress extraneous error output for SIGPIPE failures/panics
+            let code = $util::uumain(uucore::args_os()); // execute utility code
+            std::io::stdout().flush().expect("could not flush stdout"); // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
+            std::process::exit(code);
+        }
+    };
+}
+
 pub fn get_utility_is_second_arg() -> bool {
     crate::macros::UTILITY_IS_SECOND_ARG.load(Ordering::SeqCst)
 }
 
 pub fn set_utility_is_second_arg() {
-    crate::macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst)
+    crate::macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst);
 }
 
 // args_os() can be expensive to call, it copies all of argv before iterating.
@@ -134,8 +151,7 @@ pub enum ConversionResult {
 impl ConversionResult {
     pub fn accept_any(self) -> Vec<String> {
         match self {
-            Self::Complete(result) => result,
-            Self::Lossy(result) => result,
+            Self::Complete(result) | Self::Lossy(result) => result,
         }
     }
 

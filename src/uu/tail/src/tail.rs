@@ -22,7 +22,7 @@ mod platform;
 use chunks::ReverseChunks;
 use lines::lines;
 
-use clap::{App, Arg};
+use clap::{App, AppSettings, Arg};
 use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::fmt;
@@ -72,7 +72,7 @@ enum FilterMode {
 
 impl Default for FilterMode {
     fn default() -> Self {
-        FilterMode::Lines(10, b'\n')
+        Self::Lines(10, b'\n')
     }
 }
 
@@ -92,7 +92,7 @@ impl Settings {
     pub fn get_from(args: impl uucore::Args) -> Result<Self, String> {
         let matches = uu_app().get_matches_from(arg_iterate(args)?);
 
-        let mut settings: Settings = Settings {
+        let mut settings: Self = Self {
             sleep_msec: 1000,
             follow: matches.is_present(options::FOLLOW),
             ..Default::default()
@@ -102,7 +102,7 @@ impl Settings {
             if let Some(n) = matches.value_of(options::SLEEP_INT) {
                 let parsed: Option<u32> = n.parse().ok();
                 if let Some(m) = parsed {
-                    settings.sleep_msec = m * 1000
+                    settings.sleep_msec = m * 1000;
                 }
             }
         }
@@ -158,7 +158,7 @@ impl Settings {
 }
 
 #[allow(clippy::cognitive_complexity)]
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = match Settings::get_from(args) {
         Ok(o) => o,
@@ -279,6 +279,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(USAGE)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::BYTES)
                 .short('c')
@@ -345,6 +346,7 @@ pub fn uu_app<'a>() -> App<'a> {
         )
 }
 
+/// Continually check for new data in the given readers, writing any to stdout.
 fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) -> UResult<()> {
     if readers.is_empty() || !settings.follow {
         return Ok(());
@@ -353,6 +355,7 @@ fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) -> URes
     let mut last = readers.len() - 1;
     let mut read_some = false;
     let mut process = platform::ProcessChecker::new(settings.pid);
+    let mut stdout = stdout();
 
     loop {
         sleep(Duration::new(0, settings.sleep_msec * 1000));
@@ -363,8 +366,8 @@ fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) -> URes
         for (i, (reader, filename)) in readers.iter_mut().enumerate() {
             // Print all new content since the last pass
             loop {
-                let mut datum = String::new();
-                match reader.read_line(&mut datum) {
+                let mut datum = vec![];
+                match reader.read_until(b'\n', &mut datum) {
                     Ok(0) => break,
                     Ok(_) => {
                         read_some = true;
@@ -372,7 +375,9 @@ fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) -> URes
                             println!("\n==> {} <==", filename);
                             last = i;
                         }
-                        print!("{}", datum);
+                        stdout
+                            .write_all(&datum)
+                            .map_err_context(|| String::from("write error"))?;
                     }
                     Err(err) => return Err(USimpleError::new(1, err.to_string())),
                 }
@@ -570,9 +575,12 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
     // contains count lines/chars. When reaching the end of file, output the
     // data in the ringbuf.
     match settings.mode {
-        FilterMode::Lines(count, _) => {
-            for line in unbounded_tail_collect(lines(reader), count, settings.beginning) {
-                print!("{}", line);
+        FilterMode::Lines(count, sep) => {
+            let mut stdout = stdout();
+            for line in unbounded_tail_collect(lines(reader, sep), count, settings.beginning) {
+                stdout
+                    .write_all(&line)
+                    .map_err_context(|| String::from("IO error"))?;
             }
         }
         FilterMode::Bytes(count) => {

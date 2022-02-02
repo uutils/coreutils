@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::path::Path;
 use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
@@ -29,7 +29,7 @@ fn get_long_usage() -> String {
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -56,12 +56,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect();
 
     if !dirnames.is_empty() {
-        for path in dirnames.iter() {
+        for path in &dirnames {
             let p = Path::new(path);
             match p.parent() {
                 Some(d) => {
                     if d.components().next() == None {
-                        print!(".")
+                        print!(".");
                     } else {
                         print_verbatim(d).unwrap();
                     }
@@ -87,6 +87,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .about(ABOUT)
         .version(crate_version!())
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::ZERO)
                 .long(options::ZERO)

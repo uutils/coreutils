@@ -2,13 +2,10 @@
 // spell-checker:ignore (change!) each's
 // spell-checker:ignore (ToDO) LONGHELP FORMATSTRING templating parameterizing formatstr
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use uucore::error::{UResult, UUsageError};
+use uucore::memo;
 use uucore::InvalidEncodingHandling;
-
-mod cli;
-mod memo;
-mod tokenize;
 
 const VERSION: &str = "version";
 const HELP: &str = "help";
@@ -274,7 +271,7 @@ COPYRIGHT :
 
 ";
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -300,4 +297,5 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .arg(Arg::new(VERSION).long(VERSION))
         .arg(Arg::new(HELP).long(HELP))
+        .setting(AppSettings::InferLongArgs)
 }

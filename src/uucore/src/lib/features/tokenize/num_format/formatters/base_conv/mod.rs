@@ -16,7 +16,7 @@ pub fn arrnum_int_mult(arr_num: &[u8], basenum: u8, base_ten_int_fact: u8) -> Ve
                 new_amount = (u16::from(*u) * fact) + carry;
                 rem = new_amount % base;
                 carry = (new_amount - rem) / base;
-                ret_rev.push(rem as u8)
+                ret_rev.push(rem as u8);
             }
             None => {
                 while carry != 0 {
@@ -32,23 +32,26 @@ pub fn arrnum_int_mult(arr_num: &[u8], basenum: u8, base_ten_int_fact: u8) -> Ve
     ret
 }
 
+#[allow(dead_code)]
 pub struct Remainder<'a> {
     pub position: usize,
     pub replace: Vec<u8>,
     pub arr_num: &'a Vec<u8>,
 }
 
+#[allow(dead_code)]
 pub struct DivOut<'a> {
     pub quotient: u8,
     pub remainder: Remainder<'a>,
 }
 
-pub fn arrnum_int_div_step(
-    rem_in: Remainder,
+#[allow(dead_code)]
+pub fn arrnum_int_div_step<'a>(
+    rem_in: &'a Remainder,
     radix_in: u8,
     base_ten_int_divisor: u8,
     after_decimal: bool,
-) -> DivOut {
+) -> DivOut<'a> {
     let mut rem_out = Remainder {
         position: rem_in.position,
         replace: Vec::new(),
@@ -116,7 +119,7 @@ pub fn arrnum_int_add(arrnum: &[u8], basenum: u8, base_ten_int_term: u8) -> Vec<
                 new_amount = u16::from(*u) + carry;
                 rem = new_amount % base;
                 carry = (new_amount - rem) / base;
-                ret_rev.push(rem as u8)
+                ret_rev.push(rem as u8);
             }
             None => {
                 while carry != 0 {
@@ -141,6 +144,7 @@ pub fn base_conv_vec(src: &[u8], radix_src: u8, radix_dest: u8) -> Vec<u8> {
     result
 }
 
+#[allow(dead_code)]
 pub fn unsigned_to_arrnum(src: u16) -> Vec<u8> {
     let mut result: Vec<u8> = Vec::new();
     let mut src_tmp: u16 = src;
@@ -166,7 +170,7 @@ pub fn base_conv_float(src: &[u8], radix_src: u8, _radix_dest: u8) -> f64 {
             break;
         }
         factor /= radix_src_float;
-        r += factor * f64::from(*u)
+        r += factor * f64::from(*u);
     }
     r
 }

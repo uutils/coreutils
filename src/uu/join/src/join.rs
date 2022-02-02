@@ -10,10 +10,12 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Split, Stdin, Write};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UResult, USimpleError};
 
@@ -63,8 +65,8 @@ struct Settings {
 }
 
 impl Default for Settings {
-    fn default() -> Settings {
-        Settings {
+    fn default() -> Self {
+        Self {
             key1: 0,
             key2: 0,
             print_unpaired1: false,
@@ -163,8 +165,8 @@ struct Input {
 }
 
 impl Input {
-    fn new(separator: Sep, ignore_case: bool, check_order: CheckOrder) -> Input {
-        Input {
+    fn new(separator: Sep, ignore_case: bool, check_order: CheckOrder) -> Self {
+        Self {
             separator,
             ignore_case,
             check_order,
@@ -198,14 +200,14 @@ enum Spec {
 }
 
 impl Spec {
-    fn parse(format: &str) -> UResult<Spec> {
+    fn parse(format: &str) -> UResult<Self> {
         let mut chars = format.chars();
 
         let file_num = match chars.next() {
             Some('0') => {
                 // Must be all alone without a field specifier.
                 if chars.next().is_none() {
-                    return Ok(Spec::Key);
+                    return Ok(Self::Key);
                 }
                 return Err(USimpleError::new(
                     1,
@@ -223,7 +225,7 @@ impl Spec {
         };
 
         if let Some('.') = chars.next() {
-            return Ok(Spec::Field(file_num, parse_field_number(chars.as_str())?));
+            return Ok(Self::Field(file_num, parse_field_number(chars.as_str())?));
         }
 
         Err(USimpleError::new(
@@ -239,7 +241,7 @@ struct Line {
 }
 
 impl Line {
-    fn new(string: Vec<u8>, separator: Sep) -> Line {
+    fn new(string: Vec<u8>, separator: Sep) -> Self {
         let fields = match separator {
             Sep::Whitespaces => string
                 // GNU join uses Bourne shell field splitters by default
@@ -251,7 +253,7 @@ impl Line {
             Sep::Line => vec![string.clone()],
         };
 
-        Line { fields, string }
+        Self { fields, string }
     }
 
     /// Get field at index.
@@ -273,6 +275,7 @@ struct State<'a> {
     seq: Vec<Line>,
     line_num: usize,
     has_failed: bool,
+    has_unpaired: bool,
 }
 
 impl<'a> State<'a> {
@@ -302,6 +305,7 @@ impl<'a> State<'a> {
             seq: Vec::new(),
             line_num: 0,
             has_failed: false,
+            has_unpaired: false,
         }
     }
 
@@ -415,11 +419,18 @@ impl<'a> State<'a> {
     }
 
     fn finalize(&mut self, input: &Input, repr: &Repr) -> Result<(), std::io::Error> {
-        if self.has_line() && self.print_unpaired {
-            self.print_first_line(repr)?;
+        if self.has_line() {
+            if self.print_unpaired {
+                self.print_first_line(repr)?;
+            }
 
-            while let Some(line) = self.next_line(input) {
-                self.print_line(&line, repr)?;
+            let mut next_line = self.next_line(input);
+            while let Some(line) = &next_line {
+                if self.print_unpaired {
+                    self.print_line(line, repr)?;
+                }
+                self.reset(next_line);
+                next_line = self.next_line(input);
             }
         }
 
@@ -444,20 +455,21 @@ impl<'a> State<'a> {
         let diff = input.compare(self.get_current_key(), line.get_field(self.key));
 
         if diff == Ordering::Greater {
-            eprintln!(
-                "{}: {}:{}: is not sorted: {}",
-                uucore::execution_phrase(),
-                self.file_name.maybe_quote(),
-                self.line_num,
-                String::from_utf8_lossy(&line.string)
-            );
+            if input.check_order == CheckOrder::Enabled || (self.has_unpaired && !self.has_failed) {
+                eprintln!(
+                    "{}: {}:{}: is not sorted: {}",
+                    uucore::execution_phrase(),
+                    self.file_name.maybe_quote(),
+                    self.line_num,
+                    String::from_utf8_lossy(&line.string)
+                );
 
+                self.has_failed = true;
+            }
             // This is fatal if the check is enabled.
             if input.check_order == CheckOrder::Enabled {
                 std::process::exit(1);
             }
-
-            self.has_failed = true;
         }
 
         Some(line)
@@ -493,7 +505,7 @@ impl<'a> State<'a> {
     }
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
@@ -522,15 +534,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.key1 = get_field_number(keys, key1)?;
     settings.key2 = get_field_number(keys, key2)?;
 
-    if let Some(value_str) = matches.value_of("t") {
-        let value = value_str.as_bytes();
+    if let Some(value_os) = matches.value_of_os("t") {
+        #[cfg(unix)]
+        let value = value_os.as_bytes();
+        #[cfg(not(unix))]
+        let value = match value_os.to_str() {
+            Some(value) => value.as_bytes(),
+            None => {
+                return Err(USimpleError::new(
+                    1,
+                    "unprintable field separators are only supported on unix-like platforms",
+                ))
+            }
+        };
         settings.separator = match value.len() {
             0 => Sep::Line,
             1 => Sep::Char(value[0]),
+            2 if value[0] == b'\\' && value[1] == b'0' => Sep::Char(0),
             _ => {
                 return Err(USimpleError::new(
                     1,
-                    format!("multi-character tab {}", value_str),
+                    format!("multi-character tab {}", value_os.to_string_lossy()),
                 ))
             }
         };
@@ -590,6 +614,7 @@ standard output. The default join field is the first, delimited by blanks.
 
 When FILE1 or FILE2 (not both) is -, read standard input.",
         )
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new("a")
                 .short('a')
@@ -643,6 +668,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
                 .short('t')
                 .takes_value(true)
                 .value_name("CHAR")
+                .allow_invalid_utf8(true)
                 .help("use CHAR as input and output field separator"),
         )
         .arg(
@@ -760,9 +786,13 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), std::io::Err
         match diff {
             Ordering::Less => {
                 state1.skip_line(&input, &repr)?;
+                state1.has_unpaired = true;
+                state2.has_unpaired = true;
             }
             Ordering::Greater => {
                 state2.skip_line(&input, &repr)?;
+                state1.has_unpaired = true;
+                state2.has_unpaired = true;
             }
             Ordering::Equal => {
                 let next_line1 = state1.extend(&input);
@@ -782,6 +812,10 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), std::io::Err
     state2.finalize(&input, &repr)?;
 
     if state1.has_failed || state2.has_failed {
+        eprintln!(
+            "{}: input is not in sorted order",
+            uucore::execution_phrase()
+        );
         set_exit_code(1);
     }
     Ok(())
@@ -810,8 +844,13 @@ fn get_field_number(keys: Option<usize>, key: Option<usize>) -> UResult<usize> {
 /// Parse the specified field string as a natural number and return
 /// the zero-based field number.
 fn parse_field_number(value: &str) -> UResult<usize> {
+    // TODO: use ParseIntError.kind() once MSRV >= 1.55
+    // For now, store an overflow Err from parsing a value 10x 64 bit usize::MAX
+    // Adapted from https://github.com/rust-lang/rust/issues/22639
+    let overflow = "184467440737095516150".parse::<usize>().err().unwrap();
     match value.parse::<usize>() {
         Ok(result) if result > 0 => Ok(result - 1),
+        Err(ref e) if *e == overflow => Ok(usize::MAX),
         _ => Err(USimpleError::new(
             1,
             format!("invalid field number: {}", value.quote()),

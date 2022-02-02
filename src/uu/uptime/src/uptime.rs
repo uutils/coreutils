@@ -9,7 +9,7 @@
 // spell-checker:ignore (ToDO) getloadavg upsecs updays nusers loadavg boottime uphours upmins
 
 use chrono::{Local, TimeZone, Utc};
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 
 // import crate time from utmpx
 pub use uucore::libc;
@@ -36,7 +36,7 @@ fn usage() -> String {
     format!("{0} [OPTION]...", uucore::execution_phrase())
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
@@ -66,6 +66,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::SINCE)
                 .short('s')
@@ -177,7 +178,7 @@ fn print_uptime(upsecs: i64) {
     match updays.cmp(&1) {
         std::cmp::Ordering::Equal => print!("up {:1} day, {:2}:{:02},  ", updays, uphours, upmins),
         std::cmp::Ordering::Greater => {
-            print!("up {:1} days, {:2}:{:02},  ", updays, uphours, upmins)
+            print!("up {:1} days, {:2}:{:02},  ", updays, uphours, upmins);
         }
         _ => print!("up  {:2}:{:02}, ", uphours, upmins),
     };

@@ -56,10 +56,10 @@ fn unimplemented_flags_should_error() {
         let matches = uu_app().try_get_matches_from(args).unwrap();
 
         if parse_iflags(&matches).is_ok() {
-            succeeded.push(format!("iflag={}", flag))
+            succeeded.push(format!("iflag={}", flag));
         }
         if parse_oflags(&matches).is_ok() {
-            succeeded.push(format!("oflag={}", flag))
+            succeeded.push(format!("oflag={}", flag));
         }
     }
 
@@ -157,6 +157,7 @@ fn test_all_top_level_args_no_leading_dashes() {
     assert_eq!(
         IConvFlags {
             ctable: Some(&EBCDIC_TO_ASCII_LCASE_TO_UCASE),
+            unblock: Some(1), // because ascii implies unblock
             ..IConvFlags::default()
         },
         parse_conv_flag_input(&matches).unwrap()
@@ -241,6 +242,7 @@ fn test_all_top_level_args_with_leading_dashes() {
     assert_eq!(
         IConvFlags {
             ctable: Some(&EBCDIC_TO_ASCII_LCASE_TO_UCASE),
+            unblock: Some(1), // because ascii implies unblock
             ..IConvFlags::default()
         },
         parse_conv_flag_input(&matches).unwrap()

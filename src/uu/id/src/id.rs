@@ -39,7 +39,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::ffi::CStr;
 use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
@@ -126,7 +126,7 @@ struct State {
     user_specified: bool,
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let after_help = get_description();
@@ -335,7 +335,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         if default_format {
-            id_print(&mut state, groups);
+            id_print(&mut state, &groups);
         }
         print!("{}", line_ending);
 
@@ -351,6 +351,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::OPT_AUDIT)
                 .short('A')
@@ -555,7 +556,7 @@ fn auditid() {
     println!("asid={}", auditinfo.ai_asid);
 }
 
-fn id_print(state: &mut State, groups: Vec<u32>) {
+fn id_print(state: &mut State, groups: &[u32]) {
     let uid = state.ids.as_ref().unwrap().uid;
     let gid = state.ids.as_ref().unwrap().gid;
     let euid = state.ids.as_ref().unwrap().euid;

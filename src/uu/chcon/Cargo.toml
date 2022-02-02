@@ -16,7 +16,6 @@ path = "src/chcon.rs"
 [dependencies]
 clap         = { version = "3.0", features = ["wrap_help", "cargo"] }
 uucore       = { version = ">=0.0.9", package="uucore", path="../../uucore", features=["entries", "fs", "perms"] }
-uucore_procs = { version = ">=0.0.6", package="uucore_procs", path="../../uucore_procs" }
 selinux      = { version = "0.2"   }
 fts-sys      = { version = "0.2"   }
 thiserror    = { version = "1.0"   }
@@ -25,6 +24,3 @@ libc         = { version = "0.2"   }
 [[bin]]
 name = "chcon"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

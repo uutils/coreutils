@@ -11,7 +11,7 @@
 use chrono::{DateTime, FixedOffset, Local, Offset, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
@@ -111,11 +111,11 @@ enum Iso8601Format {
 impl<'a> From<&'a str> for Iso8601Format {
     fn from(s: &str) -> Self {
         match s {
-            HOURS | HOUR => Iso8601Format::Hours,
-            MINUTES | MINUTE => Iso8601Format::Minutes,
-            SECONDS | SECOND => Iso8601Format::Seconds,
-            NS => Iso8601Format::Ns,
-            DATE => Iso8601Format::Date,
+            HOURS | HOUR => Self::Hours,
+            MINUTES | MINUTE => Self::Minutes,
+            SECONDS | SECOND => Self::Seconds,
+            NS => Self::Ns,
+            DATE => Self::Date,
             // Should be caught by clap
             _ => panic!("Invalid format: {}", s),
         }
@@ -131,16 +131,16 @@ enum Rfc3339Format {
 impl<'a> From<&'a str> for Rfc3339Format {
     fn from(s: &str) -> Self {
         match s {
-            DATE => Rfc3339Format::Date,
-            SECONDS | SECOND => Rfc3339Format::Seconds,
-            NS => Rfc3339Format::Ns,
+            DATE => Self::Date,
+            SECONDS | SECOND => Self::Seconds,
+            NS => Self::Ns,
             // Should be caught by clap
             _ => panic!("Invalid format: {}", s),
         }
     }
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let syntax = format!(
         "{0} [OPTION]... [+FORMAT]...
@@ -261,6 +261,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_DATE)
                 .short('d')
@@ -377,9 +378,9 @@ fn set_system_datetime(_date: DateTime<Utc>) -> UResult<()> {
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 /// System call to set date (unix).
 /// See here for more:
-/// https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html
-/// https://linux.die.net/man/3/clock_settime
-/// https://www.gnu.org/software/libc/manual/html_node/Time-Types.html
+/// `<https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html>`
+/// `<https://linux.die.net/man/3/clock_settime>`
+/// `<https://www.gnu.org/software/libc/manual/html_node/Time-Types.html>`
 fn set_system_datetime(date: DateTime<Utc>) -> UResult<()> {
     let timespec = timespec {
         tv_sec: date.timestamp() as _,

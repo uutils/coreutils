@@ -6,7 +6,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::io::{self, Write};
 use std::iter::Peekable;
 use std::str::Chars;
@@ -88,10 +88,7 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
                         start = 0;
                         next
                     }),
-                    '0' => parse_code(&mut iter, 8, 3, 3).unwrap_or_else(|| {
-                        start = 0;
-                        next
-                    }),
+                    '0' => parse_code(&mut iter, 8, 3, 3).unwrap_or('\0'),
                     _ => {
                         start = 0;
                         next
@@ -111,7 +108,7 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
     Ok(should_stop)
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -125,7 +122,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec!["".to_string()],
     };
 
-    execute(no_newline, escaped, values).map_err_context(|| "could not write to stdout".to_string())
+    execute(no_newline, escaped, &values)
+        .map_err_context(|| "could not write to stdout".to_string())
 }
 
 pub fn uu_app<'a>() -> App<'a> {
@@ -134,8 +132,9 @@ pub fn uu_app<'a>() -> App<'a> {
         // TrailingVarArg specifies the final positional argument is a VarArg
         // and it doesn't attempts the parse any further args.
         // Final argument must have multiple(true) or the usage string equivalent.
-        .setting(clap::AppSettings::TrailingVarArg)
-        .setting(clap::AppSettings::AllowHyphenValues)
+        .setting(AppSettings::TrailingVarArg)
+        .setting(AppSettings::AllowHyphenValues)
+        .setting(AppSettings::InferLongArgs)
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(AFTER_HELP)
@@ -161,7 +160,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(Arg::new(options::STRING).multiple_occurrences(true))
 }
 
-fn execute(no_newline: bool, escaped: bool, free: Vec<String>) -> io::Result<()> {
+fn execute(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<()> {
     let stdout = io::stdout();
     let mut output = stdout.lock();
 

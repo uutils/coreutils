@@ -36,7 +36,7 @@ process).",
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
@@ -110,6 +110,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .setting(AppSettings::TrailingVarArg)
+        .setting(AppSettings::InferLongArgs)
         .version(crate_version!())
         .arg(
             Arg::new(options::ADJUSTMENT)

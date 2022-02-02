@@ -221,7 +221,7 @@ macro_rules! show_usage_error(
     })
 );
 
-/// Display an error and [`exit!`]
+/// Display an error and [`std::process::exit`]
 ///
 /// Displays the provided error message using [`show_error!`], then invokes
 /// [`std::process::exit`] with the provided exit code.

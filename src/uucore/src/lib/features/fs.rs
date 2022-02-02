@@ -159,7 +159,7 @@ pub fn resolve_relative_path(path: &Path) -> Cow<Path> {
             }
             Component::CurDir => (),
             Component::RootDir | Component::Normal(_) | Component::Prefix(_) => {
-                result.push(comp.as_os_str())
+                result.push(comp.as_os_str());
             }
         }
     }
@@ -500,12 +500,12 @@ mod tests {
 
     #[test]
     fn test_normalize_path() {
-        for test in NORMALIZE_PATH_TESTS.iter() {
+        for test in &NORMALIZE_PATH_TESTS {
             let path = Path::new(test.path);
             let normalized = normalize_path(path);
             assert_eq!(
                 test.test
-                    .replace("/", std::path::MAIN_SEPARATOR.to_string().as_str()),
+                    .replace('/', std::path::MAIN_SEPARATOR.to_string().as_str()),
                 normalized.to_str().expect("Path is not valid utf-8!")
             );
         }

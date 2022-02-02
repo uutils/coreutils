@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
@@ -48,7 +48,7 @@ fn get_long_usage() -> String {
     String::from("Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.")
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -118,13 +118,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         cmode,
     };
 
-    chmoder.chmod(files)
+    chmoder.chmod(&files)
 }
 
 pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::CHANGES)
                 .long(options::CHANGES)
@@ -192,10 +193,10 @@ struct Chmoder {
 }
 
 impl Chmoder {
-    fn chmod(&self, files: Vec<String>) -> UResult<()> {
+    fn chmod(&self, files: &[String]) -> UResult<()> {
         let mut r = Ok(());
 
-        for filename in &files {
+        for filename in files {
             let filename = &filename[..];
             let file = Path::new(filename);
             if !file.exists() {

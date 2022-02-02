@@ -5,23 +5,24 @@
 //! it is created by Sub's implementation of the Tokenizer trait
 //! Subs which have numeric field chars make use of the num_format
 //! submodule
+use crate::show_error;
 use itertools::{put_back_n, PutBackN};
 use std::iter::Peekable;
 use std::process::exit;
 use std::slice::Iter;
 use std::str::Chars;
-use uucore::show_error;
 // use std::collections::HashSet;
 
 use super::num_format::format_field::{FieldType, FormatField};
 use super::num_format::num_format;
 use super::token;
 use super::unescaped_text::UnescapedText;
-use crate::cli;
+
+const EXIT_ERR: i32 = 1;
 
 fn err_conv(sofar: &str) {
     show_error!("%{}: invalid conversion specification", sofar);
-    exit(cli::EXIT_ERR);
+    exit(EXIT_ERR);
 }
 
 fn convert_asterisk_arg_int(asterisk_arg: &str) -> isize {
@@ -66,7 +67,7 @@ impl Sub {
         second_field: CanAsterisk<Option<u32>>,
         field_char: char,
         orig: String,
-    ) -> Sub {
+    ) -> Self {
         // for more dry printing, field characters are grouped
         // in initialization of token.
         let field_type = match field_char {
@@ -80,10 +81,10 @@ impl Sub {
             _ => {
                 // should be unreachable.
                 println!("Invalid field type");
-                exit(cli::EXIT_ERR);
+                exit(EXIT_ERR);
             }
         };
-        Sub {
+        Self {
             min_width,
             second_field,
             field_char,
@@ -93,6 +94,7 @@ impl Sub {
     }
 }
 
+#[derive(Default)]
 struct SubParser {
     min_width_tmp: Option<String>,
     min_width_is_asterisk: bool,
@@ -105,32 +107,23 @@ struct SubParser {
 }
 
 impl SubParser {
-    fn new() -> SubParser {
-        SubParser {
-            min_width_tmp: None,
-            min_width_is_asterisk: false,
-            past_decimal: false,
-            second_field_tmp: None,
-            second_field_is_asterisk: false,
-            specifiers_found: false,
-            field_char: None,
-            text_so_far: String::new(),
-        }
+    fn new() -> Self {
+        Self::default()
     }
     fn from_it(
         it: &mut PutBackN<Chars>,
         args: &mut Peekable<Iter<String>>,
     ) -> Option<Box<dyn token::Token>> {
-        let mut parser = SubParser::new();
+        let mut parser = Self::new();
         if parser.sub_vals_retrieved(it) {
-            let t: Box<dyn token::Token> = SubParser::build_token(parser);
+            let t: Box<dyn token::Token> = Self::build_token(parser);
             t.print(args);
             Some(t)
         } else {
             None
         }
     }
-    fn build_token(parser: SubParser) -> Box<dyn token::Token> {
+    fn build_token(parser: Self) -> Box<dyn token::Token> {
         // not a self method so as to allow move of sub-parser vals.
         // return new Sub struct as token
         let t: Box<dyn token::Token> = Box::new(Sub::new(
@@ -150,7 +143,7 @@ impl SubParser {
         t
     }
     fn sub_vals_retrieved(&mut self, it: &mut PutBackN<Chars>) -> bool {
-        if !SubParser::successfully_eat_prefix(it, &mut self.text_so_far) {
+        if !Self::successfully_eat_prefix(it, &mut self.text_so_far) {
             return false;
         }
         // this fn in particular is much longer than it needs to be
@@ -282,10 +275,10 @@ impl SubParser {
             }
         } else {
             if let Some(x) = n_ch {
-                it.put_back(x)
+                it.put_back(x);
             };
             if let Some(x) = preface {
-                it.put_back(x)
+                it.put_back(x);
             };
             false
         }

@@ -110,10 +110,10 @@ impl From<ExtendedBigInt> for ExtendedBigDecimal {
     fn from(big_int: ExtendedBigInt) -> Self {
         match big_int {
             ExtendedBigInt::BigInt(n) => Self::BigDecimal(BigDecimal::from(n)),
-            ExtendedBigInt::Infinity => ExtendedBigDecimal::Infinity,
-            ExtendedBigInt::MinusInfinity => ExtendedBigDecimal::MinusInfinity,
-            ExtendedBigInt::MinusZero => ExtendedBigDecimal::MinusZero,
-            ExtendedBigInt::Nan => ExtendedBigDecimal::Nan,
+            ExtendedBigInt::Infinity => Self::Infinity,
+            ExtendedBigInt::MinusInfinity => Self::MinusInfinity,
+            ExtendedBigInt::MinusZero => Self::MinusZero,
+            ExtendedBigInt::Nan => Self::Nan,
         }
     }
 }
@@ -124,7 +124,7 @@ impl Display for ExtendedBigDecimal {
             ExtendedBigDecimal::BigDecimal(x) => {
                 let (n, p) = x.as_bigint_and_exponent();
                 match p {
-                    0 => ExtendedBigDecimal::BigDecimal(BigDecimal::new(n * 10, 1)).fmt(f),
+                    0 => Self::BigDecimal(BigDecimal::new(n * 10, 1)).fmt(f),
                     _ => x.fmt(f),
                 }
             }
@@ -145,7 +145,7 @@ impl Display for ExtendedBigDecimal {
 
 impl Zero for ExtendedBigDecimal {
     fn zero() -> Self {
-        ExtendedBigDecimal::BigDecimal(BigDecimal::zero())
+        Self::BigDecimal(BigDecimal::zero())
     }
     fn is_zero(&self) -> bool {
         match self {

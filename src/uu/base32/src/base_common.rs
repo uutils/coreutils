@@ -18,7 +18,7 @@ use std::fs::File;
 use std::io::{BufReader, Stdin};
 use std::path::Path;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 
 pub static BASE_CMD_PARSE_ERROR: i32 = 1;
 
@@ -38,7 +38,7 @@ pub mod options {
 }
 
 impl Config {
-    pub fn from(options: &clap::ArgMatches) -> UResult<Config> {
+    pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let file: Option<String> = match options.values_of(options::FILE) {
             Some(mut values) => {
                 let name = values.next().unwrap();
@@ -76,7 +76,7 @@ impl Config {
             })
             .transpose()?;
 
-        Ok(Config {
+        Ok(Self {
             decode: options.is_present(options::DECODE),
             ignore_garbage: options.is_present(options::IGNORE_GARBAGE),
             wrap_cols: cols,
@@ -97,6 +97,7 @@ pub fn base_app(about: &str) -> App {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(about)
+        .setting(AppSettings::InferLongArgs)
         // Format arguments.
         .arg(
             Arg::new(options::DECODE)
@@ -152,7 +153,7 @@ pub fn handle_input<R: Read>(
     if !decode {
         match data.encode() {
             Ok(s) => {
-                wrap_print(&data, s);
+                wrap_print(&data, &s);
                 Ok(())
             }
             Err(_) => Err(USimpleError::new(

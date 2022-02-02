@@ -50,7 +50,7 @@ fn replace_output_file_in_input_files(
                         std::fs::copy(file_path, &copy_path)
                             .map_err(|error| SortError::OpenTmpFileFailed { error })?;
                         *file = copy_path.clone().into_os_string();
-                        copy = Some(copy_path)
+                        copy = Some(copy_path);
                     }
                 }
             }
@@ -166,7 +166,7 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
         let settings = settings.clone();
         move || {
             reader(
-                request_receiver,
+                &request_receiver,
                 &mut reader_files,
                 &settings,
                 if settings.zero_terminated {
@@ -187,7 +187,7 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
                 file_number,
                 line_idx: 0,
                 receiver,
-            })
+            });
         }
     }
 
@@ -210,7 +210,7 @@ struct ReaderFile<M: MergeInput> {
 
 /// The function running on the reader thread.
 fn reader(
-    recycled_receiver: Receiver<(usize, RecycledChunk)>,
+    recycled_receiver: &Receiver<(usize, RecycledChunk)>,
     files: &mut [Option<ReaderFile<impl MergeInput>>],
     settings: &GlobalSettings,
     separator: u8,
@@ -415,7 +415,7 @@ impl WriteableTmpFile for WriteablePlainTmpFile {
     type InnerWrite = BufWriter<File>;
 
     fn create((file, path): (File, PathBuf), _: Option<&str>) -> UResult<Self> {
-        Ok(WriteablePlainTmpFile {
+        Ok(Self {
             file: BufWriter::new(file),
             path,
         })
@@ -484,7 +484,7 @@ impl WriteableTmpFile for WriteableCompressedTmpFile {
                 code: err.raw_os_error().unwrap(),
             })?;
         let child_stdin = child.stdin.take().unwrap();
-        Ok(WriteableCompressedTmpFile {
+        Ok(Self {
             path,
             compress_prog: compress_prog.to_owned(),
             child,

@@ -18,11 +18,7 @@ path = "src/head.rs"
 clap = { version = "3.0", features = ["wrap_help", "cargo"] }
 memchr = "2"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["ringbuffer"] }
-uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "head"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

@@ -18,7 +18,6 @@ path = "src/uptime.rs"
 chrono = "^0.4.11"
 clap = { version = "3.0", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["libc", "utmpx"] }
-uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "uptime"

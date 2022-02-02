@@ -9,7 +9,7 @@ fn test_tee_processing_multiple_operands() {
     // POSIX says: "Processing of at least 13 file operands shall be supported."
 
     let content = "tee_sample_content";
-    for &n in [1, 2, 12, 13].iter() {
+    for &n in &[1, 2, 12, 13] {
         let files = (1..=n).map(|x| x.to_string()).collect::<Vec<_>>();
         let (at, mut ucmd) = at_and_ucmd!();
 
@@ -18,7 +18,7 @@ fn test_tee_processing_multiple_operands() {
             .succeeds()
             .stdout_is(content);
 
-        for file in files.iter() {
+        for file in &files {
             assert!(at.file_exists(file));
             assert_eq!(at.read(file), content);
         }

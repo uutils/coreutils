@@ -104,6 +104,7 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
 }
 
 #[cfg(not(windows))]
+#[allow(clippy::ptr_arg)]
 fn build_command<'a, 'b>(args: &'a mut Vec<&'b str>) -> (Cow<'b, str>, &'a [&'b str]) {
     let progname = Cow::from(args[0]);
     (progname, &args[1..])
@@ -127,6 +128,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .override_usage(USAGE)
         .after_help(AFTER_HELP)
         .setting(AppSettings::AllowExternalSubcommands)
+        .setting(AppSettings::InferLongArgs)
         .arg(Arg::new("ignore-environment")
             .short('i')
             .long("ignore-environment")
@@ -318,7 +320,7 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     run_env(args)
 }

@@ -35,7 +35,7 @@ pub enum CsplitError {
 
 impl From<io::Error> for CsplitError {
     fn from(error: io::Error) -> Self {
-        CsplitError::IoError(error)
+        Self::IoError(error)
     }
 }
 

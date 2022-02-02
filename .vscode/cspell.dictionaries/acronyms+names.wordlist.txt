@@ -35,6 +35,7 @@ WASM
 XFS
 aarch
 flac
+impls
 lzma
 
 # * names

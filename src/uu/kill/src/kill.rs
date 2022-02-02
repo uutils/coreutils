@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use libc::{c_int, pid_t};
 use std::io::Error;
 use uucore::display::Quotable;
@@ -35,7 +35,7 @@ pub enum Mode {
     List,
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -74,7 +74,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             table();
             Ok(())
         }
-        Mode::List => list(pids_or_signals.get(0).cloned()),
+        Mode::List => list(pids_or_signals.get(0)),
     }
 }
 
@@ -82,6 +82,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::LIST)
                 .short('l')
@@ -167,9 +168,9 @@ fn print_signals() {
     println!();
 }
 
-fn list(arg: Option<String>) -> UResult<()> {
+fn list(arg: Option<&String>) -> UResult<()> {
     match arg {
-        Some(ref x) => print_signal(x),
+        Some(x) => print_signal(x),
         None => {
             print_signals();
             Ok(())

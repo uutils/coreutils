@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
@@ -255,7 +255,7 @@ fn get_long_usage() -> String {
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let long_usage = get_long_usage();
@@ -294,8 +294,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         zero_terminated: matches.is_present(options::ZERO_TERMINATED),
     };
     uniq.print_uniq(
-        &mut open_input_file(in_file_name)?,
-        &mut open_output_file(out_file_name)?,
+        &mut open_input_file(&in_file_name)?,
+        &mut open_output_file(&out_file_name)?,
     )
 }
 
@@ -303,6 +303,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::ALL_REPEATED)
                 .short('D')
@@ -408,11 +409,11 @@ fn get_delimiter(matches: &ArgMatches) -> Delimiters {
     }
 }
 
-fn open_input_file(in_file_name: String) -> UResult<BufReader<Box<dyn Read + 'static>>> {
+fn open_input_file(in_file_name: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     let in_file = if in_file_name == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
-        let path = Path::new(&in_file_name[..]);
+        let path = Path::new(in_file_name);
         let in_file = File::open(&path)
             .map_err_context(|| format!("Could not open {}", in_file_name.maybe_quote()))?;
         Box::new(in_file) as Box<dyn Read>
@@ -420,11 +421,11 @@ fn open_input_file(in_file_name: String) -> UResult<BufReader<Box<dyn Read + 'st
     Ok(BufReader::new(in_file))
 }
 
-fn open_output_file(out_file_name: String) -> UResult<BufWriter<Box<dyn Write + 'static>>> {
+fn open_output_file(out_file_name: &str) -> UResult<BufWriter<Box<dyn Write + 'static>>> {
     let out_file = if out_file_name == "-" {
         Box::new(stdout()) as Box<dyn Write>
     } else {
-        let path = Path::new(&out_file_name[..]);
+        let path = Path::new(out_file_name);
         let out_file = File::create(&path)
             .map_err_context(|| format!("Could not create {}", out_file_name.maybe_quote()))?;
         Box::new(out_file) as Box<dyn Write>

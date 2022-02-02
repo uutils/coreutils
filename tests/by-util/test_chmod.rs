@@ -33,7 +33,7 @@ fn make_file(file: &str, mode: u32) {
     set_permissions(file, perms).unwrap();
 }
 
-fn run_single_test(test: &TestCase, at: AtPath, mut ucmd: UCommand) {
+fn run_single_test(test: &TestCase, at: &AtPath, mut ucmd: UCommand) {
     make_file(&at.plus_as_string(TEST_FILE), test.before);
     let perms = at.metadata(TEST_FILE).permissions().mode();
     if perms != test.before {
@@ -64,7 +64,7 @@ fn run_single_test(test: &TestCase, at: AtPath, mut ucmd: UCommand) {
 fn run_tests(tests: Vec<TestCase>) {
     for test in tests {
         let (at, ucmd) = at_and_ucmd!();
-        run_single_test(&test, at, ucmd);
+        run_single_test(&test, &at, ucmd);
     }
 }
 
@@ -295,7 +295,7 @@ fn test_chmod_reference_file() {
     ];
     let (at, ucmd) = at_and_ucmd!();
     make_file(&at.plus_as_string(REFERENCE_FILE), REFERENCE_PERMS);
-    run_single_test(&tests[0], at, ucmd);
+    run_single_test(&tests[0], &at, ucmd);
 }
 
 #[test]
@@ -553,7 +553,7 @@ fn test_mode_after_dash_dash() {
             before: 0o100777,
             after: 0o100333,
         },
-        at,
+        &at,
         ucmd,
     );
 }

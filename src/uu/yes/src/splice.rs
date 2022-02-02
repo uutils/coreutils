@@ -55,7 +55,7 @@ type Result<T> = std::result::Result<T, Error>;
 
 impl From<nix::Error> for Error {
     fn from(error: nix::Error) -> Self {
-        Error::Io(io::Error::from_raw_os_error(error as i32))
+        Self::Io(io::Error::from_raw_os_error(error as i32))
     }
 }
 

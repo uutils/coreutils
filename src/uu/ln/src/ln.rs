@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
 
@@ -81,11 +81,11 @@ impl Error for LnError {}
 impl UError for LnError {
     fn code(&self) -> i32 {
         match self {
-            Self::TargetIsDirectory(_) => 1,
-            Self::SomeLinksFailed => 1,
-            Self::FailedToLink(_) => 1,
-            Self::MissingDestination(_) => 1,
-            Self::ExtraOperand(_) => 1,
+            Self::TargetIsDirectory(_)
+            | Self::SomeLinksFailed
+            | Self::FailedToLink(_)
+            | Self::MissingDestination(_)
+            | Self::ExtraOperand(_) => 1,
         }
     }
 }
@@ -129,7 +129,7 @@ mod options {
 
 static ARG_FILES: &str = "files";
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let long_usage = long_usage();
@@ -183,6 +183,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
         // TODO: opts.arg(
@@ -307,7 +308,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                 if is_symlink(target_dir) {
                     if target_dir.is_file() {
                         if let Err(e) = fs::remove_file(target_dir) {
-                            show_error!("Could not update {}: {}", target_dir.quote(), e)
+                            show_error!("Could not update {}: {}", target_dir.quote(), e);
                         };
                     }
                     if target_dir.is_dir() {
@@ -315,7 +316,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                         // considered as a dir
                         // See test_ln::test_symlink_no_deref_dir
                         if let Err(e) = fs::remove_dir(target_dir) {
-                            show_error!("Could not update {}: {}", target_dir.quote(), e)
+                            show_error!("Could not update {}: {}", target_dir.quote(), e);
                         };
                     }
                 }
@@ -401,7 +402,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
                 if !read_yes() {
                     return Ok(());
                 }
-                fs::remove_file(dst)?
+                fs::remove_file(dst)?;
             }
             OverwriteMode::Force => fs::remove_file(dst)?,
         };

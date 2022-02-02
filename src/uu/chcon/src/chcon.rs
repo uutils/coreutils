@@ -5,7 +5,7 @@
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::{display::Quotable, show_error, show_warning};
 
-use clap::{App, Arg};
+use clap::{App, AppSettings, Arg};
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
 use std::borrow::Cow;
@@ -61,7 +61,7 @@ fn get_usage() -> String {
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
 
@@ -164,6 +164,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::dereference::DEREFERENCE)
                 .long(options::dereference::DEREFERENCE)
@@ -742,7 +743,7 @@ This almost certainly means that you have a corrupted file system.\n\
 NOTIFY YOUR SYSTEM MANAGER.\n\
 The following directory is part of the cycle {}.",
         file_name.quote()
-    )
+    );
 }
 
 #[derive(Debug)]

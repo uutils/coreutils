@@ -27,7 +27,7 @@ impl Add for WordCount {
 
 impl AddAssign for WordCount {
     fn add_assign(&mut self, other: Self) {
-        *self = *self + other
+        *self = *self + other;
     }
 }
 

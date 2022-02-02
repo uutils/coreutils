@@ -9,7 +9,7 @@
 
 use std::ffi::CString;
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use libc::{dev_t, mode_t};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 
@@ -79,7 +79,7 @@ fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
     }
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -149,6 +149,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .override_usage(USAGE)
         .after_help(LONG_HELP)
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new("mode")
                 .short('m')

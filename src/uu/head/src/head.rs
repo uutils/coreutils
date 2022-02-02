@@ -5,13 +5,13 @@
 
 // spell-checker:ignore (vars) zlines BUFWRITER seekable
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::convert::{TryFrom, TryInto};
 use std::ffi::OsString;
 use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
-use uucore::show_error_custom_description;
+use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::show;
 
 const BUF_SIZE: usize = 65536;
 
@@ -47,6 +47,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(USAGE)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::BYTES_NAME)
                 .short('c')
@@ -111,7 +112,7 @@ enum Modes {
 
 impl Default for Modes {
     fn default() -> Self {
-        Modes::Lines(10)
+        Self::Lines(10)
     }
 }
 
@@ -166,7 +167,7 @@ impl HeadOptions {
     pub fn get_from(args: impl uucore::Args) -> Result<Self, String> {
         let matches = uu_app().get_matches_from(arg_iterate(args)?);
 
-        let mut options: HeadOptions = Default::default();
+        let mut options = Self::default();
 
         options.quiet = matches.is_present(options::QUIET_NAME);
         options.verbose = matches.is_present(options::VERBOSE_NAME);
@@ -415,7 +416,6 @@ fn head_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Resul
 }
 
 fn uu_head(options: &HeadOptions) -> UResult<()> {
-    let mut error_count = 0;
     let mut first = true;
     for file in &options.files {
         let res = match file.as_str() {
@@ -424,7 +424,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     if !first {
                         println!();
                     }
-                    println!("==> standard input <==")
+                    println!("==> standard input <==");
                 }
                 let stdin = std::io::stdin();
                 let mut stdin = stdin.lock();
@@ -449,19 +449,10 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 let mut file = match std::fs::File::open(name) {
                     Ok(f) => f,
                     Err(err) => {
-                        let prefix = format!("cannot open {} for reading", name.quote());
-                        match err.kind() {
-                            ErrorKind::NotFound => {
-                                show_error_custom_description!(prefix, "No such file or directory");
-                            }
-                            ErrorKind::PermissionDenied => {
-                                show_error_custom_description!(prefix, "Permission denied");
-                            }
-                            _ => {
-                                show_error_custom_description!(prefix, "{}", err);
-                            }
-                        }
-                        error_count += 1;
+                        show!(err.map_err_context(|| format!(
+                            "cannot open {} for reading",
+                            name.quote()
+                        )));
                         continue;
                     }
                 };
@@ -469,7 +460,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     if !first {
                         println!();
                     }
-                    println!("==> {} <==", name)
+                    println!("==> {} <==", name);
                 }
                 head_file(&mut file, options)
             }
@@ -480,20 +471,21 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
             } else {
                 file
             };
-            let prefix = format!("error reading {}", name);
-            show_error_custom_description!(prefix, "Input/output error");
-            error_count += 1;
+            show!(USimpleError::new(
+                1,
+                format!("error reading {}: Input/output error", name)
+            ));
         }
         first = false;
     }
-    if error_count > 0 {
-        Err(USimpleError::new(1, ""))
-    } else {
-        Ok(())
-    }
+    // Even though this is returning `Ok`, it is possible that a call
+    // to `show!()` and thus a call to `set_exit_code()` has been
+    // called above. If that happens, then this process will exit with
+    // a non-zero exit code.
+    Ok(())
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = match HeadOptions::get_from(args) {
         Ok(o) => o,

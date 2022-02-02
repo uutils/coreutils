@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use remove_dir_all::remove_dir_all;
 use std::collections::VecDeque;
 use std::fs;
@@ -76,7 +76,7 @@ fn get_long_usage() -> String {
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let long_usage = get_long_usage();
@@ -138,7 +138,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
 
-        if remove(files, options) {
+        if remove(&files, &options) {
             return Err(1.into());
         }
     }
@@ -149,7 +149,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_FORCE)
             .short('f')
@@ -236,19 +236,19 @@ pub fn uu_app<'a>() -> App<'a> {
 }
 
 // TODO: implement one-file-system (this may get partially implemented in walkdir)
-fn remove(files: Vec<String>, options: Options) -> bool {
+fn remove(files: &[String], options: &Options) -> bool {
     let mut had_err = false;
 
-    for filename in &files {
+    for filename in files {
         let file = Path::new(filename);
         had_err = match file.symlink_metadata() {
             Ok(metadata) => {
                 if metadata.is_dir() {
-                    handle_dir(file, &options)
+                    handle_dir(file, options)
                 } else if is_symlink_dir(&metadata) {
-                    remove_dir(file, &options)
+                    remove_dir(file, options)
                 } else {
-                    remove_file(file, &options)
+                    remove_file(file, options)
                 }
             }
             Err(_e) => {

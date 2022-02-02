@@ -13,7 +13,7 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 
@@ -65,7 +65,7 @@ fn usage() -> String {
     format!("{0} {1}", uucore::execution_phrase(), SYNTAX)
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -127,7 +127,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let result;
     if files.is_empty() {
-        result = parse(INTERNAL_DB.lines(), out_format, "")
+        result = parse(INTERNAL_DB.lines(), &out_format, "");
     } else {
         if files.len() > 1 {
             return Err(UUsageError::new(
@@ -138,7 +138,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         match File::open(files[0]) {
             Ok(f) => {
                 let fin = BufReader::new(f);
-                result = parse(fin.lines().filter_map(Result::ok), out_format, files[0])
+                result = parse(fin.lines().filter_map(Result::ok), &out_format, files[0]);
             }
             Err(e) => {
                 return Err(USimpleError::new(
@@ -165,6 +165,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(LONG_HELP)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::BOURNE_SHELL)
                 .long("sh")
@@ -258,7 +259,7 @@ enum ParseState {
 use std::collections::HashMap;
 use uucore::InvalidEncodingHandling;
 
-fn parse<T>(lines: T, fmt: OutputFmt, fp: &str) -> Result<String, String>
+fn parse<T>(lines: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
 where
     T: IntoIterator,
     T::Item: Borrow<str>,

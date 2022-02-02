@@ -86,7 +86,7 @@ impl UError for ParseError {
     }
 }
 
-/// Some flags specified as part of a conv=CONV[,CONV]... block
+/// Some flags specified as part of a conv=CONV\[,CONV\]... block
 /// relate to the input file, others to the output file.
 #[derive(Debug, PartialEq)]
 enum ConvFlag {
@@ -296,9 +296,9 @@ impl std::str::FromStr for StatusLevel {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "none" => Ok(StatusLevel::None),
-            "noxfer" => Ok(StatusLevel::Noxfer),
-            "progress" => Ok(StatusLevel::Progress),
+            "none" => Ok(Self::None),
+            "noxfer" => Ok(Self::Noxfer),
+            "progress" => Ok(Self::Progress),
             _ => Err(ParseError::StatusLevelNotRecognized(s.to_string())),
         }
     }
@@ -444,6 +444,20 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
                     return Err(ParseError::MultipleFmtTable);
                 } else {
                     fmt = Some(flag);
+                    // From the GNU documentation:
+                    //
+                    // > ‘ascii’
+                    // >
+                    // > Convert EBCDIC to ASCII, using the conversion
+                    // > table specified by POSIX. This provides a 1:1
+                    // > translation for all 256 bytes. This implies
+                    // > ‘conv=unblock’; input is converted to ASCII
+                    // > before trailing spaces are deleted.
+                    //
+                    // -- https://www.gnu.org/software/coreutils/manual/html_node/dd-invocation.html
+                    if cbs.is_some() {
+                        iconvflags.unblock = cbs;
+                    }
                 }
             }
             ConvFlag::FmtAtoE => {
@@ -451,6 +465,19 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
                     return Err(ParseError::MultipleFmtTable);
                 } else {
                     fmt = Some(flag);
+                    // From the GNU documentation:
+                    //
+                    // > ‘ebcdic’
+                    // >
+                    // > Convert ASCII to EBCDIC. This is the inverse
+                    // > of the ‘ascii’ conversion. This implies
+                    // > ‘conv=block’; trailing spaces are added before
+                    // > being converted to EBCDIC.
+                    //
+                    // -- https://www.gnu.org/software/coreutils/manual/html_node/dd-invocation.html
+                    if cbs.is_some() {
+                        iconvflags.block = cbs;
+                    }
                 }
             }
             ConvFlag::FmtAtoI => {
@@ -460,18 +487,11 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
                     fmt = Some(flag);
                 }
             }
-            ConvFlag::UCase => {
+            ConvFlag::UCase | ConvFlag::LCase => {
                 if case.is_some() {
                     return Err(ParseError::MultipleUCaseLCase);
                 } else {
-                    case = Some(flag)
-                }
-            }
-            ConvFlag::LCase => {
-                if case.is_some() {
-                    return Err(ParseError::MultipleUCaseLCase);
-                } else {
-                    case = Some(flag)
+                    case = Some(flag);
                 }
             }
             ConvFlag::Block => match (cbs, iconvflags.unblock) {

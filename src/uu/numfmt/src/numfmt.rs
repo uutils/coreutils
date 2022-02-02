@@ -7,15 +7,17 @@
 
 // spell-checker:ignore N'th M'th
 
+use crate::errors::*;
 use crate::format::format_and_print;
 use crate::options::*;
 use crate::units::{Result, Unit};
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::io::{BufRead, Write};
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::UResult;
 use uucore::ranges::Range;
 
+pub mod errors;
 pub mod format;
 pub mod options;
 mod units;
@@ -53,28 +55,35 @@ fn usage() -> String {
     format!("{0} [OPTION]... [NUMBER]...", uucore::execution_phrase())
 }
 
-fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: NumfmtOptions) -> Result<()> {
+fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions) -> UResult<()> {
     for l in args {
-        format_and_print(l, &options)?;
+        match format_and_print(l, options) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(NumfmtError::FormattingError(e.to_string())),
+        }?;
     }
 
     Ok(())
 }
 
-fn handle_stdin(options: NumfmtOptions) -> Result<()> {
-    let stdin = std::io::stdin();
-    let locked_stdin = stdin.lock();
-
-    let mut lines = locked_stdin.lines();
-    for l in lines.by_ref().take(options.header) {
-        l.map(|s| println!("{}", s)).map_err(|e| e.to_string())?;
+fn handle_buffer<R>(input: R, options: &NumfmtOptions) -> UResult<()>
+where
+    R: BufRead,
+{
+    let mut lines = input.lines();
+    for (idx, line) in lines.by_ref().enumerate() {
+        match line {
+            Ok(l) if idx < options.header => {
+                println!("{}", l);
+                Ok(())
+            }
+            Ok(l) => match format_and_print(&l, options) {
+                Ok(_) => Ok(()),
+                Err(e) => Err(NumfmtError::FormattingError(e.to_string())),
+            },
+            Err(e) => Err(NumfmtError::IoError(e.to_string())),
+        }?;
     }
-
-    for l in lines {
-        l.map_err(|e| e.to_string())
-            .and_then(|l| format_and_print(&l, &options))?;
-    }
-
     Ok(())
 }
 
@@ -155,24 +164,27 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     })
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
     let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
-    let result =
-        parse_options(&matches).and_then(|options| match matches.values_of(options::NUMBER) {
-            Some(values) => handle_args(values, options),
-            None => handle_stdin(options),
-        });
+    let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
+
+    let result = match matches.values_of(options::NUMBER) {
+        Some(values) => handle_args(values, &options),
+        None => {
+            let stdin = std::io::stdin();
+            let mut locked_stdin = stdin.lock();
+            handle_buffer(&mut locked_stdin, &options)
+        }
+    };
 
     match result {
         Err(e) => {
             std::io::stdout().flush().expect("error flushing stdout");
-            // TODO Change `handle_args()` and `handle_stdin()` so that
-            // they return `UResult`.
-            return Err(USimpleError::new(1, e));
+            Err(e)
         }
         _ => Ok(()),
     }
@@ -184,6 +196,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .about(ABOUT)
         .after_help(LONG_HELP)
         .setting(AppSettings::AllowNegativeNumbers)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::DELIMITER)
                 .short('d')
@@ -259,4 +272,66 @@ pub fn uu_app<'a>() -> App<'a> {
                 .hide(true)
                 .multiple_occurrences(true),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{handle_buffer, NumfmtOptions, Range, RoundMethod, TransformOptions, Unit};
+    use std::io::{BufReader, Error, ErrorKind, Read};
+    struct MockBuffer {}
+
+    impl Read for MockBuffer {
+        fn read(&mut self, _: &mut [u8]) -> Result<usize, Error> {
+            Err(Error::new(ErrorKind::BrokenPipe, "broken pipe"))
+        }
+    }
+
+    fn get_valid_options() -> NumfmtOptions {
+        NumfmtOptions {
+            transform: TransformOptions {
+                from: Unit::None,
+                to: Unit::None,
+            },
+            padding: 10,
+            header: 1,
+            fields: vec![Range { low: 0, high: 1 }],
+            delimiter: None,
+            round: RoundMethod::Nearest,
+            suffix: None,
+        }
+    }
+
+    #[test]
+    fn broken_buffer_returns_io_error() {
+        let mock_buffer = MockBuffer {};
+        let result = handle_buffer(BufReader::new(mock_buffer), &get_valid_options())
+            .expect_err("returned Ok after receiving IO error");
+        let result_debug = format!("{:?}", result);
+        let result_display = format!("{}", result);
+        assert_eq!(result_debug, "IoError(\"broken pipe\")");
+        assert_eq!(result_display, "broken pipe");
+        assert_eq!(result.code(), 1);
+    }
+
+    #[test]
+    fn non_numeric_returns_formatting_error() {
+        let input_value = b"135\nhello";
+        let result = handle_buffer(BufReader::new(&input_value[..]), &get_valid_options())
+            .expect_err("returned Ok after receiving improperly formatted input");
+        let result_debug = format!("{:?}", result);
+        let result_display = format!("{}", result);
+        assert_eq!(
+            result_debug,
+            "FormattingError(\"invalid suffix in input: 'hello'\")"
+        );
+        assert_eq!(result_display, "invalid suffix in input: 'hello'");
+        assert_eq!(result.code(), 2);
+    }
+
+    #[test]
+    fn valid_input_returns_ok() {
+        let input_value = b"165\n100\n300\n500";
+        let result = handle_buffer(BufReader::new(&input_value[..]), &get_valid_options());
+        assert!(result.is_ok(), "did not return Ok for valid input");
+    }
 }

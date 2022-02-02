@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat seekable
 
 #[cfg(test)]
 mod dd_unit_tests;
@@ -36,7 +36,7 @@ use std::thread;
 use std::time;
 
 use byte_unit::Byte;
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use gcd::Gcd;
 #[cfg(target_os = "linux")]
 use signal_hook::consts::signal;
@@ -69,7 +69,7 @@ impl Input<io::Stdin> {
         let skip = parseargs::parse_skip_amt(&ibs, &iflags, matches)?;
         let count = parseargs::parse_count(&iflags, matches)?;
 
-        let mut i = Input {
+        let mut i = Self {
             src: io::stdin(),
             non_ascii,
             ibs,
@@ -157,7 +157,7 @@ impl Input<File> {
                     .map_err_context(|| "failed to seek in input file".to_string())?;
             }
 
-            let i = Input {
+            let i = Self {
                 src,
                 non_ascii,
                 ibs,
@@ -294,10 +294,19 @@ impl OutputTrait for Output<io::Stdout> {
     fn new(matches: &Matches) -> UResult<Self> {
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
+        let oflags = parseargs::parse_oflags(matches)?;
+        let seek = parseargs::parse_seek_amt(&obs, &oflags, matches)?;
 
-        let dst = io::stdout();
+        let mut dst = io::stdout();
 
-        Ok(Output { dst, obs, cflags })
+        // stdout is not seekable, so we just write null bytes.
+        if let Some(amt) = seek {
+            let bytes = vec![b'\0'; amt];
+            dst.write_all(&bytes)
+                .map_err_context(|| String::from("write error"))?;
+        }
+
+        Ok(Self { dst, obs, cflags })
     }
 
     fn fsync(&mut self) -> io::Result<()> {
@@ -313,7 +322,7 @@ impl<W: Write> Output<W>
 where
     Self: OutputTrait,
 {
-    fn write_blocks(&mut self, buf: Vec<u8>) -> io::Result<WriteStat> {
+    fn write_blocks(&mut self, buf: &[u8]) -> io::Result<WriteStat> {
         let mut writes_complete = 0;
         let mut writes_partial = 0;
         let mut bytes_total = 0;
@@ -372,7 +381,7 @@ where
                 ) => break,
                 (rstat_update, buf) => {
                     let wstat_update = self
-                        .write_blocks(buf)
+                        .write_blocks(&buf)
                         .map_err_context(|| "failed to write output".to_string())?;
 
                     rstat += rstat_update;
@@ -398,8 +407,13 @@ where
         }
 
         match i.print_level {
-            Some(StatusLevel::Noxfer) | Some(StatusLevel::None) => {}
-            _ => print_transfer_stats(&ProgUpdate {
+            Some(StatusLevel::None) => {}
+            Some(StatusLevel::Noxfer) => print_io_lines(&ProgUpdate {
+                read_stat: rstat,
+                write_stat: wstat,
+                duration: start.elapsed(),
+            }),
+            Some(StatusLevel::Progress) | None => print_transfer_stats(&ProgUpdate {
                 read_stat: rstat,
                 write_stat: wstat,
                 duration: start.elapsed(),
@@ -483,7 +497,7 @@ impl OutputTrait for Output<File> {
                     .map_err_context(|| "failed to seek in output file".to_string())?;
             }
 
-            Ok(Output { dst, obs, cflags })
+            Ok(Self { dst, obs, cflags })
         } else {
             // The following error should only occur if someone
             // mistakenly calls Output::<File>::new() without checking
@@ -546,7 +560,7 @@ impl Write for Output<io::Stdout> {
 /// Splits the content of buf into cbs-length blocks
 /// Appends padding as specified by conv=block and cbs=N
 /// Expects ascii encoded data
-fn block(buf: Vec<u8>, cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
+fn block(buf: &[u8], cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
     let mut blocks = buf
         .split(|&e| e == NEWLINE)
         .map(|split| split.to_vec())
@@ -572,7 +586,7 @@ fn block(buf: Vec<u8>, cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
 /// Trims padding from each cbs-length partition of buf
 /// as specified by conv=unblock and cbs=N
 /// Expects ascii encoded data
-fn unblock(buf: Vec<u8>, cbs: usize) -> Vec<u8> {
+fn unblock(buf: &[u8], cbs: usize) -> Vec<u8> {
     buf.chunks(cbs).fold(Vec::new(), |mut acc, block| {
         if let Some(last_char_idx) = block.iter().rposition(|&e| e != SPACE) {
             // Include text up to last space.
@@ -629,10 +643,10 @@ fn conv_block_unblock_helper<R: Read>(
         // ascii input so perform the block first
         let cbs = i.cflags.block.unwrap();
 
-        let mut blocks = block(buf, cbs, rstat);
+        let mut blocks = block(&buf, cbs, rstat);
 
         if let Some(ct) = i.cflags.ctable {
-            for buf in blocks.iter_mut() {
+            for buf in &mut blocks {
                 apply_conversion(buf, ct);
             }
         }
@@ -648,14 +662,14 @@ fn conv_block_unblock_helper<R: Read>(
             apply_conversion(&mut buf, ct);
         }
 
-        let blocks = block(buf, cbs, rstat).into_iter().flatten().collect();
+        let blocks = block(&buf, cbs, rstat).into_iter().flatten().collect();
 
         Ok(blocks)
     } else if should_unblock_then_conv(i) {
         // ascii input so perform the unblock first
         let cbs = i.cflags.unblock.unwrap();
 
-        let mut buf = unblock(buf, cbs);
+        let mut buf = unblock(&buf, cbs);
 
         if let Some(ct) = i.cflags.ctable {
             apply_conversion(&mut buf, ct);
@@ -670,7 +684,7 @@ fn conv_block_unblock_helper<R: Read>(
             apply_conversion(&mut buf, ct);
         }
 
-        let buf = unblock(buf, cbs);
+        let buf = unblock(&buf, cbs);
 
         Ok(buf)
     } else {
@@ -893,7 +907,7 @@ fn append_dashes_if_not_present(mut acc: Vec<String>, mut s: String) -> Vec<Stri
     acc
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let dashed_args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -936,6 +950,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::INFILE)
                 .long(options::INFILE)

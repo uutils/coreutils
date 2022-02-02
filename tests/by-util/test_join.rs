@@ -1,6 +1,10 @@
 // spell-checker:ignore (words) autoformat
 
 use crate::common::util::*;
+#[cfg(unix)]
+use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+#[cfg(windows)]
+use std::{ffi::OsString, os::windows::ffi::OsStringExt};
 
 #[test]
 fn empty_files() {
@@ -73,6 +77,27 @@ fn different_field() {
         .arg("2")
         .succeeds()
         .stdout_only_fixture("different_field.expected");
+}
+
+#[test]
+fn out_of_bounds_fields() {
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_4.txt")
+        .arg("-1")
+        .arg("3")
+        .arg("-2")
+        .arg("5")
+        .succeeds()
+        .stdout_only_fixture("out_of_bounds_fields.expected");
+
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_4.txt")
+        .arg("-j")
+        .arg("100000000000000000000") // > usize::MAX for 64 bits
+        .succeeds()
+        .stdout_only_fixture("out_of_bounds_fields.expected");
 }
 
 #[test]
@@ -289,7 +314,21 @@ fn wrong_line_order() {
         .arg("fields_4.txt")
         .fails()
         .stderr_is(&format!(
-            "{} {}: fields_4.txt:5: is not sorted: 11 g 5 gh",
+        "{0} {1}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0} {1}: input is not in sorted order",
+        ts.bin_path.to_string_lossy(),
+        ts.util_name
+    ));
+}
+
+#[test]
+fn both_files_wrong_line_order() {
+    let ts = TestScenario::new(util_name!());
+    new_ucmd!()
+        .arg("fields_4.txt")
+        .arg("fields_5.txt")
+        .fails()
+        .stderr_is(&format!(
+            "{0} {1}: fields_5.txt:4: is not sorted: 3\n{0} {1}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0} {1}: input is not in sorted order",
             ts.bin_path.to_string_lossy(),
             ts.util_name
         ));
@@ -350,6 +389,43 @@ fn non_unicode() {
         .arg("non-unicode_2.bin")
         .succeeds()
         .stdout_only_fixture("non-unicode.expected");
+
+    #[cfg(unix)]
+    {
+        let invalid_utf8: u8 = 167;
+        new_ucmd!()
+            .arg("-t")
+            .arg(OsStr::from_bytes(&[invalid_utf8]))
+            .arg("non-unicode_1.bin")
+            .arg("non-unicode_2.bin")
+            .succeeds()
+            .stdout_only_fixture("non-unicode_sep.expected");
+    }
+
+    #[cfg(windows)]
+    {
+        let invalid_utf16: OsString = OsStringExt::from_wide(&[0xD800]);
+        new_ucmd!()
+            .arg("-t")
+            .arg(&invalid_utf16)
+            .arg("non-unicode_1.bin")
+            .arg("non-unicode_2.bin")
+            .fails()
+            .stderr_is(
+                "join: unprintable field separators are only supported on unix-like platforms",
+            );
+    }
+}
+
+#[test]
+fn null_field_separators() {
+    new_ucmd!()
+        .arg("-t")
+        .arg("\\0")
+        .arg("non-unicode_1.bin")
+        .arg("non-unicode_2.bin")
+        .succeeds()
+        .stdout_only_fixture("null-sep.expected");
 }
 
 #[test]

@@ -25,7 +25,7 @@ mod numeric_str_cmp;
 mod tmp_dir;
 
 use chunks::LineData;
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
@@ -323,7 +323,7 @@ pub struct GlobalSettings {
 
 /// Data needed for sorting. Should be computed once before starting to sort
 /// by calling `GlobalSettings::init_precomputed`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 struct Precomputed {
     needs_tokens: bool,
     num_infos_per_line: usize,
@@ -378,8 +378,8 @@ impl GlobalSettings {
 }
 
 impl Default for GlobalSettings {
-    fn default() -> GlobalSettings {
-        GlobalSettings {
+    fn default() -> Self {
+        Self {
             mode: SortMode::Default,
             debug: false,
             ignore_leading_blanks: false,
@@ -400,12 +400,7 @@ impl Default for GlobalSettings {
             buffer_size: DEFAULT_BUF_SIZE,
             compress_prog: None,
             merge_batch_size: 32,
-            precomputed: Precomputed {
-                num_infos_per_line: 0,
-                floats_per_line: 0,
-                selections_per_line: 0,
-                needs_tokens: false,
-            },
+            precomputed: Precomputed::default(),
         }
     }
 }
@@ -535,7 +530,7 @@ impl<'a> Line<'a> {
                 }
                 Selection::Str(str) => {
                     if selector.needs_selection {
-                        line_data.selections.push(str)
+                        line_data.selections.push(str);
                     }
                 }
             }
@@ -571,14 +566,14 @@ impl<'a> Line<'a> {
 
         let mut fields = vec![];
         tokenize(self.line, settings.separator, &mut fields);
-        for selector in settings.selectors.iter() {
+        for selector in &settings.selectors {
             let mut selection = selector.get_range(self.line, Some(&fields));
             match selector.settings.mode {
                 SortMode::Numeric | SortMode::HumanNumeric => {
                     // find out which range is used for numeric comparisons
                     let (_, num_range) = NumInfo::parse(
                         &self.line[selection.clone()],
-                        NumInfoParseSettings {
+                        &NumInfoParseSettings {
                             accept_si_units: selector.settings.mode == SortMode::HumanNumeric,
                             ..Default::default()
                         },
@@ -701,9 +696,9 @@ impl<'a> Line<'a> {
 fn tokenize(line: &str, separator: Option<char>, token_buffer: &mut Vec<Field>) {
     assert!(token_buffer.is_empty());
     if let Some(separator) = separator {
-        tokenize_with_separator(line, separator, token_buffer)
+        tokenize_with_separator(line, separator, token_buffer);
     } else {
-        tokenize_default(line, token_buffer)
+        tokenize_default(line, token_buffer);
     }
 }
 
@@ -784,7 +779,7 @@ impl KeyPosition {
 
 impl Default for KeyPosition {
     fn default() -> Self {
-        KeyPosition {
+        Self {
             field: 1,
             char: 1,
             ignore_blanks: false,
@@ -927,7 +922,7 @@ impl FieldSelector {
             // Parse NumInfo for this number.
             let (info, num_range) = NumInfo::parse(
                 range,
-                NumInfoParseSettings {
+                &NumInfoParseSettings {
                     accept_si_units: self.settings.mode == SortMode::HumanNumeric,
                     ..Default::default()
                 },
@@ -1056,7 +1051,7 @@ fn make_sort_mode_arg<'a>(mode: &'a str, short: char, help: &'a str) -> Arg<'a> 
     arg
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -1156,7 +1151,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .value_of(options::BUF_SIZE)
             .map_or(Ok(DEFAULT_BUF_SIZE), |s| {
                 GlobalSettings::parse_byte_count(s).map_err(|e| {
-                    USimpleError::new(2, format_error_message(e, s, options::BUF_SIZE))
+                    USimpleError::new(2, format_error_message(&e, s, options::BUF_SIZE))
                 })
             })?;
 
@@ -1232,7 +1227,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ),
             ));
         }
-        settings.separator = Some(separator.chars().next().unwrap())
+        settings.separator = Some(separator.chars().next().unwrap());
     }
 
     if let Some(values) = matches.values_of(options::KEY) {
@@ -1281,6 +1276,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::modes::SORT)
                 .long(options::modes::SORT)
@@ -1523,9 +1519,9 @@ fn exec(
 
 fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_data: &LineData<'a>) {
     if settings.stable || settings.unique {
-        unsorted.par_sort_by(|a, b| compare_by(a, b, settings, line_data, line_data))
+        unsorted.par_sort_by(|a, b| compare_by(a, b, settings, line_data, line_data));
     } else {
-        unsorted.par_sort_unstable_by(|a, b| compare_by(a, b, settings, line_data, line_data))
+        unsorted.par_sort_unstable_by(|a, b| compare_by(a, b, settings, line_data, line_data));
     }
 }
 
@@ -1828,7 +1824,7 @@ fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
     }
 }
 
-fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
+fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
     // GNU's sort echos affected flag, -S or --buffer-size, depending user's selection
     // GNU's sort does distinguish between "invalid (suffix in) argument"

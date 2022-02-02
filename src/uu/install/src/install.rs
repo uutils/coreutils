@@ -12,7 +12,7 @@ mod mode;
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use file_diff::diff;
 use filetime::{set_file_times, FileTime};
 use uucore::backup_control::{self, BackupMode};
@@ -171,7 +171,7 @@ fn usage() -> String {
 ///
 /// Returns a program return code.
 ///
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
@@ -187,8 +187,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let behavior = behavior(&matches)?;
 
     match behavior.main_function {
-        MainFunction::Directory => directory(paths, behavior),
-        MainFunction::Standard => standard(paths, behavior),
+        MainFunction::Directory => directory(&paths, &behavior),
+        MainFunction::Standard => standard(paths, &behavior),
     }
 }
 
@@ -196,6 +196,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             backup_control::arguments::backup()
         )
@@ -390,7 +391,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 ///
 /// Returns a Result type with the Err variant containing the error message.
 ///
-fn directory(paths: Vec<String>, b: Behavior) -> UResult<()> {
+fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
     if paths.is_empty() {
         Err(InstallError::DirNeedsArg().into())
     } else {
@@ -443,7 +444,7 @@ fn is_new_file_path(path: &Path) -> bool {
 ///
 /// Returns a Result type with the Err variant containing the error message.
 ///
-fn standard(mut paths: Vec<String>, b: Behavior) -> UResult<()> {
+fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
     let target: PathBuf = b
         .target_dir
         .clone()
@@ -453,7 +454,7 @@ fn standard(mut paths: Vec<String>, b: Behavior) -> UResult<()> {
     let sources = &paths.iter().map(PathBuf::from).collect::<Vec<_>>();
 
     if sources.len() > 1 || (target.exists() && target.is_dir()) {
-        copy_files_into_dir(sources, &target, &b)
+        copy_files_into_dir(sources, &target, b)
     } else {
         if let Some(parent) = target.parent() {
             if !parent.exists() && b.create_leading {
@@ -470,7 +471,7 @@ fn standard(mut paths: Vec<String>, b: Behavior) -> UResult<()> {
         }
 
         if target.is_file() || is_new_file_path(&target) {
-            copy(&sources[0], &target, &b)
+            copy(&sources[0], &target, b)
         } else {
             Err(InstallError::InvalidTarget(target).into())
         }
@@ -681,7 +682,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
 /// Return true if a file is necessary to copy. This is the case when:
 ///
 /// - _from_ or _to_ is nonexistent;
-/// - either file has a sticky bit or set[ug]id bit, or the user specified one;
+/// - either file has a sticky bit or set\[ug\]id bit, or the user specified one;
 /// - either file isn't a regular file;
 /// - the sizes of _from_ and _to_ differ;
 /// - _to_'s owner differs from intended; or

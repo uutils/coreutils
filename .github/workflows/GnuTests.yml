@@ -18,7 +18,7 @@ jobs:
       with:
         repository: 'coreutils/coreutils'
         path: 'gnu'
-        ref: v8.32
+        ref: v9.0
     - name: Checkout GNU coreutils library (gnulib)
       uses: actions/checkout@v2
       with:
@@ -38,7 +38,7 @@ jobs:
       run: |
         ## Install dependencies
         sudo apt-get update
-        sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify python3-sphinx jq
+        sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify jq
     - name: Build binaries
       shell: bash
       run: |
@@ -96,7 +96,7 @@ jobs:
         workflow: GnuTests.yml
         name: gnu-result
         repo: uutils/coreutils
-        branch: master
+        branch: main
         path: dl
     - name: Download the log
       uses: dawidd6/action-download-artifact@v2
@@ -104,9 +104,9 @@ jobs:
         workflow: GnuTests.yml
         name: test-report
         repo: uutils/coreutils
-        branch: master
+        branch: main
         path: dl
-    - name: Compare failing tests against master
+    - name: Compare failing tests against main
       shell: bash
       run: |
             OLD_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" dl/test-suite.log | sort)
@@ -121,11 +121,11 @@ jobs:
             do
               if ! grep -Fxq $LINE<<<"$OLD_FAILING"
               then
-                echo "::error ::GNU test failed: $LINE. $LINE is passing on 'master'. Maybe you have to rebase?"
+                echo "::error ::GNU test failed: $LINE. $LINE is passing on 'main'. Maybe you have to rebase?"
               fi
             done
-    - name: Compare against master results
+    - name: Compare against main results
       shell: bash
       run: |
-        mv dl/gnu-result.json master-gnu-result.json
+        mv dl/gnu-result.json main-gnu-result.json
         python uutils/util/compare_gnu_result.py

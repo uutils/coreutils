@@ -2,7 +2,7 @@
 
 use uucore::error::{UResult, UUsageError};
 
-use clap::{App, Arg};
+use clap::{App, AppSettings, Arg};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
 
 use std::borrow::Cow;
@@ -44,7 +44,7 @@ fn get_usage() -> String {
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
 
@@ -73,7 +73,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         CommandLineMode::Print => print_current_context().map_err(|e| RunconError::new(e).into()),
         CommandLineMode::PlainContext { context, command } => {
             get_plain_context(context)
-                .and_then(set_next_exec_context)
+                .and_then(|ctx| set_next_exec_context(&ctx))
                 .map_err(RunconError::new)?;
             // On successful execution, the following call never returns,
             // and this process image is replaced.
@@ -97,7 +97,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         range.as_deref(),
                         command,
                     )
-                    .and_then(set_next_exec_context)
+                    .and_then(|ctx| set_next_exec_context(&ctx))
                     .map_err(RunconError::new)?;
                     // On successful execution, the following call never returns,
                     // and this process image is replaced.
@@ -114,6 +114,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(VERSION)
         .about(ABOUT)
         .after_help(DESCRIPTION)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::COMPUTE)
                 .short('c')
@@ -276,7 +277,7 @@ fn print_current_context() -> Result<()> {
     Ok(())
 }
 
-fn set_next_exec_context(context: OpaqueSecurityContext) -> Result<()> {
+fn set_next_exec_context(context: &OpaqueSecurityContext) -> Result<()> {
     let c_context = context
         .to_c_string()
         .map_err(|r| Error::from_selinux("Creating new context", r))?;

@@ -24,7 +24,7 @@ fn test_capitalize() {
 fn test_long_format() {
     let login = "root";
     let pw: Passwd = Passwd::locate(login).unwrap();
-    let real_name = pw.user_info.replace("&", &pw.name.capitalize());
+    let real_name = pw.user_info.replace('&', &pw.name.capitalize());
     let ts = TestScenario::new(util_name!());
     ts.ucmd().arg("-l").arg(login).succeeds().stdout_is(format!(
         "Login name: {:<28}In real life:  {}\nDirectory: {:<29}Shell:  {}\n\n",

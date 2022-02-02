@@ -6,17 +6,13 @@
 //  * file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) RFILE refsize rfilename fsize tsize
-
-#[macro_use]
-extern crate uucore;
-
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::convert::TryFrom;
 use std::fs::{metadata, OpenOptions};
 use std::io::ErrorKind;
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{UIoError, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size, ParseSizeError};
 
 #[derive(Debug, Eq, PartialEq)]
@@ -35,18 +31,38 @@ impl TruncateMode {
     ///
     /// `fsize` is the size of the reference file, in bytes.
     ///
+    /// If the mode is [`TruncateMode::Reduce`] and the value to
+    /// reduce by is greater than `fsize`, then this function returns
+    /// 0 (since it cannot return a negative number).
+    ///
     /// # Examples
+    ///
+    /// Extending a file of 10 bytes by 5 bytes:
     ///
     /// ```rust,ignore
     /// let mode = TruncateMode::Extend(5);
     /// let fsize = 10;
     /// assert_eq!(mode.to_size(fsize), 15);
     /// ```
+    ///
+    /// Reducing a file by more than its size results in 0:
+    ///
+    /// ```rust,ignore
+    /// let mode = TruncateMode::Reduce(5);
+    /// let fsize = 3;
+    /// assert_eq!(mode.to_size(fsize), 0);
+    /// ```
     fn to_size(&self, fsize: usize) -> usize {
         match self {
             TruncateMode::Absolute(size) => *size,
             TruncateMode::Extend(size) => fsize + size,
-            TruncateMode::Reduce(size) => fsize - size,
+            TruncateMode::Reduce(size) => {
+                if *size > fsize {
+                    0
+                } else {
+                    fsize - size
+                }
+            }
             TruncateMode::AtMost(size) => fsize.min(*size),
             TruncateMode::AtLeast(size) => fsize.max(*size),
             TruncateMode::RoundDown(size) => fsize - fsize % size,
@@ -91,7 +107,7 @@ fn get_long_usage() -> String {
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let long_usage = get_long_usage();
@@ -113,24 +129,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let no_create = matches.is_present(options::NO_CREATE);
         let reference = matches.value_of(options::REFERENCE).map(String::from);
         let size = matches.value_of(options::SIZE).map(String::from);
-        truncate(no_create, io_blocks, reference, size, files).map_err(|e| {
-            match e.kind() {
-                ErrorKind::NotFound => {
-                    // TODO Improve error-handling so that the error
-                    // returned by `truncate()` provides the necessary
-                    // parameter for formatting the error message.
-                    let reference = matches.value_of(options::REFERENCE).map(String::from);
-                    USimpleError::new(
-                        1,
-                        format!(
-                            "cannot stat {}: No such file or directory",
-                            reference.as_deref().unwrap_or("").quote()
-                        ),
-                    ) // TODO: fix '--no-create' see test_reference and test_truncate_bytes_size
-                }
-                _ => uio_error!(e, ""),
-            }
-        })
+        truncate(no_create, io_blocks, reference, size, &files)
     }
 }
 
@@ -138,6 +137,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::IO_BLOCKS)
             .short('o')
@@ -210,22 +210,37 @@ fn file_truncate(filename: &str, create: bool, size: usize) -> std::io::Result<(
 fn truncate_reference_and_size(
     rfilename: &str,
     size_string: &str,
-    filenames: Vec<String>,
+    filenames: &[String],
     create: bool,
-) -> std::io::Result<()> {
+) -> UResult<()> {
     let mode = match parse_mode_and_size(size_string) {
-        Ok(m) => match m {
-            TruncateMode::Absolute(_) => {
-                crash!(1, "you must specify a relative '--size' with '--reference'")
-            }
-            _ => m,
-        },
-        Err(e) => crash!(1, "Invalid number: {}", e.to_string()),
+        Err(e) => return Err(USimpleError::new(1, format!("Invalid number: {}", e))),
+        Ok(TruncateMode::Absolute(_)) => {
+            return Err(USimpleError::new(
+                1,
+                String::from("you must specify a relative '--size' with '--reference'"),
+            ))
+        }
+        Ok(m) => m,
     };
-    let fsize = usize::try_from(metadata(rfilename)?.len()).unwrap();
+    if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = mode {
+        return Err(USimpleError::new(1, "division by zero"));
+    }
+    let metadata = metadata(rfilename).map_err(|e| match e.kind() {
+        ErrorKind::NotFound => USimpleError::new(
+            1,
+            format!(
+                "cannot stat {}: No such file or directory",
+                rfilename.quote()
+            ),
+        ),
+        _ => e.map_err_context(String::new),
+    })?;
+    let fsize = metadata.len() as usize;
     let tsize = mode.to_size(fsize);
-    for filename in &filenames {
-        file_truncate(filename, create, tsize)?;
+    for filename in filenames {
+        file_truncate(filename, create, tsize)
+            .map_err_context(|| format!("cannot open {} for writing", filename.quote()))?;
     }
     Ok(())
 }
@@ -243,12 +258,23 @@ fn truncate_reference_and_size(
 /// the size of at least one file.
 fn truncate_reference_file_only(
     rfilename: &str,
-    filenames: Vec<String>,
+    filenames: &[String],
     create: bool,
-) -> std::io::Result<()> {
-    let tsize = usize::try_from(metadata(rfilename)?.len()).unwrap();
-    for filename in &filenames {
-        file_truncate(filename, create, tsize)?;
+) -> UResult<()> {
+    let metadata = metadata(rfilename).map_err(|e| match e.kind() {
+        ErrorKind::NotFound => USimpleError::new(
+            1,
+            format!(
+                "cannot stat {}: No such file or directory",
+                rfilename.quote()
+            ),
+        ),
+        _ => e.map_err_context(String::new),
+    })?;
+    let tsize = metadata.len() as usize;
+    for filename in filenames {
+        file_truncate(filename, create, tsize)
+            .map_err_context(|| format!("cannot open {} for writing", filename.quote()))?;
     }
     Ok(())
 }
@@ -268,19 +294,27 @@ fn truncate_reference_file_only(
 ///
 /// If the any file could not be opened, or there was a problem setting
 /// the size of at least one file.
-fn truncate_size_only(
-    size_string: &str,
-    filenames: Vec<String>,
-    create: bool,
-) -> std::io::Result<()> {
-    let mode = match parse_mode_and_size(size_string) {
-        Ok(m) => m,
-        Err(e) => crash!(1, "Invalid number: {}", e.to_string()),
-    };
-    for filename in &filenames {
-        let fsize = usize::try_from(metadata(filename)?.len()).unwrap();
-        let tsize = mode.to_size(fsize);
-        file_truncate(filename, create, tsize)?;
+fn truncate_size_only(size_string: &str, filenames: &[String], create: bool) -> UResult<()> {
+    let mode = parse_mode_and_size(size_string)
+        .map_err(|e| USimpleError::new(1, format!("Invalid number: {}", e)))?;
+    if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = mode {
+        return Err(USimpleError::new(1, "division by zero"));
+    }
+    for filename in filenames {
+        let fsize = match metadata(filename) {
+            Ok(m) => m.len(),
+            Err(_) => 0,
+        };
+        let tsize = mode.to_size(fsize as usize);
+        match file_truncate(filename, create, tsize) {
+            Ok(_) => continue,
+            Err(e) if e.kind() == ErrorKind::NotFound && !create => continue,
+            Err(e) => {
+                return Err(
+                    e.map_err_context(|| format!("cannot open {} for writing", filename.quote()))
+                )
+            }
+        }
     }
     Ok(())
 }
@@ -290,8 +324,8 @@ fn truncate(
     _: bool,
     reference: Option<String>,
     size: Option<String>,
-    filenames: Vec<String>,
-) -> std::io::Result<()> {
+    filenames: &[String],
+) -> UResult<()> {
     let create = !no_create;
     // There are four possibilities
     // - reference file given and size given,
@@ -369,5 +403,12 @@ mod tests {
         assert_eq!(parse_mode_and_size(">10"), Ok(TruncateMode::AtLeast(10)));
         assert_eq!(parse_mode_and_size("/10"), Ok(TruncateMode::RoundDown(10)));
         assert_eq!(parse_mode_and_size("%10"), Ok(TruncateMode::RoundUp(10)));
+    }
+
+    #[test]
+    fn test_to_size() {
+        assert_eq!(TruncateMode::Extend(5).to_size(10), 15);
+        assert_eq!(TruncateMode::Reduce(5).to_size(10), 5);
+        assert_eq!(TruncateMode::Reduce(5).to_size(3), 0);
     }
 }

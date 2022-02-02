@@ -7,13 +7,15 @@
 
 // spell-checker:ignore (ToDO) cmdline evec seps rvec fdata
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use rand::Rng;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::InvalidEncodingHandling;
+
+mod rand_read_adapter;
 
 enum Mode {
     Default(String),
@@ -50,7 +52,7 @@ mod options {
     pub static FILE: &str = "file";
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -122,6 +124,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .help_template(TEMPLATE)
         .override_usage(USAGE)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::ECHO)
                 .short('e')
@@ -244,7 +247,7 @@ fn shuf_bytes(input: &mut Vec<&[u8]>, opts: Options) -> UResult<()> {
         Some(r) => {
             let file = File::open(&r[..])
                 .map_err_context(|| format!("failed to open random source {}", r.quote()))?;
-            WrappedRng::RngFile(rand::rngs::adapter::ReadRng::new(file))
+            WrappedRng::RngFile(rand_read_adapter::ReadRng::new(file))
         }
         None => WrappedRng::RngDefault(rand::thread_rng()),
     };
@@ -302,7 +305,7 @@ fn parse_range(input_range: &str) -> Result<(usize, usize), String> {
 }
 
 enum WrappedRng {
-    RngFile(rand::rngs::adapter::ReadRng<File>),
+    RngFile(rand_read_adapter::ReadRng<File>),
     RngDefault(rand::rngs::ThreadRng),
 }
 

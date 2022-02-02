@@ -1,4 +1,4 @@
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm
 
 use crate::common::util::*;
 
@@ -183,7 +183,7 @@ fn test_final_stats_noxfer() {
     new_ucmd!()
         .args(&["status=noxfer"])
         .succeeds()
-        .stderr_only("");
+        .stderr_only("0+0 records in\n0+0 records out\n");
 }
 
 #[test]
@@ -557,6 +557,51 @@ fn test_unicode_filenames() {
         File::open(fixture_path!(&test_fn)).unwrap(),
         fix.open(&tmp_fn)
     );
+}
+
+#[test]
+fn test_conv_ascii_implies_unblock() {
+    // 0x40 = 0o100 =  64, which gets converted to ' '
+    // 0xc1 = 0o301 = 193, which gets converted to 'A'
+    //
+    // `conv=ascii` implies `conv=unblock`, which means trailing paces
+    // are stripped and a newline is appended at the end of each
+    // block.
+    //
+    // `cbs=4` means use a conversion block size of 4 bytes per block.
+    new_ucmd!()
+        .args(&["conv=ascii", "cbs=4"])
+        .pipe_in(b"\x40\xc1\x40\xc1\x40\xc1\x40\x40".to_vec())
+        .succeeds()
+        .stdout_is(" A A\n A\n");
+}
+
+#[test]
+fn test_conv_ebcdic_implies_block() {
+    // 0x40 = 0o100 =  64, which is the result of converting from ' '
+    // 0xc1 = 0o301 = 193, which is the result of converting from 'A'
+    //
+    // `conv=ebcdic` implies `conv=block`, which means trailing spaces
+    // are added to pad each block.
+    //
+    // `cbs=4` means use a conversion block size of 4 bytes per block.
+    new_ucmd!()
+        .args(&["conv=ebcdic", "cbs=4"])
+        .pipe_in(" A A\n A\n")
+        .succeeds()
+        .stdout_is_bytes(b"\x40\xc1\x40\xc1\x40\xc1\x40\x40");
+}
+
+/// Test for seeking forward N bytes in the output file before copying.
+#[test]
+fn test_seek_bytes() {
+    // Since the output file is stdout, seeking forward by eight bytes
+    // results in a prefix of eight null bytes.
+    new_ucmd!()
+        .args(&["seek=8", "oflag=seek_bytes"])
+        .pipe_in("abcdefghijklm\n")
+        .succeeds()
+        .stdout_is("\0\0\0\0\0\0\0\0abcdefghijklm\n");
 }
 
 // conv=[ascii,ebcdic,ibm], conv=[ucase,lcase], conv=[block,unblock], conv=sync

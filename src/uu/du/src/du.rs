@@ -10,8 +10,7 @@ extern crate uucore;
 
 use chrono::prelude::DateTime;
 use chrono::Local;
-use clap::ArgMatches;
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::env;
@@ -115,7 +114,7 @@ struct Stat {
 }
 
 impl Stat {
-    fn new(path: PathBuf, options: &Options) -> Result<Stat> {
+    fn new(path: PathBuf, options: &Options) -> Result<Self> {
         let metadata = if options.dereference {
             fs::metadata(&path)?
         } else {
@@ -128,7 +127,7 @@ impl Stat {
             dev_id: metadata.dev(),
         };
         #[cfg(not(windows))]
-        return Ok(Stat {
+        return Ok(Self {
             path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
@@ -145,7 +144,7 @@ impl Stat {
         #[cfg(windows)]
         let file_info = get_file_info(&path);
         #[cfg(windows)]
-        Ok(Stat {
+        Ok(Self {
             path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
@@ -248,7 +247,7 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
 fn read_block_size(s: Option<&str>) -> usize {
     if let Some(s) = s {
         parse_size(s)
-            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::BLOCK_SIZE)))
+            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::BLOCK_SIZE)))
     } else {
         for env_var in &["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
             if let Ok(env_size) = env::var(env_var) {
@@ -336,7 +335,7 @@ fn du(
                         ErrorKind::PermissionDenied => {
                             let description = format!("cannot access {}", entry.path().quote());
                             let error_message = "Permission denied";
-                            show_error_custom_description!(description, "{}", error_message)
+                            show_error_custom_description!(description, "{}", error_message);
                         }
                         _ => show_error!("cannot access {}: {}", entry.path().quote(), error),
                     },
@@ -445,15 +444,15 @@ impl Error for DuError {}
 impl UError for DuError {
     fn code(&self) -> i32 {
         match self {
-            Self::InvalidMaxDepthArg(_) => 1,
-            Self::SummarizeDepthConflict(_) => 1,
-            Self::InvalidTimeStyleArg(_) => 1,
-            Self::InvalidTimeArg(_) => 1,
+            Self::InvalidMaxDepthArg(_)
+            | Self::SummarizeDepthConflict(_)
+            | Self::InvalidTimeStyleArg(_)
+            | Self::InvalidTimeArg(_) => 1,
         }
     }
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
@@ -487,14 +486,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if options.inodes
         && (matches.is_present(options::APPARENT_SIZE) || matches.is_present(options::BYTES))
     {
-        show_warning!("options --apparent-size and -b are ineffective with --inodes")
+        show_warning!("options --apparent-size and -b are ineffective with --inodes");
     }
 
     let block_size = u64::try_from(read_block_size(matches.value_of(options::BLOCK_SIZE))).unwrap();
 
     let threshold = matches.value_of(options::THRESHOLD).map(|s| {
         Threshold::from_str(s)
-            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::THRESHOLD)))
+            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::THRESHOLD)))
     });
 
     let multiplier: u64 = if matches.is_present(options::SI) {
@@ -630,6 +629,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(LONG_HELP)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::ALL)
                 .short('a')
@@ -644,7 +644,6 @@ pub fn uu_app<'a>() -> App<'a> {
                     although  the apparent  size is usually smaller, it may be larger due to holes \
                     in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like"
                 )
-                .alias("app") // The GNU test suite uses this alias
         )
         .arg(
             Arg::new(options::BLOCK_SIZE)
@@ -753,7 +752,6 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(options::THRESHOLD)
                 .short('t')
                 .long(options::THRESHOLD)
-                .alias("th")
                 .value_name("SIZE")
                 .number_of_values(1)
                 .allow_hyphen_values(true)
@@ -817,9 +815,9 @@ impl FromStr for Threshold {
         let size = u64::try_from(parse_size(&s[offset..])?).unwrap();
 
         if s.starts_with('-') {
-            Ok(Threshold::Upper(size))
+            Ok(Self::Upper(size))
         } else {
-            Ok(Threshold::Lower(size))
+            Ok(Self::Lower(size))
         }
     }
 }
@@ -827,13 +825,13 @@ impl FromStr for Threshold {
 impl Threshold {
     fn should_exclude(&self, size: u64) -> bool {
         match *self {
-            Threshold::Upper(threshold) => size > threshold,
-            Threshold::Lower(threshold) => size < threshold,
+            Self::Upper(threshold) => size > threshold,
+            Self::Lower(threshold) => size < threshold,
         }
     }
 }
 
-fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
+fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
     // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
     // GNU's du does distinguish between "invalid (suffix in) argument"
@@ -855,7 +853,7 @@ mod test_du {
             (Some("K".to_string()), 1024),
             (None, 1024),
         ];
-        for it in test_data.iter() {
+        for it in &test_data {
             assert_eq!(read_block_size(it.0.as_deref()), it.1);
         }
     }

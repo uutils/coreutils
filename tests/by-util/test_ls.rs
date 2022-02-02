@@ -7,14 +7,16 @@ use crate::common::util::*;
 extern crate regex;
 use self::regex::Regex;
 
+#[cfg(all(unix, feature = "chmod"))]
+use nix::unistd::{close, dup2};
 use std::collections::HashMap;
+#[cfg(all(unix, feature = "chmod"))]
+use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 #[cfg(not(windows))]
 extern crate libc;
-#[cfg(not(windows))]
-use self::libc::umask;
 #[cfg(not(windows))]
 use std::path::PathBuf;
 #[cfg(not(windows))]
@@ -26,6 +28,28 @@ extern crate tempfile;
 lazy_static! {
     static ref UMASK_MUTEX: Mutex<()> = Mutex::new(());
 }
+
+const LONG_ARGS: &[&str] = &[
+    "-l",
+    "--long",
+    "--l",
+    "--format=long",
+    "--for=long",
+    "--format=verbose",
+    "--for=verbose",
+];
+
+const ACROSS_ARGS: &[&str] = &[
+    "-x",
+    "--format=across",
+    "--format=horizontal",
+    "--for=across",
+    "--for=horizontal",
+];
+
+const COMMA_ARGS: &[&str] = &["-m", "--format=commas", "--for=commas"];
+
+const COLUMN_ARGS: &[&str] = &["-C", "--format=columns", "--for=columns"];
 
 #[test]
 fn test_ls_ls() {
@@ -128,10 +152,7 @@ fn test_ls_io_errors() {
     at.symlink_file("does_not_exist", "some-dir2/dangle");
     at.mkdir("some-dir3");
     at.mkdir("some-dir3/some-dir4");
-    at.mkdir("some-dir3/some-dir5");
-    at.mkdir("some-dir3/some-dir6");
-    at.mkdir("some-dir3/some-dir7");
-    at.mkdir("some-dir3/some-dir8");
+    at.mkdir("some-dir4");
 
     scene.ccmd("chmod").arg("000").arg("some-dir1").succeeds();
 
@@ -168,7 +189,7 @@ fn test_ls_io_errors() {
         .stderr_contains("Permission denied")
         .stdout_contains("some-dir4");
 
-    // test we don't double print on dangling link metadata errors
+    // don't double print on dangling link metadata errors
     scene
         .ucmd()
         .arg("-iRL")
@@ -177,6 +198,62 @@ fn test_ls_io_errors() {
         .stderr_does_not_contain(
             "ls: cannot access 'some-dir2/dangle': No such file or directory\nls: cannot access 'some-dir2/dangle': No such file or directory"
         );
+
+    #[cfg(unix)]
+    {
+        at.touch("some-dir4/bad-fd.txt");
+        let fd1 = at.open("some-dir4/bad-fd.txt").as_raw_fd();
+        let fd2 = 25000;
+        let rv1 = dup2(fd1, fd2);
+        let rv2 = close(fd1);
+
+        // dup and close work on the mac, but doesn't work in some linux containers
+        // so check to see that return values are non-error before proceeding
+        if rv1.is_ok() && rv2.is_ok() {
+            // on the mac and in certain Linux containers bad fds are typed as dirs,
+            // however sometimes bad fds are typed as links and directory entry on links won't fail
+            if PathBuf::from(format!("/dev/fd/{fd}", fd = fd2)).is_dir() {
+                scene
+                    .ucmd()
+                    .arg("-alR")
+                    .arg(format!("/dev/fd/{fd}", fd = fd2))
+                    .fails()
+                    .stderr_contains(format!(
+                        "cannot open directory '/dev/fd/{fd}': Bad file descriptor",
+                        fd = fd2
+                    ))
+                    .stdout_does_not_contain(format!("{fd}:\n", fd = fd2));
+
+                scene
+                    .ucmd()
+                    .arg("-RiL")
+                    .arg(format!("/dev/fd/{fd}", fd = fd2))
+                    .fails()
+                    .stderr_contains(format!("cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2))
+                    // don't double print bad fd errors
+                    .stderr_does_not_contain(format!("ls: cannot open directory '/dev/fd/{fd}': Bad file descriptor\nls: cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2));
+            } else {
+                scene
+                    .ucmd()
+                    .arg("-alR")
+                    .arg(format!("/dev/fd/{fd}", fd = fd2))
+                    .succeeds();
+
+                scene
+                    .ucmd()
+                    .arg("-RiL")
+                    .arg(format!("/dev/fd/{fd}", fd = fd2))
+                    .succeeds();
+            }
+
+            scene
+                .ucmd()
+                .arg("-alL")
+                .arg(format!("/dev/fd/{fd}", fd = fd2))
+                .succeeds();
+        }
+        let _ = close(fd2);
+    }
 }
 
 #[test]
@@ -315,7 +392,13 @@ fn test_ls_width() {
     at.touch(&at.plus_as_string("test-width-3"));
     at.touch(&at.plus_as_string("test-width-4"));
 
-    for option in &["-w 100", "-w=100", "--width=100", "--width 100"] {
+    for option in &[
+        "-w 100",
+        "-w=100",
+        "--width=100",
+        "--width 100",
+        "--wid=100",
+    ] {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
@@ -324,7 +407,7 @@ fn test_ls_width() {
             .stdout_only("test-width-1  test-width-2  test-width-3  test-width-4\n");
     }
 
-    for option in &["-w 50", "-w=50", "--width=50", "--width 50"] {
+    for option in &["-w 50", "-w=50", "--width=50", "--width 50", "--wid=50"] {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
@@ -333,7 +416,7 @@ fn test_ls_width() {
             .stdout_only("test-width-1  test-width-3\ntest-width-2  test-width-4\n");
     }
 
-    for option in &["-w 25", "-w=25", "--width=25", "--width 25"] {
+    for option in &["-w 25", "-w=25", "--width=25", "--width 25", "--wid=25"] {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
@@ -342,7 +425,7 @@ fn test_ls_width() {
             .stdout_only("test-width-1\ntest-width-2\ntest-width-3\ntest-width-4\n");
     }
 
-    for option in &["-w 0", "-w=0", "--width=0", "--width 0"] {
+    for option in &["-w 0", "-w=0", "--width=0", "--width 0", "--wid=0"] {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
@@ -358,7 +441,7 @@ fn test_ls_width() {
         .fails()
         .stderr_contains("invalid line width");
 
-    for option in &["-w 1a", "-w=1a", "--width=1a", "--width 1a"] {
+    for option in &["-w 1a", "-w=1a", "--width=1a", "--width 1a", "--wid 1a"] {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
@@ -382,12 +465,12 @@ fn test_ls_columns() {
 
     result.stdout_only("test-columns-1\ntest-columns-2\ntest-columns-3\ntest-columns-4\n");
 
-    for option in &["-C", "--format=columns"] {
+    for option in COLUMN_ARGS {
         let result = scene.ucmd().arg(option).succeeds();
         result.stdout_only("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n");
     }
 
-    for option in &["-C", "--format=columns"] {
+    for option in COLUMN_ARGS {
         scene
             .ucmd()
             .arg("-w=40")
@@ -400,7 +483,7 @@ fn test_ls_columns() {
     // environment variable.
     #[cfg(not(windows))]
     {
-        for option in &["-C", "--format=columns"] {
+        for option in COLUMN_ARGS {
             scene
                 .ucmd()
                 .env("COLUMNS", "40")
@@ -438,14 +521,14 @@ fn test_ls_across() {
     at.touch(&at.plus_as_string("test-across-3"));
     at.touch(&at.plus_as_string("test-across-4"));
 
-    for option in &["-x", "--format=across"] {
+    for option in ACROSS_ARGS {
         let result = scene.ucmd().arg(option).succeeds();
         // Because the test terminal has width 0, this is the same output as
         // the columns option.
         result.stdout_only("test-across-1  test-across-2  test-across-3  test-across-4\n");
     }
 
-    for option in &["-x", "--format=across"] {
+    for option in ACROSS_ARGS {
         // Because the test terminal has width 0, this is the same output as
         // the columns option.
         scene
@@ -466,12 +549,12 @@ fn test_ls_commas() {
     at.touch(&at.plus_as_string("test-commas-3"));
     at.touch(&at.plus_as_string("test-commas-4"));
 
-    for option in &["-m", "--format=commas"] {
+    for option in COMMA_ARGS {
         let result = scene.ucmd().arg(option).succeeds();
         result.stdout_only("test-commas-1, test-commas-2, test-commas-3, test-commas-4\n");
     }
 
-    for option in &["-m", "--format=commas"] {
+    for option in COMMA_ARGS {
         scene
             .ucmd()
             .arg("-w=30")
@@ -479,7 +562,7 @@ fn test_ls_commas() {
             .succeeds()
             .stdout_only("test-commas-1, test-commas-2,\ntest-commas-3, test-commas-4\n");
     }
-    for option in &["-m", "--format=commas"] {
+    for option in COMMA_ARGS {
         scene
             .ucmd()
             .arg("-w=45")
@@ -491,36 +574,17 @@ fn test_ls_commas() {
 
 #[test]
 fn test_ls_long() {
-    #[cfg(not(windows))]
-    let last;
-    #[cfg(not(windows))]
-    {
-        let _guard = UMASK_MUTEX.lock();
-        last = unsafe { umask(0) };
-
-        unsafe {
-            umask(0o002);
-        }
-    }
-
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch(&at.plus_as_string("test-long"));
 
-    for arg in &["-l", "--long", "--format=long", "--format=verbose"] {
+    for arg in LONG_ARGS {
         let result = scene.ucmd().arg(arg).arg("test-long").succeeds();
         #[cfg(not(windows))]
-        result.stdout_contains("-rw-rw-r--");
+        result.stdout_matches(&Regex::new(r"[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3}.*").unwrap());
 
         #[cfg(windows)]
         result.stdout_contains("---------- 1 somebody somegroup");
-    }
-
-    #[cfg(not(windows))]
-    {
-        unsafe {
-            umask(last);
-        }
     }
 }
 
@@ -533,7 +597,7 @@ fn test_ls_long_format() {
     at.touch(&at.plus_as_string("test-long-dir/test-long-file"));
     at.mkdir(&at.plus_as_string("test-long-dir/test-long-dir"));
 
-    for arg in &["-l", "--long", "--format=long", "--format=verbose"] {
+    for arg in LONG_ARGS {
         // Assuming sane username do not have spaces within them.
         // A line of the output should be:
         // One of the characters -bcCdDlMnpPsStTx?
@@ -808,7 +872,7 @@ fn test_ls_long_total_size() {
         .collect()
     };
 
-    for arg in &["-l", "--long", "--format=long", "--format=verbose"] {
+    for arg in LONG_ARGS {
         let result = scene.ucmd().arg(arg).succeeds();
         result.stdout_contains(expected_prints["long_vanilla"]);
 
@@ -1383,20 +1447,14 @@ fn test_ls_color() {
     assert!(!result.stdout_str().contains(z_with_colors));
 
     // Color should be enabled
-    scene
-        .ucmd()
-        .arg("--color")
-        .succeeds()
-        .stdout_contains(a_with_colors)
-        .stdout_contains(z_with_colors);
-
-    // Color should be enabled
-    scene
-        .ucmd()
-        .arg("--color=always")
-        .succeeds()
-        .stdout_contains(a_with_colors)
-        .stdout_contains(z_with_colors);
+    for param in &["--color", "--col", "--color=always", "--col=always"] {
+        scene
+            .ucmd()
+            .arg(param)
+            .succeeds()
+            .stdout_contains(a_with_colors)
+            .stdout_contains(z_with_colors);
+    }
 
     // Color should be disabled
     let result = scene.ucmd().arg("--color=never").succeeds();
@@ -1471,7 +1529,7 @@ fn test_ls_inode() {
     assert!(!re_long.is_match(result.stdout_str()));
     assert!(!result.stdout_str().contains(inode_long));
 
-    assert_eq!(inode_short, inode_long)
+    assert_eq!(inode_short, inode_long);
 }
 
 #[test]
@@ -1492,24 +1550,21 @@ fn test_ls_indicator_style() {
     assert!(at.is_fifo("named-pipe.fifo"));
 
     // Classify, File-Type, and Slash all contain indicators for directories.
-    let options = vec!["classify", "file-type", "slash"];
-    for opt in options {
+    for opt in [
+        "--indicator-style=classify",
+        "--ind=classify",
+        "--indicator-style=file-type",
+        "--ind=file-type",
+        "--indicator-style=slash",
+        "--ind=slash",
+        "--classify",
+        "--class",
+        "--file-type",
+        "--file",
+        "-p",
+    ] {
         // Verify that classify and file-type both contain indicators for symlinks.
-        scene
-            .ucmd()
-            .arg(format!("--indicator-style={}", opt))
-            .succeeds()
-            .stdout_contains(&"/");
-    }
-
-    // Same test as above, but with the alternate flags.
-    let options = vec!["--classify", "--file-type", "-p"];
-    for opt in options {
-        scene
-            .ucmd()
-            .arg(opt.to_string())
-            .succeeds()
-            .stdout_contains(&"/");
+        scene.ucmd().arg(opt).succeeds().stdout_contains(&"/");
     }
 
     // Classify and File-Type all contain indicators for pipes and links.
@@ -1824,7 +1879,7 @@ fn test_ls_version_sort() {
     assert_eq!(
         result.stdout_str().split('\n').collect::<Vec<_>>(),
         expected,
-    )
+    );
 }
 
 #[test]
@@ -2562,7 +2617,7 @@ fn test_ls_context2() {
         ts.ucmd()
             .args(&[c_flag, &"/"])
             .succeeds()
-            .stdout_only(unwrap_or_return!(expected_result(&ts, &[c_flag, &"/"])).stdout_str());
+            .stdout_only(unwrap_or_return!(expected_result(&ts, &[c_flag, "/"])).stdout_str());
     }
 }
 
@@ -2592,8 +2647,7 @@ fn test_ls_context_format() {
             .args(&[&"-Z", &format.as_str(), &"/"])
             .succeeds()
             .stdout_only(
-                unwrap_or_return!(expected_result(&ts, &[&"-Z", &format.as_str(), &"/"]))
-                    .stdout_str(),
+                unwrap_or_return!(expected_result(&ts, &["-Z", format.as_str(), "/"])).stdout_str(),
             );
     }
 }

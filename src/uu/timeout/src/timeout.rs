@@ -57,7 +57,7 @@ struct Config {
 }
 
 impl Config {
-    fn from(options: clap::ArgMatches) -> Config {
+    fn from(options: &clap::ArgMatches) -> Self {
         let signal = match options.value_of(options::SIGNAL) {
             Some(signal_) => {
                 let signal_result = signal_by_name_or_value(signal_);
@@ -88,7 +88,7 @@ impl Config {
             .map(String::from)
             .collect::<Vec<_>>();
 
-        Config {
+        Self {
             foreground,
             kill_after,
             signal,
@@ -100,7 +100,7 @@ impl Config {
     }
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -112,7 +112,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = app.get_matches_from(args);
 
-    let config = Config::from(matches);
+    let config = Config::from(&matches);
     timeout(
         &config.command,
         config.duration,
@@ -167,6 +167,7 @@ pub fn uu_app<'a>() -> App<'a> {
                 .multiple_occurrences(true)
         )
         .setting(AppSettings::TrailingVarArg)
+        .setting(AppSettings::InferLongArgs)
 }
 
 /// Remove pre-existing SIGCHLD handlers that would make waiting for the child's exit code fail.

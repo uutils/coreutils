@@ -18,7 +18,7 @@ use std::io::BufReader;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::path::PathBuf;
 use uucore::InvalidEncodingHandling;
 
@@ -51,7 +51,7 @@ fn get_long_usage() -> String {
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -136,6 +136,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::LONG_FORMAT)
                 .short('l')
@@ -209,9 +210,9 @@ impl Capitalize for str {
         self.char_indices()
             .fold(String::with_capacity(self.len()), |mut acc, x| {
                 if x.0 != 0 {
-                    acc.push(x.1)
+                    acc.push(x.1);
                 } else {
-                    acc.push(x.1.to_ascii_uppercase())
+                    acc.push(x.1.to_ascii_uppercase());
                 }
                 acc
             })
@@ -274,7 +275,7 @@ impl Pinky {
                 if let Some(n) = gecos.find(',') {
                     gecos.truncate(n + 1);
                 }
-                print!(" {:<19.19}", gecos.replace("&", &pw.name.capitalize()));
+                print!(" {:<19.19}", gecos.replace('&', &pw.name.capitalize()));
             } else {
                 print!(" {:19}", "        ???");
             }
@@ -323,12 +324,10 @@ impl Pinky {
             self.print_heading();
         }
         for ut in Utmpx::iter_all_records() {
-            if ut.is_user_process() {
-                if self.names.is_empty() {
-                    self.print_entry(&ut)?
-                } else if self.names.iter().any(|n| n.as_str() == ut.user()) {
-                    self.print_entry(&ut)?;
-                }
+            if ut.is_user_process()
+                && (self.names.is_empty() || self.names.iter().any(|n| n.as_str() == ut.user()))
+            {
+                self.print_entry(&ut)?;
             }
         }
         Ok(())
@@ -338,7 +337,7 @@ impl Pinky {
         for u in &self.names {
             print!("Login name: {:<28}In real life: ", u);
             if let Ok(pw) = Passwd::locate(u.as_str()) {
-                println!(" {}", pw.user_info.replace("&", &pw.name.capitalize()));
+                println!(" {}", pw.user_info.replace('&', &pw.name.capitalize()));
                 if self.include_home_and_shell {
                     print!("Directory: {:<29}", pw.user_dir);
                     println!("Shell:  {}", pw.user_shell);

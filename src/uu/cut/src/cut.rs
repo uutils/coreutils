@@ -11,7 +11,7 @@
 extern crate uucore;
 
 use bstr::io::BufReadExt;
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use std::path::Path;
@@ -340,7 +340,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> URes
     Ok(())
 }
 
-fn cut_files(mut filenames: Vec<String>, mode: Mode) -> UResult<()> {
+fn cut_files(mut filenames: Vec<String>, mode: &Mode) -> UResult<()> {
     let mut stdin_read = false;
 
     if filenames.is_empty() {
@@ -372,9 +372,10 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> UResult<()> {
                 .map_err_context(|| filename.maybe_quote().to_string())
                 .and_then(|file| {
                     match &mode {
-                        Mode::Bytes(ref ranges, ref opts) => cut_bytes(file, ranges, opts),
-                        Mode::Characters(ref ranges, ref opts) => cut_bytes(file, ranges, opts),
-                        Mode::Fields(ref ranges, ref opts) => cut_fields(file, ranges, opts),
+                        Mode::Bytes(ranges, opts) | Mode::Characters(ranges, opts) => {
+                            cut_bytes(file, ranges, opts)
+                        }
+                        Mode::Fields(ranges, opts) => cut_fields(file, ranges, opts),
                     }
                 }));
         }
@@ -395,7 +396,7 @@ mod options {
     pub const FILE: &str = "file";
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -527,7 +528,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect();
 
     match mode_parse {
-        Ok(mode) => cut_files(files, mode),
+        Ok(mode) => cut_files(files, &mode),
         Err(e) => Err(USimpleError::new(1, e)),
     }
 }
@@ -539,6 +540,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .override_usage(SYNTAX)
         .about(SUMMARY)
         .after_help(LONG_HELP)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::BYTES)
                 .short('b')

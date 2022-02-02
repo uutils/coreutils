@@ -18,7 +18,6 @@ path = "src/test.rs"
 clap = { version = "3.0", features = ["wrap_help", "cargo"] }
 libc = "0.2.42"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.8", package="uucore_procs", path="../../uucore_procs" }
 
 [target.'cfg(target_os = "redox")'.dependencies]
 redox_syscall = "0.2"
@@ -26,6 +25,3 @@ redox_syscall = "0.2"
 [[bin]]
 name = "test"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

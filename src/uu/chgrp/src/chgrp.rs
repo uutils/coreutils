@@ -12,7 +12,7 @@ pub use uucore::entries;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::perms::{chown_base, options, IfFrom};
 
-use clap::{App, Arg, ArgMatches};
+use clap::{App, AppSettings, Arg, ArgMatches};
 
 use std::fs;
 use std::os::unix::fs::MetadataExt;
@@ -51,7 +51,7 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>,
     Ok((dest_gid, None, IfFrom::All))
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
 
@@ -68,6 +68,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::verbosity::CHANGES)
                 .short('c')

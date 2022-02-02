@@ -70,7 +70,7 @@ impl<'a> TryFrom<&ArgMatches> for ProgramOptions {
     type Error = ProgramOptionsError;
 
     fn try_from(matches: &ArgMatches) -> Result<Self, Self::Error> {
-        Ok(ProgramOptions {
+        Ok(Self {
             stdin: check_option(matches, options::INPUT)?,
             stdout: check_option(matches, options::OUTPUT)?,
             stderr: check_option(matches, options::ERROR)?,
@@ -127,7 +127,7 @@ fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramO
     }
 }
 
-fn set_command_env(command: &mut Command, buffer_name: &str, buffer_type: BufferType) {
+fn set_command_env(command: &mut Command, buffer_name: &str, buffer_type: &BufferType) {
     match buffer_type {
         BufferType::Size(m) => {
             command.env(buffer_name, m.to_string());
@@ -149,7 +149,7 @@ fn get_preload_env(tmp_dir: &mut TempDir) -> io::Result<(String, PathBuf)> {
     Ok((preload.to_owned(), inject_path))
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -167,9 +167,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut tmp_dir = tempdir().unwrap();
     let (preload_env, libstdbuf) = get_preload_env(&mut tmp_dir).map_err_context(String::new)?;
     command.env(preload_env, libstdbuf);
-    set_command_env(&mut command, "_STDBUF_I", options.stdin);
-    set_command_env(&mut command, "_STDBUF_O", options.stdout);
-    set_command_env(&mut command, "_STDBUF_E", options.stderr);
+    set_command_env(&mut command, "_STDBUF_I", &options.stdin);
+    set_command_env(&mut command, "_STDBUF_O", &options.stdout);
+    set_command_env(&mut command, "_STDBUF_E", &options.stderr);
     command.args(command_params);
 
     let mut process = command
@@ -197,6 +197,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .about(ABOUT)
         .after_help(LONG_HELP)
         .setting(AppSettings::TrailingVarArg)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::INPUT)
                 .long(options::INPUT)

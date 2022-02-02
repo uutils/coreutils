@@ -384,7 +384,7 @@ fn build_best_path<'a>(paths: &[LineBreak<'a>], active: &[usize]) -> Vec<(&'a Wo
             None => return breakwords,
             Some(prev) => {
                 breakwords.push((prev, next_best.break_before));
-                best_idx = next_best.prev
+                best_idx = next_best.prev;
             }
         }
     }

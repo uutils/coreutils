@@ -94,12 +94,12 @@ pub(crate) struct RunconError {
 }
 
 impl RunconError {
-    pub(crate) fn new(e: Error) -> RunconError {
-        RunconError::with_code(error_exit_status::ANOTHER_ERROR, e)
+    pub(crate) fn new(e: Error) -> Self {
+        Self::with_code(error_exit_status::ANOTHER_ERROR, e)
     }
 
-    pub(crate) fn with_code(code: i32, e: Error) -> RunconError {
-        RunconError { inner: e, code }
+    pub(crate) fn with_code(code: i32, e: Error) -> Self {
+        Self { inner: e, code }
     }
 }
 

@@ -1,18 +1,19 @@
-// spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
-// spell-checker:ignore (ToDO) arrnum
+// spell-checker:ignore (vars) charf cninetyninehexfloatf decf floatf intf scif strf Cninety
 
-//! formatter for %f %F common-notation floating-point subs
+//! formatter for %e %E scientific notation subs
 use super::super::format_field::FormatField;
 use super::super::formatter::{FormatPrimitive, Formatter, InitialPrefix};
 use super::float_common::{get_primitive_dec, primitive_to_str_common, FloatAnalysis};
 
-pub struct Floatf;
-impl Floatf {
-    pub fn new() -> Floatf {
-        Floatf
+#[derive(Default)]
+pub struct Scif;
+
+impl Scif {
+    pub fn new() -> Self {
+        Self::default()
     }
 }
-impl Formatter for Floatf {
+impl Formatter for Scif {
     fn get_primitive(
         &self,
         field: &FormatField,
@@ -23,8 +24,8 @@ impl Formatter for Floatf {
         let analysis = FloatAnalysis::analyze(
             str_in,
             initial_prefix,
+            Some(second_field as usize + 1),
             None,
-            Some(second_field as usize),
             false,
         );
         let f = get_primitive_dec(
@@ -32,7 +33,7 @@ impl Formatter for Floatf {
             &str_in[initial_prefix.offset..],
             &analysis,
             second_field as usize,
-            None,
+            Some(*field.field_char == 'E'),
         );
         Some(f)
     }

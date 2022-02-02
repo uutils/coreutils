@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_sleep);
+uucore::bin!(uu_sleep);

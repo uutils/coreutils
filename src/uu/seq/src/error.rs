@@ -40,11 +40,11 @@ impl SeqError {
     fn argtype(&self) -> &str {
         match self {
             SeqError::ParseError(_, e) => match e {
-                ParseNumberError::Float => "floating point",
-                ParseNumberError::Nan => "'not-a-number'",
-                ParseNumberError::Hex => "hexadecimal",
+                ParseNumberError::Float => "floating point argument",
+                ParseNumberError::Nan => "'not-a-number' argument",
+                ParseNumberError::Hex => "hexadecimal argument",
             },
-            SeqError::ZeroIncrement(_) => "Zero increment",
+            SeqError::ZeroIncrement(_) => "Zero increment value",
         }
     }
 }
@@ -61,7 +61,7 @@ impl Display for SeqError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "invalid {} argument: {}\nTry '{} --help' for more information.",
+            "invalid {}: {}\nTry '{} --help' for more information.",
             self.argtype(),
             self.arg().quote(),
             uucore::execution_phrase(),

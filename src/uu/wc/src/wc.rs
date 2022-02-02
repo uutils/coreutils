@@ -17,7 +17,7 @@ use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
 use word_count::{TitledWordCount, WordCount};
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
 use std::cmp::max;
 use std::fs::{self, File};
@@ -39,8 +39,8 @@ struct Settings {
 }
 
 impl Settings {
-    fn new(matches: &ArgMatches) -> Settings {
-        let settings = Settings {
+    fn new(matches: &ArgMatches) -> Self {
+        let settings = Self {
             show_bytes: matches.is_present(options::BYTES),
             show_chars: matches.is_present(options::CHAR),
             show_lines: matches.is_present(options::LINES),
@@ -57,7 +57,7 @@ impl Settings {
             return settings;
         }
 
-        Settings {
+        Self {
             show_bytes: true,
             show_chars: false,
             show_lines: true,
@@ -133,7 +133,7 @@ impl Input {
     }
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
@@ -159,13 +159,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let settings = Settings::new(&matches);
 
-    wc(inputs, &settings)
+    wc(&inputs, &settings)
 }
 
 pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::BYTES)
                 .short('c')
@@ -252,12 +253,7 @@ fn word_count_from_reader<T: WordCountable>(
                     }
                     if settings.show_max_line_length {
                         match ch {
-                            '\n' => {
-                                total.max_line_length = max(current_len, total.max_line_length);
-                                current_len = 0;
-                            }
-                            // '\x0c' = '\f'
-                            '\r' | '\x0c' => {
+                            '\n' | '\r' | '\x0c' => {
                                 total.max_line_length = max(current_len, total.max_line_length);
                                 current_len = 0;
                             }
@@ -408,7 +404,7 @@ fn max_width(inputs: &[Input]) -> usize {
     result
 }
 
-fn wc(inputs: Vec<Input>, settings: &Settings) -> UResult<()> {
+fn wc(inputs: &[Input], settings: &Settings) -> UResult<()> {
     // Compute the width, in digits, to use when formatting counts.
     //
     // The width is the number of digits needed to print the number of
@@ -420,14 +416,14 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> UResult<()> {
     let max_width = if settings.number_enabled() <= 1 {
         0
     } else {
-        max_width(&inputs)
+        max_width(inputs)
     };
 
     let mut total_word_count = WordCount::default();
 
     let num_inputs = inputs.len();
 
-    for input in &inputs {
+    for input in inputs {
         let word_count = match word_count_from_input(input, settings) {
             CountResult::Success(word_count) => word_count,
             CountResult::Interrupted(word_count, error) => {

@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDOs) ncount routput
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
@@ -29,7 +29,7 @@ mod options {
     pub const FILE: &str = "file";
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -60,7 +60,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec!["-".to_owned()],
     };
 
-    fold(files, bytes, spaces, width)
+    fold(&files, bytes, spaces, width)
 }
 
 pub fn uu_app<'a>() -> App<'a> {
@@ -69,6 +69,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .override_usage(SYNTAX)
         .about(SUMMARY)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::BYTES)
                 .long(options::BYTES)
@@ -114,8 +115,8 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     (args.to_vec(), None)
 }
 
-fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: usize) -> UResult<()> {
-    for filename in &filenames {
+fn fold(filenames: &[String], bytes: bool, spaces: bool, width: usize) -> UResult<()> {
+    for filename in filenames {
         let filename: &str = filename;
         let mut stdin_buf;
         let mut file_buf;

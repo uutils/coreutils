@@ -8,7 +8,7 @@
 
 // spell-checker:ignore (paths) GPGHome
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use uucore::display::{println_verbatim, Quotable};
 use uucore::error::{FromIo, UError, UResult};
 
@@ -16,7 +16,7 @@ use std::env;
 use std::error::Error;
 use std::fmt::Display;
 use std::iter;
-use std::path::{is_separator, PathBuf};
+use std::path::{is_separator, Path, PathBuf};
 
 use rand::Rng;
 use tempfile::Builder;
@@ -74,7 +74,7 @@ impl Display for MkTempError {
     }
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
@@ -118,13 +118,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     if matches.is_present(OPT_T) {
-        tmpdir = env::temp_dir()
+        tmpdir = env::temp_dir();
     }
 
     let res = if dry_run {
         dry_exec(tmpdir, prefix, rand, suffix)
     } else {
-        exec(tmpdir, prefix, rand, suffix, make_dir)
+        exec(&tmpdir, prefix, rand, suffix, make_dir)
     };
 
     if suppress_file_err {
@@ -139,6 +139,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_DIRECTORY)
                 .short('d')
@@ -248,7 +249,7 @@ pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) ->
     println_verbatim(tmpdir).map_err_context(|| "failed to print directory name".to_owned())
 }
 
-fn exec(dir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> UResult<()> {
+fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> UResult<()> {
     let context = || {
         format!(
             "failed to create file via template '{}{}{}'",

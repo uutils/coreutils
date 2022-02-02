@@ -6,7 +6,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) fname
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::fs::File;
 use std::io::{self, stdin, BufReader, Read};
 use std::path::Path;
@@ -112,7 +112,7 @@ mod options {
     pub static FILE: &str = "file";
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -146,6 +146,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(SUMMARY)
         .override_usage(SYNTAX)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)

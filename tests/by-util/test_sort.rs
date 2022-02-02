@@ -155,7 +155,7 @@ fn test_multiple_decimals_general() {
     test_helper(
         "multiple_decimals_general",
         &["-g", "--general-numeric-sort", "--sort=general-numeric"],
-    )
+    );
 }
 
 #[test]
@@ -163,7 +163,7 @@ fn test_multiple_decimals_numeric() {
     test_helper(
         "multiple_decimals_numeric",
         &["-n", "--numeric-sort", "--sort=numeric"],
-    )
+    );
 }
 
 #[test]
@@ -171,7 +171,7 @@ fn test_numeric_with_trailing_invalid_chars() {
     test_helper(
         "numeric_trailing_chars",
         &["-n", "--numeric-sort", "--sort=numeric"],
-    )
+    );
 }
 
 #[test]
@@ -588,7 +588,7 @@ fn test_keys_with_options_blanks_start() {
 
 #[test]
 fn test_keys_blanks_with_char_idx() {
-    test_helper("keys_blanks", &["-k 1.2b"])
+    test_helper("keys_blanks", &["-k 1.2b"]);
 }
 
 #[test]
@@ -648,7 +648,7 @@ fn test_keys_negative_size_match() {
 
 #[test]
 fn test_keys_ignore_flag() {
-    test_helper("keys_ignore_flag", &["-k 1n -b"])
+    test_helper("keys_ignore_flag", &["-k 1n -b"]);
 }
 
 #[test]

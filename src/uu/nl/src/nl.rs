@@ -8,7 +8,7 @@
 
 // spell-checker:ignore (ToDO) corasick memchr
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
@@ -81,7 +81,7 @@ pub mod options {
     pub const NUMBER_WIDTH: &str = "number-width";
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -145,6 +145,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .name(NAME)
         .version(crate_version!())
         .override_usage(USAGE)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)

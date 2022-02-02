@@ -9,7 +9,7 @@ const ZERO: u8 = 0;
 /// Returns an iterator over the lines of the given reader.
 ///
 /// The iterator returned from this function will yield instances of
-/// [`io::Result`]<[`Vec`]<[`u8`]>>, representing the bytes of the line
+/// [`std::io::Result`]<[`Vec`]<[`u8`]>>, representing the bytes of the line
 /// *including* the null character (with the possible exception of the
 /// last line, which may not have one).
 ///

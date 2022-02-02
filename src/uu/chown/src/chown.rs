@@ -13,7 +13,7 @@ use uucore::perms::{chown_base, options, IfFrom};
 
 use uucore::error::{FromIo, UResult, USimpleError};
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
 use std::fs;
 use std::os::unix::fs::MetadataExt;
@@ -54,7 +54,7 @@ fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<(Option<u32>, Optio
     Ok((dest_gid, dest_uid, filter))
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
 
@@ -71,6 +71,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::verbosity::CHANGES)
                 .short('c')
