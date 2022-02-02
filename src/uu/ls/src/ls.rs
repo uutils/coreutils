@@ -539,6 +539,8 @@ impl Config {
             None
         } else if options.is_present(options::size::BLOCK_SIZE) {
             Self::parse_byte_count(options.value_of(options::size::BLOCK_SIZE).unwrap())
+        } else if std::env::var_os("LS_BLOCK_SIZE").is_some() {
+            Self::parse_byte_count(&std::env::var_os("LS_BLOCK_SIZE").unwrap().to_string_lossy())
         } else if std::env::var_os("BLOCK_SIZE").is_some() {
             Self::parse_byte_count(&std::env::var_os("BLOCK_SIZE").unwrap().to_string_lossy())
         } else if std::env::var_os("POSIXLY_CORRECT").is_some() {
