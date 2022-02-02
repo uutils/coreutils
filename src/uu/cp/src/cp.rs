@@ -1420,12 +1420,12 @@ fn copy_helper(
 #[cfg(unix)]
 fn copy_fifo(dest: &Path, overwrite: OverwriteMode) -> CopyResult<()> {
     if dest.exists() {
-        overwrite.verify(&dest)?;
+        overwrite.verify(dest)?;
         fs::remove_file(&dest)?;
     }
 
     let name = CString::new(dest.as_os_str().as_bytes()).unwrap();
-    let err = unsafe { mkfifo(name.as_ptr(), 0o666 as libc::mode_t) };
+    let err = unsafe { mkfifo(name.as_ptr(), 0o666_u32) };
     if err == -1 {
         return Err(format!("cannot create fifo {}: File exists", dest.quote()).into());
     }
