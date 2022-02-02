@@ -223,15 +223,19 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     ret
 }
 
-fn resolve<P: AsRef<Path>>(original: P) -> Result<PathBuf, (PathBuf, IOError)> {
+fn resolve<P: AsRef<Path> + std::fmt::Debug>(
+    original: P,
+) -> Result<PathBuf, (bool, PathBuf, IOError)> {
     const MAX_LINKS_FOLLOWED: u32 = 255;
     let mut followed = 0;
     let mut result = original.as_ref().to_path_buf();
-
+    let mut symlink_is_absolute = false;
     let mut first_resolution = None;
+
     loop {
         if followed == MAX_LINKS_FOLLOWED {
             return Err((
+                symlink_is_absolute,
                 // When we hit MAX_LINKS_FOLLOWED we should return the first resolution (that's what GNU does - for whatever reason)
                 first_resolution.unwrap(),
                 Error::new(ErrorKind::InvalidInput, "maximum links followed"),
@@ -244,16 +248,17 @@ fn resolve<P: AsRef<Path>>(original: P) -> Result<PathBuf, (PathBuf, IOError)> {
                     break;
                 }
             }
-            Err(e) => return Err((result, e)),
+            Err(e) => return Err((symlink_is_absolute, result, e)),
         }
 
         followed += 1;
         match fs::read_link(&result) {
             Ok(path) => {
                 result.pop();
+                symlink_is_absolute = path.is_absolute();
                 result.push(path);
             }
-            Err(e) => return Err((result, e)),
+            Err(e) => return Err((symlink_is_absolute, result, e)),
         }
 
         if first_resolution.is_none() {
@@ -344,8 +349,13 @@ pub fn canonicalize<P: AsRef<Path>>(
             }
 
             match resolve(&result) {
-                Err((path, _)) if miss_mode == MissingHandling::Missing => result = path,
-                Err((_, e)) => return Err(e),
+                Err((_, path, e)) => {
+                    if miss_mode == MissingHandling::Missing {
+                        result = path;
+                    } else {
+                        return Err(e);
+                    }
+                }
                 Ok(path) => {
                     result = path;
                 }
@@ -359,10 +369,19 @@ pub fn canonicalize<P: AsRef<Path>>(
         }
 
         match resolve(&result) {
-            Err((_, e)) if miss_mode == MissingHandling::Existing => {
-                return Err(e);
+            Err((is_abolsute, path, err)) => {
+                if miss_mode == MissingHandling::Existing {
+                    return Err(err);
+                } else if err.kind() == ErrorKind::NotFound
+                    && is_abolsute
+                    && miss_mode == MissingHandling::Normal
+                {
+                    return Err(err);
+                } else {
+                    result = path;
+                }
             }
-            Ok(path) | Err((path, _)) => {
+            Ok(path) => {
                 result = path;
             }
         }
