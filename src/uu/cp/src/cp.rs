@@ -1425,7 +1425,7 @@ fn copy_fifo(dest: &Path, overwrite: OverwriteMode) -> CopyResult<()> {
     }
 
     let name = CString::new(dest.as_os_str().as_bytes()).unwrap();
-    let err = unsafe { mkfifo(name.as_ptr(), 0o666_u32) };
+    let err = unsafe { mkfifo(name.as_ptr(), 0o666) };
     if err == -1 {
         return Err(format!("cannot create fifo {}: File exists", dest.quote()).into());
     }
@@ -1515,7 +1515,6 @@ fn copy_on_write_macos(
     // Extract paths in a form suitable to be passed to a syscall.
     // The unwrap() is safe because they come from the command-line and so contain non nul
     // character.
-    use std::os::unix::ffi::OsStrExt;
     let src = CString::new(source.as_os_str().as_bytes()).unwrap();
     let dst = CString::new(dest.as_os_str().as_bytes()).unwrap();
 
