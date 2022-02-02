@@ -517,10 +517,6 @@ impl Config {
             None
         };
 
-        let alloc_size = options.is_present(options::size::ALLOCATION_SIZE);
-
-        let kibibytes = options.is_present(options::size::KIBIBYTES);
-
         let block_size = if std::env::var_os("BLOCK_SIZE").is_some() {
             Config::parse_byte_count(&std::env::var_os("BLOCK_SIZE").unwrap().to_string_lossy())
         } else if std::env::var_os("POSIXLY_CORRECT").is_some() {
@@ -745,9 +741,9 @@ impl Config {
             #[cfg(unix)]
             inode: options.is_present(options::INODE),
             long,
-            alloc_size,
+            alloc_size: options.is_present(options::size::ALLOCATION_SIZE),
             block_size,
-            kibibytes,
+            kibibytes: options.is_present(options::size::KIBIBYTES),
             width,
             quoting_style,
             indicator_style,
@@ -1748,11 +1744,10 @@ fn pad_right(string: &str, count: usize) -> String {
 fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
     let mut total_size = 0;
     for item in items {
-        total_size += item
-            .md(out)
-            .as_ref()
-            .map_or(0, |md| get_block_size(md, config));
+        total_size += item.md(out).as_ref().map_or(0, |md| get_block_size(md));
     }
+    // why not fold into the get_block_size function?  Because kibibytes
+    // only displays here and in the alloc_size/more_info block
     if config.kibibytes && config.block_size.is_some() {
         total_size *= (config.block_size.unwrap() / DEFAULT_BLOCK_SIZE) as u64;
     }
@@ -1779,11 +1774,13 @@ fn display_more_info(
     }
     if config.alloc_size {
         let s = if let Some(md) = item.md(out) {
-            let mut size = get_block_size(md, config);
+            let mut block_size = get_block_size(md);
+            // why not fold into the get_block_size function?  Because kibibytes
+            // only displays here and in the display_total block
             if config.kibibytes && config.block_size.is_some() {
-                size *= (config.block_size.unwrap() / DEFAULT_BLOCK_SIZE) as u64;
+                block_size *= (config.block_size.unwrap() / DEFAULT_BLOCK_SIZE) as u64;
             }
-            display_size(size, config, true)
+            display_size(block_size, config, true)
         } else {
             "?".to_owned()
         };
@@ -1818,7 +1815,9 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
     if config.alloc_size {
         for item in items {
             if let Some(md) = item.md(out) {
-                let mut block_size = get_block_size(md, config);
+                let mut block_size = get_block_size(md);
+                // why not fold into the get_block_size function?  Because kibibytes
+                // only displays here and in the display_total block
                 if config.kibibytes && config.block_size.is_some() {
                     block_size *= (config.block_size.unwrap() / DEFAULT_BLOCK_SIZE) as u64;
                 }
@@ -1989,22 +1988,17 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
     }
 }
 
-fn get_block_size(md: &Metadata, config: &Config) -> u64 {
+fn get_block_size(md: &Metadata) -> u64 {
     /* GNU ls will display sizes in terms of block size
        md.len() will differ from this value when the file has some holes
     */
     #[cfg(unix)]
     {
-        match config.size_format {
-            SizeFormat::Binary => md.blocks() * 512,
-            SizeFormat::Decimal => md.blocks() * 512,
-            SizeFormat::Bytes => md.blocks() * 512,
-        }
+        md.blocks() * 512
     }
 
     #[cfg(not(unix))]
     {
-        let _ = config;
         // no way to get block size for windows, fall-back to file size
         md.len()
     }

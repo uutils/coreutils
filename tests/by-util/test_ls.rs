@@ -199,6 +199,16 @@ fn test_ls_allocation_size() {
             .succeeds()
             .stdout_contains("0 empty-file")
             .stdout_contains("8192 file-with-holes");
+
+        scene
+            .ucmd()
+            .env("BLOCK_SIZE", "4K")
+            .arg("-s1k")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 4096")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("4096 file-with-holes");
     }
 }
 
