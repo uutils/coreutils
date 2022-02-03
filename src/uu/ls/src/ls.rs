@@ -1804,7 +1804,7 @@ fn pad_right(string: &str, count: usize) -> String {
     format!("{:<width$}", string, width = count)
 }
 
-fn size_to_blocks(size: u64, config: &Config) -> u64 {
+fn customize_block_size(size: u64, config: &Config) -> u64 {
     if config.block_size.is_some() {
         size / config.block_size.unwrap() as u64
     } else {
@@ -1818,7 +1818,19 @@ fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         total_size += item.md(out).as_ref().map_or(0, |md| get_block_size(md));
     }
     let display_total = match config.size_format {
-        SizeFormat::Bytes => display_size(size_to_blocks(total_size, config), config),
+        // Windows does not give us size in blocks, blocks(),
+        // so get_block_size on Windows is just len().
+        // Thus, no need to convert to a custom block size.
+        SizeFormat::Bytes => {
+            #[cfg(unix)]
+            {
+                display_size(customize_block_size(total_size, config), config)
+            }
+            #[cfg(not(unix))]
+            {
+                display_size(total_size, config)
+            }
+        }
         SizeFormat::Binary | SizeFormat::Decimal => display_size(total_size, config),
     };
     let _ = writeln!(out, "total {}", display_total);
@@ -1846,9 +1858,10 @@ fn display_more_info(
         let s = if let Some(md) = item.md(out) {
             match config.size_format {
                 SizeFormat::Bytes => {
-                    display_size(size_to_blocks(get_block_size(md), config), config)
+                    display_size(customize_block_size(get_block_size(md), config), config)
                 }
                 SizeFormat::Binary | SizeFormat::Decimal => {
+                    // display_size_or_rdev calls display_size, no need to do again here
                     match display_size_or_rdev(md, config) {
                         SizeOrDeviceId::Device(_, _) => "0".to_string(),
                         SizeOrDeviceId::Size(size) => size,
@@ -1891,7 +1904,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             if let Some(md) = item.md(out) {
                 let block_size_len = match config.size_format {
                     SizeFormat::Bytes => {
-                        display_size(size_to_blocks(get_block_size(md), config), config).len()
+                        display_size(customize_block_size(get_block_size(md), config), config).len()
                     }
                     SizeFormat::Binary | SizeFormat::Decimal => {
                         match display_size_or_rdev(md, config) {
@@ -2502,7 +2515,7 @@ fn display_size_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId 
     }
     if config.block_size.is_some() {
         SizeOrDeviceId::Size(display_size(
-            get_block_size(metadata) / config.block_size.unwrap() as u64,
+            customize_block_size(get_block_size(metadata), config),
             config,
         ))
     } else {
