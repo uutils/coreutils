@@ -223,9 +223,7 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     ret
 }
 
-fn resolve<P: AsRef<Path> + std::fmt::Debug>(
-    original: P,
-) -> Result<PathBuf, (bool, PathBuf, IOError)> {
+fn resolve<P: AsRef<Path>>(original: P) -> Result<PathBuf, (bool, PathBuf, IOError)> {
     const MAX_LINKS_FOLLOWED: u32 = 255;
     let mut followed = 0;
     let mut result = original.as_ref().to_path_buf();
@@ -369,12 +367,11 @@ pub fn canonicalize<P: AsRef<Path>>(
         }
 
         match resolve(&result) {
-            Err((is_abolsute, path, err)) => {
-                if miss_mode == MissingHandling::Existing {
-                    return Err(err);
-                } else if err.kind() == ErrorKind::NotFound
-                    && is_abolsute
-                    && miss_mode == MissingHandling::Normal
+            Err((is_absolute, path, err)) => {
+                if miss_mode == MissingHandling::Existing
+                    || (err.kind() == ErrorKind::NotFound
+                        && is_absolute
+                        && miss_mode == MissingHandling::Normal)
                 {
                     return Err(err);
                 } else {
