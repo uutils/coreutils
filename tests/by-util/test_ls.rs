@@ -1568,6 +1568,18 @@ fn test_ls_indicator_style() {
         scene.ucmd().arg(opt).succeeds().stdout_contains(&"/");
     }
 
+    // Classify, Indicator options should not contain any indicators when value is none.
+    for opt in ["--indicator-style=none", "--classify=none", "--ind=none"] {
+        // Verify that there are no indicators for any of the file types.
+        scene
+            .ucmd()
+            .arg(opt)
+            .succeeds()
+            .stdout_does_not_contain(&"/")
+            .stdout_does_not_contain(&"@")
+            .stdout_does_not_contain(&"|");
+    }
+
     // Classify and File-Type all contain indicators for pipes and links.
     let options = vec!["classify", "file-type"];
     for opt in options {
