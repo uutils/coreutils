@@ -193,19 +193,11 @@ impl ScanUtil for str {
 }
 
 pub fn group_num(s: &str) -> Cow<str> {
-    let negative = s.starts_with('-');
-    assert!(negative || s.chars().take(1).all(|c| c.is_digit(10)));
-    assert!(s.chars().skip(1).all(|c| c.is_digit(10)));
+    assert!(s.chars().all(char::is_numeric));
     if s.len() < 4 {
         return s.into();
     }
     let mut res = String::with_capacity((s.len() - 1) / 3);
-    let s = if negative {
-        res.push('-');
-        &s[1..]
-    } else {
-        s
-    };
     let mut alone = (s.len() - 1) % 3 + 1;
     res.push_str(&s[..alone]);
     while alone != s.len() {
