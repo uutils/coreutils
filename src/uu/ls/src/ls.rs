@@ -1819,7 +1819,7 @@ fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
     }
     let display_total = match config.size_format {
         SizeFormat::Bytes => display_size(size_to_blocks(total_size, config), config),
-        _ => display_size(total_size, config),
+        SizeFormat::Binary | SizeFormat::Decimal => display_size(total_size, config),
     };
     let _ = writeln!(out, "total {}", display_total);
 }
@@ -1848,10 +1848,12 @@ fn display_more_info(
                 SizeFormat::Bytes => {
                     display_size(size_to_blocks(get_block_size(md), config), config)
                 }
-                _ => match display_size_or_rdev(md, config) {
-                    SizeOrDeviceId::Device(_, _) => "0".to_string(),
-                    SizeOrDeviceId::Size(size) => size,
-                },
+                SizeFormat::Binary | SizeFormat::Decimal => {
+                    match display_size_or_rdev(md, config) {
+                        SizeOrDeviceId::Device(_, _) => "0".to_string(),
+                        SizeOrDeviceId::Size(size) => size,
+                    }
+                }
             }
         } else {
             "?".to_owned()
@@ -1891,10 +1893,12 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                     SizeFormat::Bytes => {
                         display_size(size_to_blocks(get_block_size(md), config), config).len()
                     }
-                    _ => match display_size_or_rdev(md, config) {
-                        SizeOrDeviceId::Device(_, _) => 1usize,
-                        SizeOrDeviceId::Size(size) => size.len(),
-                    },
+                    SizeFormat::Binary | SizeFormat::Decimal => {
+                        match display_size_or_rdev(md, config) {
+                            SizeOrDeviceId::Device(_, _) => 1usize,
+                            SizeOrDeviceId::Size(size) => size.len(),
+                        }
+                    }
                 };
                 longest_block_size_len = block_size_len.max(longest_block_size_len);
             } else {
