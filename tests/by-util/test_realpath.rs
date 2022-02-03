@@ -149,8 +149,8 @@ fn test_realpath_dangling() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("nonexistent-file", "link");
     ucmd.arg("link")
-        .succeeds()
-        .stdout_only(at.plus_as_string("nonexistent-file\n"));
+        .fails()
+        .stderr_contains("realpath: link: No such file or directory");
 }
 
 #[test]
