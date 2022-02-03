@@ -1789,7 +1789,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                     .max(longest_size_len)
                     .max(longest_major_len + longest_minor_len + 2usize);
             }
-            longest_blk_len = longest_blk_len.max(blk_size_len)
+            longest_blk_len = longest_blk_len.max(blk_size_len);
         }
 
         #[cfg(not(unix))]
