@@ -238,7 +238,7 @@ impl MountInfo {
         }
     }
     #[cfg(windows)]
-    fn new(mut volume_name: String) -> Option<MountInfo> {
+    fn new(mut volume_name: String) -> Option<Self> {
         let mut dev_name_buf = [0u16; MAX_PATH];
         volume_name.pop();
         unsafe {
@@ -289,7 +289,7 @@ impl MountInfo {
         } else {
             None
         };
-        let mut mn_info = MountInfo {
+        let mut mn_info = Self {
             dev_id: volume_name,
             dev_name,
             fs_type: fs_type.unwrap_or_else(|| "".to_string()),
@@ -319,7 +319,7 @@ use std::ffi::CStr;
 ))]
 impl From<StatFs> for MountInfo {
     fn from(statfs: StatFs) -> Self {
-        let mut info = MountInfo {
+        let mut info = Self {
             dev_id: "".to_string(),
             dev_name: unsafe {
                 // spell-checker:disable-next-line
@@ -553,7 +553,7 @@ impl FsUsage {
         }
 
         let bytes_per_cluster = sectors_per_cluster as u64 * bytes_per_sector as u64;
-        FsUsage {
+        Self {
             // f_bsize      File system block size.
             blocksize: bytes_per_cluster as u64,
             // f_blocks - Total number of blocks on the file system, in units of f_frsize.
