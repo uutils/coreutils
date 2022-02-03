@@ -82,6 +82,33 @@ fn test_rejects_non_floats() {
 }
 
 #[test]
+fn test_accepts_option_argument_directly() {
+    new_ucmd!()
+        .arg("-s,")
+        .arg("2")
+        .succeeds()
+        .stdout_is("1,2\n");
+}
+
+#[test]
+fn test_option_with_detected_negative_argument() {
+    new_ucmd!()
+        .arg("-s,")
+        .args(&["-1", "2"])
+        .succeeds()
+        .stdout_is("-1,0,1,2\n");
+}
+
+#[test]
+fn test_negative_number_as_separator() {
+    new_ucmd!()
+        .arg("-s")
+        .args(&["-1", "2"])
+        .succeeds()
+        .stdout_is("1-12\n");
+}
+
+#[test]
 fn test_invalid_float() {
     new_ucmd!()
         .args(&["1e2.3"])
