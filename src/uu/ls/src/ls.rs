@@ -1232,6 +1232,8 @@ only ignore '.' and '..'.",
                 .value_name("when")
                 .possible_values(&["none", "auto", "always"])
                 .default_missing_value("always")
+                .require_equals(true)
+                .min_values(0)
                 .overrides_with_all(&[
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
