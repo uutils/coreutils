@@ -34,6 +34,8 @@ fn test_group_num() {
     assert_eq!("24", group_num("24"));
     assert_eq!("4", group_num("4"));
     assert_eq!("", group_num(""));
+    assert_eq!("-5", group_num("-5"));
+    assert_eq!("-1,234", group_num("-1234"));
 }
 
 #[cfg(test)]
