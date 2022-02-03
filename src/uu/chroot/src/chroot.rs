@@ -201,12 +201,12 @@ fn set_main_group(group: &str) -> UResult<()> {
 }
 
 #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
-fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
+fn set_groups(groups: &[libc::gid_t]) -> libc::c_int {
     unsafe { setgroups(groups.len() as libc::c_int, groups.as_ptr()) }
 }
 
 #[cfg(target_os = "linux")]
-fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
+fn set_groups(groups: &[libc::gid_t]) -> libc::c_int {
     unsafe { setgroups(groups.len() as libc::size_t, groups.as_ptr()) }
 }
 
@@ -220,7 +220,7 @@ fn set_groups_from_str(groups: &str) -> UResult<()> {
             };
             groups_vec.push(gid);
         }
-        let err = set_groups(groups_vec);
+        let err = set_groups(&groups_vec);
         if err != 0 {
             return Err(ChrootError::SetGroupsFailed(Error::last_os_error()).into());
         }

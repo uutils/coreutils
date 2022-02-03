@@ -144,7 +144,7 @@ impl Stat {
         #[cfg(windows)]
         let file_info = get_file_info(&path);
         #[cfg(windows)]
-        Ok(Stat {
+        Ok(Self {
             path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),

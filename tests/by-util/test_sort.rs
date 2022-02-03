@@ -1066,10 +1066,13 @@ fn test_separator_null() {
 #[test]
 fn test_output_is_input() {
     let input = "a\nb\nc\n";
-    let (at, mut cmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
     at.touch("file");
     at.append("file", input);
-    cmd.args(&["-m", "-u", "-o", "file", "file", "file", "file"])
+    scene
+        .ucmd_keepenv()
+        .args(&["-m", "-u", "-o", "file", "file", "file", "file"])
         .succeeds();
     assert_eq!(at.read("file"), input);
 }

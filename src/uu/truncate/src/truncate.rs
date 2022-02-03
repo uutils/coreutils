@@ -115,7 +115,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
         .override_usage(&usage[..])
         .after_help(&long_usage[..])
-        .get_matches_from(args);
+        .try_get_matches_from(args)
+        .map_err(|e| {
+            e.print().expect("Error writing clap::Error");
+            match e.kind {
+                clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion => 0,
+                _ => 1,
+            }
+        })?;
 
     let files: Vec<String> = matches
         .values_of(options::ARG_FILES)
