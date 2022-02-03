@@ -585,9 +585,9 @@ impl Config {
             }
         } else if let Some(field) = options.value_of(options::indicator_style::CLASSIFY) {
             match field {
-                "none" => IndicatorStyle::None,
-                "always" => IndicatorStyle::Classify,
-                "auto" => {
+                "never" | "no" | "none" => IndicatorStyle::None,
+                "always" | "yes" | "force" => IndicatorStyle::Classify,
+                "auto" | "tty" | "if-tty" => {
                     if atty::is(atty::Stream::Stdout) {
                         IndicatorStyle::Classify
                     } else {
@@ -1213,6 +1213,11 @@ only ignore '.' and '..'.",
                 ]),
         )
         .arg(
+            // The --classify flag can take an optional when argument to
+            // control its behavior from version 9 of GNU coreutils.
+            // There is currently an inconsistency where GNU coreutils allows only
+            // the long form of the flag to take the argument while we allow it
+            // for both the long and short form of the flag.
             Arg::new(options::indicator_style::CLASSIFY)
                 .short('F')
                 .long(options::indicator_style::CLASSIFY)
@@ -1230,7 +1235,9 @@ only ignore '.' and '..'.",
                 )
                 .takes_value(true)
                 .value_name("when")
-                .possible_values(&["none", "auto", "always"])
+                .possible_values(&[
+                    "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
+                ])
                 .default_missing_value("always")
                 .require_equals(true)
                 .min_values(0)

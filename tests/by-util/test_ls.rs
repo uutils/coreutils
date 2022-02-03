@@ -1559,6 +1559,8 @@ fn test_ls_indicator_style() {
         "--ind=slash",
         "--classify",
         "--classify=always",
+        "--classify=yes",
+        "--classify=force",
         "--class",
         "--file-type",
         "--file",
@@ -1569,7 +1571,13 @@ fn test_ls_indicator_style() {
     }
 
     // Classify, Indicator options should not contain any indicators when value is none.
-    for opt in ["--indicator-style=none", "--classify=none", "--ind=none"] {
+    for opt in [
+        "--indicator-style=none",
+        "--ind=none",
+        "--classify=none",
+        "--classify=never",
+        "--classify=no",
+    ] {
         // Verify that there are no indicators for any of the file types.
         scene
             .ucmd()
