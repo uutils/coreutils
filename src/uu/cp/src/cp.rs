@@ -1025,7 +1025,10 @@ fn copy_directory(
         if is_symlink && !options.dereference {
             copy_link(&path, &local_to_target, symlinked_files)?;
         } else if path.is_dir() && !local_to_target.exists() {
-            or_continue!(fs::create_dir_all(local_to_target));
+            if target.is_file() {
+                return Err("cannot overwrite non-directory with directory".into());
+            }
+            fs::create_dir_all(local_to_target)?;
         } else if !path.is_dir() {
             if preserve_hard_links {
                 let mut found_hard_link = false;
