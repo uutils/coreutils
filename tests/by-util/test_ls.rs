@@ -80,7 +80,207 @@ fn test_ls_ordering() {
         .stdout_matches(&Regex::new("some-dir1:\\ntotal 0").unwrap());
 }
 
-//#[cfg(all(feature = "mknod"))]
+#[cfg(all(feature = "truncate", feature = "dd"))]
+#[test]
+fn test_ls_allocation_size() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("some-dir1");
+    at.touch("some-dir1/empty-file");
+
+    scene
+        .ccmd("truncate")
+        .arg("-s")
+        .arg("4M")
+        .arg("some-dir1/file-with-holes")
+        .succeeds();
+
+    #[cfg(unix)]
+    {
+        scene
+            .ucmd()
+            .arg("-s1")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_is("total 0\n0 empty-file\n0 file-with-holes\n");
+
+        scene
+            .ucmd()
+            .arg("-sl")
+            .arg("some-dir1")
+            .succeeds()
+            // block size is 0 whereas size/len is 4194304
+            .stdout_contains("4194304");
+
+        // fill empty file with zeros
+        scene
+            .ccmd("dd")
+            .arg("--if=/dev/zero")
+            .arg("--of=some-dir1/file-with-holes")
+            .arg("bs=1024")
+            .arg("count=4096")
+            .succeeds();
+
+        scene
+            .ucmd()
+            .arg("-s1")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("0 empty-file")
+            .stdout_contains("4096 file-with-holes");
+
+        // Test alignment of different block sized files
+        let res = scene.ucmd().arg("-si1").arg("some-dir1").succeeds();
+
+        let empty_file_len = String::from_utf8(res.stdout().to_owned())
+            .ok()
+            .unwrap()
+            .lines()
+            .nth(1)
+            .unwrap()
+            .strip_suffix("empty-file")
+            .unwrap()
+            .len();
+
+        let file_with_holes_len = String::from_utf8(res.stdout().to_owned())
+            .ok()
+            .unwrap()
+            .lines()
+            .nth(2)
+            .unwrap()
+            .strip_suffix("file-with-holes")
+            .unwrap()
+            .len();
+
+        assert_eq!(empty_file_len, file_with_holes_len);
+
+        scene
+            .ucmd()
+            .env("LS_BLOCK_SIZE", "8K")
+            .env("BLOCK_SIZE", "4K")
+            .arg("-s1")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 512")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("512 file-with-holes");
+
+        scene
+            .ucmd()
+            .env("BLOCK_SIZE", "4K")
+            .arg("-s1")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 1024")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("1024 file-with-holes");
+
+        scene
+            .ucmd()
+            .env("BLOCK_SIZE", "4K")
+            .arg("-s1h")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 4.0M")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("4.0M file-with-holes");
+
+        scene
+            .ucmd()
+            .env("BLOCK_SIZE", "4K")
+            .arg("-s1")
+            .arg("--si")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 4.2M")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("4.2M file-with-holes");
+
+        scene
+            .ucmd()
+            .env("BLOCK_SIZE", "4096")
+            .arg("-s1")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 1024")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("1024 file-with-holes");
+
+        scene
+            .ucmd()
+            .env("POSIXLY_CORRECT", "true")
+            .arg("-s1")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 8192")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("8192 file-with-holes");
+
+        // -k should make 'ls' ignore the env var
+        scene
+            .ucmd()
+            .env("BLOCK_SIZE", "4K")
+            .arg("-s1k")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 4096")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("4096 file-with-holes");
+
+        // but manually specified blocksize overrides -k
+        scene
+            .ucmd()
+            .arg("-s1k")
+            .arg("--block-size=4K")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 1024")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("1024 file-with-holes");
+
+        scene
+            .ucmd()
+            .arg("-s1")
+            .arg("--block-size=4K")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 1024")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("1024 file-with-holes");
+
+        // si option should always trump the human-readable option
+        scene
+            .ucmd()
+            .arg("-s1h")
+            .arg("--si")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 4.2M")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("4.2M file-with-holes");
+
+        scene
+            .ucmd()
+            .arg("-s1")
+            .arg("--block-size=human-readable")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 4.0M")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("4.0M file-with-holes");
+
+        scene
+            .ucmd()
+            .arg("-s1")
+            .arg("--block-size=si")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 4.2M")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("4.2M file-with-holes");
+    }
+}
+
 #[test]
 fn test_ls_devices() {
     let scene = TestScenario::new(util_name!());
@@ -108,7 +308,7 @@ fn test_ls_devices() {
             .stdout_matches(&Regex::new("[^ ] 1, 3 [^ ]").unwrap());
     }
 
-    // Regex tests alignment against a file (stdout is a link to a tty)
+    // Tests display alignment against a file (stdout is a link to a tty)
     #[cfg(unix)]
     {
         let res = scene

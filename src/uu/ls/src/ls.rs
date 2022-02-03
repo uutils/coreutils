@@ -40,6 +40,7 @@ use std::{
 };
 use std::{ffi::OsString, fs::ReadDir};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
+use uucore::parse_size::parse_size;
 use uucore::{
     display::Quotable,
     error::{set_exit_code, UError, UResult},
@@ -91,8 +92,11 @@ pub mod options {
     }
 
     pub mod size {
+        pub static ALLOCATION_SIZE: &str = "size";
+        pub static BLOCK_SIZE: &str = "block-size";
         pub static HUMAN_READABLE: &str = "human-readable";
         pub static SI: &str = "si";
+        pub static KIBIBYTES: &str = "kibibytes";
     }
 
     pub mod quoting {
@@ -137,20 +141,25 @@ pub mod options {
     pub static CONTEXT: &str = "context";
 }
 
-const DEFAULT_TERM_WIDTH: u16 = 80;
+const DEFAULT_TERM_WIDTH: u16 = 80u16;
+const DEFAULT_BLOCK_SIZE: usize = 1024usize;
+const POSIXLY_CORRECT_BLOCK_SIZE: usize = 512usize;
 
 #[derive(Debug)]
 enum LsError {
     InvalidLineWidth(String),
     IOError(std::io::Error),
     IOErrorContext(std::io::Error, PathBuf),
+    ParseError(String),
 }
 
 impl UError for LsError {
     fn code(&self) -> i32 {
         match self {
             LsError::InvalidLineWidth(_) => 2,
-            LsError::IOError(_) | LsError::IOErrorContext(_, _) => 1,
+            LsError::IOError(_) => 1,
+            LsError::IOErrorContext(_, _) => 1,
+            LsError::ParseError(_) => 1,
         }
     }
 }
@@ -160,6 +169,7 @@ impl Error for LsError {}
 impl Display for LsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            LsError::ParseError(s) => write!(f, "unable to parse value: {}", s.quote()),
             LsError::InvalidLineWidth(s) => write!(f, "invalid line width: {}", s.quote()),
             LsError::IOError(e) => write!(f, "general io error: {}", e),
             LsError::IOErrorContext(e, p) => {
@@ -305,6 +315,8 @@ struct Config {
     inode: bool,
     color: Option<LsColors>,
     long: LongFormat,
+    alloc_size: bool,
+    block_size: Option<usize>,
     width: u16,
     quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
@@ -323,6 +335,7 @@ struct LongFormat {
 }
 
 struct PaddingCollection {
+    longest_block_size_len: usize,
     #[cfg(unix)]
     longest_inode_len: usize,
     longest_link_count_len: usize,
@@ -337,6 +350,40 @@ struct PaddingCollection {
 }
 
 impl Config {
+    /// Parse a SIZE string into a number of bytes.
+    /// A size string comprises an integer and an optional unit.
+    /// The unit may be k, K, m, M, g, G, t, T, P, E, Z, Y (powers of 1024), or b which is 1.
+    fn parse_byte_count(input: &str) -> Option<usize> {
+        // GNU sort (8.32)   valid: 1b,        k, K, m, M, g, G, t, T, P, E, Z, Y
+        // GNU sort (8.32) invalid:  b, B, 1B,                         p, e, z, y
+        const ALLOW_LIST: &[char] = &[
+            'b', 'k', 'K', 'm', 'M', 'g', 'G', 't', 'T', 'P', 'E', 'Z', 'Y',
+        ];
+
+        let start_string = input
+            .trim_start_matches(|c: char| !c.is_digit(10))
+            .to_string();
+        let mut trimmed_string = start_string.clone();
+
+        for (pos, c) in start_string.char_indices() {
+            if c.is_digit(10) {
+                continue;
+            }
+            if ALLOW_LIST.contains(&c) {
+                let (ts, _) = start_string.split_at(pos + 1);
+                trimmed_string = ts.to_owned();
+            }
+            break;
+        }
+
+        if let Ok(parsed_size) = parse_size(&trimmed_string) {
+            Some(parsed_size)
+        } else {
+            show!(LsError::ParseError(trimmed_string.to_string()));
+            None
+        }
+    }
+
     #[allow(clippy::cognitive_complexity)]
     fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let context = options.is_present(options::CONTEXT);
@@ -469,12 +516,77 @@ impl Config {
             None
         };
 
-        let size_format = if options.is_present(options::size::HUMAN_READABLE) {
-            SizeFormat::Binary
-        } else if options.is_present(options::size::SI) {
-            SizeFormat::Decimal
+        let mut size_format = SizeFormat::Bytes;
+
+        let block_size = if options.is_present(options::size::BLOCK_SIZE)
+            && !options
+                .value_of(options::size::BLOCK_SIZE)
+                .unwrap()
+                .eq("si")
+            && !options
+                .value_of(options::size::BLOCK_SIZE)
+                .unwrap()
+                .eq("human-readable")
+        {
+            Self::parse_byte_count(options.value_of(options::size::BLOCK_SIZE).unwrap())
+        } else if (options.is_present(options::size::BLOCK_SIZE)
+            && options
+                .value_of(options::size::BLOCK_SIZE)
+                .unwrap()
+                .eq("si"))
+            || options.is_present(options::size::SI)
+        {
+            size_format = SizeFormat::Decimal;
+            None
+        } else if (options.is_present(options::size::BLOCK_SIZE)
+            && options
+                .value_of(options::size::BLOCK_SIZE)
+                .unwrap()
+                .eq("human-readable"))
+            || options.is_present(options::size::HUMAN_READABLE)
+        {
+            size_format = SizeFormat::Binary;
+            None
+        } else if options.is_present(options::size::KIBIBYTES) {
+            None
+        } else if let Some(x) = &std::env::var_os("LS_BLOCK_SIZE") {
+            if !x.eq(&OsString::from("si")) && !x.eq(&OsString::from("si")) {
+                Self::parse_byte_count(&x.to_string_lossy())
+            } else if x.eq(&OsString::from("si")) {
+                size_format = SizeFormat::Decimal;
+                None
+            } else if x.eq(&OsString::from("human-readable")) {
+                size_format = SizeFormat::Binary;
+                None
+            } else {
+                None
+            }
+        } else if let Some(x) = &std::env::var_os("BLOCK_SIZE") {
+            if !x.eq(&OsString::from("si")) && !x.eq(&OsString::from("si")) {
+                Self::parse_byte_count(&x.to_string_lossy())
+            } else if x.eq(&OsString::from("si")) {
+                size_format = SizeFormat::Decimal;
+                None
+            } else if x.eq(&OsString::from("human-readable")) {
+                size_format = SizeFormat::Binary;
+                None
+            } else {
+                None
+            }
+        } else if std::env::var_os("POSIXLY_CORRECT").is_some() {
+            if std::env::var_os("POSIXLY_CORRECT")
+                .unwrap()
+                .eq(&OsString::from("true"))
+                || std::env::var_os("POSIXLY_CORRECT")
+                    .unwrap()
+                    .eq(&OsString::from("1"))
+            {
+                Some(POSIXLY_CORRECT_BLOCK_SIZE)
+            } else {
+                None
+            }
         } else {
-            SizeFormat::Bytes
+            None
         };
 
         let long = {
@@ -525,8 +637,18 @@ impl Config {
             !atty::is(atty::Stream::Stdout)
         };
 
-        let quoting_style = if let Some(style) = options.value_of(options::QUOTING_STYLE) {
-            match style {
+        let opt_quoting_style = if let Some(cmd_line_qs) = options.value_of(options::QUOTING_STYLE)
+        {
+            Some(cmd_line_qs.to_owned())
+        } else if std::env::var_os("QUOTING_STYLE").is_some() {
+            Self::parse_byte_count(&std::env::var_os("QUOTING_STYLE").unwrap().to_string_lossy())
+                .map(|parsed| parsed.to_string())
+        } else {
+            None
+        };
+
+        let quoting_style = if let Some(style) = opt_quoting_style {
+            match style.as_str() {
                 "literal" => QuotingStyle::Literal { show_control },
                 "shell" => QuotingStyle::Shell {
                     escape: false,
@@ -675,6 +797,8 @@ impl Config {
             #[cfg(unix)]
             inode: options.is_present(options::INODE),
             long,
+            alloc_size: options.is_present(options::size::ALLOCATION_SIZE),
+            block_size,
             width,
             quoting_style,
             indicator_style,
@@ -1141,9 +1265,23 @@ only ignore '.' and '..'.",
                 .overrides_with(options::size::SI),
         )
         .arg(
+            Arg::new(options::size::KIBIBYTES)
+                .short('k')
+                .long(options::size::KIBIBYTES)
+                .help("default to 1024-byte blocks for file system usage; used only with -s and per directory totals"),
+        )
+        .arg(
             Arg::new(options::size::SI)
                 .long(options::size::SI)
                 .help("Print human readable file sizes using powers of 1000 instead of 1024."),
+        )
+        .arg(
+            Arg::new(options::size::BLOCK_SIZE)
+                .long(options::size::BLOCK_SIZE)
+                .takes_value(true)
+                .require_equals(true)
+                .value_name("BLOCK_SIZE")
+                .help("scale sizes by SIZE when printing them"),
         )
         .arg(
             Arg::new(options::INODE)
@@ -1173,6 +1311,12 @@ only ignore '.' and '..'.",
                 .help("Assume that the terminal is COLS columns wide.")
                 .value_name("COLS")
                 .takes_value(true),
+        )
+        .arg(
+            Arg::new(options::size::ALLOCATION_SIZE)
+                .short('s')
+                .long(options::size::ALLOCATION_SIZE)
+                .help("print the allocated size of each file, in blocks"),
         )
         .arg(
             Arg::new(options::COLOR)
@@ -1587,7 +1731,7 @@ fn enter_directory(
     entries.append(&mut vec_path_data);
 
     // Print total after any error display
-    if config.format == Format::Long {
+    if config.format == Format::Long || config.alloc_size {
         display_total(&entries, config, out);
     }
 
@@ -1628,7 +1772,7 @@ fn display_dir_entry_size(
     entry: &PathData,
     config: &Config,
     out: &mut BufWriter<std::io::Stdout>,
-) -> (usize, usize, usize, usize, usize, usize, usize) {
+) -> (usize, usize, usize, usize, usize, usize) {
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
     if let Some(md) = entry.md(out) {
         let (size_len, major_len, minor_len) = match display_size_or_rdev(md, config) {
@@ -1646,10 +1790,9 @@ fn display_dir_entry_size(
             size_len,
             major_len,
             minor_len,
-            display_inode(md).len(),
         )
     } else {
-        (0, 0, 0, 0, 0, 0, 0)
+        (0, 0, 0, 0, 0, 0)
     }
 }
 
@@ -1661,15 +1804,64 @@ fn pad_right(string: &str, count: usize) -> String {
     format!("{:<width$}", string, width = count)
 }
 
+fn size_to_blocks(size: u64, config: &Config) -> u64 {
+    if config.block_size.is_some() {
+        size / config.block_size.unwrap() as u64
+    } else {
+        size / DEFAULT_BLOCK_SIZE as u64
+    }
+}
+
 fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
     let mut total_size = 0;
     for item in items {
-        total_size += item
-            .md(out)
-            .as_ref()
-            .map_or(0, |md| get_block_size(md, config));
+        total_size += item.md(out).as_ref().map_or(0, |md| get_block_size(md));
     }
-    let _ = writeln!(out, "total {}", display_size(total_size, config));
+    let display_total = match config.size_format {
+        SizeFormat::Bytes => display_size(size_to_blocks(total_size, config), config),
+        _ => display_size(total_size, config),
+    };
+    let _ = writeln!(out, "total {}", display_total);
+}
+
+fn display_more_info(
+    item: &PathData,
+    padding: &PaddingCollection,
+    config: &Config,
+    out: &mut BufWriter<Stdout>,
+) -> String {
+    let mut result = String::new();
+    #[cfg(unix)]
+    {
+        if config.inode {
+            let i = if let Some(md) = item.md(out) {
+                get_inode(md)
+            } else {
+                "?".to_owned()
+            };
+            result.push_str(&format!("{} ", pad_left(&i, padding.longest_inode_len)));
+        }
+    }
+    if config.alloc_size {
+        let s = if let Some(md) = item.md(out) {
+            match config.size_format {
+                SizeFormat::Bytes => {
+                    display_size(size_to_blocks(get_block_size(md), config), config)
+                }
+                _ => match display_size_or_rdev(md, config) {
+                    SizeOrDeviceId::Device(_, _) => "0".to_string(),
+                    SizeOrDeviceId::Size(size) => size,
+                },
+            }
+        } else {
+            "?".to_owned()
+        };
+        result.push_str(&format!(
+            "{} ",
+            pad_left(&s, padding.longest_block_size_len),
+        ));
+    }
+    result
 }
 
 fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
@@ -1677,10 +1869,43 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
     // option, print the security context to the left of the size column.
 
+    #[cfg(unix)]
+    let mut longest_inode_len = 1;
+    #[cfg(unix)]
+    if config.inode {
+        for item in items {
+            let inode_len = if let Some(md) = item.md(out) {
+                display_inode(md).len()
+            } else {
+                continue;
+            };
+            longest_inode_len = inode_len.max(longest_inode_len);
+        }
+    }
+
+    let mut longest_block_size_len = 1;
+    if config.alloc_size {
+        for item in items {
+            if let Some(md) = item.md(out) {
+                let block_size_len = match config.size_format {
+                    SizeFormat::Bytes => {
+                        display_size(size_to_blocks(get_block_size(md), config), config).len()
+                    }
+                    _ => match display_size_or_rdev(md, config) {
+                        SizeOrDeviceId::Device(_, _) => 1usize,
+                        SizeOrDeviceId::Size(size) => size.len(),
+                    },
+                };
+                longest_block_size_len = block_size_len.max(longest_block_size_len);
+            } else {
+                continue;
+            };
+        }
+    }
+
     if config.format == Format::Long {
         #[cfg(unix)]
         let (
-            mut longest_inode_len,
             mut longest_link_count_len,
             mut longest_uname_len,
             mut longest_group_len,
@@ -1688,7 +1913,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             mut longest_size_len,
             mut longest_major_len,
             mut longest_minor_len,
-        ) = (1, 1, 1, 1, 1, 1, 1, 1);
+        ) = (1, 1, 1, 1, 1, 1, 1);
 
         #[cfg(not(unix))]
         let (
@@ -1702,9 +1927,8 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         #[cfg(unix)]
         for item in items {
             let context_len = item.security_context.len();
-            let (link_count_len, uname_len, group_len, size_len, major_len, minor_len, inode_len) =
+            let (link_count_len, uname_len, group_len, size_len, major_len, minor_len) =
                 display_dir_entry_size(item, config, out);
-            longest_inode_len = inode_len.max(longest_inode_len);
             longest_link_count_len = link_count_len.max(longest_link_count_len);
             longest_uname_len = uname_len.max(longest_uname_len);
             longest_group_len = group_len.max(longest_group_len);
@@ -1727,15 +1951,8 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         #[cfg(not(unix))]
         for item in items {
             let context_len = item.security_context.len();
-            let (
-                link_count_len,
-                uname_len,
-                group_len,
-                size_len,
-                _major_len,
-                _minor_len,
-                _inode_len,
-            ) = display_dir_entry_size(item, config, out);
+            let (link_count_len, uname_len, group_len, size_len, _major_len, _minor_len) =
+                display_dir_entry_size(item, config, out);
             longest_link_count_len = link_count_len.max(longest_link_count_len);
             longest_uname_len = uname_len.max(longest_uname_len);
             longest_group_len = group_len.max(longest_group_len);
@@ -1746,24 +1963,31 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         }
 
         for item in items {
-            display_item_long(
-                item,
-                &PaddingCollection {
-                    #[cfg(unix)]
-                    longest_inode_len,
-                    longest_link_count_len,
-                    longest_uname_len,
-                    longest_group_len,
-                    longest_context_len,
-                    longest_size_len,
-                    #[cfg(unix)]
-                    longest_major_len,
-                    #[cfg(unix)]
-                    longest_minor_len,
-                },
-                config,
-                out,
-            );
+            let padding = &PaddingCollection {
+                longest_block_size_len,
+                #[cfg(unix)]
+                longest_inode_len,
+                longest_link_count_len,
+                longest_uname_len,
+                longest_group_len,
+                longest_context_len,
+                longest_size_len,
+                #[cfg(unix)]
+                longest_major_len,
+                #[cfg(unix)]
+                longest_minor_len,
+            };
+            #[cfg(unix)]
+            if config.inode || config.alloc_size {
+                let more_info = display_more_info(item, padding, config, out);
+                let _ = write!(out, "{}", more_info);
+            }
+            #[cfg(not(unix))]
+            if config.alloc_size {
+                let more_info = display_more_info(item, padding, config, out);
+                let _ = write!(out, "{}", more_info);
+            }
+            display_item_long(item, padding, config, out);
         }
     } else {
         let mut longest_context_len = 1;
@@ -1777,27 +2001,30 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             None
         };
 
-        #[cfg(not(unix))]
-        let longest_inode_len = 1;
-        #[cfg(unix)]
-        let mut longest_inode_len = 1;
-        #[cfg(unix)]
-        if config.inode {
-            for item in items {
-                let inode_len = if let Some(md) = item.md(out) {
-                    display_inode(md).len()
-                } else {
-                    continue;
-                };
-                longest_inode_len = inode_len.max(longest_inode_len);
-            }
+        let padding = PaddingCollection {
+            longest_block_size_len,
+            #[cfg(unix)]
+            longest_inode_len,
+            longest_link_count_len: 0usize,
+            longest_uname_len: 0usize,
+            longest_group_len: 0usize,
+            longest_context_len: 0usize,
+            longest_size_len: 0usize,
+            #[cfg(unix)]
+            longest_major_len: 0usize,
+            #[cfg(unix)]
+            longest_minor_len: 0usize,
+        };
+
+        let mut names_vec = Vec::new();
+
+        for i in items {
+            let more_info = display_more_info(i, &padding, config, out);
+            let cell = display_file_name(i, config, prefix_context, more_info, out);
+            names_vec.push(cell);
         }
 
-        let names: std::vec::IntoIter<Cell> = items
-            .iter()
-            .map(|i| display_file_name(i, config, prefix_context, longest_inode_len, out))
-            .collect::<Vec<Cell>>()
-            .into_iter();
+        let names = names_vec.into_iter();
 
         match config.format {
             Format::Columns => display_grid(names, config.width, Direction::TopToBottom, out),
@@ -1835,23 +2062,17 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
     }
 }
 
-fn get_block_size(md: &Metadata, config: &Config) -> u64 {
+fn get_block_size(md: &Metadata) -> u64 {
     /* GNU ls will display sizes in terms of block size
        md.len() will differ from this value when the file has some holes
     */
     #[cfg(unix)]
     {
-        // hard-coded for now - enabling setting this remains a TODO
-        let ls_block_size = 1024;
-        match config.size_format {
-            SizeFormat::Binary | SizeFormat::Decimal => md.blocks() * 512,
-            SizeFormat::Bytes => md.blocks() * 512 / ls_block_size,
-        }
+        md.blocks() * 512
     }
 
     #[cfg(not(unix))]
     {
-        let _ = config;
         // no way to get block size for windows, fall-back to file size
         md.len()
     }
@@ -1933,17 +2154,6 @@ fn display_item_long(
     out: &mut BufWriter<Stdout>,
 ) {
     if let Some(md) = item.md(out) {
-        #[cfg(unix)]
-        {
-            if config.inode {
-                let _ = write!(
-                    out,
-                    "{} ",
-                    pad_left(&get_inode(md), padding.longest_inode_len),
-                );
-            }
-        }
-
         let _ = write!(
             out,
             "{}{} {}",
@@ -2022,18 +2232,10 @@ fn display_item_long(
             }
         };
 
-        let dfn = display_file_name(item, config, None, 0, out).contents;
+        let dfn = display_file_name(item, config, None, "".to_owned(), out).contents;
 
         let _ = writeln!(out, " {} {}", display_date(md, config), dfn);
     } else {
-        // this 'else' is expressly for the case of a dangling symlink/restricted file
-        #[cfg(unix)]
-        {
-            if config.inode {
-                let _ = write!(out, "{} ", pad_left("?", padding.longest_inode_len),);
-            }
-        }
-
         #[cfg(unix)]
         let leading_char = {
             if let Some(Some(ft)) = item.ft.get() {
@@ -2103,7 +2305,7 @@ fn display_item_long(
             let _ = write!(out, " {}", pad_right("?", padding.longest_uname_len));
         }
 
-        let dfn = display_file_name(item, config, None, 0, out).contents;
+        let dfn = display_file_name(item, config, None, "".to_owned(), out).contents;
         let date_len = 12;
 
         let _ = writeln!(
@@ -2118,7 +2320,7 @@ fn display_item_long(
 
 #[cfg(unix)]
 fn get_inode(metadata: &Metadata) -> String {
-    format!("{:8}", metadata.ino())
+    format!("{}", metadata.ino())
 }
 
 // Currently getpwuid is `linux` target only. If it's broken out into
@@ -2294,8 +2496,14 @@ fn display_size_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId 
             return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
         }
     }
-
-    SizeOrDeviceId::Size(display_size(metadata.len(), config))
+    if config.block_size.is_some() {
+        SizeOrDeviceId::Size(display_size(
+            get_block_size(metadata) / config.block_size.unwrap() as u64,
+            config,
+        ))
+    } else {
+        SizeOrDeviceId::Size(display_size(metadata.len(), config))
+    }
 }
 
 fn display_size(size: u64, config: &Config) -> String {
@@ -2361,7 +2569,7 @@ fn display_file_name(
     path: &PathData,
     config: &Config,
     prefix_context: Option<usize>,
-    longest_inode_len: usize,
+    more_info: String,
     out: &mut BufWriter<Stdout>,
 ) -> Cell {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
@@ -2377,18 +2585,11 @@ fn display_file_name(
         }
     }
 
-    #[cfg(unix)]
-    {
-        if config.inode && config.format != Format::Long {
-            let inode = match path.md(out) {
-                Some(md) => pad_left(&get_inode(md), longest_inode_len),
-                None => pad_left("?", longest_inode_len),
-            };
-            // increment width here b/c name was given colors and name.width() is now the wrong
-            // size for display
-            width += inode.width();
-            name = inode + " " + &name;
-        }
+    if config.format != Format::Long && !more_info.is_empty() {
+        // increment width here b/c name was given colors and name.width() is now the wrong
+        // size for display
+        width += more_info.width();
+        name = more_info + &name;
     }
 
     if config.indicator_style != IndicatorStyle::None {
@@ -2514,16 +2715,9 @@ fn display_symlink_count(metadata: &Metadata) -> String {
     metadata.nlink().to_string()
 }
 
-#[allow(unused_variables)]
+#[cfg(unix)]
 fn display_inode(metadata: &Metadata) -> String {
-    #[cfg(unix)]
-    {
-        get_inode(metadata)
-    }
-    #[cfg(not(unix))]
-    {
-        "".to_string()
-    }
+    get_inode(metadata)
 }
 
 // This returns the SELinux security context as UTF8 `String`.
