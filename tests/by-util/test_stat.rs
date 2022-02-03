@@ -36,6 +36,12 @@ fn test_group_num() {
     assert_eq!("", group_num(""));
 }
 
+#[test]
+#[should_panic]
+fn test_group_num_panic_if_invalid_numeric_characters() {
+    group_num("³³³³³");
+}
+
 #[cfg(test)]
 mod test_generate_tokens {
     use super::*;
