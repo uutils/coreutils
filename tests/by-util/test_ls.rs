@@ -1558,6 +1558,7 @@ fn test_ls_indicator_style() {
         "--indicator-style=slash",
         "--ind=slash",
         "--classify",
+        "--classify=always",
         "--class",
         "--file-type",
         "--file",

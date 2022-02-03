@@ -583,8 +583,19 @@ impl Config {
                 "slash" => IndicatorStyle::Slash,
                 &_ => IndicatorStyle::None,
             }
-        } else if options.is_present(options::indicator_style::CLASSIFY) {
-            IndicatorStyle::Classify
+        } else if let Some(field) = options.value_of(options::indicator_style::CLASSIFY) {
+            match field {
+                "none" => IndicatorStyle::None,
+                "always" => IndicatorStyle::Classify,
+                "auto" => {
+                    if atty::is(atty::Stream::Stdout) {
+                        IndicatorStyle::Classify
+                    } else {
+                        IndicatorStyle::None
+                    }
+                }
+                &_ => IndicatorStyle::None,
+            }
         } else if options.is_present(options::indicator_style::SLASH) {
             IndicatorStyle::Slash
         } else if options.is_present(options::indicator_style::FILE_TYPE) {
@@ -1209,8 +1220,18 @@ only ignore '.' and '..'.",
                     "Append a character to each file name indicating the file type. Also, for \
                 regular files that are executable, append '*'. The file type indicators are \
                 '/' for directories, '@' for symbolic links, '|' for FIFOs, '=' for sockets, \
-                '>' for doors, and nothing for regular files.",
+                '>' for doors, and nothing for regular files. when may be omitted, or one of:\n\
+                    \tnone - Do not classify. This is the default.\n\
+                    \tauto - Only classify if standard output is a terminal.\n\
+                    \talways - Always classify.\n\
+                Specifying --classify and no when is equivalent to --classify=always. This will not follow\
+                symbolic links listed on the command line unless the --dereference-command-line (-H),\
+                --dereference (-L), or --dereference-command-line-symlink-to-dir options are specified.",
                 )
+                .takes_value(true)
+                .value_name("when")
+                .possible_values(&["none", "auto", "always"])
+                .default_missing_value("always")
                 .overrides_with_all(&[
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
