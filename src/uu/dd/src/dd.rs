@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat seekable
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, wlen, wstat seekable
 
 mod datastructures;
 use datastructures::*;
@@ -16,27 +16,23 @@ use parseargs::Matches;
 mod conversion_tables;
 use conversion_tables::*;
 
+mod progress;
+use progress::{gen_prog_updater, ProgUpdate, ReadStat, StatusLevel, WriteStat};
+
 use std::cmp;
 use std::convert::TryInto;
 use std::env;
-#[cfg(target_os = "linux")]
-use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, Write};
 #[cfg(target_os = "linux")]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 use std::sync::mpsc;
-#[cfg(target_os = "linux")]
-use std::sync::{atomic::AtomicUsize, atomic::Ordering, Arc};
 use std::thread;
 use std::time;
 
-use byte_unit::Byte;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use gcd::Gcd;
-#[cfg(target_os = "linux")]
-use signal_hook::consts::signal;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::show_error;
@@ -351,8 +347,8 @@ where
     fn print_stats<R: Read>(&self, i: &Input<R>, prog_update: &ProgUpdate) {
         match i.print_level {
             Some(StatusLevel::None) => {}
-            Some(StatusLevel::Noxfer) => print_io_lines(prog_update),
-            Some(StatusLevel::Progress) | None => print_transfer_stats(prog_update),
+            Some(StatusLevel::Noxfer) => prog_update.print_io_lines(),
+            Some(StatusLevel::Progress) | None => prog_update.print_transfer_stats(),
         }
     }
 
@@ -768,115 +764,6 @@ fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> std::io::Result<(Read
         Ok((rstat, buf))
     } else {
         Ok((rstat, buf))
-    }
-}
-
-// Print io lines of a status update:
-// <complete>+<partial> records in
-// <complete>+<partial> records out
-fn print_io_lines(update: &ProgUpdate) {
-    eprintln!(
-        "{}+{} records in",
-        update.read_stat.reads_complete, update.read_stat.reads_partial
-    );
-    eprintln!(
-        "{}+{} records out",
-        update.write_stat.writes_complete, update.write_stat.writes_partial
-    );
-    match update.read_stat.records_truncated {
-        0 => {}
-        1 => eprintln!("1 truncated record"),
-        n => eprintln!("{} truncated records", n),
-    }
-}
-// Print the progress line of a status update:
-// <byte-count> bytes (<base-1000-size>, <base-2-size>) copied, <time> s, <base-2-rate>/s
-fn make_prog_line(update: &ProgUpdate) -> String {
-    let btotal_metric = Byte::from_bytes(update.write_stat.bytes_total)
-        .get_appropriate_unit(false)
-        .format(0);
-    let btotal_bin = Byte::from_bytes(update.write_stat.bytes_total)
-        .get_appropriate_unit(true)
-        .format(0);
-    let safe_millis = cmp::max(1, update.duration.as_millis());
-    let transfer_rate = Byte::from_bytes(1000 * (update.write_stat.bytes_total / safe_millis))
-        .get_appropriate_unit(false)
-        .format(1);
-
-    format!(
-        "{} bytes ({}, {}) copied, {:.1} s, {}/s",
-        update.write_stat.bytes_total,
-        btotal_metric,
-        btotal_bin,
-        update.duration.as_secs_f64(),
-        transfer_rate
-    )
-}
-// Print progress line only. Overwrite the current line.
-fn reprint_prog_line(update: &ProgUpdate) {
-    eprint!("\r{}", make_prog_line(update));
-}
-// Print progress line only. Print as a new line.
-fn print_prog_line(update: &ProgUpdate) {
-    eprintln!("{}", make_prog_line(update));
-}
-// Print both io lines and progress line.
-fn print_transfer_stats(update: &ProgUpdate) {
-    print_io_lines(update);
-    print_prog_line(update);
-}
-
-// Generate a progress updater that tracks progress, receives updates, and responds to progress update requests (signals).
-// Signals:
-// - SIGUSR1: Trigger progress line reprint. Linux (GNU & BSD) only.
-// - TODO: SIGINFO: Trigger progress line reprint. BSD-style Linux only.
-fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, print_level: Option<StatusLevel>) -> impl Fn() {
-    // --------------------------------------------------------------
-    #[cfg(target_os = "linux")]
-    const SIGUSR1_USIZE: usize = signal::SIGUSR1 as usize;
-    // --------------------------------------------------------------
-    #[cfg(target_os = "linux")]
-    fn posixly_correct() -> bool {
-        env::var("POSIXLY_CORRECT").is_ok()
-    }
-    #[cfg(target_os = "linux")]
-    fn register_linux_signal_handler(sigval: Arc<AtomicUsize>) -> Result<(), Box<dyn Error>> {
-        if !posixly_correct() {
-            signal_hook::flag::register_usize(signal::SIGUSR1, sigval, SIGUSR1_USIZE)?;
-        }
-
-        Ok(())
-    }
-    // --------------------------------------------------------------
-    move || {
-        #[cfg(target_os = "linux")]
-        let sigval = Arc::new(AtomicUsize::new(0));
-
-        #[cfg(target_os = "linux")]
-        register_linux_signal_handler(sigval.clone()).unwrap_or_else(|e| {
-            if Some(StatusLevel::None) != print_level {
-                eprintln!(
-                    "Internal dd Warning: Unable to register signal handler \n\t{}",
-                    e
-                );
-            }
-        });
-
-        let mut progress_as_secs = 0;
-        while let Ok(update) = rx.recv() {
-            // (Re)print status line if progress is requested.
-            if Some(StatusLevel::Progress) == print_level
-                && update.duration.as_secs() >= progress_as_secs
-            {
-                reprint_prog_line(&update);
-                progress_as_secs = update.duration.as_secs() + 1;
-            }
-            // Handle signals
-            #[cfg(target_os = "linux")]
-            if let SIGUSR1_USIZE = sigval.load(Ordering::Relaxed) {
-                print_transfer_stats(&update);
-            };
-        }
     }
 }
 
