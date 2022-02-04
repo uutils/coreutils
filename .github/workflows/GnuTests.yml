@@ -66,7 +66,7 @@ jobs:
       run: |
         ## Install dependencies
         sudo apt-get update
-        sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify jq
+        sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify jq valgrind
     - name: Add various locales
       shell: bash
       run: |
