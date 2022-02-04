@@ -32,7 +32,7 @@ static OPT_NUMERIC_SUFFIXES: &str = "numeric-suffixes";
 static OPT_SUFFIX_LENGTH: &str = "suffix-length";
 static OPT_DEFAULT_SUFFIX_LENGTH: &str = "0";
 static OPT_VERBOSE: &str = "verbose";
-//The ---io-blksize parameter is consumed and ignored. 
+//The ---io-blksize parameter is consumed and ignored.
 //The parameter is included to make GNU coreutils tests pass.
 static OPT_IO_BLKSIZE: &str = "-io-blksize";
 
@@ -147,7 +147,7 @@ pub fn uu_app<'a>() -> App<'a> {
                 .long(OPT_IO_BLKSIZE)
                 .alias(OPT_IO_BLKSIZE)
                 .takes_value(true)
-                .hide(true)
+                .hide(true),
         )
         .arg(
             Arg::new(ARG_INPUT)

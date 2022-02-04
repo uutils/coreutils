@@ -449,7 +449,8 @@ fn test_split_number_with_io_blksize() {
         at.open(f).read_to_string(&mut s).unwrap();
         s
     };
-    ucmd.args(&["-n", "5", "asciilowercase.txt", "---io-blksize", "1024"]).succeeds();
+    ucmd.args(&["-n", "5", "asciilowercase.txt", "---io-blksize", "1024"])
+        .succeeds();
     assert_eq!(file_read("xaa"), "abcde");
     assert_eq!(file_read("xab"), "fghij");
     assert_eq!(file_read("xac"), "klmno");
@@ -460,7 +461,7 @@ fn test_split_number_with_io_blksize() {
 #[test]
 fn test_split_default_with_io_blksize() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let name = "split_default";
+    let name = "split_default_with_io_blksize";
     RandomFile::new(&at, name).add_lines(2000);
     ucmd.args(&[name, "---io-blksize", "2M"]).succeeds();
 
