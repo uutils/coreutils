@@ -88,10 +88,7 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
                         start = 0;
                         next
                     }),
-                    '0' => parse_code(&mut iter, 8, 3, 3).unwrap_or_else(|| {
-                        start = 0;
-                        next
-                    }),
+                    '0' => parse_code(&mut iter, 8, 3, 3).unwrap_or('\0'),
                     _ => {
                         start = 0;
                         next
