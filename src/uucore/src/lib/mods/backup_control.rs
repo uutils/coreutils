@@ -231,6 +231,7 @@ pub mod arguments {
             .help("override the usual backup suffix")
             .takes_value(true)
             .value_name("SUFFIX")
+            .allow_hyphen_values(true)
     }
 }
 
@@ -617,5 +618,14 @@ mod tests {
 
         assert_eq!(result, BackupMode::SimpleBackup);
         env::remove_var(ENV_VERSION_CONTROL);
+    }
+
+    #[test]
+    fn test_suffix_takes_hyphen_value() {
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        let matches = make_app().get_matches_from(vec!["app", "-b", "--suffix", "-v"]);
+
+        let result = determine_backup_suffix(&matches);
+        assert_eq!(result, "-v");
     }
 }
