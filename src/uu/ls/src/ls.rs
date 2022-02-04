@@ -550,7 +550,7 @@ impl Config {
         } else if options.is_present(options::size::KIBIBYTES) {
             None
         } else if let Some(x) = &std::env::var_os("LS_BLOCK_SIZE") {
-            if !x.eq(&OsString::from("si")) && !x.eq(&OsString::from("si")) {
+            if !x.eq(&OsString::from("si")) && !x.eq(&OsString::from("human-readable")) {
                 Self::parse_byte_count(&x.to_string_lossy())
             } else if x.eq(&OsString::from("si")) {
                 size_format = SizeFormat::Decimal;
@@ -562,7 +562,7 @@ impl Config {
                 None
             }
         } else if let Some(x) = &std::env::var_os("BLOCK_SIZE") {
-            if !x.eq(&OsString::from("si")) && !x.eq(&OsString::from("si")) {
+            if !x.eq(&OsString::from("si")) && !x.eq(&OsString::from("human-readable")) {
                 Self::parse_byte_count(&x.to_string_lossy())
             } else if x.eq(&OsString::from("si")) {
                 size_format = SizeFormat::Decimal;
@@ -1281,7 +1281,7 @@ only ignore '.' and '..'.",
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("BLOCK_SIZE")
-                .help("scale sizes by SIZE when printing them"),
+                .help("scale sizes by BLOCK_SIZE when printing them"),
         )
         .arg(
             Arg::new(options::INODE)
