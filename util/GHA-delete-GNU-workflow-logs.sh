@@ -15,21 +15,21 @@ ME_parent_dir_abs="$(realpath -mP -- "${ME_parent_dir}")"
 
 # * `gh` available?
 unset GH
-gh --version 1>/dev/null 2>&1
-if [ $? -eq 0 ]; then export GH="gh"; fi
+if gh --version 1>/dev/null 2>&1; then
+    export GH="gh"
+else
+    echo "ERR!: missing \`gh\` (see install instructions at <https://github.com/cli/cli>)" 1>&2
+fi
 
 # * `jq` available?
 unset JQ
-jq --version 1>/dev/null 2>&1
-if [ $? -eq 0 ]; then export JQ="jq"; fi
+if jq --version 1>/dev/null 2>&1; then
+    export JQ="jq"
+else
+    echo "ERR!: missing \`jq\` (install with \`sudo apt install jq\`)" 1>&2
+fi
 
 if [ -z "${GH}" ] || [ -z "${JQ}" ]; then
-    if [ -z "${GH}" ]; then
-        echo 'ERR!: missing `gh` (see install instructions at <https://github.com/cli/cli>)' 1>&2
-    fi
-    if [ -z "${JQ}" ]; then
-        echo 'ERR!: missing `jq` (install with `sudo apt install jq`)' 1>&2
-    fi
     exit 1
 fi
 
