@@ -130,14 +130,7 @@ impl Display for ExtendedBigDecimal {
             }
             ExtendedBigDecimal::Infinity => f32::INFINITY.fmt(f),
             ExtendedBigDecimal::MinusInfinity => f32::NEG_INFINITY.fmt(f),
-            ExtendedBigDecimal::MinusZero => {
-                // FIXME In Rust version 1.53.0 and later, the display
-                // of floats was updated to allow displaying negative
-                // zero. See
-                // https://github.com/rust-lang/rust/pull/78618. Currently,
-                // this just formats "0.0".
-                (0.0f32).fmt(f)
-            }
+            ExtendedBigDecimal::MinusZero => (-0.0f32).fmt(f),
             ExtendedBigDecimal::Nan => "nan".fmt(f),
         }
     }
@@ -280,11 +273,6 @@ mod tests {
         assert_eq!(format!("{}", ExtendedBigDecimal::Infinity), "inf");
         assert_eq!(format!("{}", ExtendedBigDecimal::MinusInfinity), "-inf");
         assert_eq!(format!("{}", ExtendedBigDecimal::Nan), "nan");
-        // FIXME In Rust version 1.53.0 and later, the display of floats
-        // was updated to allow displaying negative zero. Until then, we
-        // just display `MinusZero` as "0.0".
-        //
-        //     assert_eq!(format!("{}", ExtendedBigDecimal::MinusZero), "-0.0");
-        //
+        assert_eq!(format!("{}", ExtendedBigDecimal::MinusZero), "-0.0");
     }
 }
