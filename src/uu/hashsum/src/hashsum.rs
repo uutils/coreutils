@@ -93,35 +93,36 @@ fn detect_algo(
             Box::new(blake2b_simd::State::new()) as Box<dyn Digest>,
             512,
         ),
-        "sha3sum" => match matches.value_of("bits") {
-            Some(bits_str) => match (bits_str).parse::<usize>() {
-                Ok(224) => (
-                    "SHA3-224",
-                    Box::new(Sha3_224::new()) as Box<dyn Digest>,
-                    224,
-                ),
-                Ok(256) => (
-                    "SHA3-256",
-                    Box::new(Sha3_256::new()) as Box<dyn Digest>,
-                    256,
-                ),
-                Ok(384) => (
-                    "SHA3-384",
-                    Box::new(Sha3_384::new()) as Box<dyn Digest>,
-                    384,
-                ),
-                Ok(512) => (
-                    "SHA3-512",
-                    Box::new(Sha3_512::new()) as Box<dyn Digest>,
-                    512,
-                ),
-                Ok(_) => crash!(
-                    1,
-                    "Invalid output size for SHA3 (expected 224, 256, 384, or 512)"
-                ),
-                Err(err) => crash!(1, "{}", err),
-            },
-            None => crash!(1, "--bits required for SHA3"),
+        "sha3sum" => match matches
+            .value_of("bits")
+            .unwrap_or_else(|| crash!(1, "--bits required for SHA3"))
+            .parse()
+            .unwrap_or_else(|err| crash!(1, "{}", err))
+        {
+            224 => (
+                "SHA3-224",
+                Box::new(Sha3_224::new()) as Box<dyn Digest>,
+                224,
+            ),
+            256 => (
+                "SHA3-256",
+                Box::new(Sha3_256::new()) as Box<dyn Digest>,
+                256,
+            ),
+            384 => (
+                "SHA3-384",
+                Box::new(Sha3_384::new()) as Box<dyn Digest>,
+                384,
+            ),
+            512 => (
+                "SHA3-512",
+                Box::new(Sha3_512::new()) as Box<dyn Digest>,
+                512,
+            ),
+            _ => crash!(
+                1,
+                "Invalid output size for SHA3 (expected 224, 256, 384, or 512)"
+            ),
         },
         "sha3-224sum" => (
             "SHA3-224",
@@ -143,28 +144,30 @@ fn detect_algo(
             Box::new(Sha3_512::new()) as Box<dyn Digest>,
             512,
         ),
-        "shake128sum" => match matches.value_of("bits") {
-            Some(bits_str) => match (bits_str).parse::<usize>() {
-                Ok(bits) => (
-                    "SHAKE128",
-                    Box::new(Shake128::new()) as Box<dyn Digest>,
-                    bits,
-                ),
-                Err(err) => crash!(1, "{}", err),
-            },
-            None => crash!(1, "--bits required for SHAKE-128"),
-        },
-        "shake256sum" => match matches.value_of("bits") {
-            Some(bits_str) => match (bits_str).parse::<usize>() {
-                Ok(bits) => (
-                    "SHAKE256",
-                    Box::new(Shake256::new()) as Box<dyn Digest>,
-                    bits,
-                ),
-                Err(err) => crash!(1, "{}", err),
-            },
-            None => crash!(1, "--bits required for SHAKE-256"),
-        },
+        "shake128sum" => {
+            let bits = matches
+                .value_of("bits")
+                .unwrap_or_else(|| crash!(1, "--bits required for SHAKE-128"))
+                .parse()
+                .unwrap_or_else(|err| crash!(1, "{}", err));
+            (
+                "SHAKE128",
+                Box::new(Shake128::new()) as Box<dyn Digest>,
+                bits,
+            )
+        }
+        "shake256sum" => {
+            let bits = matches
+                .value_of("bits")
+                .unwrap_or_else(|| crash!(1, "--bits required for SHAKE-256"))
+                .parse()
+                .unwrap_or_else(|err| crash!(1, "{}", err));
+            (
+                "SHAKE256",
+                Box::new(Shake256::new()) as Box<dyn Digest>,
+                bits,
+            )
+        }
         _ => {
             {
                 let mut set_or_crash = |n, val, bits| {
@@ -197,35 +200,36 @@ fn detect_algo(
                     set_or_crash("BLAKE2", Box::new(blake2b_simd::State::new()), 512);
                 }
                 if matches.is_present("sha3") {
-                    match matches.value_of("bits") {
-                        Some(bits_str) => match (bits_str).parse::<usize>() {
-                            Ok(224) => set_or_crash(
-                                "SHA3-224",
-                                Box::new(Sha3_224::new()) as Box<dyn Digest>,
-                                224,
-                            ),
-                            Ok(256) => set_or_crash(
-                                "SHA3-256",
-                                Box::new(Sha3_256::new()) as Box<dyn Digest>,
-                                256,
-                            ),
-                            Ok(384) => set_or_crash(
-                                "SHA3-384",
-                                Box::new(Sha3_384::new()) as Box<dyn Digest>,
-                                384,
-                            ),
-                            Ok(512) => set_or_crash(
-                                "SHA3-512",
-                                Box::new(Sha3_512::new()) as Box<dyn Digest>,
-                                512,
-                            ),
-                            Ok(_) => crash!(
-                                1,
-                                "Invalid output size for SHA3 (expected 224, 256, 384, or 512)"
-                            ),
-                            Err(err) => crash!(1, "{}", err),
-                        },
-                        None => crash!(1, "--bits required for SHA3"),
+                    match matches
+                        .value_of("bits")
+                        .unwrap_or_else(|| crash!(1, "--bits required for SHA3"))
+                        .parse()
+                        .unwrap_or_else(|err| crash!(1, "{}", err))
+                    {
+                        224 => set_or_crash(
+                            "SHA3-224",
+                            Box::new(Sha3_224::new()) as Box<dyn Digest>,
+                            224,
+                        ),
+                        256 => set_or_crash(
+                            "SHA3-256",
+                            Box::new(Sha3_256::new()) as Box<dyn Digest>,
+                            256,
+                        ),
+                        384 => set_or_crash(
+                            "SHA3-384",
+                            Box::new(Sha3_384::new()) as Box<dyn Digest>,
+                            384,
+                        ),
+                        512 => set_or_crash(
+                            "SHA3-512",
+                            Box::new(Sha3_512::new()) as Box<dyn Digest>,
+                            512,
+                        ),
+                        _ => crash!(
+                            1,
+                            "Invalid output size for SHA3 (expected 224, 256, 384, or 512)"
+                        ),
                     }
                 }
                 if matches.is_present("sha3-224") {
@@ -241,22 +245,20 @@ fn detect_algo(
                     set_or_crash("SHA3-512", Box::new(Sha3_512::new()), 512);
                 }
                 if matches.is_present("shake128") {
-                    match matches.value_of("bits") {
-                        Some(bits_str) => match (bits_str).parse::<usize>() {
-                            Ok(bits) => set_or_crash("SHAKE128", Box::new(Shake128::new()), bits),
-                            Err(err) => crash!(1, "{}", err),
-                        },
-                        None => crash!(1, "--bits required for SHAKE-128"),
-                    }
+                    let bits = matches
+                        .value_of("bits")
+                        .unwrap_or_else(|| crash!(1, "--bits required for SHAKE-128"))
+                        .parse()
+                        .unwrap_or_else(|err| crash!(1, "{}", err));
+                    set_or_crash("SHAKE128", Box::new(Shake128::new()), bits);
                 }
                 if matches.is_present("shake256") {
-                    match matches.value_of("bits") {
-                        Some(bits_str) => match (bits_str).parse::<usize>() {
-                            Ok(bits) => set_or_crash("SHAKE256", Box::new(Shake256::new()), bits),
-                            Err(err) => crash!(1, "{}", err),
-                        },
-                        None => crash!(1, "--bits required for SHAKE-256"),
-                    }
+                    let bits = matches
+                        .value_of("bits")
+                        .unwrap_or_else(|| crash!(1, "--bits required for SHAKE-256"))
+                        .parse()
+                        .unwrap_or_else(|err| crash!(1, "{}", err));
+                    set_or_crash("SHAKE256", Box::new(Shake256::new()), bits);
                 }
             }
             let alg = alg.unwrap_or_else(|| crash!(1, "You must specify hash algorithm!"));
