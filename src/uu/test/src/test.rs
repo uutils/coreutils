@@ -10,7 +10,7 @@
 
 mod parser;
 
-use clap::{crate_version, App, AppSettings};
+use clap::{crate_version, App};
 use parser::{parse, Operator, Symbol, UnaryOperator};
 use std::ffi::{OsStr, OsString};
 use uucore::display::Quotable;
@@ -86,10 +86,14 @@ NOTE: your shell may have its own version of test and/or [, which usually supers
 the version described here.  Please refer to your shell's documentation
 for details about the options it supports.";
 
+const ABOUT: &str = "Check file types and compare values.";
+
 pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
-        .setting(AppSettings::DisableHelpFlag)
-        .setting(AppSettings::DisableVersionFlag)
+        .version(crate_version!())
+        .about(ABOUT)
+        .override_usage(USAGE)
+        .after_help(AFTER_HELP)
 }
 
 #[uucore::main]
@@ -104,6 +108,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
             // Let clap pretty-print help and version
             App::new(binary_name)
                 .version(crate_version!())
+                .about(ABOUT)
                 .override_usage(USAGE)
                 .after_help(AFTER_HELP)
                 // Disable printing of -h and -v as valid alternatives for --help and --version,
