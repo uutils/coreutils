@@ -32,6 +32,9 @@ static OPT_NUMERIC_SUFFIXES: &str = "numeric-suffixes";
 static OPT_SUFFIX_LENGTH: &str = "suffix-length";
 static OPT_DEFAULT_SUFFIX_LENGTH: &str = "0";
 static OPT_VERBOSE: &str = "verbose";
+//The ---io-blksize parameter is consumed and ignored. 
+//The parameter is included to make GNU coreutils tests pass.
+static OPT_IO_BLKSIZE: &str = "-io-blksize";
 
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
@@ -138,6 +141,13 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(OPT_VERBOSE)
                 .long(OPT_VERBOSE)
                 .help("print a diagnostic just before each output file is opened"),
+        )
+        .arg(
+            Arg::new(OPT_IO_BLKSIZE)
+                .long(OPT_IO_BLKSIZE)
+                .alias(OPT_IO_BLKSIZE)
+                .takes_value(true)
+                .hide(true)
         )
         .arg(
             Arg::new(ARG_INPUT)

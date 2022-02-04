@@ -440,3 +440,31 @@ fn test_number() {
     assert_eq!(file_read("xad"), "pqrst");
     assert_eq!(file_read("xae"), "uvwxyz");
 }
+
+#[test]
+fn test_split_number_with_io_blksize() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_read = |f| {
+        let mut s = String::new();
+        at.open(f).read_to_string(&mut s).unwrap();
+        s
+    };
+    ucmd.args(&["-n", "5", "asciilowercase.txt", "---io-blksize", "1024"]).succeeds();
+    assert_eq!(file_read("xaa"), "abcde");
+    assert_eq!(file_read("xab"), "fghij");
+    assert_eq!(file_read("xac"), "klmno");
+    assert_eq!(file_read("xad"), "pqrst");
+    assert_eq!(file_read("xae"), "uvwxyz");
+}
+
+#[test]
+fn test_split_default_with_io_blksize() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "split_default";
+    RandomFile::new(&at, name).add_lines(2000);
+    ucmd.args(&[name, "---io-blksize", "2M"]).succeeds();
+
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
+    assert_eq!(glob.count(), 2);
+    assert_eq!(glob.collate(), at.read_bytes(name));
+}
