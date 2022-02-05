@@ -51,8 +51,7 @@ use uucore::InvalidEncodingHandling;
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
 static ABOUT: &str = "dump files in octal and other formats";
 
-static USAGE: &str = r#"
-    od [OPTION]... [--] [FILENAME]...
+static USAGE: &str = r#"od [OPTION]... [--] [FILENAME]...
     od [-abcdDefFhHiIlLoOsxX] [FILENAME] [[+][0x]OFFSET[.][b]]
     od --traditional [OPTION]... [FILENAME] [[+][0x]OFFSET[.][b] [[+][0x]LABEL[.][b]]]"#;
 
