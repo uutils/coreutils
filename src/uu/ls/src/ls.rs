@@ -1275,9 +1275,9 @@ only ignore '.' and '..'.",
         )
 }
 
-/// Represents a Path along with it's associated data
-/// Any data that will be reused several times makes sense to be added to this structure
-/// Caching data here helps eliminate redundant syscalls to fetch same information
+/// Represents a Path along with it's associated data.
+/// Any data that will be reused several times makes sense to be added to this structure.
+/// Caching data here helps eliminate redundant syscalls to fetch same information.
 #[derive(Debug)]
 struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
@@ -1678,92 +1678,10 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
     // option, print the security context to the left of the size column.
 
     if config.format == Format::Long {
-        #[cfg(unix)]
-        let (
-            mut longest_inode_len,
-            mut longest_link_count_len,
-            mut longest_uname_len,
-            mut longest_group_len,
-            mut longest_context_len,
-            mut longest_size_len,
-            mut longest_major_len,
-            mut longest_minor_len,
-        ) = (1, 1, 1, 1, 1, 1, 1, 1);
-
-        #[cfg(not(unix))]
-        let (
-            mut longest_link_count_len,
-            mut longest_uname_len,
-            mut longest_group_len,
-            mut longest_context_len,
-            mut longest_size_len,
-        ) = (1, 1, 1, 1, 1);
-
-        #[cfg(unix)]
-        for item in items {
-            let context_len = item.security_context.len();
-            let (link_count_len, uname_len, group_len, size_len, major_len, minor_len, inode_len) =
-                display_dir_entry_size(item, config, out);
-            longest_inode_len = inode_len.max(longest_inode_len);
-            longest_link_count_len = link_count_len.max(longest_link_count_len);
-            longest_uname_len = uname_len.max(longest_uname_len);
-            longest_group_len = group_len.max(longest_group_len);
-            if config.context {
-                longest_context_len = context_len.max(longest_context_len);
-            }
-            if items.len() == 1usize {
-                longest_size_len = 0usize;
-                longest_major_len = 0usize;
-                longest_minor_len = 0usize;
-            } else {
-                longest_major_len = major_len.max(longest_major_len);
-                longest_minor_len = minor_len.max(longest_minor_len);
-                longest_size_len = size_len
-                    .max(longest_size_len)
-                    .max(longest_major_len + longest_minor_len + 2usize);
-            }
-        }
-
-        #[cfg(not(unix))]
-        for item in items {
-            let context_len = item.security_context.len();
-            let (
-                link_count_len,
-                uname_len,
-                group_len,
-                size_len,
-                _major_len,
-                _minor_len,
-                _inode_len,
-            ) = display_dir_entry_size(item, config, out);
-            longest_link_count_len = link_count_len.max(longest_link_count_len);
-            longest_uname_len = uname_len.max(longest_uname_len);
-            longest_group_len = group_len.max(longest_group_len);
-            if config.context {
-                longest_context_len = context_len.max(longest_context_len);
-            }
-            longest_size_len = size_len.max(longest_size_len);
-        }
+        let padding_collection = calculate_padding_collection(items, config, out);
 
         for item in items {
-            display_item_long(
-                item,
-                &PaddingCollection {
-                    #[cfg(unix)]
-                    longest_inode_len,
-                    longest_link_count_len,
-                    longest_uname_len,
-                    longest_group_len,
-                    longest_context_len,
-                    longest_size_len,
-                    #[cfg(unix)]
-                    longest_major_len,
-                    #[cfg(unix)]
-                    longest_minor_len,
-                },
-                config,
-                out,
-            );
+            display_item_long(item, &padding_collection, config, out);
         }
     } else {
         let mut longest_context_len = 1;
@@ -2562,5 +2480,97 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
         }
     } else {
         substitute_string
+    }
+}
+
+#[cfg(unix)]
+fn calculate_padding_collection(
+    items: &[PathData],
+    config: &Config,
+    out: &mut BufWriter<Stdout>,
+) -> PaddingCollection {
+    let (
+        mut longest_inode_len,
+        mut longest_link_count_len,
+        mut longest_uname_len,
+        mut longest_group_len,
+        mut longest_context_len,
+        mut longest_size_len,
+        mut longest_major_len,
+        mut longest_minor_len,
+    ) = (1, 1, 1, 1, 1, 1, 1, 1);
+
+    for item in items {
+        let context_len = item.security_context.len();
+        let (link_count_len, uname_len, group_len, size_len, major_len, minor_len, inode_len) =
+            display_dir_entry_size(item, config, out);
+        longest_inode_len = inode_len.max(longest_inode_len);
+        longest_link_count_len = link_count_len.max(longest_link_count_len);
+        longest_uname_len = uname_len.max(longest_uname_len);
+        longest_group_len = group_len.max(longest_group_len);
+        if config.context {
+            longest_context_len = context_len.max(longest_context_len);
+        }
+        if items.len() == 1usize {
+            longest_size_len = 0usize;
+            longest_major_len = 0usize;
+            longest_minor_len = 0usize;
+        } else {
+            longest_major_len = major_len.max(longest_major_len);
+            longest_minor_len = minor_len.max(longest_minor_len);
+            longest_size_len = size_len
+                .max(longest_size_len)
+                .max(longest_major_len + longest_minor_len + 2usize);
+        }
+    }
+
+    PaddingCollection {
+        longest_inode_len,
+        longest_link_count_len,
+        longest_uname_len,
+        longest_group_len,
+        longest_context_len,
+        longest_size_len,
+        longest_major_len,
+        longest_minor_len,
+    }
+}
+
+#[cfg(not(unix))]
+fn calculate_paddings(
+    items: &[PathData],
+    config: &Config,
+    out: &mut BufWriter<Stdout>,
+) -> PaddingCollection {
+    let (
+        mut longest_link_count_len,
+        mut longest_uname_len,
+        mut longest_group_len,
+        mut longest_context_len,
+        mut longest_size_len,
+    ) = (1, 1, 1, 1, 1);
+
+    for item in items {
+        let context_len = item.security_context.len();
+        let (link_count_len, uname_len, group_len, size_len, _major_len, _minor_len, _inode_len) =
+            display_dir_entry_size(item, config, out);
+        longest_link_count_len = link_count_len.max(longest_link_count_len);
+        longest_uname_len = uname_len.max(longest_uname_len);
+        longest_group_len = group_len.max(longest_group_len);
+        if config.context {
+            longest_context_len = context_len.max(longest_context_len);
+        }
+        longest_size_len = size_len.max(longest_size_len);
+    }
+
+    PaddingCollection {
+        longest_inode_len,
+        longest_link_count_len,
+        longest_uname_len,
+        longest_group_len,
+        longest_context_len,
+        longest_size_len,
+        longest_major_len,
+        longest_minor_len,
     }
 }
