@@ -56,7 +56,10 @@ impl Formatter for Decf {
         // strip trailing zeroes
         if let Some(ref post_dec) = f_sci.post_decimal {
             let trimmed = post_dec.trim_end_matches('0');
-            if trimmed.len() != post_dec.len() {
+            if trimmed.is_empty() {
+                f_sci.post_decimal = Some(String::new());
+                f_sci.suffix = Some(String::new());
+            } else if trimmed.len() != post_dec.len() {
                 f_sci.post_decimal = Some(trimmed.to_owned());
             }
         }

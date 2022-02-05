@@ -437,3 +437,24 @@ fn stop_after_additional_escape() {
         .succeeds()
         .stdout_only("ABC");
 }
+
+#[test]
+fn sub_general_float() {
+    new_ucmd!()
+        .args(&["%g", "3.1"])
+        .succeeds()
+        .stdout_only("3.1");
+}
+
+#[test]
+fn sub_general_truncate_to_integer() {
+    new_ucmd!().args(&["%g", "3.0"]).succeeds().stdout_only("3");
+}
+
+#[test]
+fn sub_general_prefix_with_spaces() {
+    new_ucmd!()
+        .args(&["%5g", "3.1"])
+        .succeeds()
+        .stdout_only("  3.1");
+}
