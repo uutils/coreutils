@@ -1379,7 +1379,8 @@ impl PathData {
                 // if not, check if we can use Path metadata
                 match get_metadata(self.p_buf.as_path(), self.must_dereference) {
                     Err(err) => {
-                        let _ = out.flush();
+                        // FIXME: A bit tricky to propagate the result here
+                        out.flush().unwrap();
                         let errno = err.raw_os_error().unwrap_or(1i32);
                         // a bad fd will throw an error when dereferenced,
                         // but GNU will not throw an error until a bad fd "dir"
@@ -1443,7 +1444,7 @@ fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     sort_entries(&mut files, config, &mut out);
     sort_entries(&mut dirs, config, &mut out);
 
-    display_items(&files, config, &mut out);
+    display_items(&files, config, &mut out)?;
 
     for (pos, path_data) in dirs.iter().enumerate() {
         // Do read_dir call here to match GNU semantics by printing
@@ -1451,7 +1452,7 @@ fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         let read_dir = match fs::read_dir(&path_data.p_buf) {
             Err(err) => {
                 // flush stdout buffer before the error to preserve formatting and order
-                let _ = out.flush();
+                out.flush()?;
                 show!(LsError::IOErrorContext(err, path_data.p_buf.clone()));
                 continue;
             }
@@ -1461,12 +1462,12 @@ fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         // Print dir heading - name... 'total' comes after error display
         if initial_locs_len > 1 || config.recursive {
             if pos.eq(&0usize) && files.is_empty() {
-                let _ = writeln!(out, "{}:", path_data.p_buf.display());
+                writeln!(out, "{}:", path_data.p_buf.display())?;
             } else {
-                let _ = writeln!(out, "\n{}:", path_data.p_buf.display());
+                writeln!(out, "\n{}:", path_data.p_buf.display())?;
             }
         }
-        enter_directory(path_data, read_dir, config, &mut out);
+        enter_directory(path_data, read_dir, config, &mut out)?;
     }
 
     Ok(())
@@ -1540,7 +1541,7 @@ fn enter_directory(
     read_dir: ReadDir,
     config: &Config,
     out: &mut BufWriter<Stdout>,
-) {
+) -> UResult<()> {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
         vec![
@@ -1570,7 +1571,7 @@ fn enter_directory(
         let dir_entry = match raw_entry {
             Ok(path) => path,
             Err(err) => {
-                let _ = out.flush();
+                out.flush()?;
                 show!(LsError::IOError(err));
                 continue;
             }
@@ -1588,10 +1589,10 @@ fn enter_directory(
 
     // Print total after any error display
     if config.format == Format::Long {
-        display_total(&entries, config, out);
+        display_total(&entries, config, out)?;
     }
 
-    display_items(&entries, config, out);
+    display_items(&entries, config, out)?;
 
     if config.recursive {
         for e in entries
@@ -1603,17 +1604,19 @@ fn enter_directory(
         {
             match fs::read_dir(&e.p_buf) {
                 Err(err) => {
-                    let _ = out.flush();
+                    out.flush()?;
                     show!(LsError::IOErrorContext(err, e.p_buf.clone()));
                     continue;
                 }
                 Ok(rd) => {
-                    let _ = writeln!(out, "\n{}:", e.p_buf.display());
-                    enter_directory(e, rd, config, out);
+                    writeln!(out, "\n{}:", e.p_buf.display())?;
+                    enter_directory(e, rd, config, out)?;
                 }
             }
         }
     }
+
+    Ok(())
 }
 
 fn get_metadata(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
@@ -1661,7 +1664,7 @@ fn pad_right(string: &str, count: usize) -> String {
     format!("{:<width$}", string, width = count)
 }
 
-fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
+fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) -> UResult<()> {
     let mut total_size = 0;
     for item in items {
         total_size += item
@@ -1669,19 +1672,19 @@ fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             .as_ref()
             .map_or(0, |md| get_block_size(md, config));
     }
-    let _ = writeln!(out, "total {}", display_size(total_size, config));
+    writeln!(out, "total {}", display_size(total_size, config))?;
+    Ok(())
 }
 
-fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
+fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) -> UResult<()> {
     // `-Z`, `--context`:
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
     // option, print the security context to the left of the size column.
 
     if config.format == Format::Long {
         let padding_collection = calculate_padding_collection(items, config, out);
-
         for item in items {
-            display_item_long(item, &padding_collection, config, out);
+            display_item_long(item, &padding_collection, config, out)?;
         }
     } else {
         let mut longest_context_len = 1;
@@ -1718,13 +1721,13 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             .into_iter();
 
         match config.format {
-            Format::Columns => display_grid(names, config.width, Direction::TopToBottom, out),
-            Format::Across => display_grid(names, config.width, Direction::LeftToRight, out),
+            Format::Columns => display_grid(names, config.width, Direction::TopToBottom, out)?,
+            Format::Across => display_grid(names, config.width, Direction::LeftToRight, out)?,
             Format::Commas => {
                 let mut current_col = 0;
                 let mut names = names;
                 if let Some(name) = names.next() {
-                    let _ = write!(out, "{}", name.contents);
+                    write!(out, "{}", name.contents)?;
                     current_col = name.width as u16 + 2;
                 }
                 for name in names {
@@ -1732,25 +1735,27 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                     // If the width is 0 we print one single line
                     if config.width != 0 && current_col + name_width + 1 > config.width {
                         current_col = name_width + 2;
-                        let _ = write!(out, ",\n{}", name.contents);
+                        write!(out, ",\n{}", name.contents)?;
                     } else {
                         current_col += name_width + 2;
-                        let _ = write!(out, ", {}", name.contents);
+                        write!(out, ", {}", name.contents)?;
                     }
                 }
                 // Current col is never zero again if names have been printed.
                 // So we print a newline.
                 if current_col > 0 {
-                    let _ = writeln!(out,);
+                    writeln!(out,)?;
                 }
             }
             _ => {
                 for name in names {
-                    let _ = writeln!(out, "{}", name.contents);
+                    writeln!(out, "{}", name.contents)?;
                 }
             }
-        }
+        };
     }
+
+    Ok(())
 }
 
 fn get_block_size(md: &Metadata, config: &Config) -> u64 {
@@ -1769,7 +1774,6 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
 
     #[cfg(not(unix))]
     {
-        let _ = config;
         // no way to get block size for windows, fall-back to file size
         md.len()
     }
@@ -1780,19 +1784,19 @@ fn display_grid(
     width: u16,
     direction: Direction,
     out: &mut BufWriter<Stdout>,
-) {
+) -> UResult<()> {
     if width == 0 {
         // If the width is 0 we print one single line
         let mut printed_something = false;
         for name in names {
             if printed_something {
-                let _ = write!(out, "  ");
+                write!(out, "  ")?;
             }
             printed_something = true;
-            let _ = write!(out, "{}", name.contents);
+            write!(out, "{}", name.contents)?;
         }
         if printed_something {
-            let _ = writeln!(out);
+            writeln!(out)?;
         }
     } else {
         let mut grid = Grid::new(GridOptions {
@@ -1806,14 +1810,15 @@ fn display_grid(
 
         match grid.fit_into_width(width as usize) {
             Some(output) => {
-                let _ = write!(out, "{}", output);
+                write!(out, "{}", output)?;
             }
             // Width is too small for the grid, so we fit it in one column
             None => {
-                let _ = write!(out, "{}", grid.fit_into_columns(1));
+                write!(out, "{}", grid.fit_into_columns(1))?;
             }
         }
     }
+    Ok(())
 }
 
 /// This writes to the BufWriter out a single string of the output of `ls -l`.
@@ -1849,20 +1854,20 @@ fn display_item_long(
     padding: &PaddingCollection,
     config: &Config,
     out: &mut BufWriter<Stdout>,
-) {
+) -> UResult<()> {
     if let Some(md) = item.md(out) {
         #[cfg(unix)]
         {
             if config.inode {
-                let _ = write!(
+                write!(
                     out,
                     "{} ",
                     pad_left(&get_inode(md), padding.longest_inode_len),
-                );
+                )?;
             }
         }
 
-        let _ = write!(
+        write!(
             out,
             "{}{} {}",
             display_permissions(md, true),
@@ -1874,48 +1879,48 @@ fn display_item_long(
                 ""
             },
             pad_left(&display_symlink_count(md), padding.longest_link_count_len),
-        );
+        )?;
 
         if config.long.owner {
-            let _ = write!(
+            write!(
                 out,
                 " {}",
                 pad_right(&display_uname(md, config), padding.longest_uname_len),
-            );
+            )?;
         }
 
         if config.long.group {
-            let _ = write!(
+            write!(
                 out,
                 " {}",
                 pad_right(&display_group(md, config), padding.longest_group_len),
-            );
+            )?;
         }
 
         if config.context {
-            let _ = write!(
+            write!(
                 out,
                 " {}",
                 pad_right(&item.security_context, padding.longest_context_len),
-            );
+            )?;
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
         // the owner, since GNU/Hurd is not currently supported by Rust.
         if config.long.author {
-            let _ = write!(
+            write!(
                 out,
                 " {}",
                 pad_right(&display_uname(md, config), padding.longest_uname_len),
-            );
+            )?;
         }
 
         match display_size_or_rdev(md, config) {
             SizeOrDeviceId::Size(size) => {
-                let _ = write!(out, " {}", pad_left(&size, padding.longest_size_len),);
+                write!(out, " {}", pad_left(&size, padding.longest_size_len),)?;
             }
             SizeOrDeviceId::Device(major, minor) => {
-                let _ = write!(
+                write!(
                     out,
                     " {}, {}",
                     pad_left(
@@ -1936,19 +1941,19 @@ fn display_item_long(
                         #[cfg(unix)]
                         padding.longest_minor_len,
                     ),
-                );
+                )?;
             }
         };
 
         let dfn = display_file_name(item, config, None, 0, out).contents;
 
-        let _ = writeln!(out, " {} {}", display_date(md, config), dfn);
+        writeln!(out, " {} {}", display_date(md, config), dfn)?;
     } else {
         // this 'else' is expressly for the case of a dangling symlink/restricted file
         #[cfg(unix)]
         {
             if config.inode {
-                let _ = write!(out, "{} ", pad_left("?", padding.longest_inode_len),);
+                write!(out, "{} ", pad_left("?", padding.longest_inode_len),)?;
             }
         }
 
@@ -1985,7 +1990,7 @@ fn display_item_long(
             }
         };
 
-        let _ = write!(
+        write!(
             out,
             "{}{} {}",
             format_args!("{}?????????", leading_char),
@@ -1997,41 +2002,43 @@ fn display_item_long(
                 ""
             },
             pad_left("?", padding.longest_link_count_len),
-        );
+        )?;
 
         if config.long.owner {
-            let _ = write!(out, " {}", pad_right("?", padding.longest_uname_len));
+            write!(out, " {}", pad_right("?", padding.longest_uname_len))?;
         }
 
         if config.long.group {
-            let _ = write!(out, " {}", pad_right("?", padding.longest_group_len));
+            write!(out, " {}", pad_right("?", padding.longest_group_len))?;
         }
 
         if config.context {
-            let _ = write!(
+            write!(
                 out,
                 " {}",
                 pad_right(&item.security_context, padding.longest_context_len)
-            );
+            )?;
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
         // the owner, since GNU/Hurd is not currently supported by Rust.
         if config.long.author {
-            let _ = write!(out, " {}", pad_right("?", padding.longest_uname_len));
+            write!(out, " {}", pad_right("?", padding.longest_uname_len))?;
         }
 
         let dfn = display_file_name(item, config, None, 0, out).contents;
         let date_len = 12;
 
-        let _ = writeln!(
+        writeln!(
             out,
             " {} {} {}",
             pad_left("?", padding.longest_size_len),
             pad_left("?", date_len),
             dfn,
-        );
+        )?;
     }
+
+    Ok(())
 }
 
 #[cfg(unix)]
