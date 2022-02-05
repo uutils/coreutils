@@ -80,8 +80,7 @@ impl Input<io::Stdin> {
         };
 
         if let Some(amt) = skip {
-            let mut buf = vec![BUF_INIT_BYTE; amt];
-            i.force_fill(&mut buf, amt)
+            i.force_fill(amt.try_into().unwrap())
                 .map_err_context(|| "failed to read input".to_string())?;
         }
 
@@ -264,17 +263,19 @@ impl<R: Read> Input<R> {
         })
     }
 
-    /// Force-fills a buffer, ignoring zero-length reads which would otherwise be
-    /// interpreted as EOF.
-    /// Note: This will not return unless the source (eventually) produces
-    /// enough bytes to meet target_len.
-    fn force_fill(&mut self, buf: &mut [u8], target_len: usize) -> std::io::Result<usize> {
-        let mut base_idx = 0;
-        while base_idx < target_len {
-            base_idx += self.read(&mut buf[base_idx..target_len])?;
-        }
-
-        Ok(base_idx)
+    /// Read the specified number of bytes from this reader.
+    ///
+    /// On success, this method returns the number of bytes read. If
+    /// this reader has fewer than `n` bytes available, then it reads
+    /// as many as possible. In that case, this method returns a
+    /// number less than `n`.
+    ///
+    /// # Errors
+    ///
+    /// If there is a problem reading.
+    fn force_fill(&mut self, n: u64) -> std::io::Result<usize> {
+        let mut buf = vec![];
+        self.take(n).read_to_end(&mut buf)
     }
 }
 
