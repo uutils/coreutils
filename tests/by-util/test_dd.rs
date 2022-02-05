@@ -624,5 +624,18 @@ fn test_seek_bytes() {
         .stdout_is("\0\0\0\0\0\0\0\0abcdefghijklm\n");
 }
 
+/// Test for skipping beyond the number of bytes in a file.
+#[test]
+fn test_skip_beyond_file() {
+    new_ucmd!()
+        .args(&["bs=1", "skip=5", "count=0", "status=noxfer"])
+        .pipe_in("abcd")
+        .succeeds()
+        .no_stdout()
+        .stderr_contains(
+            "'standard input': cannot skip to specified offset\n0+0 records in\n0+0 records out\n",
+        );
+}
+
 // conv=[ascii,ebcdic,ibm], conv=[ucase,lcase], conv=[block,unblock], conv=sync
 // TODO: Move conv tests from unit test module

@@ -42,6 +42,7 @@ use gcd::Gcd;
 use signal_hook::consts::signal;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::show_error;
 use uucore::InvalidEncodingHandling;
 
 const ABOUT: &str = "copy, and optionally convert, a file system resource";
@@ -80,8 +81,12 @@ impl Input<io::Stdin> {
         };
 
         if let Some(amt) = skip {
-            i.force_fill(amt.try_into().unwrap())
+            let num_bytes_read = i
+                .force_fill(amt.try_into().unwrap())
                 .map_err_context(|| "failed to read input".to_string())?;
+            if num_bytes_read < amt {
+                show_error!("'standard input': cannot skip to specified offset");
+            }
         }
 
         Ok(i)
