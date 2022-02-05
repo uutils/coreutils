@@ -14,9 +14,11 @@ mod platform;
 use crate::filenames::FilenameIterator;
 use crate::filenames::SuffixType;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
+use std::convert::TryInto;
 use std::env;
 use std::fmt;
 use std::fs::{metadata, File};
+use std::io;
 use std::io::{stdin, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::num::ParseIntError;
 use std::path::Path;
@@ -175,17 +177,17 @@ pub fn uu_app<'a>() -> App<'a> {
 /// The strategy for breaking up the input file into chunks.
 enum Strategy {
     /// Each chunk has the specified number of lines.
-    Lines(usize),
+    Lines(u64),
 
     /// Each chunk has the specified number of bytes.
-    Bytes(usize),
+    Bytes(u64),
 
     /// Each chunk has as many lines as possible without exceeding the
     /// specified number of bytes.
-    LineBytes(usize),
+    LineBytes(u64),
 
     /// Split the file into this many chunks.
-    Number(usize),
+    Number(u64),
 }
 
 /// An error when parsing a chunking strategy from command-line arguments.
@@ -246,7 +248,7 @@ impl Strategy {
             }
             (0, 0, 0, 1) => {
                 let s = matches.value_of(OPT_NUMBER).unwrap();
-                let n = s.parse::<usize>().map_err(StrategyError::NumberOfChunks)?;
+                let n = s.parse::<u64>().map_err(StrategyError::NumberOfChunks)?;
                 Ok(Self::Number(n))
             }
             _ => Err(StrategyError::MultipleWays),
@@ -399,17 +401,17 @@ struct ByteChunkWriter<'a> {
     settings: &'a Settings,
 
     /// The maximum number of bytes allowed for a single chunk of output.
-    chunk_size: usize,
+    chunk_size: u64,
 
     /// Running total of number of chunks that have been completed.
-    num_chunks_written: usize,
+    num_chunks_written: u64,
 
     /// Remaining capacity in number of bytes in the current chunk.
     ///
     /// This number starts at `chunk_size` and decreases as bytes are
     /// written. Once it reaches zero, a writer for a new chunk is
     /// initialized and this number gets reset to `chunk_size`.
-    num_bytes_remaining_in_current_chunk: usize,
+    num_bytes_remaining_in_current_chunk: u64,
 
     /// The underlying writer for the current chunk.
     ///
@@ -423,7 +425,7 @@ struct ByteChunkWriter<'a> {
 }
 
 impl<'a> ByteChunkWriter<'a> {
-    fn new(chunk_size: usize, settings: &'a Settings) -> Option<ByteChunkWriter<'a>> {
+    fn new(chunk_size: u64, settings: &'a Settings) -> Option<ByteChunkWriter<'a>> {
         let mut filename_iterator = FilenameIterator::new(
             &settings.prefix,
             &settings.additional_suffix,
@@ -453,7 +455,7 @@ impl<'a> Write for ByteChunkWriter<'a> {
         // different underlying writers. In that case, each iteration of
         // this loop writes to the underlying writer that corresponds to
         // the current chunk number.
-        let mut carryover_bytes_written = 0;
+        let mut carryover_bytes_written: usize = 0;
         loop {
             if buf.is_empty() {
                 return Ok(carryover_bytes_written);
@@ -464,19 +466,23 @@ impl<'a> Write for ByteChunkWriter<'a> {
             // write enough bytes to fill the current chunk, then increment
             // the chunk number and repeat.
             let n = buf.len();
-            if n < self.num_bytes_remaining_in_current_chunk {
+            if (n as u64) < self.num_bytes_remaining_in_current_chunk {
                 let num_bytes_written = self.inner.write(buf)?;
-                self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
+                self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
                 return Ok(carryover_bytes_written + num_bytes_written);
             } else {
                 // Write enough bytes to fill the current chunk.
-                let i = self.num_bytes_remaining_in_current_chunk;
+                //
+                // Conversion to usize is safe because we checked that
+                // self.num_bytes_remaining_in_current_chunk is lower than
+                // n, which is already usize.
+                let i = self.num_bytes_remaining_in_current_chunk as usize;
                 let num_bytes_written = self.inner.write(&buf[..i])?;
 
                 // It's possible that the underlying writer did not
                 // write all the bytes.
                 if num_bytes_written < i {
-                    self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
+                    self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
                     return Ok(carryover_bytes_written + num_bytes_written);
                 } else {
                     // Move the window to look at only the remaining bytes.
@@ -527,17 +533,17 @@ struct LineChunkWriter<'a> {
     settings: &'a Settings,
 
     /// The maximum number of lines allowed for a single chunk of output.
-    chunk_size: usize,
+    chunk_size: u64,
 
     /// Running total of number of chunks that have been completed.
-    num_chunks_written: usize,
+    num_chunks_written: u64,
 
     /// Remaining capacity in number of lines in the current chunk.
     ///
     /// This number starts at `chunk_size` and decreases as lines are
     /// written. Once it reaches zero, a writer for a new chunk is
     /// initialized and this number gets reset to `chunk_size`.
-    num_lines_remaining_in_current_chunk: usize,
+    num_lines_remaining_in_current_chunk: u64,
 
     /// The underlying writer for the current chunk.
     ///
@@ -551,7 +557,7 @@ struct LineChunkWriter<'a> {
 }
 
 impl<'a> LineChunkWriter<'a> {
-    fn new(chunk_size: usize, settings: &'a Settings) -> Option<LineChunkWriter<'a>> {
+    fn new(chunk_size: u64, settings: &'a Settings) -> Option<LineChunkWriter<'a>> {
         let mut filename_iterator = FilenameIterator::new(
             &settings.prefix,
             &settings.additional_suffix,
@@ -632,7 +638,7 @@ impl<'a> Write for LineChunkWriter<'a> {
 fn split_into_n_chunks_by_byte<R>(
     settings: &Settings,
     reader: &mut R,
-    num_chunks: usize,
+    num_chunks: u64,
 ) -> UResult<()>
 where
     R: Read,
@@ -648,15 +654,19 @@ where
     // files.
     let metadata = metadata(&settings.input).unwrap();
     let num_bytes = metadata.len();
-    let will_have_empty_files = settings.elide_empty_files && num_chunks as u64 > num_bytes;
+    let will_have_empty_files = settings.elide_empty_files && num_chunks > num_bytes;
     let (num_chunks, chunk_size) = if will_have_empty_files {
-        let num_chunks = num_bytes as usize;
+        let num_chunks = num_bytes;
         let chunk_size = 1;
         (num_chunks, chunk_size)
     } else {
-        let chunk_size = ((num_bytes / (num_chunks as u64)) as usize).max(1);
+        let chunk_size = (num_bytes / (num_chunks)).max(1);
         (num_chunks, chunk_size)
     };
+
+    let num_chunks: usize = num_chunks
+        .try_into()
+        .map_err(|_| USimpleError::new(1, "Number of chunks too big"))?;
 
     // This object is responsible for creating the filename for each chunk.
     let mut filename_iterator = FilenameIterator::new(
@@ -682,29 +692,17 @@ where
         // Write `chunk_size` bytes from the reader into each writer
         // except the last.
         //
-        // Re-use the buffer to avoid re-allocating a `Vec` on each
-        // iteration. The contents will be completely overwritten each
-        // time we call `read_exact()`.
-        //
         // The last writer gets all remaining bytes so that if the number
         // of bytes in the input file was not evenly divisible by
         // `num_chunks`, we don't leave any bytes behind.
-        let mut buf = vec![0u8; chunk_size];
         for writer in writers.iter_mut().take(num_chunks - 1) {
-            reader.read_exact(&mut buf)?;
-            writer.write_all(&buf)?;
+            io::copy(&mut reader.by_ref().take(chunk_size), writer)?;
         }
 
         // Write all the remaining bytes to the last chunk.
-        //
-        // To do this, we resize our buffer to have the necessary number
-        // of bytes.
         let i = num_chunks - 1;
-        let last_chunk_size = num_bytes as usize - (chunk_size * (num_chunks - 1));
-        buf.resize(last_chunk_size, 0);
-
-        reader.read_exact(&mut buf)?;
-        writers[i].write_all(&buf)?;
+        let last_chunk_size = num_bytes - (chunk_size * (num_chunks as u64 - 1));
+        io::copy(&mut reader.by_ref().take(last_chunk_size), &mut writers[i])?;
 
         Ok(())
     }
