@@ -469,7 +469,6 @@ impl OutputTrait for Output<File> {
             let mut opts = OpenOptions::new();
             opts.write(true)
                 .create(!cflags.nocreat)
-                .truncate(!cflags.notrunc)
                 .create_new(cflags.excl)
                 .append(oflags.append);
 
@@ -489,13 +488,13 @@ impl OutputTrait for Output<File> {
             let mut dst = open_dst(Path::new(&fname), &cflags, &oflags)
                 .map_err_context(|| format!("failed to open {}", fname.quote()))?;
 
-            if let Some(amt) = seek {
-                let amt: u64 = amt
-                    .try_into()
-                    .map_err(|_| USimpleError::new(1, "failed to parse seek amount"))?;
-                dst.seek(io::SeekFrom::Start(amt))
-                    .map_err_context(|| "failed to seek in output file".to_string())?;
+            let i = seek.unwrap_or(0).try_into().unwrap();
+            if !cflags.notrunc {
+                dst.set_len(i)
+                    .map_err_context(|| "failed to truncate output file".to_string())?;
             }
+            dst.seek(io::SeekFrom::Start(i))
+                .map_err_context(|| "failed to seek in output file".to_string())?;
 
             Ok(Self { dst, obs, cflags })
         } else {
