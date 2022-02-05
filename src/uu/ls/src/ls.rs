@@ -1857,6 +1857,8 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
 
     #[cfg(not(unix))]
     {
+        // Silence linter warning about `config` being unused for windows.
+        let _ = config;
         // no way to get block size for windows, fall-back to file size
         md.len()
     }
