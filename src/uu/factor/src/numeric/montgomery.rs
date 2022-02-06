@@ -145,8 +145,8 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
         // a+b % n
         #[cfg(debug_assertions)]
         {
-            let a_r = self.to_u64(a) as u128;
-            let b_r = self.to_u64(b) as u128;
+            let a_r = u128::from(self.to_u64(a));
+            let b_r = u128::from(self.to_u64(b));
             let r_r = self.to_u64(r);
             let r_2 = ((a_r + b_r) % self.n.as_u128()) as u64;
             debug_assert_eq!(
@@ -165,8 +165,8 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
         // a*b % n
         #[cfg(debug_assertions)]
         {
-            let a_r = self.to_u64(a) as u128;
-            let b_r = self.to_u64(b) as u128;
+            let a_r = u128::from(self.to_u64(a));
+            let b_r = u128::from(self.to_u64(b));
             let r_r = self.to_u64(r);
             let r_2: u64 = ((a_r * b_r) % self.n.as_u128()) as u64;
             debug_assert_eq!(

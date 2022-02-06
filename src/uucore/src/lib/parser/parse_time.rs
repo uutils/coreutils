@@ -35,9 +35,9 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
         .parse::<f64>()
         .map_err(|e| format!("invalid time interval {}: {}", string.quote(), e))?;
 
-    const NANOS_PER_SEC: u32 = 1_000_000_000;
+    const NANOS_PER_SEC: f64 = 1_000_000_000.0;
     let whole_secs = num.trunc();
-    let nanos = (num.fract() * (NANOS_PER_SEC as f64)).trunc();
+    let nanos = (num.fract() * (NANOS_PER_SEC)).trunc();
     let duration = Duration::new(whole_secs as u64, nanos as u32);
     Ok(duration * times)
 }

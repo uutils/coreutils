@@ -42,7 +42,7 @@ impl Decomposition {
     fn product(&self) -> u64 {
         self.0
             .iter()
-            .fold(1, |acc, (p, exp)| acc * p.pow(*exp as u32))
+            .fold(1, |acc, (p, exp)| acc * p.pow((*exp).into()))
     }
 
     fn get(&self, p: u64) -> Option<&(u64, u8)> {

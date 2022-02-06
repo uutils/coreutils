@@ -123,7 +123,7 @@ impl Stat {
 
         #[cfg(not(windows))]
         let file_info = FileInfo {
-            file_id: metadata.ino() as u128,
+            file_id: metadata.ino().into(),
             dev_id: metadata.dev(),
         };
         #[cfg(not(windows))]

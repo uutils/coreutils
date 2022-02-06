@@ -9,4 +9,5 @@ rustflags = [
   "-Wclippy::semicolon_if_nothing_returned",
   "-Wclippy::single_char_pattern",
   "-Wclippy::explicit_iter_loop",
+  "-Wclippy::cast_lossless",
 ]
