@@ -23,10 +23,11 @@ jobs:
         path_reference="reference"
         outputs path_GNU path_GNU_tests path_GNULIB path_reference path_UUTILS
         #
+        repo_default_branch="${{ github.event.repository.default_branch }}"
         repo_GNU_ref="v9.0"
         repo_GNULIB_ref="8e99f24c0931a38880c6ee9b8287c7da80b0036b"
         repo_reference_branch="${{ github.event.repository.default_branch }}"
-        outputs repo_GNU_ref repo_GNULIB_ref repo_reference_branch
+        outputs repo_default_branch repo_GNU_ref repo_GNULIB_ref repo_reference_branch
         #
         SUITE_LOG_FILE="${path_GNU_tests}/test-suite.log"
         TEST_LOGS_GLOB="${path_GNU_tests}/**/*.log" ## note: not usable at bash CLI; [why] double globstar not enabled by default b/c MacOS includes only bash v3 which doesn't have double globstar support
@@ -160,7 +161,7 @@ jobs:
           do
             if ! grep -Fxq $LINE<<<"$REF_FAILING"
             then
-              echo "::error ::GNU test failed: $LINE. $LINE is passing on 'main'. Maybe you have to rebase?"
+              echo "::error ::GNU test failed: $LINE. $LINE is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
             fi
           done
         else
