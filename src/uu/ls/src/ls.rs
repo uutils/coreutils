@@ -2537,7 +2537,7 @@ fn calculate_padding_collection(
 }
 
 #[cfg(not(unix))]
-fn calculate_paddings(
+fn calculate_padding_collection(
     items: &[PathData],
     config: &Config,
     out: &mut BufWriter<Stdout>,
@@ -2564,13 +2564,10 @@ fn calculate_paddings(
     }
 
     PaddingCollection {
-        longest_inode_len,
         longest_link_count_len,
         longest_uname_len,
         longest_group_len,
         longest_context_len,
         longest_size_len,
-        longest_major_len,
-        longest_minor_len,
     }
 }
