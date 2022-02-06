@@ -11,6 +11,7 @@
 extern crate uucore;
 
 use clap::{crate_version, App, AppSettings, Arg};
+use memchr::{memchr3_iter, memchr_iter};
 use std::cmp::Ordering;
 use std::convert::From;
 use std::error::Error;
@@ -66,7 +67,7 @@ enum LineEnding {
     Newline = b'\n',
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 enum Sep {
     Char(u8),
     Line,
@@ -147,7 +148,7 @@ impl<'a> Repr<'a> {
     fn print_field(
         &self,
         writer: &mut impl Write,
-        field: Option<&Vec<u8>>,
+        field: Option<&[u8]>,
     ) -> Result<(), std::io::Error> {
         let value = match field {
             Some(field) => field,
@@ -164,10 +165,10 @@ impl<'a> Repr<'a> {
         line: &Line,
         index: usize,
     ) -> Result<(), std::io::Error> {
-        for i in 0..line.fields.len() {
+        for i in 0..line.field_ranges.len() {
             if i != index {
                 writer.write_all(&[self.separator])?;
-                writer.write_all(&line.fields[i])?;
+                writer.write_all(line.get_field(i).unwrap())?;
             }
         }
         Ok(())
@@ -176,7 +177,7 @@ impl<'a> Repr<'a> {
     /// Print each field or the empty filler if the field is not set.
     fn print_format<F>(&self, writer: &mut impl Write, f: F) -> Result<(), std::io::Error>
     where
-        F: Fn(&Spec) -> Option<&'a Vec<u8>>,
+        F: Fn(&Spec) -> Option<&'a [u8]>,
     {
         for i in 0..self.format.len() {
             if i > 0 {
@@ -214,7 +215,7 @@ impl Input {
         }
     }
 
-    fn compare(&self, field1: Option<&Vec<u8>>, field2: Option<&Vec<u8>>) -> Ordering {
+    fn compare(&self, field1: Option<&[u8]>, field2: Option<&[u8]>) -> Ordering {
         if let (Some(field1), Some(field2)) = (field1, field2) {
             if self.ignore_case {
                 field1
@@ -277,30 +278,41 @@ impl Spec {
 }
 
 struct Line {
-    fields: Vec<Vec<u8>>,
+    field_ranges: Vec<(usize, usize)>,
     string: Vec<u8>,
 }
 
 impl Line {
     fn new(string: Vec<u8>, separator: Sep) -> Self {
-        let fields = match separator {
-            Sep::Whitespaces => string
-                // GNU join uses Bourne shell field splitters by default
-                .split(|c| matches!(*c, b' ' | b'\t' | b'\n'))
-                .filter(|f| !f.is_empty())
-                .map(Vec::from)
-                .collect(),
-            Sep::Char(sep) => string.split(|c| *c == sep).map(Vec::from).collect(),
-            Sep::Line => vec![string.clone()],
-        };
+        let mut field_ranges = Vec::new();
+        let mut last_end = 0;
+        if separator == Sep::Whitespaces {
+            // GNU join uses Bourne shell field splitters by default
+            for i in memchr3_iter(b' ', b'\t', b'\n', &string) {
+                if i > last_end {
+                    field_ranges.push((last_end, i));
+                }
+                last_end = i + 1;
+            }
+        } else if let Sep::Char(sep) = separator {
+            for i in memchr_iter(sep, &string) {
+                field_ranges.push((last_end, i));
+                last_end = i + 1;
+            }
+        }
+        field_ranges.push((last_end, string.len()));
 
-        Self { fields, string }
+        Self {
+            field_ranges,
+            string,
+        }
     }
 
     /// Get field at index.
-    fn get_field(&self, index: usize) -> Option<&Vec<u8>> {
-        if index < self.fields.len() {
-            Some(&self.fields[index])
+    fn get_field(&self, index: usize) -> Option<&[u8]> {
+        if index < self.field_ranges.len() {
+            let (low, high) = self.field_ranges[index];
+            Some(&self.string[low..high])
         } else {
             None
         }
@@ -470,7 +482,7 @@ impl<'a> State<'a> {
             self.seq.push(line);
 
             if autoformat {
-                return self.seq[0].fields.len();
+                return self.seq[0].field_ranges.len();
             }
         }
         0
@@ -547,7 +559,7 @@ impl<'a> State<'a> {
     }
 
     /// Gets the key value of the lines stored in seq.
-    fn get_current_key(&self) -> Option<&Vec<u8>> {
+    fn get_current_key(&self) -> Option<&[u8]> {
         self.seq[0].get_field(self.key)
     }
 
