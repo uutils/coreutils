@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# spell-checker:ignore (vars) OSID
+# spell-checker:ignore (vars) OSID binfmt
 
 ME_dir="$(dirname -- "$(readlink -fm -- "$0")")"
 REPO_main_dir="$(dirname -- "${ME_dir}")"

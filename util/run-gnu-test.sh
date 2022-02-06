@@ -1,7 +1,7 @@
 #!/bin/bash
 # `$0 [TEST]`
 # run GNU test (or all tests if TEST is missing/null)
-# spell-checker:ignore (env/vars) BUILDDIR GNULIB SUBDIRS
+# spell-checker:ignore (env/vars) GNULIB SUBDIRS ; (utils) shellcheck
 
 ME_dir="$(dirname -- "$(readlink -fm -- "$0")")"
 REPO_main_dir="$(dirname -- "${ME_dir}")"

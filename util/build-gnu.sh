@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall gnulib inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode ; (vars/env) BUILDDIR SRCDIR
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall gnulib inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules ; (vars/env) BUILDDIR SRCDIR
 
 set -e
 if test ! -d ../gnu; then
@@ -14,14 +14,12 @@ if test ! -d ../gnulib; then
     exit 1
 fi
 
-
 pushd "$PWD"
 make PROFILE=release
 BUILDDIR="$PWD/target/release/"
 cp "${BUILDDIR}/install" "${BUILDDIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 # Create *sum binaries
-for sum in b2sum b3sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum
-do
+for sum in b2sum b3sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum; do
     sum_path="${BUILDDIR}/${sum}"
     test -f "${sum_path}" || cp "${BUILDDIR}/hashsum" "${sum_path}"
 done
@@ -31,10 +29,12 @@ GNULIB_SRCDIR="$PWD/../gnulib"
 pushd ../gnu/
 
 # Any binaries that aren't built become `false` so their tests fail
-for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs)
-do
+for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
     bin_path="${BUILDDIR}/${binary}"
-    test -f "${bin_path}" || { echo "'${binary}' was not built with uutils, using the 'false' program"; cp "${BUILDDIR}/false" "${bin_path}"; }
+    test -f "${bin_path}" || {
+        echo "'${binary}' was not built with uutils, using the 'false' program"
+        cp "${BUILDDIR}/false" "${bin_path}"
+    }
 done
 
 ./bootstrap --gnulib-srcdir="$GNULIB_SRCDIR"
@@ -47,17 +47,14 @@ sed -i 's| tr | /usr/bin/tr |' tests/init.sh
 make -j "$(nproc)"
 # Generate the factor tests, so they can be fixed
 # Used to be 36. Reduced to 20 to decrease the log size
-for i in {00..20}
-do
+for i in {00..20}; do
     make "tests/factor/t${i}.sh"
 done
 
 # strip the long stuff
-for i in {21..36}
-do
+for i in {21..36}; do
     sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
 done
-
 
 grep -rl 'path_prepend_' tests/* | xargs sed -i 's| path_prepend_ ./src||'
 sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*sh
@@ -97,10 +94,8 @@ sed -i 's|seq |/usr/bin/seq |' tests/misc/sort-discrim.sh
 # Add specific timeout to tests that currently hang to limit time spent waiting
 sed -i 's|\(^\s*\)seq \$|\1/usr/bin/timeout 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh
 
-
 # Remove dup of /usr/bin/ when executed several times
 grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs --no-run-if-empty sed -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
-
 
 #### Adjust tests to make them work with Rust/coreutils
 # in some cases, what we are doing in rust/coreutils is good (or better)
