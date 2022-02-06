@@ -8,7 +8,8 @@
 
 FEATURES_OPTION="--features feat_os_unix"
 
-ME_dir="$(dirname -- "$(readlink -fm -- "$0")")"
+ME="${0}"
+ME_dir="$(dirname -- "$(readlink -fm -- "${ME}")")"
 REPO_main_dir="$(dirname -- "${ME_dir}")"
 
 cd "${REPO_main_dir}" &&
