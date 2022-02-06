@@ -56,4 +56,5 @@ if genhtml --version 2>/dev/null 1>&2; then
 else
     grcov . --output-type html --output-path "${COVERAGE_REPORT_DIR}" --branch --ignore build.rs --ignore '/*' --ignore '[A-Za-z]:/*' --ignore 'C:/Users/*' --excl-br-line '^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()'
 fi
+# shellcheck disable=SC2181
 if [ $? -ne 0 ]; then exit 1; fi
