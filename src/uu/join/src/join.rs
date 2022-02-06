@@ -283,8 +283,8 @@ struct Line {
 }
 
 impl Line {
-    fn new(string: Vec<u8>, separator: Sep) -> Self {
-        let mut field_ranges = Vec::new();
+    fn new(string: Vec<u8>, separator: Sep, len_guess: usize) -> Self {
+        let mut field_ranges = Vec::with_capacity(len_guess);
         let mut last_end = 0;
         if separator == Sep::Whitespaces {
             // GNU join uses Bourne shell field splitters by default
@@ -325,6 +325,7 @@ struct State<'a> {
     file_num: FileNum,
     print_unpaired: bool,
     lines: Split<Box<dyn BufRead + 'a>>,
+    max_len: usize,
     seq: Vec<Line>,
     line_num: usize,
     has_failed: bool,
@@ -355,6 +356,7 @@ impl<'a> State<'a> {
             file_num,
             print_unpaired,
             lines: f.split(line_ending as u8),
+            max_len: 1,
             seq: Vec::new(),
             line_num: 0,
             has_failed: false,
@@ -517,7 +519,11 @@ impl<'a> State<'a> {
         match self.lines.next() {
             Some(value) => {
                 self.line_num += 1;
-                Ok(Some(Line::new(value?, sep)))
+                let line = Line::new(value?, sep, self.max_len);
+                if line.field_ranges.len() > self.max_len {
+                    self.max_len = line.field_ranges.len();
+                }
+                Ok(Some(line))
             }
             None => Ok(None),
         }
