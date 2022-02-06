@@ -12,14 +12,46 @@ extern crate uucore;
 
 use clap::{crate_version, App, AppSettings, Arg};
 use std::cmp::Ordering;
+use std::convert::From;
+use std::error::Error;
+use std::fmt::Display;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Split, Stdin, Write};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UResult, USimpleError};
+use uucore::error::{set_exit_code, UError, UResult, USimpleError};
 
 static NAME: &str = "join";
+
+#[derive(Debug)]
+enum JoinError {
+    IOError(std::io::Error),
+    UnorderedInput,
+}
+
+impl UError for JoinError {
+    fn code(&self) -> i32 {
+        1
+    }
+}
+
+impl Error for JoinError {}
+
+impl Display for JoinError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            JoinError::IOError(e) => write!(f, "io error: {}", e),
+            JoinError::UnorderedInput => Ok(()),
+        }
+    }
+}
+
+impl From<std::io::Error> for JoinError {
+    fn from(error: std::io::Error) -> Self {
+        Self::IOError(error)
+    }
+}
 
 #[derive(Copy, Clone, PartialEq)]
 enum FileNum {
@@ -310,29 +342,29 @@ impl<'a> State<'a> {
     }
 
     /// Skip the current unpaired line.
-    fn skip_line(&mut self, input: &Input, repr: &Repr) -> Result<(), std::io::Error> {
+    fn skip_line(&mut self, input: &Input, repr: &Repr) -> Result<(), JoinError> {
         if self.print_unpaired {
             self.print_first_line(repr)?;
         }
 
-        self.reset_next_line(input);
+        self.reset_next_line(input)?;
         Ok(())
     }
 
     /// Keep reading line sequence until the key does not change, return
     /// the first line whose key differs.
-    fn extend(&mut self, input: &Input) -> Option<Line> {
-        while let Some(line) = self.next_line(input) {
+    fn extend(&mut self, input: &Input) -> Result<Option<Line>, JoinError> {
+        while let Some(line) = self.next_line(input)? {
             let diff = input.compare(self.get_current_key(), line.get_field(self.key));
 
             if diff == Ordering::Equal {
                 self.seq.push(line);
             } else {
-                return Some(line);
+                return Ok(Some(line));
             }
         }
 
-        None
+        Ok(None)
     }
 
     /// Print lines in the buffers as headers.
@@ -393,14 +425,16 @@ impl<'a> State<'a> {
         }
     }
 
-    fn reset_read_line(&mut self, input: &Input) {
-        let line = self.read_line(input.separator);
+    fn reset_read_line(&mut self, input: &Input) -> Result<(), std::io::Error> {
+        let line = self.read_line(input.separator)?;
         self.reset(line);
+        Ok(())
     }
 
-    fn reset_next_line(&mut self, input: &Input) {
-        let line = self.next_line(input);
+    fn reset_next_line(&mut self, input: &Input) -> Result<(), JoinError> {
+        let line = self.next_line(input)?;
         self.reset(line);
+        Ok(())
     }
 
     fn has_line(&self) -> bool {
@@ -408,7 +442,7 @@ impl<'a> State<'a> {
     }
 
     fn initialize(&mut self, read_sep: Sep, autoformat: bool) -> usize {
-        if let Some(line) = self.read_line(read_sep) {
+        if let Some(line) = crash_if_err!(1, self.read_line(read_sep)) {
             self.seq.push(line);
 
             if autoformat {
@@ -418,19 +452,19 @@ impl<'a> State<'a> {
         0
     }
 
-    fn finalize(&mut self, input: &Input, repr: &Repr) -> Result<(), std::io::Error> {
+    fn finalize(&mut self, input: &Input, repr: &Repr) -> Result<(), JoinError> {
         if self.has_line() {
             if self.print_unpaired {
                 self.print_first_line(repr)?;
             }
 
-            let mut next_line = self.next_line(input);
+            let mut next_line = self.next_line(input)?;
             while let Some(line) = &next_line {
                 if self.print_unpaired {
                     self.print_line(line, repr)?;
                 }
                 self.reset(next_line);
-                next_line = self.next_line(input);
+                next_line = self.next_line(input)?;
             }
         }
 
@@ -438,41 +472,49 @@ impl<'a> State<'a> {
     }
 
     /// Get the next line without the order check.
-    fn read_line(&mut self, sep: Sep) -> Option<Line> {
-        let value = self.lines.next()?;
-        self.line_num += 1;
-        Some(Line::new(crash_if_err!(1, value), sep))
+    fn read_line(&mut self, sep: Sep) -> Result<Option<Line>, std::io::Error> {
+        match self.lines.next() {
+            Some(value) => {
+                self.line_num += 1;
+                Ok(Some(Line::new(value?, sep)))
+            }
+            None => Ok(None),
+        }
     }
 
     /// Get the next line with the order check.
-    fn next_line(&mut self, input: &Input) -> Option<Line> {
-        let line = self.read_line(input.separator)?;
-
-        if input.check_order == CheckOrder::Disabled {
-            return Some(line);
-        }
-
-        let diff = input.compare(self.get_current_key(), line.get_field(self.key));
-
-        if diff == Ordering::Greater {
-            if input.check_order == CheckOrder::Enabled || (self.has_unpaired && !self.has_failed) {
-                eprintln!(
-                    "{}: {}:{}: is not sorted: {}",
-                    uucore::execution_phrase(),
-                    self.file_name.maybe_quote(),
-                    self.line_num,
-                    String::from_utf8_lossy(&line.string)
-                );
-
-                self.has_failed = true;
+    fn next_line(&mut self, input: &Input) -> Result<Option<Line>, JoinError> {
+        if let Some(line) = self.read_line(input.separator)? {
+            if input.check_order == CheckOrder::Disabled {
+                return Ok(Some(line));
             }
-            // This is fatal if the check is enabled.
-            if input.check_order == CheckOrder::Enabled {
-                std::process::exit(1);
-            }
-        }
 
-        Some(line)
+            let diff = input.compare(self.get_current_key(), line.get_field(self.key));
+
+            if diff == Ordering::Greater {
+                if input.check_order == CheckOrder::Enabled
+                    || (self.has_unpaired && !self.has_failed)
+                {
+                    eprintln!(
+                        "{}: {}:{}: is not sorted: {}",
+                        uucore::execution_phrase(),
+                        self.file_name.maybe_quote(),
+                        self.line_num,
+                        String::from_utf8_lossy(&line.string)
+                    );
+
+                    self.has_failed = true;
+                }
+                // This is fatal if the check is enabled.
+                if input.check_order == CheckOrder::Enabled {
+                    return Err(JoinError::UnorderedInput);
+                }
+            }
+
+            Ok(Some(line))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Gets the key value of the lines stored in seq.
@@ -718,7 +760,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
         )
 }
 
-fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), std::io::Error> {
+fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), JoinError> {
     let stdin = stdin();
 
     let mut state1 = State::new(
@@ -776,8 +818,8 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), std::io::Err
 
     if settings.headers {
         state1.print_headers(&state2, &repr)?;
-        state1.reset_read_line(&input);
-        state2.reset_read_line(&input);
+        state1.reset_read_line(&input)?;
+        state2.reset_read_line(&input)?;
     }
 
     while state1.has_line() && state2.has_line() {
@@ -795,8 +837,8 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), std::io::Err
                 state2.has_unpaired = true;
             }
             Ordering::Equal => {
-                let next_line1 = state1.extend(&input);
-                let next_line2 = state2.extend(&input);
+                let next_line1 = state1.extend(&input)?;
+                let next_line2 = state2.extend(&input)?;
 
                 if settings.print_joined {
                     state1.combine(&state2, &repr)?;
