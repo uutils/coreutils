@@ -1,6 +1,6 @@
 name: GnuTests
 
-# spell-checker:ignore (names) gnulib ; (people) Dawid Dziurla * dawidd6 ; (utils) autopoint chksum gperf pyinotify shopt texinfo ; (vars) FILESET XPASS
+# spell-checker:ignore (names) gnulib ; (jargon) submodules ; (people) Dawid Dziurla * dawidd ; (utils) autopoint chksum gperf pyinotify shopt texinfo ; (vars) FILESET XPASS
 
 on: [push, pull_request]
 

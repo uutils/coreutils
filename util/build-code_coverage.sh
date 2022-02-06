@@ -4,7 +4,7 @@
 # spell-checker:ignore (jargon) toolchain
 # spell-checker:ignore (rust) Ccodegen Cinline Coverflow Cpanic RUSTC RUSTDOCFLAGS RUSTFLAGS RUSTUP Zpanic
 # spell-checker:ignore (shell) OSID esac
-# spell-checker:ignore (utils) genhtml grcov lcov readlink sccache uutils
+# spell-checker:ignore (utils) genhtml grcov lcov readlink sccache shellcheck uutils
 
 FEATURES_OPTION="--features feat_os_unix"
 
