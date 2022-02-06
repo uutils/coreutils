@@ -106,10 +106,10 @@ pub fn uu_app<'a>() -> App<'a> {
 
 #[derive(Debug, PartialEq)]
 enum Mode {
-    FirstLines(usize),
-    AllButLastLines(usize),
-    FirstBytes(usize),
-    AllButLastBytes(usize),
+    FirstLines(u64),
+    AllButLastLines(u64),
+    FirstBytes(u64),
+    AllButLastBytes(u64),
 }
 
 impl Default for Mode {
@@ -199,12 +199,12 @@ impl HeadOptions {
     }
 }
 
-fn read_n_bytes<R>(input: R, n: usize) -> std::io::Result<()>
+fn read_n_bytes<R>(input: R, n: u64) -> std::io::Result<()>
 where
     R: Read,
 {
     // Read the first `n` bytes from the `input` reader.
-    let mut reader = input.take(n as u64);
+    let mut reader = input.take(n);
 
     // Write those bytes to `stdout`.
     let stdout = std::io::stdout();
@@ -215,7 +215,7 @@ where
     Ok(())
 }
 
-fn read_n_lines(input: &mut impl std::io::BufRead, n: usize, zero: bool) -> std::io::Result<()> {
+fn read_n_lines(input: &mut impl std::io::BufRead, n: u64, zero: bool) -> std::io::Result<()> {
     // Read the first `n` lines from the `input` reader.
     let separator = if zero { b'\0' } else { b'\n' };
     let mut reader = take_lines(input, n, separator);
@@ -233,8 +233,9 @@ fn read_n_lines(input: &mut impl std::io::BufRead, n: usize, zero: bool) -> std:
 fn read_but_last_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io::Result<()> {
     if n == 0 {
         //prints everything
-        return read_n_bytes(input, std::usize::MAX);
+        return read_n_bytes(input, std::u64::MAX);
     }
+
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
 
@@ -337,17 +338,18 @@ fn read_but_last_n_lines(
 /// assert_eq!(find_nth_line_from_end(&mut input, 4, false).unwrap(), 0);
 /// assert_eq!(find_nth_line_from_end(&mut input, 1000, false).unwrap(), 0);
 /// ```
-fn find_nth_line_from_end<R>(input: &mut R, n: usize, zeroed: bool) -> std::io::Result<usize>
+fn find_nth_line_from_end<R>(input: &mut R, n: u64, zeroed: bool) -> std::io::Result<u64>
 where
     R: Read + Seek,
 {
     let size = input.seek(SeekFrom::End(0))?;
-    let size = usize::try_from(size).unwrap();
 
     let mut buffer = [0u8; BUF_SIZE];
-    let buffer = &mut buffer[..BUF_SIZE.min(size)];
-    let mut i = 0usize;
-    let mut lines = 0usize;
+    let buf_size: usize = (BUF_SIZE as u64).min(size).try_into().unwrap();
+    let buffer = &mut buffer[..buf_size];
+
+    let mut i = 0u64;
+    let mut lines = 0u64;
 
     loop {
         // the casts here are ok, `buffer.len()` should never be above a few k
@@ -382,7 +384,7 @@ where
 fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
     match options.mode {
         Mode::AllButLastBytes(n) => {
-            let size = input.metadata()?.len().try_into().unwrap();
+            let size = input.metadata()?.len();
             if n >= size {
                 return Ok(());
             } else {
@@ -431,12 +433,30 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 }
                 let stdin = std::io::stdin();
                 let mut stdin = stdin.lock();
+
+                // Outputting "all-but-last" requires us to use a ring buffer with size n, so n
+                // must be converted from u64 to usize to fit in memory. If such conversion fails,
+                // it means the platform doesn't have enough memory to hold the buffer, so we fail.
+                if let Mode::AllButLastLines(n) | Mode::AllButLastBytes(n) = options.mode {
+                    if let Err(n) = usize::try_from(n) {
+                        show!(USimpleError::new(
+                            1,
+                            format!("{}: number of bytes is too large", n)
+                        ));
+                        continue;
+                    };
+                };
+
                 match options.mode {
                     Mode::FirstBytes(n) => read_n_bytes(&mut stdin, n),
-                    Mode::AllButLastBytes(n) => read_but_last_n_bytes(&mut stdin, n),
+                    // unwrap is guaranteed to succeed because we checked the value of n above
+                    Mode::AllButLastBytes(n) => {
+                        read_but_last_n_bytes(&mut stdin, n.try_into().unwrap())
+                    }
                     Mode::FirstLines(n) => read_n_lines(&mut stdin, n, options.zeroed),
+                    // unwrap is guaranteed to succeed because we checked the value of n above
                     Mode::AllButLastLines(n) => {
-                        read_but_last_n_lines(&mut stdin, n, options.zeroed)
+                        read_but_last_n_lines(&mut stdin, n.try_into().unwrap(), options.zeroed)
                     }
                 }
             }

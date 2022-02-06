@@ -69,7 +69,7 @@ where
 /// details.
 pub struct TakeLines<T> {
     inner: T,
-    limit: usize,
+    limit: u64,
     separator: u8,
 }
 
@@ -103,7 +103,7 @@ impl<T: Read> Read for TakeLines<T> {
 ///
 /// The `separator` defines the character to interpret as the line
 /// ending. For the usual notion of "line", set this to `b'\n'`.
-pub fn take_lines<R>(reader: R, limit: usize, separator: u8) -> TakeLines<R> {
+pub fn take_lines<R>(reader: R, limit: u64, separator: u8) -> TakeLines<R> {
     TakeLines {
         inner: reader,
         limit,
