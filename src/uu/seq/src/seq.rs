@@ -146,7 +146,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .setting(AppSettings::TrailingVarArg)
-        .setting(AppSettings::AllowHyphenValues)
+        .setting(AppSettings::AllowNegativeNumbers)
         .setting(AppSettings::InferLongArgs)
         .version(crate_version!())
         .about(ABOUT)
