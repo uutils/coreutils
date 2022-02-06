@@ -487,19 +487,11 @@ fn sub_general_truncate_to_integer() {
 }
 
 #[test]
-fn sub_general_prefix_with_spaces() {
+fn sub_general_scientific_notation() {
     new_ucmd!()
-        .args(&["%5g", "1.1"])
+        .args(&["%g", "1000010"])
         .succeeds()
-        .stdout_only("  1.1");
-}
-
-#[test]
-fn sub_general_large_integer() {
-    new_ucmd!()
-        .args(&["%g", "1000000"])
-        .succeeds()
-        .stdout_only("1e+06");
+        .stdout_only("1.00001e+06");
 }
 
 #[test]
@@ -508,14 +500,6 @@ fn sub_general_round_scientific_notation() {
         .args(&["%g", "123456789"])
         .succeeds()
         .stdout_only("1.23457e+08");
-}
-
-#[test]
-fn sub_general_scientific_leading_zeroes() {
-    new_ucmd!()
-        .args(&["%g", "1000010"])
-        .succeeds()
-        .stdout_only("1.00001e+06");
 }
 
 #[test]
