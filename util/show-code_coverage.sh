@@ -2,7 +2,8 @@
 
 # spell-checker:ignore (vars) OSID binfmt
 
-ME_dir="$(dirname -- "$(readlink -fm -- "$0")")"
+ME="${0}"
+ME_dir="$(dirname -- "$(readlink -fm -- "${ME}")")"
 REPO_main_dir="$(dirname -- "${ME_dir}")"
 
 export COVERAGE_REPORT_DIR="${REPO_main_dir}/target/debug/coverage-nix"
