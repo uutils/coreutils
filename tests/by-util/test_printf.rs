@@ -437,3 +437,11 @@ fn stop_after_additional_escape() {
         .succeeds()
         .stdout_only("ABC");
 }
+
+#[test]
+fn sub_float_leading_zeroes() {
+    new_ucmd!()
+        .args(&["%010f", "1"])
+        .succeeds()
+        .stdout_only("001.000000");
+}
