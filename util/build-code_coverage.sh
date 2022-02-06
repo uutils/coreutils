@@ -12,7 +12,7 @@ ME_dir="$(dirname -- "$(readlink -fm -- "$0")")"
 REPO_main_dir="$(dirname -- "${ME_dir}")"
 
 cd "${REPO_main_dir}" &&
-echo "[ \"$PWD\" ]"
+    echo "[ \"$PWD\" ]"
 
 #shellcheck disable=SC2086
 UTIL_LIST=$("${ME_dir}"/show-utils.sh ${FEATURES_OPTION})
@@ -26,13 +26,14 @@ done
 # cargo clean
 
 export CARGO_INCREMENTAL=0
-export RUSTC_WRAPPER=""     ## NOTE: RUSTC_WRAPPER=='sccache' breaks code coverage calculations (uu_*.gcno files are not created during build)
+export RUSTC_WRAPPER="" ## NOTE: RUSTC_WRAPPER=='sccache' breaks code coverage calculations (uu_*.gcno files are not created during build)
 # export RUSTFLAGS="-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zno-landing-pads"
 export RUSTFLAGS="-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
 export RUSTDOCFLAGS="-Cpanic=abort"
 export RUSTUP_TOOLCHAIN="nightly-gnu"
 #shellcheck disable=SC2086
-{   cargo build ${FEATURES_OPTION}
+{
+    cargo build ${FEATURES_OPTION}
     cargo test --no-run ${FEATURES_OPTION}
     cargo test --quiet ${FEATURES_OPTION}
     cargo test --quiet ${FEATURES_OPTION} ${CARGO_INDIVIDUAL_PACKAGE_OPTIONS}
@@ -55,4 +56,4 @@ if genhtml --version 2>/dev/null 1>&2; then
 else
     grcov . --output-type html --output-path "${COVERAGE_REPORT_DIR}" --branch --ignore build.rs --ignore '/*' --ignore '[A-Za-z]:/*' --ignore 'C:/Users/*' --excl-br-line '^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()'
 fi
-if [ $? -ne 0 ]; then exit 1 ; fi
+if [ $? -ne 0 ]; then exit 1; fi
