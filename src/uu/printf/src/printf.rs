@@ -11,22 +11,13 @@ const VERSION: &str = "version";
 const HELP: &str = "help";
 const USAGE: &str = "printf FORMATSTRING [ARGUMENT]...";
 const ABOUT: &str = "Print output based off of the format string and proceeding arguments.";
-static LONGHELP_LEAD: &str = "printf
-
-USAGE: printf FORMATSTRING [ARGUMENT]...
-
+const AFTER_HELP: &str = "
 basic anonymous string templating:
 
 prints format string at least once, repeating as long as there are remaining arguments
 output prints escaped literals in the format string as character literals
 output replaces anonymous fields with the next unused argument, formatted according to the field.
 
-Options:
-    --help              display this help and exit
-    --version           output version information and exit
-
-";
-static LONGHELP_BODY: &str = "
 Prints the , replacing escaped character sequences with character literals
   and substitution field sequences with passed arguments
 
@@ -273,32 +264,36 @@ COPYRIGHT :
 
 ";
 
+mod options {
+    pub const FORMATSTRING: &str = "FORMATSTRING";
+    pub const ARGUMENT: &str = "ARGUMENT";
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
+    let matches = uu_app().get_matches_from(args);
 
-    if args.len() <= 1 {
-        return Err(UUsageError::new(1, "missing operand"));
-    }
-    let formatstr = &args[1];
+    let format_string = matches
+        .value_of(options::FORMATSTRING)
+        .ok_or_else(|| UUsageError::new(1, "missing operand"))?;
+    let values: Vec<String> = match matches.values_of(options::ARGUMENT) {
+        Some(s) => s.map(|s| s.to_string()).collect(),
+        None => vec![],
+    };
 
-    if formatstr == "--help" {
-        print!("{} {}", LONGHELP_LEAD, LONGHELP_BODY);
-    } else if formatstr == "--version" {
-        println!("{} {}", uucore::util_name(), crate_version!());
-    } else {
-        let printf_args = &args[2..];
-        memo::Memo::run_all(formatstr, printf_args);
-    }
+    memo::Memo::run_all(format_string, &values[..]);
     Ok(())
 }
 
 pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
+        .setting(AppSettings::AllowHyphenValues)
         .version(crate_version!())
         .about(ABOUT)
+        .after_help(AFTER_HELP)
         .override_usage(USAGE)
         .arg(Arg::new(HELP).long(HELP).help("Print help information"))
         .arg(
@@ -306,5 +301,6 @@ pub fn uu_app<'a>() -> App<'a> {
                 .long(VERSION)
                 .help("Print version information"),
         )
-        .setting(AppSettings::InferLongArgs)
+        .arg(Arg::new(options::FORMATSTRING))
+        .arg(Arg::new(options::ARGUMENT).multiple_occurrences(true))
 }
