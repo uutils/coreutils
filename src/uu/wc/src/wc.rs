@@ -123,9 +123,9 @@ enum Input {
 impl From<&OsStr> for Input {
     fn from(input: &OsStr) -> Self {
         if input == STDIN_REPR {
-            Input::Stdin(StdinKind::Explicit)
+            Self::Stdin(StdinKind::Explicit)
         } else {
-            Input::Path(input.into())
+            Self::Path(input.into())
         }
     }
 }
