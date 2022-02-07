@@ -13,6 +13,7 @@ use super::*;
 use std::error::Error;
 use uucore::error::UError;
 use uucore::parse_size::ParseSizeError;
+use uucore::show_warning;
 
 pub type Matches = ArgMatches;
 
@@ -356,6 +357,13 @@ fn parse_bytes_only(s: &str) -> Result<usize, ParseError> {
 /// assert_eq!(parse_bytes_no_x("2k").unwrap(), 2 * 1024);
 /// ```
 fn parse_bytes_no_x(s: &str) -> Result<usize, ParseError> {
+    if s == "0" {
+        show_warning!(
+            "{} is a zero multiplier; use {} if that is intended",
+            "0x".quote(),
+            "00x".quote()
+        );
+    }
     let (num, multiplier) = match (s.find('c'), s.rfind('w'), s.rfind('b')) {
         (None, None, None) => match uucore::parse_size::parse_size(s) {
             Ok(n) => (n, 1),

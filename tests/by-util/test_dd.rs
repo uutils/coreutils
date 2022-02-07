@@ -199,6 +199,39 @@ fn test_x_multiplier() {
 }
 
 #[test]
+fn test_zero_multiplier_warning() {
+    for arg in ["count", "seek", "skip"] {
+        new_ucmd!()
+            .args(&[format!("{}=00x1", arg).as_str(), "status=none"])
+            .pipe_in("")
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+
+        new_ucmd!()
+            .args(&[format!("{}=0x1", arg).as_str(), "status=none"])
+            .pipe_in("")
+            .succeeds()
+            .no_stdout()
+            .stderr_contains("warning: '0x' is a zero multiplier; use '00x' if that is intended");
+
+        new_ucmd!()
+            .args(&[format!("{}=0x0x1", arg).as_str(), "status=none"])
+            .pipe_in("")
+            .succeeds()
+            .no_stdout()
+            .stderr_is("dd: warning: '0x' is a zero multiplier; use '00x' if that is intended\ndd: warning: '0x' is a zero multiplier; use '00x' if that is intended\n");
+
+        new_ucmd!()
+            .args(&[format!("{}=1x0x1", arg).as_str(), "status=none"])
+            .pipe_in("")
+            .succeeds()
+            .no_stdout()
+            .stderr_contains("warning: '0x' is a zero multiplier; use '00x' if that is intended");
+    }
+}
+
+#[test]
 fn test_final_stats_noxfer() {
     new_ucmd!()
         .args(&["status=noxfer"])
