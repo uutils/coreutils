@@ -567,7 +567,7 @@ impl FsUsage {
             // Total number of file nodes (inodes) on the file system.
             files: 0, // Not available on windows
             // Total number of free file nodes (inodes).
-            ffree: 4096, // Meaningless on Windows
+            ffree: 0, // Meaningless on Windows
         }
     }
 }
