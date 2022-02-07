@@ -87,7 +87,7 @@ fn main() {
         };
 
         if util == "completion" {
-            gen_completions(args, utils);
+            gen_completions(args, &utils);
         }
 
         match utils.get(util) {
@@ -132,7 +132,7 @@ fn main() {
 /// Prints completions for the utility in the first parameter for the shell in the second parameter to stdout
 fn gen_completions<T: uucore::Args>(
     args: impl Iterator<Item = OsString>,
-    util_map: UtilityMap<T>,
+    util_map: &UtilityMap<T>,
 ) -> ! {
     let all_utilities: Vec<_> = std::iter::once("coreutils")
         .chain(util_map.keys().copied())
@@ -168,9 +168,9 @@ fn gen_completions<T: uucore::Args>(
     process::exit(0);
 }
 
-fn gen_coreutils_app<T: uucore::Args>(util_map: UtilityMap<T>) -> App<'static> {
+fn gen_coreutils_app<T: uucore::Args>(util_map: &UtilityMap<T>) -> App<'static> {
     let mut app = App::new("coreutils");
-    for (_, (_, sub_app)) in &util_map {
+    for (_, (_, sub_app)) in util_map {
         app = app.subcommand(sub_app());
     }
     app

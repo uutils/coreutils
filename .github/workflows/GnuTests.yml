@@ -1,6 +1,6 @@
 name: GnuTests
 
-# spell-checker:ignore (names) gnulib ; (utils) autopoint gperf pyinotify texinfo ; (vars) XPASS
+# spell-checker:ignore (names) gnulib ; (people) Dawid Dziurla * dawidd6 ; (utils) autopoint chksum gperf pyinotify shopt texinfo ; (vars) FILESET XPASS
 
 on: [push, pull_request]
 
@@ -9,23 +9,55 @@ jobs:
     name: Run GNU tests
     runs-on: ubuntu-latest
     steps:
+    - name: Initialize workflow variables
+      id: vars
+      shell: bash
+      run: |
+        ## VARs setup
+        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        # * config
+        path_GNU="gnu"
+        path_GNULIB="gnulib"
+        path_GNU_tests="gnu/tests"
+        path_UUTILS="uutils"
+        path_reference="reference"
+        outputs path_GNU path_GNU_tests path_GNULIB path_reference path_UUTILS
+        #
+        repo_GNU_ref="v9.0"
+        repo_GNULIB_ref="8e99f24c0931a38880c6ee9b8287c7da80b0036b"
+        repo_reference_branch="${{ github.event.repository.default_branch }}"
+        outputs repo_GNU_ref repo_GNULIB_ref repo_reference_branch
+        #
+        SUITE_LOG_FILE="${path_GNU_tests}/test-suite.log"
+        TEST_LOGS_GLOB="${path_GNU_tests}/**/*.log" ## note: not usable at bash CLI; [why] double globstar not enabled by default b/c MacOS includes only bash v3 which doesn't have double globstar support
+        TEST_FILESET_PREFIX='test-fileset-IDs.sha1#'
+        TEST_FILESET_SUFFIX='.txt'
+        TEST_SUMMARY_FILE='gnu-result.json'
+        outputs SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE
     - name: Checkout code uutil
       uses: actions/checkout@v2
       with:
-        path: 'uutils'
+        path: '${{ steps.vars.outputs.path_UUTILS }}'
     - name: Checkout GNU coreutils
       uses: actions/checkout@v2
       with:
         repository: 'coreutils/coreutils'
-        path: 'gnu'
-        ref: v9.0
+        path: '${{ steps.vars.outputs.path_GNU }}'
+        ref: ${{ steps.vars.outputs.repo_GNU_ref }}
     - name: Checkout GNU coreutils library (gnulib)
       uses: actions/checkout@v2
       with:
         repository: 'coreutils/gnulib'
-        path: 'gnulib'
-        ref: 8e99f24c0931a38880c6ee9b8287c7da80b0036b
-        fetch-depth: 0 # gnu gets upset if gnulib is a shallow checkout
+        path: '${{ steps.vars.outputs.path_GNULIB }}'
+        ref: ${{ steps.vars.outputs.repo_GNULIB_ref }}
+        fetch-depth: 0 # full depth checkout (o/w gnu gets upset if gnulib is a shallow checkout)
+    - name: Retrieve reference artifacts
+      uses: dawidd6/action-download-artifact@v2
+      continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
+      with:
+        workflow: GnuTests.yml
+        branch: "${{ steps.vars.outputs.repo_reference_branch }}"
+        path: "${{ steps.vars.outputs.path_reference }}"
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
@@ -43,28 +75,34 @@ jobs:
       shell: bash
       run: |
         ## Build binaries
-        cd uutils
+        cd '${{ steps.vars.outputs.path_UUTILS }}'
         bash util/build-gnu.sh
     - name: Run GNU tests
       shell: bash
       run: |
-        bash uutils/util/run-gnu-test.sh
-    - name: Extract testing info
+        path_GNU='${{ steps.vars.outputs.path_GNU }}'
+        path_GNULIB='${{ steps.vars.outputs.path_GNULIB }}'
+        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
+        bash "${path_UUTILS}/util/run-gnu-test.sh"
+    - name: Extract/summarize testing info
+      id: summary
       shell: bash
       run: |
-        ## Extract testing info
-        LOG_FILE=gnu/tests/test-suite.log
-        if test -f "$LOG_FILE"
+        ## Extract/summarize testing info
+        outputs() { step_id="summary"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        #
+        SUITE_LOG_FILE='${{ steps.vars.outputs.SUITE_LOG_FILE }}'
+        if test -f "${SUITE_LOG_FILE}"
         then
-            TOTAL=$(sed -n "s/.*# TOTAL: \(.*\)/\1/p"  "$LOG_FILE"|tr -d '\r'|head -n1)
-            PASS=$(sed -n "s/.*# PASS: \(.*\)/\1/p" "$LOG_FILE"|tr -d '\r'|head -n1)
-            SKIP=$(sed -n "s/.*# SKIP: \(.*\)/\1/p" "$LOG_FILE"|tr -d '\r'|head -n1)
-            FAIL=$(sed -n "s/.*# FAIL: \(.*\)/\1/p" "$LOG_FILE"|tr -d '\r'|head -n1)
-            XPASS=$(sed -n "s/.*# XPASS: \(.*\)/\1/p" "$LOG_FILE"|tr -d '\r'|head -n1)
-            ERROR=$(sed -n "s/.*# ERROR: \(.*\)/\1/p" "$LOG_FILE"|tr -d '\r'|head -n1)
+            TOTAL=$(sed -n "s/.*# TOTAL: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
+            PASS=$(sed -n "s/.*# PASS: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
+            SKIP=$(sed -n "s/.*# SKIP: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
+            FAIL=$(sed -n "s/.*# FAIL: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
+            XPASS=$(sed -n "s/.*# XPASS: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
+            ERROR=$(sed -n "s/.*# ERROR: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
             if [[ "$TOTAL" -eq 0 || "$TOTAL" -eq 1 ]]; then
-               echo "Error in the execution, failing early"
-               exit 1
+              echo "::error ::Failed to parse test results from '${SUITE_LOG_FILE}'; failing early"
+              exit 1
             fi
             output="GNU tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / ERROR: $ERROR"
             echo "${output}"
@@ -78,54 +116,61 @@ jobs:
                   --arg fail "$FAIL" \
                   --arg xpass "$XPASS" \
                   --arg error "$ERROR" \
-                  '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, xpass: $xpass, error: $error, }}' > gnu-result.json
+                  '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, xpass: $xpass, error: $error, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+            HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
+            outputs HASH
           else
-            echo "::error ::Failed to get summary of test results"
+            echo "::error ::Failed to find summary of test results (missing '${SUITE_LOG_FILE}'); failing early"
+            exit 1
           fi
-    - uses: actions/upload-artifact@v2
+    - name: Reserve SHA1/ID of 'test-summary'
+      uses: actions/upload-artifact@v2
       with:
-        name: test-report
-        path: gnu/tests/**/*.log
-    - uses: actions/upload-artifact@v2
+        name: "${{ steps.summary.outputs.HASH }}"
+        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
+    - name: Reserve test results summary
+      uses: actions/upload-artifact@v2
       with:
-        name: gnu-result
-        path: gnu-result.json
-    - name: Download the result
-      uses: dawidd6/action-download-artifact@v2
+        name: test-summary
+        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
+    - name: Reserve test logs
+      uses: actions/upload-artifact@v2
       with:
-        workflow: GnuTests.yml
-        name: gnu-result
-        repo: uutils/coreutils
-        branch: main
-        path: dl
-    - name: Download the log
-      uses: dawidd6/action-download-artifact@v2
-      with:
-        workflow: GnuTests.yml
-        name: test-report
-        repo: uutils/coreutils
-        branch: main
-        path: dl
-    - name: Compare failing tests against main
+        name: test-logs
+        path: "${{ steps.vars.outputs.TEST_LOGS_GLOB }}"
+    - name: Compare test failures VS reference
       shell: bash
       run: |
-            OLD_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" dl/test-suite.log | sort)
-            NEW_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" gnu/tests/test-suite.log | sort)
-            for LINE in $OLD_FAILING
-            do
-              if ! grep -Fxq $LINE<<<"$NEW_FAILING"; then
-                echo "::warning ::Congrats! The gnu test $LINE is now passing!"
-              fi
-            done
-            for LINE in $NEW_FAILING
-            do
-              if ! grep -Fxq $LINE<<<"$OLD_FAILING"
-              then
-                echo "::error ::GNU test failed: $LINE. $LINE is passing on 'main'. Maybe you have to rebase?"
-              fi
-            done
-    - name: Compare against main results
+        REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/test-suite.log'
+        REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
+        if test -f "${REF_LOG_FILE}"; then
+          echo "Reference SHA1/ID (of '${REF_SUMMARY_FILE}'): $(sha1sum -- "${REF_SUMMARY_FILE}")"
+          REF_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${REF_LOG_FILE}" | sort)
+          NEW_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" '${{ steps.vars.outputs.path_GNU_tests }}/test-suite.log' | sort)
+          for LINE in $REF_FAILING
+          do
+            if ! grep -Fxq $LINE<<<"$NEW_FAILING"; then
+              echo "::warning ::Congrats! The gnu test $LINE is now passing!"
+            fi
+          done
+          for LINE in $NEW_FAILING
+          do
+            if ! grep -Fxq $LINE<<<"$REF_FAILING"
+            then
+              echo "::error ::GNU test failed: $LINE. $LINE is passing on 'main'. Maybe you have to rebase?"
+            fi
+          done
+        else
+          echo "::warning ::Skipping test failure comparison; no prior reference test logs are available."
+        fi
+    - name: Compare test summary VS reference
       shell: bash
       run: |
-        mv dl/gnu-result.json main-gnu-result.json
-        python uutils/util/compare_gnu_result.py
+        REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
+        if test -f "${REF_SUMMARY_FILE}"; then
+          echo "Reference SHA1/ID (of '${REF_SUMMARY_FILE}'): $(sha1sum -- "${REF_SUMMARY_FILE}")"
+          mv "${REF_SUMMARY_FILE}" main-gnu-result.json
+          python uutils/util/compare_gnu_result.py
+        else
+          echo "::warning ::Skipping test summary comparison; no prior reference summary is available."
+        fi
