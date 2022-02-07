@@ -480,10 +480,7 @@ fn sub_general_float() {
 
 #[test]
 fn sub_general_truncate_to_integer() {
-    new_ucmd!()
-        .args(&["%g", "1.0"])
-        .succeeds()
-        .stdout_only("1");
+    new_ucmd!().args(&["%g", "1.0"]).succeeds().stdout_only("1");
 }
 
 #[test]
