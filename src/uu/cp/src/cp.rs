@@ -319,7 +319,7 @@ pub fn uu_app<'a>() -> App<'a> {
                  if Path::new(s).is_dir() {
                      return Ok(());
                  }
-                 Err("must specify a directory")
+                 Err(format!("'{}' is not a directory", s))
              })
              .help("copy all SOURCE arguments into target-directory"))
         .arg(Arg::new(options::NO_TARGET_DIRECTORY)
