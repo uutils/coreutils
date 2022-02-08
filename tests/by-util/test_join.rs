@@ -1,6 +1,8 @@
-// spell-checker:ignore (words) autoformat
+// spell-checker:ignore (words) autoformat nocheck
 
 use crate::common::util::*;
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+use std::fs::OpenOptions;
 #[cfg(unix)]
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 #[cfg(windows)]
@@ -307,17 +309,40 @@ fn missing_format_fields() {
 }
 
 #[test]
+fn nocheck_order() {
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_2.txt")
+        .arg("--nocheck-order")
+        .succeeds()
+        .stdout_only_fixture("default.expected");
+}
+
+#[test]
 fn wrong_line_order() {
     let ts = TestScenario::new(util_name!());
     new_ucmd!()
         .arg("fields_2.txt")
         .arg("fields_4.txt")
         .fails()
+        .stdout_contains("7 g f 4 fg")
         .stderr_is(&format!(
-        "{0} {1}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0} {1}: input is not in sorted order",
-        ts.bin_path.to_string_lossy(),
-        ts.util_name
-    ));
+            "{0} {1}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0} {1}: input is not in sorted order",
+            ts.bin_path.to_string_lossy(),
+            ts.util_name
+        ));
+
+    new_ucmd!()
+        .arg("--check-order")
+        .arg("fields_2.txt")
+        .arg("fields_4.txt")
+        .fails()
+        .stdout_does_not_contain("7 g f 4 fg")
+        .stderr_is(&format!(
+            "{0} {1}: fields_4.txt:5: is not sorted: 11 g 5 gh",
+            ts.bin_path.to_string_lossy(),
+            ts.util_name
+        ));
 }
 
 #[test]
@@ -327,8 +352,21 @@ fn both_files_wrong_line_order() {
         .arg("fields_4.txt")
         .arg("fields_5.txt")
         .fails()
+        .stdout_contains("5 e 3 ef")
         .stderr_is(&format!(
             "{0} {1}: fields_5.txt:4: is not sorted: 3\n{0} {1}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0} {1}: input is not in sorted order",
+            ts.bin_path.to_string_lossy(),
+            ts.util_name
+        ));
+
+    new_ucmd!()
+        .arg("--check-order")
+        .arg("fields_4.txt")
+        .arg("fields_5.txt")
+        .fails()
+        .stdout_does_not_contain("5 e 3 ef")
+        .stderr_is(&format!(
+            "{0} {1}: fields_5.txt:4: is not sorted: 3",
             ts.bin_path.to_string_lossy(),
             ts.util_name
         ));
@@ -436,4 +474,16 @@ fn null_line_endings() {
         .arg("non-unicode_2.bin")
         .succeeds()
         .stdout_only_fixture("z.expected");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_full() {
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_2.txt")
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_contains("No space left on device");
 }
