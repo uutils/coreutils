@@ -11,8 +11,10 @@
 extern crate uucore;
 
 use clap::{crate_version, App, AppSettings, Arg};
+use std::env;
 use std::fs;
-use std::io::{stdout, Write};
+use std::io::{stdout, Error, ErrorKind, Result, Write};
+use std::panic;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
@@ -32,6 +34,25 @@ const ARG_FILES: &str = "files";
 
 fn usage() -> String {
     format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
+}
+
+// fs::canonicalize will panic if it's given a relative path from a directory
+// that doesn't exist. This function catches that panic and converts it to an
+// Error, while suppressing any output to stderr.
+fn try_canonicalize(
+    path: &Path,
+    miss_mode: MissingHandling,
+    res_mode: ResolveMode,
+) -> Result<PathBuf> {
+    let prev_hook = panic::take_hook();
+    panic::set_hook(Box::new(|_| {}));
+    let canonical_path = panic::catch_unwind(|| canonicalize(&path, miss_mode, res_mode));
+    let result = match canonical_path {
+        Ok(r) => r,
+        Err(_) => Err(Error::new(ErrorKind::NotFound, "")),
+    };
+    panic::set_hook(prev_hook);
+    result
 }
 
 #[uucore::main]
@@ -78,8 +99,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let p = PathBuf::from(f);
         let path_result = if res_mode == ResolveMode::None {
             fs::read_link(&p)
-        } else {
+        } else if env::current_dir().is_ok() {
             canonicalize(&p, can_mode, res_mode)
+        } else {
+            // canonicalize() will panic if called with a relative path
+            try_canonicalize(&p, can_mode, res_mode)
         };
         match path_result {
             Ok(path) => show(&path, no_newline, use_zero).map_err_context(String::new)?,
