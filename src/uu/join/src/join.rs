@@ -28,7 +28,7 @@ static NAME: &str = "join";
 #[derive(Debug)]
 enum JoinError {
     IOError(std::io::Error),
-    UnorderedInput,
+    UnorderedInput(String),
 }
 
 impl UError for JoinError {
@@ -43,7 +43,7 @@ impl Display for JoinError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             JoinError::IOError(e) => write!(f, "io error: {}", e),
-            JoinError::UnorderedInput => Ok(()),
+            JoinError::UnorderedInput(e) => f.write_str(e),
         }
     }
 }
@@ -538,24 +538,22 @@ impl<'a> State<'a> {
 
             let diff = input.compare(self.get_current_key(), line.get_field(self.key));
 
-            if diff == Ordering::Greater {
-                if input.check_order == CheckOrder::Enabled
-                    || (self.has_unpaired && !self.has_failed)
-                {
-                    eprintln!(
-                        "{}: {}:{}: is not sorted: {}",
-                        uucore::execution_phrase(),
-                        self.file_name.maybe_quote(),
-                        self.line_num,
-                        String::from_utf8_lossy(&line.string)
-                    );
-
-                    self.has_failed = true;
-                }
+            if diff == Ordering::Greater
+                && (input.check_order == CheckOrder::Enabled
+                    || (self.has_unpaired && !self.has_failed))
+            {
+                let err_msg = format!(
+                    "{}:{}: is not sorted: {}",
+                    self.file_name.maybe_quote(),
+                    self.line_num,
+                    String::from_utf8_lossy(&line.string)
+                );
                 // This is fatal if the check is enabled.
                 if input.check_order == CheckOrder::Enabled {
-                    return Err(JoinError::UnorderedInput);
+                    return Err(JoinError::UnorderedInput(err_msg));
                 }
+                eprintln!("{}: {}", uucore::execution_phrase(), err_msg);
+                self.has_failed = true;
             }
 
             Ok(Some(line))
