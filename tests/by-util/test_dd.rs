@@ -199,6 +199,39 @@ fn test_x_multiplier() {
 }
 
 #[test]
+fn test_zero_multiplier_warning() {
+    for arg in ["count", "seek", "skip"] {
+        new_ucmd!()
+            .args(&[format!("{}=00x1", arg).as_str(), "status=none"])
+            .pipe_in("")
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+
+        new_ucmd!()
+            .args(&[format!("{}=0x1", arg).as_str(), "status=none"])
+            .pipe_in("")
+            .succeeds()
+            .no_stdout()
+            .stderr_contains("warning: '0x' is a zero multiplier; use '00x' if that is intended");
+
+        new_ucmd!()
+            .args(&[format!("{}=0x0x1", arg).as_str(), "status=none"])
+            .pipe_in("")
+            .succeeds()
+            .no_stdout()
+            .stderr_is("dd: warning: '0x' is a zero multiplier; use '00x' if that is intended\ndd: warning: '0x' is a zero multiplier; use '00x' if that is intended\n");
+
+        new_ucmd!()
+            .args(&[format!("{}=1x0x1", arg).as_str(), "status=none"])
+            .pipe_in("")
+            .succeeds()
+            .no_stdout()
+            .stderr_contains("warning: '0x' is a zero multiplier; use '00x' if that is intended");
+    }
+}
+
+#[test]
 fn test_final_stats_noxfer() {
     new_ucmd!()
         .args(&["status=noxfer"])
@@ -635,6 +668,28 @@ fn test_skip_beyond_file() {
         .stderr_contains(
             "'standard input': cannot skip to specified offset\n0+0 records in\n0+0 records out\n",
         );
+}
+
+#[test]
+fn test_seek_do_not_overwrite() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut outfile = at.make_file("outfile");
+    outfile.write_all(b"abc").unwrap();
+    // Skip the first byte of the input, seek past the first byte of
+    // the output, and write only one byte to the output.
+    ucmd.args(&[
+        "bs=1",
+        "skip=1",
+        "seek=1",
+        "count=1",
+        "status=noxfer",
+        "of=outfile",
+    ])
+    .pipe_in("123")
+    .succeeds()
+    .stderr_is("1+0 records in\n1+0 records out\n")
+    .no_stdout();
+    assert_eq!(at.read("outfile"), "a2");
 }
 
 // conv=[ascii,ebcdic,ibm], conv=[ucase,lcase], conv=[block,unblock], conv=sync

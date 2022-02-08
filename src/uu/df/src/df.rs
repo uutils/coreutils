@@ -161,64 +161,79 @@ impl Filesystem {
     }
 }
 
+/// Keep only the specified subset of [`MountInfo`] instances.
+///
+/// If `paths` is non-empty, this function excludes any [`MountInfo`]
+/// that is not mounted at the specified path.
+///
+/// The `opt` argument specifies a variety of ways of excluding
+/// [`MountInfo`] instances; see [`Options`] for more information.
+///
+/// Finally, if there are duplicate entries, the one with the shorter
+/// path is kept.
 fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Vec<MountInfo> {
-    vmi.into_iter()
-        .filter_map(|mi| {
-            if (mi.remote && opt.show_local_fs)
-                || (mi.dummy && !opt.show_all_fs && !opt.show_listed_fs)
-                || !opt.fs_selector.should_select(&mi.fs_type)
-            {
-                None
-            } else {
-                if paths.is_empty() {
-                    // No path specified
-                    return Some((mi.dev_id.clone(), mi));
-                }
-                if paths.contains(&mi.mount_dir) {
-                    // One or more paths have been provided
-                    Some((mi.dev_id.clone(), mi))
-                } else {
-                    // Not a path we want to see
-                    None
-                }
-            }
-        })
-        .fold(
-            HashMap::<String, Cell<MountInfo>>::new(),
-            |mut acc, (id, mi)| {
-                #[allow(clippy::map_entry)]
-                {
-                    if acc.contains_key(&id) {
-                        let seen = acc[&id].replace(mi.clone());
-                        let target_nearer_root = seen.mount_dir.len() > mi.mount_dir.len();
-                        // With bind mounts, prefer items nearer the root of the source
-                        let source_below_root = !seen.mount_root.is_empty()
-                            && !mi.mount_root.is_empty()
-                            && seen.mount_root.len() < mi.mount_root.len();
-                        // let "real" devices with '/' in the name win.
-                        if (!mi.dev_name.starts_with('/') || seen.dev_name.starts_with('/'))
-                            // let points towards the root of the device win.
-                            && (!target_nearer_root || source_below_root)
-                            // let an entry over-mounted on a new device win...
-                            && (seen.dev_name == mi.dev_name
-                            /* ... but only when matching an existing mnt point,
-                            to avoid problematic replacement when given
-                            inaccurate mount lists, seen with some chroot
-                            environments for example.  */
-                            || seen.mount_dir != mi.mount_dir)
-                        {
-                            acc[&id].replace(seen);
-                        }
-                    } else {
-                        acc.insert(id, Cell::new(mi));
-                    }
-                    acc
-                }
-            },
-        )
-        .into_iter()
-        .map(|ent| ent.1.into_inner())
-        .collect::<Vec<_>>()
+    let mut mount_info_by_id = HashMap::<String, Cell<MountInfo>>::new();
+    for mi in vmi {
+        // Don't show remote filesystems if `--local` has been given.
+        if mi.remote && opt.show_local_fs {
+            continue;
+        }
+
+        // Don't show pseudo filesystems unless `--all` has been given.
+        if mi.dummy && !opt.show_all_fs && !opt.show_listed_fs {
+            continue;
+        }
+
+        // Don't show filesystems if they have been explicitly excluded.
+        if !opt.fs_selector.should_select(&mi.fs_type) {
+            continue;
+        }
+
+        // Don't show filesystems other than the ones specified on the
+        // command line, if any.
+        if !paths.is_empty() && !paths.contains(&mi.mount_dir) {
+            continue;
+        }
+
+        // If the device ID has not been encountered yet, just store it.
+        let id = mi.dev_id.clone();
+        #[allow(clippy::map_entry)]
+        if !mount_info_by_id.contains_key(&id) {
+            mount_info_by_id.insert(id, Cell::new(mi));
+            continue;
+        }
+
+        // Otherwise, if we have seen the current device ID before,
+        // then check if we need to update it or keep the previously
+        // seen one.
+        let seen = mount_info_by_id[&id].replace(mi.clone());
+        let target_nearer_root = seen.mount_dir.len() > mi.mount_dir.len();
+        // With bind mounts, prefer items nearer the root of the source
+        let source_below_root = !seen.mount_root.is_empty()
+            && !mi.mount_root.is_empty()
+            && seen.mount_root.len() < mi.mount_root.len();
+        // let "real" devices with '/' in the name win.
+        if (!mi.dev_name.starts_with('/') || seen.dev_name.starts_with('/'))
+            // let points towards the root of the device win.
+            && (!target_nearer_root || source_below_root)
+            // let an entry over-mounted on a new device win...
+            && (seen.dev_name == mi.dev_name
+                /* ... but only when matching an existing mnt point,
+                to avoid problematic replacement when given
+                inaccurate mount lists, seen with some chroot
+                environments for example.  */
+                || seen.mount_dir != mi.mount_dir)
+        {
+            mount_info_by_id[&id].replace(seen);
+        }
+    }
+
+    // Take ownership of the `MountInfo` instances and collect them
+    // into a `Vec`.
+    mount_info_by_id
+        .into_values()
+        .map(|m| m.into_inner())
+        .collect()
 }
 
 /// Convert `value` to a human readable string based on `base`.
