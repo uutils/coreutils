@@ -657,5 +657,27 @@ fn test_seek_bytes() {
         .stdout_is("\0\0\0\0\0\0\0\0abcdefghijklm\n");
 }
 
+#[test]
+fn test_seek_do_not_overwrite() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut outfile = at.make_file("outfile");
+    outfile.write_all(b"abc").unwrap();
+    // Skip the first byte of the input, seek past the first byte of
+    // the output, and write only one byte to the output.
+    ucmd.args(&[
+        "bs=1",
+        "skip=1",
+        "seek=1",
+        "count=1",
+        "status=noxfer",
+        "of=outfile",
+    ])
+    .pipe_in("123")
+    .succeeds()
+    .stderr_is("1+0 records in\n1+0 records out\n")
+    .no_stdout();
+    assert_eq!(at.read("outfile"), "a2");
+}
+
 // conv=[ascii,ebcdic,ibm], conv=[ucase,lcase], conv=[block,unblock], conv=sync
 // TODO: Move conv tests from unit test module
