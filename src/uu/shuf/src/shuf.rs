@@ -288,17 +288,16 @@ fn shuf_bytes(input: &mut Vec<&[u8]>, opts: Options) -> UResult<()> {
 }
 
 fn parse_range(input_range: &str) -> Result<(usize, usize), String> {
-    let split: Vec<&str> = input_range.split('-').collect();
-    if split.len() != 2 {
-        Err(format!("invalid input range: {}", input_range.quote()))
-    } else {
-        let begin = split[0]
+    if let Some((from, to)) = input_range.split_once('-') {
+        let begin = from
             .parse::<usize>()
-            .map_err(|_| format!("invalid input range: {}", split[0].quote()))?;
-        let end = split[1]
+            .map_err(|_| format!("invalid input range: {}", from.quote()))?;
+        let end = to
             .parse::<usize>()
-            .map_err(|_| format!("invalid input range: {}", split[1].quote()))?;
+            .map_err(|_| format!("invalid input range: {}", to.quote()))?;
         Ok((begin, end + 1))
+    } else {
+        Err(format!("invalid input range: {}", input_range.quote()))
     }
 }
 
