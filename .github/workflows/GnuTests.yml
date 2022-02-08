@@ -53,10 +53,13 @@ jobs:
         fetch-depth: 0 # full depth checkout (o/w gnu gets upset if gnulib is a shallow checkout)
     - name: Retrieve reference artifacts
       uses: dawidd6/action-download-artifact@v2
+      # ref: <https://github.com/dawidd6/action-download-artifact>
       continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:
         workflow: GnuTests.yml
         branch: "${{ steps.vars.outputs.repo_reference_branch }}"
+        # workflow_conclusion: success ## (default); * but, if commit with failed GnuTests is merged into the default branch, future commits will all show regression errors in GnuTests CI until o/w fixed
+        workflow_conclusion: completed ## continually recalibrates to last commit of default branch with a successful GnuTests (ie, "self-heals" from GnuTest regressions, but needs more supervision for/of regressions)
         path: "${{ steps.vars.outputs.path_reference }}"
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
