@@ -2524,7 +2524,7 @@ fn calculate_padding_collection(
 }
 
 #[cfg(not(unix))]
-fn calculate_paddings(
+fn calculate_padding_collection(
     items: &[PathData],
     config: &Config,
     out: &mut BufWriter<Stdout>,
