@@ -306,6 +306,10 @@ fn test_head_invalid_num() {
                 ));
         }
     }
+    new_ucmd!()
+        .args(&["-c", "-³"])
+        .fails()
+        .stderr_is("head: invalid number of bytes: '³'");
 }
 
 #[test]

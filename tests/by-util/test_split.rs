@@ -469,3 +469,12 @@ fn test_split_default_with_io_blksize() {
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
+
+#[test]
+fn test_invalid_suffix_length() {
+    new_ucmd!()
+        .args(&["-a", "xyz"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid suffix length: 'xyz'");
+}
