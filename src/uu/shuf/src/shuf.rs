@@ -8,7 +8,8 @@
 // spell-checker:ignore (ToDO) cmdline evec seps rvec fdata
 
 use clap::{crate_version, App, AppSettings, Arg};
-use rand::Rng;
+use rand::prelude::SliceRandom;
+use rand::RngCore;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use uucore::display::Quotable;
@@ -254,40 +255,35 @@ fn shuf_bytes(input: &mut Vec<&[u8]>, opts: Options) -> UResult<()> {
         None => WrappedRng::RngDefault(rand::thread_rng()),
     };
 
-    // we're generating a random usize. To keep things fair, we take this number mod ceil(log2(length+1))
-    let mut len_mod = 1;
-    let mut len = input.len();
-    while len > 0 {
-        len >>= 1;
-        len_mod <<= 1;
+    if input.is_empty() {
+        return Ok(());
     }
 
-    let mut count = opts.head_count;
-    while count > 0 && !input.is_empty() {
-        let mut r = input.len();
-        while r >= input.len() {
-            r = rng.next_usize() % len_mod;
+    if opts.repeat {
+        for _ in 0..opts.head_count {
+            // Returns None is the slice is empty. We checked this before, so
+            // this is safe.
+            let r = input.choose(&mut rng).unwrap();
+
+            output
+                .write_all(r)
+                .map_err_context(|| "write failed".to_string())?;
+            output
+                .write_all(&[opts.sep])
+                .map_err_context(|| "write failed".to_string())?;
         }
-
-        // write the randomly chosen value and the separator
-        output
-            .write_all(input[r])
-            .map_err_context(|| "write failed".to_string())?;
-        output
-            .write_all(&[opts.sep])
-            .map_err_context(|| "write failed".to_string())?;
-
-        // if we do not allow repeats, remove the chosen value from the input vector
-        if !opts.repeat {
-            // shrink the mask if we will drop below a power of 2
-            if input.len() % 2 == 0 && len_mod > 2 {
-                len_mod >>= 1;
-            }
-            input.swap_remove(r);
+    } else {
+        let (shuffled, _) = input.partial_shuffle(&mut rng, opts.head_count);
+        for r in shuffled {
+            output
+                .write_all(r)
+                .map_err_context(|| "write failed".to_string())?;
+            output
+                .write_all(&[opts.sep])
+                .map_err_context(|| "write failed".to_string())?;
         }
-
-        count -= 1;
     }
+
     Ok(())
 }
 
@@ -311,11 +307,32 @@ enum WrappedRng {
     RngDefault(rand::rngs::ThreadRng),
 }
 
-impl WrappedRng {
-    fn next_usize(&mut self) -> usize {
-        match *self {
-            WrappedRng::RngFile(ref mut r) => r.gen(),
-            WrappedRng::RngDefault(ref mut r) => r.gen(),
+impl RngCore for WrappedRng {
+    fn next_u32(&mut self) -> u32 {
+        match self {
+            Self::RngFile(r) => r.next_u32(),
+            Self::RngDefault(r) => r.next_u32(),
+        }
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        match self {
+            Self::RngFile(r) => r.next_u64(),
+            Self::RngDefault(r) => r.next_u64(),
+        }
+    }
+
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        match self {
+            Self::RngFile(r) => r.fill_bytes(dest),
+            Self::RngDefault(r) => r.fill_bytes(dest),
+        }
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
+        match self {
+            Self::RngFile(r) => r.try_fill_bytes(dest),
+            Self::RngDefault(r) => r.try_fill_bytes(dest),
         }
     }
 }
