@@ -1,4 +1,4 @@
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi
 
 use crate::common::util::*;
 
@@ -176,6 +176,59 @@ fn test_stdin_stdout_count_w_multiplier() {
         .no_stderr()
         .stdout_is(output)
         .success();
+}
+
+#[test]
+fn test_b_multiplier() {
+    // "2b" means 2 * 512, which is 1024.
+    new_ucmd!()
+        .args(&["bs=2b", "count=1"])
+        .pipe_in("a".repeat(1025))
+        .succeeds()
+        .stdout_is("a".repeat(1024));
+}
+
+#[test]
+fn test_x_multiplier() {
+    // "2x3" means 2 * 3, which is 6.
+    new_ucmd!()
+        .args(&["bs=2x3", "count=1"])
+        .pipe_in("abcdefghi")
+        .succeeds()
+        .stdout_is("abcdef");
+}
+
+#[test]
+fn test_zero_multiplier_warning() {
+    for arg in ["count", "seek", "skip"] {
+        new_ucmd!()
+            .args(&[format!("{}=00x1", arg).as_str(), "status=none"])
+            .pipe_in("")
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+
+        new_ucmd!()
+            .args(&[format!("{}=0x1", arg).as_str(), "status=none"])
+            .pipe_in("")
+            .succeeds()
+            .no_stdout()
+            .stderr_contains("warning: '0x' is a zero multiplier; use '00x' if that is intended");
+
+        new_ucmd!()
+            .args(&[format!("{}=0x0x1", arg).as_str(), "status=none"])
+            .pipe_in("")
+            .succeeds()
+            .no_stdout()
+            .stderr_is("dd: warning: '0x' is a zero multiplier; use '00x' if that is intended\ndd: warning: '0x' is a zero multiplier; use '00x' if that is intended\n");
+
+        new_ucmd!()
+            .args(&[format!("{}=1x0x1", arg).as_str(), "status=none"])
+            .pipe_in("")
+            .succeeds()
+            .no_stdout()
+            .stderr_contains("warning: '0x' is a zero multiplier; use '00x' if that is intended");
+    }
 }
 
 #[test]
@@ -602,6 +655,28 @@ fn test_seek_bytes() {
         .pipe_in("abcdefghijklm\n")
         .succeeds()
         .stdout_is("\0\0\0\0\0\0\0\0abcdefghijklm\n");
+}
+
+#[test]
+fn test_seek_do_not_overwrite() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut outfile = at.make_file("outfile");
+    outfile.write_all(b"abc").unwrap();
+    // Skip the first byte of the input, seek past the first byte of
+    // the output, and write only one byte to the output.
+    ucmd.args(&[
+        "bs=1",
+        "skip=1",
+        "seek=1",
+        "count=1",
+        "status=noxfer",
+        "of=outfile",
+    ])
+    .pipe_in("123")
+    .succeeds()
+    .stderr_is("1+0 records in\n1+0 records out\n")
+    .no_stdout();
+    assert_eq!(at.read("outfile"), "a2");
 }
 
 // conv=[ascii,ebcdic,ibm], conv=[ucase,lcase], conv=[block,unblock], conv=sync
