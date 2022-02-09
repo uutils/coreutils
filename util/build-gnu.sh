@@ -15,7 +15,7 @@ if test ! -d ../gnulib; then
 fi
 
 
-pushd $(pwd)
+pushd "$PWD"
 make PROFILE=release
 BUILDDIR="$PWD/target/release/"
 cp "${BUILDDIR}/install" "${BUILDDIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
@@ -49,7 +49,7 @@ make -j "$(nproc)"
 # Used to be 36. Reduced to 20 to decrease the log size
 for i in {00..20}
 do
-    make tests/factor/t${i}.sh
+    make "tests/factor/t${i}.sh"
 done
 
 # strip the long stuff
@@ -89,7 +89,7 @@ sed -i 's|dd |/usr/bin/dd |' tests/du/8gb.sh tests/tail-2/big-4gb.sh init.cfg
 sed -i 's|id -|/usr/bin/id -|' tests/misc/runcon-no-reorder.sh
 sed -i 's|touch |/usr/bin/touch |' tests/cp/preserve-link.sh tests/cp/reflink-perm.sh tests/ls/block-size.sh tests/ls/abmon-align.sh tests/ls/rt-1.sh tests/mv/update.sh tests/misc/ls-time.sh tests/misc/stat-nanoseconds.sh tests/misc/time-style.sh tests/misc/test-N.sh
 sed -i 's|ln -|/usr/bin/ln -|' tests/cp/link-deref.sh
-sed -i 's|printf |/usr/bin/printf |' tests/dd/ascii.sh
+sed -i 's|printf |/usr/bin/printf |g' tests/dd/ascii.sh
 sed -i 's|cp |/usr/bin/cp |' tests/mv/hard-2.sh
 sed -i 's|paste |/usr/bin/paste |' tests/misc/od-endian.sh
 sed -i 's|seq |/usr/bin/seq |' tests/misc/sort-discrim.sh

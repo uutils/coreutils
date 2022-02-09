@@ -36,11 +36,11 @@ process).",
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let mut niceness = unsafe {
         nix::errno::Errno::clear();
@@ -107,17 +107,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .setting(AppSettings::TrailingVarArg)
+        .setting(AppSettings::InferLongArgs)
         .version(crate_version!())
         .arg(
-            Arg::with_name(options::ADJUSTMENT)
-                .short("n")
+            Arg::new(options::ADJUSTMENT)
+                .short('n')
                 .long(options::ADJUSTMENT)
                 .help("add N to the niceness (default is 10)")
                 .takes_value(true)
                 .allow_hyphen_values(true),
         )
-        .arg(Arg::with_name(options::COMMAND).multiple(true))
+        .arg(Arg::new(options::COMMAND).multiple_occurrences(true))
 }

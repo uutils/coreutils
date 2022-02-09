@@ -24,7 +24,7 @@ fn test_capitalize() {
 fn test_long_format() {
     let login = "root";
     let pw: Passwd = Passwd::locate(login).unwrap();
-    let real_name = pw.user_info.replace("&", &pw.name.capitalize());
+    let real_name = pw.user_info.replace('&', &pw.name.capitalize());
     let ts = TestScenario::new(util_name!());
     ts.ucmd().arg("-l").arg(login).succeeds().stdout_is(format!(
         "Login name: {:<28}In real life:  {}\nDirectory: {:<29}Shell:  {}\n\n",
@@ -58,7 +58,7 @@ fn test_long_format_multiple_users() {
 #[test]
 fn test_long_format_wo_user() {
     // "no username specified; at least one must be specified when using -l"
-    new_ucmd!().arg("-l").fails().code_is(1);
+    new_ucmd!().arg("-l").fails();
 }
 
 #[cfg(unix)]

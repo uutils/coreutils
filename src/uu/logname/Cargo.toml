@@ -1,6 +1,6 @@
 [package]
 name = "uu_logname"
-version = "0.0.8"
+version = "0.0.12"
 authors = ["uutils developers"]
 license = "MIT"
 description = "logname ~ (uutils) display the login name of the current user"
@@ -16,13 +16,9 @@ path = "src/logname.rs"
 
 [dependencies]
 libc = "0.2.42"
-clap = { version = "2.33", features = ["wrap_help"] }
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+clap = { version = "3.0", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
 
 [[bin]]
 name = "logname"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

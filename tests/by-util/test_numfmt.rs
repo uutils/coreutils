@@ -568,3 +568,28 @@ fn test_suffix_with_padding() {
         .succeeds()
         .stdout_only("     1000pad 2000 3000\n");
 }
+
+#[test]
+fn test_invalid_stdin_number_returns_status_2() {
+    new_ucmd!().pipe_in("hello").fails().code_is(2);
+}
+
+#[test]
+fn test_invalid_stdin_number_in_middle_of_input() {
+    new_ucmd!().pipe_in("100\nhello\n200").fails().code_is(2);
+}
+
+#[test]
+fn test_invalid_argument_number_returns_status_2() {
+    new_ucmd!().args(&["hello"]).fails().code_is(2);
+}
+
+#[test]
+fn test_invalid_argument_returns_status_1() {
+    new_ucmd!()
+        .args(&["--header=hello"])
+        .pipe_in("53478")
+        .ignore_stdin_write_error()
+        .fails()
+        .code_is(1);
+}

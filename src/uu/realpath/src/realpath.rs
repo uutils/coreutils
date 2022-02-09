@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::{
     io::{stdout, Write},
     path::{Path, PathBuf},
@@ -37,11 +37,11 @@ fn usage() -> String {
     format!("{0} [OPTION]... FILE...", uucore::execution_phrase())
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     /*  the list of files */
 
@@ -74,44 +74,45 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(OPT_QUIET)
-                .short("q")
+            Arg::new(OPT_QUIET)
+                .short('q')
                 .long(OPT_QUIET)
                 .help("Do not print warnings for invalid paths"),
         )
         .arg(
-            Arg::with_name(OPT_STRIP)
-                .short("s")
+            Arg::new(OPT_STRIP)
+                .short('s')
                 .long(OPT_STRIP)
                 .help("Only strip '.' and '..' components, but don't resolve symbolic links"),
         )
         .arg(
-            Arg::with_name(OPT_ZERO)
-                .short("z")
+            Arg::new(OPT_ZERO)
+                .short('z')
                 .long(OPT_ZERO)
                 .help("Separate output filenames with \\0 rather than newline"),
         )
         .arg(
-            Arg::with_name(OPT_LOGICAL)
-                .short("L")
+            Arg::new(OPT_LOGICAL)
+                .short('L')
                 .long(OPT_LOGICAL)
                 .help("resolve '..' components before symlinks"),
         )
         .arg(
-            Arg::with_name(OPT_PHYSICAL)
-                .short("P")
+            Arg::new(OPT_PHYSICAL)
+                .short('P')
                 .long(OPT_PHYSICAL)
                 .overrides_with_all(&[OPT_STRIP, OPT_LOGICAL])
                 .help("resolve symlinks as encountered (default)"),
         )
         .arg(
-            Arg::with_name(OPT_CANONICALIZE_EXISTING)
-                .short("e")
+            Arg::new(OPT_CANONICALIZE_EXISTING)
+                .short('e')
                 .long(OPT_CANONICALIZE_EXISTING)
                 .help(
                     "canonicalize by following every symlink in every component of the \
@@ -119,8 +120,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_CANONICALIZE_MISSING)
-                .short("m")
+            Arg::new(OPT_CANONICALIZE_MISSING)
+                .short('m')
                 .long(OPT_CANONICALIZE_MISSING)
                 .help(
                     "canonicalize by following every symlink in every component of the \
@@ -128,8 +129,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(ARG_FILES)
-                .multiple(true)
+            Arg::new(ARG_FILES)
+                .multiple_occurrences(true)
                 .takes_value(true)
                 .required(true)
                 .min_values(1),

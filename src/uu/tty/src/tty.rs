@@ -9,7 +9,7 @@
 
 // spell-checker:ignore (ToDO) ttyname filedesc
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::ffi::CStr;
 use std::io::Write;
 use uucore::error::{UResult, UUsageError};
@@ -25,7 +25,7 @@ fn usage() -> String {
     format!("{0} [OPTION]...", uucore::execution_phrase())
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let args = args
@@ -33,8 +33,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .accept_any();
 
     let matches = uu_app()
-        .usage(&usage[..])
-        .get_matches_from_safe(args)
+        .override_usage(&usage[..])
+        .try_get_matches_from(args)
         .map_err(|e| UUsageError::new(2, format!("{}", e)))?;
 
     let silent = matches.is_present(options::SILENT);
@@ -71,15 +71,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::SILENT)
+            Arg::new(options::SILENT)
                 .long(options::SILENT)
                 .visible_alias("quiet")
-                .short("s")
+                .short('s')
                 .help("print nothing, only return an exit status")
                 .required(false),
         )

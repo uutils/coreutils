@@ -11,7 +11,7 @@
 
 #[macro_use]
 extern crate uucore;
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Stdout, Write};
 use std::str::from_utf8;
@@ -22,12 +22,12 @@ use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "unexpand";
 static USAGE: &str = "unexpand [OPTION]... [FILE]...";
-static SUMMARY: &str = "Convert blanks in each FILE to tabs, writing to standard output.\n
-                 With no FILE, or when FILE is -, read standard input.";
+static SUMMARY: &str = "Convert blanks in each FILE to tabs, writing to standard output.\n\
+                        With no FILE, or when FILE is -, read standard input.";
 
 const DEFAULT_TABSTOP: usize = 8;
 
-fn tabstops_parse(s: String) -> Vec<usize> {
+fn tabstops_parse(s: &str) -> Vec<usize> {
     let words = s.split(',');
 
     let nums = words
@@ -67,10 +67,10 @@ struct Options {
 }
 
 impl Options {
-    fn new(matches: clap::ArgMatches) -> Options {
+    fn new(matches: &clap::ArgMatches) -> Self {
         let tabstops = match matches.value_of(options::TABS) {
             None => vec![DEFAULT_TABSTOP],
-            Some(s) => tabstops_parse(s.to_string()),
+            Some(s) => tabstops_parse(s),
         };
 
         let aflag = (matches.is_present(options::ALL) || matches.is_present(options::TABS))
@@ -82,7 +82,7 @@ impl Options {
             None => vec!["-".to_owned()],
         };
 
-        Options {
+        Self {
             files,
             tabstops,
             aflag,
@@ -91,7 +91,7 @@ impl Options {
     }
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -99,45 +99,46 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().get_matches_from(args);
 
-    unexpand(Options::new(matches)).map_err_context(String::new)
+    unexpand(&Options::new(&matches)).map_err_context(String::new)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .usage(USAGE)
+        .override_usage(USAGE)
         .about(SUMMARY)
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+        .setting(AppSettings::InferLongArgs)
+        .arg(Arg::new(options::FILE).hide(true).multiple_occurrences(true))
         .arg(
-            Arg::with_name(options::ALL)
-                .short("a")
+            Arg::new(options::ALL)
+                .short('a')
                 .long(options::ALL)
                 .help("convert all blanks, instead of just initial blanks")
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::FIRST_ONLY)
+            Arg::new(options::FIRST_ONLY)
                 .long(options::FIRST_ONLY)
                 .help("convert only leading sequences of blanks (overrides -a)")
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::TABS)
-                .short("t")
+            Arg::new(options::TABS)
+                .short('t')
                 .long(options::TABS)
                 .long_help("use comma separated LIST of tab positions or have tabs N characters apart instead of 8 (enables -a)")
                 .takes_value(true)
         )
         .arg(
-            Arg::with_name(options::NO_UTF8)
-                .short("U")
+            Arg::new(options::NO_UTF8)
+                .short('U')
                 .long(options::NO_UTF8)
                 .takes_value(false)
                 .help("interpret input file as 8-bit ASCII rather than UTF-8"))
 }
 
-fn open(path: String) -> BufReader<Box<dyn Read + 'static>> {
+fn open(path: &str) -> BufReader<Box<dyn Read + 'static>> {
     let file_buf;
     if path == "-" {
         BufReader::new(Box::new(stdin()) as Box<dyn Read>)
@@ -242,13 +243,13 @@ fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usi
     (ctype, cwidth, nbytes)
 }
 
-fn unexpand(options: Options) -> std::io::Result<()> {
+fn unexpand(options: &Options) -> std::io::Result<()> {
     let mut output = BufWriter::new(stdout());
     let ts = &options.tabstops[..];
     let mut buf = Vec::new();
     let lastcol = if ts.len() > 1 { *ts.last().unwrap() } else { 0 };
 
-    for file in options.files.into_iter() {
+    for file in &options.files {
         let mut fh = open(file);
 
         while match fh.read_until(b'\n', &mut buf) {

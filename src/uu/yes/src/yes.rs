@@ -13,7 +13,7 @@ use std::io::{self, Write};
 #[macro_use]
 extern crate clap;
 
-use clap::{App, Arg};
+use clap::{App, AppSettings, Arg};
 use uucore::error::{UResult, USimpleError};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -23,7 +23,7 @@ mod splice;
 // systems, but honestly this is good enough
 const BUF_SIZE: usize = 16 * 1024;
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
@@ -46,8 +46,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    app_from_crate!().arg(Arg::with_name("STRING").index(1).multiple(true))
+pub fn uu_app<'a>() -> App<'a> {
+    app_from_crate!()
+        .arg(Arg::new("STRING").index(1).multiple_occurrences(true))
+        .setting(AppSettings::InferLongArgs)
 }
 
 fn prepare_buffer<'a>(input: &'a str, buffer: &'a mut [u8; BUF_SIZE]) -> &'a [u8] {

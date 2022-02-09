@@ -11,7 +11,7 @@ use crate::common::util::*;
 #[test]
 fn test_count() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-q", "--count"] {
+    for opt in &["-q", "--count", "--c"] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
@@ -21,7 +21,7 @@ fn test_count() {
 #[test]
 fn test_boot() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-b", "--boot"] {
+    for opt in &["-b", "--boot", "--b"] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
@@ -31,7 +31,7 @@ fn test_boot() {
 #[test]
 fn test_heading() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-H", "--heading"] {
+    for opt in &["-H", "--heading", "--head"] {
         // allow whitespace variation
         // * minor whitespace differences occur between platform built-in outputs;
         //   specifically number of TABs between "TIME" and "COMMENT" may be variant
@@ -49,7 +49,7 @@ fn test_heading() {
 #[test]
 fn test_short() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-s", "--short"] {
+    for opt in &["-s", "--short", "--s"] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
@@ -59,7 +59,7 @@ fn test_short() {
 #[test]
 fn test_login() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-l", "--login"] {
+    for opt in &["-l", "--login", "--log"] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
@@ -79,7 +79,7 @@ fn test_m() {
 #[test]
 fn test_process() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-p", "--process"] {
+    for opt in &["-p", "--process", "--p"] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
@@ -89,7 +89,7 @@ fn test_process() {
 #[test]
 fn test_runlevel() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-r", "--runlevel"] {
+    for opt in &["-r", "--runlevel", "--r"] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
 
@@ -102,7 +102,7 @@ fn test_runlevel() {
 #[test]
 fn test_time() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-t", "--time"] {
+    for opt in &["-t", "--time", "--t"] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
@@ -118,7 +118,15 @@ fn test_mesg() {
     // --writable
     //     same as -T
     let ts = TestScenario::new(util_name!());
-    for opt in &["-T", "-w", "--mesg", "--message", "--writable"] {
+    for opt in &[
+        "-T",
+        "-w",
+        "--mesg",
+        "--m",
+        "--message",
+        "--writable",
+        "--w",
+    ] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
@@ -136,7 +144,7 @@ fn test_arg1_arg2() {
 #[test]
 fn test_too_many_args() {
     const EXPECTED: &str =
-        "error: The value 'u' was provided to '<FILE>...', but it wasn't expecting any more values";
+        "error: The value 'u' was provided to '<FILE>...' but it wasn't expecting any more values";
 
     let args = ["am", "i", "u"];
     new_ucmd!().args(&args).fails().stderr_contains(EXPECTED);
@@ -146,7 +154,7 @@ fn test_too_many_args() {
 #[test]
 fn test_users() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-u", "--users"] {
+    for opt in &["-u", "--users", "--us"] {
         let actual = ts.ucmd().arg(opt).succeeds().stdout_move_str();
         let expect = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         println!("actual: {:?}", actual);
@@ -180,7 +188,7 @@ fn test_lookup() {
 #[test]
 fn test_dead() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-d", "--dead"] {
+    for opt in &["-d", "--dead", "--de"] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
@@ -212,7 +220,7 @@ fn test_all() {
     }
 
     let ts = TestScenario::new(util_name!());
-    for opt in &["-a", "--all"] {
+    for opt in &["-a", "--all", "--a"] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }

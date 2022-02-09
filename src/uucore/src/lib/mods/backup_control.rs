@@ -47,7 +47,7 @@
 //!         .arg(backup_control::arguments::backup())
 //!         .arg(backup_control::arguments::backup_no_args())
 //!         .arg(backup_control::arguments::suffix())
-//!         .usage(&usage[..])
+//!         .override_usage(&usage[..])
 //!         .after_help(&*format!(
 //!             "{}\n{}",
 //!             long_usage,
@@ -129,7 +129,7 @@ pub enum BackupMode {
 /// Backup error types.
 ///
 /// Errors are currently raised by [`determine_backup_mode`] only. All errors
-/// are implemented as [`UCustomError`] for uniform handling across utilities.
+/// are implemented as [`UError`] for uniform handling across utilities.
 #[derive(Debug, Eq, PartialEq)]
 pub enum BackupError {
     /// An invalid argument (e.g. 'foo') was given as backup type. First
@@ -206,8 +206,8 @@ pub mod arguments {
     pub static OPT_SUFFIX: &str = "backupopt_suffix";
 
     /// '--backup' argument
-    pub fn backup() -> clap::Arg<'static, 'static> {
-        clap::Arg::with_name(OPT_BACKUP)
+    pub fn backup<'a>() -> clap::Arg<'a> {
+        clap::Arg::new(OPT_BACKUP)
             .long("backup")
             .help("make a backup of each existing destination file")
             .takes_value(true)
@@ -217,20 +217,21 @@ pub mod arguments {
     }
 
     /// '-b' argument
-    pub fn backup_no_args() -> clap::Arg<'static, 'static> {
-        clap::Arg::with_name(OPT_BACKUP_NO_ARG)
-            .short("b")
+    pub fn backup_no_args<'a>() -> clap::Arg<'a> {
+        clap::Arg::new(OPT_BACKUP_NO_ARG)
+            .short('b')
             .help("like --backup but does not accept an argument")
     }
 
     /// '-S, --suffix' argument
-    pub fn suffix() -> clap::Arg<'static, 'static> {
-        clap::Arg::with_name(OPT_SUFFIX)
-            .short("S")
+    pub fn suffix<'a>() -> clap::Arg<'a> {
+        clap::Arg::new(OPT_SUFFIX)
+            .short('S')
             .long("suffix")
             .help("override the usual backup suffix")
             .takes_value(true)
             .value_name("SUFFIX")
+            .allow_hyphen_values(true)
     }
 }
 
@@ -462,7 +463,7 @@ mod tests {
     // Environment variable for "VERSION_CONTROL"
     static ENV_VERSION_CONTROL: &str = "VERSION_CONTROL";
 
-    fn make_app() -> clap::App<'static, 'static> {
+    fn make_app() -> clap::App<'static> {
         App::new("app")
             .arg(arguments::backup())
             .arg(arguments::backup_no_args())
@@ -617,5 +618,14 @@ mod tests {
 
         assert_eq!(result, BackupMode::SimpleBackup);
         env::remove_var(ENV_VERSION_CONTROL);
+    }
+
+    #[test]
+    fn test_suffix_takes_hyphen_value() {
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        let matches = make_app().get_matches_from(vec!["app", "-b", "--suffix", "-v"]);
+
+        let result = determine_backup_suffix(&matches);
+        assert_eq!(result, "-v");
     }
 }

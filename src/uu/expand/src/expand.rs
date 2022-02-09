@@ -12,7 +12,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::str::from_utf8;
@@ -67,7 +67,7 @@ fn is_space_or_comma(c: char) -> bool {
 /// in the list. This mode defines the strategy to use for computing the
 /// number of spaces to use for columns beyond the end of the tab stop
 /// list specified here.
-fn tabstops_parse(s: String) -> (RemainingMode, Vec<usize>) {
+fn tabstops_parse(s: &str) -> (RemainingMode, Vec<usize>) {
     // Leading commas and spaces are ignored.
     let s = s.trim_start_matches(is_space_or_comma);
 
@@ -133,9 +133,9 @@ struct Options {
 }
 
 impl Options {
-    fn new(matches: &ArgMatches) -> Options {
+    fn new(matches: &ArgMatches) -> Self {
         let (remaining_mode, tabstops) = match matches.value_of(options::TABS) {
-            Some(s) => tabstops_parse(s.to_string()),
+            Some(s) => tabstops_parse(s),
             None => (RemainingMode::None, vec![DEFAULT_TABSTOP]),
         };
 
@@ -160,7 +160,7 @@ impl Options {
             None => vec!["-".to_owned()],
         };
 
-        Options {
+        Self {
             files,
             tabstops,
             tspaces,
@@ -171,52 +171,53 @@ impl Options {
     }
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
-    expand(Options::new(&matches)).map_err_context(|| "failed to write output".to_string())
+    expand(&Options::new(&matches)).map_err_context(|| "failed to write output".to_string())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::INITIAL)
+            Arg::new(options::INITIAL)
                 .long(options::INITIAL)
-                .short("i")
+                .short('i')
                 .help("do not convert tabs after non blanks"),
         )
         .arg(
-            Arg::with_name(options::TABS)
+            Arg::new(options::TABS)
                 .long(options::TABS)
-                .short("t")
+                .short('t')
                 .value_name("N, LIST")
                 .takes_value(true)
                 .help("have tabs N characters apart, not 8 or use comma separated list of explicit tab positions"),
         )
         .arg(
-            Arg::with_name(options::NO_UTF8)
+            Arg::new(options::NO_UTF8)
                 .long(options::NO_UTF8)
-                .short("U")
+                .short('U')
                 .help("interpret input file as 8-bit ASCII rather than UTF-8"),
         ).arg(
-            Arg::with_name(options::FILES)
-                .multiple(true)
-                .hidden(true)
+            Arg::new(options::FILES)
+                .multiple_occurrences(true)
+                .hide(true)
                 .takes_value(true)
         )
 }
 
-fn open(path: String) -> BufReader<Box<dyn Read + 'static>> {
+fn open(path: &str) -> BufReader<Box<dyn Read + 'static>> {
     let file_buf;
     if path == "-" {
         BufReader::new(Box::new(stdin()) as Box<dyn Read>)
     } else {
-        file_buf = match File::open(&path[..]) {
+        file_buf = match File::open(path) {
             Ok(a) => a,
             Err(e) => crash!(1, "{}: {}\n", path.maybe_quote(), e),
         };
@@ -270,14 +271,14 @@ enum CharType {
     Other,
 }
 
-fn expand(options: Options) -> std::io::Result<()> {
+fn expand(options: &Options) -> std::io::Result<()> {
     use self::CharType::*;
 
     let mut output = BufWriter::new(stdout());
     let ts = options.tabstops.as_ref();
     let mut buf = Vec::new();
 
-    for file in options.files.into_iter() {
+    for file in &options.files {
         let mut fh = open(file);
 
         while match fh.read_until(b'\n', &mut buf) {
@@ -331,7 +332,7 @@ fn expand(options: Options) -> std::io::Result<()> {
                         // now dump out either spaces if we're expanding, or a literal tab if we're not
                         if init || !options.iflag {
                             if nts <= options.tspaces.len() {
-                                output.write_all(options.tspaces[..nts].as_bytes())?
+                                output.write_all(options.tspaces[..nts].as_bytes())?;
                             } else {
                                 output.write_all(" ".repeat(nts).as_bytes())?;
                             };

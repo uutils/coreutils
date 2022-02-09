@@ -13,7 +13,7 @@ mod error;
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -72,7 +72,7 @@ fn usage() -> String {
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
@@ -82,7 +82,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             LONG_HELP,
             backup_control::BACKUP_CONTROL_LONG_HELP
         ))
-        .usage(&usage[..])
+        .override_usage(&usage[..])
         .get_matches_from(args);
 
     let files: Vec<OsString> = matches
@@ -116,13 +116,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         strip_slashes: matches.is_present(OPT_STRIP_TRAILING_SLASHES),
     };
 
-    exec(&files[..], behavior)
+    exec(&files[..], &behavior)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
     .arg(
         backup_control::arguments::backup()
     )
@@ -130,24 +131,24 @@ pub fn uu_app() -> App<'static, 'static> {
         backup_control::arguments::backup_no_args()
     )
     .arg(
-            Arg::with_name(OPT_FORCE)
-            .short("f")
+            Arg::new(OPT_FORCE)
+            .short('f')
             .long(OPT_FORCE)
             .help("do not prompt before overwriting")
     )
     .arg(
-            Arg::with_name(OPT_INTERACTIVE)
-            .short("i")
+            Arg::new(OPT_INTERACTIVE)
+            .short('i')
             .long(OPT_INTERACTIVE)
             .help("prompt before override")
     )
     .arg(
-            Arg::with_name(OPT_NO_CLOBBER).short("n")
+            Arg::new(OPT_NO_CLOBBER).short('n')
             .long(OPT_NO_CLOBBER)
             .help("do not overwrite an existing file")
     )
     .arg(
-            Arg::with_name(OPT_STRIP_TRAILING_SLASHES)
+            Arg::new(OPT_STRIP_TRAILING_SLASHES)
             .long(OPT_STRIP_TRAILING_SLASHES)
             .help("remove any trailing slashes from each SOURCE argument")
     )
@@ -155,37 +156,39 @@ pub fn uu_app() -> App<'static, 'static> {
         backup_control::arguments::suffix()
     )
     .arg(
-        Arg::with_name(OPT_TARGET_DIRECTORY)
-        .short("t")
+        Arg::new(OPT_TARGET_DIRECTORY)
+        .short('t')
         .long(OPT_TARGET_DIRECTORY)
         .help("move all SOURCE arguments into DIRECTORY")
         .takes_value(true)
         .value_name("DIRECTORY")
         .conflicts_with(OPT_NO_TARGET_DIRECTORY)
+        .allow_invalid_utf8(true)
     )
     .arg(
-            Arg::with_name(OPT_NO_TARGET_DIRECTORY)
-            .short("T")
+            Arg::new(OPT_NO_TARGET_DIRECTORY)
+            .short('T')
             .long(OPT_NO_TARGET_DIRECTORY).
             help("treat DEST as a normal file")
     )
     .arg(
-            Arg::with_name(OPT_UPDATE)
-            .short("u")
+            Arg::new(OPT_UPDATE)
+            .short('u')
             .long(OPT_UPDATE)
             .help("move only when the SOURCE file is newer than the destination file or when the destination file is missing")
     )
     .arg(
-            Arg::with_name(OPT_VERBOSE)
-            .short("v")
+            Arg::new(OPT_VERBOSE)
+            .short('v')
             .long(OPT_VERBOSE).help("explain what is being done")
     )
     .arg(
-        Arg::with_name(ARG_FILES)
-            .multiple(true)
+        Arg::new(ARG_FILES)
+            .multiple_occurrences(true)
             .takes_value(true)
             .min_values(2)
             .required(true)
+            .allow_invalid_utf8(true)
         )
 }
 
@@ -204,7 +207,7 @@ fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
     }
 }
 
-fn exec(files: &[OsString], b: Behavior) -> UResult<()> {
+fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
     let paths: Vec<PathBuf> = {
         let paths = files.iter().map(Path::new);
 
@@ -219,7 +222,7 @@ fn exec(files: &[OsString], b: Behavior) -> UResult<()> {
     };
 
     if let Some(ref name) = b.target_dir {
-        return move_files_into_dir(&paths, &PathBuf::from(name), &b);
+        return move_files_into_dir(&paths, &PathBuf::from(name), b);
     }
     match paths.len() {
         /* case 0/1 are not possible thanks to clap */
@@ -253,12 +256,12 @@ fn exec(files: &[OsString], b: Behavior) -> UResult<()> {
                     if !source.is_dir() {
                         Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
                     } else {
-                        rename(source, target, &b).map_err_context(|| {
+                        rename(source, target, b).map_err_context(|| {
                             format!("cannot move {} to {}", source.quote(), target.quote())
                         })
                     }
                 } else {
-                    move_files_into_dir(&[source.clone()], target, &b)
+                    move_files_into_dir(&[source.clone()], target, b)
                 }
             } else if target.exists() && source.is_dir() {
                 Err(MvError::NonDirectoryToDirectory(
@@ -267,7 +270,7 @@ fn exec(files: &[OsString], b: Behavior) -> UResult<()> {
                 )
                 .into())
             } else {
-                rename(source, target, &b).map_err(|e| USimpleError::new(1, format!("{}", e)))
+                rename(source, target, b).map_err(|e| USimpleError::new(1, format!("{}", e)))
             }
         }
         _ => {
@@ -278,7 +281,7 @@ fn exec(files: &[OsString], b: Behavior) -> UResult<()> {
                 ));
             }
             let target_dir = paths.last().unwrap();
-            move_files_into_dir(&paths[..paths.len() - 1], target_dir, &b)
+            move_files_into_dir(&paths[..paths.len() - 1], target_dir, b)
         }
     }
 }
@@ -302,7 +305,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
                 sourcepath.quote(),
                 targetpath.quote()
             ))
-        )
+        );
     }
     Ok(())
 }
@@ -337,7 +340,7 @@ fn rename(from: &Path, to: &Path, b: &Behavior) -> io::Result<()> {
         // normalize behavior between *nix and windows
         if from.is_dir() {
             if is_empty_dir(to) {
-                fs::remove_dir(to)?
+                fs::remove_dir(to)?;
             } else {
                 return Err(io::Error::new(io::ErrorKind::Other, "Directory not empty"));
             }

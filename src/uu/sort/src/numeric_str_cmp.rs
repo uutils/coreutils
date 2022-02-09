@@ -52,7 +52,7 @@ impl NumInfo {
     /// an empty range (idx..idx) is returned so that idx is the char after the last zero.
     /// If the input is not a number (which has to be treated as zero), the returned empty range
     /// will be 0..0.
-    pub fn parse(num: &str, parse_settings: NumInfoParseSettings) -> (Self, Range<usize>) {
+    pub fn parse(num: &str, parse_settings: &NumInfoParseSettings) -> (Self, Range<usize>) {
         let mut exponent = -1;
         let mut had_decimal_pt = false;
         let mut had_digit = false;
@@ -80,17 +80,17 @@ impl NumInfo {
                 continue;
             }
 
-            if Self::is_invalid_char(char, &mut had_decimal_pt, &parse_settings) {
+            if Self::is_invalid_char(char, &mut had_decimal_pt, parse_settings) {
                 return if let Some(start) = start {
                     let has_si_unit = parse_settings.accept_si_units
                         && matches!(char, 'K' | 'k' | 'M' | 'G' | 'T' | 'P' | 'E' | 'Z' | 'Y');
                     (
-                        NumInfo { exponent, sign },
+                        Self { exponent, sign },
                         start..if has_si_unit { idx + 1 } else { idx },
                     )
                 } else {
                     (
-                        NumInfo {
+                        Self {
                             sign: Sign::Positive,
                             exponent: 0,
                         },
@@ -127,10 +127,10 @@ impl NumInfo {
             }
         }
         if let Some(start) = start {
-            (NumInfo { exponent, sign }, start..num.len())
+            (Self { exponent, sign }, start..num.len())
         } else {
             (
-                NumInfo {
+                Self {
                     sign: Sign::Positive,
                     exponent: 0,
                 },
@@ -270,7 +270,7 @@ mod tests {
     fn parses_exp() {
         let n = "1";
         assert_eq!(
-            NumInfo::parse(n, Default::default()),
+            NumInfo::parse(n, &Default::default()),
             (
                 NumInfo {
                     exponent: 0,
@@ -281,7 +281,7 @@ mod tests {
         );
         let n = "100";
         assert_eq!(
-            NumInfo::parse(n, Default::default()),
+            NumInfo::parse(n, &Default::default()),
             (
                 NumInfo {
                     exponent: 2,
@@ -294,7 +294,7 @@ mod tests {
         assert_eq!(
             NumInfo::parse(
                 n,
-                NumInfoParseSettings {
+                &NumInfoParseSettings {
                     thousands_separator: Some(','),
                     ..Default::default()
                 }
@@ -309,7 +309,7 @@ mod tests {
         );
         let n = "1,000";
         assert_eq!(
-            NumInfo::parse(n, Default::default()),
+            NumInfo::parse(n, &Default::default()),
             (
                 NumInfo {
                     exponent: 0,
@@ -320,7 +320,7 @@ mod tests {
         );
         let n = "1000.00";
         assert_eq!(
-            NumInfo::parse(n, Default::default()),
+            NumInfo::parse(n, &Default::default()),
             (
                 NumInfo {
                     exponent: 3,
@@ -334,7 +334,7 @@ mod tests {
     fn parses_negative_exp() {
         let n = "0.00005";
         assert_eq!(
-            NumInfo::parse(n, Default::default()),
+            NumInfo::parse(n, &Default::default()),
             (
                 NumInfo {
                     exponent: -5,
@@ -345,7 +345,7 @@ mod tests {
         );
         let n = "00000.00005";
         assert_eq!(
-            NumInfo::parse(n, Default::default()),
+            NumInfo::parse(n, &Default::default()),
             (
                 NumInfo {
                     exponent: -5,
@@ -360,7 +360,7 @@ mod tests {
     fn parses_sign() {
         let n = "5";
         assert_eq!(
-            NumInfo::parse(n, Default::default()),
+            NumInfo::parse(n, &Default::default()),
             (
                 NumInfo {
                     exponent: 0,
@@ -371,7 +371,7 @@ mod tests {
         );
         let n = "-5";
         assert_eq!(
-            NumInfo::parse(n, Default::default()),
+            NumInfo::parse(n, &Default::default()),
             (
                 NumInfo {
                     exponent: 0,
@@ -382,7 +382,7 @@ mod tests {
         );
         let n = "    -5";
         assert_eq!(
-            NumInfo::parse(n, Default::default()),
+            NumInfo::parse(n, &Default::default()),
             (
                 NumInfo {
                     exponent: 0,
@@ -394,8 +394,8 @@ mod tests {
     }
 
     fn test_helper(a: &str, b: &str, expected: Ordering) {
-        let (a_info, a_range) = NumInfo::parse(a, Default::default());
-        let (b_info, b_range) = NumInfo::parse(b, Default::default());
+        let (a_info, a_range) = NumInfo::parse(a, &Default::default());
+        let (b_info, b_range) = NumInfo::parse(b, &Default::default());
         let ordering = numeric_str_cmp(
             (&a[a_range.to_owned()], &a_info),
             (&b[b_range.to_owned()], &b_info),
@@ -470,7 +470,7 @@ mod tests {
     }
     #[test]
     fn single_minus() {
-        let info = NumInfo::parse("-", Default::default());
+        let info = NumInfo::parse("-", &Default::default());
         assert_eq!(
             info,
             (
@@ -486,7 +486,7 @@ mod tests {
     fn invalid_with_unit() {
         let info = NumInfo::parse(
             "-K",
-            NumInfoParseSettings {
+            &NumInfoParseSettings {
                 accept_si_units: true,
                 ..Default::default()
             },

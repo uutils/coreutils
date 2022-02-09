@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::env;
 use std::io;
 use std::path::PathBuf;
@@ -124,11 +124,11 @@ fn usage() -> String {
     format!("{0} [OPTION]... FILE...", uucore::execution_phrase())
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
     let cwd = if matches.is_present(OPT_LOGICAL) {
         logical_path()
     } else {
@@ -152,19 +152,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(OPT_LOGICAL)
-                .short("L")
+            Arg::new(OPT_LOGICAL)
+                .short('L')
                 .long(OPT_LOGICAL)
                 .help("use PWD from environment, even if it contains symlinks"),
         )
         .arg(
-            Arg::with_name(OPT_PHYSICAL)
-                .short("P")
+            Arg::new(OPT_PHYSICAL)
+                .short('P')
                 .long(OPT_PHYSICAL)
                 .overrides_with(OPT_LOGICAL)
                 .help("avoid all symlinks"),

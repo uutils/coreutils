@@ -1,6 +1,6 @@
 [package]
 name = "uu_date"
-version = "0.0.8"
+version = "0.0.12"
 authors = ["uutils developers"]
 license = "MIT"
 description = "date ~ (uutils) display or set the current time"
@@ -15,10 +15,9 @@ edition = "2018"
 path = "src/date.rs"
 
 [dependencies]
-chrono = "0.4.4"
-clap = { version = "2.33", features = ["wrap_help"] }
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+chrono = "^0.4.11"
+clap = { version = "3.0", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -29,6 +28,3 @@ winapi = { version = "0.3", features = ["minwinbase", "sysinfoapi", "minwindef"]
 [[bin]]
 name = "date"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

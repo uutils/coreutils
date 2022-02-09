@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) delim
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
@@ -34,12 +34,12 @@ fn read_line<R: Read>(
     }
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let serial = matches.is_present(options::SERIAL);
-    let delimiters = matches.value_of(options::DELIMITER).unwrap().to_owned();
+    let delimiters = matches.value_of(options::DELIMITER).unwrap();
     let files = matches
         .values_of(options::FILE)
         .unwrap()
@@ -48,34 +48,35 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     paste(files, serial, delimiters)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::SERIAL)
+            Arg::new(options::SERIAL)
                 .long(options::SERIAL)
-                .short("s")
+                .short('s')
                 .help("paste one file at a time instead of in parallel"),
         )
         .arg(
-            Arg::with_name(options::DELIMITER)
+            Arg::new(options::DELIMITER)
                 .long(options::DELIMITER)
-                .short("d")
+                .short('d')
                 .help("reuse characters from LIST instead of TABs")
                 .value_name("LIST")
                 .default_value("\t")
                 .hide_default_value(true),
         )
         .arg(
-            Arg::with_name(options::FILE)
+            Arg::new(options::FILE)
                 .value_name("FILE")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .default_value("-"),
         )
 }
 
-fn paste(filenames: Vec<String>, serial: bool, delimiters: String) -> UResult<()> {
+fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> {
     let mut files = vec![];
     for name in filenames {
         let file = if name == "-" {
@@ -145,7 +146,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) -> UResult<()
 
 // Unescape all special characters
 // TODO: this will need work to conform to GNU implementation
-fn unescape(s: String) -> String {
+fn unescape(s: &str) -> String {
     s.replace("\\n", "\n")
         .replace("\\t", "\t")
         .replace("\\\\", "\\")

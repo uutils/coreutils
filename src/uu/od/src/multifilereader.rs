@@ -60,7 +60,7 @@ impl<'b> MultifileReader<'b> {
                             // then move on the the next file.
                             // This matches the behavior of the original `od`
                             show_error!("{}: {}", fname.maybe_quote(), e);
-                            self.any_err = true
+                            self.any_err = true;
                         }
                     }
                 }

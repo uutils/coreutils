@@ -12,7 +12,7 @@ use uucore::error::{FromIo, UResult};
 use uucore::libc::{ttyname, STDIN_FILENO, S_IWGRP};
 use uucore::utmpx::{self, time, Utmpx};
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::borrow::Cow;
 use std::ffi::CStr;
 use std::os::unix::fs::MetadataExt;
@@ -59,7 +59,7 @@ fn get_long_usage() -> String {
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -69,7 +69,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let after_help = get_long_usage();
 
     let matches = uu_app()
-        .usage(&usage[..])
+        .override_usage(&usage[..])
         .after_help(&after_help[..])
         .get_matches_from(args);
 
@@ -161,101 +161,102 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     who.exec()
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::ALL)
+            Arg::new(options::ALL)
                 .long(options::ALL)
-                .short("a")
+                .short('a')
                 .help("same as -b -d --login -p -r -t -T -u"),
         )
         .arg(
-            Arg::with_name(options::BOOT)
+            Arg::new(options::BOOT)
                 .long(options::BOOT)
-                .short("b")
+                .short('b')
                 .help("time of last system boot"),
         )
         .arg(
-            Arg::with_name(options::DEAD)
+            Arg::new(options::DEAD)
                 .long(options::DEAD)
-                .short("d")
+                .short('d')
                 .help("print dead processes"),
         )
         .arg(
-            Arg::with_name(options::HEADING)
+            Arg::new(options::HEADING)
                 .long(options::HEADING)
-                .short("H")
+                .short('H')
                 .help("print line of column headings"),
         )
         .arg(
-            Arg::with_name(options::LOGIN)
+            Arg::new(options::LOGIN)
                 .long(options::LOGIN)
-                .short("l")
+                .short('l')
                 .help("print system login processes"),
         )
         .arg(
-            Arg::with_name(options::LOOKUP)
+            Arg::new(options::LOOKUP)
                 .long(options::LOOKUP)
                 .help("attempt to canonicalize hostnames via DNS"),
         )
         .arg(
-            Arg::with_name(options::ONLY_HOSTNAME_USER)
-                .short("m")
+            Arg::new(options::ONLY_HOSTNAME_USER)
+                .short('m')
                 .help("only hostname and user associated with stdin"),
         )
         .arg(
-            Arg::with_name(options::PROCESS)
+            Arg::new(options::PROCESS)
                 .long(options::PROCESS)
-                .short("p")
+                .short('p')
                 .help("print active processes spawned by init"),
         )
         .arg(
-            Arg::with_name(options::COUNT)
+            Arg::new(options::COUNT)
                 .long(options::COUNT)
-                .short("q")
+                .short('q')
                 .help("all login names and number of users logged on"),
         )
         .arg(
-            Arg::with_name(options::RUNLEVEL)
+            Arg::new(options::RUNLEVEL)
                 .long(options::RUNLEVEL)
-                .short("r")
+                .short('r')
                 .help(RUNLEVEL_HELP),
         )
         .arg(
-            Arg::with_name(options::SHORT)
+            Arg::new(options::SHORT)
                 .long(options::SHORT)
-                .short("s")
+                .short('s')
                 .help("print only name, line, and time (default)"),
         )
         .arg(
-            Arg::with_name(options::TIME)
+            Arg::new(options::TIME)
                 .long(options::TIME)
-                .short("t")
+                .short('t')
                 .help("print last system clock change"),
         )
         .arg(
-            Arg::with_name(options::USERS)
+            Arg::new(options::USERS)
                 .long(options::USERS)
-                .short("u")
+                .short('u')
                 .help("list users logged in"),
         )
         .arg(
-            Arg::with_name(options::MESG)
+            Arg::new(options::MESG)
                 .long(options::MESG)
-                .short("T")
+                .short('T')
                 // .visible_short_alias('w')  // TODO: requires clap "3.0.0-beta.2"
                 .visible_aliases(&["message", "writable"])
                 .help("add user's message status as +, - or ?"),
         )
         .arg(
-            Arg::with_name("w") // work around for `Arg::visible_short_alias`
-                .short("w")
+            Arg::new("w") // work around for `Arg::visible_short_alias`
+                .short('w')
                 .help("same as -T"),
         )
         .arg(
-            Arg::with_name(options::FILE)
+            Arg::new(options::FILE)
                 .takes_value(true)
                 .min_values(1)
                 .max_values(2),
@@ -350,7 +351,7 @@ impl Who {
             let records = Utmpx::iter_all_records_from(f).peekable();
 
             if self.include_heading {
-                self.print_heading()
+                self.print_heading();
             }
             let cur_tty = if self.my_line_only {
                 current_tty()

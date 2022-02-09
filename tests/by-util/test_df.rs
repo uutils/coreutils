@@ -6,6 +6,11 @@ fn test_df_compatible_no_size_arg() {
 }
 
 #[test]
+fn test_df_shortened_long_argument() {
+    new_ucmd!().arg("--a").succeeds();
+}
+
+#[test]
 fn test_df_compatible() {
     new_ucmd!().arg("-ah").succeeds();
 }

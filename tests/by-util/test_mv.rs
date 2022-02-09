@@ -263,7 +263,7 @@ fn test_mv_same_file_dot_dir() {
     ucmd.arg(".")
         .arg(".")
         .fails()
-        .stderr_is("mv: '.' and '.' are the same file\n".to_string());
+        .stderr_is("mv: '.' and '.' are the same file\n");
 }
 
 #[test]
@@ -325,6 +325,27 @@ fn test_mv_custom_backup_suffix() {
     let file_a = "test_mv_custom_backup_suffix_file_a";
     let file_b = "test_mv_custom_backup_suffix_file_b";
     let suffix = "super-suffix-of-the-century";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    ucmd.arg("-b")
+        .arg(format!("--suffix={}", suffix))
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}{}", file_b, suffix)));
+}
+
+#[test]
+fn test_mv_custom_backup_suffix_hyphen_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_custom_backup_suffix_file_a";
+    let file_b = "test_mv_custom_backup_suffix_file_b";
+    let suffix = "-v";
 
     at.touch(file_a);
     at.touch(file_b);

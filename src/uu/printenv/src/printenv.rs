@@ -7,7 +7,7 @@
 
 /* last synced with: printenv (GNU coreutils) 8.13 */
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::env;
 use uucore::error::UResult;
 
@@ -21,11 +21,11 @@ fn usage() -> String {
     format!("{0} [VARIABLE]... [OPTION]...", uucore::execution_phrase())
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let variables: Vec<String> = matches
         .values_of(ARG_VARIABLES)
@@ -61,19 +61,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(OPT_NULL)
-                .short("0")
+            Arg::new(OPT_NULL)
+                .short('0')
                 .long(OPT_NULL)
                 .help("end each output line with 0 byte rather than newline"),
         )
         .arg(
-            Arg::with_name(ARG_VARIABLES)
-                .multiple(true)
+            Arg::new(ARG_VARIABLES)
+                .multiple_occurrences(true)
                 .takes_value(true)
                 .min_values(1),
         )

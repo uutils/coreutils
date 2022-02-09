@@ -16,7 +16,7 @@ use uucore::fsext::{
 };
 use uucore::libc::mode_t;
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::borrow::Cow;
 use std::convert::AsRef;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
@@ -193,11 +193,19 @@ impl ScanUtil for str {
 }
 
 pub fn group_num(s: &str) -> Cow<str> {
-    assert!(s.chars().all(char::is_numeric));
+    let is_negative = s.starts_with('-');
+    assert!(is_negative || s.chars().take(1).all(|c| c.is_digit(10)));
+    assert!(s.chars().skip(1).all(|c| c.is_digit(10)));
     if s.len() < 4 {
         return s.into();
     }
     let mut res = String::with_capacity((s.len() - 1) / 3);
+    let s = if is_negative {
+        res.push('-');
+        &s[1..]
+    } else {
+        s
+    };
     let mut alone = (s.len() - 1) % 3 + 1;
     res.push_str(&s[..alone]);
     while alone != s.len() {
@@ -219,7 +227,7 @@ pub struct Stater {
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn print_it(arg: &str, output_type: OutputType, flag: u8, width: usize, precision: i32) {
+fn print_it(arg: &str, output_type: &OutputType, flag: u8, width: usize, precision: i32) {
     // If the precision is given as just '.', the precision is taken to be zero.
     // A negative precision is taken as if the precision were omitted.
     // This gives the minimum number of digits to appear for d, i, o, u, x, and X conversions,
@@ -250,7 +258,7 @@ fn print_it(arg: &str, output_type: OutputType, flag: u8, width: usize, precisio
     // By default, a sign  is  used only for negative numbers.
     // A + overrides a space if both are used.
 
-    if output_type == OutputType::Unknown {
+    if output_type == &OutputType::Unknown {
         return print!("?");
     }
 
@@ -406,7 +414,7 @@ impl Stater {
                         flag,
                         precision,
                         format: chars[i],
-                    })
+                    });
                 }
                 '\\' => {
                     if !use_printf {
@@ -461,7 +469,7 @@ impl Stater {
         Ok(tokens)
     }
 
-    fn new(matches: ArgMatches) -> UResult<Stater> {
+    fn new(matches: &ArgMatches) -> UResult<Self> {
         let files: Vec<String> = matches
             .values_of(ARG_FILES)
             .map(|v| v.map(ToString::to_string).collect())
@@ -480,12 +488,12 @@ impl Stater {
         let show_fs = matches.is_present(options::FILE_SYSTEM);
 
         let default_tokens = if format_str.is_empty() {
-            Stater::generate_tokens(&Stater::default_format(show_fs, terse, false), use_printf)?
+            Self::generate_tokens(&Self::default_format(show_fs, terse, false), use_printf)?
         } else {
-            Stater::generate_tokens(format_str, use_printf)?
+            Self::generate_tokens(format_str, use_printf)?
         };
         let default_dev_tokens =
-            Stater::generate_tokens(&Stater::default_format(show_fs, terse, true), use_printf)?;
+            Self::generate_tokens(&Self::default_format(show_fs, terse, true), use_printf)?;
 
         let mount_list = if show_fs {
             // mount points aren't displayed when showing filesystem information
@@ -501,7 +509,7 @@ impl Stater {
             Some(mount_list)
         };
 
-        Ok(Stater {
+        Ok(Self {
             follow: matches.is_present(options::DEREFERENCE),
             show_fs,
             from_user: !format_str.is_empty(),
@@ -743,7 +751,7 @@ impl Stater {
                                         output_type = OutputType::Unknown;
                                     }
                                 }
-                                print_it(&arg, output_type, flag, width, precision);
+                                print_it(&arg, &output_type, flag, width, precision);
                             }
                         }
                     }
@@ -836,7 +844,7 @@ impl Stater {
                                     }
                                 }
 
-                                print_it(&arg, output_type, flag, width, precision);
+                                print_it(&arg, &output_type, flag, width, precision);
                             }
                         }
                     }
@@ -947,17 +955,17 @@ for details about the options it supports.
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let long_usage = get_long_usage();
 
     let matches = uu_app()
-        .usage(&usage[..])
+        .override_usage(&usage[..])
         .after_help(&long_usage[..])
         .get_matches_from(args);
 
-    let stater = Stater::new(matches)?;
+    let stater = Stater::new(&matches)?;
     let exit_status = stater.exec();
     if exit_status == 0 {
         Ok(())
@@ -966,31 +974,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::DEREFERENCE)
-                .short("L")
+            Arg::new(options::DEREFERENCE)
+                .short('L')
                 .long(options::DEREFERENCE)
                 .help("follow links"),
         )
         .arg(
-            Arg::with_name(options::FILE_SYSTEM)
-                .short("f")
+            Arg::new(options::FILE_SYSTEM)
+                .short('f')
                 .long(options::FILE_SYSTEM)
                 .help("display file system status instead of file status"),
         )
         .arg(
-            Arg::with_name(options::TERSE)
-                .short("t")
+            Arg::new(options::TERSE)
+                .short('t')
                 .long(options::TERSE)
                 .help("print the information in terse form"),
         )
         .arg(
-            Arg::with_name(options::FORMAT)
-                .short("c")
+            Arg::new(options::FORMAT)
+                .short('c')
                 .long(options::FORMAT)
                 .help(
                     "use the specified FORMAT instead of the default;
@@ -999,7 +1008,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 .value_name("FORMAT"),
         )
         .arg(
-            Arg::with_name(options::PRINTF)
+            Arg::new(options::PRINTF)
                 .long(options::PRINTF)
                 .value_name("FORMAT")
                 .help(
@@ -1009,8 +1018,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(ARG_FILES)
-                .multiple(true)
+            Arg::new(ARG_FILES)
+                .multiple_occurrences(true)
                 .takes_value(true)
                 .min_values(1),
         )

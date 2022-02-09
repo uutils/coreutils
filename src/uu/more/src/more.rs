@@ -17,7 +17,7 @@ use std::{
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 extern crate nix;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute, queue,
@@ -49,7 +49,7 @@ pub mod options {
 
 const MULTI_FILE_TOP_PROMPT: &str = "::::::::::::::\n{}\n::::::::::::::\n";
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
@@ -96,64 +96,65 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .about("A file perusal filter for CRT viewing.")
         .version(crate_version!())
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::SILENT)
-                .short("d")
+            Arg::new(options::SILENT)
+                .short('d')
                 .long(options::SILENT)
                 .help("Display help instead of ringing bell"),
         )
         // The commented arguments below are unimplemented:
         /*
         .arg(
-            Arg::with_name(options::LOGICAL)
-                .short("f")
+            Arg::new(options::LOGICAL)
+                .short('f')
                 .long(options::LOGICAL)
                 .help("Count logical rather than screen lines"),
         )
         .arg(
-            Arg::with_name(options::NO_PAUSE)
-                .short("l")
+            Arg::new(options::NO_PAUSE)
+                .short('l')
                 .long(options::NO_PAUSE)
                 .help("Suppress pause after form feed"),
         )
         .arg(
-            Arg::with_name(options::PRINT_OVER)
-                .short("c")
+            Arg::new(options::PRINT_OVER)
+                .short('c')
                 .long(options::PRINT_OVER)
                 .help("Do not scroll, display text and clean line ends"),
         )
         .arg(
-            Arg::with_name(options::CLEAN_PRINT)
-                .short("p")
+            Arg::new(options::CLEAN_PRINT)
+                .short('p')
                 .long(options::CLEAN_PRINT)
                 .help("Do not scroll, clean screen and display text"),
         )
         .arg(
-            Arg::with_name(options::SQUEEZE)
-                .short("s")
+            Arg::new(options::SQUEEZE)
+                .short('s')
                 .long(options::SQUEEZE)
                 .help("Squeeze multiple blank lines into one"),
         )
         .arg(
-            Arg::with_name(options::PLAIN)
-                .short("u")
+            Arg::new(options::PLAIN)
+                .short('u')
                 .long(options::PLAIN)
                 .help("Suppress underlining and bold"),
         )
         .arg(
-            Arg::with_name(options::LINES)
-                .short("n")
+            Arg::new(options::LINES)
+                .short('n')
                 .long(options::LINES)
                 .value_name("number")
                 .takes_value(true)
                 .help("The number of lines per screen full"),
         )
         .arg(
-            Arg::with_name(options::NUMBER)
+            Arg::new(options::NUMBER)
                 .allow_hyphen_values(true)
                 .long(options::NUMBER)
                 .required(false)
@@ -161,8 +162,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("Same as --lines"),
         )
         .arg(
-            Arg::with_name(options::FROM_LINE)
-                .short("F")
+            Arg::new(options::FROM_LINE)
+                .short('F')
                 .allow_hyphen_values(true)
                 .required(false)
                 .takes_value(true)
@@ -170,8 +171,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("Display file beginning from line number"),
         )
         .arg(
-            Arg::with_name(options::PATTERN)
-                .short("P")
+            Arg::new(options::PATTERN)
+                .short('P')
                 .allow_hyphen_values(true)
                 .required(false)
                 .takes_value(true)
@@ -179,9 +180,9 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         */
         .arg(
-            Arg::with_name(options::FILES)
+            Arg::new(options::FILES)
                 .required(false)
-                .multiple(true)
+                .multiple_occurrences(true)
                 .help("Path to the files to be read"),
         )
 }

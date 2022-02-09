@@ -10,7 +10,7 @@
 
 use std::path::Path;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use uucore::error::UResult;
 use uucore::utmpx::{self, Utmpx};
 
@@ -30,13 +30,13 @@ If FILE is not specified, use {}.  /var/log/wtmp as FILE is common.",
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let after_help = get_long_usage();
 
     let matches = uu_app()
-        .usage(&usage[..])
+        .override_usage(&usage[..])
         .after_help(&after_help[..])
         .get_matches_from(args);
 
@@ -64,9 +64,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .arg(Arg::with_name(ARG_FILES).takes_value(true).max_values(1))
+        .setting(AppSettings::InferLongArgs)
+        .arg(Arg::new(ARG_FILES).takes_value(true).max_values(1))
 }

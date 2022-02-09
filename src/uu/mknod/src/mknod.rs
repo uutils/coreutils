@@ -9,7 +9,7 @@
 
 use std::ffi::CString;
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use libc::{dev_t, mode_t};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 
@@ -79,7 +79,7 @@ fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
     }
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -143,28 +143,29 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
-        .usage(USAGE)
+        .override_usage(USAGE)
         .after_help(LONG_HELP)
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name("mode")
-                .short("m")
+            Arg::new("mode")
+                .short('m')
                 .long("mode")
                 .value_name("MODE")
                 .help("set file permission bits to MODE, not a=rw - umask"),
         )
         .arg(
-            Arg::with_name("name")
+            Arg::new("name")
                 .value_name("NAME")
                 .help("name of the new file")
                 .required(true)
                 .index(1),
         )
         .arg(
-            Arg::with_name("type")
+            Arg::new("type")
                 .value_name("TYPE")
                 .help("type of the new file (b, c, u or p)")
                 .required(true)
@@ -172,14 +173,14 @@ pub fn uu_app() -> App<'static, 'static> {
                 .index(2),
         )
         .arg(
-            Arg::with_name("major")
+            Arg::new("major")
                 .value_name("MAJOR")
                 .help("major file type")
                 .validator(valid_u64)
                 .index(3),
         )
         .arg(
-            Arg::with_name("minor")
+            Arg::new("minor")
                 .value_name("MINOR")
                 .help("minor file type")
                 .validator(valid_u64)
@@ -202,7 +203,7 @@ fn get_mode(matches: &ArgMatches) -> Result<mode_t, String> {
     }
 }
 
-fn valid_type(tpe: String) -> Result<(), String> {
+fn valid_type(tpe: &str) -> Result<(), String> {
     // Only check the first character, to allow mnemonic usage like
     // 'mknod /dev/rst0 character 18 0'.
     tpe.chars()
@@ -217,6 +218,6 @@ fn valid_type(tpe: String) -> Result<(), String> {
         })
 }
 
-fn valid_u64(num: String) -> Result<(), String> {
-    num.parse::<u64>().map(|_| ()).map_err(|_| num)
+fn valid_u64(num: &str) -> Result<(), String> {
+    num.parse::<u64>().map(|_| ()).map_err(|_| num.into())
 }

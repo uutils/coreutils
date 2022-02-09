@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
@@ -48,7 +48,7 @@ fn get_long_usage() -> String {
     String::from("Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.")
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -62,7 +62,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let after_help = get_long_usage();
 
     let matches = uu_app()
-        .usage(&usage[..])
+        .override_usage(&usage[..])
         .after_help(&after_help[..])
         .get_matches_from(args);
 
@@ -118,66 +118,67 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         cmode,
     };
 
-    chmoder.chmod(files)
+    chmoder.chmod(&files)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::CHANGES)
+            Arg::new(options::CHANGES)
                 .long(options::CHANGES)
-                .short("c")
+                .short('c')
                 .help("like verbose but report only when a change is made"),
         )
         .arg(
-            Arg::with_name(options::QUIET)
+            Arg::new(options::QUIET)
                 .long(options::QUIET)
                 .visible_alias("silent")
-                .short("f")
+                .short('f')
                 .help("suppress most error messages"),
         )
         .arg(
-            Arg::with_name(options::VERBOSE)
+            Arg::new(options::VERBOSE)
                 .long(options::VERBOSE)
-                .short("v")
+                .short('v')
                 .help("output a diagnostic for every file processed"),
         )
         .arg(
-            Arg::with_name(options::NO_PRESERVE_ROOT)
+            Arg::new(options::NO_PRESERVE_ROOT)
                 .long(options::NO_PRESERVE_ROOT)
                 .help("do not treat '/' specially (the default)"),
         )
         .arg(
-            Arg::with_name(options::PRESERVE_ROOT)
+            Arg::new(options::PRESERVE_ROOT)
                 .long(options::PRESERVE_ROOT)
                 .help("fail to operate recursively on '/'"),
         )
         .arg(
-            Arg::with_name(options::RECURSIVE)
+            Arg::new(options::RECURSIVE)
                 .long(options::RECURSIVE)
-                .short("R")
+                .short('R')
                 .help("change files and directories recursively"),
         )
         .arg(
-            Arg::with_name(options::REFERENCE)
+            Arg::new(options::REFERENCE)
                 .long("reference")
                 .takes_value(true)
                 .help("use RFILE's mode instead of MODE values"),
         )
         .arg(
-            Arg::with_name(options::MODE)
-                .required_unless(options::REFERENCE)
+            Arg::new(options::MODE)
+                .required_unless_present(options::REFERENCE)
                 .takes_value(true),
             // It would be nice if clap could parse with delimiter, e.g. "g-x,u+x",
-            // however .multiple(true) cannot be used here because FILE already needs that.
-            // Only one positional argument with .multiple(true) set is allowed per command
+            // however .multiple_occurrences(true) cannot be used here because FILE already needs that.
+            // Only one positional argument with .multiple_occurrences(true) set is allowed per command
         )
         .arg(
-            Arg::with_name(options::FILE)
-                .required_unless(options::MODE)
-                .multiple(true),
+            Arg::new(options::FILE)
+                .required_unless_present(options::MODE)
+                .multiple_occurrences(true),
         )
 }
 
@@ -192,10 +193,10 @@ struct Chmoder {
 }
 
 impl Chmoder {
-    fn chmod(&self, files: Vec<String>) -> UResult<()> {
+    fn chmod(&self, files: &[String]) -> UResult<()> {
         let mut r = Ok(());
 
-        for filename in &files {
+        for filename in files {
             let filename = &filename[..];
             let file = Path::new(filename);
             if !file.exists() {

@@ -1,4 +1,4 @@
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob
 
 use crate::common::util::*;
 #[cfg(not(windows))]
@@ -43,6 +43,8 @@ static TEST_MOUNT_COPY_FROM_FOLDER: &str = "dir_with_mount";
 static TEST_MOUNT_MOUNTPOINT: &str = "mount";
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
+#[cfg(unix)]
+static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
 
 #[test]
 fn test_cp_cp() {
@@ -228,6 +230,17 @@ fn test_cp_arg_no_clobber() {
 }
 
 #[test]
+fn test_cp_arg_no_clobber_inferred_arg() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("--no-clob")
+        .succeeds();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
+}
+
+#[test]
 fn test_cp_arg_no_clobber_twice() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -368,6 +381,24 @@ fn test_cp_arg_suffix() {
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
         at.read(&*format!("{}.bak", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_arg_suffix_hyphen_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("-b")
+        .arg("--suffix")
+        .arg("-v")
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}-v", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
 }
@@ -1417,4 +1448,26 @@ fn test_copy_through_dangling_symlink() {
         .arg("target")
         .fails()
         .stderr_only("cp: not writing through dangling symlink 'target'");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_archive_on_nonexistent_file() {
+    new_ucmd!()
+        .arg("-a")
+        .arg(TEST_NONEXISTENT_FILE)
+        .arg(TEST_EXISTING_FILE)
+        .fails()
+        .stderr_only(
+            "cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)",
+        );
+}
+#[test]
+fn test_cp_dir_vs_file() {
+    new_ucmd!()
+        .arg("-R")
+        .arg(TEST_COPY_FROM_FOLDER)
+        .arg(TEST_EXISTING_FILE)
+        .fails()
+        .stderr_only("cp: cannot overwrite non-directory with directory");
 }

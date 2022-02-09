@@ -7,13 +7,16 @@
 
 // spell-checker:ignore (ToDO) cmdline evec seps rvec fdata
 
-use clap::{crate_version, App, Arg};
-use rand::Rng;
+use clap::{crate_version, App, AppSettings, Arg};
+use rand::prelude::SliceRandom;
+use rand::RngCore;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::InvalidEncodingHandling;
+
+mod rand_read_adapter;
 
 enum Mode {
     Default(String),
@@ -29,7 +32,8 @@ Write a random permutation of the input lines to standard output.
 
 With no FILE, or when FILE is -, read standard input.
 "#;
-static TEMPLATE: &str = "Usage: {usage}\nMandatory arguments to long options are mandatory for short options too.\n{unified}";
+static ABOUT: &str = "Shuffle the input by outputting a random permutation of input lines. Each output permutation is equally likely.";
+static TEMPLATE: &str = "Usage: {usage}\nMandatory arguments to long options are mandatory for short options too.\n{options}";
 
 struct Options {
     head_count: usize,
@@ -50,7 +54,7 @@ mod options {
     pub static FILE: &str = "file";
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -116,27 +120,29 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
+        .about(ABOUT)
         .version(crate_version!())
-        .template(TEMPLATE)
-        .usage(USAGE)
+        .help_template(TEMPLATE)
+        .override_usage(USAGE)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::ECHO)
-                .short("e")
+            Arg::new(options::ECHO)
+                .short('e')
                 .long(options::ECHO)
                 .takes_value(true)
                 .value_name("ARG")
                 .help("treat each ARG as an input line")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .use_delimiter(false)
                 .min_values(0)
                 .conflicts_with(options::INPUT_RANGE),
         )
         .arg(
-            Arg::with_name(options::INPUT_RANGE)
-                .short("i")
+            Arg::new(options::INPUT_RANGE)
+                .short('i')
                 .long(options::INPUT_RANGE)
                 .takes_value(true)
                 .value_name("LO-HI")
@@ -144,41 +150,41 @@ pub fn uu_app() -> App<'static, 'static> {
                 .conflicts_with(options::FILE),
         )
         .arg(
-            Arg::with_name(options::HEAD_COUNT)
-                .short("n")
+            Arg::new(options::HEAD_COUNT)
+                .short('n')
                 .long(options::HEAD_COUNT)
                 .takes_value(true)
                 .value_name("COUNT")
                 .help("output at most COUNT lines"),
         )
         .arg(
-            Arg::with_name(options::OUTPUT)
-                .short("o")
+            Arg::new(options::OUTPUT)
+                .short('o')
                 .long(options::OUTPUT)
                 .takes_value(true)
                 .value_name("FILE")
                 .help("write result to FILE instead of standard output"),
         )
         .arg(
-            Arg::with_name(options::RANDOM_SOURCE)
+            Arg::new(options::RANDOM_SOURCE)
                 .long(options::RANDOM_SOURCE)
                 .takes_value(true)
                 .value_name("FILE")
                 .help("get random bytes from FILE"),
         )
         .arg(
-            Arg::with_name(options::REPEAT)
-                .short("r")
+            Arg::new(options::REPEAT)
+                .short('r')
                 .long(options::REPEAT)
                 .help("output lines can be repeated"),
         )
         .arg(
-            Arg::with_name(options::ZERO_TERMINATED)
-                .short("z")
+            Arg::new(options::ZERO_TERMINATED)
+                .short('z')
                 .long(options::ZERO_TERMINATED)
                 .help("line delimiter is NUL, not newline"),
         )
-        .arg(Arg::with_name(options::FILE).takes_value(true))
+        .arg(Arg::new(options::FILE).takes_value(true))
 }
 
 fn read_input_file(filename: &str) -> UResult<Vec<u8>> {
@@ -244,73 +250,88 @@ fn shuf_bytes(input: &mut Vec<&[u8]>, opts: Options) -> UResult<()> {
         Some(r) => {
             let file = File::open(&r[..])
                 .map_err_context(|| format!("failed to open random source {}", r.quote()))?;
-            WrappedRng::RngFile(rand::rngs::adapter::ReadRng::new(file))
+            WrappedRng::RngFile(rand_read_adapter::ReadRng::new(file))
         }
         None => WrappedRng::RngDefault(rand::thread_rng()),
     };
 
-    // we're generating a random usize. To keep things fair, we take this number mod ceil(log2(length+1))
-    let mut len_mod = 1;
-    let mut len = input.len();
-    while len > 0 {
-        len >>= 1;
-        len_mod <<= 1;
+    if input.is_empty() {
+        return Ok(());
     }
 
-    let mut count = opts.head_count;
-    while count > 0 && !input.is_empty() {
-        let mut r = input.len();
-        while r >= input.len() {
-            r = rng.next_usize() % len_mod;
+    if opts.repeat {
+        for _ in 0..opts.head_count {
+            // Returns None is the slice is empty. We checked this before, so
+            // this is safe.
+            let r = input.choose(&mut rng).unwrap();
+
+            output
+                .write_all(r)
+                .map_err_context(|| "write failed".to_string())?;
+            output
+                .write_all(&[opts.sep])
+                .map_err_context(|| "write failed".to_string())?;
         }
-
-        // write the randomly chosen value and the separator
-        output
-            .write_all(input[r])
-            .map_err_context(|| "write failed".to_string())?;
-        output
-            .write_all(&[opts.sep])
-            .map_err_context(|| "write failed".to_string())?;
-
-        // if we do not allow repeats, remove the chosen value from the input vector
-        if !opts.repeat {
-            // shrink the mask if we will drop below a power of 2
-            if input.len() % 2 == 0 && len_mod > 2 {
-                len_mod >>= 1;
-            }
-            input.swap_remove(r);
+    } else {
+        let (shuffled, _) = input.partial_shuffle(&mut rng, opts.head_count);
+        for r in shuffled {
+            output
+                .write_all(r)
+                .map_err_context(|| "write failed".to_string())?;
+            output
+                .write_all(&[opts.sep])
+                .map_err_context(|| "write failed".to_string())?;
         }
-
-        count -= 1;
     }
+
     Ok(())
 }
 
 fn parse_range(input_range: &str) -> Result<(usize, usize), String> {
-    let split: Vec<&str> = input_range.split('-').collect();
-    if split.len() != 2 {
-        Err(format!("invalid input range: {}", input_range.quote()))
-    } else {
-        let begin = split[0]
+    if let Some((from, to)) = input_range.split_once('-') {
+        let begin = from
             .parse::<usize>()
-            .map_err(|_| format!("invalid input range: {}", split[0].quote()))?;
-        let end = split[1]
+            .map_err(|_| format!("invalid input range: {}", from.quote()))?;
+        let end = to
             .parse::<usize>()
-            .map_err(|_| format!("invalid input range: {}", split[1].quote()))?;
+            .map_err(|_| format!("invalid input range: {}", to.quote()))?;
         Ok((begin, end + 1))
+    } else {
+        Err(format!("invalid input range: {}", input_range.quote()))
     }
 }
 
 enum WrappedRng {
-    RngFile(rand::rngs::adapter::ReadRng<File>),
+    RngFile(rand_read_adapter::ReadRng<File>),
     RngDefault(rand::rngs::ThreadRng),
 }
 
-impl WrappedRng {
-    fn next_usize(&mut self) -> usize {
-        match *self {
-            WrappedRng::RngFile(ref mut r) => r.gen(),
-            WrappedRng::RngDefault(ref mut r) => r.gen(),
+impl RngCore for WrappedRng {
+    fn next_u32(&mut self) -> u32 {
+        match self {
+            Self::RngFile(r) => r.next_u32(),
+            Self::RngDefault(r) => r.next_u32(),
+        }
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        match self {
+            Self::RngFile(r) => r.next_u64(),
+            Self::RngDefault(r) => r.next_u64(),
+        }
+    }
+
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        match self {
+            Self::RngFile(r) => r.fill_bytes(dest),
+            Self::RngDefault(r) => r.fill_bytes(dest),
+        }
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
+        match self {
+            Self::RngFile(r) => r.try_fill_bytes(dest),
+            Self::RngDefault(r) => r.try_fill_bytes(dest),
         }
     }
 }

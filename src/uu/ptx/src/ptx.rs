@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDOs) corasick memchr Roff trunc oset iset
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use regex::Regex;
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -52,8 +52,8 @@ struct Config {
 }
 
 impl Default for Config {
-    fn default() -> Config {
-        Config {
+    fn default() -> Self {
+        Self {
             format: OutFormat::Dumb,
             gnu_ext: true,
             auto_ref: false,
@@ -96,7 +96,7 @@ struct WordFilter {
 }
 
 impl WordFilter {
-    fn new(matches: &clap::ArgMatches, config: &Config) -> UResult<WordFilter> {
+    fn new(matches: &clap::ArgMatches, config: &Config) -> UResult<Self> {
         let (o, oset): (bool, HashSet<String>) = if matches.is_present(options::ONLY_FILE) {
             let words =
                 read_word_filter_file(matches, options::ONLY_FILE).map_err_context(String::new)?;
@@ -139,7 +139,7 @@ impl WordFilter {
                 }
             }
         };
-        Ok(WordFilter {
+        Ok(Self {
             only_specified: o,
             ignore_specified: i,
             only_set: oset,
@@ -275,7 +275,7 @@ fn read_input(input_files: &[String], config: &Config) -> std::io::Result<FileMa
                 offset,
             },
         );
-        offset += size
+        offset += size;
     }
     Ok(file_map)
 }
@@ -674,7 +674,7 @@ mod options {
     pub static WIDTH: &str = "width";
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -683,7 +683,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // let mut opts = Options::new();
     let matches = uu_app().get_matches_from(args);
 
-    let input_files: Vec<String> = match &matches.values_of(options::FILE) {
+    let mut input_files: Vec<String> = match &matches.values_of(options::FILE) {
         Some(v) => v.clone().map(|v| v.to_owned()).collect(),
         None => vec!["-".to_string()],
     };
@@ -692,134 +692,139 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let word_filter = WordFilter::new(&matches, &config)?;
     let file_map = read_input(&input_files, &config).map_err_context(String::new)?;
     let word_set = create_word_set(&config, &word_filter, &file_map);
-    let output_file = if !config.gnu_ext && matches.args.len() == 2 {
-        matches.value_of(options::FILE).unwrap_or("-").to_string()
+    let output_file = if !config.gnu_ext && input_files.len() == 2 {
+        input_files.pop().unwrap()
     } else {
-        "-".to_owned()
+        "-".to_string()
     };
     write_traditional_output(&config, &file_map, &word_set, &output_file)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .usage(BRIEF)
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+        .override_usage(BRIEF)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::AUTO_REFERENCE)
-                .short("A")
+            Arg::new(options::FILE)
+                .hide(true)
+                .multiple_occurrences(true),
+        )
+        .arg(
+            Arg::new(options::AUTO_REFERENCE)
+                .short('A')
                 .long(options::AUTO_REFERENCE)
                 .help("output automatically generated references")
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::TRADITIONAL)
-                .short("G")
+            Arg::new(options::TRADITIONAL)
+                .short('G')
                 .long(options::TRADITIONAL)
                 .help("behave more like System V 'ptx'"),
         )
         .arg(
-            Arg::with_name(options::FLAG_TRUNCATION)
-                .short("F")
+            Arg::new(options::FLAG_TRUNCATION)
+                .short('F')
                 .long(options::FLAG_TRUNCATION)
                 .help("use STRING for flagging line truncations")
                 .value_name("STRING")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(options::MACRO_NAME)
-                .short("M")
+            Arg::new(options::MACRO_NAME)
+                .short('M')
                 .long(options::MACRO_NAME)
                 .help("macro name to use instead of 'xx'")
                 .value_name("STRING")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(options::FORMAT_ROFF)
-                .short("O")
+            Arg::new(options::FORMAT_ROFF)
+                .short('O')
                 .long(options::FORMAT_ROFF)
                 .help("generate output as roff directives"),
         )
         .arg(
-            Arg::with_name(options::RIGHT_SIDE_REFS)
-                .short("R")
+            Arg::new(options::RIGHT_SIDE_REFS)
+                .short('R')
                 .long(options::RIGHT_SIDE_REFS)
                 .help("put references at right, not counted in -w")
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::SENTENCE_REGEXP)
-                .short("S")
+            Arg::new(options::SENTENCE_REGEXP)
+                .short('S')
                 .long(options::SENTENCE_REGEXP)
                 .help("for end of lines or end of sentences")
                 .value_name("REGEXP")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(options::FORMAT_TEX)
-                .short("T")
+            Arg::new(options::FORMAT_TEX)
+                .short('T')
                 .long(options::FORMAT_TEX)
                 .help("generate output as TeX directives"),
         )
         .arg(
-            Arg::with_name(options::WORD_REGEXP)
-                .short("W")
+            Arg::new(options::WORD_REGEXP)
+                .short('W')
                 .long(options::WORD_REGEXP)
                 .help("use REGEXP to match each keyword")
                 .value_name("REGEXP")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(options::BREAK_FILE)
-                .short("b")
+            Arg::new(options::BREAK_FILE)
+                .short('b')
                 .long(options::BREAK_FILE)
                 .help("word break characters in this FILE")
                 .value_name("FILE")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(options::IGNORE_CASE)
-                .short("f")
+            Arg::new(options::IGNORE_CASE)
+                .short('f')
                 .long(options::IGNORE_CASE)
                 .help("fold lower case to upper case for sorting")
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::GAP_SIZE)
-                .short("g")
+            Arg::new(options::GAP_SIZE)
+                .short('g')
                 .long(options::GAP_SIZE)
                 .help("gap size in columns between output fields")
                 .value_name("NUMBER")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(options::IGNORE_FILE)
-                .short("i")
+            Arg::new(options::IGNORE_FILE)
+                .short('i')
                 .long(options::IGNORE_FILE)
                 .help("read ignore word list from FILE")
                 .value_name("FILE")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(options::ONLY_FILE)
-                .short("o")
+            Arg::new(options::ONLY_FILE)
+                .short('o')
                 .long(options::ONLY_FILE)
                 .help("read only word list from this FILE")
                 .value_name("FILE")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(options::REFERENCES)
-                .short("r")
+            Arg::new(options::REFERENCES)
+                .short('r')
                 .long(options::REFERENCES)
                 .help("first field of each line is a reference")
                 .value_name("FILE")
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::WIDTH)
-                .short("w")
+            Arg::new(options::WIDTH)
+                .short('w')
                 .long(options::WIDTH)
                 .help("output width in columns, reference excluded")
                 .value_name("NUMBER")

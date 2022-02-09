@@ -12,17 +12,17 @@ use uucore::error::UResult;
 use uucore::fsext::statfs_fn;
 use uucore::fsext::{read_fs_list, FsUsage, MountInfo};
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
 use number_prefix::NumberPrefix;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::collections::HashSet;
-
 use std::error::Error;
 #[cfg(unix)]
 use std::ffi::CString;
 use std::fmt::Display;
+use std::iter::FromIterator;
 #[cfg(unix)]
 use std::mem;
 
@@ -52,6 +52,7 @@ static OPT_EXCLUDE_TYPE: &str = "exclude-type";
 
 /// Store names of file systems as a selector.
 /// Note: `exclude` takes priority over `include`.
+#[derive(Default)]
 struct FsSelector {
     include: HashSet<String>,
     exclude: HashSet<String>,
@@ -68,6 +69,27 @@ struct Options {
     fs_selector: FsSelector,
 }
 
+impl Options {
+    /// Convert command-line arguments into [`Options`].
+    fn from(matches: &ArgMatches) -> Self {
+        Self {
+            show_local_fs: matches.is_present(OPT_LOCAL),
+            show_all_fs: matches.is_present(OPT_ALL),
+            show_listed_fs: false,
+            show_fs_type: matches.is_present(OPT_PRINT_TYPE),
+            show_inode_instead: matches.is_present(OPT_INODES),
+            human_readable_base: if matches.is_present(OPT_HUMAN_READABLE) {
+                1024
+            } else if matches.is_present(OPT_HUMAN_READABLE_2) {
+                1000
+            } else {
+                -1
+            },
+            fs_selector: FsSelector::from(matches),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct Filesystem {
     mount_info: MountInfo,
@@ -79,21 +101,19 @@ fn usage() -> String {
 }
 
 impl FsSelector {
-    fn new() -> FsSelector {
-        FsSelector {
-            include: HashSet::new(),
-            exclude: HashSet::new(),
-        }
-    }
-
-    #[inline(always)]
-    fn include(&mut self, fs_type: String) {
-        self.include.insert(fs_type);
-    }
-
-    #[inline(always)]
-    fn exclude(&mut self, fs_type: String) {
-        self.exclude.insert(fs_type);
+    /// Convert command-line arguments into a [`FsSelector`].
+    ///
+    /// This function reads the include and exclude sets from
+    /// [`ArgMatches`] and returns the corresponding [`FsSelector`]
+    /// instance.
+    fn from(matches: &ArgMatches) -> Self {
+        let include = HashSet::from_iter(matches.values_of_lossy(OPT_TYPE).unwrap_or_default());
+        let exclude = HashSet::from_iter(
+            matches
+                .values_of_lossy(OPT_EXCLUDE_TYPE)
+                .unwrap_or_default(),
+        );
+        Self { include, exclude }
     }
 
     fn should_select(&self, fs_type: &str) -> bool {
@@ -104,27 +124,9 @@ impl FsSelector {
     }
 }
 
-impl Options {
-    fn new() -> Options {
-        Options {
-            show_local_fs: false,
-            show_all_fs: false,
-            show_listed_fs: false,
-            show_fs_type: false,
-            show_inode_instead: false,
-            // block_size: match env::var("BLOCKSIZE") {
-            //     Ok(size) => size.parse().unwrap(),
-            //     Err(_) => 512,
-            // },
-            human_readable_base: -1,
-            fs_selector: FsSelector::new(),
-        }
-    }
-}
-
 impl Filesystem {
     // TODO: resolve uuid in `mount_info.dev_name` if exists
-    fn new(mount_info: MountInfo) -> Option<Filesystem> {
+    fn new(mount_info: MountInfo) -> Option<Self> {
         let _stat_path = if !mount_info.mount_dir.is_empty() {
             mount_info.mount_dir.clone()
         } else {
@@ -145,78 +147,93 @@ impl Filesystem {
             if statfs_fn(path.as_ptr(), &mut statvfs) < 0 {
                 None
             } else {
-                Some(Filesystem {
+                Some(Self {
                     mount_info,
                     usage: FsUsage::new(statvfs),
                 })
             }
         }
         #[cfg(windows)]
-        Some(Filesystem {
+        Some(Self {
             mount_info,
             usage: FsUsage::new(Path::new(&_stat_path)),
         })
     }
 }
 
+/// Keep only the specified subset of [`MountInfo`] instances.
+///
+/// If `paths` is non-empty, this function excludes any [`MountInfo`]
+/// that is not mounted at the specified path.
+///
+/// The `opt` argument specifies a variety of ways of excluding
+/// [`MountInfo`] instances; see [`Options`] for more information.
+///
+/// Finally, if there are duplicate entries, the one with the shorter
+/// path is kept.
 fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Vec<MountInfo> {
-    vmi.into_iter()
-        .filter_map(|mi| {
-            if (mi.remote && opt.show_local_fs)
-                || (mi.dummy && !opt.show_all_fs && !opt.show_listed_fs)
-                || !opt.fs_selector.should_select(&mi.fs_type)
-            {
-                None
-            } else {
-                if paths.is_empty() {
-                    // No path specified
-                    return Some((mi.dev_id.clone(), mi));
-                }
-                if paths.contains(&mi.mount_dir) {
-                    // One or more paths have been provided
-                    Some((mi.dev_id.clone(), mi))
-                } else {
-                    // Not a path we want to see
-                    None
-                }
-            }
-        })
-        .fold(
-            HashMap::<String, Cell<MountInfo>>::new(),
-            |mut acc, (id, mi)| {
-                #[allow(clippy::map_entry)]
-                {
-                    if acc.contains_key(&id) {
-                        let seen = acc[&id].replace(mi.clone());
-                        let target_nearer_root = seen.mount_dir.len() > mi.mount_dir.len();
-                        // With bind mounts, prefer items nearer the root of the source
-                        let source_below_root = !seen.mount_root.is_empty()
-                            && !mi.mount_root.is_empty()
-                            && seen.mount_root.len() < mi.mount_root.len();
-                        // let "real" devices with '/' in the name win.
-                        if (!mi.dev_name.starts_with('/') || seen.dev_name.starts_with('/'))
-                            // let points towards the root of the device win.
-                            && (!target_nearer_root || source_below_root)
-                            // let an entry over-mounted on a new device win...
-                            && (seen.dev_name == mi.dev_name
-                            /* ... but only when matching an existing mnt point,
-                            to avoid problematic replacement when given
-                            inaccurate mount lists, seen with some chroot
-                            environments for example.  */
-                            || seen.mount_dir != mi.mount_dir)
-                        {
-                            acc[&id].replace(seen);
-                        }
-                    } else {
-                        acc.insert(id, Cell::new(mi));
-                    }
-                    acc
-                }
-            },
-        )
-        .into_iter()
-        .map(|ent| ent.1.into_inner())
-        .collect::<Vec<_>>()
+    let mut mount_info_by_id = HashMap::<String, Cell<MountInfo>>::new();
+    for mi in vmi {
+        // Don't show remote filesystems if `--local` has been given.
+        if mi.remote && opt.show_local_fs {
+            continue;
+        }
+
+        // Don't show pseudo filesystems unless `--all` has been given.
+        if mi.dummy && !opt.show_all_fs && !opt.show_listed_fs {
+            continue;
+        }
+
+        // Don't show filesystems if they have been explicitly excluded.
+        if !opt.fs_selector.should_select(&mi.fs_type) {
+            continue;
+        }
+
+        // Don't show filesystems other than the ones specified on the
+        // command line, if any.
+        if !paths.is_empty() && !paths.contains(&mi.mount_dir) {
+            continue;
+        }
+
+        // If the device ID has not been encountered yet, just store it.
+        let id = mi.dev_id.clone();
+        #[allow(clippy::map_entry)]
+        if !mount_info_by_id.contains_key(&id) {
+            mount_info_by_id.insert(id, Cell::new(mi));
+            continue;
+        }
+
+        // Otherwise, if we have seen the current device ID before,
+        // then check if we need to update it or keep the previously
+        // seen one.
+        let seen = mount_info_by_id[&id].replace(mi.clone());
+        let target_nearer_root = seen.mount_dir.len() > mi.mount_dir.len();
+        // With bind mounts, prefer items nearer the root of the source
+        let source_below_root = !seen.mount_root.is_empty()
+            && !mi.mount_root.is_empty()
+            && seen.mount_root.len() < mi.mount_root.len();
+        // let "real" devices with '/' in the name win.
+        if (!mi.dev_name.starts_with('/') || seen.dev_name.starts_with('/'))
+            // let points towards the root of the device win.
+            && (!target_nearer_root || source_below_root)
+            // let an entry over-mounted on a new device win...
+            && (seen.dev_name == mi.dev_name
+                /* ... but only when matching an existing mnt point,
+                to avoid problematic replacement when given
+                inaccurate mount lists, seen with some chroot
+                environments for example.  */
+                || seen.mount_dir != mi.mount_dir)
+        {
+            mount_info_by_id[&id].replace(seen);
+        }
+    }
+
+    // Take ownership of the `MountInfo` instances and collect them
+    // into a `Vec`.
+    mount_info_by_id
+        .into_values()
+        .map(|m| m.into_inner())
+        .collect()
 }
 
 /// Convert `value` to a human readable string based on `base`.
@@ -277,10 +294,10 @@ impl UError for DfError {
     }
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let paths: Vec<String> = matches
         .values_of(OPT_PATHS)
@@ -295,34 +312,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let mut opt = Options::new();
-    if matches.is_present(OPT_LOCAL) {
-        opt.show_local_fs = true;
-    }
-    if matches.is_present(OPT_ALL) {
-        opt.show_all_fs = true;
-    }
-    if matches.is_present(OPT_INODES) {
-        opt.show_inode_instead = true;
-    }
-    if matches.is_present(OPT_PRINT_TYPE) {
-        opt.show_fs_type = true;
-    }
-    if matches.is_present(OPT_HUMAN_READABLE) {
-        opt.human_readable_base = 1024;
-    }
-    if matches.is_present(OPT_HUMAN_READABLE_2) {
-        opt.human_readable_base = 1000;
-    }
-    for fs_type in matches.values_of_lossy(OPT_TYPE).unwrap_or_default() {
-        opt.fs_selector.include(fs_type.to_owned());
-    }
-    for fs_type in matches
-        .values_of_lossy(OPT_EXCLUDE_TYPE)
-        .unwrap_or_default()
-    {
-        opt.fs_selector.exclude(fs_type.to_owned());
-    }
+    let opt = Options::from(&matches);
 
     let fs_list = filter_mount_list(read_fs_list(), &paths, &opt)
         .into_iter()
@@ -367,7 +357,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
     println!();
-    for fs in fs_list.iter() {
+    for fs in &fs_list {
         print!("{0: <16} ", fs.mount_info.dev_name);
         if opt.show_fs_type {
             print!("{0: <5} ", fs.mount_info.fs_type);
@@ -421,19 +411,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(OPT_ALL)
-                .short("a")
+            Arg::new(OPT_ALL)
+                .short('a')
                 .long("all")
                 .help("include dummy file systems"),
         )
         .arg(
-            Arg::with_name(OPT_BLOCKSIZE)
-                .short("B")
+            Arg::new(OPT_BLOCKSIZE)
+                .short('B')
                 .long("block-size")
                 .takes_value(true)
                 .help(
@@ -442,54 +433,50 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_DIRECT)
+            Arg::new(OPT_DIRECT)
                 .long("direct")
                 .help("show statistics for a file instead of mount point"),
         )
         .arg(
-            Arg::with_name(OPT_TOTAL)
+            Arg::new(OPT_TOTAL)
                 .long("total")
                 .help("produce a grand total"),
         )
         .arg(
-            Arg::with_name(OPT_HUMAN_READABLE)
-                .short("h")
+            Arg::new(OPT_HUMAN_READABLE)
+                .short('h')
                 .long("human-readable")
                 .conflicts_with(OPT_HUMAN_READABLE_2)
                 .help("print sizes in human readable format (e.g., 1K 234M 2G)"),
         )
         .arg(
-            Arg::with_name(OPT_HUMAN_READABLE_2)
-                .short("H")
+            Arg::new(OPT_HUMAN_READABLE_2)
+                .short('H')
                 .long("si")
                 .conflicts_with(OPT_HUMAN_READABLE)
                 .help("likewise, but use powers of 1000 not 1024"),
         )
         .arg(
-            Arg::with_name(OPT_INODES)
-                .short("i")
+            Arg::new(OPT_INODES)
+                .short('i')
                 .long("inodes")
                 .help("list inode information instead of block usage"),
         )
+        .arg(Arg::new(OPT_KILO).short('k').help("like --block-size=1K"))
         .arg(
-            Arg::with_name(OPT_KILO)
-                .short("k")
-                .help("like --block-size=1K"),
-        )
-        .arg(
-            Arg::with_name(OPT_LOCAL)
-                .short("l")
+            Arg::new(OPT_LOCAL)
+                .short('l')
                 .long("local")
                 .help("limit listing to local file systems"),
         )
         .arg(
-            Arg::with_name(OPT_NO_SYNC)
+            Arg::new(OPT_NO_SYNC)
                 .long("no-sync")
                 .conflicts_with(OPT_SYNC)
                 .help("do not invoke sync before getting usage info (default)"),
         )
         .arg(
-            Arg::with_name(OPT_OUTPUT)
+            Arg::new(OPT_OUTPUT)
                 .long("output")
                 .takes_value(true)
                 .use_delimiter(true)
@@ -499,39 +486,39 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_PORTABILITY)
-                .short("P")
+            Arg::new(OPT_PORTABILITY)
+                .short('P')
                 .long("portability")
                 .help("use the POSIX output format"),
         )
         .arg(
-            Arg::with_name(OPT_SYNC)
+            Arg::new(OPT_SYNC)
                 .long("sync")
                 .conflicts_with(OPT_NO_SYNC)
                 .help("invoke sync before getting usage info"),
         )
         .arg(
-            Arg::with_name(OPT_TYPE)
-                .short("t")
+            Arg::new(OPT_TYPE)
+                .short('t')
                 .long("type")
+                .allow_invalid_utf8(true)
                 .takes_value(true)
                 .use_delimiter(true)
                 .help("limit listing to file systems of type TYPE"),
         )
         .arg(
-            Arg::with_name(OPT_PRINT_TYPE)
-                .short("T")
+            Arg::new(OPT_PRINT_TYPE)
+                .short('T')
                 .long("print-type")
                 .help("print file system type"),
         )
         .arg(
-            Arg::with_name(OPT_EXCLUDE_TYPE)
-                .short("x")
+            Arg::new(OPT_EXCLUDE_TYPE)
+                .short('x')
                 .long("exclude-type")
                 .takes_value(true)
                 .use_delimiter(true)
                 .help("limit listing to file systems not of type TYPE"),
         )
-        .arg(Arg::with_name(OPT_PATHS).multiple(true))
-        .help("Filesystem(s) to list")
+        .arg(Arg::new(OPT_PATHS).multiple_occurrences(true))
 }

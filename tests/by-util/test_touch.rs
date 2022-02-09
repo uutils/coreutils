@@ -27,7 +27,7 @@ fn get_symlink_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
 }
 
 fn set_file_times(at: &AtPath, path: &str, atime: FileTime, mtime: FileTime) {
-    filetime::set_file_times(&at.plus_as_string(path), atime, mtime).unwrap()
+    filetime::set_file_times(&at.plus_as_string(path), atime, mtime).unwrap();
 }
 
 // Adjusts for local timezone
@@ -529,4 +529,13 @@ fn test_touch_permission_denied_error_msg() {
         "touch: cannot touch '{}': Permission denied",
         &full_path
     ));
+}
+
+#[test]
+fn test_touch_no_args() {
+    let mut ucmd = new_ucmd!();
+    ucmd.fails().stderr_only(
+        r##"touch: missing file operand
+Try 'touch --help' for more information."##,
+    );
 }

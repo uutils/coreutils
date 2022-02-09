@@ -2,7 +2,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes asciilowercase
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes asciilowercase fghij klmno pqrst uvwxyz
 extern crate rand;
 extern crate regex;
 
@@ -12,16 +12,16 @@ use crate::common::util::*;
 use rand::SeedableRng;
 #[cfg(not(windows))]
 use std::env;
-use std::io::Write;
 use std::path::Path;
 use std::{
     fs::{read_dir, File},
-    io::{BufWriter, Read},
+    io::{BufWriter, Read, Write},
 };
 
 fn random_chars(n: usize) -> String {
     thread_rng()
         .sample_iter(&rand::distributions::Alphanumeric)
+        .map(char::from)
         .take(n)
         .collect::<String>()
 }
@@ -32,8 +32,8 @@ struct Glob {
 }
 
 impl Glob {
-    fn new(at: &AtPath, directory: &str, regex: &str) -> Glob {
-        Glob {
+    fn new(at: &AtPath, directory: &str, regex: &str) -> Self {
+        Self {
             directory: AtPath::new(Path::new(&at.plus_as_string(directory))),
             regex: Regex::new(regex).unwrap(),
         }
@@ -83,8 +83,8 @@ impl RandomFile {
     const LINESIZE: usize = 32;
 
     /// `create()` file handle located at `at` / `name`
-    fn new(at: &AtPath, name: &str) -> RandomFile {
-        RandomFile {
+    fn new(at: &AtPath, name: &str) -> Self {
+        Self {
             inner: File::create(&at.plus(name)).unwrap(),
         }
     }
@@ -113,7 +113,7 @@ impl RandomFile {
     fn add_lines(&mut self, lines: usize) {
         let mut n = lines;
         while n > 0 {
-            writeln!(self.inner, "{}", random_chars(RandomFile::LINESIZE)).unwrap();
+            writeln!(self.inner, "{}", random_chars(Self::LINESIZE)).unwrap();
             n -= 1;
         }
     }
@@ -407,4 +407,45 @@ fn test_suffixes_exhausted() {
         .args(&["-b", "1", "-a", "1", "asciilowercase.txt"])
         .fails()
         .stderr_only("split: output file suffixes exhausted");
+}
+
+#[test]
+fn test_verbose() {
+    new_ucmd!()
+        .args(&["-b", "5", "--verbose", "asciilowercase.txt"])
+        .succeeds()
+        .stdout_only(
+            "creating file 'xaa'
+creating file 'xab'
+creating file 'xac'
+creating file 'xad'
+creating file 'xae'
+creating file 'xaf'
+",
+        );
+}
+
+#[test]
+fn test_number() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_read = |f| {
+        let mut s = String::new();
+        at.open(f).read_to_string(&mut s).unwrap();
+        s
+    };
+    ucmd.args(&["-n", "5", "asciilowercase.txt"]).succeeds();
+    assert_eq!(file_read("xaa"), "abcde");
+    assert_eq!(file_read("xab"), "fghij");
+    assert_eq!(file_read("xac"), "klmno");
+    assert_eq!(file_read("xad"), "pqrst");
+    assert_eq!(file_read("xae"), "uvwxyz");
+}
+
+#[test]
+fn test_invalid_suffix_length() {
+    new_ucmd!()
+        .args(&["-a", "xyz"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid suffix length: 'xyz'");
 }

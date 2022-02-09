@@ -11,7 +11,7 @@
 extern crate uucore;
 
 use bstr::io::BufReadExt;
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use std::path::Path;
@@ -340,7 +340,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> URes
     Ok(())
 }
 
-fn cut_files(mut filenames: Vec<String>, mode: Mode) -> UResult<()> {
+fn cut_files(mut filenames: Vec<String>, mode: &Mode) -> UResult<()> {
     let mut stdin_read = false;
 
     if filenames.is_empty() {
@@ -372,9 +372,10 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> UResult<()> {
                 .map_err_context(|| filename.maybe_quote().to_string())
                 .and_then(|file| {
                     match &mode {
-                        Mode::Bytes(ref ranges, ref opts) => cut_bytes(file, ranges, opts),
-                        Mode::Characters(ref ranges, ref opts) => cut_bytes(file, ranges, opts),
-                        Mode::Fields(ref ranges, ref opts) => cut_fields(file, ranges, opts),
+                        Mode::Bytes(ranges, opts) | Mode::Characters(ranges, opts) => {
+                            cut_bytes(file, ranges, opts)
+                        }
+                        Mode::Fields(ranges, opts) => cut_fields(file, ranges, opts),
                     }
                 }));
         }
@@ -395,7 +396,7 @@ mod options {
     pub const FILE: &str = "file";
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -527,21 +528,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect();
 
     match mode_parse {
-        Ok(mode) => cut_files(files, mode),
+        Ok(mode) => cut_files(files, &mode),
         Err(e) => Err(USimpleError::new(1, e)),
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .usage(SYNTAX)
+        .override_usage(SYNTAX)
         .about(SUMMARY)
         .after_help(LONG_HELP)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::BYTES)
-                .short("b")
+            Arg::new(options::BYTES)
+                .short('b')
                 .long(options::BYTES)
                 .takes_value(true)
                 .help("filter byte columns from the input source")
@@ -550,8 +552,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .display_order(1),
         )
         .arg(
-            Arg::with_name(options::CHARACTERS)
-                .short("c")
+            Arg::new(options::CHARACTERS)
+                .short('c')
                 .long(options::CHARACTERS)
                 .help("alias for character mode")
                 .takes_value(true)
@@ -560,8 +562,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .display_order(2),
         )
         .arg(
-            Arg::with_name(options::DELIMITER)
-                .short("d")
+            Arg::new(options::DELIMITER)
+                .short('d')
                 .long(options::DELIMITER)
                 .help("specify the delimiter character that separates fields in the input source. Defaults to Tab.")
                 .takes_value(true)
@@ -569,8 +571,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .display_order(3),
         )
         .arg(
-            Arg::with_name(options::FIELDS)
-                .short("f")
+            Arg::new(options::FIELDS)
+                .short('f')
                 .long(options::FIELDS)
                 .help("filter field columns from the input source")
                 .takes_value(true)
@@ -579,30 +581,30 @@ pub fn uu_app() -> App<'static, 'static> {
                 .display_order(4),
         )
         .arg(
-            Arg::with_name(options::COMPLEMENT)
+            Arg::new(options::COMPLEMENT)
                 .long(options::COMPLEMENT)
                 .help("invert the filter - instead of displaying only the filtered columns, display all but those columns")
                 .takes_value(false)
                 .display_order(5),
         )
         .arg(
-            Arg::with_name(options::ONLY_DELIMITED)
-            .short("s")
+            Arg::new(options::ONLY_DELIMITED)
+            .short('s')
                 .long(options::ONLY_DELIMITED)
                 .help("in field mode, only print lines which contain the delimiter")
                 .takes_value(false)
                 .display_order(6),
         )
         .arg(
-            Arg::with_name(options::ZERO_TERMINATED)
-            .short("z")
+            Arg::new(options::ZERO_TERMINATED)
+            .short('z')
                 .long(options::ZERO_TERMINATED)
                 .help("instead of filtering columns based on line, filter columns based on \\0 (NULL character)")
                 .takes_value(false)
                 .display_order(8),
         )
         .arg(
-            Arg::with_name(options::OUTPUT_DELIMITER)
+            Arg::new(options::OUTPUT_DELIMITER)
             .long(options::OUTPUT_DELIMITER)
                 .help("in field mode, replace the delimiter in output lines with this option's argument")
                 .takes_value(true)
@@ -610,8 +612,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .display_order(7),
         )
         .arg(
-            Arg::with_name(options::FILE)
-            .hidden(true)
-                .multiple(true)
+            Arg::new(options::FILE)
+            .hide(true)
+                .multiple_occurrences(true)
         )
 }

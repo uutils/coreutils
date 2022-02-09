@@ -156,7 +156,7 @@ impl MountInfo {
             // but set dev_id
             if let Ok(stat) = std::fs::metadata(&self.mount_dir) {
                 // Why do we cast this to i32?
-                self.dev_id = (stat.dev() as i32).to_string()
+                self.dev_id = (stat.dev() as i32).to_string();
             } else {
                 self.dev_id = "".to_string();
             }
@@ -197,7 +197,7 @@ impl MountInfo {
     }
 
     #[cfg(target_os = "linux")]
-    fn new(file_name: &str, raw: Vec<&str>) -> Option<MountInfo> {
+    fn new(file_name: &str, raw: &[&str]) -> Option<Self> {
         match file_name {
             // spell-checker:ignore (word) noatime
             // Format: 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
@@ -207,7 +207,7 @@ impl MountInfo {
                 let after_fields = raw[FIELDS_OFFSET..].iter().position(|c| *c == "-").unwrap()
                     + FIELDS_OFFSET
                     + 1;
-                let mut m = MountInfo {
+                let mut m = Self {
                     dev_id: "".to_string(),
                     dev_name: raw[after_fields + 1].to_string(),
                     fs_type: raw[after_fields].to_string(),
@@ -221,7 +221,7 @@ impl MountInfo {
                 Some(m)
             }
             LINUX_MTAB => {
-                let mut m = MountInfo {
+                let mut m = Self {
                     dev_id: "".to_string(),
                     dev_name: raw[0].to_string(),
                     fs_type: raw[2].to_string(),
@@ -238,7 +238,7 @@ impl MountInfo {
         }
     }
     #[cfg(windows)]
-    fn new(mut volume_name: String) -> Option<MountInfo> {
+    fn new(mut volume_name: String) -> Option<Self> {
         let mut dev_name_buf = [0u16; MAX_PATH];
         volume_name.pop();
         unsafe {
@@ -289,7 +289,7 @@ impl MountInfo {
         } else {
             None
         };
-        let mut mn_info = MountInfo {
+        let mut mn_info = Self {
             dev_id: volume_name,
             dev_name,
             fs_type: fs_type.unwrap_or_else(|| "".to_string()),
@@ -319,7 +319,7 @@ use std::ffi::CStr;
 ))]
 impl From<StatFs> for MountInfo {
     fn from(statfs: StatFs) -> Self {
-        let mut info = MountInfo {
+        let mut info = Self {
             dev_id: "".to_string(),
             dev_name: unsafe {
                 // spell-checker:disable-next-line
@@ -410,7 +410,7 @@ pub fn read_fs_list() -> Vec<MountInfo> {
             .filter_map(|line| line.ok())
             .filter_map(|line| {
                 let raw_data = line.split_whitespace().collect::<Vec<&str>>();
-                MountInfo::new(file_name, raw_data)
+                MountInfo::new(file_name, &raw_data)
             })
             .collect::<Vec<_>>()
     }
@@ -496,9 +496,9 @@ pub struct FsUsage {
 
 impl FsUsage {
     #[cfg(unix)]
-    pub fn new(statvfs: StatFs) -> FsUsage {
+    pub fn new(statvfs: StatFs) -> Self {
         {
-            FsUsage {
+            Self {
                 blocksize: statvfs.f_bsize as u64, // or `statvfs.f_frsize` ?
                 blocks: statvfs.f_blocks as u64,
                 bfree: statvfs.f_bfree as u64,
@@ -510,7 +510,7 @@ impl FsUsage {
         }
     }
     #[cfg(not(unix))]
-    pub fn new(path: &Path) -> FsUsage {
+    pub fn new(path: &Path) -> Self {
         let mut root_path = [0u16; MAX_PATH];
         let success = unsafe {
             GetVolumePathNamesForVolumeNameW(
@@ -553,7 +553,7 @@ impl FsUsage {
         }
 
         let bytes_per_cluster = sectors_per_cluster as u64 * bytes_per_sector as u64;
-        FsUsage {
+        Self {
             // f_bsize      File system block size.
             blocksize: bytes_per_cluster as u64,
             // f_blocks - Total number of blocks on the file system, in units of f_frsize.
@@ -902,9 +902,9 @@ mod tests {
         // spell-checker:ignore (word) relatime
         let info = MountInfo::new(
             LINUX_MOUNTINFO,
-            "106 109 253:6 / /mnt rw,relatime - xfs /dev/fs0 rw"
+            &"106 109 253:6 / /mnt rw,relatime - xfs /dev/fs0 rw"
                 .split_ascii_whitespace()
-                .collect(),
+                .collect::<Vec<_>>(),
         )
         .unwrap();
 
@@ -917,9 +917,9 @@ mod tests {
         // Test parsing with different amounts of optional fields.
         let info = MountInfo::new(
             LINUX_MOUNTINFO,
-            "106 109 253:6 / /mnt rw,relatime master:1 - xfs /dev/fs0 rw"
+            &"106 109 253:6 / /mnt rw,relatime master:1 - xfs /dev/fs0 rw"
                 .split_ascii_whitespace()
-                .collect(),
+                .collect::<Vec<_>>(),
         )
         .unwrap();
 
@@ -928,9 +928,9 @@ mod tests {
 
         let info = MountInfo::new(
             LINUX_MOUNTINFO,
-            "106 109 253:6 / /mnt rw,relatime master:1 shared:2 - xfs /dev/fs0 rw"
+            &"106 109 253:6 / /mnt rw,relatime master:1 shared:2 - xfs /dev/fs0 rw"
                 .split_ascii_whitespace()
-                .collect(),
+                .collect::<Vec<_>>(),
         )
         .unwrap();
 

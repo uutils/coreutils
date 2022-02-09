@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_mkdir);
+uucore::bin!(uu_mkdir);

@@ -14,7 +14,7 @@ use std::fmt::Write as FmtWrite;
 use std::io::{self, stdin, stdout, BufRead, Write};
 
 mod factor;
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 pub use factor::*;
 use uucore::display::Quotable;
 use uucore::error::UResult;
@@ -44,7 +44,7 @@ fn print_factors_str(
     })
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
     let stdout = stdout();
@@ -77,9 +77,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
-        .arg(Arg::with_name(options::NUMBER).multiple(true))
+        .setting(AppSettings::InferLongArgs)
+        .arg(Arg::new(options::NUMBER).multiple_occurrences(true))
 }

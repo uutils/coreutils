@@ -91,7 +91,7 @@ fn test_head_count() {
         result_seq.iter().all(|x| input_seq.contains(x)),
         "Output includes element not from input: {}",
         result.stdout_str()
-    )
+    );
 }
 
 #[test]
@@ -129,7 +129,7 @@ fn test_repeat() {
             .iter()
             .filter(|x| !input_seq.contains(x))
             .collect::<Vec<&i32>>()
-    )
+    );
 }
 
 #[test]
@@ -154,9 +154,7 @@ fn test_shuf_echo_and_input_range_not_allowed() {
     new_ucmd!()
         .args(&["-e", "0", "-i", "0-2"])
         .fails()
-        .stderr_contains(
-            "The argument '--input-range <LO-HI>' cannot be used with '--echo <ARG>...'",
-        );
+        .stderr_contains("cannot be used with");
 }
 
 #[test]
@@ -164,7 +162,7 @@ fn test_shuf_input_range_and_file_not_allowed() {
     new_ucmd!()
         .args(&["-i", "0-9", "file"])
         .fails()
-        .stderr_contains("The argument '<file>' cannot be used with '--input-range <LO-HI>'");
+        .stderr_contains("cannot be used with");
 }
 
 #[test]

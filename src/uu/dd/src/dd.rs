@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat seekable
 
 #[cfg(test)]
 mod dd_unit_tests;
@@ -36,7 +36,7 @@ use std::thread;
 use std::time;
 
 use byte_unit::Byte;
-use clap::{self, crate_version};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use gcd::Gcd;
 #[cfg(target_os = "linux")]
 use signal_hook::consts::signal;
@@ -69,7 +69,7 @@ impl Input<io::Stdin> {
         let skip = parseargs::parse_skip_amt(&ibs, &iflags, matches)?;
         let count = parseargs::parse_count(&iflags, matches)?;
 
-        let mut i = Input {
+        let mut i = Self {
             src: io::stdin(),
             non_ascii,
             ibs,
@@ -157,7 +157,7 @@ impl Input<File> {
                     .map_err_context(|| "failed to seek in input file".to_string())?;
             }
 
-            let i = Input {
+            let i = Self {
                 src,
                 non_ascii,
                 ibs,
@@ -294,10 +294,19 @@ impl OutputTrait for Output<io::Stdout> {
     fn new(matches: &Matches) -> UResult<Self> {
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
+        let oflags = parseargs::parse_oflags(matches)?;
+        let seek = parseargs::parse_seek_amt(&obs, &oflags, matches)?;
 
-        let dst = io::stdout();
+        let mut dst = io::stdout();
 
-        Ok(Output { dst, obs, cflags })
+        // stdout is not seekable, so we just write null bytes.
+        if let Some(amt) = seek {
+            let bytes = vec![b'\0'; amt];
+            dst.write_all(&bytes)
+                .map_err_context(|| String::from("write error"))?;
+        }
+
+        Ok(Self { dst, obs, cflags })
     }
 
     fn fsync(&mut self) -> io::Result<()> {
@@ -313,7 +322,7 @@ impl<W: Write> Output<W>
 where
     Self: OutputTrait,
 {
-    fn write_blocks(&mut self, buf: Vec<u8>) -> io::Result<WriteStat> {
+    fn write_blocks(&mut self, buf: &[u8]) -> io::Result<WriteStat> {
         let mut writes_complete = 0;
         let mut writes_partial = 0;
         let mut bytes_total = 0;
@@ -338,73 +347,111 @@ where
         })
     }
 
-    fn dd_out<R: Read>(mut self, mut i: Input<R>) -> UResult<()> {
-        let mut rstat = ReadStat {
-            reads_complete: 0,
-            reads_partial: 0,
-            records_truncated: 0,
-        };
-        let mut wstat = WriteStat {
-            writes_complete: 0,
-            writes_partial: 0,
-            bytes_total: 0,
-        };
-        let start = time::Instant::now();
-        let bsize = calc_bsize(i.ibs, self.obs);
-
-        let prog_tx = {
-            let (tx, rx) = mpsc::channel();
-            thread::spawn(gen_prog_updater(rx, i.print_level));
-            tx
-        };
-
-        while below_count_limit(&i.count, &rstat, &wstat) {
-            // Read/Write
-            let loop_bsize = calc_loop_bsize(&i.count, &rstat, &wstat, i.ibs, bsize);
-            match read_helper(&mut i, loop_bsize)? {
-                (
-                    ReadStat {
-                        reads_complete: 0,
-                        reads_partial: 0,
-                        ..
-                    },
-                    _,
-                ) => break,
-                (rstat_update, buf) => {
-                    let wstat_update = self
-                        .write_blocks(buf)
-                        .map_err_context(|| "failed to write output".to_string())?;
-
-                    rstat += rstat_update;
-                    wstat += wstat_update;
-                }
-            };
-            // Update Prog
-            prog_tx
-                .send(ProgUpdate {
-                    read_stat: rstat,
-                    write_stat: wstat,
-                    duration: start.elapsed(),
-                })
-                .map_err(|_| USimpleError::new(1, "failed to write output"))?;
+    /// Print the read/write statistics.
+    fn print_stats<R: Read>(&self, i: &Input<R>, prog_update: &ProgUpdate) {
+        match i.print_level {
+            Some(StatusLevel::None) => {}
+            Some(StatusLevel::Noxfer) => print_io_lines(prog_update),
+            Some(StatusLevel::Progress) | None => print_transfer_stats(prog_update),
         }
+    }
 
+    /// Flush the output to disk, if configured to do so.
+    fn sync(&mut self) -> std::io::Result<()> {
         if self.cflags.fsync {
             self.fsync()
-                .map_err_context(|| "failed to write output".to_string())?;
         } else if self.cflags.fdatasync {
             self.fdatasync()
-                .map_err_context(|| "failed to write output".to_string())?;
+        } else {
+            // Intentionally do nothing in this case.
+            Ok(())
+        }
+    }
+
+    /// Copy the given input data to this output, consuming both.
+    ///
+    /// This method contains the main loop for the `dd` program. Bytes
+    /// are read in blocks from `i` and written in blocks to this
+    /// output. Read/write statistics are reported to stderr as
+    /// configured by the `status` command-line argument.
+    ///
+    /// # Errors
+    ///
+    /// If there is a problem reading from the input or writing to
+    /// this output.
+    fn dd_out<R: Read>(mut self, mut i: Input<R>) -> std::io::Result<()> {
+        // The read and write statistics.
+        //
+        // These objects are counters, initialized to zero. After each
+        // iteration of the main loop, each will be incremented by the
+        // number of blocks read and written, respectively.
+        let mut rstat = Default::default();
+        let mut wstat = Default::default();
+
+        // The time at which the main loop starts executing.
+        //
+        // When `status=progress` is given on the command-line, the
+        // `dd` program reports its progress every second or so. Part
+        // of its report includes the throughput in bytes per second,
+        // which requires knowing how long the process has been
+        // running.
+        let start = time::Instant::now();
+
+        // A good buffer size for reading.
+        //
+        // This is an educated guess about a good buffer size based on
+        // the input and output block sizes.
+        let bsize = calc_bsize(i.ibs, self.obs);
+
+        // Start a thread that reports transfer progress.
+        //
+        // When `status=progress` is given on the command-line, the
+        // `dd` program reports its progress every second or so. We
+        // perform this reporting in a new thread so as not to take
+        // any CPU time away from the actual reading and writing of
+        // data. We send a `ProgUpdate` from the transmitter `prog_tx`
+        // to the receives `rx`, and the receiver prints the transfer
+        // information.
+        let (prog_tx, rx) = mpsc::channel();
+        thread::spawn(gen_prog_updater(rx, i.print_level));
+
+        // The main read/write loop.
+        //
+        // Each iteration reads blocks from the input and writes
+        // blocks to this output. Read/write statistics are updated on
+        // each iteration and cumulative statistics are reported to
+        // the progress reporting thread.
+        while below_count_limit(&i.count, &rstat, &wstat) {
+            // Read a block from the input then write the block to the output.
+            //
+            // As an optimization, make an educated guess about the
+            // best buffer size for reading based on the number of
+            // blocks already read and the number of blocks remaining.
+            let loop_bsize = calc_loop_bsize(&i.count, &rstat, &wstat, i.ibs, bsize);
+            let (rstat_update, buf) = read_helper(&mut i, loop_bsize)?;
+            if rstat_update.is_empty() {
+                break;
+            }
+            let wstat_update = self.write_blocks(&buf)?;
+
+            // Update the read/write stats and inform the progress thread.
+            //
+            // If the receiver is disconnected, `send()` returns an
+            // error. Since it is just reporting progress and is not
+            // crucial to the operation of `dd`, let's just ignore the
+            // error.
+            rstat += rstat_update;
+            wstat += wstat_update;
+            let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed());
+            prog_tx.send(prog_update).unwrap_or(());
         }
 
-        match i.print_level {
-            Some(StatusLevel::Noxfer) | Some(StatusLevel::None) => {}
-            _ => print_transfer_stats(&ProgUpdate {
-                read_stat: rstat,
-                write_stat: wstat,
-                duration: start.elapsed(),
-            }),
-        }
+        // Flush the output, if configured to do so.
+        self.sync()?;
+
+        // Print the final read/write statistics.
+        let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed());
+        self.print_stats(&i, &prog_update);
         Ok(())
     }
 }
@@ -455,7 +502,6 @@ impl OutputTrait for Output<File> {
             let mut opts = OpenOptions::new();
             opts.write(true)
                 .create(!cflags.nocreat)
-                .truncate(!cflags.notrunc)
                 .create_new(cflags.excl)
                 .append(oflags.append);
 
@@ -475,15 +521,15 @@ impl OutputTrait for Output<File> {
             let mut dst = open_dst(Path::new(&fname), &cflags, &oflags)
                 .map_err_context(|| format!("failed to open {}", fname.quote()))?;
 
-            if let Some(amt) = seek {
-                let amt: u64 = amt
-                    .try_into()
-                    .map_err(|_| USimpleError::new(1, "failed to parse seek amount"))?;
-                dst.seek(io::SeekFrom::Start(amt))
-                    .map_err_context(|| "failed to seek in output file".to_string())?;
+            let i = seek.unwrap_or(0).try_into().unwrap();
+            if !cflags.notrunc {
+                dst.set_len(i)
+                    .map_err_context(|| "failed to truncate output file".to_string())?;
             }
+            dst.seek(io::SeekFrom::Start(i))
+                .map_err_context(|| "failed to seek in output file".to_string())?;
 
-            Ok(Output { dst, obs, cflags })
+            Ok(Self { dst, obs, cflags })
         } else {
             // The following error should only occur if someone
             // mistakenly calls Output::<File>::new() without checking
@@ -546,7 +592,7 @@ impl Write for Output<io::Stdout> {
 /// Splits the content of buf into cbs-length blocks
 /// Appends padding as specified by conv=block and cbs=N
 /// Expects ascii encoded data
-fn block(buf: Vec<u8>, cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
+fn block(buf: &[u8], cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
     let mut blocks = buf
         .split(|&e| e == NEWLINE)
         .map(|split| split.to_vec())
@@ -572,7 +618,7 @@ fn block(buf: Vec<u8>, cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
 /// Trims padding from each cbs-length partition of buf
 /// as specified by conv=unblock and cbs=N
 /// Expects ascii encoded data
-fn unblock(buf: Vec<u8>, cbs: usize) -> Vec<u8> {
+fn unblock(buf: &[u8], cbs: usize) -> Vec<u8> {
     buf.chunks(cbs).fold(Vec::new(), |mut acc, block| {
         if let Some(last_char_idx) = block.iter().rposition(|&e| e != SPACE) {
             // Include text up to last space.
@@ -629,10 +675,10 @@ fn conv_block_unblock_helper<R: Read>(
         // ascii input so perform the block first
         let cbs = i.cflags.block.unwrap();
 
-        let mut blocks = block(buf, cbs, rstat);
+        let mut blocks = block(&buf, cbs, rstat);
 
         if let Some(ct) = i.cflags.ctable {
-            for buf in blocks.iter_mut() {
+            for buf in &mut blocks {
                 apply_conversion(buf, ct);
             }
         }
@@ -648,14 +694,14 @@ fn conv_block_unblock_helper<R: Read>(
             apply_conversion(&mut buf, ct);
         }
 
-        let blocks = block(buf, cbs, rstat).into_iter().flatten().collect();
+        let blocks = block(&buf, cbs, rstat).into_iter().flatten().collect();
 
         Ok(blocks)
     } else if should_unblock_then_conv(i) {
         // ascii input so perform the unblock first
         let cbs = i.cflags.unblock.unwrap();
 
-        let mut buf = unblock(buf, cbs);
+        let mut buf = unblock(&buf, cbs);
 
         if let Some(ct) = i.cflags.ctable {
             apply_conversion(&mut buf, ct);
@@ -670,7 +716,7 @@ fn conv_block_unblock_helper<R: Read>(
             apply_conversion(&mut buf, ct);
         }
 
-        let buf = unblock(buf, cbs);
+        let buf = unblock(&buf, cbs);
 
         Ok(buf)
     } else {
@@ -684,7 +730,7 @@ fn conv_block_unblock_helper<R: Read>(
 }
 
 /// Read helper performs read operations common to all dd reads, and dispatches the buffer to relevant helper functions as dictated by the operations requested by the user.
-fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> UResult<(ReadStat, Vec<u8>)> {
+fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> std::io::Result<(ReadStat, Vec<u8>)> {
     // Local Predicate Fns -----------------------------------------------
     fn is_conv<R: Read>(i: &Input<R>) -> bool {
         i.cflags.ctable.is_some()
@@ -705,12 +751,8 @@ fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> UResult<(ReadStat, Ve
     // Read
     let mut buf = vec![BUF_INIT_BYTE; bsize];
     let mut rstat = match i.cflags.sync {
-        Some(ch) => i
-            .fill_blocks(&mut buf, ch)
-            .map_err_context(|| "failed to write output".to_string())?,
-        _ => i
-            .fill_consecutive(&mut buf)
-            .map_err_context(|| "failed to write output".to_string())?,
+        Some(ch) => i.fill_blocks(&mut buf, ch)?,
+        _ => i.fill_consecutive(&mut buf)?,
     };
     // Return early if no data
     if rstat.reads_complete == 0 && rstat.reads_partial == 0 {
@@ -722,7 +764,7 @@ fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> UResult<(ReadStat, Ve
         perform_swab(&mut buf);
     }
     if is_conv(i) || is_block(i) || is_unblock(i) {
-        let buf = conv_block_unblock_helper(buf, i, &mut rstat)?;
+        let buf = conv_block_unblock_helper(buf, i, &mut rstat).unwrap();
         Ok((rstat, buf))
     } else {
         Ok((rstat, buf))
@@ -893,7 +935,7 @@ fn append_dashes_if_not_present(mut acc: Vec<String>, mut s: String) -> Vec<Stri
     acc
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let dashed_args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -912,32 +954,33 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         (true, true) => {
             let i = Input::<File>::new(&matches)?;
             let o = Output::<File>::new(&matches)?;
-            o.dd_out(i)
+            o.dd_out(i).map_err_context(|| "IO error".to_string())
         }
         (false, true) => {
             let i = Input::<io::Stdin>::new(&matches)?;
             let o = Output::<File>::new(&matches)?;
-            o.dd_out(i)
+            o.dd_out(i).map_err_context(|| "IO error".to_string())
         }
         (true, false) => {
             let i = Input::<File>::new(&matches)?;
             let o = Output::<io::Stdout>::new(&matches)?;
-            o.dd_out(i)
+            o.dd_out(i).map_err_context(|| "IO error".to_string())
         }
         (false, false) => {
             let i = Input::<io::Stdin>::new(&matches)?;
             let o = Output::<io::Stdout>::new(&matches)?;
-            o.dd_out(i)
+            o.dd_out(i).map_err_context(|| "IO error".to_string())
         }
     }
 }
 
-pub fn uu_app() -> clap::App<'static, 'static> {
-    clap::App::new(uucore::util_name())
+pub fn uu_app<'a>() -> App<'a> {
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            clap::Arg::with_name(options::INFILE)
+            Arg::new(options::INFILE)
                 .long(options::INFILE)
                 .takes_value(true)
                 .require_equals(true)
@@ -945,7 +988,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .help("(alternatively if=FILE) specifies the file used for input. When not specified, stdin is used instead")
         )
         .arg(
-            clap::Arg::with_name(options::OUTFILE)
+            Arg::new(options::OUTFILE)
                 .long(options::OUTFILE)
                 .takes_value(true)
                 .require_equals(true)
@@ -953,7 +996,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .help("(alternatively of=FILE) specifies the file used for output. When not specified, stdout is used instead")
         )
         .arg(
-            clap::Arg::with_name(options::IBS)
+            Arg::new(options::IBS)
                 .long(options::IBS)
                 .takes_value(true)
                 .require_equals(true)
@@ -961,7 +1004,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .help("(alternatively ibs=N) specifies the size of buffer used for reads (default: 512). Multiplier strings permitted.")
         )
         .arg(
-            clap::Arg::with_name(options::OBS)
+            Arg::new(options::OBS)
                 .long(options::OBS)
                 .takes_value(true)
                 .require_equals(true)
@@ -969,7 +1012,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .help("(alternatively obs=N) specifies the size of buffer used for writes (default: 512). Multiplier strings permitted.")
         )
         .arg(
-            clap::Arg::with_name(options::BS)
+            Arg::new(options::BS)
                 .long(options::BS)
                 .takes_value(true)
                 .require_equals(true)
@@ -977,7 +1020,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .help("(alternatively bs=N) specifies ibs=N and obs=N (default: 512). If ibs or obs are also specified, bs=N takes precedence. Multiplier strings permitted.")
         )
         .arg(
-            clap::Arg::with_name(options::CBS)
+            Arg::new(options::CBS)
                 .long(options::CBS)
                 .takes_value(true)
                 .require_equals(true)
@@ -985,7 +1028,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .help("(alternatively cbs=BYTES) specifies the 'conversion block size' in bytes. Applies to the conv=block, and conv=unblock operations. Multiplier strings permitted.")
         )
         .arg(
-            clap::Arg::with_name(options::SKIP)
+            Arg::new(options::SKIP)
                 .long(options::SKIP)
                 .takes_value(true)
                 .require_equals(true)
@@ -993,7 +1036,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .help("(alternatively skip=N) causes N ibs-sized records of input to be skipped before beginning copy/convert operations. See iflag=count_bytes if skipping N bytes is preferred. Multiplier strings permitted.")
         )
         .arg(
-            clap::Arg::with_name(options::SEEK)
+            Arg::new(options::SEEK)
                 .long(options::SEEK)
                 .takes_value(true)
                 .require_equals(true)
@@ -1001,7 +1044,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .help("(alternatively seek=N) seeks N obs-sized records into output before beginning copy/convert operations. See oflag=seek_bytes if seeking N bytes is preferred. Multiplier strings permitted.")
         )
         .arg(
-            clap::Arg::with_name(options::COUNT)
+            Arg::new(options::COUNT)
                 .long(options::COUNT)
                 .takes_value(true)
                 .require_equals(true)
@@ -1009,7 +1052,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .help("(alternatively count=N) stop reading input after N ibs-sized read operations rather than proceeding until EOF. See iflag=count_bytes if stopping after N bytes is preferred. Multiplier strings permitted.")
         )
         .arg(
-            clap::Arg::with_name(options::STATUS)
+            Arg::new(options::STATUS)
                 .long(options::STATUS)
                 .takes_value(true)
                 .require_equals(true)
@@ -1033,7 +1076,7 @@ Printing performance stats is also triggered by the INFO signal (where supported
 ")
         )
         .arg(
-            clap::Arg::with_name(options::CONV)
+            Arg::new(options::CONV)
                 .long(options::CONV)
                 .takes_value(true)
                 .require_equals(true)
@@ -1070,7 +1113,7 @@ Conversion Flags:
 ")
         )
         .arg(
-            clap::Arg::with_name(options::IFLAG)
+            Arg::new(options::IFLAG)
                 .long(options::IFLAG)
                 .takes_value(true)
                 .require_equals(true)
@@ -1096,7 +1139,7 @@ General-Flags
 ")
         )
         .arg(
-            clap::Arg::with_name(options::OFLAG)
+            Arg::new(options::OFLAG)
                 .long(options::OFLAG)
                 .takes_value(true)
                 .require_equals(true)

@@ -1,3 +1,6 @@
+#[cfg(all(unix, not(target_os = "macos")))]
+use pretty_assertions::assert_ne;
+
 use crate::common::util::*;
 
 // spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars
@@ -234,4 +237,11 @@ fn test_read_from_nonexistent_file() {
         .fails()
         .stderr_contains(MSG)
         .stdout_is("");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "macos")))]
+fn test_files_from_pseudo_filesystem() {
+    let result = new_ucmd!().arg("-c").arg("/proc/version").succeeds();
+    assert_ne!(result.stdout_str(), "0 /proc/version\n");
 }

@@ -10,7 +10,7 @@
 mod error;
 
 use crate::error::ChrootError;
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::ffi::CString;
 use std::io::Error;
 use std::path::Path;
@@ -31,7 +31,7 @@ mod options {
     pub const COMMAND: &str = "command";
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -91,40 +91,41 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(SYNTAX)
+        .override_usage(SYNTAX)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::NEWROOT)
-                .hidden(true)
+            Arg::new(options::NEWROOT)
+                .hide(true)
                 .required(true)
                 .index(1),
         )
         .arg(
-            Arg::with_name(options::USER)
-                .short("u")
+            Arg::new(options::USER)
+                .short('u')
                 .long(options::USER)
                 .help("User (ID or name) to switch before running the program")
                 .value_name("USER"),
         )
         .arg(
-            Arg::with_name(options::GROUP)
-                .short("g")
+            Arg::new(options::GROUP)
+                .short('g')
                 .long(options::GROUP)
                 .help("Group (ID or name) to switch to")
                 .value_name("GROUP"),
         )
         .arg(
-            Arg::with_name(options::GROUPS)
-                .short("G")
+            Arg::new(options::GROUPS)
+                .short('G')
                 .long(options::GROUPS)
                 .help("Comma-separated list of groups to switch to")
                 .value_name("GROUP1,GROUP2..."),
         )
         .arg(
-            Arg::with_name(options::USERSPEC)
+            Arg::new(options::USERSPEC)
                 .long(options::USERSPEC)
                 .help(
                     "Colon-separated user and group to switch to. \
@@ -134,9 +135,9 @@ pub fn uu_app() -> App<'static, 'static> {
                 .value_name("USER:GROUP"),
         )
         .arg(
-            Arg::with_name(options::COMMAND)
-                .hidden(true)
-                .multiple(true)
+            Arg::new(options::COMMAND)
+                .hide(true)
+                .multiple_occurrences(true)
                 .index(2),
         )
 }
@@ -200,12 +201,12 @@ fn set_main_group(group: &str) -> UResult<()> {
 }
 
 #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
-fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
+fn set_groups(groups: &[libc::gid_t]) -> libc::c_int {
     unsafe { setgroups(groups.len() as libc::c_int, groups.as_ptr()) }
 }
 
 #[cfg(target_os = "linux")]
-fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
+fn set_groups(groups: &[libc::gid_t]) -> libc::c_int {
     unsafe { setgroups(groups.len() as libc::size_t, groups.as_ptr()) }
 }
 
@@ -219,7 +220,7 @@ fn set_groups_from_str(groups: &str) -> UResult<()> {
             };
             groups_vec.push(gid);
         }
-        let err = set_groups(groups_vec);
+        let err = set_groups(&groups_vec);
         if err != 0 {
             return Err(ChrootError::SetGroupsFailed(Error::last_os_error()).into());
         }

@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_relpath);
+uucore::bin!(uu_relpath);

@@ -19,12 +19,12 @@ use uucore::{
 
 use std::io::{stdin, Read};
 
-static ABOUT: &str = "
- With no FILE, or when FILE is -, read standard input.
+static ABOUT: &str = "\
+With no FILE, or when FILE is -, read standard input.
 
- When decoding, the input may contain newlines in addition to the bytes of
- the formal alphabet. Use --ignore-garbage to attempt to recover
- from any other non-alphabet bytes in the encoded stream.
+When decoding, the input may contain newlines in addition to the bytes of
+the formal alphabet. Use --ignore-garbage to attempt to recover
+from any other non-alphabet bytes in the encoded stream.
 ";
 
 const ENCODINGS: &[(&str, Format)] = &[
@@ -36,26 +36,23 @@ const ENCODINGS: &[(&str, Format)] = &[
     ("base2lsbf", Format::Base2Lsbf),
     ("base2msbf", Format::Base2Msbf),
     ("z85", Format::Z85),
-    // common abbreviations. TODO: once we have clap 3.0 we can use `AppSettings::InferLongArgs` to get all abbreviations automatically
-    ("base2l", Format::Base2Lsbf),
-    ("base2m", Format::Base2Msbf),
 ];
 
 fn usage() -> String {
     format!("{0} [OPTION]... [FILE]", uucore::execution_phrase())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     let mut app = base_common::base_app(ABOUT);
     for encoding in ENCODINGS {
-        app = app.arg(Arg::with_name(encoding.0).long(encoding.0));
+        app = app.arg(Arg::new(encoding.0).long(encoding.0));
     }
     app
 }
 
 fn parse_cmd_args(args: impl uucore::Args) -> UResult<(Config, Format)> {
     let usage = usage();
-    let matches = uu_app().usage(&usage[..]).get_matches_from(
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(
         args.collect_str(InvalidEncodingHandling::ConvertLossy)
             .accept_any(),
     );
@@ -68,7 +65,7 @@ fn parse_cmd_args(args: impl uucore::Args) -> UResult<(Config, Format)> {
     Ok((config, format))
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (config, format) = parse_cmd_args(args)?;
     // Create a reference to stdin so we can return a locked stdin from

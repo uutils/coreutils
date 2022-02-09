@@ -1,6 +1,6 @@
 [package]
 name = "uu_chroot"
-version = "0.0.8"
+version = "0.0.12"
 authors = ["uutils developers"]
 license = "MIT"
 description = "chroot ~ (uutils) run COMMAND under a new root directory"
@@ -15,13 +15,9 @@ edition = "2018"
 path = "src/chroot.rs"
 
 [dependencies]
-clap= "2.33"
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["entries"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+clap = { version = "3.0", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["entries"] }
 
 [[bin]]
 name = "chroot"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

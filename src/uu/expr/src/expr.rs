@@ -5,7 +5,7 @@
 //* For the full copyright and license information, please view the LICENSE
 //* file that was distributed with this source code.
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use uucore::error::{UResult, USimpleError};
 use uucore::InvalidEncodingHandling;
 
@@ -15,13 +15,14 @@ mod tokens;
 const VERSION: &str = "version";
 const HELP: &str = "help";
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
-        .arg(Arg::with_name(VERSION).long(VERSION))
-        .arg(Arg::with_name(HELP).long(HELP))
+        .setting(AppSettings::InferLongArgs)
+        .arg(Arg::new(VERSION).long(VERSION))
+        .arg(Arg::new(HELP).long(HELP))
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)

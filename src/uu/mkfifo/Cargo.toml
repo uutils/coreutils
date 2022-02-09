@@ -1,6 +1,6 @@
 [package]
 name = "uu_mkfifo"
-version = "0.0.8"
+version = "0.0.12"
 authors = ["uutils developers"]
 license = "MIT"
 description = "mkfifo ~ (uutils) create FIFOs (named pipes)"
@@ -15,14 +15,10 @@ edition = "2018"
 path = "src/mkfifo.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
+clap = { version = "3.0", features = ["wrap_help", "cargo"] }
 libc = "0.2.42"
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
 
 [[bin]]
 name = "mkfifo"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

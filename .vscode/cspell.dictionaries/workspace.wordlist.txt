@@ -25,6 +25,7 @@ getrandom
 globset
 itertools
 lscolors
+mdbook
 memchr
 multifilereader
 onig
@@ -322,6 +323,7 @@ ucommand
 utmpx
 uucore
 uucore_procs
+uudoc
 uumain
 uutil
 uutils

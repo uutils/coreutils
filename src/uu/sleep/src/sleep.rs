@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use uucore::error::{UResult, USimpleError};
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 
 static ABOUT: &str = "Pause for NUMBER seconds.";
 static LONG_HELP: &str = "Pause for NUMBER seconds.  SUFFIX may be 's' for seconds (the default),
@@ -31,37 +31,37 @@ fn usage() -> String {
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     if let Some(values) = matches.values_of(options::NUMBER) {
-        let numbers = values.collect();
-        return sleep(numbers);
+        let numbers = values.collect::<Vec<_>>();
+        return sleep(&numbers);
     }
 
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::NUMBER)
-                .long(options::NUMBER)
+            Arg::new(options::NUMBER)
                 .help("pause for NUMBER seconds")
                 .value_name(options::NUMBER)
                 .index(1)
-                .multiple(true)
+                .multiple_occurrences(true)
                 .required(true),
         )
 }
 
-fn sleep(args: Vec<&str>) -> UResult<()> {
+fn sleep(args: &[&str]) -> UResult<()> {
     let sleep_dur =
         args.iter().try_fold(
             Duration::new(0, 0),

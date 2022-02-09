@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use remove_dir_all::remove_dir_all;
 use std::collections::VecDeque;
 use std::fs;
@@ -51,7 +51,7 @@ static OPT_PROMPT_MORE: &str = "prompt-more";
 static OPT_RECURSIVE: &str = "recursive";
 static OPT_RECURSIVE_R: &str = "recursive_R";
 static OPT_VERBOSE: &str = "verbose";
-static PRESUME_INPUT_TTY: &str = "presume-input-tty";
+static PRESUME_INPUT_TTY: &str = "-presume-input-tty";
 
 static ARG_FILES: &str = "files";
 
@@ -76,13 +76,13 @@ fn get_long_usage() -> String {
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let long_usage = get_long_usage();
 
     let matches = uu_app()
-        .usage(&usage[..])
+        .override_usage(&usage[..])
         .after_help(&long_usage[..])
         .get_matches_from(args);
 
@@ -138,78 +138,78 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
 
-        if remove(files, options) {
+        if remove(&files, &options) {
             return Err(1.into());
         }
     }
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(OPT_FORCE)
-            .short("f")
+            Arg::new(OPT_FORCE)
+            .short('f')
             .long(OPT_FORCE)
-            .multiple(true)
+            .multiple_occurrences(true)
             .help("ignore nonexistent files and arguments, never prompt")
         )
         .arg(
-            Arg::with_name(OPT_PROMPT)
-            .short("i")
+            Arg::new(OPT_PROMPT)
+            .short('i')
             .long("prompt before every removal")
         )
         .arg(
-            Arg::with_name(OPT_PROMPT_MORE)
-            .short("I")
+            Arg::new(OPT_PROMPT_MORE)
+            .short('I')
             .help("prompt once before removing more than three files, or when removing recursively. Less intrusive than -i, while still giving some protection against most mistakes")
         )
         .arg(
-            Arg::with_name(OPT_INTERACTIVE)
+            Arg::new(OPT_INTERACTIVE)
             .long(OPT_INTERACTIVE)
             .help("prompt according to WHEN: never, once (-I), or always (-i). Without WHEN, prompts always")
             .value_name("WHEN")
             .takes_value(true)
         )
         .arg(
-            Arg::with_name(OPT_ONE_FILE_SYSTEM)
+            Arg::new(OPT_ONE_FILE_SYSTEM)
             .long(OPT_ONE_FILE_SYSTEM)
             .help("when removing a hierarchy recursively, skip any directory that is on a file system different from that of the corresponding command line argument (NOT IMPLEMENTED)")
         )
         .arg(
-            Arg::with_name(OPT_NO_PRESERVE_ROOT)
+            Arg::new(OPT_NO_PRESERVE_ROOT)
             .long(OPT_NO_PRESERVE_ROOT)
             .help("do not treat '/' specially")
         )
         .arg(
-            Arg::with_name(OPT_PRESERVE_ROOT)
+            Arg::new(OPT_PRESERVE_ROOT)
             .long(OPT_PRESERVE_ROOT)
             .help("do not remove '/' (default)")
         )
         .arg(
-            Arg::with_name(OPT_RECURSIVE).short("r")
-            .multiple(true)
+            Arg::new(OPT_RECURSIVE).short('r')
+            .multiple_occurrences(true)
             .long(OPT_RECURSIVE)
             .help("remove directories and their contents recursively")
         )
         .arg(
             // To mimic GNU's behavior we also want the '-R' flag. However, using clap's
             // alias method 'visible_alias("R")' would result in a long '--R' flag.
-            Arg::with_name(OPT_RECURSIVE_R).short("R")
+            Arg::new(OPT_RECURSIVE_R).short('R')
             .help("Equivalent to -r")
         )
         .arg(
-            Arg::with_name(OPT_DIR)
-            .short("d")
+            Arg::new(OPT_DIR)
+            .short('d')
             .long(OPT_DIR)
             .help("remove empty directories")
         )
         .arg(
-            Arg::with_name(OPT_VERBOSE)
-            .short("v")
+            Arg::new(OPT_VERBOSE)
+            .short('v')
             .long(OPT_VERBOSE)
             .help("explain what is being done")
         )
@@ -219,33 +219,36 @@ pub fn uu_app() -> App<'static, 'static> {
         // It is relatively difficult to ensure that there is a tty on stdin.
         // Since rm acts differently depending on that, without this option,
         // it'd be harder to test the parts of rm that depend on that setting.
+        // In contrast with Arg::long, Arg::alias does not strip leading
+        // hyphens. Therefore it supports 3 leading hyphens.
         .arg(
-            Arg::with_name(PRESUME_INPUT_TTY)
+            Arg::new(PRESUME_INPUT_TTY)
             .long(PRESUME_INPUT_TTY)
-            .hidden(true)
+            .alias(PRESUME_INPUT_TTY)
+            .hide(true)
         )
         .arg(
-            Arg::with_name(ARG_FILES)
-            .multiple(true)
+            Arg::new(ARG_FILES)
+            .multiple_occurrences(true)
             .takes_value(true)
             .min_values(1)
         )
 }
 
 // TODO: implement one-file-system (this may get partially implemented in walkdir)
-fn remove(files: Vec<String>, options: Options) -> bool {
+fn remove(files: &[String], options: &Options) -> bool {
     let mut had_err = false;
 
-    for filename in &files {
+    for filename in files {
         let file = Path::new(filename);
         had_err = match file.symlink_metadata() {
             Ok(metadata) => {
                 if metadata.is_dir() {
-                    handle_dir(file, &options)
+                    handle_dir(file, options)
                 } else if is_symlink_dir(&metadata) {
-                    remove_dir(file, &options)
+                    remove_dir(file, options)
                 } else {
-                    remove_file(file, &options)
+                    remove_file(file, options)
                 }
             }
             Err(_e) => {

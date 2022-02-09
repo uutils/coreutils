@@ -12,7 +12,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App};
+use clap::{crate_version, App, AppSettings};
 use std::ffi::CStr;
 use uucore::error::UResult;
 use uucore::InvalidEncodingHandling;
@@ -39,13 +39,13 @@ fn usage() -> &'static str {
     uucore::execution_phrase()
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let _ = uu_app().usage(usage()).get_matches_from(args);
+    let _ = uu_app().override_usage(usage()).get_matches_from(args);
 
     match get_userlogin() {
         Some(userlogin) => println!("{}", userlogin),
@@ -55,8 +55,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
+        .setting(AppSettings::InferLongArgs)
 }

@@ -8,13 +8,13 @@
 
 use platform_info::*;
 
-use clap::{crate_version, App};
+use clap::{crate_version, App, AppSettings};
 use uucore::error::{FromIo, UResult};
 
 static ABOUT: &str = "Display machine architecture";
 static SUMMARY: &str = "Determine architecture name for current machine.";
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     uu_app().get_matches_from(args);
 
@@ -23,9 +23,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(SUMMARY)
+        .setting(AppSettings::InferLongArgs)
 }

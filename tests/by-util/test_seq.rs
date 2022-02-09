@@ -693,3 +693,21 @@ fn test_parse_error_hex() {
         .fails()
         .usage_error("invalid hexadecimal argument: '0xlmnop'");
 }
+
+#[test]
+fn test_format_option() {
+    new_ucmd!()
+        .args(&["-f", "%.2f", "0.0", "0.1", "0.5"])
+        .succeeds()
+        .stdout_only("0.00\n0.10\n0.20\n0.30\n0.40\n0.50\n");
+}
+
+#[test]
+fn test_invalid_zero_increment_value() {
+    new_ucmd!()
+        .args(&["0", "0", "1"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid Zero increment value: '0'")
+        .stderr_contains("for more information.");
+}

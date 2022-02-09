@@ -18,7 +18,7 @@ use std::io::BufReader;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::path::PathBuf;
 use uucore::InvalidEncodingHandling;
 
@@ -51,7 +51,7 @@ fn get_long_usage() -> String {
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -61,7 +61,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let after_help = get_long_usage();
 
     let matches = uu_app()
-        .usage(&usage[..])
+        .override_usage(&usage[..])
         .after_help(&after_help[..])
         .get_matches_from(args);
 
@@ -132,60 +132,61 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::LONG_FORMAT)
-                .short("l")
+            Arg::new(options::LONG_FORMAT)
+                .short('l')
                 .requires(options::USER)
                 .help("produce long format output for the specified USERs"),
         )
         .arg(
-            Arg::with_name(options::OMIT_HOME_DIR)
-                .short("b")
+            Arg::new(options::OMIT_HOME_DIR)
+                .short('b')
                 .help("omit the user's home directory and shell in long format"),
         )
         .arg(
-            Arg::with_name(options::OMIT_PROJECT_FILE)
-                .short("h")
+            Arg::new(options::OMIT_PROJECT_FILE)
+                .short('h')
                 .help("omit the user's project file in long format"),
         )
         .arg(
-            Arg::with_name(options::OMIT_PLAN_FILE)
-                .short("p")
+            Arg::new(options::OMIT_PLAN_FILE)
+                .short('p')
                 .help("omit the user's plan file in long format"),
         )
         .arg(
-            Arg::with_name(options::SHORT_FORMAT)
-                .short("s")
+            Arg::new(options::SHORT_FORMAT)
+                .short('s')
                 .help("do short format output, this is the default"),
         )
         .arg(
-            Arg::with_name(options::OMIT_HEADINGS)
-                .short("f")
+            Arg::new(options::OMIT_HEADINGS)
+                .short('f')
                 .help("omit the line of column headings in short format"),
         )
         .arg(
-            Arg::with_name(options::OMIT_NAME)
-                .short("w")
+            Arg::new(options::OMIT_NAME)
+                .short('w')
                 .help("omit the user's full name in short format"),
         )
         .arg(
-            Arg::with_name(options::OMIT_NAME_HOST)
-                .short("i")
+            Arg::new(options::OMIT_NAME_HOST)
+                .short('i')
                 .help("omit the user's full name and remote host in short format"),
         )
         .arg(
-            Arg::with_name(options::OMIT_NAME_HOST_TIME)
-                .short("q")
+            Arg::new(options::OMIT_NAME_HOST_TIME)
+                .short('q')
                 .help("omit the user's full name, remote host and idle time in short format"),
         )
         .arg(
-            Arg::with_name(options::USER)
+            Arg::new(options::USER)
                 .takes_value(true)
-                .multiple(true),
+                .multiple_occurrences(true),
         )
 }
 
@@ -209,9 +210,9 @@ impl Capitalize for str {
         self.char_indices()
             .fold(String::with_capacity(self.len()), |mut acc, x| {
                 if x.0 != 0 {
-                    acc.push(x.1)
+                    acc.push(x.1);
                 } else {
-                    acc.push(x.1.to_ascii_uppercase())
+                    acc.push(x.1.to_ascii_uppercase());
                 }
                 acc
             })
@@ -274,7 +275,7 @@ impl Pinky {
                 if let Some(n) = gecos.find(',') {
                     gecos.truncate(n + 1);
                 }
-                print!(" {:<19.19}", gecos.replace("&", &pw.name.capitalize()));
+                print!(" {:<19.19}", gecos.replace('&', &pw.name.capitalize()));
             } else {
                 print!(" {:19}", "        ???");
             }
@@ -323,12 +324,10 @@ impl Pinky {
             self.print_heading();
         }
         for ut in Utmpx::iter_all_records() {
-            if ut.is_user_process() {
-                if self.names.is_empty() {
-                    self.print_entry(&ut)?
-                } else if self.names.iter().any(|n| n.as_str() == ut.user()) {
-                    self.print_entry(&ut)?;
-                }
+            if ut.is_user_process()
+                && (self.names.is_empty() || self.names.iter().any(|n| n.as_str() == ut.user()))
+            {
+                self.print_entry(&ut)?;
             }
         }
         Ok(())
@@ -338,7 +337,7 @@ impl Pinky {
         for u in &self.names {
             print!("Login name: {:<28}In real life: ", u);
             if let Ok(pw) = Passwd::locate(u.as_str()) {
-                println!(" {}", pw.user_info.replace("&", &pw.name.capitalize()));
+                println!(" {}", pw.user_info.replace('&', &pw.name.capitalize()));
                 if self.include_home_and_shell {
                     print!("Directory: {:<29}", pw.user_dir);
                     println!("Shell:  {}", pw.user_shell);

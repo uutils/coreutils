@@ -10,8 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::OsValues;
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches, OsValues};
 use std::fs;
 use std::path::Path;
 use uucore::display::Quotable;
@@ -79,7 +78,7 @@ fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
     mode::strip_minus_from_mode(args)
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -96,7 +95,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
     let matches = uu_app()
-        .usage(&usage[..])
+        .override_usage(&usage[..])
         .after_help(&after_help[..])
         .get_matches_from(args);
 
@@ -110,35 +109,36 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::MODE)
-                .short("m")
+            Arg::new(options::MODE)
+                .short('m')
                 .long(options::MODE)
                 .help("set file mode (not implemented on windows)")
                 .default_value("755"),
         )
         .arg(
-            Arg::with_name(options::PARENTS)
-                .short("p")
+            Arg::new(options::PARENTS)
+                .short('p')
                 .long(options::PARENTS)
-                .alias("parent")
                 .help("make parent directories as needed"),
         )
         .arg(
-            Arg::with_name(options::VERBOSE)
-                .short("v")
+            Arg::new(options::VERBOSE)
+                .short('v')
                 .long(options::VERBOSE)
                 .help("print a message for each printed directory"),
         )
         .arg(
-            Arg::with_name(options::DIRS)
-                .multiple(true)
+            Arg::new(options::DIRS)
+                .multiple_occurrences(true)
                 .takes_value(true)
-                .min_values(1),
+                .min_values(1)
+                .allow_invalid_utf8(true),
         )
 }
 

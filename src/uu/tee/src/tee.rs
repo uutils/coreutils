@@ -8,7 +8,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use retain_mut::RetainMut;
 use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
@@ -38,11 +38,11 @@ fn usage() -> String {
     format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let options = Options {
         append: matches.is_present(options::APPEND),
@@ -53,30 +53,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .unwrap_or_default(),
     };
 
-    match tee(options) {
+    match tee(&options) {
         Ok(_) => Ok(()),
         Err(_) => Err(1.into()),
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help("If a FILE is -, it refers to a file named - .")
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::APPEND)
+            Arg::new(options::APPEND)
                 .long(options::APPEND)
-                .short("a")
+                .short('a')
                 .help("append to the given FILEs, do not overwrite"),
         )
         .arg(
-            Arg::with_name(options::IGNORE_INTERRUPTS)
+            Arg::new(options::IGNORE_INTERRUPTS)
                 .long(options::IGNORE_INTERRUPTS)
-                .short("i")
+                .short('i')
                 .help("ignore interrupt signals (ignored on non-Unix platforms)"),
         )
-        .arg(Arg::with_name(options::FILE).multiple(true))
+        .arg(Arg::new(options::FILE).multiple_occurrences(true))
 }
 
 #[cfg(unix)]
@@ -94,9 +95,9 @@ fn ignore_interrupts() -> Result<()> {
     Ok(())
 }
 
-fn tee(options: Options) -> Result<()> {
+fn tee(options: &Options) -> Result<()> {
     if options.ignore_interrupts {
-        ignore_interrupts()?
+        ignore_interrupts()?;
     }
     let mut writers: Vec<NamedWriter> = options
         .files

@@ -14,7 +14,7 @@
 extern crate unix_socket;
 
 // last synced with: cat (GNU coreutils) 8.13
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::fs::{metadata, File};
 use std::io::{self, Read, Write};
 use thiserror::Error;
@@ -182,7 +182,7 @@ mod options {
     pub static SHOW_NONPRINTING: &str = "show-nonprinting";
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -236,67 +236,72 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         show_tabs,
         squeeze_blank,
     };
-    cat_files(files, &options)
+    cat_files(&files, &options)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .usage(SYNTAX)
+        .override_usage(SYNTAX)
         .about(SUMMARY)
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::SHOW_ALL)
-                .short("A")
+            Arg::new(options::FILE)
+                .hide(true)
+                .multiple_occurrences(true),
+        )
+        .arg(
+            Arg::new(options::SHOW_ALL)
+                .short('A')
                 .long(options::SHOW_ALL)
                 .help("equivalent to -vET"),
         )
         .arg(
-            Arg::with_name(options::NUMBER_NONBLANK)
-                .short("b")
+            Arg::new(options::NUMBER_NONBLANK)
+                .short('b')
                 .long(options::NUMBER_NONBLANK)
                 .help("number nonempty output lines, overrides -n")
                 .overrides_with(options::NUMBER),
         )
         .arg(
-            Arg::with_name(options::SHOW_NONPRINTING_ENDS)
-                .short("e")
+            Arg::new(options::SHOW_NONPRINTING_ENDS)
+                .short('e')
                 .help("equivalent to -vE"),
         )
         .arg(
-            Arg::with_name(options::SHOW_ENDS)
-                .short("E")
+            Arg::new(options::SHOW_ENDS)
+                .short('E')
                 .long(options::SHOW_ENDS)
                 .help("display $ at end of each line"),
         )
         .arg(
-            Arg::with_name(options::NUMBER)
-                .short("n")
+            Arg::new(options::NUMBER)
+                .short('n')
                 .long(options::NUMBER)
                 .help("number all output lines"),
         )
         .arg(
-            Arg::with_name(options::SQUEEZE_BLANK)
-                .short("s")
+            Arg::new(options::SQUEEZE_BLANK)
+                .short('s')
                 .long(options::SQUEEZE_BLANK)
                 .help("suppress repeated empty output lines"),
         )
         .arg(
-            Arg::with_name(options::SHOW_NONPRINTING_TABS)
-                .short("t")
+            Arg::new(options::SHOW_NONPRINTING_TABS)
+                .short('t')
                 .long(options::SHOW_NONPRINTING_TABS)
                 .help("equivalent to -vT"),
         )
         .arg(
-            Arg::with_name(options::SHOW_TABS)
-                .short("T")
+            Arg::new(options::SHOW_TABS)
+                .short('T')
                 .long(options::SHOW_TABS)
                 .help("display TAB characters at ^I"),
         )
         .arg(
-            Arg::with_name(options::SHOW_NONPRINTING)
-                .short("v")
+            Arg::new(options::SHOW_NONPRINTING)
+                .short('v')
                 .long(options::SHOW_NONPRINTING)
                 .help("use ^ and M- notation, except for LF (\\n) and TAB (\\t)"),
         )
@@ -360,7 +365,7 @@ fn cat_path(
     }
 }
 
-fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
+fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
     let out_info = FileInformation::from_file(&std::io::stdout());
 
     let mut state = OutputState {
@@ -371,7 +376,7 @@ fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
     };
     let mut error_messages: Vec<String> = Vec::new();
 
-    for path in &files {
+    for path in files {
         if let Err(err) = cat_path(path, options, &mut state, out_info.as_ref()) {
             error_messages.push(format!("{}: {}", path.maybe_quote(), err));
         }
@@ -474,7 +479,7 @@ fn write_lines<R: FdReadable>(
                 if !state.at_line_start || !options.squeeze_blank || !state.one_blank_kept {
                     state.one_blank_kept = true;
                     if state.at_line_start && options.number == NumberingMode::All {
-                        write!(&mut writer, "{0:6}\t", state.line_number)?;
+                        write!(writer, "{0:6}\t", state.line_number)?;
                         state.line_number += 1;
                     }
                     writer.write_all(options.end_of_line().as_bytes())?;
@@ -493,7 +498,7 @@ fn write_lines<R: FdReadable>(
             }
             state.one_blank_kept = false;
             if state.at_line_start && options.number != NumberingMode::None {
-                write!(&mut writer, "{0:6}\t", state.line_number)?;
+                write!(writer, "{0:6}\t", state.line_number)?;
                 state.line_number += 1;
             }
 

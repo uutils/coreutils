@@ -15,13 +15,12 @@ extern crate lazy_static;
 
 mod quoting_style;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use glob::Pattern;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
-use std::ffi::OsString;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -39,6 +38,7 @@ use std::{
     os::unix::fs::{FileTypeExt, MetadataExt},
     time::Duration,
 };
+use std::{ffi::OsString, fs::ReadDir};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use uucore::{
     display::Quotable,
@@ -150,8 +150,7 @@ impl UError for LsError {
     fn code(&self) -> i32 {
         match self {
             LsError::InvalidLineWidth(_) => 2,
-            LsError::IOError(_) => 1,
-            LsError::IOErrorContext(_, _) => 1,
+            LsError::IOError(_) | LsError::IOErrorContext(_, _) => 1,
         }
     }
 }
@@ -165,7 +164,7 @@ impl Display for LsError {
             LsError::IOError(e) => write!(f, "general io error: {}", e),
             LsError::IOErrorContext(e, p) => {
                 let error_kind = e.kind();
-                let raw_os_error = e.raw_os_error().unwrap_or(13i32);
+                let errno = e.raw_os_error().unwrap_or(1i32);
 
                 match error_kind {
                     // No such file or directory
@@ -180,7 +179,7 @@ impl Display for LsError {
                     ErrorKind::PermissionDenied =>
                     {
                         #[allow(clippy::wildcard_in_or_patterns)]
-                        match raw_os_error {
+                        match errno {
                             1i32 => {
                                 write!(
                                     f,
@@ -205,12 +204,24 @@ impl Display for LsError {
                             }
                         }
                     }
-                    _ => write!(
-                        f,
-                        "unknown io error: '{:?}', '{:?}'",
-                        p.to_string_lossy(),
-                        e
-                    ),
+                    _ => match errno {
+                        9i32 => {
+                            // only should ever occur on a read_dir on a bad fd
+                            write!(
+                                f,
+                                "cannot open directory '{}': Bad file descriptor",
+                                p.to_string_lossy(),
+                            )
+                        }
+                        _ => {
+                            write!(
+                                f,
+                                "unknown io error: '{:?}', '{:?}'",
+                                p.to_string_lossy(),
+                                e
+                            )
+                        }
+                    },
                 }
             }
         }
@@ -327,7 +338,7 @@ struct PaddingCollection {
 
 impl Config {
     #[allow(clippy::cognitive_complexity)]
-    fn from(options: &clap::ArgMatches) -> UResult<Config> {
+    fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let context = options.is_present(options::CONTEXT);
         let (mut format, opt) = if let Some(format_) = options.value_of(options::FORMAT) {
             (
@@ -649,7 +660,7 @@ impl Config {
             Dereference::DirArgs
         };
 
-        Ok(Config {
+        Ok(Self {
             format,
             files,
             sort,
@@ -683,11 +694,11 @@ impl Config {
     }
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
-    let app = uu_app().usage(&usage[..]);
+    let app = uu_app().override_usage(&usage[..]);
 
     let matches = app.get_matches_from(args);
 
@@ -698,10 +709,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(Path::new).collect())
         .unwrap_or_else(|| vec![Path::new(".")]);
 
-    list(locs, config)
+    list(locs, &config)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(
@@ -709,9 +720,10 @@ pub fn uu_app() -> App<'static, 'static> {
             the command line, expect that it will ignore files and directories \
             whose names start with '.'.",
         )
+        .setting(AppSettings::InferLongArgs)
         // Format arguments
         .arg(
-            Arg::with_name(options::FORMAT)
+            Arg::new(options::FORMAT)
                 .long(options::FORMAT)
                 .help("Set the display format.")
                 .takes_value(true)
@@ -736,8 +748,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::format::COLUMNS)
-                .short(options::format::COLUMNS)
+            Arg::new(options::format::COLUMNS)
+                .short('C')
                 .help("Display the files in columns.")
                 .overrides_with_all(&[
                     options::FORMAT,
@@ -748,8 +760,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::format::LONG)
-                .short("l")
+            Arg::new(options::format::LONG)
+                .short('l')
                 .long(options::format::LONG)
                 .help("Display detailed information.")
                 .overrides_with_all(&[
@@ -761,8 +773,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::format::ACROSS)
-                .short(options::format::ACROSS)
+            Arg::new(options::format::ACROSS)
+                .short('x')
                 .help("List entries in rows instead of in columns.")
                 .overrides_with_all(&[
                     options::FORMAT,
@@ -773,8 +785,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::format::COMMAS)
-                .short(options::format::COMMAS)
+            Arg::new(options::format::COMMAS)
+                .short('m')
                 .help("List entries separated by commas.")
                 .overrides_with_all(&[
                     options::FORMAT,
@@ -791,36 +803,36 @@ pub fn uu_app() -> App<'static, 'static> {
         // ls -1g1
         // even though `ls -11` and `ls -1 -g -1` work.
         .arg(
-            Arg::with_name(options::format::ONE_LINE)
-                .short(options::format::ONE_LINE)
+            Arg::new(options::format::ONE_LINE)
+                .short('1')
                 .help("List one file per line.")
-                .multiple(true),
+                .multiple_occurrences(true),
         )
         .arg(
-            Arg::with_name(options::format::LONG_NO_GROUP)
-                .short(options::format::LONG_NO_GROUP)
+            Arg::new(options::format::LONG_NO_GROUP)
+                .short('o')
                 .help(
                     "Long format without group information. \
                     Identical to --format=long with --no-group.",
                 )
-                .multiple(true),
+                .multiple_occurrences(true),
         )
         .arg(
-            Arg::with_name(options::format::LONG_NO_OWNER)
-                .short(options::format::LONG_NO_OWNER)
+            Arg::new(options::format::LONG_NO_OWNER)
+                .short('g')
                 .help("Long format without owner information.")
-                .multiple(true),
+                .multiple_occurrences(true),
         )
         .arg(
-            Arg::with_name(options::format::LONG_NUMERIC_UID_GID)
-                .short("n")
+            Arg::new(options::format::LONG_NUMERIC_UID_GID)
+                .short('n')
                 .long(options::format::LONG_NUMERIC_UID_GID)
                 .help("-l with numeric UIDs and GIDs.")
-                .multiple(true),
+                .multiple_occurrences(true),
         )
         // Quoting style
         .arg(
-            Arg::with_name(options::QUOTING_STYLE)
+            Arg::new(options::QUOTING_STYLE)
                 .long(options::QUOTING_STYLE)
                 .takes_value(true)
                 .help("Set quoting style.")
@@ -841,8 +853,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::quoting::LITERAL)
-                .short("N")
+            Arg::new(options::quoting::LITERAL)
+                .short('N')
                 .long(options::quoting::LITERAL)
                 .help("Use literal quoting style. Equivalent to `--quoting-style=literal`")
                 .overrides_with_all(&[
@@ -853,8 +865,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::quoting::ESCAPE)
-                .short("b")
+            Arg::new(options::quoting::ESCAPE)
+                .short('b')
                 .long(options::quoting::ESCAPE)
                 .help("Use escape quoting style. Equivalent to `--quoting-style=escape`")
                 .overrides_with_all(&[
@@ -865,8 +877,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::quoting::C)
-                .short("Q")
+            Arg::new(options::quoting::C)
+                .short('Q')
                 .long(options::quoting::C)
                 .help("Use C quoting style. Equivalent to `--quoting-style=c`")
                 .overrides_with_all(&[
@@ -878,21 +890,21 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         // Control characters
         .arg(
-            Arg::with_name(options::HIDE_CONTROL_CHARS)
-                .short("q")
+            Arg::new(options::HIDE_CONTROL_CHARS)
+                .short('q')
                 .long(options::HIDE_CONTROL_CHARS)
                 .help("Replace control characters with '?' if they are not escaped.")
                 .overrides_with_all(&[options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS]),
         )
         .arg(
-            Arg::with_name(options::SHOW_CONTROL_CHARS)
+            Arg::new(options::SHOW_CONTROL_CHARS)
                 .long(options::SHOW_CONTROL_CHARS)
                 .help("Show control characters 'as is' if they are not escaped.")
                 .overrides_with_all(&[options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS]),
         )
         // Time arguments
         .arg(
-            Arg::with_name(options::TIME)
+            Arg::new(options::TIME)
                 .long(options::TIME)
                 .help(
                     "Show time in <field>:\n\
@@ -910,8 +922,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .overrides_with_all(&[options::TIME, options::time::ACCESS, options::time::CHANGE]),
         )
         .arg(
-            Arg::with_name(options::time::CHANGE)
-                .short(options::time::CHANGE)
+            Arg::new(options::time::CHANGE)
+                .short('c')
                 .help(
                     "If the long listing format (e.g., -l, -o) is being used, print the status \
                 change time (the 'ctime' in the inode) instead of the modification time. When \
@@ -921,8 +933,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .overrides_with_all(&[options::TIME, options::time::ACCESS, options::time::CHANGE]),
         )
         .arg(
-            Arg::with_name(options::time::ACCESS)
-                .short(options::time::ACCESS)
+            Arg::new(options::time::ACCESS)
+                .short('u')
                 .help(
                     "If the long listing format (e.g., -l, -o) is being used, print the status \
                 access time instead of the modification time. When explicitly sorting by time \
@@ -933,33 +945,33 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         // Hide and ignore
         .arg(
-            Arg::with_name(options::HIDE)
+            Arg::new(options::HIDE)
                 .long(options::HIDE)
                 .takes_value(true)
-                .multiple(true)
+                .multiple_occurrences(true)
                 .value_name("PATTERN")
                 .help(
                     "do not list implied entries matching shell PATTERN (overridden by -a or -A)",
                 ),
         )
         .arg(
-            Arg::with_name(options::IGNORE)
-                .short("I")
+            Arg::new(options::IGNORE)
+                .short('I')
                 .long(options::IGNORE)
                 .takes_value(true)
-                .multiple(true)
+                .multiple_occurrences(true)
                 .value_name("PATTERN")
                 .help("do not list implied entries matching shell PATTERN"),
         )
         .arg(
-            Arg::with_name(options::IGNORE_BACKUPS)
-                .short("B")
+            Arg::new(options::IGNORE_BACKUPS)
+                .short('B')
                 .long(options::IGNORE_BACKUPS)
                 .help("Ignore entries which end with ~."),
         )
         // Sort arguments
         .arg(
-            Arg::with_name(options::SORT)
+            Arg::new(options::SORT)
                 .long(options::SORT)
                 .help("Sort by <field>: name, none (-U), time (-t), size (-S) or extension (-X)")
                 .value_name("field")
@@ -976,8 +988,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::sort::SIZE)
-                .short(options::sort::SIZE)
+            Arg::new(options::sort::SIZE)
+                .short('S')
                 .help("Sort by file size, largest first.")
                 .overrides_with_all(&[
                     options::SORT,
@@ -989,8 +1001,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::sort::TIME)
-                .short(options::sort::TIME)
+            Arg::new(options::sort::TIME)
+                .short('t')
                 .help("Sort by modification time (the 'mtime' in the inode), newest first.")
                 .overrides_with_all(&[
                     options::SORT,
@@ -1002,8 +1014,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::sort::VERSION)
-                .short(options::sort::VERSION)
+            Arg::new(options::sort::VERSION)
+                .short('v')
                 .help("Natural sort of (version) numbers in the filenames.")
                 .overrides_with_all(&[
                     options::SORT,
@@ -1015,8 +1027,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::sort::EXTENSION)
-                .short(options::sort::EXTENSION)
+            Arg::new(options::sort::EXTENSION)
+                .short('X')
                 .help("Sort alphabetically by entry extension.")
                 .overrides_with_all(&[
                     options::SORT,
@@ -1028,8 +1040,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::sort::NONE)
-                .short(options::sort::NONE)
+            Arg::new(options::sort::NONE)
+                .short('U')
                 .help(
                     "Do not sort; list the files in whatever order they are stored in the \
     directory.  This is especially useful when listing very large directories, \
@@ -1046,8 +1058,8 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         // Dereferencing
         .arg(
-            Arg::with_name(options::dereference::ALL)
-                .short("L")
+            Arg::new(options::dereference::ALL)
+                .short('L')
                 .long(options::dereference::ALL)
                 .help(
                     "When showing file information for a symbolic link, show information for the \
@@ -1060,7 +1072,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::dereference::DIR_ARGS)
+            Arg::new(options::dereference::DIR_ARGS)
                 .long(options::dereference::DIR_ARGS)
                 .help(
                     "Do not dereference symlinks except when they link to directories and are \
@@ -1073,8 +1085,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::dereference::ARGS)
-                .short("H")
+            Arg::new(options::dereference::ARGS)
+                .short('H')
                 .long(options::dereference::ARGS)
                 .help("Do not dereference symlinks except when given as command line arguments.")
                 .overrides_with_all(&[
@@ -1085,25 +1097,25 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         // Long format options
         .arg(
-            Arg::with_name(options::NO_GROUP)
+            Arg::new(options::NO_GROUP)
                 .long(options::NO_GROUP)
-                .short("-G")
+                .short('G')
                 .help("Do not show group in long format."),
         )
-        .arg(Arg::with_name(options::AUTHOR).long(options::AUTHOR).help(
+        .arg(Arg::new(options::AUTHOR).long(options::AUTHOR).help(
             "Show author in long format. \
             On the supported platforms, the author always matches the file owner.",
         ))
         // Other Flags
         .arg(
-            Arg::with_name(options::files::ALL)
-                .short("a")
+            Arg::new(options::files::ALL)
+                .short('a')
                 .long(options::files::ALL)
                 .help("Do not ignore hidden files (files with names that start with '.')."),
         )
         .arg(
-            Arg::with_name(options::files::ALMOST_ALL)
-                .short("A")
+            Arg::new(options::files::ALMOST_ALL)
+                .short('A')
                 .long(options::files::ALMOST_ALL)
                 .help(
                     "In a directory, do not ignore all file names that start with '.', \
@@ -1111,8 +1123,8 @@ only ignore '.' and '..'.",
                 ),
         )
         .arg(
-            Arg::with_name(options::DIRECTORY)
-                .short("d")
+            Arg::new(options::DIRECTORY)
+                .short('d')
                 .long(options::DIRECTORY)
                 .help(
                     "Only list the names of directories, rather than listing directory contents. \
@@ -1122,26 +1134,26 @@ only ignore '.' and '..'.",
                 ),
         )
         .arg(
-            Arg::with_name(options::size::HUMAN_READABLE)
-                .short("h")
+            Arg::new(options::size::HUMAN_READABLE)
+                .short('h')
                 .long(options::size::HUMAN_READABLE)
                 .help("Print human readable file sizes (e.g. 1K 234M 56G).")
                 .overrides_with(options::size::SI),
         )
         .arg(
-            Arg::with_name(options::size::SI)
+            Arg::new(options::size::SI)
                 .long(options::size::SI)
                 .help("Print human readable file sizes using powers of 1000 instead of 1024."),
         )
         .arg(
-            Arg::with_name(options::INODE)
-                .short("i")
+            Arg::new(options::INODE)
+                .short('i')
                 .long(options::INODE)
                 .help("print the index number of each file"),
         )
         .arg(
-            Arg::with_name(options::REVERSE)
-                .short("r")
+            Arg::new(options::REVERSE)
+                .short('r')
                 .long(options::REVERSE)
                 .help(
                     "Reverse whatever the sorting method is e.g., list files in reverse \
@@ -1149,21 +1161,21 @@ only ignore '.' and '..'.",
                 ),
         )
         .arg(
-            Arg::with_name(options::RECURSIVE)
-                .short("R")
+            Arg::new(options::RECURSIVE)
+                .short('R')
                 .long(options::RECURSIVE)
                 .help("List the contents of all directories recursively."),
         )
         .arg(
-            Arg::with_name(options::WIDTH)
+            Arg::new(options::WIDTH)
                 .long(options::WIDTH)
-                .short("w")
+                .short('w')
                 .help("Assume that the terminal is COLS columns wide.")
                 .value_name("COLS")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(options::COLOR)
+            Arg::new(options::COLOR)
                 .long(options::COLOR)
                 .help("Color output based on file type.")
                 .takes_value(true)
@@ -1174,7 +1186,7 @@ only ignore '.' and '..'.",
                 .min_values(0),
         )
         .arg(
-            Arg::with_name(options::INDICATOR_STYLE)
+            Arg::new(options::INDICATOR_STYLE)
                 .long(options::INDICATOR_STYLE)
                 .help(
                     "Append indicator with style WORD to entry names: \
@@ -1190,8 +1202,8 @@ only ignore '.' and '..'.",
                 ]),
         )
         .arg(
-            Arg::with_name(options::indicator_style::CLASSIFY)
-                .short("F")
+            Arg::new(options::indicator_style::CLASSIFY)
+                .short('F')
                 .long(options::indicator_style::CLASSIFY)
                 .help(
                     "Append a character to each file name indicating the file type. Also, for \
@@ -1207,7 +1219,7 @@ only ignore '.' and '..'.",
                 ]),
         )
         .arg(
-            Arg::with_name(options::indicator_style::FILE_TYPE)
+            Arg::new(options::indicator_style::FILE_TYPE)
                 .long(options::indicator_style::FILE_TYPE)
                 .help("Same as --classify, but do not append '*'")
                 .overrides_with_all(&[
@@ -1218,8 +1230,8 @@ only ignore '.' and '..'.",
                 ]),
         )
         .arg(
-            Arg::with_name(options::indicator_style::SLASH)
-                .short(options::indicator_style::SLASH)
+            Arg::new(options::indicator_style::SLASH)
+                .short('p')
                 .help("Append / indicator to directories.")
                 .overrides_with_all(&[
                     options::indicator_style::FILE_TYPE,
@@ -1230,7 +1242,7 @@ only ignore '.' and '..'.",
         )
         .arg(
             //This still needs support for posix-*, +FORMAT
-            Arg::with_name(options::TIME_STYLE)
+            Arg::new(options::TIME_STYLE)
                 .long(options::TIME_STYLE)
                 .help("time/date format with -l; see TIME_STYLE below")
                 .value_name("TIME_STYLE")
@@ -1239,22 +1251,23 @@ only ignore '.' and '..'.",
                 .overrides_with_all(&[options::TIME_STYLE]),
         )
         .arg(
-            Arg::with_name(options::FULL_TIME)
+            Arg::new(options::FULL_TIME)
                 .long(options::FULL_TIME)
                 .overrides_with(options::FULL_TIME)
                 .help("like -l --time-style=full-iso"),
         )
         .arg(
-            Arg::with_name(options::CONTEXT)
-                .short("Z")
+            Arg::new(options::CONTEXT)
+                .short('Z')
                 .long(options::CONTEXT)
                 .help(CONTEXT_HELP_TEXT),
         )
         // Positional arguments
         .arg(
-            Arg::with_name(options::PATHS)
-                .multiple(true)
-                .takes_value(true),
+            Arg::new(options::PATHS)
+                .multiple_occurrences(true)
+                .takes_value(true)
+                .allow_invalid_utf8(true),
         )
         .after_help(
             "The TIME_STYLE argument can be full-iso, long-iso, iso. \
@@ -1270,6 +1283,7 @@ struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
+    de: Option<DirEntry>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
     // PathBuf that all above data corresponds to
@@ -1281,7 +1295,7 @@ struct PathData {
 impl PathData {
     fn new(
         p_buf: PathBuf,
-        file_type: Option<std::io::Result<FileType>>,
+        dir_entry: Option<std::io::Result<DirEntry>>,
         file_name: Option<OsString>,
         config: &Config,
         command_line: bool,
@@ -1315,8 +1329,23 @@ impl PathData {
             Dereference::None => false,
         };
 
-        let ft = match file_type {
-            Some(ft) => OnceCell::from(ft.ok()),
+        let de: Option<DirEntry> = match dir_entry {
+            Some(de) => de.ok(),
+            None => None,
+        };
+
+        // Why prefer to check the DirEntry file_type()?  B/c the call is
+        // nearly free compared to a metadata() call on a Path
+        let ft = match de {
+            Some(ref de) => {
+                if let Ok(ft_de) = de.file_type() {
+                    OnceCell::from(Some(ft_de))
+                } else if let Ok(md_pb) = p_buf.metadata() {
+                    OnceCell::from(Some(md_pb.file_type()))
+                } else {
+                    OnceCell::new()
+                }
+            }
             None => OnceCell::new(),
         };
 
@@ -1329,6 +1358,7 @@ impl PathData {
         Self {
             md: OnceCell::new(),
             ft,
+            de,
             display_name,
             p_buf,
             must_dereference,
@@ -1338,16 +1368,34 @@ impl PathData {
 
     fn md(&self, out: &mut BufWriter<Stdout>) -> Option<&Metadata> {
         self.md
-            .get_or_init(
-                || match get_metadata(self.p_buf.as_path(), self.must_dereference) {
+            .get_or_init(|| {
+                // check if we can use DirEntry metadata
+                if !self.must_dereference {
+                    if let Some(dir_entry) = &self.de {
+                        return dir_entry.metadata().ok();
+                    }
+                }
+
+                // if not, check if we can use Path metadata
+                match get_metadata(self.p_buf.as_path(), self.must_dereference) {
                     Err(err) => {
                         let _ = out.flush();
+                        let errno = err.raw_os_error().unwrap_or(1i32);
+                        // a bad fd will throw an error when dereferenced,
+                        // but GNU will not throw an error until a bad fd "dir"
+                        // is entered, here we match that GNU behavior, by handing
+                        // back the non-dereferenced metadata upon an EBADF
+                        if self.must_dereference && errno == 9i32 {
+                            if let Some(dir_entry) = &self.de {
+                                return dir_entry.metadata().ok();
+                            }
+                        }
                         show!(LsError::IOErrorContext(err, self.p_buf.clone(),));
                         None
                     }
                     Ok(md) => Some(md),
-                },
-            )
+                }
+            })
             .as_ref()
     }
 
@@ -1358,14 +1406,14 @@ impl PathData {
     }
 }
 
-fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
+fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
     let mut out = BufWriter::new(stdout());
     let initial_locs_len = locs.len();
 
     for loc in locs {
-        let path_data = PathData::new(PathBuf::from(loc), None, None, &config, true);
+        let path_data = PathData::new(PathBuf::from(loc), None, None, config, true);
 
         // Getting metadata here is no big deal as it's just the CWD
         // and we really just want to know if the strings exist as files/dirs
@@ -1392,27 +1440,39 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
         }
     }
 
-    sort_entries(&mut files, &config, &mut out);
-    sort_entries(&mut dirs, &config, &mut out);
+    sort_entries(&mut files, config, &mut out);
+    sort_entries(&mut dirs, config, &mut out);
 
-    display_items(&files, &config, &mut out);
+    display_items(&files, config, &mut out);
 
-    for (pos, dir) in dirs.iter().enumerate() {
+    for (pos, path_data) in dirs.iter().enumerate() {
+        // Do read_dir call here to match GNU semantics by printing
+        // read_dir errors before directory headings, names and totals
+        let read_dir = match fs::read_dir(&path_data.p_buf) {
+            Err(err) => {
+                // flush stdout buffer before the error to preserve formatting and order
+                let _ = out.flush();
+                show!(LsError::IOErrorContext(err, path_data.p_buf.clone()));
+                continue;
+            }
+            Ok(rd) => rd,
+        };
+
         // Print dir heading - name... 'total' comes after error display
         if initial_locs_len > 1 || config.recursive {
             if pos.eq(&0usize) && files.is_empty() {
-                let _ = writeln!(out, "{}:", dir.p_buf.display());
+                let _ = writeln!(out, "{}:", path_data.p_buf.display());
             } else {
-                let _ = writeln!(out, "\n{}:", dir.p_buf.display());
+                let _ = writeln!(out, "\n{}:", path_data.p_buf.display());
             }
         }
-        enter_directory(dir, &config, &mut out);
+        enter_directory(path_data, read_dir, config, &mut out);
     }
 
     Ok(())
 }
 
-fn sort_entries(entries: &mut Vec<PathData>, config: &Config, out: &mut BufWriter<Stdout>) {
+fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<Stdout>) {
     match config.sort {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
@@ -1475,12 +1535,29 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
     true
 }
 
-fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>) {
+fn enter_directory(
+    path_data: &PathData,
+    read_dir: ReadDir,
+    config: &Config,
+    out: &mut BufWriter<Stdout>,
+) {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
         vec![
-            PathData::new(dir.p_buf.clone(), None, Some(".".into()), config, false),
-            PathData::new(dir.p_buf.join(".."), None, Some("..".into()), config, false),
+            PathData::new(
+                path_data.p_buf.clone(),
+                None,
+                Some(".".into()),
+                config,
+                false,
+            ),
+            PathData::new(
+                path_data.p_buf.join(".."),
+                None,
+                Some("..".into()),
+                config,
+                false,
+            ),
         ]
     } else {
         vec![]
@@ -1489,19 +1566,8 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
     // Convert those entries to the PathData struct
     let mut vec_path_data = Vec::new();
 
-    // check for errors early, and ignore entries with errors
-    let read_dir = match fs::read_dir(&dir.p_buf) {
-        Err(err) => {
-            // flush buffer because the error may get printed in the wrong order
-            let _ = out.flush();
-            show!(LsError::IOErrorContext(err, dir.p_buf.clone()));
-            return;
-        }
-        Ok(res) => res,
-    };
-
-    for entry in read_dir {
-        let unwrapped = match entry {
+    for raw_entry in read_dir {
+        let dir_entry = match raw_entry {
             Ok(path) => path,
             Err(err) => {
                 let _ = out.flush();
@@ -1510,27 +1576,17 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
             }
         };
 
-        if should_display(&unwrapped, config) {
-            // why check the DirEntry file_type()?  B/c the call is
-            // nearly free compared to a metadata() or file_type() call on a dir/file
-            let path_data = match unwrapped.file_type() {
-                Err(err) => {
-                    let _ = out.flush();
-                    show!(LsError::IOErrorContext(err, unwrapped.path()));
-                    continue;
-                }
-                Ok(dir_ft) => {
-                    PathData::new(unwrapped.path(), Some(Ok(dir_ft)), None, config, false)
-                }
-            };
-            vec_path_data.push(path_data);
+        if should_display(&dir_entry, config) {
+            let entry_path_data =
+                PathData::new(dir_entry.path(), Some(Ok(dir_entry)), None, config, false);
+            vec_path_data.push(entry_path_data);
         };
     }
 
     sort_entries(&mut vec_path_data, config, out);
     entries.append(&mut vec_path_data);
 
-    // ...and total
+    // Print total after any error display
     if config.format == Format::Long {
         display_total(&entries, config, out);
     }
@@ -1541,13 +1597,21 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
         for e in entries
             .iter()
             .skip(if config.files == Files::All { 2 } else { 0 })
-            // Already requested file_type for the dir_entries above. So we know the OnceCell is set.
-            // And can unwrap again because we tested whether path has is_some here
+            .filter(|p| p.ft.get().is_some())
             .filter(|p| p.ft.get().unwrap().is_some())
             .filter(|p| p.ft.get().unwrap().unwrap().is_dir())
         {
-            let _ = writeln!(out, "\n{}:", e.p_buf.display());
-            enter_directory(e, config, out);
+            match fs::read_dir(&e.p_buf) {
+                Err(err) => {
+                    let _ = out.flush();
+                    show!(LsError::IOErrorContext(err, e.p_buf.clone()));
+                    continue;
+                }
+                Ok(rd) => {
+                    let _ = writeln!(out, "\n{}:", e.p_buf.display());
+                    enter_directory(e, rd, config, out);
+                }
+            }
         }
     }
 }
@@ -1684,7 +1748,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         for item in items {
             display_item_long(
                 item,
-                PaddingCollection {
+                &PaddingCollection {
                     #[cfg(unix)]
                     longest_inode_len,
                     longest_link_count_len,
@@ -1780,8 +1844,7 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
         // hard-coded for now - enabling setting this remains a TODO
         let ls_block_size = 1024;
         match config.size_format {
-            SizeFormat::Binary => md.blocks() * 512,
-            SizeFormat::Decimal => md.blocks() * 512,
+            SizeFormat::Binary | SizeFormat::Decimal => md.blocks() * 512,
             SizeFormat::Bytes => md.blocks() * 512 / ls_block_size,
         }
     }
@@ -1865,7 +1928,7 @@ fn display_grid(
 #[allow(clippy::write_literal)]
 fn display_item_long(
     item: &PathData,
-    padding: PaddingCollection,
+    padding: &PaddingCollection,
     config: &Config,
     out: &mut BufWriter<Stdout>,
 ) {
@@ -1971,10 +2034,43 @@ fn display_item_long(
             }
         }
 
+        #[cfg(unix)]
+        let leading_char = {
+            if let Some(Some(ft)) = item.ft.get() {
+                if ft.is_char_device() {
+                    "c"
+                } else if ft.is_block_device() {
+                    "b"
+                } else if ft.is_symlink() {
+                    "l"
+                } else if ft.is_dir() {
+                    "d"
+                } else {
+                    "-"
+                }
+            } else {
+                "-"
+            }
+        };
+        #[cfg(not(unix))]
+        let leading_char = {
+            if let Some(Some(ft)) = item.ft.get() {
+                if ft.is_symlink() {
+                    "l"
+                } else if ft.is_dir() {
+                    "d"
+                } else {
+                    "-"
+                }
+            } else {
+                "-"
+            }
+        };
+
         let _ = write!(
             out,
             "{}{} {}",
-            "l?????????",
+            format_args!("{}?????????", leading_char),
             if item.security_context.len() > 1 {
                 // GNU `ls` uses a "." character to indicate a file with a security context,
                 // but not other alternate access method.
@@ -2153,7 +2249,7 @@ fn display_date(metadata: &Metadata, config: &Config) -> String {
 // 3. The human-readable format uses powers for 1024, but does not display the "i"
 //    that is commonly used to denote Kibi, Mebi, etc.
 // 4. Kibi and Kilo are denoted differently ("k" and "K", respectively)
-fn format_prefixed(prefixed: NumberPrefix<f64>) -> String {
+fn format_prefixed(prefixed: &NumberPrefix<f64>) -> String {
     match prefixed {
         NumberPrefix::Standalone(bytes) => bytes.to_string(),
         NumberPrefix::Prefixed(prefix, bytes) => {
@@ -2206,8 +2302,8 @@ fn display_size(size: u64, config: &Config) -> String {
     // NOTE: The human-readable behavior deviates from the GNU ls.
     // The GNU ls uses binary prefixes by default.
     match config.size_format {
-        SizeFormat::Binary => format_prefixed(NumberPrefix::binary(size as f64)),
-        SizeFormat::Decimal => format_prefixed(NumberPrefix::decimal(size as f64)),
+        SizeFormat::Binary => format_prefixed(&NumberPrefix::binary(size as f64)),
+        SizeFormat::Decimal => format_prefixed(&NumberPrefix::decimal(size as f64)),
         SizeFormat::Bytes => size.to_string(),
     }
 }

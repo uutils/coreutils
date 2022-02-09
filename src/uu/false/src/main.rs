@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_false);
+uucore::bin!(uu_false);

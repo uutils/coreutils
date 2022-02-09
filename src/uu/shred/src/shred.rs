@@ -8,7 +8,7 @@
 
 // spell-checker:ignore (words) writeback wipesync
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use rand::prelude::SliceRandom;
 use rand::Rng;
 use std::cell::{Cell, RefCell};
@@ -68,9 +68,9 @@ struct FilenameGenerator {
 }
 
 impl FilenameGenerator {
-    fn new(name_len: usize) -> FilenameGenerator {
+    fn new(name_len: usize) -> Self {
         let indices: Vec<usize> = vec![0; name_len];
-        FilenameGenerator {
+        Self {
             name_len,
             name_charset_indices: RefCell::new(indices),
             exhausted: Cell::new(false),
@@ -96,7 +96,7 @@ impl Iterator for FilenameGenerator {
         }
 
         if name_charset_indices[0] == NAME_CHARSET.len() - 1 {
-            self.exhausted.set(true)
+            self.exhausted.set(true);
         }
         // Now increment the least significant index
         for i in (0..self.name_len).rev() {
@@ -267,7 +267,7 @@ pub mod options {
     pub const ZERO: &str = "zero";
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -275,7 +275,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let usage = usage();
 
-    let app = uu_app().usage(&usage[..]);
+    let app = uu_app().override_usage(&usage[..]);
 
     let matches = app.get_matches_from(args);
 
@@ -321,62 +321,67 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::FORCE)
+            Arg::new(options::FORCE)
                 .long(options::FORCE)
-                .short("f")
+                .short('f')
                 .help("change permissions to allow writing if necessary"),
         )
         .arg(
-            Arg::with_name(options::ITERATIONS)
+            Arg::new(options::ITERATIONS)
                 .long(options::ITERATIONS)
-                .short("n")
+                .short('n')
                 .help("overwrite N times instead of the default (3)")
                 .value_name("NUMBER")
                 .default_value("3"),
         )
         .arg(
-            Arg::with_name(options::SIZE)
+            Arg::new(options::SIZE)
                 .long(options::SIZE)
-                .short("s")
+                .short('s')
                 .takes_value(true)
                 .value_name("N")
                 .help("shred this many bytes (suffixes like K, M, G accepted)"),
         )
         .arg(
-            Arg::with_name(options::REMOVE)
-                .short("u")
+            Arg::new(options::REMOVE)
+                .short('u')
                 .long(options::REMOVE)
                 .help("truncate and remove file after overwriting;  See below"),
         )
         .arg(
-            Arg::with_name(options::VERBOSE)
+            Arg::new(options::VERBOSE)
                 .long(options::VERBOSE)
-                .short("v")
+                .short('v')
                 .help("show progress"),
         )
         .arg(
-            Arg::with_name(options::EXACT)
+            Arg::new(options::EXACT)
                 .long(options::EXACT)
-                .short("x")
+                .short('x')
                 .help(
                     "do not round file sizes up to the next full block;\n\
                      this is the default for non-regular files",
                 ),
         )
         .arg(
-            Arg::with_name(options::ZERO)
+            Arg::new(options::ZERO)
                 .long(options::ZERO)
-                .short("z")
+                .short('z')
                 .help("add a final overwrite with zeros to hide shredding"),
         )
         // Positional arguments
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+        .arg(
+            Arg::new(options::FILE)
+                .hide(true)
+                .multiple_occurrences(true),
+        )
 }
 
 // TODO: Add support for all postfixes here up to and including EiB
@@ -473,7 +478,7 @@ fn wipe_file(
     if n_passes <= 3 {
         // Only random passes if n_passes <= 3
         for _ in 0..n_passes {
-            pass_sequence.push(PassType::Random)
+            pass_sequence.push(PassType::Random);
         }
     }
     // First fill it with Patterns, shuffle it, then evenly distribute Random

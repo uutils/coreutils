@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use libc::{c_int, pid_t};
 use std::io::Error;
 use uucore::display::Quotable;
@@ -35,7 +35,7 @@ pub enum Mode {
     List,
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -43,7 +43,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let obs_signal = handle_obsolete(&mut args);
 
     let usage = format!("{} [OPTIONS]... PID...", uucore::execution_phrase());
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let mode = if matches.is_present(options::TABLE) || matches.is_present(options::TABLE_OLD) {
         Mode::Table
@@ -74,40 +74,41 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             table();
             Ok(())
         }
-        Mode::List => list(pids_or_signals.get(0).cloned()),
+        Mode::List => list(pids_or_signals.get(0)),
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::LIST)
-                .short("l")
+            Arg::new(options::LIST)
+                .short('l')
                 .long(options::LIST)
                 .help("Lists signals")
                 .conflicts_with(options::TABLE)
                 .conflicts_with(options::TABLE_OLD),
         )
         .arg(
-            Arg::with_name(options::TABLE)
-                .short("t")
+            Arg::new(options::TABLE)
+                .short('t')
                 .long(options::TABLE)
                 .help("Lists table of signals"),
         )
-        .arg(Arg::with_name(options::TABLE_OLD).short("L").hidden(true))
+        .arg(Arg::new(options::TABLE_OLD).short('L').hide(true))
         .arg(
-            Arg::with_name(options::SIGNAL)
-                .short("s")
+            Arg::new(options::SIGNAL)
+                .short('s')
                 .long(options::SIGNAL)
                 .help("Sends given signal")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(options::PIDS_OR_SIGNALS)
-                .hidden(true)
-                .multiple(true),
+            Arg::new(options::PIDS_OR_SIGNALS)
+                .hide(true)
+                .multiple_occurrences(true),
         )
 }
 
@@ -167,9 +168,9 @@ fn print_signals() {
     println!();
 }
 
-fn list(arg: Option<String>) -> UResult<()> {
+fn list(arg: Option<&String>) -> UResult<()> {
     match arg {
-        Some(ref x) => print_signal(x),
+        Some(x) => print_signal(x),
         None => {
             print_signals();
             Ok(())

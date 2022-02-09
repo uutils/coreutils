@@ -20,7 +20,7 @@ mod digest;
 use self::digest::Digest;
 use self::digest::DigestWriter;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{App, AppSettings, Arg, ArgMatches};
 use hex::ToHex;
 use md5::Context as Md5;
 use regex::Regex;
@@ -70,13 +70,14 @@ fn is_custom_binary(program: &str) -> bool {
             | "shake128sum"
             | "shake256sum"
             | "b2sum"
+            | "b3sum"
     )
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn detect_algo<'a>(
+fn detect_algo(
     program: &str,
-    matches: &ArgMatches<'a>,
+    matches: &ArgMatches,
 ) -> (&'static str, Box<dyn Digest + 'static>, usize) {
     let mut alg: Option<Box<dyn Digest>> = None;
     let mut name: &'static str = "";
@@ -92,6 +93,11 @@ fn detect_algo<'a>(
             "BLAKE2",
             Box::new(blake2b_simd::State::new()) as Box<dyn Digest>,
             512,
+        ),
+        "b3sum" => (
+            "blake3",
+            Box::new(blake3::Hasher::new()) as Box<dyn Digest>,
+            256,
         ),
         "sha3sum" => match matches.value_of("bits") {
             Some(bits_str) => match (bits_str).parse::<usize>() {
@@ -173,28 +179,31 @@ fn detect_algo<'a>(
                     };
                     name = n;
                     alg = Some(val);
-                    output_bits = bits
+                    output_bits = bits;
                 };
                 if matches.is_present("md5") {
-                    set_or_crash("MD5", Box::new(Md5::new()), 128)
+                    set_or_crash("MD5", Box::new(Md5::new()), 128);
                 }
                 if matches.is_present("sha1") {
-                    set_or_crash("SHA1", Box::new(Sha1::new()), 160)
+                    set_or_crash("SHA1", Box::new(Sha1::new()), 160);
                 }
                 if matches.is_present("sha224") {
-                    set_or_crash("SHA224", Box::new(Sha224::new()), 224)
+                    set_or_crash("SHA224", Box::new(Sha224::new()), 224);
                 }
                 if matches.is_present("sha256") {
-                    set_or_crash("SHA256", Box::new(Sha256::new()), 256)
+                    set_or_crash("SHA256", Box::new(Sha256::new()), 256);
                 }
                 if matches.is_present("sha384") {
-                    set_or_crash("SHA384", Box::new(Sha384::new()), 384)
+                    set_or_crash("SHA384", Box::new(Sha384::new()), 384);
                 }
                 if matches.is_present("sha512") {
-                    set_or_crash("SHA512", Box::new(Sha512::new()), 512)
+                    set_or_crash("SHA512", Box::new(Sha512::new()), 512);
                 }
                 if matches.is_present("b2sum") {
-                    set_or_crash("BLAKE2", Box::new(blake2b_simd::State::new()), 512)
+                    set_or_crash("BLAKE2", Box::new(blake2b_simd::State::new()), 512);
+                }
+                if matches.is_present("b3sum") {
+                    set_or_crash("blake3", Box::new(blake3::Hasher::new()), 256)
                 }
                 if matches.is_present("sha3") {
                     match matches.value_of("bits") {
@@ -229,16 +238,16 @@ fn detect_algo<'a>(
                     }
                 }
                 if matches.is_present("sha3-224") {
-                    set_or_crash("SHA3-224", Box::new(Sha3_224::new()), 224)
+                    set_or_crash("SHA3-224", Box::new(Sha3_224::new()), 224);
                 }
                 if matches.is_present("sha3-256") {
-                    set_or_crash("SHA3-256", Box::new(Sha3_256::new()), 256)
+                    set_or_crash("SHA3-256", Box::new(Sha3_256::new()), 256);
                 }
                 if matches.is_present("sha3-384") {
-                    set_or_crash("SHA3-384", Box::new(Sha3_384::new()), 384)
+                    set_or_crash("SHA3-384", Box::new(Sha3_384::new()), 384);
                 }
                 if matches.is_present("sha3-512") {
-                    set_or_crash("SHA3-512", Box::new(Sha3_512::new()), 512)
+                    set_or_crash("SHA3-512", Box::new(Sha3_512::new()), 512);
                 }
                 if matches.is_present("shake128") {
                     match matches.value_of("bits") {
@@ -270,13 +279,11 @@ fn parse_bit_num(arg: &str) -> Result<usize, ParseIntError> {
     arg.parse()
 }
 
-fn is_valid_bit_num(arg: String) -> Result<(), String> {
-    parse_bit_num(&arg)
-        .map(|_| ())
-        .map_err(|e| format!("{}", e))
+fn is_valid_bit_num(arg: &str) -> Result<(), String> {
+    parse_bit_num(arg).map(|_| ()).map_err(|e| format!("{}", e))
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     // if there is no program name for some reason, default to "hashsum"
     let program = args.next().unwrap_or_else(|| OsString::from(NAME));
@@ -292,7 +299,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
 
     let app = uu_app(&binary_name);
 
-    // FIXME: this should use get_matches_from_safe() and crash!(), but at the moment that just
+    // FIXME: this should use try_get_matches_from() and crash!(), but at the moment that just
     //        causes "error: " to be printed twice (once from crash!() and once from clap).  With
     //        the current setup, the name of the utility is not printed, but I think this is at
     //        least somewhat better from a user's perspective.
@@ -333,7 +340,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app_common() -> App<'static, 'static> {
+pub fn uu_app_common<'a>() -> App<'a> {
     #[cfg(windows)]
     const BINARY_HELP: &str = "read in binary mode (default)";
     #[cfg(not(windows))]
@@ -345,56 +352,57 @@ pub fn uu_app_common() -> App<'static, 'static> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about("Compute and check message digests.")
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name("binary")
-                .short("b")
+            Arg::new("binary")
+                .short('b')
                 .long("binary")
                 .help(BINARY_HELP),
         )
         .arg(
-            Arg::with_name("check")
-                .short("c")
+            Arg::new("check")
+                .short('c')
                 .long("check")
                 .help("read hashsums from the FILEs and check them"),
         )
         .arg(
-            Arg::with_name("tag")
+            Arg::new("tag")
                 .long("tag")
                 .help("create a BSD-style checksum"),
         )
         .arg(
-            Arg::with_name("text")
-                .short("t")
+            Arg::new("text")
+                .short('t')
                 .long("text")
                 .help(TEXT_HELP)
                 .conflicts_with("binary"),
         )
         .arg(
-            Arg::with_name("quiet")
-                .short("q")
+            Arg::new("quiet")
+                .short('q')
                 .long("quiet")
                 .help("don't print OK for each successfully verified file"),
         )
         .arg(
-            Arg::with_name("status")
-                .short("s")
+            Arg::new("status")
+                .short('s')
                 .long("status")
                 .help("don't output anything, status code shows success"),
         )
         .arg(
-            Arg::with_name("strict")
+            Arg::new("strict")
                 .long("strict")
                 .help("exit non-zero for improperly formatted checksum lines"),
         )
         .arg(
-            Arg::with_name("warn")
-                .short("w")
+            Arg::new("warn")
+                .short('w')
                 .long("warn")
                 .help("warn about improperly formatted checksum lines"),
         )
         // Needed for variable-length output sums (e.g. SHAKE)
         .arg(
-            Arg::with_name("bits")
+            Arg::new("bits")
                 .long("bits")
                 .help("set the size of the output (only for SHAKE)")
                 .takes_value(true)
@@ -403,14 +411,15 @@ pub fn uu_app_common() -> App<'static, 'static> {
                 .validator(is_valid_bit_num),
         )
         .arg(
-            Arg::with_name("FILE")
+            Arg::new("FILE")
                 .index(1)
-                .multiple(true)
-                .value_name("FILE"),
+                .multiple_occurrences(true)
+                .value_name("FILE")
+                .allow_invalid_utf8(true),
         )
 }
 
-pub fn uu_app_custom() -> App<'static, 'static> {
+pub fn uu_app_custom<'a>() -> App<'a> {
     let mut app = uu_app_common();
     let algorithms = &[
         ("md5", "work with MD5"),
@@ -433,17 +442,18 @@ pub fn uu_app_custom() -> App<'static, 'static> {
             "work with SHAKE256 using BITS for the output size",
         ),
         ("b2sum", "work with BLAKE2"),
+        ("b3sum", "work with BLAKE3"),
     ];
 
     for (name, desc) in algorithms {
-        app = app.arg(Arg::with_name(name).long(name).help(desc));
+        app = app.arg(Arg::new(*name).long(name).help(*desc));
     }
     app
 }
 
 // hashsum is handled differently in build.rs, therefore this is not the same
 // as in other utilities.
-fn uu_app(binary_name: &str) -> App<'static, 'static> {
+fn uu_app<'a>(binary_name: &str) -> App<'a> {
     if !is_custom_binary(binary_name) {
         uu_app_custom()
     } else {

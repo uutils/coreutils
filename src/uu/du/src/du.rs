@@ -10,8 +10,7 @@ extern crate uucore;
 
 use chrono::prelude::DateTime;
 use chrono::Local;
-use clap::ArgMatches;
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::env;
@@ -115,7 +114,7 @@ struct Stat {
 }
 
 impl Stat {
-    fn new(path: PathBuf, options: &Options) -> Result<Stat> {
+    fn new(path: PathBuf, options: &Options) -> Result<Self> {
         let metadata = if options.dereference {
             fs::metadata(&path)?
         } else {
@@ -128,7 +127,7 @@ impl Stat {
             dev_id: metadata.dev(),
         };
         #[cfg(not(windows))]
-        return Ok(Stat {
+        return Ok(Self {
             path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
@@ -145,7 +144,7 @@ impl Stat {
         #[cfg(windows)]
         let file_info = get_file_info(&path);
         #[cfg(windows)]
-        Ok(Stat {
+        Ok(Self {
             path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
@@ -248,7 +247,7 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
 fn read_block_size(s: Option<&str>) -> usize {
     if let Some(s) = s {
         parse_size(s)
-            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::BLOCK_SIZE)))
+            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::BLOCK_SIZE)))
     } else {
         for env_var in &["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
             if let Ok(env_size) = env::var(env_var) {
@@ -336,7 +335,7 @@ fn du(
                         ErrorKind::PermissionDenied => {
                             let description = format!("cannot access {}", entry.path().quote());
                             let error_message = "Permission denied";
-                            show_error_custom_description!(description, "{}", error_message)
+                            show_error_custom_description!(description, "{}", error_message);
                         }
                         _ => show_error!("cannot access {}: {}", entry.path().quote(), error),
                     },
@@ -445,15 +444,15 @@ impl Error for DuError {}
 impl UError for DuError {
     fn code(&self) -> i32 {
         match self {
-            Self::InvalidMaxDepthArg(_) => 1,
-            Self::SummarizeDepthConflict(_) => 1,
-            Self::InvalidTimeStyleArg(_) => 1,
-            Self::InvalidTimeArg(_) => 1,
+            Self::InvalidMaxDepthArg(_)
+            | Self::SummarizeDepthConflict(_)
+            | Self::InvalidTimeStyleArg(_)
+            | Self::InvalidTimeArg(_) => 1,
         }
     }
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
@@ -462,7 +461,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
     let summarize = matches.is_present(options::SUMMARIZE);
 
@@ -487,14 +486,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if options.inodes
         && (matches.is_present(options::APPARENT_SIZE) || matches.is_present(options::BYTES))
     {
-        show_warning!("options --apparent-size and -b are ineffective with --inodes")
+        show_warning!("options --apparent-size and -b are ineffective with --inodes");
     }
 
     let block_size = u64::try_from(read_block_size(matches.value_of(options::BLOCK_SIZE))).unwrap();
 
     let threshold = matches.value_of(options::THRESHOLD).map(|s| {
         Threshold::from_str(s)
-            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::THRESHOLD)))
+            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::THRESHOLD)))
     });
 
     let multiplier: u64 = if matches.is_present(options::SI) {
@@ -625,30 +624,30 @@ fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<u
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(LONG_HELP)
+        .setting(AppSettings::InferLongArgs)
         .arg(
-            Arg::with_name(options::ALL)
-                .short("a")
+            Arg::new(options::ALL)
+                .short('a')
                 .long(options::ALL)
                 .help("write counts for all files, not just directories"),
         )
         .arg(
-            Arg::with_name(options::APPARENT_SIZE)
+            Arg::new(options::APPARENT_SIZE)
                 .long(options::APPARENT_SIZE)
                 .help(
                     "print apparent sizes,  rather  than  disk  usage \
                     although  the apparent  size is usually smaller, it may be larger due to holes \
                     in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like"
                 )
-                .alias("app") // The GNU test suite uses this alias
         )
         .arg(
-            Arg::with_name(options::BLOCK_SIZE)
-                .short("B")
+            Arg::new(options::BLOCK_SIZE)
+                .short('B')
                 .long(options::BLOCK_SIZE)
                 .value_name("SIZE")
                 .help(
@@ -657,20 +656,20 @@ pub fn uu_app() -> App<'static, 'static> {
                 )
         )
         .arg(
-            Arg::with_name(options::BYTES)
-                .short("b")
+            Arg::new(options::BYTES)
+                .short('b')
                 .long("bytes")
                 .help("equivalent to '--apparent-size --block-size=1'")
         )
         .arg(
-            Arg::with_name(options::TOTAL)
+            Arg::new(options::TOTAL)
                 .long("total")
-                .short("c")
+                .short('c')
                 .help("produce a grand total")
         )
         .arg(
-            Arg::with_name(options::MAX_DEPTH)
-                .short("d")
+            Arg::new(options::MAX_DEPTH)
+                .short('d')
                 .long("max-depth")
                 .value_name("N")
                 .help(
@@ -680,80 +679,79 @@ pub fn uu_app() -> App<'static, 'static> {
                 )
         )
         .arg(
-            Arg::with_name(options::HUMAN_READABLE)
+            Arg::new(options::HUMAN_READABLE)
                 .long("human-readable")
-                .short("h")
+                .short('h')
                 .help("print sizes in human readable format (e.g., 1K 234M 2G)")
         )
         .arg(
-            Arg::with_name(options::INODES)
+            Arg::new(options::INODES)
                 .long(options::INODES)
                 .help(
                     "list inode usage information instead of block usage like --block-size=1K"
                 )
         )
         .arg(
-            Arg::with_name(options::BLOCK_SIZE_1K)
-                .short("k")
+            Arg::new(options::BLOCK_SIZE_1K)
+                .short('k')
                 .help("like --block-size=1K")
         )
         .arg(
-            Arg::with_name(options::COUNT_LINKS)
-                .short("l")
+            Arg::new(options::COUNT_LINKS)
+                .short('l')
                 .long("count-links")
                 .help("count sizes many times if hard linked")
         )
         .arg(
-            Arg::with_name(options::DEREFERENCE)
-                .short("L")
+            Arg::new(options::DEREFERENCE)
+                .short('L')
                 .long(options::DEREFERENCE)
                 .help("dereference all symbolic links")
         )
         // .arg(
-        //     Arg::with_name("no-dereference")
-        //         .short("P")
+        //     Arg::new("no-dereference")
+        //         .short('P')
         //         .long("no-dereference")
         //         .help("don't follow any symbolic links (this is the default)")
         // )
         .arg(
-            Arg::with_name(options::BLOCK_SIZE_1M)
-                .short("m")
+            Arg::new(options::BLOCK_SIZE_1M)
+                .short('m')
                 .help("like --block-size=1M")
         )
         .arg(
-            Arg::with_name(options::NULL)
-                .short("0")
+            Arg::new(options::NULL)
+                .short('0')
                 .long("null")
                 .help("end each output line with 0 byte rather than newline")
         )
         .arg(
-            Arg::with_name(options::SEPARATE_DIRS)
-                .short("S")
+            Arg::new(options::SEPARATE_DIRS)
+                .short('S')
                 .long("separate-dirs")
                 .help("do not include size of subdirectories")
         )
         .arg(
-            Arg::with_name(options::SUMMARIZE)
-                .short("s")
+            Arg::new(options::SUMMARIZE)
+                .short('s')
                 .long("summarize")
                 .help("display only a total for each argument")
         )
         .arg(
-            Arg::with_name(options::SI)
+            Arg::new(options::SI)
                 .long(options::SI)
                 .help("like -h, but use powers of 1000 not 1024")
         )
         .arg(
-            Arg::with_name(options::ONE_FILE_SYSTEM)
-                .short("x")
+            Arg::new(options::ONE_FILE_SYSTEM)
+                .short('x')
                 .long(options::ONE_FILE_SYSTEM)
                 .help("skip directories on different file systems")
         )
         .arg(
-            Arg::with_name(options::THRESHOLD)
-                .short("t")
+            Arg::new(options::THRESHOLD)
+                .short('t')
                 .long(options::THRESHOLD)
-                .alias("th")
                 .value_name("SIZE")
                 .number_of_values(1)
                 .allow_hyphen_values(true)
@@ -761,20 +759,20 @@ pub fn uu_app() -> App<'static, 'static> {
                           or entries greater than SIZE if negative")
         )
         // .arg(
-        //     Arg::with_name("")
-        //         .short("x")
+        //     Arg::new("")
+        //         .short('x')
         //         .long("exclude-from")
         //         .value_name("FILE")
         //         .help("exclude files that match any pattern in FILE")
         // )
         // .arg(
-        //     Arg::with_name("exclude")
+        //     Arg::new("exclude")
         //         .long("exclude")
         //         .value_name("PATTERN")
         //         .help("exclude files that match PATTERN")
         // )
         .arg(
-            Arg::with_name(options::TIME)
+            Arg::new(options::TIME)
                 .long(options::TIME)
                 .value_name("WORD")
                 .require_equals(true)
@@ -787,7 +785,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 )
         )
         .arg(
-            Arg::with_name(options::TIME_STYLE)
+            Arg::new(options::TIME_STYLE)
                 .long(options::TIME_STYLE)
                 .value_name("STYLE")
                 .help(
@@ -796,9 +794,9 @@ pub fn uu_app() -> App<'static, 'static> {
                 )
         )
         .arg(
-            Arg::with_name(options::FILE)
-                .hidden(true)
-                .multiple(true)
+            Arg::new(options::FILE)
+                .hide(true)
+                .multiple_occurrences(true)
         )
 }
 
@@ -817,9 +815,9 @@ impl FromStr for Threshold {
         let size = u64::try_from(parse_size(&s[offset..])?).unwrap();
 
         if s.starts_with('-') {
-            Ok(Threshold::Upper(size))
+            Ok(Self::Upper(size))
         } else {
-            Ok(Threshold::Lower(size))
+            Ok(Self::Lower(size))
         }
     }
 }
@@ -827,13 +825,13 @@ impl FromStr for Threshold {
 impl Threshold {
     fn should_exclude(&self, size: u64) -> bool {
         match *self {
-            Threshold::Upper(threshold) => size > threshold,
-            Threshold::Lower(threshold) => size < threshold,
+            Self::Upper(threshold) => size > threshold,
+            Self::Lower(threshold) => size < threshold,
         }
     }
 }
 
-fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
+fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
     // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
     // GNU's du does distinguish between "invalid (suffix in) argument"
@@ -855,7 +853,7 @@ mod test_du {
             (Some("K".to_string()), 1024),
             (None, 1024),
         ];
-        for it in test_data.iter() {
+        for it in &test_data {
             assert_eq!(read_block_size(it.0.as_deref()), it.1);
         }
     }

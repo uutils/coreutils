@@ -115,7 +115,7 @@ fn test_random() {
             // log distribution---higher probability for lower numbers
             let factor;
             loop {
-                let next = rng.gen_range(0_f64, log_num_primes).exp2().floor() as usize;
+                let next = rng.gen_range(0_f64..log_num_primes).exp2().floor() as usize;
                 if next < NUM_PRIMES {
                     factor = primes[next];
                     break;
