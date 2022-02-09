@@ -15,12 +15,14 @@ use crate::filenames::FilenameIterator;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::convert::TryFrom;
 use std::env;
+use std::fmt;
 use std::fs::{metadata, remove_file, File};
 use std::io::{stdin, BufRead, BufReader, BufWriter, Read, Write};
+use std::num::ParseIntError;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::parse_size::parse_size;
+use uucore::parse_size::{parse_size, ParseSizeError};
 
 static OPT_BYTES: &str = "bytes";
 static OPT_LINE_BYTES: &str = "line-bytes";
@@ -62,8 +64,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .override_usage(&usage[..])
         .after_help(&long_usage[..])
         .get_matches_from(args);
-    let settings = Settings::from(&matches)?;
-    split(&settings)
+    match Settings::from(&matches) {
+        Ok(settings) => split(&settings),
+        Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{}", e))),
+        Err(e) => Err(USimpleError::new(1, format!("{}", e))),
+    }
 }
 
 pub fn uu_app<'a>() -> App<'a> {
@@ -169,9 +174,35 @@ enum Strategy {
     Number(usize),
 }
 
+/// An error when parsing a chunking strategy from command-line arguments.
+enum StrategyError {
+    /// Invalid number of lines.
+    Lines(ParseSizeError),
+
+    /// Invalid number of bytes.
+    Bytes(ParseSizeError),
+
+    /// Invalid number of chunks.
+    NumberOfChunks(ParseIntError),
+
+    /// Multiple chunking strategies were specified (but only one should be).
+    MultipleWays,
+}
+
+impl fmt::Display for StrategyError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Lines(e) => write!(f, "invalid number of lines: {}", e),
+            Self::Bytes(e) => write!(f, "invalid number of bytes: {}", e),
+            Self::NumberOfChunks(e) => write!(f, "invalid number of chunks: {}", e),
+            Self::MultipleWays => write!(f, "cannot split in more than one way"),
+        }
+    }
+}
+
 impl Strategy {
     /// Parse a strategy from the command-line arguments.
-    fn from(matches: &ArgMatches) -> UResult<Self> {
+    fn from(matches: &ArgMatches) -> Result<Self, StrategyError> {
         // Check that the user is not specifying more than one strategy.
         //
         // Note: right now, this exact behavior cannot be handled by
@@ -186,30 +217,25 @@ impl Strategy {
             (0, 0, 0, 0) => Ok(Self::Lines(1000)),
             (1, 0, 0, 0) => {
                 let s = matches.value_of(OPT_LINES).unwrap();
-                let n = parse_size(s)
-                    .map_err(|e| USimpleError::new(1, format!("invalid number of lines: {}", e)))?;
+                let n = parse_size(s).map_err(StrategyError::Lines)?;
                 Ok(Self::Lines(n))
             }
             (0, 1, 0, 0) => {
                 let s = matches.value_of(OPT_BYTES).unwrap();
-                let n = parse_size(s)
-                    .map_err(|e| USimpleError::new(1, format!("invalid number of bytes: {}", e)))?;
+                let n = parse_size(s).map_err(StrategyError::Bytes)?;
                 Ok(Self::Bytes(n))
             }
             (0, 0, 1, 0) => {
                 let s = matches.value_of(OPT_LINE_BYTES).unwrap();
-                let n = parse_size(s)
-                    .map_err(|e| USimpleError::new(1, format!("invalid number of bytes: {}", e)))?;
+                let n = parse_size(s).map_err(StrategyError::Bytes)?;
                 Ok(Self::LineBytes(n))
             }
             (0, 0, 0, 1) => {
                 let s = matches.value_of(OPT_NUMBER).unwrap();
-                let n = s.parse::<usize>().map_err(|e| {
-                    USimpleError::new(1, format!("invalid number of chunks: {}", e))
-                })?;
+                let n = s.parse::<usize>().map_err(StrategyError::NumberOfChunks)?;
                 Ok(Self::Number(n))
             }
-            _ => Err(UUsageError::new(1, "cannot split in more than one way")),
+            _ => Err(StrategyError::MultipleWays),
         }
     }
 }
@@ -230,19 +256,53 @@ struct Settings {
     verbose: bool,
 }
 
+/// An error when parsing settings from command-line arguments.
+enum SettingsError {
+    /// Invalid chunking strategy.
+    Strategy(StrategyError),
+
+    /// Invalid suffix length parameter.
+    SuffixLength(String),
+
+    /// The `--filter` option is not supported on Windows.
+    #[cfg(windows)]
+    NotSupported,
+}
+
+impl SettingsError {
+    /// Whether the error demands a usage message.
+    fn requires_usage(&self) -> bool {
+        matches!(self, Self::Strategy(StrategyError::MultipleWays))
+    }
+}
+
+impl fmt::Display for SettingsError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Strategy(e) => e.fmt(f),
+            Self::SuffixLength(s) => write!(f, "invalid suffix length: {}", s.quote()),
+            #[cfg(windows)]
+            Self::NotSupported => write!(
+                f,
+                "{} is currently not supported in this platform",
+                OPT_FILTER
+            ),
+        }
+    }
+}
+
 impl Settings {
     /// Parse a strategy from the command-line arguments.
-    fn from(matches: &ArgMatches) -> UResult<Self> {
+    fn from(matches: &ArgMatches) -> Result<Self, SettingsError> {
+        let suffix_length_str = matches.value_of(OPT_SUFFIX_LENGTH).unwrap();
         let result = Self {
-            suffix_length: matches
-                .value_of(OPT_SUFFIX_LENGTH)
-                .unwrap()
+            suffix_length: suffix_length_str
                 .parse()
-                .unwrap_or_else(|_| panic!("Invalid number for {}", OPT_SUFFIX_LENGTH)),
+                .map_err(|_| SettingsError::SuffixLength(suffix_length_str.to_string()))?,
             numeric_suffix: matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0,
             additional_suffix: matches.value_of(OPT_ADDITIONAL_SUFFIX).unwrap().to_owned(),
             verbose: matches.occurrences_of("verbose") > 0,
-            strategy: Strategy::from(matches)?,
+            strategy: Strategy::from(matches).map_err(SettingsError::Strategy)?,
             input: matches.value_of(ARG_INPUT).unwrap().to_owned(),
             prefix: matches.value_of(ARG_PREFIX).unwrap().to_owned(),
             filter: matches.value_of(OPT_FILTER).map(|s| s.to_owned()),
@@ -250,10 +310,7 @@ impl Settings {
         #[cfg(windows)]
         if result.filter.is_some() {
             // see https://github.com/rust-lang/rust/issues/29494
-            return Err(USimpleError::new(
-                -1,
-                format!("{} is currently not supported in this platform", OPT_FILTER),
-            ));
+            return Err(SettingsError::NotSupported);
         }
 
         Ok(result)
