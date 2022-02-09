@@ -1327,17 +1327,14 @@ fn test_ls_order_time() {
     // So the order should be 2 3 4 1
     for arg in &["-u", "--time=atime", "--time=access", "--time=use"] {
         let result = scene.ucmd().arg("-t").arg(arg).succeeds();
-        let file3_access = at.open("test-3").metadata().unwrap().accessed().unwrap();
-        let file4_access = at.open("test-4").metadata().unwrap().accessed().unwrap();
+        at.open("test-3").metadata().unwrap().accessed().unwrap();
+        at.open("test-4").metadata().unwrap().accessed().unwrap();
 
         // It seems to be dependent on the platform whether the access time is actually set
-        if file3_access > file4_access {
-            result.stdout_only("test-3\ntest-4\ntest-2\ntest-1\n");
-        } else {
-            // Access time does not seem to be set on Windows and some other
-            // systems so the order is 4 3 2 1
-            result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
-        }
+        #[cfg(unix)]
+        result.stdout_only("test-3\ntest-4\ntest-2\ntest-1\n");
+        #[cfg(windows)]
+        result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
     }
 
     // test-2 had the last ctime change when the permissions were set

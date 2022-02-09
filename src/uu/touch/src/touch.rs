@@ -58,7 +58,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
-    let files = matches.values_of_os(ARG_FILES).unwrap();
+    let files = matches.values_of_os(ARG_FILES).ok_or_else(|| {
+        USimpleError::new(
+            1,
+            r##"missing file operand
+Try 'touch --help' for more information."##,
+        )
+    })?;
 
     let (mut atime, mut mtime) =
         if let Some(reference) = matches.value_of_os(options::sources::REFERENCE) {

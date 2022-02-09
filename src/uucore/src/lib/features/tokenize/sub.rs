@@ -60,6 +60,7 @@ pub struct Sub {
     field_char: char,
     field_type: FieldType,
     orig: String,
+    prefix_char: char,
 }
 impl Sub {
     pub fn new(
@@ -67,6 +68,7 @@ impl Sub {
         second_field: CanAsterisk<Option<u32>>,
         field_char: char,
         orig: String,
+        prefix_char: char,
     ) -> Self {
         // for more dry printing, field characters are grouped
         // in initialization of token.
@@ -90,6 +92,7 @@ impl Sub {
             field_char,
             field_type,
             orig,
+            prefix_char,
         }
     }
 }
@@ -126,6 +129,11 @@ impl SubParser {
     fn build_token(parser: Self) -> Box<dyn token::Token> {
         // not a self method so as to allow move of sub-parser vals.
         // return new Sub struct as token
+        let prefix_char = match &parser.min_width_tmp {
+            Some(width) if width.starts_with('0') => '0',
+            _ => ' ',
+        };
+
         let t: Box<dyn token::Token> = Box::new(Sub::new(
             if parser.min_width_is_asterisk {
                 CanAsterisk::Asterisk
@@ -139,6 +147,7 @@ impl SubParser {
             },
             parser.field_char.unwrap(),
             parser.text_so_far,
+            prefix_char,
         ));
         t
     }
@@ -394,7 +403,7 @@ impl token::Token for Sub {
                                 final_str.push_str(&pre_min_width);
                             }
                             for _ in 0..diff {
-                                final_str.push(' ');
+                                final_str.push(self.prefix_char);
                             }
                             if pad_before {
                                 final_str.push_str(&pre_min_width);

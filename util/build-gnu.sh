@@ -15,7 +15,7 @@ if test ! -d ../gnulib; then
 fi
 
 
-pushd $(pwd)
+pushd "$PWD"
 make PROFILE=release
 BUILDDIR="$PWD/target/release/"
 cp "${BUILDDIR}/install" "${BUILDDIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
@@ -49,7 +49,7 @@ make -j "$(nproc)"
 # Used to be 36. Reduced to 20 to decrease the log size
 for i in {00..20}
 do
-    make tests/factor/t${i}.sh
+    make "tests/factor/t${i}.sh"
 done
 
 # strip the long stuff
