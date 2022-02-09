@@ -201,7 +201,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if state.cflag {
         if state.selinux_supported {
             // print SElinux context and exit
-            #[cfg(all(target_os = "linux", feature = "selinux"))]
+            #[cfg(all(any(target_os = "linux", target_os = "android"), feature = "selinux"))]
             if let Ok(context) = selinux::SecurityContext::current(false) {
                 let bytes = context.as_bytes();
                 print!("{}{}", String::from_utf8_lossy(bytes), line_ending);
@@ -520,7 +520,7 @@ fn pline(possible_uid: Option<uid_t>) {
     );
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn pline(possible_uid: Option<uid_t>) {
     let uid = possible_uid.unwrap_or_else(getuid);
     let pw = Passwd::locate(uid).unwrap();
@@ -537,10 +537,10 @@ fn pline(possible_uid: Option<uid_t>) {
     );
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn auditid() {}
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn auditid() {
     #[allow(deprecated)]
     let mut auditinfo: audit::c_auditinfo_addr_t = unsafe { std::mem::uninitialized() };
@@ -620,7 +620,7 @@ fn id_print(state: &mut State, groups: &[u32]) {
             .join(",")
     );
 
-    #[cfg(all(target_os = "linux", feature = "selinux"))]
+    #[cfg(all(any(target_os = "linux", target_os = "android"), feature = "selinux"))]
     if state.selinux_supported
         && !state.user_specified
         && std::env::var_os("POSIXLY_CORRECT").is_none()
@@ -633,7 +633,7 @@ fn id_print(state: &mut State, groups: &[u32]) {
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 mod audit {
     use super::libc::{c_int, c_uint, dev_t, pid_t, uid_t};
 

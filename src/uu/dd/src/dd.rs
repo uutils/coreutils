@@ -26,7 +26,7 @@ use std::cmp;
 use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, Write};
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 use std::sync::mpsc;
@@ -88,7 +88,7 @@ impl Input<io::Stdin> {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
     let mut flag = 0;
 
@@ -140,7 +140,7 @@ impl Input<File> {
                 let mut opts = OpenOptions::new();
                 opts.read(true);
 
-                #[cfg(target_os = "linux")]
+                #[cfg(any(target_os = "linux", target_os = "android"))]
                 if let Some(libc_flags) = make_linux_iflags(&iflags) {
                     opts.custom_flags(libc_flags);
                 }
@@ -455,7 +455,7 @@ where
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
     let mut flag = 0;
 
@@ -504,7 +504,7 @@ impl OutputTrait for Output<File> {
                 .create_new(cflags.excl)
                 .append(oflags.append);
 
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "android"))]
             if let Some(libc_flags) = make_linux_oflags(oflags) {
                 opts.custom_flags(libc_flags);
             }

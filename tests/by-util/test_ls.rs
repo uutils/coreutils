@@ -314,7 +314,7 @@ fn test_ls_devices() {
             .stdout_matches(&Regex::new("[^ ] 3, 2 [^ ]").unwrap());
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         scene
             .ucmd()
@@ -327,11 +327,15 @@ fn test_ls_devices() {
     // Tests display alignment against a file (stdout is a link to a tty)
     #[cfg(unix)]
     {
+        #[cfg(not(target_os = "android"))]
+        let stdout = "/dev/stdout";
+        #[cfg(target_os = "android")]
+        let stdout = "/proc/self/fd/1";
         let res = scene
             .ucmd()
             .arg("-alL")
             .arg("/dev/null")
-            .arg("/dev/stdout")
+            .arg(stdout)
             .succeeds();
 
         let null_len = String::from_utf8(res.stdout().to_owned())
@@ -350,7 +354,7 @@ fn test_ls_devices() {
             .lines()
             .nth(1)
             .unwrap()
-            .strip_suffix("/dev/stdout")
+            .strip_suffix(stdout)
             .unwrap()
             .len();
 
@@ -1546,9 +1550,9 @@ fn test_ls_order_time() {
         at.open("test-4").metadata().unwrap().accessed().unwrap();
 
         // It seems to be dependent on the platform whether the access time is actually set
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "android")))]
         result.stdout_only("test-3\ntest-4\ntest-2\ntest-1\n");
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "android"))]
         result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
     }
 

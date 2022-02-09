@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) libselinux
+# spell-checker:ignore (libs) libselinux gethostid
 
 [package]
 name = "coreutils"
@@ -120,6 +120,7 @@ feat_Tier1 = [
 # "feat_os_macos" == set of utilities which can be built/run on the MacOS platform
 feat_os_macos = [
     "feat_os_unix", ## == a modern/usual *nix platform
+    "feat_require_hostid",
 ]
 # "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms
 feat_os_unix = [
@@ -140,9 +141,16 @@ feat_os_unix_gnueabihf = [
     #
     "feat_require_unix",
     "feat_require_unix_utmpx",
+    "feat_require_hostid",
 ]
 # "feat_os_unix_musl" == set of utilities which can be built/run on targets binding to the "musl" library (ref: <https://musl.libc.org/about.html>)
 feat_os_unix_musl = [
+    "feat_Tier1",
+    #
+    "feat_require_unix",
+    "feat_require_hostid",
+]
+feat_os_unix_android = [
     "feat_Tier1",
     #
     "feat_require_unix",
@@ -172,7 +180,6 @@ feat_require_unix = [
     "chown",
     "chroot",
     "groups",
-    "hostid",
     "id",
     "install",
     "kill",
@@ -194,6 +201,10 @@ feat_require_unix_utmpx = [
     "uptime",
     "users",
     "who",
+]
+# "feat_require_hostid" == set of utilities requiring gethostid in libc (only some unixes provide)
+feat_require_hostid = [
+    "hostid",
 ]
 # "feat_require_selinux" == set of utilities depending on SELinux.
 feat_require_selinux = [
@@ -386,7 +397,7 @@ walkdir = "2.2"
 atty = "0.2"
 hex-literal = "0.3.1"
 
-[target.'cfg(target_os = "linux")'.dev-dependencies]
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dev-dependencies]
 rlimit = "0.8.3"
 
 [target.'cfg(unix)'.dev-dependencies]

@@ -8,7 +8,7 @@ fn test_invalid_option() {
     new_ucmd!().arg("-w").arg("/").fails();
 }
 
-static DIR: &str = "/tmp";
+static DIR: &str = "/dev";
 
 // we should always get both arguments, regardless of whether --reference was used
 #[test]
@@ -49,11 +49,13 @@ fn test_invalid_group() {
 #[test]
 fn test_1() {
     if get_effective_gid() != 0 {
-        new_ucmd!()
-            .arg("bin")
-            .arg(DIR)
-            .fails()
-            .stderr_is("chgrp: changing group of '/tmp': Operation not permitted (os error 1)");
+        new_ucmd!().arg("bin").arg(DIR).fails().stderr_contains(
+            // linux fails with "Operation not permitted (os error 1)"
+            // because of insufficient permissions,
+            // android fails with "Permission denied (os error 13)"
+            // because it can't resolve /proc (even though it can resolve /proc/self/)
+            "chgrp: changing group of '/dev': ",
+        );
     }
 }
 
@@ -76,7 +78,7 @@ fn test_preserve_root() {
     // It's weird that on OS X, `realpath /etc/..` returns '/private'
     for d in [
         "/",
-        "/////tmp///../../../../",
+        "/////dev///../../../../",
         "../../../../../../../../../../../../../../",
         "./../../../../../../../../../../../../../../",
     ] {
@@ -94,7 +96,7 @@ fn test_preserve_root_symlink() {
     let file = "test_chgrp_symlink2root";
     for d in [
         "/",
-        "////tmp//../../../../",
+        "////dev//../../../../",
         "..//../../..//../..//../../../../../../../../",
         ".//../../../../../../..//../../../../../../../",
     ] {
@@ -108,7 +110,7 @@ fn test_preserve_root_symlink() {
     }
 
     let (at, mut ucmd) = at_and_ucmd!();
-    at.symlink_file("///usr", file);
+    at.symlink_file("///dev", file);
     ucmd.arg("--preserve-root")
         .arg("-HR")
         .arg("bin").arg(format!(".//{}/..//..//../../", file))
@@ -116,15 +118,12 @@ fn test_preserve_root_symlink() {
         .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe");
 
     let (at, mut ucmd) = at_and_ucmd!();
-    at.symlink_file("/", "/tmp/__root__");
+    at.symlink_file("/", "__root__");
     ucmd.arg("--preserve-root")
         .arg("-R")
-        .arg("bin").arg("/tmp/__root__/.")
+        .arg("bin").arg("__root__/.")
         .fails()
         .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe");
-
-    use std::fs;
-    fs::remove_file("/tmp/__root__").unwrap();
 }
 
 #[test]
@@ -156,7 +155,7 @@ fn test_reference() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
 fn test_reference_multi_no_equal() {
     new_ucmd!()
         .arg("-v")
@@ -170,7 +169,7 @@ fn test_reference_multi_no_equal() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
 fn test_reference_last() {
     new_ucmd!()
         .arg("-v")
@@ -212,7 +211,7 @@ fn test_big_p() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_big_h() {
     if get_effective_gid() != 0 {
         assert!(

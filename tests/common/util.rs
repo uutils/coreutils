@@ -892,7 +892,7 @@ pub struct UCommand {
     stdout: Option<Stdio>,
     stderr: Option<Stdio>,
     bytes_into_stdin: Option<Vec<u8>>,
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     limits: Vec<(rlimit::Resource, u64, u64)>,
 }
 
@@ -938,7 +938,7 @@ impl UCommand {
             stdin: None,
             stdout: None,
             stderr: None,
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "android"))]
             limits: vec![],
         };
 
@@ -1042,7 +1042,7 @@ impl UCommand {
         self
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn with_limit(
         &mut self,
         resource: rlimit::Resource,

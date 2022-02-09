@@ -235,7 +235,7 @@ impl std::str::FromStr for Flag {
             "direct" =>
             // Ok(Self::Direct),
             {
-                if cfg!(target_os = "linux") {
+                if cfg!(any(target_os = "linux", target_os = "android")) {
                     Ok(Self::Direct)
                 } else {
                     Err(ParseError::Unimplemented(s.to_string()))
@@ -244,7 +244,7 @@ impl std::str::FromStr for Flag {
             "directory" =>
             // Ok(Self::Directory),
             {
-                if cfg!(target_os = "linux") {
+                if cfg!(any(target_os = "linux", target_os = "android")) {
                     Ok(Self::Directory)
                 } else {
                     Err(ParseError::Unimplemented(s.to_string()))
@@ -253,7 +253,7 @@ impl std::str::FromStr for Flag {
             "dsync" =>
             // Ok(Self::Dsync),
             {
-                if cfg!(target_os = "linux") {
+                if cfg!(any(target_os = "linux", target_os = "android")) {
                     Ok(Self::Dsync)
                 } else {
                     Err(ParseError::Unimplemented(s.to_string()))
@@ -262,7 +262,7 @@ impl std::str::FromStr for Flag {
             "sync" =>
             // Ok(Self::Sync),
             {
-                if cfg!(target_os = "linux") {
+                if cfg!(any(target_os = "linux", target_os = "android")) {
                     Ok(Self::Sync)
                 } else {
                     Err(ParseError::Unimplemented(s.to_string()))
@@ -276,7 +276,7 @@ impl std::str::FromStr for Flag {
             "nonblock" =>
             // Ok(Self::NonBlock),
             {
-                if cfg!(target_os = "linux") {
+                if cfg!(any(target_os = "linux", target_os = "android")) {
                     Ok(Self::NonBlock)
                 } else {
                     Err(ParseError::Unimplemented(s.to_string()))
@@ -285,7 +285,7 @@ impl std::str::FromStr for Flag {
             "noatime" =>
             // Ok(Self::NoATime),
             {
-                if cfg!(target_os = "linux") {
+                if cfg!(any(target_os = "linux", target_os = "android")) {
                     Ok(Self::NoATime)
                 } else {
                     Err(ParseError::Unimplemented(s.to_string()))
@@ -294,7 +294,7 @@ impl std::str::FromStr for Flag {
             "noctty" =>
             // Ok(Self::NoCtty),
             {
-                if cfg!(target_os = "linux") {
+                if cfg!(any(target_os = "linux", target_os = "android")) {
                     Ok(Self::NoCtty)
                 } else {
                     Err(ParseError::Unimplemented(s.to_string()))
@@ -303,7 +303,7 @@ impl std::str::FromStr for Flag {
             "nofollow" =>
             // Ok(Self::NoFollow),
             {
-                if cfg!(target_os = "linux") {
+                if cfg!(any(target_os = "linux", target_os = "android")) {
                     Ok(Self::NoFollow)
                 } else {
                     Err(ParseError::Unimplemented(s.to_string()))
