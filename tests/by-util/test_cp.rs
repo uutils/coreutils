@@ -1462,3 +1462,12 @@ fn test_cp_archive_on_nonexistent_file() {
             "cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)",
         );
 }
+#[test]
+fn test_cp_dir_vs_file() {
+    new_ucmd!()
+        .arg("-R")
+        .arg(TEST_COPY_FROM_FOLDER)
+        .arg(TEST_EXISTING_FILE)
+        .fails()
+        .stderr_only("cp: cannot overwrite non-directory with directory");
+}

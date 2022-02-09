@@ -19,12 +19,34 @@ pub struct ProgUpdate {
     pub duration: time::Duration,
 }
 
+impl ProgUpdate {
+    pub(crate) fn new(
+        read_stat: ReadStat,
+        write_stat: WriteStat,
+        duration: time::Duration,
+    ) -> Self {
+        Self {
+            read_stat,
+            write_stat,
+            duration,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Default)]
 pub struct ReadStat {
     pub reads_complete: u64,
     pub reads_partial: u64,
     pub records_truncated: u32,
 }
+
+impl ReadStat {
+    /// Whether this counter has zero complete reads and zero partial reads.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.reads_complete == 0 && self.reads_partial == 0
+    }
+}
+
 impl std::ops::AddAssign for ReadStat {
     fn add_assign(&mut self, other: Self) {
         *self = Self {
@@ -35,7 +57,7 @@ impl std::ops::AddAssign for ReadStat {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct WriteStat {
     pub writes_complete: u64,
     pub writes_partial: u64,

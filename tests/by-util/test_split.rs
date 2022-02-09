@@ -440,3 +440,12 @@ fn test_number() {
     assert_eq!(file_read("xad"), "pqrst");
     assert_eq!(file_read("xae"), "uvwxyz");
 }
+
+#[test]
+fn test_invalid_suffix_length() {
+    new_ucmd!()
+        .args(&["-a", "xyz"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid suffix length: 'xyz'");
+}

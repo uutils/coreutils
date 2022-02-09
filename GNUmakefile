@@ -62,6 +62,7 @@ PROGS       := \
 	csplit \
 	cut \
 	date \
+	dd \
 	df \
 	dircolors \
 	dirname \
