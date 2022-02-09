@@ -368,11 +368,10 @@ pub fn canonicalize<P: AsRef<Path>>(
 
         match resolve(&result) {
             Err((is_absolute, path, err)) => {
+                // If the resolved symlink is an absolute path and non-existent,
+                // `realpath` throws no such file error.
                 if miss_mode == MissingHandling::Existing
-                    || 
-                    // If the resolved path is absolute path and non-existent,
-                    // `realpath` throws no such file error.
-                    (err.kind() == ErrorKind::NotFound
+                    || (err.kind() == ErrorKind::NotFound
                         && is_absolute
                         && miss_mode == MissingHandling::Normal)
                 {
