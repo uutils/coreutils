@@ -583,8 +583,19 @@ impl Config {
                 "slash" => IndicatorStyle::Slash,
                 &_ => IndicatorStyle::None,
             }
-        } else if options.is_present(options::indicator_style::CLASSIFY) {
-            IndicatorStyle::Classify
+        } else if let Some(field) = options.value_of(options::indicator_style::CLASSIFY) {
+            match field {
+                "never" | "no" | "none" => IndicatorStyle::None,
+                "always" | "yes" | "force" => IndicatorStyle::Classify,
+                "auto" | "tty" | "if-tty" => {
+                    if atty::is(atty::Stream::Stdout) {
+                        IndicatorStyle::Classify
+                    } else {
+                        IndicatorStyle::None
+                    }
+                }
+                &_ => IndicatorStyle::None,
+            }
         } else if options.is_present(options::indicator_style::SLASH) {
             IndicatorStyle::Slash
         } else if options.is_present(options::indicator_style::FILE_TYPE) {
@@ -1202,6 +1213,11 @@ only ignore '.' and '..'.",
                 ]),
         )
         .arg(
+            // The --classify flag can take an optional when argument to
+            // control its behavior from version 9 of GNU coreutils.
+            // There is currently an inconsistency where GNU coreutils allows only
+            // the long form of the flag to take the argument while we allow it
+            // for both the long and short form of the flag.
             Arg::new(options::indicator_style::CLASSIFY)
                 .short('F')
                 .long(options::indicator_style::CLASSIFY)
@@ -1209,8 +1225,22 @@ only ignore '.' and '..'.",
                     "Append a character to each file name indicating the file type. Also, for \
                 regular files that are executable, append '*'. The file type indicators are \
                 '/' for directories, '@' for symbolic links, '|' for FIFOs, '=' for sockets, \
-                '>' for doors, and nothing for regular files.",
+                '>' for doors, and nothing for regular files. when may be omitted, or one of:\n\
+                    \tnone - Do not classify. This is the default.\n\
+                    \tauto - Only classify if standard output is a terminal.\n\
+                    \talways - Always classify.\n\
+                Specifying --classify and no when is equivalent to --classify=always. This will not follow\
+                symbolic links listed on the command line unless the --dereference-command-line (-H),\
+                --dereference (-L), or --dereference-command-line-symlink-to-dir options are specified.",
                 )
+                .takes_value(true)
+                .value_name("when")
+                .possible_values(&[
+                    "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
+                ])
+                .default_missing_value("always")
+                .require_equals(true)
+                .min_values(0)
                 .overrides_with_all(&[
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
