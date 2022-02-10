@@ -1060,8 +1060,11 @@ Printing performance stats is also triggered by the INFO signal (where supported
         .arg(
             Arg::new(options::CONV)
                 .long(options::CONV)
-                .overrides_with(options::CONV)
                 .takes_value(true)
+                .multiple_occurrences(true)
+                .use_delimiter(true)
+                .require_delimiter(true)
+                .multiple_values(true)
                 .require_equals(true)
                 .value_name("CONV")
                 .help("(alternatively conv=CONV[,CONV]) specifies a comma-separated list of conversion options or (for legacy reasons) file flags. Conversion options and file flags may be intermixed.
@@ -1098,8 +1101,11 @@ Conversion Flags:
         .arg(
             Arg::new(options::IFLAG)
                 .long(options::IFLAG)
-                .overrides_with(options::IFLAG)
                 .takes_value(true)
+                .multiple_occurrences(true)
+                .use_delimiter(true)
+                .require_delimiter(true)
+                .multiple_values(true)
                 .require_equals(true)
                 .value_name("FLAG")
                 .help("(alternatively iflag=FLAG[,FLAG]) a comma separated list of input flags which specify how the input source is treated. FLAG may be any of the input-flags or general-flags specified below.
@@ -1125,8 +1131,11 @@ General-Flags
         .arg(
             Arg::new(options::OFLAG)
                 .long(options::OFLAG)
-                .overrides_with(options::OFLAG)
                 .takes_value(true)
+                .multiple_occurrences(true)
+                .use_delimiter(true)
+                .require_delimiter(true)
+                .multiple_values(true)
                 .require_equals(true)
                 .value_name("FLAG")
                 .help("(alternatively oflag=FLAG[,FLAG]) a comma separated list of output flags which specify how the output source is treated. FLAG may be any of the output-flags or general-flags specified below.

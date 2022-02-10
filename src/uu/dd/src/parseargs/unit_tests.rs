@@ -300,7 +300,39 @@ fn test_status_level_noxfer() {
 }
 
 #[test]
-fn test_override_multiple_levels() {
+fn test_multiple_flags_options() {
+    let args = vec![
+        String::from("dd"),
+        String::from("--iflag=fullblock,directory"),
+        String::from("--iflag=skip_bytes"),
+        String::from("--oflag=direct"),
+        String::from("--oflag=dsync"),
+        String::from("--conv=ascii,ucase"),
+        String::from("--conv=unblock"),
+    ];
+    let matches = uu_app().try_get_matches_from(args).unwrap();
+
+    // iflag
+    let iflags = parse_flag_list::<Flag>(options::IFLAG, &matches).unwrap();
+    assert_eq!(
+        vec![Flag::FullBlock, Flag::Directory, Flag::SkipBytes],
+        iflags
+    );
+
+    // oflag
+    let oflags = parse_flag_list::<Flag>(options::OFLAG, &matches).unwrap();
+    assert_eq!(vec![Flag::Direct, Flag::Dsync], oflags);
+
+    // conv
+    let conv = parse_flag_list::<ConvFlag>(options::CONV, &matches).unwrap();
+    assert_eq!(
+        vec![ConvFlag::FmtEtoA, ConvFlag::UCase, ConvFlag::Unblock],
+        conv
+    );
+}
+
+#[test]
+fn test_override_multiple_options() {
     let args = vec![
         String::from("dd"),
         String::from("--if=foo.file"),
@@ -321,12 +353,6 @@ fn test_override_multiple_levels() {
         String::from("--status=noxfer"),
         String::from("--count=512"),
         String::from("--count=1024"),
-        String::from("--conv=ascii,ucase"),
-        String::from("--conv=ebcdic,lcase,unblock"),
-        String::from("--iflag=direct,nocache"),
-        String::from("--iflag=count_bytes,skip_bytes"),
-        String::from("--oflag=append,direct"),
-        String::from("--oflag=append,seek_bytes"),
     ];
 
     let matches = uu_app().try_get_matches_from(args).unwrap();
@@ -368,14 +394,6 @@ fn test_override_multiple_levels() {
             .unwrap()
     );
 
-    // conv
-    let exp = vec![ConvFlag::FmtEtoA, ConvFlag::LCase, ConvFlag::Unblock];
-    let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
-    assert_eq!(exp.len(), act.len());
-    for cf in &exp {
-        assert!(exp.contains(cf));
-    }
-
     // count
     assert_eq!(
         CountType::Bytes(1024),
@@ -388,26 +406,6 @@ fn test_override_multiple_levels() {
         )
         .unwrap()
         .unwrap()
-    );
-
-    // iflag
-    assert_eq!(
-        IFlags {
-            count_bytes: true,
-            skip_bytes: true,
-            ..IFlags::default()
-        },
-        parse_iflags(&matches).unwrap()
-    );
-
-    // oflag
-    assert_eq!(
-        OFlags {
-            seek_bytes: true,
-            append: true,
-            ..OFlags::default()
-        },
-        parse_oflags(&matches).unwrap()
     );
 }
 
