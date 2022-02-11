@@ -1755,6 +1755,9 @@ fn test_ls_indicator_style() {
         "--indicator-style=slash",
         "--ind=slash",
         "--classify",
+        "--classify=always",
+        "--classify=yes",
+        "--classify=force",
         "--class",
         "--file-type",
         "--file",
@@ -1762,6 +1765,24 @@ fn test_ls_indicator_style() {
     ] {
         // Verify that classify and file-type both contain indicators for symlinks.
         scene.ucmd().arg(opt).succeeds().stdout_contains(&"/");
+    }
+
+    // Classify, Indicator options should not contain any indicators when value is none.
+    for opt in [
+        "--indicator-style=none",
+        "--ind=none",
+        "--classify=none",
+        "--classify=never",
+        "--classify=no",
+    ] {
+        // Verify that there are no indicators for any of the file types.
+        scene
+            .ucmd()
+            .arg(opt)
+            .succeeds()
+            .stdout_does_not_contain(&"/")
+            .stdout_does_not_contain(&"@")
+            .stdout_does_not_contain(&"|");
     }
 
     // Classify and File-Type all contain indicators for pipes and links.

@@ -2444,6 +2444,7 @@ name = "uu_join"
 version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
+ "memchr 2.4.1",
  "uucore",
 ]
 

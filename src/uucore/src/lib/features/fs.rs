@@ -299,9 +299,8 @@ pub fn canonicalize<P: AsRef<Path>>(
     let original = if original.is_absolute() {
         original.to_path_buf()
     } else {
-        dunce::canonicalize(env::current_dir().unwrap())
-            .unwrap()
-            .join(original)
+        let current_dir = env::current_dir()?;
+        dunce::canonicalize(current_dir)?.join(original)
     };
 
     let mut result = PathBuf::new();
