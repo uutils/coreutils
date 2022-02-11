@@ -6,6 +6,7 @@
 //! that prints tokens.
 
 use crate::display::Quotable;
+use crate::error::UResult;
 use crate::features::tokenize::sub::Sub;
 use crate::features::tokenize::token::{Token, Tokenizer};
 use crate::features::tokenize::unescaped_text::UnescapedText;
@@ -26,17 +27,17 @@ fn warn_excess_args(first_arg: &str) {
 }
 
 impl Memo {
-    pub fn new(pf_string: &str, pf_args_it: &mut Peekable<Iter<String>>) -> Self {
+    pub fn new(pf_string: &str, pf_args_it: &mut Peekable<Iter<String>>) -> UResult<Self> {
         let mut pm = Self { tokens: Vec::new() };
         let mut tmp_token: Option<Box<dyn Token>>;
         let mut it = put_back_n(pf_string.chars());
         let mut has_sub = false;
         loop {
-            tmp_token = UnescapedText::from_it(&mut it, pf_args_it);
+            tmp_token = UnescapedText::from_it(&mut it, pf_args_it)?;
             if let Some(x) = tmp_token {
                 pm.tokens.push(x);
             }
-            tmp_token = Sub::from_it(&mut it, pf_args_it);
+            tmp_token = Sub::from_it(&mut it, pf_args_it)?;
             if let Some(x) = tmp_token {
                 if !has_sub {
                     has_sub = true;
@@ -64,19 +65,19 @@ impl Memo {
                 }
             }
         }
-        pm
+        Ok(pm)
     }
     pub fn apply(&self, pf_args_it: &mut Peekable<Iter<String>>) {
         for tkn in &self.tokens {
             tkn.print(pf_args_it);
         }
     }
-    pub fn run_all(pf_string: &str, pf_args: &[String]) {
+    pub fn run_all(pf_string: &str, pf_args: &[String]) -> UResult<()> {
         let mut arg_it = pf_args.iter().peekable();
-        let pm = Self::new(pf_string, &mut arg_it);
+        let pm = Self::new(pf_string, &mut arg_it)?;
         loop {
             if arg_it.peek().is_none() {
-                break;
+                return Ok(());
             }
             pm.apply(&mut arg_it);
         }

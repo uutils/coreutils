@@ -5,7 +5,7 @@
 //! it is created by Sub's implementation of the Tokenizer trait
 //! Subs which have numeric field chars make use of the num_format
 //! submodule
-use crate::show_error;
+use crate::error::{UResult, UUsageError};
 use itertools::{put_back_n, PutBackN};
 use std::iter::Peekable;
 use std::process::exit;
@@ -19,11 +19,6 @@ use super::token;
 use super::unescaped_text::UnescapedText;
 
 const EXIT_ERR: i32 = 1;
-
-fn err_conv(sofar: &str) {
-    show_error!("%{}: invalid conversion specification", sofar);
-    exit(EXIT_ERR);
-}
 
 fn convert_asterisk_arg_int(asterisk_arg: &str) -> isize {
     // this is a costly way to parse the
@@ -116,14 +111,14 @@ impl SubParser {
     fn from_it(
         it: &mut PutBackN<Chars>,
         args: &mut Peekable<Iter<String>>,
-    ) -> Option<Box<dyn token::Token>> {
+    ) -> UResult<Option<Box<dyn token::Token>>> {
         let mut parser = Self::new();
-        if parser.sub_vals_retrieved(it) {
+        if parser.sub_vals_retrieved(it)? {
             let t: Box<dyn token::Token> = Self::build_token(parser);
             t.print(args);
-            Some(t)
+            Ok(Some(t))
         } else {
-            None
+            Ok(None)
         }
     }
     fn build_token(parser: Self) -> Box<dyn token::Token> {
@@ -151,9 +146,9 @@ impl SubParser {
         ));
         t
     }
-    fn sub_vals_retrieved(&mut self, it: &mut PutBackN<Chars>) -> bool {
-        if !Self::successfully_eat_prefix(it, &mut self.text_so_far) {
-            return false;
+    fn sub_vals_retrieved(&mut self, it: &mut PutBackN<Chars>) -> UResult<bool> {
+        if !Self::successfully_eat_prefix(it, &mut self.text_so_far)? {
+            return Ok(false);
         }
         // this fn in particular is much longer than it needs to be
         // .could get a lot
@@ -177,7 +172,10 @@ impl SubParser {
                 '-' | '*' | '0'..='9' => {
                     if !self.past_decimal {
                         if self.min_width_is_asterisk || self.specifiers_found {
-                            err_conv(&self.text_so_far);
+                            return Err(UUsageError::new(
+                                1,
+                                format!("%{}: invalid conversion specification", &self.text_so_far),
+                            ));
                         }
                         if self.min_width_tmp.is_none() {
                             self.min_width_tmp = Some(String::new());
@@ -185,7 +183,13 @@ impl SubParser {
                         match self.min_width_tmp.as_mut() {
                             Some(x) => {
                                 if (ch == '-' || ch == '*') && !x.is_empty() {
-                                    err_conv(&self.text_so_far);
+                                    return Err(UUsageError::new(
+                                        1,
+                                        format!(
+                                            "%{}: invalid conversion specification",
+                                            &self.text_so_far
+                                        ),
+                                    ));
                                 }
                                 if ch == '*' {
                                     self.min_width_is_asterisk = true;
@@ -200,7 +204,10 @@ impl SubParser {
                         // second field should never have a
                         // negative value
                         if self.second_field_is_asterisk || ch == '-' || self.specifiers_found {
-                            err_conv(&self.text_so_far);
+                            return Err(UUsageError::new(
+                                1,
+                                format!("%{}: invalid conversion specification", &self.text_so_far),
+                            ));
                         }
                         if self.second_field_tmp.is_none() {
                             self.second_field_tmp = Some(String::new());
@@ -208,7 +215,13 @@ impl SubParser {
                         match self.second_field_tmp.as_mut() {
                             Some(x) => {
                                 if ch == '*' && !x.is_empty() {
-                                    err_conv(&self.text_so_far);
+                                    return Err(UUsageError::new(
+                                        1,
+                                        format!(
+                                            "%{}: invalid conversion specification",
+                                            &self.text_so_far
+                                        ),
+                                    ));
                                 }
                                 if ch == '*' {
                                     self.second_field_is_asterisk = true;
@@ -225,7 +238,10 @@ impl SubParser {
                     if !self.past_decimal {
                         self.past_decimal = true;
                     } else {
-                        err_conv(&self.text_so_far);
+                        return Err(UUsageError::new(
+                            1,
+                            format!("%{}: invalid conversion specification", &self.text_so_far),
+                        ));
                     }
                 }
                 x if legal_fields.binary_search(&x).is_ok() => {
@@ -242,18 +258,24 @@ impl SubParser {
                     }
                 }
                 _ => {
-                    err_conv(&self.text_so_far);
+                    return Err(UUsageError::new(
+                        1,
+                        format!("%{}: invalid conversion specification", &self.text_so_far),
+                    ));
                 }
             }
         }
         if self.field_char.is_none() {
-            err_conv(&self.text_so_far);
+            return Err(UUsageError::new(
+                1,
+                format!("%{}: invalid conversion specification", &self.text_so_far),
+            ));
         }
         let field_char_retrieved = self.field_char.unwrap();
         if self.past_decimal && self.second_field_tmp.is_none() {
             self.second_field_tmp = Some(String::from("0"));
         }
-        self.validate_field_params(field_char_retrieved);
+        self.validate_field_params(field_char_retrieved)?;
         // if the dot is provided without a second field
         // printf interprets it as 0.
         if let Some(x) = self.second_field_tmp.as_mut() {
@@ -262,9 +284,12 @@ impl SubParser {
             }
         }
 
-        true
+        Ok(true)
     }
-    fn successfully_eat_prefix(it: &mut PutBackN<Chars>, text_so_far: &mut String) -> bool {
+    fn successfully_eat_prefix(
+        it: &mut PutBackN<Chars>,
+        text_so_far: &mut String,
+    ) -> UResult<bool> {
         // get next two chars,
         // if they're '%%' we're not tokenizing it
         // else put chars back
@@ -274,12 +299,14 @@ impl SubParser {
             match n_ch {
                 Some(x) => {
                     it.put_back(x);
-                    true
+                    Ok(true)
                 }
                 None => {
                     text_so_far.push('%');
-                    err_conv(text_so_far);
-                    false
+                    return Err(UUsageError::new(
+                        1,
+                        format!("%{}: invalid conversion specification", &text_so_far[..]),
+                    ));
                 }
             }
         } else {
@@ -289,10 +316,10 @@ impl SubParser {
             if let Some(x) = preface {
                 it.put_back(x);
             };
-            false
+            Ok(false)
         }
     }
-    fn validate_field_params(&self, field_char: char) {
+    fn validate_field_params(&self, field_char: char) -> UResult<()> {
         // check for illegal combinations here when possible vs
         // on each application so we check less per application
         // to do: move these checks to Sub::new
@@ -304,8 +331,15 @@ impl SubParser {
                     || self.past_decimal
                     || self.second_field_tmp.is_some()))
         {
-            err_conv(&self.text_so_far);
+            // invalid string substitution
+            // to do: include information about an invalid
+            // string substitution
+            return Err(UUsageError::new(
+                1,
+                format!("%{}: invalid conversion specification", &self.text_so_far),
+            ));
         }
+        Ok(())
     }
 }
 
@@ -313,7 +347,7 @@ impl token::Tokenizer for Sub {
     fn from_it(
         it: &mut PutBackN<Chars>,
         args: &mut Peekable<Iter<String>>,
-    ) -> Option<Box<dyn token::Token>> {
+    ) -> UResult<Option<Box<dyn token::Token>>> {
         SubParser::from_it(it, args)
     }
 }

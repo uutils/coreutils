@@ -4,6 +4,8 @@ use std::iter::Peekable;
 use std::slice::Iter;
 use std::str::Chars;
 
+use crate::error::UResult;
+
 // A token object is an object that can print the expected output
 // of a contiguous segment of the format string, and
 // requires at most 1 argument
@@ -27,5 +29,5 @@ pub trait Tokenizer {
     fn from_it(
         it: &mut PutBackN<Chars>,
         args: &mut Peekable<Iter<String>>,
-    ) -> Option<Box<dyn Token>>;
+    ) -> UResult<Option<Box<dyn Token>>>;
 }
