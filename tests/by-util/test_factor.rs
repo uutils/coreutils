@@ -29,6 +29,8 @@ const NUM_TESTS: usize = 100;
 
 #[test]
 fn test_parallel() {
+    use sha1::{Sha1, Digest};
+    use hex_literal::hex;
     // factor should only flush the buffer at line breaks
     let n_integers = 100_000;
     let mut input_string = String::new();
@@ -60,13 +62,17 @@ fn test_parallel() {
         .ccmd("sort")
         .arg(tmp_dir.plus("output"))
         .succeeds();
-    let hash_check = sha1::Sha1::from(result.stdout()).hexdigest();
-    assert_eq!(hash_check, "cc743607c0ff300ff575d92f4ff0c87d5660c393");
+    let mut hasher = Sha1::new();
+    hasher.update(result.stdout());
+    let hash_check = hasher.finalize();
+    assert_eq!(hash_check[..], hex!("cc743607c0ff300ff575d92f4ff0c87d5660c393"));
 }
 
 #[test]
 fn test_first_100000_integers() {
     extern crate sha1;
+    use sha1::{Sha1, Digest};
+    use hex_literal::hex;
 
     let n_integers = 100_000;
     let mut input_string = String::new();
@@ -78,8 +84,10 @@ fn test_first_100000_integers() {
     let result = new_ucmd!().pipe_in(input_string.as_bytes()).succeeds();
 
     // `seq 0 100000 | factor | sha1sum` => "4ed2d8403934fa1c76fe4b84c5d4b8850299c359"
-    let hash_check = sha1::Sha1::from(result.stdout()).hexdigest();
-    assert_eq!(hash_check, "4ed2d8403934fa1c76fe4b84c5d4b8850299c359");
+    let mut hasher = Sha1::new();
+    hasher.update(result.stdout());
+    let hash_check = hasher.finalize();
+    assert_eq!(hash_check[..], hex!("4ed2d8403934fa1c76fe4b84c5d4b8850299c359"));
 }
 
 #[test]
