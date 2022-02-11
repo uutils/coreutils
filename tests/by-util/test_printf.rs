@@ -229,11 +229,35 @@ fn sub_num_float() {
 }
 
 #[test]
+fn sub_num_float_e_round() {
+    new_ucmd!()
+        .args(&["%e", "99999999"])
+        .succeeds()
+        .stdout_only("1.000000e+08");
+}
+
+#[test]
+fn sub_num_float_e_no_round() {
+    new_ucmd!()
+        .args(&["%e", "99999994"])
+        .succeeds()
+        .stdout_only("9.999999e+07");
+}
+
+#[test]
 fn sub_num_float_round() {
     new_ucmd!()
         .args(&["two is %f", "1.9999995"])
         .succeeds()
         .stdout_only("two is 2.000000");
+}
+
+#[test]
+fn sub_num_float_round_nines_dec() {
+    new_ucmd!()
+        .args(&["%f", "0.99999999"])
+        .succeeds()
+        .stdout_only("1.000000");
 }
 
 #[test]
