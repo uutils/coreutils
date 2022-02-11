@@ -264,6 +264,9 @@ enum SettingsError {
     /// Invalid suffix length parameter.
     SuffixLength(String),
 
+    /// Suffix contains a directory separator, which is not allowed.
+    SuffixContainsSeparator(String),
+
     /// The `--filter` option is not supported on Windows.
     #[cfg(windows)]
     NotSupported,
@@ -272,7 +275,10 @@ enum SettingsError {
 impl SettingsError {
     /// Whether the error demands a usage message.
     fn requires_usage(&self) -> bool {
-        matches!(self, Self::Strategy(StrategyError::MultipleWays))
+        matches!(
+            self,
+            Self::Strategy(StrategyError::MultipleWays) | Self::SuffixContainsSeparator(_)
+        )
     }
 }
 
@@ -281,6 +287,11 @@ impl fmt::Display for SettingsError {
         match self {
             Self::Strategy(e) => e.fmt(f),
             Self::SuffixLength(s) => write!(f, "invalid suffix length: {}", s.quote()),
+            Self::SuffixContainsSeparator(s) => write!(
+                f,
+                "invalid suffix {}, contains directory separator",
+                s.quote()
+            ),
             #[cfg(windows)]
             Self::NotSupported => write!(
                 f,
@@ -294,13 +305,17 @@ impl fmt::Display for SettingsError {
 impl Settings {
     /// Parse a strategy from the command-line arguments.
     fn from(matches: &ArgMatches) -> Result<Self, SettingsError> {
+        let additional_suffix = matches.value_of(OPT_ADDITIONAL_SUFFIX).unwrap().to_string();
+        if additional_suffix.contains('/') {
+            return Err(SettingsError::SuffixContainsSeparator(additional_suffix));
+        }
         let suffix_length_str = matches.value_of(OPT_SUFFIX_LENGTH).unwrap();
         let result = Self {
             suffix_length: suffix_length_str
                 .parse()
                 .map_err(|_| SettingsError::SuffixLength(suffix_length_str.to_string()))?,
             numeric_suffix: matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0,
-            additional_suffix: matches.value_of(OPT_ADDITIONAL_SUFFIX).unwrap().to_owned(),
+            additional_suffix,
             verbose: matches.occurrences_of("verbose") > 0,
             strategy: Strategy::from(matches).map_err(SettingsError::Strategy)?,
             input: matches.value_of(ARG_INPUT).unwrap().to_owned(),
