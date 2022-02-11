@@ -17,11 +17,10 @@ jobs:
         outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # * config
         path_GNU="gnu"
-        path_GNULIB="gnulib"
-        path_GNU_tests="gnu/tests"
+        path_GNU_tests="${path_GNU}/tests"
         path_UUTILS="uutils"
         path_reference="reference"
-        outputs path_GNU path_GNU_tests path_GNULIB path_reference path_UUTILS
+        outputs path_GNU path_GNU_tests path_reference path_UUTILS
         #
         repo_default_branch="${{ github.event.repository.default_branch }}"
         repo_GNU_ref="v9.0"
@@ -35,23 +34,17 @@ jobs:
         TEST_FILESET_SUFFIX='.txt'
         TEST_SUMMARY_FILE='gnu-result.json'
         outputs SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE
-    - name: Checkout code uutil
+    - name: Checkout code (uutil)
       uses: actions/checkout@v2
       with:
         path: '${{ steps.vars.outputs.path_UUTILS }}'
-    - name: Checkout GNU coreutils
+    - name: Checkout code (GNU coreutils)
       uses: actions/checkout@v2
       with:
         repository: 'coreutils/coreutils'
         path: '${{ steps.vars.outputs.path_GNU }}'
         ref: ${{ steps.vars.outputs.repo_GNU_ref }}
-    - name: Checkout GNU coreutils library (gnulib)
-      uses: actions/checkout@v2
-      with:
-        repository: 'coreutils/gnulib'
-        path: '${{ steps.vars.outputs.path_GNULIB }}'
-        ref: ${{ steps.vars.outputs.repo_GNULIB_ref }}
-        fetch-depth: 0 # full depth checkout (o/w gnu gets upset if gnulib is a shallow checkout)
+        submodules: recursive
     - name: Retrieve reference artifacts
       uses: dawidd6/action-download-artifact@v2
       # ref: <https://github.com/dawidd6/action-download-artifact>
@@ -85,7 +78,6 @@ jobs:
       shell: bash
       run: |
         path_GNU='${{ steps.vars.outputs.path_GNU }}'
-        path_GNULIB='${{ steps.vars.outputs.path_GNULIB }}'
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         bash "${path_UUTILS}/util/run-gnu-test.sh"
     - name: Extract/summarize testing info
