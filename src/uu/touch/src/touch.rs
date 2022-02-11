@@ -83,8 +83,18 @@ Try 'touch --help' for more information."##,
     for filename in files {
         let path = Path::new(filename);
         if !path.exists() {
-            // no-dereference included here for compatibility
-            if matches.is_present(options::NO_CREATE) || matches.is_present(options::NO_DEREF) {
+            if matches.is_present(options::NO_CREATE) {
+                continue;
+            }
+
+            if matches.is_present(options::NO_DEREF) {
+                show!(USimpleError::new(
+                    1,
+                    format!(
+                        "setting times of {}: No such file or directory",
+                        filename.quote()
+                    )
+                ));
                 continue;
             }
 
