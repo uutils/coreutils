@@ -228,6 +228,14 @@ fn test_split_additional_suffix() {
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
+#[test]
+fn test_additional_suffix_no_slash() {
+    new_ucmd!()
+        .args(&["--additional-suffix", "a/b"])
+        .fails()
+        .usage_error("invalid suffix 'a/b', contains directory separator");
+}
+
 // note: the test_filter* tests below are unix-only
 // windows support has been waived for now because of the difficulty of getting
 // the `cmd` call right
