@@ -124,17 +124,17 @@ impl Mode {
             let (n, all_but_last) =
                 parse::parse_num(v).map_err(|err| format!("invalid number of bytes: {}", err))?;
             if all_but_last {
-                Ok(Mode::AllButLastBytes(n))
+                Ok(Self::AllButLastBytes(n))
             } else {
-                Ok(Mode::FirstBytes(n))
+                Ok(Self::FirstBytes(n))
             }
         } else if let Some(v) = matches.value_of(options::LINES_NAME) {
             let (n, all_but_last) =
                 parse::parse_num(v).map_err(|err| format!("invalid number of lines: {}", err))?;
             if all_but_last {
-                Ok(Mode::AllButLastLines(n))
+                Ok(Self::AllButLastLines(n))
             } else {
-                Ok(Mode::FirstLines(n))
+                Ok(Self::FirstLines(n))
             }
         } else {
             Ok(Default::default())
