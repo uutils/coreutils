@@ -245,3 +245,57 @@ fn test_files_from_pseudo_filesystem() {
     let result = new_ucmd!().arg("-c").arg("/proc/version").succeeds();
     assert_ne!(result.stdout_str(), "0 /proc/version\n");
 }
+
+#[test]
+fn test_files0_disabled_files_argument() {
+    const MSG: &str = "file operands cannot be combined with --files0-from";
+    new_ucmd!()
+        .args(&["--files0-from=files0_list.txt"])
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .stderr_contains(MSG)
+        .stdout_is("");
+}
+
+#[test]
+fn test_files0_from() {
+    new_ucmd!()
+        .args(&["--files0-from=files0_list.txt"])
+        .run()
+        .stdout_is(
+            "  13  109  772 lorem_ipsum.txt\n  18  204 1115 moby_dick.txt\n   5   57  302 \
+             alice_in_wonderland.txt\n  36  370 2189 total\n",
+        );
+}
+
+#[test]
+fn test_files0_from_with_stdin() {
+    new_ucmd!()
+        .args(&["--files0-from=-"])
+        .pipe_in("lorem_ipsum.txt")
+        .run()
+        .stdout_is(" 13 109 772 lorem_ipsum.txt\n");
+}
+
+#[test]
+fn test_files0_from_with_stdin_in_file() {
+    new_ucmd!()
+        .args(&["--files0-from=files0_list_with_stdin.txt"])
+        .pipe_in_fixture("alice_in_wonderland.txt")
+        .run()
+        .stdout_is(
+            "     13     109     772 lorem_ipsum.txt\n     18     204    1115 moby_dick.txt\n      5      57     302 \
+             -\n     36     370    2189 total\n",
+        );
+}
+
+#[test]
+fn test_files0_from_with_stdin_try_read_from_stdin() {
+    const MSG: &str = "when reading file names from stdin, no file name of '-' allowed";
+    new_ucmd!()
+        .args(&["--files0-from=-"])
+        .pipe_in("-")
+        .fails()
+        .stderr_contains(MSG)
+        .stdout_is("");
+}
