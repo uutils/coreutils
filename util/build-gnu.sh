@@ -43,7 +43,7 @@ cd "${path_UUTILS}" && echo "[ pwd:'${PWD}' ]"
 make PROFILE="${UU_MAKE_PROFILE}"
 cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 # Create *sum binaries
-for sum in b2sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum; do
+for sum in b2sum b3sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum; do
     sum_path="${UU_BUILD_DIR}/${sum}"
     test -f "${sum_path}" || cp "${UU_BUILD_DIR}/hashsum" "${sum_path}"
 done
