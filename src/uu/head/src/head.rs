@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (vars) zlines BUFWRITER seekable
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::convert::{TryFrom, TryInto};
 use std::ffi::OsString;
 use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
@@ -104,25 +104,42 @@ pub fn uu_app<'a>() -> App<'a> {
         )
         .arg(Arg::new(options::FILES_NAME).multiple_occurrences(true))
 }
-#[derive(PartialEq, Debug, Clone, Copy)]
-enum Modes {
-    Lines(usize),
-    Bytes(usize),
+
+#[derive(Debug, PartialEq)]
+enum Mode {
+    FirstLines(usize),
+    AllButLastLines(usize),
+    FirstBytes(usize),
+    AllButLastBytes(usize),
 }
 
-impl Default for Modes {
+impl Default for Mode {
     fn default() -> Self {
-        Self::Lines(10)
+        Self::FirstLines(10)
     }
 }
 
-fn parse_mode<F>(src: &str, closure: F) -> Result<(Modes, bool), String>
-where
-    F: FnOnce(usize) -> Modes,
-{
-    match parse::parse_num(src) {
-        Ok((n, last)) => Ok((closure(n), last)),
-        Err(e) => Err(e.to_string()),
+impl Mode {
+    fn from(matches: &ArgMatches) -> Result<Self, String> {
+        if let Some(v) = matches.value_of(options::BYTES_NAME) {
+            let (n, all_but_last) =
+                parse::parse_num(v).map_err(|err| format!("invalid number of bytes: {}", err))?;
+            if all_but_last {
+                Ok(Mode::AllButLastBytes(n))
+            } else {
+                Ok(Mode::FirstBytes(n))
+            }
+        } else if let Some(v) = matches.value_of(options::LINES_NAME) {
+            let (n, all_but_last) =
+                parse::parse_num(v).map_err(|err| format!("invalid number of lines: {}", err))?;
+            if all_but_last {
+                Ok(Mode::AllButLastLines(n))
+            } else {
+                Ok(Mode::FirstLines(n))
+            }
+        } else {
+            Ok(Default::default())
+        }
     }
 }
 
@@ -157,8 +174,7 @@ struct HeadOptions {
     pub quiet: bool,
     pub verbose: bool,
     pub zeroed: bool,
-    pub all_but_last: bool,
-    pub mode: Modes,
+    pub mode: Mode,
     pub files: Vec<String>,
 }
 
@@ -173,18 +189,7 @@ impl HeadOptions {
         options.verbose = matches.is_present(options::VERBOSE_NAME);
         options.zeroed = matches.is_present(options::ZERO_NAME);
 
-        let mode_and_from_end = if let Some(v) = matches.value_of(options::BYTES_NAME) {
-            parse_mode(v, Modes::Bytes)
-                .map_err(|err| format!("invalid number of bytes: {}", err))?
-        } else if let Some(v) = matches.value_of(options::LINES_NAME) {
-            parse_mode(v, Modes::Lines)
-                .map_err(|err| format!("invalid number of lines: {}", err))?
-        } else {
-            (Modes::Lines(10), false)
-        };
-
-        options.mode = mode_and_from_end.0;
-        options.all_but_last = mode_and_from_end.1;
+        options.mode = Mode::from(&matches)?;
 
         options.files = match matches.values_of(options::FILES_NAME) {
             Some(v) => v.map(|s| s.to_owned()).collect(),
@@ -374,9 +379,8 @@ where
 }
 
 fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
-    assert!(options.all_but_last);
     match options.mode {
-        Modes::Bytes(n) => {
+        Mode::AllButLastBytes(n) => {
             let size = input.metadata()?.len().try_into().unwrap();
             if n >= size {
                 return Ok(());
@@ -387,31 +391,29 @@ fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std:
                 )?;
             }
         }
-        Modes::Lines(n) => {
+        Mode::AllButLastLines(n) => {
             let found = find_nth_line_from_end(input, n, options.zeroed)?;
             read_n_bytes(
                 &mut std::io::BufReader::with_capacity(BUF_SIZE, input),
                 found,
             )?;
         }
+        _ => unreachable!(),
     }
     Ok(())
 }
 
 fn head_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
-    if options.all_but_last {
-        head_backwards_file(input, options)
-    } else {
-        match options.mode {
-            Modes::Bytes(n) => {
-                read_n_bytes(&mut std::io::BufReader::with_capacity(BUF_SIZE, input), n)
-            }
-            Modes::Lines(n) => read_n_lines(
-                &mut std::io::BufReader::with_capacity(BUF_SIZE, input),
-                n,
-                options.zeroed,
-            ),
+    match options.mode {
+        Mode::FirstBytes(n) => {
+            read_n_bytes(&mut std::io::BufReader::with_capacity(BUF_SIZE, input), n)
         }
+        Mode::FirstLines(n) => read_n_lines(
+            &mut std::io::BufReader::with_capacity(BUF_SIZE, input),
+            n,
+            options.zeroed,
+        ),
+        Mode::AllButLastBytes(_) | Mode::AllButLastLines(_) => head_backwards_file(input, options),
     }
 }
 
@@ -429,19 +431,11 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 let stdin = std::io::stdin();
                 let mut stdin = stdin.lock();
                 match options.mode {
-                    Modes::Bytes(n) => {
-                        if options.all_but_last {
-                            read_but_last_n_bytes(&mut stdin, n)
-                        } else {
-                            read_n_bytes(&mut stdin, n)
-                        }
-                    }
-                    Modes::Lines(n) => {
-                        if options.all_but_last {
-                            read_but_last_n_lines(&mut stdin, n, options.zeroed)
-                        } else {
-                            read_n_lines(&mut stdin, n, options.zeroed)
-                        }
+                    Mode::FirstBytes(n) => read_n_bytes(&mut stdin, n),
+                    Mode::AllButLastBytes(n) => read_but_last_n_bytes(&mut stdin, n),
+                    Mode::FirstLines(n) => read_n_lines(&mut stdin, n, options.zeroed),
+                    Mode::AllButLastLines(n) => {
+                        read_but_last_n_lines(&mut stdin, n, options.zeroed)
                     }
                 }
             }
@@ -512,17 +506,16 @@ mod tests {
         let args = options("-n -10M -vz").unwrap();
         assert!(args.zeroed);
         assert!(args.verbose);
-        assert!(args.all_but_last);
-        assert_eq!(args.mode, Modes::Lines(10 * 1024 * 1024));
+        assert_eq!(args.mode, Mode::AllButLastLines(10 * 1024 * 1024));
     }
     #[test]
     fn test_gnu_compatibility() {
         let args = options("-n 1 -c 1 -n 5 -c kiB -vqvqv").unwrap(); // spell-checker:disable-line
-        assert!(args.mode == Modes::Bytes(1024));
+        assert!(args.mode == Mode::FirstBytes(1024));
         assert!(args.verbose);
-        assert_eq!(options("-5").unwrap().mode, Modes::Lines(5));
-        assert_eq!(options("-2b").unwrap().mode, Modes::Bytes(1024));
-        assert_eq!(options("-5 -c 1").unwrap().mode, Modes::Bytes(1));
+        assert_eq!(options("-5").unwrap().mode, Mode::FirstLines(5));
+        assert_eq!(options("-2b").unwrap().mode, Mode::FirstBytes(1024));
+        assert_eq!(options("-5 -c 1").unwrap().mode, Mode::FirstBytes(1));
     }
     #[test]
     fn all_args_test() {
@@ -533,10 +526,10 @@ mod tests {
         assert!(options("-v").unwrap().verbose);
         assert!(options("--zero-terminated").unwrap().zeroed);
         assert!(options("-z").unwrap().zeroed);
-        assert_eq!(options("--lines 15").unwrap().mode, Modes::Lines(15));
-        assert_eq!(options("-n 15").unwrap().mode, Modes::Lines(15));
-        assert_eq!(options("--bytes 15").unwrap().mode, Modes::Bytes(15));
-        assert_eq!(options("-c 15").unwrap().mode, Modes::Bytes(15));
+        assert_eq!(options("--lines 15").unwrap().mode, Mode::FirstLines(15));
+        assert_eq!(options("-n 15").unwrap().mode, Mode::FirstLines(15));
+        assert_eq!(options("--bytes 15").unwrap().mode, Mode::FirstBytes(15));
+        assert_eq!(options("-c 15").unwrap().mode, Mode::FirstBytes(15));
     }
     #[test]
     fn test_options_errors() {
@@ -550,25 +543,8 @@ mod tests {
         assert!(!opts.verbose);
         assert!(!opts.quiet);
         assert!(!opts.zeroed);
-        assert!(!opts.all_but_last);
-        assert_eq!(opts.mode, Modes::Lines(10));
+        assert_eq!(opts.mode, Mode::FirstLines(10));
         assert!(opts.files.is_empty());
-    }
-    #[test]
-    fn test_parse_mode() {
-        assert_eq!(
-            parse_mode("123", Modes::Lines),
-            Ok((Modes::Lines(123), false))
-        );
-        assert_eq!(
-            parse_mode("-456", Modes::Bytes),
-            Ok((Modes::Bytes(456), true))
-        );
-        assert!(parse_mode("Nonsensical Nonsense", Modes::Bytes).is_err());
-        #[cfg(target_pointer_width = "64")]
-        assert!(parse_mode("1Y", Modes::Lines).is_err());
-        #[cfg(target_pointer_width = "32")]
-        assert!(parse_mode("1T", Modes::Bytes).is_err());
     }
     fn arg_outputs(src: &str) -> Result<String, String> {
         let split = src.split_whitespace().map(OsString::from);
