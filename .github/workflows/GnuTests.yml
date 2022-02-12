@@ -71,6 +71,19 @@ jobs:
         ## Install dependencies
         sudo apt-get update
         sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify jq
+    - name: Add various locales
+      shell: bash
+      run: |
+        echo "Before:"
+        locale -a
+        ## Some tests fail with 'cannot change locale (en_US.ISO-8859-1): No such file or directory'
+        ## Some others need a French locale
+        sudo locale-gen
+        sudo locale-gen fr_FR
+        sudo locale-gen fr_FR.UTF-8
+        sudo update-locale
+        echo "After:"
+        locale -a
     - name: Build binaries
       shell: bash
       run: |
