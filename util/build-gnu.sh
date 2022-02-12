@@ -3,7 +3,7 @@
 #
 # UU_MAKE_PROFILE == 'debug' | 'release' ## build profile for *uutils* build; may be supplied by caller, defaults to 'debug'
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall gnulib inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules ; (vars/env) SRCDIR
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules ; (vars/env) SRCDIR
 
 set -e
 
@@ -15,7 +15,7 @@ echo "ME='${ME}'"
 echo "ME_dir='${ME_dir}'"
 echo "REPO_main_dir='${REPO_main_dir}'"
 
-### * config (from environment with fallback defaults); note: GNU and GNULIB are expected to be sibling repo directories
+### * config (from environment with fallback defaults); note: GNU is expected to be a sibling repo directory
 
 path_UUTILS=${path_UUTILS:-${REPO_main_dir}}
 path_GNU="$(readlink -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
