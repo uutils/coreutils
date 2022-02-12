@@ -157,11 +157,17 @@ fn test_negative_byte_syntax() {
 #[test]
 fn test_negative_zero_lines() {
     new_ucmd!()
-        .args(&["--lines=-0"])
+        .arg("--lines=-0")
         .pipe_in("a\nb\n")
         .succeeds()
         .stdout_is("a\nb\n");
+    new_ucmd!()
+        .arg("--lines=-0")
+        .pipe_in("a\nb")
+        .succeeds()
+        .stdout_is("a\nb");
 }
+
 #[test]
 fn test_negative_zero_bytes() {
     new_ucmd!()

@@ -11,6 +11,7 @@ use std::ffi::OsString;
 use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::lines::lines;
 use uucore::show;
 
 const BUF_SIZE: usize = 65536;
@@ -35,10 +36,8 @@ mod options {
     pub const ZERO_NAME: &str = "ZERO";
     pub const FILES_NAME: &str = "FILE";
 }
-mod lines;
 mod parse;
 mod take;
-use lines::zlines;
 use take::take_all_but;
 use take::take_lines;
 
@@ -286,12 +285,14 @@ fn read_but_last_n_lines(
     if zero {
         let stdout = std::io::stdout();
         let mut stdout = stdout.lock();
-        for bytes in take_all_but(zlines(input), n) {
+        for bytes in take_all_but(lines(input, b'\0'), n) {
             stdout.write_all(&bytes?)?;
         }
     } else {
-        for line in take_all_but(input.lines(), n) {
-            println!("{}", line?);
+        let stdout = std::io::stdout();
+        let mut stdout = stdout.lock();
+        for bytes in take_all_but(lines(input, b'\n'), n) {
+            stdout.write_all(&bytes?)?;
         }
     }
     Ok(())

@@ -38,6 +38,8 @@ pub use crate::features::encoding;
 pub use crate::features::fs;
 #[cfg(feature = "fsext")]
 pub use crate::features::fsext;
+#[cfg(feature = "lines")]
+pub use crate::features::lines;
 #[cfg(feature = "memo")]
 pub use crate::features::memo;
 #[cfg(feature = "ringbuffer")]
