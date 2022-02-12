@@ -18,7 +18,6 @@ use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
 use uucore::{format_usage, show_error, InvalidEncodingHandling};
-use walkdir::WalkDir;
 
 static ABOUT: &str = "Change the mode of each FILE to MODE.
  With --reference, change the mode of each FILE to that of RFILE.";
@@ -227,10 +226,17 @@ impl Chmoder {
             if !self.recursive {
                 r = self.chmod_file(file).and(r);
             } else {
-                for entry in WalkDir::new(&filename).into_iter().filter_map(|e| e.ok()) {
-                    let file = entry.path();
-                    r = self.chmod_file(file).and(r);
-                }
+                r = self.walk_dir(file);
+            }
+        }
+        r
+    }
+
+    fn walk_dir(&self, file_path: &Path) -> UResult<()> {
+        let mut r = self.chmod_file(file_path);
+        if file_path.is_dir() {
+            for dir_entry in fs::read_dir(file_path)? {
+                r = self.walk_dir(dir_entry?.path().as_path());
             }
         }
         r
