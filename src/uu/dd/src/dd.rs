@@ -866,10 +866,14 @@ fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, print_level: Option<StatusLe
             }
         });
 
+        let mut progress_as_secs = 0;
         while let Ok(update) = rx.recv() {
             // (Re)print status line if progress is requested.
-            if Some(StatusLevel::Progress) == print_level {
+            if Some(StatusLevel::Progress) == print_level
+                && update.duration.as_secs() >= progress_as_secs
+            {
                 reprint_prog_line(&update);
+                progress_as_secs = update.duration.as_secs() + 1;
             }
             // Handle signals
             #[cfg(target_os = "linux")]
