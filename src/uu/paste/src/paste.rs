@@ -9,8 +9,7 @@
 
 use clap::{crate_version, App, AppSettings, Arg};
 use std::fs::File;
-use std::io::{stdin, BufRead, BufReader, Read};
-use std::iter::repeat;
+use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
 use std::path::Path;
 use uucore::error::{FromIo, UResult};
 
@@ -77,7 +76,7 @@ pub fn uu_app<'a>() -> App<'a> {
 }
 
 fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> {
-    let mut files = vec![];
+    let mut files = Vec::with_capacity(filenames.len());
     for name in filenames {
         let file = if name == "-" {
             None
@@ -89,55 +88,62 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> 
         files.push(file);
     }
 
-    let delimiters: Vec<String> = unescape(delimiters)
-        .chars()
-        .map(|x| x.to_string())
-        .collect();
+    let delimiters: Vec<char> = unescape(delimiters).chars().collect();
     let mut delim_count = 0;
+    let stdout = stdout();
+    let mut stdout = stdout.lock();
 
+    let mut output = String::new();
     if serial {
         for file in &mut files {
-            let mut output = String::new();
+            output.clear();
             loop {
-                let mut line = String::new();
-                match read_line(file.as_mut(), &mut line) {
+                match read_line(file.as_mut(), &mut output) {
                     Ok(0) => break,
                     Ok(_) => {
-                        output.push_str(line.trim_end());
-                        output.push_str(&delimiters[delim_count % delimiters.len()]);
+                        if output.ends_with('\n') {
+                            output.pop();
+                        }
+                        output.push(delimiters[delim_count % delimiters.len()]);
                     }
                     Err(e) => return Err(e.map_err_context(String::new)),
                 }
                 delim_count += 1;
             }
-            println!("{}", &output[..output.len() - 1]);
+            output.pop();
+            writeln!(stdout, "{}", output)?;
         }
     } else {
-        let mut eof: Vec<bool> = repeat(false).take(files.len()).collect();
+        let mut eof = vec![false; files.len()];
         loop {
-            let mut output = String::new();
+            output.clear();
             let mut eof_count = 0;
             for (i, file) in files.iter_mut().enumerate() {
                 if eof[i] {
                     eof_count += 1;
                 } else {
-                    let mut line = String::new();
-                    match read_line(file.as_mut(), &mut line) {
+                    match read_line(file.as_mut(), &mut output) {
                         Ok(0) => {
                             eof[i] = true;
                             eof_count += 1;
                         }
-                        Ok(_) => output.push_str(line.trim_end()),
+                        Ok(_) => {
+                            if output.ends_with('\n') {
+                                output.pop();
+                            }
+                        }
                         Err(e) => return Err(e.map_err_context(String::new)),
                     }
                 }
-                output.push_str(&delimiters[delim_count % delimiters.len()]);
+                output.push(delimiters[delim_count % delimiters.len()]);
                 delim_count += 1;
             }
             if files.len() == eof_count {
                 break;
             }
-            println!("{}", &output[..output.len() - 1]);
+            // Remove final delimiter
+            output.pop();
+            writeln!(stdout, "{}", output)?;
             delim_count = 0;
         }
     }
