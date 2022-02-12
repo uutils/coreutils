@@ -356,7 +356,7 @@ impl CmdResult {
     ///     of the passed value
     /// 2.  the command resulted in an empty stdout stream
     pub fn stderr_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
-        self.no_stderr().stderr_is_bytes(msg)
+        self.no_stdout().stderr_is_bytes(msg)
     }
 
     pub fn fails_silently(&self) -> &Self {
