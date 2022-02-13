@@ -14,8 +14,6 @@ use uucore::fsext::{read_fs_list, FsUsage, MountInfo};
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
-use std::cell::Cell;
-use std::collections::HashMap;
 use std::collections::HashSet;
 #[cfg(unix)]
 use std::ffi::CString;
@@ -218,6 +216,19 @@ fn mount_info_lt(m1: &MountInfo, m2: &MountInfo) -> bool {
     true
 }
 
+/// Whether to prioritize given mount info over all others on the same device.
+///
+/// This function decides whether the mount info `mi` is better than
+/// all others in `previous` that mount the same device as `mi`.
+fn is_best(previous: &[MountInfo], mi: &MountInfo) -> bool {
+    for seen in previous {
+        if seen.dev_id == mi.dev_id && mount_info_lt(mi, seen) {
+            return false;
+        }
+    }
+    true
+}
+
 /// Keep only the specified subset of [`MountInfo`] instances.
 ///
 /// If `paths` is non-empty, this function excludes any [`MountInfo`]
@@ -229,35 +240,18 @@ fn mount_info_lt(m1: &MountInfo, m2: &MountInfo) -> bool {
 /// Finally, if there are duplicate entries, the one with the shorter
 /// path is kept.
 fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Vec<MountInfo> {
-    let mut mount_info_by_id = HashMap::<String, Cell<MountInfo>>::new();
+    let mut result = vec![];
     for mi in vmi {
-        if !is_included(&mi, paths, opt) {
-            continue;
-        }
-
-        // If the device ID has not been encountered yet, just store it.
-        let id = mi.dev_id.clone();
-        #[allow(clippy::map_entry)]
-        if !mount_info_by_id.contains_key(&id) {
-            mount_info_by_id.insert(id, Cell::new(mi));
-            continue;
-        }
-
-        // Otherwise, if we have seen the current device ID before,
-        // then check if we need to update it or keep the previously
-        // seen one.
-        let seen = mount_info_by_id[&id].replace(mi.clone());
-        if mount_info_lt(&mi, &seen) {
-            mount_info_by_id[&id].replace(seen);
+        // TODO The running time of the `is_best()` function is linear
+        // in the length of `result`. That makes the running time of
+        // this loop quadratic in the length of `vmi`. This could be
+        // improved by a more efficient implementation of `is_best()`,
+        // but `vmi` is probably not very long in practice.
+        if is_included(&mi, paths, opt) && is_best(&result, &mi) {
+            result.push(mi);
         }
     }
-
-    // Take ownership of the `MountInfo` instances and collect them
-    // into a `Vec`.
-    mount_info_by_id
-        .into_values()
-        .map(|m| m.into_inner())
-        .collect()
+    result
 }
 
 #[uucore::main]
