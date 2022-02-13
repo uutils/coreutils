@@ -338,6 +338,7 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(OPT_INODES)
                 .short('i')
                 .long("inodes")
+                .conflicts_with(OPT_OUTPUT)
                 .help("list inode information instead of block usage"),
         )
         .arg(Arg::new(OPT_KILO).short('k').help("like --block-size=1K"))
@@ -367,6 +368,7 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(OPT_PORTABILITY)
                 .short('P')
                 .long("portability")
+                .conflicts_with(OPT_OUTPUT)
                 .help("use the POSIX output format"),
         )
         .arg(
@@ -388,6 +390,7 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(OPT_PRINT_TYPE)
                 .short('T')
                 .long("print-type")
+                .conflicts_with(OPT_OUTPUT)
                 .help("print file system type"),
         )
         .arg(
