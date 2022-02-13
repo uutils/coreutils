@@ -334,16 +334,13 @@ where
         let mut bytes_total = 0;
 
         for chunk in buf.chunks(self.obs) {
-            match self.write(chunk)? {
-                wlen if wlen < chunk.len() => {
-                    writes_partial += 1;
-                    bytes_total += wlen;
-                }
-                wlen => {
-                    writes_complete += 1;
-                    bytes_total += wlen;
-                }
+            let wlen = self.write(chunk)?;
+            if wlen < self.obs {
+                writes_partial += 1;
+            } else {
+                writes_complete += 1;
             }
+            bytes_total += wlen;
         }
 
         Ok(WriteStat {
