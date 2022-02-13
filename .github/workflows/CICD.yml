@@ -590,8 +590,8 @@ jobs:
       run: |
         ## Install/setup prerequisites
         case '${{ matrix.job.target }}' in
-          arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
-          aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
+          arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf libclang-dev ;;
+          aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu libclang-dev ;;
         esac
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for testing
@@ -603,17 +603,6 @@ jobs:
         mkdir -p '${{ steps.vars.outputs.STAGING }}'
         mkdir -p '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}'
         mkdir -p '${{ steps.vars.outputs.STAGING }}/dpkg'
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        ## Install/setup prerequisites
-        case '${{ matrix.job.target }}' in
-          arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
-          aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
-        esac
-        case '${{ matrix.job.os }}' in
-          macos-latest) brew install coreutils ;; # needed for testing
-        esac
     - name: rust toolchain ~ install
       uses: actions-rs/toolchain@v1
       # env:
