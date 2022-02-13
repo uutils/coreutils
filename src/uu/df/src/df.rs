@@ -14,8 +14,6 @@ use uucore::fsext::{read_fs_list, FsUsage, MountInfo};
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
-use std::cell::Cell;
-use std::collections::HashMap;
 use std::collections::HashSet;
 #[cfg(unix)]
 use std::ffi::CString;
@@ -161,6 +159,76 @@ impl Filesystem {
     }
 }
 
+/// Whether to display the mount info given the inclusion settings.
+fn is_included(mi: &MountInfo, paths: &[String], opt: &Options) -> bool {
+    // Don't show remote filesystems if `--local` has been given.
+    if mi.remote && opt.show_local_fs {
+        return false;
+    }
+
+    // Don't show pseudo filesystems unless `--all` has been given.
+    if mi.dummy && !opt.show_all_fs && !opt.show_listed_fs {
+        return false;
+    }
+
+    // Don't show filesystems if they have been explicitly excluded.
+    if !opt.fs_selector.should_select(&mi.fs_type) {
+        return false;
+    }
+
+    // Don't show filesystems other than the ones specified on the
+    // command line, if any.
+    if !paths.is_empty() && !paths.contains(&mi.mount_dir) {
+        return false;
+    }
+
+    true
+}
+
+/// Whether the mount info in `m2` should be prioritized over `m1`.
+///
+/// The "lt" in the function name is in analogy to the
+/// [`std::cmp::PartialOrd::lt`].
+fn mount_info_lt(m1: &MountInfo, m2: &MountInfo) -> bool {
+    // let "real" devices with '/' in the name win.
+    if m1.dev_name.starts_with('/') && !m2.dev_name.starts_with('/') {
+        return false;
+    }
+
+    let m1_nearer_root = m1.mount_dir.len() < m2.mount_dir.len();
+    // With bind mounts, prefer items nearer the root of the source
+    let m2_below_root = !m1.mount_root.is_empty()
+        && !m2.mount_root.is_empty()
+        && m1.mount_root.len() > m2.mount_root.len();
+    // let points towards the root of the device win.
+    if m1_nearer_root && !m2_below_root {
+        return false;
+    }
+
+    // let an entry over-mounted on a new device win, but only when
+    // matching an existing mnt point, to avoid problematic
+    // replacement when given inaccurate mount lists, seen with some
+    // chroot environments for example.
+    if m1.dev_name != m2.dev_name && m1.mount_dir == m2.mount_dir {
+        return false;
+    }
+
+    true
+}
+
+/// Whether to prioritize given mount info over all others on the same device.
+///
+/// This function decides whether the mount info `mi` is better than
+/// all others in `previous` that mount the same device as `mi`.
+fn is_best(previous: &[MountInfo], mi: &MountInfo) -> bool {
+    for seen in previous {
+        if seen.dev_id == mi.dev_id && mount_info_lt(mi, seen) {
+            return false;
+        }
+    }
+    true
+}
+
 /// Keep only the specified subset of [`MountInfo`] instances.
 ///
 /// If `paths` is non-empty, this function excludes any [`MountInfo`]
@@ -172,68 +240,18 @@ impl Filesystem {
 /// Finally, if there are duplicate entries, the one with the shorter
 /// path is kept.
 fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Vec<MountInfo> {
-    let mut mount_info_by_id = HashMap::<String, Cell<MountInfo>>::new();
+    let mut result = vec![];
     for mi in vmi {
-        // Don't show remote filesystems if `--local` has been given.
-        if mi.remote && opt.show_local_fs {
-            continue;
-        }
-
-        // Don't show pseudo filesystems unless `--all` has been given.
-        if mi.dummy && !opt.show_all_fs && !opt.show_listed_fs {
-            continue;
-        }
-
-        // Don't show filesystems if they have been explicitly excluded.
-        if !opt.fs_selector.should_select(&mi.fs_type) {
-            continue;
-        }
-
-        // Don't show filesystems other than the ones specified on the
-        // command line, if any.
-        if !paths.is_empty() && !paths.contains(&mi.mount_dir) {
-            continue;
-        }
-
-        // If the device ID has not been encountered yet, just store it.
-        let id = mi.dev_id.clone();
-        #[allow(clippy::map_entry)]
-        if !mount_info_by_id.contains_key(&id) {
-            mount_info_by_id.insert(id, Cell::new(mi));
-            continue;
-        }
-
-        // Otherwise, if we have seen the current device ID before,
-        // then check if we need to update it or keep the previously
-        // seen one.
-        let seen = mount_info_by_id[&id].replace(mi.clone());
-        let target_nearer_root = seen.mount_dir.len() > mi.mount_dir.len();
-        // With bind mounts, prefer items nearer the root of the source
-        let source_below_root = !seen.mount_root.is_empty()
-            && !mi.mount_root.is_empty()
-            && seen.mount_root.len() < mi.mount_root.len();
-        // let "real" devices with '/' in the name win.
-        if (!mi.dev_name.starts_with('/') || seen.dev_name.starts_with('/'))
-            // let points towards the root of the device win.
-            && (!target_nearer_root || source_below_root)
-            // let an entry over-mounted on a new device win...
-            && (seen.dev_name == mi.dev_name
-                /* ... but only when matching an existing mnt point,
-                to avoid problematic replacement when given
-                inaccurate mount lists, seen with some chroot
-                environments for example.  */
-                || seen.mount_dir != mi.mount_dir)
-        {
-            mount_info_by_id[&id].replace(seen);
+        // TODO The running time of the `is_best()` function is linear
+        // in the length of `result`. That makes the running time of
+        // this loop quadratic in the length of `vmi`. This could be
+        // improved by a more efficient implementation of `is_best()`,
+        // but `vmi` is probably not very long in practice.
+        if is_included(&mi, paths, opt) && is_best(&result, &mi) {
+            result.push(mi);
         }
     }
-
-    // Take ownership of the `MountInfo` instances and collect them
-    // into a `Vec`.
-    mount_info_by_id
-        .into_values()
-        .map(|m| m.into_inner())
-        .collect()
+    result
 }
 
 #[uucore::main]
