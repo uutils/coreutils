@@ -4,7 +4,7 @@ name: CICD
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain
 # spell-checker:ignore (names) CodeCOV MacOS MinGW Peltoche rivy
-# spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rustc rustfmt rustup shopt xargs
+# spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rsync rustc rustfmt rustup shopt xargs
 # spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend pell runtest tempfile testsuite uutils DESTDIR sizemulti
 
 # ToDO: [2021-06; rivy] change from `cargo-tree` to `cargo tree` once MSRV is >= 1.45
