@@ -5,8 +5,10 @@
 //! it is created by Sub's implementation of the Tokenizer trait
 //! Subs which have numeric field chars make use of the num_format
 //! submodule
-use crate::error::{UResult, UUsageError};
+use crate::error::{UError, UResult};
 use itertools::{put_back_n, PutBackN};
+use std::error::Error;
+use std::fmt::Display;
 use std::iter::Peekable;
 use std::process::exit;
 use std::slice::Iter;
@@ -19,6 +21,23 @@ use super::token;
 use super::unescaped_text::UnescapedText;
 
 const EXIT_ERR: i32 = 1;
+
+#[derive(Debug)]
+pub enum SubError {
+    InvalidSpec(String),
+}
+
+impl Display for SubError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            Self::InvalidSpec(s) => write!(f, "%{}: invalid conversion specification", s),
+        }
+    }
+}
+
+impl Error for SubError {}
+
+impl UError for SubError {}
 
 fn convert_asterisk_arg_int(asterisk_arg: &str) -> isize {
     // this is a costly way to parse the
@@ -172,10 +191,7 @@ impl SubParser {
                 '-' | '*' | '0'..='9' => {
                     if !self.past_decimal {
                         if self.min_width_is_asterisk || self.specifiers_found {
-                            return Err(UUsageError::new(
-                                1,
-                                format!("%{}: invalid conversion specification", &self.text_so_far),
-                            ));
+                            return Err(SubError::InvalidSpec(self.text_so_far.clone()).into());
                         }
                         if self.min_width_tmp.is_none() {
                             self.min_width_tmp = Some(String::new());
@@ -183,13 +199,9 @@ impl SubParser {
                         match self.min_width_tmp.as_mut() {
                             Some(x) => {
                                 if (ch == '-' || ch == '*') && !x.is_empty() {
-                                    return Err(UUsageError::new(
-                                        1,
-                                        format!(
-                                            "%{}: invalid conversion specification",
-                                            &self.text_so_far
-                                        ),
-                                    ));
+                                    return Err(
+                                        SubError::InvalidSpec(self.text_so_far.clone()).into()
+                                    );
                                 }
                                 if ch == '*' {
                                     self.min_width_is_asterisk = true;
@@ -204,10 +216,7 @@ impl SubParser {
                         // second field should never have a
                         // negative value
                         if self.second_field_is_asterisk || ch == '-' || self.specifiers_found {
-                            return Err(UUsageError::new(
-                                1,
-                                format!("%{}: invalid conversion specification", &self.text_so_far),
-                            ));
+                            return Err(SubError::InvalidSpec(self.text_so_far.clone()).into());
                         }
                         if self.second_field_tmp.is_none() {
                             self.second_field_tmp = Some(String::new());
@@ -215,13 +224,9 @@ impl SubParser {
                         match self.second_field_tmp.as_mut() {
                             Some(x) => {
                                 if ch == '*' && !x.is_empty() {
-                                    return Err(UUsageError::new(
-                                        1,
-                                        format!(
-                                            "%{}: invalid conversion specification",
-                                            &self.text_so_far
-                                        ),
-                                    ));
+                                    return Err(
+                                        SubError::InvalidSpec(self.text_so_far.clone()).into()
+                                    );
                                 }
                                 if ch == '*' {
                                     self.second_field_is_asterisk = true;
@@ -238,10 +243,7 @@ impl SubParser {
                     if !self.past_decimal {
                         self.past_decimal = true;
                     } else {
-                        return Err(UUsageError::new(
-                            1,
-                            format!("%{}: invalid conversion specification", &self.text_so_far),
-                        ));
+                        return Err(SubError::InvalidSpec(self.text_so_far.clone()).into());
                     }
                 }
                 x if legal_fields.binary_search(&x).is_ok() => {
@@ -258,18 +260,12 @@ impl SubParser {
                     }
                 }
                 _ => {
-                    return Err(UUsageError::new(
-                        1,
-                        format!("%{}: invalid conversion specification", &self.text_so_far),
-                    ));
+                    return Err(SubError::InvalidSpec(self.text_so_far.clone()).into());
                 }
             }
         }
         if self.field_char.is_none() {
-            return Err(UUsageError::new(
-                1,
-                format!("%{}: invalid conversion specification", &self.text_so_far),
-            ));
+            return Err(SubError::InvalidSpec(self.text_so_far.clone()).into());
         }
         let field_char_retrieved = self.field_char.unwrap();
         if self.past_decimal && self.second_field_tmp.is_none() {
@@ -303,10 +299,7 @@ impl SubParser {
                 }
                 None => {
                     text_so_far.push('%');
-                    return Err(UUsageError::new(
-                        1,
-                        format!("%{}: invalid conversion specification", &text_so_far[..]),
-                    ));
+                    Err(SubError::InvalidSpec(text_so_far.clone()).into())
                 }
             }
         } else {
@@ -334,10 +327,7 @@ impl SubParser {
             // invalid string substitution
             // to do: include information about an invalid
             // string substitution
-            return Err(UUsageError::new(
-                1,
-                format!("%{}: invalid conversion specification", &self.text_so_far),
-            ));
+            return Err(SubError::InvalidSpec(self.text_so_far.clone()).into());
         }
         Ok(())
     }
