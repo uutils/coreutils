@@ -357,6 +357,26 @@ fn test_chmod_recursive() {
 }
 
 #[test]
+#[allow(clippy::unreadable_literal)]
+fn test_chmod_recursive_read_permission() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("a/b");
+    let mut perms = at.metadata("a/b").permissions();
+    perms.set_mode(0o311);
+    set_permissions(at.plus_as_string("a/b"), perms.clone()).unwrap();
+    set_permissions(at.plus_as_string("a"), perms).unwrap();
+
+    ucmd.arg("-R")
+        .arg("u+r")
+        .arg("a")
+        .succeeds();
+
+    assert_eq!(at.metadata("a").permissions().mode(), 0o40711);
+    assert_eq!(at.metadata("a/b").permissions().mode(), 0o40711);
+}
+
+#[test]
 fn test_chmod_non_existing_file() {
     new_ucmd!()
         .arg("-R")
