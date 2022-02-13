@@ -381,7 +381,7 @@ pub fn uu_app<'a>() -> App<'a> {
                 .long("type")
                 .allow_invalid_utf8(true)
                 .takes_value(true)
-                .use_delimiter(true)
+                .multiple_occurrences(true)
                 .help("limit listing to file systems of type TYPE"),
         )
         .arg(
