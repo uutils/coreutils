@@ -3,6 +3,8 @@
 use crate::common::util::*;
 #[cfg(target_os = "linux")]
 use rust_users::get_effective_uid;
+#[cfg(unix)]
+use std::os::unix::fs::symlink as symlink_file;
 
 extern crate chown;
 
@@ -613,6 +615,23 @@ fn test_root_preserve() {
         .arg("-R")
         .arg(user_name)
         .arg("/")
+        .fails();
+    result.stderr_contains(&"chown: it is dangerous to operate recursively");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_root_preserve_indirect() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("test");
+    symlink_file("/", "test/root");
+
+    let result = ucmd
+        .arg("-RL")
+        .arg("--preserve-root")
+        .arg("1000")
+        .arg("test")
         .fails();
     result.stderr_contains(&"chown: it is dangerous to operate recursively");
 }

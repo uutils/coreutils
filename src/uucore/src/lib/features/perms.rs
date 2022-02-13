@@ -197,19 +197,7 @@ impl ChownExecutor {
         Ok(())
     }
 
-    fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
-        let path = root.as_ref();
-        let meta = match self.obtain_meta(path, self.dereference) {
-            Some(m) => m,
-            _ => return 1,
-        };
-
-        // Prohibit only if:
-        // (--preserve-root and -R present) &&
-        // (
-        //     (argument is not symlink && resolved to be '/') ||
-        //     (argument is symlink && should follow argument && resolved to be '/')
-        // )
+    fn is_dangerous(&self, path: &Path) -> bool {
         if self.recursive && self.preserve_root {
             let may_exist = if self.dereference {
                 path.canonicalize().ok()
@@ -226,9 +214,29 @@ impl ChownExecutor {
                 if p.parent().is_none() {
                     show_error!("it is dangerous to operate recursively on '/'");
                     show_error!("use --no-preserve-root to override this failsafe");
-                    return 1;
+                    return true;
                 }
             }
+        }
+        false
+    }
+
+    fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
+        let path = root.as_ref();
+        let meta = match self.obtain_meta(path, self.dereference) {
+            Some(m) => m,
+            _ => return 1,
+        };
+
+        // Prohibit only if:
+        // (--preserve-root and -R present) &&
+        // (
+        //     (argument is not symlink && resolved to be '/') ||
+        //     (argument is symlink && should follow argument && resolved to be '/')
+        // )
+
+        if self.is_dangerous(&path) {
+            return 1;
         }
 
         let ret = if self.matched(meta.uid(), meta.gid()) {
@@ -305,6 +313,11 @@ impl ChownExecutor {
                 Ok(entry) => entry,
             };
             let path = entry.path();
+
+            if self.is_dangerous(&path) {
+                return 1;
+            }
+
             let meta = match self.obtain_meta(path, self.dereference) {
                 Some(m) => m,
                 _ => {
