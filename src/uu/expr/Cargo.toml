@@ -19,7 +19,7 @@ clap = { version = "3.0", features = ["wrap_help", "cargo"] }
 libc = "0.2.42"
 num-bigint = "0.4.0"
 num-traits = "0.2.14"
-onig = "~4.3.2"
+onig = "~6.3"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
 
 [[bin]]
