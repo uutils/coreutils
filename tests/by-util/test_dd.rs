@@ -692,5 +692,15 @@ fn test_seek_do_not_overwrite() {
     assert_eq!(at.read("outfile"), "a2");
 }
 
+#[test]
+fn test_partial_records_out() {
+    new_ucmd!()
+        .args(&["bs=2", "status=noxfer"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_is("abc")
+        .stderr_is("1+1 records in\n1+1 records out\n");
+}
+
 // conv=[ascii,ebcdic,ibm], conv=[ucase,lcase], conv=[block,unblock], conv=sync
 // TODO: Move conv tests from unit test module
