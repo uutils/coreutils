@@ -31,6 +31,7 @@ use std::thread::sleep;
 use std::time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::format_usage;
 use uucore::lines::lines;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::ringbuffer::RingBuffer;
@@ -47,7 +48,7 @@ const ABOUT: &str = "\
                      \n\
                      Mandatory arguments to long flags are mandatory for short flags too.\
                      ";
-const USAGE: &str = "tail [FLAG]... [FILE]...";
+const USAGE: &str = "{} [FLAG]... [FILE]...";
 
 pub mod options {
     pub mod verbosity {
@@ -277,7 +278,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .override_usage(USAGE)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::BYTES)

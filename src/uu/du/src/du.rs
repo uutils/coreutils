@@ -33,6 +33,7 @@ use std::time::{Duration, UNIX_EPOCH};
 use std::{error::Error, fmt::Display};
 use uucore::display::{print_verbatim, Quotable};
 use uucore::error::{UError, UResult};
+use uucore::format_usage;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::InvalidEncodingHandling;
 #[cfg(windows)]
@@ -80,6 +81,9 @@ SIZE is an integer and optional unit (example: 10M is 10*1024*1024).
 Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB,... (powers
 of 1000).
 ";
+const USAGE: &str = "\
+    {} [OPTION]... [FILE]...
+    {} [OPTION]... --files0-from=F";
 
 // TODO: Support Z & Y (currently limited by size of u64)
 const UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2), ('K', 1)];
@@ -391,14 +395,6 @@ fn convert_size_other(size: u64, _multiplier: u64, block_size: u64) -> String {
     format!("{}", ((size as f64) / (block_size as f64)).ceil())
 }
 
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... [FILE]...
-    {0} [OPTION]... --files0-from=F",
-        uucore::execution_phrase()
-    )
-}
-
 #[derive(Debug)]
 enum DuError {
     InvalidMaxDepthArg(String),
@@ -459,9 +455,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = usage();
-
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let summarize = matches.is_present(options::SUMMARIZE);
 
@@ -629,6 +623,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(LONG_HELP)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::ALL)

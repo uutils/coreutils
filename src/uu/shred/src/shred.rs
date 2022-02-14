@@ -20,7 +20,7 @@ use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::{util_name, InvalidEncodingHandling};
+use uucore::{format_usage, util_name, InvalidEncodingHandling};
 
 #[macro_use]
 extern crate uucore;
@@ -214,10 +214,7 @@ impl<'a> BytesGenerator<'a> {
 static ABOUT: &str = "Overwrite the specified FILE(s) repeatedly, in order to make it harder\n\
 for even very expensive hardware probing to recover the data.
 ";
-
-fn usage() -> String {
-    format!("{} [OPTION]... FILE...", uucore::execution_phrase())
-}
+const USAGE: &str = "{} [OPTION]... FILE...";
 
 static AFTER_HELP: &str =
     "Delete FILE(s) if --remove (-u) is specified.  The default is not to remove\n\
@@ -273,11 +270,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = usage();
-
-    let app = uu_app().override_usage(&usage[..]);
-
-    let matches = app.get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     if !matches.is_present(options::FILE) {
         return Err(UUsageError::new(1, "missing file operand"));
@@ -326,6 +319,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::FORCE)

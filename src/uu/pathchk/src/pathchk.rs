@@ -13,7 +13,7 @@ use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UResult, UUsageError};
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 // operating mode
 enum Mode {
@@ -24,6 +24,7 @@ enum Mode {
 }
 
 static ABOUT: &str = "Check whether file names are valid or portable";
+const USAGE: &str = "{} [OPTION]... NAME...";
 
 mod options {
     pub const POSIX: &str = "posix";
@@ -36,18 +37,13 @@ mod options {
 const POSIX_PATH_MAX: usize = 256;
 const POSIX_NAME_MAX: usize = 14;
 
-fn usage() -> String {
-    format!("{0} [OPTION]... NAME...", uucore::execution_phrase())
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     // set working mode
     let is_posix = matches.values_of(options::POSIX).is_some();
@@ -92,6 +88,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::POSIX)

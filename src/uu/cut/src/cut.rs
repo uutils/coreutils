@@ -20,13 +20,13 @@ use uucore::error::{FromIo, UResult, USimpleError};
 
 use self::searcher::Searcher;
 use uucore::ranges::Range;
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 mod searcher;
 
 static NAME: &str = "cut";
-static SYNTAX: &str =
-    "[-d] [-s] [-z] [--output-delimiter] ((-f|-b|-c) {{sequence}}) {{sourcefile}}+";
+static USAGE: &str =
+    "{} [-d] [-s] [-z] [--output-delimiter] ((-f|-b|-c) {{sequence}}) {{sourcefile}}+";
 static SUMMARY: &str =
     "Prints specified byte or field columns from each line of stdin or the input files";
 static LONG_HELP: &str = "
@@ -537,7 +537,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .override_usage(SYNTAX)
+        .override_usage(format_usage(USAGE))
         .about(SUMMARY)
         .after_help(LONG_HELP)
         .setting(AppSettings::InferLongArgs)

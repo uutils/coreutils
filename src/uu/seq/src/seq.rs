@@ -11,6 +11,7 @@ use num_traits::Zero;
 
 use uucore::error::FromIo;
 use uucore::error::UResult;
+use uucore::format_usage;
 use uucore::memo::Memo;
 
 mod error;
@@ -25,6 +26,10 @@ use crate::number::Number;
 use crate::number::PreciseNumber;
 
 static ABOUT: &str = "Display numbers from FIRST to LAST, in steps of INCREMENT.";
+const USAGE: &str = "\
+    {} [OPTION]... LAST
+    {} [OPTION]... FIRST LAST
+    {} [OPTION]... FIRST INCREMENT LAST";
 static OPT_SEPARATOR: &str = "separator";
 static OPT_TERMINATOR: &str = "terminator";
 static OPT_WIDTHS: &str = "widths";
@@ -32,14 +37,6 @@ static OPT_FORMAT: &str = "format";
 
 static ARG_NUMBERS: &str = "numbers";
 
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... LAST
-    {0} [OPTION]... FIRST LAST
-    {0} [OPTION]... FIRST INCREMENT LAST",
-        uucore::execution_phrase()
-    )
-}
 #[derive(Clone)]
 struct SeqOptions<'a> {
     separator: String,
@@ -60,8 +57,7 @@ type RangeFloat = (ExtendedBigDecimal, ExtendedBigDecimal, ExtendedBigDecimal);
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let numbers = matches.values_of(ARG_NUMBERS).unwrap().collect::<Vec<_>>();
 
@@ -150,6 +146,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .setting(AppSettings::InferLongArgs)
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .arg(
             Arg::new(OPT_SEPARATOR)
                 .short('s')

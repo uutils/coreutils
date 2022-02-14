@@ -16,31 +16,26 @@ use std::io::Error;
 use std::ptr;
 
 use clap::{crate_version, App, AppSettings, Arg};
-use uucore::error::{set_exit_code, UResult, USimpleError, UUsageError};
+use uucore::{
+    error::{set_exit_code, UResult, USimpleError, UUsageError},
+    format_usage,
+};
 
 pub mod options {
     pub static ADJUSTMENT: &str = "adjustment";
     pub static COMMAND: &str = "COMMAND";
 }
 
-fn usage() -> String {
-    format!(
-        "
-  {0} [OPTIONS] [COMMAND [ARGS]]
-
-Run COMMAND with an adjusted niceness, which affects process scheduling.
-With no COMMAND, print the current niceness.  Niceness values range from at
-least -20 (most favorable to the process) to 19 (least favorable to the
-process).",
-        uucore::execution_phrase()
-    )
-}
+const ABOUT: &str = "\
+    Run COMMAND with an adjusted niceness, which affects process scheduling. \
+    With no COMMAND, print the current niceness.  Niceness values range from at \
+    least -20 (most favorable to the process) to 19 (least favorable to the \
+    process).";
+const USAGE: &str = "{} [OPTIONS] [COMMAND [ARGS]]";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let mut niceness = unsafe {
         nix::errno::Errno::clear();
@@ -109,6 +104,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
+        .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::TrailingVarArg)
         .setting(AppSettings::InferLongArgs)
         .version(crate_version!())

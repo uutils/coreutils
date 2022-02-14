@@ -20,16 +20,10 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::process::ChildExt;
 use uucore::signals::{signal_by_name_or_value, signal_name_by_value};
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static ABOUT: &str = "Start COMMAND, and kill it if still running after DURATION.";
-
-fn usage() -> String {
-    format!(
-        "{0} [OPTION] DURATION COMMAND...",
-        uucore::execution_phrase()
-    )
-}
+const USAGE: &str = "{} [OPTION] DURATION COMMAND...";
 
 const ERR_EXIT_STATUS: i32 = 125;
 
@@ -106,9 +100,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let usage = usage();
-
-    let app = uu_app().override_usage(&usage[..]);
+    let app = uu_app();
 
     let matches = app.get_matches_from(args);
 
@@ -128,6 +120,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new("timeout")
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .arg(
             Arg::new(options::FOREGROUND)
                 .long(options::FOREGROUND)

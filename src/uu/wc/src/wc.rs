@@ -15,6 +15,7 @@ use count_fast::{count_bytes_and_lines_fast, count_bytes_fast};
 use countable::WordCountable;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
+use uucore::format_usage;
 use word_count::{TitledWordCount, WordCount};
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
@@ -81,7 +82,8 @@ impl Settings {
 }
 
 static ABOUT: &str = "Display newline, word, and byte counts for each FILE, and a total line if
-more than one FILE is specified.";
+more than one FILE is specified. With no FILE, or when FILE is -, read standard input.";
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 pub mod options {
     pub static BYTES: &str = "bytes";
@@ -94,14 +96,6 @@ pub mod options {
 
 static ARG_FILES: &str = "files";
 static STDIN_REPR: &str = "-";
-
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... [FILE]...
- With no FILE, or when FILE is -, read standard input.",
-        uucore::execution_phrase()
-    )
-}
 
 enum StdinKind {
     /// Stdin specified on command-line with "-".
@@ -180,9 +174,7 @@ impl Display for WcError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let inputs = inputs(&matches)?;
 
@@ -195,6 +187,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::BYTES)

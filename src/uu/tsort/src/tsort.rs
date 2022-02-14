@@ -12,7 +12,7 @@ use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static SUMMARY: &str = "Topological sort the strings in FILE.
 Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline).
@@ -96,7 +96,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
-        .override_usage(USAGE)
+        .override_usage(format_usage(USAGE))
         .about(SUMMARY)
         .setting(AppSettings::InferLongArgs)
         .arg(Arg::new(options::FILE).default_value("-").hide(true))

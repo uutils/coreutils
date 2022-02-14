@@ -21,6 +21,7 @@ use std::num::ParseIntError;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
+use uucore::format_usage;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::uio_error;
 
@@ -41,32 +42,15 @@ static OPT_IO_BLKSIZE: &str = "-io-blksize";
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
 
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... [INPUT [PREFIX]]",
-        uucore::execution_phrase()
-    )
-}
-fn get_long_usage() -> String {
-    format!(
-        "Usage:
-  {0}
-
-Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default
-size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
--, read standard input.",
-        usage()
-    )
-}
+const USAGE: &str = "{} [OPTION]... [INPUT [PREFIX]]";
+const AFTER_HELP: &str = "\
+    Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default \
+    size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is \
+    -, read standard input.";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-    let long_usage = get_long_usage();
-    let matches = uu_app()
-        .override_usage(&usage[..])
-        .after_help(&long_usage[..])
-        .get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
     match Settings::from(&matches) {
         Ok(settings) => split(&settings),
         Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{}", e))),
@@ -78,6 +62,8 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about("Create output files containing consecutive or interleaved sections of input")
+        .after_help(AFTER_HELP)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         // strategy (mutually exclusive)
         .arg(

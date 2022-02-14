@@ -19,6 +19,7 @@ use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UIoError, UResult};
+use uucore::format_usage;
 use uucore::mode::get_umask;
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 
@@ -144,6 +145,7 @@ impl Behavior {
 
 static ABOUT: &str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
  DIRECTORY, while setting permission modes and owner/group";
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 static OPT_COMPARE: &str = "compare";
 static OPT_DIRECTORY: &str = "directory";
@@ -163,19 +165,13 @@ static OPT_CONTEXT: &str = "context";
 
 static ARG_FILES: &str = "files";
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
-}
-
 /// Main install utility function, called from main.rs.
 ///
 /// Returns a program return code.
 ///
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let paths: Vec<String> = matches
         .values_of(ARG_FILES)
@@ -196,6 +192,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             backup_control::arguments::backup()

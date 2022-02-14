@@ -7,10 +7,10 @@
 // that was distributed with this source code.
 mod table;
 
-use uucore::error::UResult;
 #[cfg(unix)]
 use uucore::fsext::statfs_fn;
 use uucore::fsext::{read_fs_list, FsUsage, MountInfo};
+use uucore::{error::UResult, format_usage};
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
@@ -28,6 +28,7 @@ use crate::table::{DisplayRow, Header, Row};
 
 static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
                       or all file systems by default.";
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 static OPT_ALL: &str = "all";
 static OPT_BLOCKSIZE: &str = "blocksize";
@@ -92,10 +93,6 @@ impl Options {
 struct Filesystem {
     mount_info: MountInfo,
     usage: FsUsage,
-}
-
-fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 impl FsSelector {
@@ -256,8 +253,7 @@ fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Ve
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let paths: Vec<String> = matches
         .values_of(OPT_PATHS)
@@ -293,6 +289,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_ALL)
