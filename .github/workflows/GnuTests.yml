@@ -32,7 +32,8 @@ jobs:
         TEST_FILESET_PREFIX='test-fileset-IDs.sha1#'
         TEST_FILESET_SUFFIX='.txt'
         TEST_SUMMARY_FILE='gnu-result.json'
-        outputs SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE
+        TEST_FULL_SUMMARY_FILE='gnu-full-result.json'
+        outputs SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE
     - name: Checkout code (uutil)
       uses: actions/checkout@v2
       with:
@@ -92,6 +93,11 @@ jobs:
         path_GNU='${{ steps.vars.outputs.path_GNU }}'
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         bash "${path_UUTILS}/util/run-gnu-test.sh"
+    - name: Extract testing info into JSON
+      shell: bash
+      run : |
+        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
+        python ${path_UUTILS}/util/gnu-json-result.py ${{ steps.vars.outputs.path_GNU_tests }} > ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
     - name: Extract/summarize testing info
       id: summary
       shell: bash
@@ -146,6 +152,11 @@ jobs:
       with:
         name: test-logs
         path: "${{ steps.vars.outputs.TEST_LOGS_GLOB }}"
+    - name: Upload full json results
+      uses: actions/upload-artifact@v2
+      with:
+        name: gnu-full-result.json
+        path: ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
     - name: Compare test failures VS reference
       shell: bash
       run: |
