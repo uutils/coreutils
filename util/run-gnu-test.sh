@@ -31,6 +31,8 @@ export RUST_BACKTRACE=1
 if test -n "$1"; then
     # if set, run only the test passed
     export RUN_TEST="TESTS=$1"
+elif test -n "$CI"; then
+    sudo make -j "$(nproc)" check-root SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
 fi
 
 # * timeout used to kill occasionally errant/"stuck" processes (note: 'release' testing takes ~1 hour; 'debug' testing takes ~2.5 hours)
