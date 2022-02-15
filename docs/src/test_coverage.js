@@ -69,7 +69,7 @@ function parse_result(parent, obj) {
 	return totals;
 }
 
-fetch("https://github.com/uutils/coreutils-tracking/blob/main/gnu-full-result.json")
+fetch("https://raw.githubusercontent.com/uutils/coreutils-tracking/main/gnu-full-result.json")
 	.then((r) => r.json())
 	.then((obj) => {
 		let parent = document.getElementById("test-cov");
