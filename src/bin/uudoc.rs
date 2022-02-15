@@ -68,7 +68,14 @@ fn write_version(w: &mut impl Write, app: &App) -> io::Result<()> {
 
 fn write_usage(w: &mut impl Write, app: &mut App, name: &str) -> io::Result<()> {
     writeln!(w, "\n```")?;
-    let mut usage: String = app.render_usage().lines().nth(1).unwrap().trim().into();
+    let mut usage: String = app
+        .render_usage()
+        .lines()
+        .skip(1)
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
     usage = usage.replace(app.get_name(), name);
     writeln!(w, "{}", usage)?;
     writeln!(w, "```")
