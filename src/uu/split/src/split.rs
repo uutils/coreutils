@@ -293,10 +293,13 @@ enum SettingsError {
     Strategy(StrategyError),
 
     /// Invalid suffix length parameter.
-    SuffixLength(String),
+    SuffixNotParsable(String),
 
     /// Suffix contains a directory separator, which is not allowed.
     SuffixContainsSeparator(String),
+
+    /// Suffix is not large enough to split into specified chunks
+    SuffixTooSmall(usize),
 
     /// The `--filter` option is not supported on Windows.
     #[cfg(windows)]
@@ -317,7 +320,8 @@ impl fmt::Display for SettingsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Strategy(e) => e.fmt(f),
-            Self::SuffixLength(s) => write!(f, "invalid suffix length: {}", s.quote()),
+            Self::SuffixNotParsable(s) => write!(f, "invalid suffix length: {}", s.quote()),
+            Self::SuffixTooSmall(i) => write!(f, "the suffix length needs to be at least {}", i),
             Self::SuffixContainsSeparator(s) => write!(
                 f,
                 "invalid suffix {}, contains directory separator",
@@ -340,15 +344,29 @@ impl Settings {
         if additional_suffix.contains('/') {
             return Err(SettingsError::SuffixContainsSeparator(additional_suffix));
         }
+        let strategy = Strategy::from(matches).map_err(SettingsError::Strategy)?;
+        let suffix_type = suffix_type_from(matches);
         let suffix_length_str = matches.value_of(OPT_SUFFIX_LENGTH).unwrap();
+        let suffix_length: usize = suffix_length_str
+            .parse()
+            .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?;
+        if let Strategy::Number(chunks) = strategy {
+            if suffix_length != 0 {
+                let required_suffix_length =
+                    (chunks as f64).log(suffix_type.radix() as f64).ceil() as usize;
+                if suffix_length < required_suffix_length {
+                    return Err(SettingsError::SuffixTooSmall(required_suffix_length));
+                }
+            }
+        }
         let result = Self {
             suffix_length: suffix_length_str
                 .parse()
-                .map_err(|_| SettingsError::SuffixLength(suffix_length_str.to_string()))?,
-            suffix_type: suffix_type_from(matches),
+                .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?,
+            suffix_type,
             additional_suffix,
             verbose: matches.occurrences_of("verbose") > 0,
-            strategy: Strategy::from(matches).map_err(SettingsError::Strategy)?,
+            strategy,
             input: matches.value_of(ARG_INPUT).unwrap().to_owned(),
             prefix: matches.value_of(ARG_PREFIX).unwrap().to_owned(),
             filter: matches.value_of(OPT_FILTER).map(|s| s.to_owned()),
