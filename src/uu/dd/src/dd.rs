@@ -989,6 +989,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::INFILE)
                 .long(options::INFILE)
+                .overrides_with(options::INFILE)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("FILE")
@@ -997,6 +998,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::OUTFILE)
                 .long(options::OUTFILE)
+                .overrides_with(options::OUTFILE)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("FILE")
@@ -1005,6 +1007,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::IBS)
                 .long(options::IBS)
+                .overrides_with(options::IBS)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1013,6 +1016,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::OBS)
                 .long(options::OBS)
+                .overrides_with(options::OBS)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1021,6 +1025,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::BS)
                 .long(options::BS)
+                .overrides_with(options::BS)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1029,6 +1034,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::CBS)
                 .long(options::CBS)
+                .overrides_with(options::CBS)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1037,6 +1043,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::SKIP)
                 .long(options::SKIP)
+                .overrides_with(options::SKIP)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1045,6 +1052,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::SEEK)
                 .long(options::SEEK)
+                .overrides_with(options::SEEK)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1053,6 +1061,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::COUNT)
                 .long(options::COUNT)
+                .overrides_with(options::COUNT)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1061,6 +1070,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::STATUS)
                 .long(options::STATUS)
+                .overrides_with(options::STATUS)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("LEVEL")
@@ -1086,6 +1096,10 @@ Printing performance stats is also triggered by the INFO signal (where supported
             Arg::new(options::CONV)
                 .long(options::CONV)
                 .takes_value(true)
+                .multiple_occurrences(true)
+                .use_delimiter(true)
+                .require_delimiter(true)
+                .multiple_values(true)
                 .require_equals(true)
                 .value_name("CONV")
                 .help("(alternatively conv=CONV[,CONV]) specifies a comma-separated list of conversion options or (for legacy reasons) file flags. Conversion options and file flags may be intermixed.
@@ -1123,6 +1137,10 @@ Conversion Flags:
             Arg::new(options::IFLAG)
                 .long(options::IFLAG)
                 .takes_value(true)
+                .multiple_occurrences(true)
+                .use_delimiter(true)
+                .require_delimiter(true)
+                .multiple_values(true)
                 .require_equals(true)
                 .value_name("FLAG")
                 .help("(alternatively iflag=FLAG[,FLAG]) a comma separated list of input flags which specify how the input source is treated. FLAG may be any of the input-flags or general-flags specified below.
@@ -1149,6 +1167,10 @@ General-Flags
             Arg::new(options::OFLAG)
                 .long(options::OFLAG)
                 .takes_value(true)
+                .multiple_occurrences(true)
+                .use_delimiter(true)
+                .require_delimiter(true)
+                .multiple_values(true)
                 .require_equals(true)
                 .value_name("FLAG")
                 .help("(alternatively oflag=FLAG[,FLAG]) a comma separated list of output flags which specify how the output source is treated. FLAG may be any of the output-flags or general-flags specified below.

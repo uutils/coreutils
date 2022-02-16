@@ -299,6 +299,116 @@ fn test_status_level_noxfer() {
     assert_eq!(st, StatusLevel::Noxfer);
 }
 
+#[test]
+fn test_multiple_flags_options() {
+    let args = vec![
+        String::from("dd"),
+        String::from("--iflag=fullblock,directory"),
+        String::from("--iflag=skip_bytes"),
+        String::from("--oflag=direct"),
+        String::from("--oflag=dsync"),
+        String::from("--conv=ascii,ucase"),
+        String::from("--conv=unblock"),
+    ];
+    let matches = uu_app().try_get_matches_from(args).unwrap();
+
+    // iflag
+    let iflags = parse_flag_list::<Flag>(options::IFLAG, &matches).unwrap();
+    assert_eq!(
+        vec![Flag::FullBlock, Flag::Directory, Flag::SkipBytes],
+        iflags
+    );
+
+    // oflag
+    let oflags = parse_flag_list::<Flag>(options::OFLAG, &matches).unwrap();
+    assert_eq!(vec![Flag::Direct, Flag::Dsync], oflags);
+
+    // conv
+    let conv = parse_flag_list::<ConvFlag>(options::CONV, &matches).unwrap();
+    assert_eq!(
+        vec![ConvFlag::FmtEtoA, ConvFlag::UCase, ConvFlag::Unblock],
+        conv
+    );
+}
+
+#[test]
+fn test_override_multiple_options() {
+    let args = vec![
+        String::from("dd"),
+        String::from("--if=foo.file"),
+        String::from("--if=correct.file"),
+        String::from("--of=bar.file"),
+        String::from("--of=correct.file"),
+        String::from("--ibs=256"),
+        String::from("--ibs=1024"),
+        String::from("--obs=256"),
+        String::from("--obs=1024"),
+        String::from("--cbs=1"),
+        String::from("--cbs=2"),
+        String::from("--skip=0"),
+        String::from("--skip=2"),
+        String::from("--seek=0"),
+        String::from("--seek=2"),
+        String::from("--status=none"),
+        String::from("--status=noxfer"),
+        String::from("--count=512"),
+        String::from("--count=1024"),
+    ];
+
+    let matches = uu_app().try_get_matches_from(args).unwrap();
+
+    // if
+    assert_eq!("correct.file", matches.value_of(options::INFILE).unwrap());
+
+    // of
+    assert_eq!("correct.file", matches.value_of(options::OUTFILE).unwrap());
+
+    // ibs
+    assert_eq!(1024, parse_ibs(&matches).unwrap());
+
+    // obs
+    assert_eq!(1024, parse_obs(&matches).unwrap());
+
+    // cbs
+    assert_eq!(2, parse_cbs(&matches).unwrap().unwrap());
+
+    // status
+    assert_eq!(
+        StatusLevel::Noxfer,
+        parse_status_level(&matches).unwrap().unwrap()
+    );
+
+    // skip
+    assert_eq!(
+        200,
+        parse_skip_amt(&100, &IFlags::default(), &matches)
+            .unwrap()
+            .unwrap()
+    );
+
+    // seek
+    assert_eq!(
+        200,
+        parse_seek_amt(&100, &OFlags::default(), &matches)
+            .unwrap()
+            .unwrap()
+    );
+
+    // count
+    assert_eq!(
+        CountType::Bytes(1024),
+        parse_count(
+            &IFlags {
+                count_bytes: true,
+                ..IFlags::default()
+            },
+            &matches
+        )
+        .unwrap()
+        .unwrap()
+    );
+}
+
 // ----- IConvFlags/Output -----
 
 #[test]
