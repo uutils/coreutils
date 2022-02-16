@@ -1,12 +1,13 @@
+// spell-checker:ignore (misc) matklad
+// see <http://go.microsoft.com/fwlink/?LinkId=827846> for the documentation about the extensions.json format
+// *
+// "foxundermoon.shell-format" ~ shell script formatting ; note: ENABLE "Use EditorConfig"
+// "matklad.rust-analyzer" ~ `rust` language support
+// "streetsidesoftware.code-spell-checker" ~ `cspell` spell-checker support
 {
-  // spell-checker:ignore (misc) matklad
-  // see <http://go.microsoft.com/fwlink/?LinkId=827846> for the documentation about the extensions.json format
-  "recommendations": [
-    // Rust language support.
-    "rust-lang.rust",
-    // Provides support for rust-analyzer: novel LSP server for the Rust programming language.
-    "matklad.rust-analyzer",
-    // `cspell` spell-checker support
-    "streetsidesoftware.code-spell-checker"
-  ]
+	"recommendations": [
+		"matklad.rust-analyzer",
+		"streetsidesoftware.code-spell-checker",
+		"foxundermoon.shell-format"
+	]
 }

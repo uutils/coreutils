@@ -64,14 +64,14 @@ quick_error! {
     #[derive(Debug)]
     pub enum Error {
         /// Simple io::Error wrapper
-        IoErr(err: io::Error) { from() cause(err) display("{}", err)}
+        IoErr(err: io::Error) { from() source(err) display("{}", err)}
 
         /// Wrapper for io::Error with path context
         IoErrContext(err: io::Error, path: String) {
             display("{}: {}", path, err)
             context(path: &'a str, err: io::Error) -> (err, path.to_owned())
             context(context: String, err: io::Error) -> (err, context)
-            cause(err)
+            source(err)
         }
 
         /// General copy error
@@ -86,7 +86,7 @@ quick_error! {
         NotAllFilesCopied {}
 
         /// Simple walkdir::Error wrapper
-        WalkDirErr(err: walkdir::Error) { from() display("{}", err) cause(err) }
+        WalkDirErr(err: walkdir::Error) { from() display("{}", err) source(err) }
 
         /// Simple std::path::StripPrefixError wrapper
         StripPrefixError(err: StripPrefixError) { from() }
@@ -1025,7 +1025,10 @@ fn copy_directory(
         if is_symlink && !options.dereference {
             copy_link(&path, &local_to_target, symlinked_files)?;
         } else if path.is_dir() && !local_to_target.exists() {
-            or_continue!(fs::create_dir_all(local_to_target));
+            if target.is_file() {
+                return Err("cannot overwrite non-directory with directory".into());
+            }
+            fs::create_dir_all(local_to_target)?;
         } else if !path.is_dir() {
             if preserve_hard_links {
                 let mut found_hard_link = false;

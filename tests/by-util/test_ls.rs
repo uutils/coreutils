@@ -1,31 +1,27 @@
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile
 
-#[cfg(unix)]
-extern crate unix_socket;
-use crate::common::util::*;
-
-extern crate regex;
-use self::regex::Regex;
-
-#[cfg(unix)]
-use nix::unistd::{close, dup2};
-#[cfg(unix)]
-use std::os::unix::io::AsRawFd;
-
-use std::collections::HashMap;
-use std::path::Path;
-use std::thread::sleep;
-use std::time::Duration;
 #[cfg(not(windows))]
 extern crate libc;
+extern crate regex;
 #[cfg(not(windows))]
-use self::libc::umask;
+extern crate tempfile;
+#[cfg(unix)]
+extern crate unix_socket;
+
+use self::regex::Regex;
+use crate::common::util::*;
+#[cfg(all(unix, feature = "chmod"))]
+use nix::unistd::{close, dup};
+use std::collections::HashMap;
+#[cfg(all(unix, feature = "chmod"))]
+use std::os::unix::io::IntoRawFd;
+use std::path::Path;
 #[cfg(not(windows))]
 use std::path::PathBuf;
 #[cfg(not(windows))]
 use std::sync::Mutex;
-#[cfg(not(windows))]
-extern crate tempfile;
+use std::thread::sleep;
+use std::time::Duration;
 
 #[cfg(not(windows))]
 lazy_static! {
@@ -145,7 +141,7 @@ fn test_ls_devices() {
     }
 }
 
-#[cfg(all(feature = "chmod"))]
+#[cfg(feature = "chmod")]
 #[test]
 fn test_ls_io_errors() {
     let scene = TestScenario::new(util_name!());
@@ -205,56 +201,52 @@ fn test_ls_io_errors() {
     #[cfg(unix)]
     {
         at.touch("some-dir4/bad-fd.txt");
-        let fd1 = at.open("some-dir4/bad-fd.txt").as_raw_fd();
-        let fd2 = 25000;
-        let rv1 = dup2(fd1, fd2);
-        let rv2 = close(fd1);
+        let fd1 = at.open("some-dir4/bad-fd.txt").into_raw_fd();
+        let fd2 = dup(dbg!(fd1)).unwrap();
+        close(fd1).unwrap();
 
-        // dup and close work on the mac, but doesn't work in some linux containers
-        // so check to see that return values are non-error before proceeding
-        if rv1.is_ok() && rv2.is_ok() {
-            // on the mac and in certain Linux containers bad fds are typed as dirs,
-            // however sometimes bad fds are typed as links and directory entry on links won't fail
-            if PathBuf::from(format!("/dev/fd/{fd}", fd = fd2)).is_dir() {
-                scene
-                    .ucmd()
-                    .arg("-alR")
-                    .arg(format!("/dev/fd/{fd}", fd = fd2))
-                    .fails()
-                    .stderr_contains(format!(
-                        "cannot open directory '/dev/fd/{fd}': Bad file descriptor",
-                        fd = fd2
-                    ))
-                    .stdout_does_not_contain(format!("{fd}:\n", fd = fd2));
-
-                scene
-                    .ucmd()
-                    .arg("-RiL")
-                    .arg(format!("/dev/fd/{fd}", fd = fd2))
-                    .fails()
-                    .stderr_contains(format!("cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2))
-                    // don't double print bad fd errors
-                    .stderr_does_not_contain(format!("ls: cannot open directory '/dev/fd/{fd}': Bad file descriptor\nls: cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2));
-            } else {
-                scene
-                    .ucmd()
-                    .arg("-alR")
-                    .arg(format!("/dev/fd/{fd}", fd = fd2))
-                    .succeeds();
-
-                scene
-                    .ucmd()
-                    .arg("-RiL")
-                    .arg(format!("/dev/fd/{fd}", fd = fd2))
-                    .succeeds();
-            }
+        // on the mac and in certain Linux containers bad fds are typed as dirs,
+        // however sometimes bad fds are typed as links and directory entry on links won't fail
+        if PathBuf::from(format!("/dev/fd/{fd}", fd = fd2)).is_dir() {
+            scene
+                .ucmd()
+                .arg("-alR")
+                .arg(format!("/dev/fd/{fd}", fd = fd2))
+                .fails()
+                .stderr_contains(format!(
+                    "cannot open directory '/dev/fd/{fd}': Bad file descriptor",
+                    fd = fd2
+                ))
+                .stdout_does_not_contain(format!("{fd}:\n", fd = fd2));
 
             scene
                 .ucmd()
-                .arg("-alL")
+                .arg("-RiL")
+                .arg(format!("/dev/fd/{fd}", fd = fd2))
+                .fails()
+                .stderr_contains(format!("cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2))
+                // don't double print bad fd errors
+                .stderr_does_not_contain(format!("ls: cannot open directory '/dev/fd/{fd}': Bad file descriptor\nls: cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2));
+        } else {
+            scene
+                .ucmd()
+                .arg("-alR")
+                .arg(format!("/dev/fd/{fd}", fd = fd2))
+                .succeeds();
+
+            scene
+                .ucmd()
+                .arg("-RiL")
                 .arg(format!("/dev/fd/{fd}", fd = fd2))
                 .succeeds();
         }
+
+        scene
+            .ucmd()
+            .arg("-alL")
+            .arg(format!("/dev/fd/{fd}", fd = fd2))
+            .succeeds();
+
         let _ = close(fd2);
     }
 }
@@ -577,18 +569,6 @@ fn test_ls_commas() {
 
 #[test]
 fn test_ls_long() {
-    #[cfg(not(windows))]
-    let last;
-    #[cfg(not(windows))]
-    {
-        let _guard = UMASK_MUTEX.lock();
-        last = unsafe { umask(0) };
-
-        unsafe {
-            umask(0o002);
-        }
-    }
-
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch(&at.plus_as_string("test-long"));
@@ -596,17 +576,10 @@ fn test_ls_long() {
     for arg in LONG_ARGS {
         let result = scene.ucmd().arg(arg).arg("test-long").succeeds();
         #[cfg(not(windows))]
-        result.stdout_contains("-rw-rw-r--");
+        result.stdout_matches(&Regex::new(r"[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3}.*").unwrap());
 
         #[cfg(windows)]
         result.stdout_contains("---------- 1 somebody somegroup");
-    }
-
-    #[cfg(not(windows))]
-    {
-        unsafe {
-            umask(last);
-        }
     }
 }
 
@@ -1349,17 +1322,14 @@ fn test_ls_order_time() {
     // So the order should be 2 3 4 1
     for arg in &["-u", "--time=atime", "--time=access", "--time=use"] {
         let result = scene.ucmd().arg("-t").arg(arg).succeeds();
-        let file3_access = at.open("test-3").metadata().unwrap().accessed().unwrap();
-        let file4_access = at.open("test-4").metadata().unwrap().accessed().unwrap();
+        at.open("test-3").metadata().unwrap().accessed().unwrap();
+        at.open("test-4").metadata().unwrap().accessed().unwrap();
 
         // It seems to be dependent on the platform whether the access time is actually set
-        if file3_access > file4_access {
-            result.stdout_only("test-3\ntest-4\ntest-2\ntest-1\n");
-        } else {
-            // Access time does not seem to be set on Windows and some other
-            // systems so the order is 4 3 2 1
-            result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
-        }
+        #[cfg(unix)]
+        result.stdout_only("test-3\ntest-4\ntest-2\ntest-1\n");
+        #[cfg(windows)]
+        result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
     }
 
     // test-2 had the last ctime change when the permissions were set
@@ -1580,6 +1550,9 @@ fn test_ls_indicator_style() {
         "--indicator-style=slash",
         "--ind=slash",
         "--classify",
+        "--classify=always",
+        "--classify=yes",
+        "--classify=force",
         "--class",
         "--file-type",
         "--file",
@@ -1587,6 +1560,24 @@ fn test_ls_indicator_style() {
     ] {
         // Verify that classify and file-type both contain indicators for symlinks.
         scene.ucmd().arg(opt).succeeds().stdout_contains(&"/");
+    }
+
+    // Classify, Indicator options should not contain any indicators when value is none.
+    for opt in [
+        "--indicator-style=none",
+        "--ind=none",
+        "--classify=none",
+        "--classify=never",
+        "--classify=no",
+    ] {
+        // Verify that there are no indicators for any of the file types.
+        scene
+            .ucmd()
+            .arg(opt)
+            .succeeds()
+            .stdout_does_not_contain(&"/")
+            .stdout_does_not_contain(&"@")
+            .stdout_does_not_contain(&"|");
     }
 
     // Classify and File-Type all contain indicators for pipes and links.

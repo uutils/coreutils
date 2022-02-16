@@ -16,11 +16,9 @@ extern crate clap;
 extern crate uucore;
 
 mod chunks;
-mod lines;
 mod parse;
 mod platform;
 use chunks::ReverseChunks;
-use lines::lines;
 
 use clap::{App, AppSettings, Arg};
 use std::collections::VecDeque;
@@ -33,6 +31,7 @@ use std::thread::sleep;
 use std::time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::lines::lines;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::ringbuffer::RingBuffer;
 

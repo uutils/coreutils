@@ -491,6 +491,10 @@ fn test_tail_invalid_num() {
                 ));
         }
     }
+    new_ucmd!()
+        .args(&["-c", "-³"])
+        .fails()
+        .stderr_is("tail: invalid number of bytes: '³'");
 }
 
 #[test]

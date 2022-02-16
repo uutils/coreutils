@@ -38,6 +38,8 @@ pub use crate::features::encoding;
 pub use crate::features::fs;
 #[cfg(feature = "fsext")]
 pub use crate::features::fsext;
+#[cfg(feature = "lines")]
+pub use crate::features::lines;
 #[cfg(feature = "memo")]
 pub use crate::features::memo;
 #[cfg(feature = "ringbuffer")]
@@ -151,8 +153,7 @@ pub enum ConversionResult {
 impl ConversionResult {
     pub fn accept_any(self) -> Vec<String> {
         match self {
-            Self::Complete(result) => result,
-            Self::Lossy(result) => result,
+            Self::Complete(result) | Self::Lossy(result) => result,
         }
     }
 

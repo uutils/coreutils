@@ -376,18 +376,18 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | basename  | df        |        |
 | basenc    | expr      |        |
 | cat       | install   |        |
-| chcon     | join      |        |
-| chgrp     | ls        |        |
-| chmod     | more      |        |
-| chown     | numfmt    |        |
-| chroot    | od (`--strings` and 128-bit data types missing) | |
-| cksum     | pr        |        |
-| comm      | printf    |        |
-| csplit    | sort      |        |
-| cut       | split     |        |
-| dircolors | tac       |        |
-| dirname   | tail      |        |
-| du        | test      |        |
+| chcon     | ls        |        |
+| chgrp     | more      |        |
+| chmod     | numfmt    |        |
+| chown     | od (`--strings` and 128-bit data types missing) | |
+| chroot    | pr        |        |
+| cksum     | printf    |        |
+| comm      | sort      |        |
+| csplit    | split     |        |
+| cut       | tac       |        |
+| dircolors | tail      |        |
+| dirname   | test      |        |
+| du        |           |        |
 | echo      |           |        |
 | env       |           |        |
 | expand    |           |        |
@@ -401,6 +401,7 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | hostid    |           |        |
 | hostname  |           |        |
 | id        |           |        |
+| join      |           |        |
 | kill      |           |        |
 | link      |           |        |
 | ln        |           |        |
