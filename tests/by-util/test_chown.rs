@@ -3,8 +3,6 @@
 use crate::common::util::*;
 #[cfg(target_os = "linux")]
 use rust_users::get_effective_uid;
-#[cfg(unix)]
-use std::os::unix::fs::symlink as symlink_file;
 
 extern crate chown;
 
@@ -625,7 +623,7 @@ fn test_root_preserve_indirect() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("test");
-    symlink_file("/", "test/root");
+    at.symlink_file("/", "test/root");
 
     let result = ucmd
         .arg("-RL")
