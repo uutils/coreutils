@@ -212,7 +212,13 @@ impl ChownExecutor {
 
             if let Some(p) = may_exist {
                 if p.parent().is_none() {
-                    show_error!("it is dangerous to operate recursively on '/'");
+                    let display_path = if p == path {
+                        "'/'".to_owned()
+                    } else {
+                        format!("'{}' (same as '/')", path.display())
+                    };
+
+                    show_error!("it is dangerous to operate recursively on {}", display_path);
                     show_error!("use --no-preserve-root to override this failsafe");
                     return true;
                 }
