@@ -265,6 +265,28 @@ impl CmdResult {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stdout_is(String::from_utf8(contents).unwrap())
     }
+
+    /// Assert that the bytes of stdout exactly match those of the given file.
+    ///
+    /// Contrast this with [`CmdResult::stdout_is_fixture`], which
+    /// decodes the contents of the file as a UTF-8 [`String`] before
+    /// comparison with stdout.
+    ///
+    /// # Examples
+    ///
+    /// Use this method in a unit test like this:
+    ///
+    /// ```rust,ignore
+    /// #[test]
+    /// fn test_something() {
+    ///     new_ucmd!().succeeds().stdout_is_fixture_bytes("expected.bin");
+    /// }
+    /// ```
+    pub fn stdout_is_fixture_bytes<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
+        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        self.stdout_is_bytes(contents)
+    }
+
     /// like stdout_is_fixture(...), but replaces the data in fixture file based on values provided in template_vars
     /// command output
     pub fn stdout_is_templated_fixture<T: AsRef<OsStr>>(
