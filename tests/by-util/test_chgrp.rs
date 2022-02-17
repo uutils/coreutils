@@ -85,7 +85,7 @@ fn test_preserve_root() {
             .arg("-R")
             .arg("bin").arg(d)
             .fails()
-            .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe");
+            .stderr_contains("chgrp: it is dangerous to operate recursively");
     }
 }
 
@@ -104,7 +104,7 @@ fn test_preserve_root_symlink() {
             .arg("-HR")
             .arg("bin").arg(file)
             .fails()
-            .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe");
+            .stderr_contains("chgrp: it is dangerous to operate recursively");
     }
 
     let (at, mut ucmd) = at_and_ucmd!();
@@ -113,7 +113,7 @@ fn test_preserve_root_symlink() {
         .arg("-HR")
         .arg("bin").arg(format!(".//{}/..//..//../../", file))
         .fails()
-        .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe");
+        .stderr_contains("chgrp: it is dangerous to operate recursively");
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("/", "/tmp/__root__");
@@ -121,7 +121,7 @@ fn test_preserve_root_symlink() {
         .arg("-R")
         .arg("bin").arg("/tmp/__root__/.")
         .fails()
-        .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe");
+        .stderr_contains("chgrp: it is dangerous to operate recursively");
 
     use std::fs;
     fs::remove_file("/tmp/__root__").unwrap();
