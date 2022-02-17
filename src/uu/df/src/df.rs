@@ -5,6 +5,7 @@
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
+// spell-checker:ignore itotal iused iavail ipcent pcent
 mod table;
 
 use uucore::error::UResult;
@@ -46,6 +47,10 @@ static OPT_SYNC: &str = "sync";
 static OPT_TYPE: &str = "type";
 static OPT_PRINT_TYPE: &str = "print-type";
 static OPT_EXCLUDE_TYPE: &str = "exclude-type";
+static OUTPUT_FIELD_LIST: [&str; 12] = [
+    "source", "fstype", "itotal", "iused", "iavail", "ipcent", "size", "used", "avail", "pcent",
+    "file", "target",
+];
 
 /// Store names of file systems as a selector.
 /// Note: `exclude` takes priority over `include`.
@@ -338,7 +343,6 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(OPT_INODES)
                 .short('i')
                 .long("inodes")
-                .conflicts_with(OPT_OUTPUT)
                 .help("list inode information instead of block usage"),
         )
         .arg(Arg::new(OPT_KILO).short('k').help("like --block-size=1K"))
@@ -359,6 +363,10 @@ pub fn uu_app<'a>() -> App<'a> {
                 .long("output")
                 .takes_value(true)
                 .use_delimiter(true)
+                .possible_values(OUTPUT_FIELD_LIST)
+                .default_missing_values(&OUTPUT_FIELD_LIST)
+                .default_values(&["source", "size", "used", "avail", "pcent", "target"])
+                .conflicts_with_all(&[OPT_INODES, OPT_PORTABILITY, OPT_PRINT_TYPE])
                 .help(
                     "use the output format defined by FIELD_LIST,\
                      or print all fields if FIELD_LIST is omitted.",
@@ -368,7 +376,6 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(OPT_PORTABILITY)
                 .short('P')
                 .long("portability")
-                .conflicts_with(OPT_OUTPUT)
                 .help("use the POSIX output format"),
         )
         .arg(
@@ -390,7 +397,6 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(OPT_PRINT_TYPE)
                 .short('T')
                 .long("print-type")
-                .conflicts_with(OPT_OUTPUT)
                 .help("print file system type"),
         )
         .arg(
