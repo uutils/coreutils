@@ -198,41 +198,29 @@ fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> boo
 }
 
 /// Write a big decimal formatted according to the given parameters.
-///
-/// This method is an adapter to support displaying negative zero on
-/// Rust versions earlier than 1.53.0. After that version, we should be
-/// able to display negative zero using the default formatting provided
-/// by `-0.0f32`, for example.
 fn write_value_float(
     writer: &mut impl Write,
     value: &ExtendedBigDecimal,
     width: usize,
     precision: usize,
-    is_first_iteration: bool,
+    _is_first_iteration: bool,
 ) -> std::io::Result<()> {
-    let value_as_str = if *value == ExtendedBigDecimal::MinusZero && is_first_iteration {
-        format!(
-            "-{value:>0width$.precision$}",
-            value = value,
-            width = if width > 0 { width - 1 } else { width },
-            precision = precision,
-        )
-    } else if *value == ExtendedBigDecimal::Infinity || *value == ExtendedBigDecimal::MinusInfinity
-    {
-        format!(
-            "{value:>width$.precision$}",
-            value = value,
-            width = width,
-            precision = precision,
-        )
-    } else {
-        format!(
-            "{value:>0width$.precision$}",
-            value = value,
-            width = width,
-            precision = precision,
-        )
-    };
+    let value_as_str =
+        if *value == ExtendedBigDecimal::Infinity || *value == ExtendedBigDecimal::MinusInfinity {
+            format!(
+                "{value:>width$.precision$}",
+                value = value,
+                width = width,
+                precision = precision,
+            )
+        } else {
+            format!(
+                "{value:>0width$.precision$}",
+                value = value,
+                width = width,
+                precision = precision,
+            )
+        };
     write!(writer, "{}", value_as_str)
 }
 
