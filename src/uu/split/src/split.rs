@@ -150,7 +150,7 @@ pub fn uu_app<'a>() -> App<'a> {
                 .long(OPT_HEX_SUFFIXES)
                 .takes_value(true)
                 .default_missing_value("0")
-                .help("use hex suffixes starting at 0, not alphabetic"),
+                .help("use hex suffixes instead of alphabetic"),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
@@ -263,9 +263,9 @@ impl Strategy {
 /// Parse the suffix type from the command-line arguments.
 fn suffix_type_from(matches: &ArgMatches) -> SuffixType {
     if matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0 {
-        SuffixType::NumericDecimal
+        SuffixType::Decimal
     } else if matches.occurrences_of(OPT_HEX_SUFFIXES) > 0 {
-        SuffixType::NumericHexadecimal
+        SuffixType::Hexadecimal
     } else {
         SuffixType::Alphabetic
     }

@@ -36,10 +36,10 @@ pub enum SuffixType {
     Alphabetic,
 
     /// Decimal numbers.
-    NumericDecimal,
+    Decimal,
 
     /// Hexadecimal numbers.
-    NumericHexadecimal,
+    Hexadecimal,
 }
 
 impl SuffixType {
@@ -47,8 +47,8 @@ impl SuffixType {
     pub fn radix(&self) -> u8 {
         match self {
             SuffixType::Alphabetic => 26,
-            SuffixType::NumericDecimal => 10,
-            SuffixType::NumericHexadecimal => 16,
+            SuffixType::Decimal => 10,
+            SuffixType::Hexadecimal => 16,
         }
     }
 }
@@ -90,7 +90,7 @@ impl SuffixType {
 /// assert_eq!(it.next().unwrap(), "chunk_ac.txt");
 /// ```
 ///
-/// For decimal numeric filenames, use `SuffixType::NumericDecimal`:
+/// For decimal numeric filenames, use `SuffixType::Decimal`:
 ///
 /// ```rust,ignore
 /// use crate::filenames::FilenameIterator;
@@ -99,7 +99,7 @@ impl SuffixType {
 /// let prefix = "chunk_".to_string();
 /// let suffix = ".txt".to_string();
 /// let width = 2;
-/// let suffix_type = SuffixType::NumericDecimal;
+/// let suffix_type = SuffixType::Decimal;
 /// let it = FilenameIterator::new(prefix, suffix, width, suffix_type);
 ///
 /// assert_eq!(it.next().unwrap(), "chunk_00.txt");
@@ -173,12 +173,12 @@ mod tests {
 
     #[test]
     fn test_filename_iterator_numeric_fixed_width() {
-        let mut it = FilenameIterator::new("chunk_", ".txt", 2, SuffixType::NumericDecimal);
+        let mut it = FilenameIterator::new("chunk_", ".txt", 2, SuffixType::Decimal);
         assert_eq!(it.next().unwrap(), "chunk_00.txt");
         assert_eq!(it.next().unwrap(), "chunk_01.txt");
         assert_eq!(it.next().unwrap(), "chunk_02.txt");
 
-        let mut it = FilenameIterator::new("chunk_", ".txt", 2, SuffixType::NumericDecimal);
+        let mut it = FilenameIterator::new("chunk_", ".txt", 2, SuffixType::Decimal);
         assert_eq!(it.nth(10 * 10 - 1).unwrap(), "chunk_99.txt");
         assert_eq!(it.next(), None);
     }
@@ -198,12 +198,12 @@ mod tests {
 
     #[test]
     fn test_filename_iterator_numeric_dynamic_width() {
-        let mut it = FilenameIterator::new("chunk_", ".txt", 0, SuffixType::NumericDecimal);
+        let mut it = FilenameIterator::new("chunk_", ".txt", 0, SuffixType::Decimal);
         assert_eq!(it.next().unwrap(), "chunk_00.txt");
         assert_eq!(it.next().unwrap(), "chunk_01.txt");
         assert_eq!(it.next().unwrap(), "chunk_02.txt");
 
-        let mut it = FilenameIterator::new("chunk_", ".txt", 0, SuffixType::NumericDecimal);
+        let mut it = FilenameIterator::new("chunk_", ".txt", 0, SuffixType::Decimal);
         assert_eq!(it.nth(10 * 9 - 1).unwrap(), "chunk_89.txt");
         assert_eq!(it.next().unwrap(), "chunk_9000.txt");
         assert_eq!(it.next().unwrap(), "chunk_9001.txt");
