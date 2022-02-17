@@ -241,7 +241,7 @@ impl ChownExecutor {
         //     (argument is symlink && should follow argument && resolved to be '/')
         // )
 
-        if self.is_dangerous(&path) {
+        if self.is_dangerous(path) {
             return 1;
         }
 
@@ -320,7 +320,7 @@ impl ChownExecutor {
             };
             let path = entry.path();
 
-            if self.is_dangerous(&path) {
+            if self.is_dangerous(path) {
                 return 1;
             }
 
