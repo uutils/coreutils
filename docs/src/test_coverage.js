@@ -7,13 +7,18 @@ function progressBar(totals) {
 		totalTests += value;
 	}
 	const passPercentage = Math.round(100 * totals["PASS"] / totalTests);
-	const skipPercentage = passPercentage + Math.round(100 * totals["PASS"] / totalTests);
+	const skipPercentage = passPercentage + Math.round(100 * totals["SKIP"] / totalTests);
+
+	// The ternary expressions are used for some edge-cases where there are no failing test,
+	// but still a red (or beige) line shows up because of how CSS draws gradients.
 	bar.style = `background: linear-gradient(
         to right,
-        var(--PASS) ${passPercentage}%,
-        var(--SKIP) ${passPercentage}%,
-        var(--SKIP) ${skipPercentage}%,
-        var(--FAIL) 0)`;
+        var(--PASS) ${passPercentage}%`
+		+ ( passPercentage === 100 ? ", var(--PASS)" :
+        `, var(--SKIP) ${passPercentage}%,
+        var(--SKIP) ${skipPercentage}%`
+		)
+        + (skipPercentage === 100 ? ")" : ", var(--FAIL) 0)");
 	
 	const progress = document.createElement("div");
 	progress.className = "progress"
@@ -69,7 +74,7 @@ function parse_result(parent, obj) {
 	return totals;
 }
 
-fetch("https://github.com/uutils/coreutils-tracking/blob/main/gnu-full-result.json")
+fetch("https://raw.githubusercontent.com/uutils/coreutils-tracking/main/gnu-full-result.json")
 	.then((r) => r.json())
 	.then((obj) => {
 		let parent = document.getElementById("test-cov");

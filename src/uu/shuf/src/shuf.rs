@@ -14,7 +14,7 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::InvalidEncodingHandling;
+use uucore::{execution_phrase, InvalidEncodingHandling};
 
 mod rand_read_adapter;
 
@@ -26,14 +26,9 @@ enum Mode {
 
 static NAME: &str = "shuf";
 static USAGE: &str = r#"shuf [OPTION]... [FILE]
-  or:  shuf -e [OPTION]... [ARG]...
-  or:  shuf -i LO-HI [OPTION]...
-Write a random permutation of the input lines to standard output.
-
-With no FILE, or when FILE is -, read standard input.
-"#;
+    or:  shuf -e [OPTION]... [ARG]...
+    or:  shuf -i LO-HI [OPTION]..."#;
 static ABOUT: &str = "Shuffle the input by outputting a random permutation of input lines. Each output permutation is equally likely.";
-static TEMPLATE: &str = "Usage: {usage}\nMandatory arguments to long options are mandatory for short options too.\n{options}";
 
 struct Options {
     head_count: usize,
@@ -60,7 +55,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app()
+        .override_usage(&USAGE.replace(NAME, execution_phrase())[..])
+        .get_matches_from(args);
 
     let mode = if let Some(args) = matches.values_of(options::ECHO) {
         Mode::Echo(args.map(String::from).collect())
@@ -125,7 +122,6 @@ pub fn uu_app<'a>() -> App<'a> {
         .name(NAME)
         .about(ABOUT)
         .version(crate_version!())
-        .help_template(TEMPLATE)
         .override_usage(USAGE)
         .setting(AppSettings::InferLongArgs)
         .arg(
