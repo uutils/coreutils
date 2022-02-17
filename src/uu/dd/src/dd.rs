@@ -521,10 +521,17 @@ impl OutputTrait for Output<File> {
             let mut dst = open_dst(Path::new(&fname), &cflags, &oflags)
                 .map_err_context(|| format!("failed to open {}", fname.quote()))?;
 
+            // Seek to the index in the output file, truncating if requested.
+            //
+            // Calling `set_len()` may result in an error (for
+            // example, when calling it on `/dev/null`), but we don't
+            // want to terminate the process when that happens.
+            // Instead, we suppress the error by calling
+            // `Result::ok()`. This matches the behavior of GNU `dd`
+            // when given the command-line argument `of=/dev/null`.
             let i = seek.unwrap_or(0).try_into().unwrap();
             if !cflags.notrunc {
-                dst.set_len(i)
-                    .map_err_context(|| "failed to truncate output file".to_string())?;
+                dst.set_len(i).ok();
             }
             dst.seek(io::SeekFrom::Start(i))
                 .map_err_context(|| "failed to seek in output file".to_string())?;
