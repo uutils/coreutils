@@ -7,27 +7,21 @@
 use clap::App;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, Read, Write};
-use std::process::Command;
+use std::io::Cursor;
+use std::io::{self, Read, Seek, Write};
+use zip::ZipArchive;
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
 fn main() -> io::Result<()> {
-    let _ = std::fs::create_dir("docs/tldr");
     println!("Downloading tldr archive");
-    Command::new("curl")
-        .arg("https://tldr.sh/assets/tldr.zip")
-        .arg("--output")
-        .arg("docs/tldr/tldr.zip")
-        .output()?;
-
-    println!("Unzipping tldr archive");
-    Command::new("unzip")
-        .arg("-o")
-        .arg("docs/tldr/tldr.zip")
-        .arg("-d")
-        .arg("docs/tldr")
-        .output()?;
+    let mut zip_reader = ureq::get("https://tldr.sh/assets/tldr.zip")
+        .call()
+        .unwrap()
+        .into_reader();
+    let mut buffer = Vec::new();
+    zip_reader.read_to_end(&mut buffer).unwrap();
+    let mut tldr_zip = ZipArchive::new(Cursor::new(buffer)).unwrap();
 
     let utils = util_map::<Box<dyn Iterator<Item = OsString>>>();
     match std::fs::create_dir("docs/src/utils/") {
@@ -58,7 +52,7 @@ fn main() -> io::Result<()> {
         }
         let p = format!("docs/src/utils/{}.md", name);
         if let Ok(f) = File::create(&p) {
-            write_markdown(f, &mut app(), name)?;
+            write_markdown(f, &mut app(), name, &mut tldr_zip)?;
             println!("Wrote to '{}'", p);
         } else {
             println!("Error writing to {}", p);
@@ -68,12 +62,17 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn write_markdown(mut w: impl Write, app: &mut App, name: &str) -> io::Result<()> {
+fn write_markdown(
+    mut w: impl Write,
+    app: &mut App,
+    name: &str,
+    tldr_zip: &mut zip::ZipArchive<impl Read + Seek>,
+) -> io::Result<()> {
     write!(w, "# {}\n\n", name)?;
     write_version(&mut w, app)?;
     write_usage(&mut w, app, name)?;
     write_description(&mut w, app)?;
-    write_examples(&mut w, name)?;
+    write_examples(&mut w, name, tldr_zip)?;
     write_options(&mut w, app)
 }
 
@@ -101,33 +100,49 @@ fn write_description(w: &mut impl Write, app: &App) -> io::Result<()> {
     }
 }
 
-fn write_examples(w: &mut impl Write, name: &str) -> io::Result<()> {
-    if let Ok(mut file) = std::fs::File::open(format!("docs/tldr/pages/common/{}.md", name))
-        .or_else(|_| std::fs::File::open(format!("docs/tldr/pages/linux/{}.md", name)))
-    {
-        let mut content = String::new();
-        file.read_to_string(&mut content)?;
-
-        writeln!(w, "## Examples")?;
-        writeln!(w)?;
-        for line in content.lines().skip_while(|l| !l.starts_with('-')) {
-            if let Some(l) = line.strip_prefix("- ") {
-                writeln!(w, "{}", l)?;
-            } else if line.starts_with('`') {
-                writeln!(w, "```shell\n{}\n```", line.trim_matches('`'))?;
-            } else if line.is_empty() {
-                writeln!(w)?;
-            } else {
-                println!("Not sure what to do with this line:");
-                println!("{}", line);
-            }
-        }
-        writeln!(w)?;
-        writeln!(w, "> The examples are provided by the [tldr-pages project](https://tldr.sh) under the [CC BY 4.0 License](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md).")?;
+fn write_examples(
+    w: &mut impl Write,
+    name: &str,
+    tldr_zip: &mut zip::ZipArchive<impl Read + Seek>,
+) -> io::Result<()> {
+    let content = if let Some(f) = get_zip_content(tldr_zip, &format!("pages/common/{}.md", name)) {
+        f
+    } else if let Some(f) = get_zip_content(tldr_zip, &format!("pages/linux/{}.md", name)) {
+        f
     } else {
-        println!("No examples found for: {}", name);
+        return Ok(());
+    };
+
+    writeln!(w, "## Examples")?;
+    writeln!(w)?;
+    for line in content.lines().skip_while(|l| !l.starts_with('-')) {
+        if let Some(l) = line.strip_prefix("- ") {
+            writeln!(w, "{}", l)?;
+        } else if line.starts_with('`') {
+            writeln!(w, "```shell\n{}\n```", line.trim_matches('`'))?;
+        } else if line.is_empty() {
+            writeln!(w)?;
+        } else {
+            println!("Not sure what to do with this line:");
+            println!("{}", line);
+        }
     }
-    Ok(())
+    writeln!(w)?;
+    writeln!(
+        w,
+        "> The examples are provided by the [tldr-pages project](https://tldr.sh) under the [CC BY 4.0 License](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md)."
+    )?;
+    writeln!(w, ">")?;
+    writeln!(
+        w,
+        "> Please note that, as uutils is a work in progress, some examples might fail."
+    )
+}
+
+fn get_zip_content(archive: &mut ZipArchive<impl Read + Seek>, name: &str) -> Option<String> {
+    let mut s = String::new();
+    archive.by_name(name).ok()?.read_to_string(&mut s).unwrap();
+    Some(s)
 }
 
 fn write_options(w: &mut impl Write, app: &App) -> io::Result<()> {
