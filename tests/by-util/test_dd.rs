@@ -1079,3 +1079,19 @@ fn test_skip_zero() {
         .no_stdout()
         .stderr_is("0+0 records in\n0+0 records out\n");
 }
+
+#[test]
+fn test_truncated_record() {
+    new_ucmd!()
+        .args(&["cbs=1", "conv=block", "status=noxfer"])
+        .pipe_in("ab")
+        .succeeds()
+        .stdout_is("a")
+        .stderr_is("0+1 records in\n0+1 records out\n1 truncated record\n");
+    new_ucmd!()
+        .args(&["cbs=1", "conv=block", "status=noxfer"])
+        .pipe_in("ab\ncd\n")
+        .succeeds()
+        .stdout_is("ac")
+        .stderr_is("0+1 records in\n0+1 records out\n2 truncated records\n");
+}

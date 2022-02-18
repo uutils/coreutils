@@ -779,13 +779,15 @@ fn print_io_lines(update: &ProgUpdate) {
         "{}+{} records in",
         update.read_stat.reads_complete, update.read_stat.reads_partial
     );
-    if update.read_stat.records_truncated > 0 {
-        eprintln!("{} truncated records", update.read_stat.records_truncated);
-    }
     eprintln!(
         "{}+{} records out",
         update.write_stat.writes_complete, update.write_stat.writes_partial
     );
+    match update.read_stat.records_truncated {
+        0 => {}
+        1 => eprintln!("1 truncated record"),
+        n => eprintln!("{} truncated records", n),
+    }
 }
 // Print the progress line of a status update:
 // <byte-count> bytes (<base-1000-size>, <base-2-size>) copied, <time> s, <base-2-rate>/s
