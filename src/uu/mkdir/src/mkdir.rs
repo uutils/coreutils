@@ -65,8 +65,8 @@ fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, St
             Ok(new_mode)
         }
         None => {
-            // If no mode argument is specified return the mode from umask
-            Ok(mode::get_umask())
+            // If no mode argument is specified return the mode derived from umask
+            Ok(!mode::get_umask() & 0o0777)
         }
     }
 }
