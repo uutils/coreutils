@@ -539,3 +539,16 @@ fn test_touch_no_args() {
 Try 'touch --help' for more information."##,
     );
 }
+
+#[test]
+fn test_no_dereference_no_file() {
+    new_ucmd!()
+        .args(&["-h", "not-a-file"])
+        .fails()
+        .stderr_contains("setting times of 'not-a-file': No such file or directory");
+    new_ucmd!()
+        .args(&["-h", "not-a-file-1", "not-a-file-2"])
+        .fails()
+        .stderr_contains("setting times of 'not-a-file-1': No such file or directory")
+        .stderr_contains("setting times of 'not-a-file-2': No such file or directory");
+}

@@ -1,63 +1,85 @@
 #!/bin/bash
+# `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
+#
+# UU_MAKE_PROFILE == 'debug' | 'release' ## build profile for *uutils* build; may be supplied by caller, defaults to 'debug'
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall gnulib inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode ; (vars/env) BUILDDIR SRCDIR
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules ; (vars/env) SRCDIR
 
 set -e
-if test ! -d ../gnu; then
-    echo "Could not find ../gnu"
-    echo "git clone https://github.com/coreutils/coreutils.git gnu"
-    exit 1
-fi
-if test ! -d ../gnulib; then
-    echo "Could not find ../gnulib"
-    echo "git clone https://github.com/coreutils/gnulib.git gnulib"
+
+ME="${0}"
+ME_dir="$(dirname -- "$(readlink -fm -- "${ME}")")"
+REPO_main_dir="$(dirname -- "${ME_dir}")"
+
+echo "ME='${ME}'"
+echo "ME_dir='${ME_dir}'"
+echo "REPO_main_dir='${REPO_main_dir}'"
+
+### * config (from environment with fallback defaults); note: GNU is expected to be a sibling repo directory
+
+path_UUTILS=${path_UUTILS:-${REPO_main_dir}}
+path_GNU="$(readlink -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
+
+echo "path_UUTILS='${path_UUTILS}'"
+echo "path_GNU='${path_GNU}'"
+
+###
+
+if test ! -d "${path_GNU}"; then
+    echo "Could not find GNU (expected at '${path_GNU}')"
+    echo "git clone --recurse-submodules https://github.com/coreutils/coreutils.git \"${path_GNU}\""
     exit 1
 fi
 
+###
 
-pushd "$PWD"
-make PROFILE=release
-BUILDDIR="$PWD/target/release/"
-cp "${BUILDDIR}/install" "${BUILDDIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
+UU_MAKE_PROFILE=${UU_MAKE_PROFILE:-release}
+echo "UU_MAKE_PROFILE='${UU_MAKE_PROFILE}'"
+
+UU_BUILD_DIR="${path_UUTILS}/target/${UU_MAKE_PROFILE}"
+echo "UU_BUILD_DIR='${UU_BUILD_DIR}'"
+
+cd "${path_UUTILS}" && echo "[ pwd:'${PWD}' ]"
+make PROFILE="${UU_MAKE_PROFILE}"
+cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 # Create *sum binaries
-for sum in b2sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum
-do
-    sum_path="${BUILDDIR}/${sum}"
-    test -f "${sum_path}" || cp "${BUILDDIR}/hashsum" "${sum_path}"
+for sum in b2sum b3sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum; do
+    sum_path="${UU_BUILD_DIR}/${sum}"
+    test -f "${sum_path}" || cp "${UU_BUILD_DIR}/hashsum" "${sum_path}"
 done
-test -f "${BUILDDIR}/[" || cp "${BUILDDIR}/test" "${BUILDDIR}/["
-popd
-GNULIB_SRCDIR="$PWD/../gnulib"
-pushd ../gnu/
+test -f "${UU_BUILD_DIR}/[" || cp "${UU_BUILD_DIR}/test" "${UU_BUILD_DIR}/["
+
+##
+
+cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
 
 # Any binaries that aren't built become `false` so their tests fail
-for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs)
-do
-    bin_path="${BUILDDIR}/${binary}"
-    test -f "${bin_path}" || { echo "'${binary}' was not built with uutils, using the 'false' program"; cp "${BUILDDIR}/false" "${bin_path}"; }
+for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
+    bin_path="${UU_BUILD_DIR}/${binary}"
+    test -f "${bin_path}" || {
+        echo "'${binary}' was not built with uutils, using the 'false' program"
+        cp "${UU_BUILD_DIR}/false" "${bin_path}"
+    }
 done
 
-./bootstrap --gnulib-srcdir="$GNULIB_SRCDIR"
+./bootstrap
 ./configure --quiet --disable-gcc-warnings
 #Add timeout to to protect against hangs
 sed -i 's|^"\$@|/usr/bin/timeout 600 "\$@|' build-aux/test-driver
 # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
-sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${BUILDDIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
+sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
 sed -i 's| tr | /usr/bin/tr |' tests/init.sh
 make -j "$(nproc)"
 # Generate the factor tests, so they can be fixed
 # Used to be 36. Reduced to 20 to decrease the log size
-for i in {00..20}
-do
+for i in {00..20}; do
     make "tests/factor/t${i}.sh"
 done
 
 # strip the long stuff
-for i in {21..36}
-do
+for i in {21..36}; do
     sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
 done
-
 
 grep -rl 'path_prepend_' tests/* | xargs sed -i 's| path_prepend_ ./src||'
 sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*sh
@@ -97,10 +119,8 @@ sed -i 's|seq |/usr/bin/seq |' tests/misc/sort-discrim.sh
 # Add specific timeout to tests that currently hang to limit time spent waiting
 sed -i 's|\(^\s*\)seq \$|\1/usr/bin/timeout 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh
 
-
 # Remove dup of /usr/bin/ when executed several times
 grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs --no-run-if-empty sed -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
-
 
 #### Adjust tests to make them work with Rust/coreutils
 # in some cases, what we are doing in rust/coreutils is good (or better)
@@ -117,7 +137,7 @@ sed -i -e "s|rm: cannot remove 'a/1'|rm: cannot remove 'a'|g" tests/rm/rm2.sh
 
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
-test -f "${BUILDDIR}/getlimits" || cp src/getlimits "${BUILDDIR}"
+test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
 
 # When decoding an invalid base32/64 string, gnu writes everything it was able to decode until
 # it hit the decode error, while we don't write anything if the input is invalid.

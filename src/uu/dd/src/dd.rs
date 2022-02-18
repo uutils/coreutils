@@ -7,9 +7,6 @@
 
 // spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat seekable
 
-#[cfg(test)]
-mod dd_unit_tests;
-
 mod datastructures;
 use datastructures::*;
 
@@ -42,6 +39,7 @@ use gcd::Gcd;
 use signal_hook::consts::signal;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::show_error;
 use uucore::InvalidEncodingHandling;
 
 const ABOUT: &str = "copy, and optionally convert, a file system resource";
@@ -80,9 +78,12 @@ impl Input<io::Stdin> {
         };
 
         if let Some(amt) = skip {
-            let mut buf = vec![BUF_INIT_BYTE; amt];
-            i.force_fill(&mut buf, amt)
+            let num_bytes_read = i
+                .force_fill(amt.try_into().unwrap())
                 .map_err_context(|| "failed to read input".to_string())?;
+            if num_bytes_read < amt {
+                show_error!("'standard input': cannot skip to specified offset");
+            }
         }
 
         Ok(i)
@@ -264,17 +265,19 @@ impl<R: Read> Input<R> {
         })
     }
 
-    /// Force-fills a buffer, ignoring zero-length reads which would otherwise be
-    /// interpreted as EOF.
-    /// Note: This will not return unless the source (eventually) produces
-    /// enough bytes to meet target_len.
-    fn force_fill(&mut self, buf: &mut [u8], target_len: usize) -> std::io::Result<usize> {
-        let mut base_idx = 0;
-        while base_idx < target_len {
-            base_idx += self.read(&mut buf[base_idx..target_len])?;
-        }
-
-        Ok(base_idx)
+    /// Read the specified number of bytes from this reader.
+    ///
+    /// On success, this method returns the number of bytes read. If
+    /// this reader has fewer than `n` bytes available, then it reads
+    /// as many as possible. In that case, this method returns a
+    /// number less than `n`.
+    ///
+    /// # Errors
+    ///
+    /// If there is a problem reading.
+    fn force_fill(&mut self, n: u64) -> std::io::Result<usize> {
+        let mut buf = vec![];
+        self.take(n).read_to_end(&mut buf)
     }
 }
 
@@ -328,16 +331,13 @@ where
         let mut bytes_total = 0;
 
         for chunk in buf.chunks(self.obs) {
-            match self.write(chunk)? {
-                wlen if wlen < chunk.len() => {
-                    writes_partial += 1;
-                    bytes_total += wlen;
-                }
-                wlen => {
-                    writes_complete += 1;
-                    bytes_total += wlen;
-                }
+            let wlen = self.write(chunk)?;
+            if wlen < self.obs {
+                writes_partial += 1;
+            } else {
+                writes_complete += 1;
             }
+            bytes_total += wlen;
         }
 
         Ok(WriteStat {
@@ -860,10 +860,14 @@ fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, print_level: Option<StatusLe
             }
         });
 
+        let mut progress_as_secs = 0;
         while let Ok(update) = rx.recv() {
             // (Re)print status line if progress is requested.
-            if Some(StatusLevel::Progress) == print_level {
+            if Some(StatusLevel::Progress) == print_level
+                && update.duration.as_secs() >= progress_as_secs
+            {
                 reprint_prog_line(&update);
+                progress_as_secs = update.duration.as_secs() + 1;
             }
             // Handle signals
             #[cfg(target_os = "linux")]
@@ -982,6 +986,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::INFILE)
                 .long(options::INFILE)
+                .overrides_with(options::INFILE)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("FILE")
@@ -990,6 +995,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::OUTFILE)
                 .long(options::OUTFILE)
+                .overrides_with(options::OUTFILE)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("FILE")
@@ -998,6 +1004,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::IBS)
                 .long(options::IBS)
+                .overrides_with(options::IBS)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1006,6 +1013,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::OBS)
                 .long(options::OBS)
+                .overrides_with(options::OBS)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1014,6 +1022,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::BS)
                 .long(options::BS)
+                .overrides_with(options::BS)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1022,6 +1031,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::CBS)
                 .long(options::CBS)
+                .overrides_with(options::CBS)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1030,6 +1040,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::SKIP)
                 .long(options::SKIP)
+                .overrides_with(options::SKIP)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1038,6 +1049,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::SEEK)
                 .long(options::SEEK)
+                .overrides_with(options::SEEK)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1046,6 +1058,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::COUNT)
                 .long(options::COUNT)
+                .overrides_with(options::COUNT)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1054,6 +1067,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::STATUS)
                 .long(options::STATUS)
+                .overrides_with(options::STATUS)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("LEVEL")
@@ -1079,6 +1093,10 @@ Printing performance stats is also triggered by the INFO signal (where supported
             Arg::new(options::CONV)
                 .long(options::CONV)
                 .takes_value(true)
+                .multiple_occurrences(true)
+                .use_delimiter(true)
+                .require_delimiter(true)
+                .multiple_values(true)
                 .require_equals(true)
                 .value_name("CONV")
                 .help("(alternatively conv=CONV[,CONV]) specifies a comma-separated list of conversion options or (for legacy reasons) file flags. Conversion options and file flags may be intermixed.
@@ -1116,6 +1134,10 @@ Conversion Flags:
             Arg::new(options::IFLAG)
                 .long(options::IFLAG)
                 .takes_value(true)
+                .multiple_occurrences(true)
+                .use_delimiter(true)
+                .require_delimiter(true)
+                .multiple_values(true)
                 .require_equals(true)
                 .value_name("FLAG")
                 .help("(alternatively iflag=FLAG[,FLAG]) a comma separated list of input flags which specify how the input source is treated. FLAG may be any of the input-flags or general-flags specified below.
@@ -1142,6 +1164,10 @@ General-Flags
             Arg::new(options::OFLAG)
                 .long(options::OFLAG)
                 .takes_value(true)
+                .multiple_occurrences(true)
+                .use_delimiter(true)
+                .require_delimiter(true)
+                .multiple_values(true)
                 .require_equals(true)
                 .value_name("FLAG")
                 .help("(alternatively oflag=FLAG[,FLAG]) a comma separated list of output flags which specify how the output source is treated. FLAG may be any of the output-flags or general-flags specified below.
@@ -1163,4 +1189,455 @@ General-Flags
 
 ")
         )
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::datastructures::{IConvFlags, IFlags, OConvFlags};
+    use crate::ReadStat;
+    use crate::{block, calc_bsize, unblock, uu_app, Input, Output, OutputTrait};
+
+    use std::cmp;
+    use std::fs;
+    use std::fs::File;
+    use std::io;
+    use std::io::{BufReader, Read};
+
+    struct LazyReader<R: Read> {
+        src: R,
+    }
+
+    impl<R: Read> Read for LazyReader<R> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            let reduced = cmp::max(buf.len() / 2, 1);
+            self.src.read(&mut buf[..reduced])
+        }
+    }
+
+    const NEWLINE: u8 = b'\n';
+    const SPACE: u8 = b' ';
+
+    #[test]
+    fn block_test_no_nl() {
+        let mut rs = ReadStat::default();
+        let buf = [0u8, 1u8, 2u8, 3u8];
+        let res = block(&buf, 4, &mut rs);
+
+        assert_eq!(res, vec![vec![0u8, 1u8, 2u8, 3u8],]);
+    }
+
+    #[test]
+    fn block_test_no_nl_short_record() {
+        let mut rs = ReadStat::default();
+        let buf = [0u8, 1u8, 2u8, 3u8];
+        let res = block(&buf, 8, &mut rs);
+
+        assert_eq!(
+            res,
+            vec![vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],]
+        );
+    }
+
+    #[test]
+    fn block_test_no_nl_trunc() {
+        let mut rs = ReadStat::default();
+        let buf = [0u8, 1u8, 2u8, 3u8, 4u8];
+        let res = block(&buf, 4, &mut rs);
+
+        // Commented section(s) should be truncated and appear for reference only.
+        assert_eq!(res, vec![vec![0u8, 1u8, 2u8, 3u8 /*, 4u8*/],]);
+        assert_eq!(rs.records_truncated, 1);
+    }
+
+    #[test]
+    fn block_test_nl_gt_cbs_trunc() {
+        let mut rs = ReadStat::default();
+        let buf = [
+            0u8, 1u8, 2u8, 3u8, 4u8, NEWLINE, 0u8, 1u8, 2u8, 3u8, 4u8, NEWLINE, 5u8, 6u8, 7u8, 8u8,
+        ];
+        let res = block(&buf, 4, &mut rs);
+
+        assert_eq!(
+            res,
+            vec![
+                // Commented section(s) should be truncated and appear for reference only.
+                vec![0u8, 1u8, 2u8, 3u8],
+                // vec![4u8, SPACE, SPACE, SPACE],
+                vec![0u8, 1u8, 2u8, 3u8],
+                // vec![4u8, SPACE, SPACE, SPACE],
+                vec![5u8, 6u8, 7u8, 8u8],
+            ]
+        );
+        assert_eq!(rs.records_truncated, 2);
+    }
+
+    #[test]
+    fn block_test_surrounded_nl() {
+        let mut rs = ReadStat::default();
+        let buf = [0u8, 1u8, 2u8, 3u8, NEWLINE, 4u8, 5u8, 6u8, 7u8, 8u8];
+        let res = block(&buf, 8, &mut rs);
+
+        assert_eq!(
+            res,
+            vec![
+                vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
+                vec![4u8, 5u8, 6u8, 7u8, 8u8, SPACE, SPACE, SPACE],
+            ]
+        );
+    }
+
+    #[test]
+    fn block_test_multiple_nl_same_cbs_block() {
+        let mut rs = ReadStat::default();
+        let buf = [
+            0u8, 1u8, 2u8, 3u8, NEWLINE, 4u8, NEWLINE, 5u8, 6u8, 7u8, 8u8, 9u8,
+        ];
+        let res = block(&buf, 8, &mut rs);
+
+        assert_eq!(
+            res,
+            vec![
+                vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
+                vec![4u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE],
+                vec![5u8, 6u8, 7u8, 8u8, 9u8, SPACE, SPACE, SPACE],
+            ]
+        );
+    }
+
+    #[test]
+    fn block_test_multiple_nl_diff_cbs_block() {
+        let mut rs = ReadStat::default();
+        let buf = [
+            0u8, 1u8, 2u8, 3u8, NEWLINE, 4u8, 5u8, 6u8, 7u8, NEWLINE, 8u8, 9u8,
+        ];
+        let res = block(&buf, 8, &mut rs);
+
+        assert_eq!(
+            res,
+            vec![
+                vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
+                vec![4u8, 5u8, 6u8, 7u8, SPACE, SPACE, SPACE, SPACE],
+                vec![8u8, 9u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE],
+            ]
+        );
+    }
+
+    #[test]
+    fn block_test_end_nl_diff_cbs_block() {
+        let mut rs = ReadStat::default();
+        let buf = [0u8, 1u8, 2u8, 3u8, NEWLINE];
+        let res = block(&buf, 4, &mut rs);
+
+        assert_eq!(res, vec![vec![0u8, 1u8, 2u8, 3u8],]);
+    }
+
+    #[test]
+    fn block_test_end_nl_same_cbs_block() {
+        let mut rs = ReadStat::default();
+        let buf = [0u8, 1u8, 2u8, NEWLINE];
+        let res = block(&buf, 4, &mut rs);
+
+        assert_eq!(res, vec![vec![0u8, 1u8, 2u8, SPACE]]);
+    }
+
+    #[test]
+    fn block_test_double_end_nl() {
+        let mut rs = ReadStat::default();
+        let buf = [0u8, 1u8, 2u8, NEWLINE, NEWLINE];
+        let res = block(&buf, 4, &mut rs);
+
+        assert_eq!(
+            res,
+            vec![vec![0u8, 1u8, 2u8, SPACE], vec![SPACE, SPACE, SPACE, SPACE],]
+        );
+    }
+
+    #[test]
+    fn block_test_start_nl() {
+        let mut rs = ReadStat::default();
+        let buf = [NEWLINE, 0u8, 1u8, 2u8, 3u8];
+        let res = block(&buf, 4, &mut rs);
+
+        assert_eq!(
+            res,
+            vec![vec![SPACE, SPACE, SPACE, SPACE], vec![0u8, 1u8, 2u8, 3u8],]
+        );
+    }
+
+    #[test]
+    fn block_test_double_surrounded_nl_no_trunc() {
+        let mut rs = ReadStat::default();
+        let buf = [0u8, 1u8, 2u8, 3u8, NEWLINE, NEWLINE, 4u8, 5u8, 6u8, 7u8];
+        let res = block(&buf, 8, &mut rs);
+
+        assert_eq!(
+            res,
+            vec![
+                vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
+                vec![SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE],
+                vec![4u8, 5u8, 6u8, 7u8, SPACE, SPACE, SPACE, SPACE],
+            ]
+        );
+    }
+
+    #[test]
+    fn block_test_double_surrounded_nl_double_trunc() {
+        let mut rs = ReadStat::default();
+        let buf = [
+            0u8, 1u8, 2u8, 3u8, NEWLINE, NEWLINE, 4u8, 5u8, 6u8, 7u8, 8u8,
+        ];
+        let res = block(&buf, 4, &mut rs);
+
+        assert_eq!(
+            res,
+            vec![
+                // Commented section(s) should be truncated and appear for reference only.
+                vec![0u8, 1u8, 2u8, 3u8],
+                vec![SPACE, SPACE, SPACE, SPACE],
+                vec![4u8, 5u8, 6u8, 7u8 /*, 8u8*/],
+            ]
+        );
+        assert_eq!(rs.records_truncated, 1);
+    }
+
+    #[test]
+    fn unblock_test_full_cbs() {
+        let buf = [0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8];
+        let res = unblock(&buf, 8);
+
+        assert_eq!(res, vec![0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, NEWLINE],);
+    }
+
+    #[test]
+    fn unblock_test_all_space() {
+        let buf = [SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE];
+        let res = unblock(&buf, 8);
+
+        assert_eq!(res, vec![NEWLINE],);
+    }
+
+    #[test]
+    fn unblock_test_decoy_spaces() {
+        let buf = [0u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, 7u8];
+        let res = unblock(&buf, 8);
+
+        assert_eq!(
+            res,
+            vec![0u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, 7u8, NEWLINE],
+        );
+    }
+
+    #[test]
+    fn unblock_test_strip_single_cbs() {
+        let buf = [0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE];
+        let res = unblock(&buf, 8);
+
+        assert_eq!(res, vec![0u8, 1u8, 2u8, 3u8, NEWLINE],);
+    }
+
+    #[test]
+    fn unblock_test_strip_multi_cbs() {
+        let buf = vec![
+            vec![0u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE],
+            vec![0u8, 1u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE],
+            vec![0u8, 1u8, 2u8, SPACE, SPACE, SPACE, SPACE, SPACE],
+            vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+
+        let res = unblock(&buf, 8);
+
+        let exp = vec![
+            vec![0u8, NEWLINE],
+            vec![0u8, 1u8, NEWLINE],
+            vec![0u8, 1u8, 2u8, NEWLINE],
+            vec![0u8, 1u8, 2u8, 3u8, NEWLINE],
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+
+        assert_eq!(res, exp);
+    }
+
+    #[test]
+    fn bsize_test_primes() {
+        let (n, m) = (7901, 7919);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, n * m);
+    }
+
+    #[test]
+    fn bsize_test_rel_prime_obs_greater() {
+        let (n, m) = (7 * 5119, 13 * 5119);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, 7 * 13 * 5119);
+    }
+
+    #[test]
+    fn bsize_test_rel_prime_ibs_greater() {
+        let (n, m) = (13 * 5119, 7 * 5119);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, 7 * 13 * 5119);
+    }
+
+    #[test]
+    fn bsize_test_3fac_rel_prime() {
+        let (n, m) = (11 * 13 * 5119, 7 * 11 * 5119);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, 7 * 11 * 13 * 5119);
+    }
+
+    #[test]
+    fn bsize_test_ibs_greater() {
+        let (n, m) = (512 * 1024, 256 * 1024);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, n);
+    }
+
+    #[test]
+    fn bsize_test_obs_greater() {
+        let (n, m) = (256 * 1024, 512 * 1024);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, m);
+    }
+
+    #[test]
+    fn bsize_test_bs_eq() {
+        let (n, m) = (1024, 1024);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, m);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_nocreat_causes_failure_when_ofile_doesnt_exist() {
+        let args = vec![
+            String::from("dd"),
+            String::from("--conv=nocreat"),
+            String::from("--of=not-a-real.file"),
+        ];
+
+        let matches = uu_app().try_get_matches_from(args).unwrap();
+        let _ = Output::<File>::new(&matches).unwrap();
+    }
+
+    #[test]
+    fn test_deadbeef_16_delayed() {
+        let input = Input {
+            src: LazyReader {
+                src: File::open("./test-resources/deadbeef-16.test").unwrap(),
+            },
+            non_ascii: false,
+            ibs: 16,
+            print_level: None,
+            count: None,
+            cflags: IConvFlags {
+                sync: Some(0),
+                ..IConvFlags::default()
+            },
+            iflags: IFlags::default(),
+        };
+
+        let output = Output {
+            dst: File::create("./test-resources/FAILED-deadbeef-16-delayed.test").unwrap(),
+            obs: 32,
+            cflags: OConvFlags::default(),
+        };
+
+        output.dd_out(input).unwrap();
+
+        let tmp_fname = "./test-resources/FAILED-deadbeef-16-delayed.test";
+        let spec = File::open("./test-resources/deadbeef-16.spec").unwrap();
+
+        let res = File::open(tmp_fname).unwrap();
+        // Check test file isn't empty (unless spec file is too)
+        assert_eq!(
+            res.metadata().unwrap().len(),
+            spec.metadata().unwrap().len()
+        );
+
+        let spec = BufReader::new(spec);
+        let res = BufReader::new(res);
+
+        // Check all bytes match
+        for (b_res, b_spec) in res.bytes().zip(spec.bytes()) {
+            assert_eq!(b_res.unwrap(), b_spec.unwrap());
+        }
+
+        fs::remove_file(tmp_fname).unwrap();
+    }
+
+    #[test]
+    fn test_random_73k_test_lazy_fullblock() {
+        let input = Input {
+            src: LazyReader {
+                src: File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test")
+                    .unwrap(),
+            },
+            non_ascii: false,
+            ibs: 521,
+            print_level: None,
+            count: None,
+            cflags: IConvFlags::default(),
+            iflags: IFlags {
+                fullblock: true,
+                ..IFlags::default()
+            },
+        };
+
+        let output = Output {
+            dst: File::create("./test-resources/FAILED-random_73k_test_lazy_fullblock.test")
+                .unwrap(),
+            obs: 1031,
+            cflags: OConvFlags::default(),
+        };
+
+        output.dd_out(input).unwrap();
+
+        let tmp_fname = "./test-resources/FAILED-random_73k_test_lazy_fullblock.test";
+        let spec =
+            File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap();
+
+        let res = File::open(tmp_fname).unwrap();
+        // Check test file isn't empty (unless spec file is too)
+        assert_eq!(
+            res.metadata().unwrap().len(),
+            spec.metadata().unwrap().len()
+        );
+
+        let spec = BufReader::new(spec);
+        let res = BufReader::new(res);
+
+        // Check all bytes match
+        for (b_res, b_spec) in res.bytes().zip(spec.bytes()) {
+            assert_eq!(b_res.unwrap(), b_spec.unwrap());
+        }
+
+        fs::remove_file(tmp_fname).unwrap();
+    }
 }

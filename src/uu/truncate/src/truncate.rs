@@ -10,6 +10,8 @@ use clap::{crate_version, App, AppSettings, Arg};
 use std::convert::TryFrom;
 use std::fs::{metadata, OpenOptions};
 use std::io::ErrorKind;
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
@@ -212,8 +214,10 @@ fn file_truncate(filename: &str, create: bool, size: usize) -> std::io::Result<(
 ///
 /// # Errors
 ///
-/// If the any file could not be opened, or there was a problem setting
+/// If any file could not be opened, or there was a problem setting
 /// the size of at least one file.
+///
+/// If at least one file is a named pipe (also known as a fifo).
 fn truncate_reference_and_size(
     rfilename: &str,
     size_string: &str,
@@ -246,6 +250,17 @@ fn truncate_reference_and_size(
     let fsize = metadata.len() as usize;
     let tsize = mode.to_size(fsize);
     for filename in filenames {
+        #[cfg(unix)]
+        if std::fs::metadata(filename)?.file_type().is_fifo() {
+            return Err(USimpleError::new(
+                1,
+                format!(
+                    "cannot open {} for writing: No such device or address",
+                    filename.quote()
+                ),
+            ));
+        }
+
         file_truncate(filename, create, tsize)
             .map_err_context(|| format!("cannot open {} for writing", filename.quote()))?;
     }
@@ -261,8 +276,10 @@ fn truncate_reference_and_size(
 ///
 /// # Errors
 ///
-/// If the any file could not be opened, or there was a problem setting
+/// If any file could not be opened, or there was a problem setting
 /// the size of at least one file.
+///
+/// If at least one file is a named pipe (also known as a fifo).
 fn truncate_reference_file_only(
     rfilename: &str,
     filenames: &[String],
@@ -280,6 +297,16 @@ fn truncate_reference_file_only(
     })?;
     let tsize = metadata.len() as usize;
     for filename in filenames {
+        #[cfg(unix)]
+        if std::fs::metadata(filename)?.file_type().is_fifo() {
+            return Err(USimpleError::new(
+                1,
+                format!(
+                    "cannot open {} for writing: No such device or address",
+                    filename.quote()
+                ),
+            ));
+        }
         file_truncate(filename, create, tsize)
             .map_err_context(|| format!("cannot open {} for writing", filename.quote()))?;
     }
@@ -299,8 +326,10 @@ fn truncate_reference_file_only(
 ///
 /// # Errors
 ///
-/// If the any file could not be opened, or there was a problem setting
+/// If any file could not be opened, or there was a problem setting
 /// the size of at least one file.
+///
+/// If at least one file is a named pipe (also known as a fifo).
 fn truncate_size_only(size_string: &str, filenames: &[String], create: bool) -> UResult<()> {
     let mode = parse_mode_and_size(size_string)
         .map_err(|e| USimpleError::new(1, format!("Invalid number: {}", e)))?;
@@ -309,7 +338,19 @@ fn truncate_size_only(size_string: &str, filenames: &[String], create: bool) -> 
     }
     for filename in filenames {
         let fsize = match metadata(filename) {
-            Ok(m) => m.len(),
+            Ok(m) => {
+                #[cfg(unix)]
+                if m.file_type().is_fifo() {
+                    return Err(USimpleError::new(
+                        1,
+                        format!(
+                            "cannot open {} for writing: No such device or address",
+                            filename.quote()
+                        ),
+                    ));
+                }
+                m.len()
+            }
             Err(_) => 0,
         };
         let tsize = mode.to_size(fsize as usize);

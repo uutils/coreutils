@@ -324,16 +324,16 @@ struct LongFormat {
 
 struct PaddingCollection {
     #[cfg(unix)]
-    longest_inode_len: usize,
-    longest_link_count_len: usize,
-    longest_uname_len: usize,
-    longest_group_len: usize,
-    longest_context_len: usize,
-    longest_size_len: usize,
+    inode: usize,
+    link_count: usize,
+    uname: usize,
+    group: usize,
+    context: usize,
+    size: usize,
     #[cfg(unix)]
-    longest_major_len: usize,
+    major: usize,
     #[cfg(unix)]
-    longest_minor_len: usize,
+    minor: usize,
 }
 
 impl Config {
@@ -583,8 +583,19 @@ impl Config {
                 "slash" => IndicatorStyle::Slash,
                 &_ => IndicatorStyle::None,
             }
-        } else if options.is_present(options::indicator_style::CLASSIFY) {
-            IndicatorStyle::Classify
+        } else if let Some(field) = options.value_of(options::indicator_style::CLASSIFY) {
+            match field {
+                "never" | "no" | "none" => IndicatorStyle::None,
+                "always" | "yes" | "force" => IndicatorStyle::Classify,
+                "auto" | "tty" | "if-tty" => {
+                    if atty::is(atty::Stream::Stdout) {
+                        IndicatorStyle::Classify
+                    } else {
+                        IndicatorStyle::None
+                    }
+                }
+                &_ => IndicatorStyle::None,
+            }
         } else if options.is_present(options::indicator_style::SLASH) {
             IndicatorStyle::Slash
         } else if options.is_present(options::indicator_style::FILE_TYPE) {
@@ -1202,6 +1213,11 @@ only ignore '.' and '..'.",
                 ]),
         )
         .arg(
+            // The --classify flag can take an optional when argument to
+            // control its behavior from version 9 of GNU coreutils.
+            // There is currently an inconsistency where GNU coreutils allows only
+            // the long form of the flag to take the argument while we allow it
+            // for both the long and short form of the flag.
             Arg::new(options::indicator_style::CLASSIFY)
                 .short('F')
                 .long(options::indicator_style::CLASSIFY)
@@ -1209,8 +1225,22 @@ only ignore '.' and '..'.",
                     "Append a character to each file name indicating the file type. Also, for \
                 regular files that are executable, append '*'. The file type indicators are \
                 '/' for directories, '@' for symbolic links, '|' for FIFOs, '=' for sockets, \
-                '>' for doors, and nothing for regular files.",
+                '>' for doors, and nothing for regular files. when may be omitted, or one of:\n\
+                    \tnone - Do not classify. This is the default.\n\
+                    \tauto - Only classify if standard output is a terminal.\n\
+                    \talways - Always classify.\n\
+                Specifying --classify and no when is equivalent to --classify=always. This will not follow\
+                symbolic links listed on the command line unless the --dereference-command-line (-H),\
+                --dereference (-L), or --dereference-command-line-symlink-to-dir options are specified.",
                 )
+                .takes_value(true)
+                .value_name("when")
+                .possible_values(&[
+                    "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
+                ])
+                .default_missing_value("always")
+                .require_equals(true)
+                .min_values(0)
                 .overrides_with_all(&[
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
@@ -1275,9 +1305,9 @@ only ignore '.' and '..'.",
         )
 }
 
-/// Represents a Path along with it's associated data
-/// Any data that will be reused several times makes sense to be added to this structure
-/// Caching data here helps eliminate redundant syscalls to fetch same information
+/// Represents a Path along with it's associated data.
+/// Any data that will be reused several times makes sense to be added to this structure.
+/// Caching data here helps eliminate redundant syscalls to fetch same information.
 #[derive(Debug)]
 struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
@@ -1682,92 +1712,10 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
     // option, print the security context to the left of the size column.
 
     if config.format == Format::Long {
-        #[cfg(unix)]
-        let (
-            mut longest_inode_len,
-            mut longest_link_count_len,
-            mut longest_uname_len,
-            mut longest_group_len,
-            mut longest_context_len,
-            mut longest_size_len,
-            mut longest_major_len,
-            mut longest_minor_len,
-        ) = (1, 1, 1, 1, 1, 1, 1, 1);
-
-        #[cfg(not(unix))]
-        let (
-            mut longest_link_count_len,
-            mut longest_uname_len,
-            mut longest_group_len,
-            mut longest_context_len,
-            mut longest_size_len,
-        ) = (1, 1, 1, 1, 1);
-
-        #[cfg(unix)]
-        for item in items {
-            let context_len = item.security_context.len();
-            let (link_count_len, uname_len, group_len, size_len, major_len, minor_len, inode_len) =
-                display_dir_entry_size(item, config, out);
-            longest_inode_len = inode_len.max(longest_inode_len);
-            longest_link_count_len = link_count_len.max(longest_link_count_len);
-            longest_uname_len = uname_len.max(longest_uname_len);
-            longest_group_len = group_len.max(longest_group_len);
-            if config.context {
-                longest_context_len = context_len.max(longest_context_len);
-            }
-            if items.len() == 1usize {
-                longest_size_len = 0usize;
-                longest_major_len = 0usize;
-                longest_minor_len = 0usize;
-            } else {
-                longest_major_len = major_len.max(longest_major_len);
-                longest_minor_len = minor_len.max(longest_minor_len);
-                longest_size_len = size_len
-                    .max(longest_size_len)
-                    .max(longest_major_len + longest_minor_len + 2usize);
-            }
-        }
-
-        #[cfg(not(unix))]
-        for item in items {
-            let context_len = item.security_context.len();
-            let (
-                link_count_len,
-                uname_len,
-                group_len,
-                size_len,
-                _major_len,
-                _minor_len,
-                _inode_len,
-            ) = display_dir_entry_size(item, config, out);
-            longest_link_count_len = link_count_len.max(longest_link_count_len);
-            longest_uname_len = uname_len.max(longest_uname_len);
-            longest_group_len = group_len.max(longest_group_len);
-            if config.context {
-                longest_context_len = context_len.max(longest_context_len);
-            }
-            longest_size_len = size_len.max(longest_size_len);
-        }
+        let padding_collection = calculate_padding_collection(items, config, out);
 
         for item in items {
-            display_item_long(
-                item,
-                &PaddingCollection {
-                    #[cfg(unix)]
-                    longest_inode_len,
-                    longest_link_count_len,
-                    longest_uname_len,
-                    longest_group_len,
-                    longest_context_len,
-                    longest_size_len,
-                    #[cfg(unix)]
-                    longest_major_len,
-                    #[cfg(unix)]
-                    longest_minor_len,
-                },
-                config,
-                out,
-            )?;
+            display_item_long(item, &padding_collection, config, out)?;
         }
     } else {
         let mut longest_context_len = 1;
@@ -1944,11 +1892,7 @@ fn display_item_long(
         #[cfg(unix)]
         {
             if config.inode {
-                write!(
-                    out,
-                    "{} ",
-                    pad_left(&get_inode(md), padding.longest_inode_len),
-                )?;
+                write!(out, "{} ", pad_left(&get_inode(md), padding.inode))?;
             }
         }
 
@@ -1963,14 +1907,14 @@ fn display_item_long(
             } else {
                 ""
             },
-            pad_left(&display_symlink_count(md), padding.longest_link_count_len),
+            pad_left(&display_symlink_count(md), padding.link_count)
         )?;
 
         if config.long.owner {
             write!(
                 out,
                 " {}",
-                pad_right(&display_uname(md, config), padding.longest_uname_len),
+                pad_right(&display_uname(md, config), padding.uname)
             )?;
         }
 
@@ -1978,7 +1922,7 @@ fn display_item_long(
             write!(
                 out,
                 " {}",
-                pad_right(&display_group(md, config), padding.longest_group_len),
+                pad_right(&display_group(md, config), padding.group)
             )?;
         }
 
@@ -1986,7 +1930,7 @@ fn display_item_long(
             write!(
                 out,
                 " {}",
-                pad_right(&item.security_context, padding.longest_context_len),
+                pad_right(&item.security_context, padding.context)
             )?;
         }
 
@@ -1996,13 +1940,13 @@ fn display_item_long(
             write!(
                 out,
                 " {}",
-                pad_right(&display_uname(md, config), padding.longest_uname_len),
+                pad_right(&display_uname(md, config), padding.uname)
             )?;
         }
 
         match display_size_or_rdev(md, config) {
             SizeOrDeviceId::Size(size) => {
-                write!(out, " {}", pad_left(&size, padding.longest_size_len),)?;
+                write!(out, " {}", pad_left(&size, padding.size))?;
             }
             SizeOrDeviceId::Device(major, minor) => {
                 write!(
@@ -2013,10 +1957,10 @@ fn display_item_long(
                         #[cfg(not(unix))]
                         0usize,
                         #[cfg(unix)]
-                        padding.longest_major_len.max(
+                        padding.major.max(
                             padding
-                                .longest_size_len
-                                .saturating_sub(padding.longest_minor_len.saturating_add(2usize))
+                                .size
+                                .saturating_sub(padding.minor.saturating_add(2usize))
                         )
                     ),
                     pad_left(
@@ -2024,7 +1968,7 @@ fn display_item_long(
                         #[cfg(not(unix))]
                         0usize,
                         #[cfg(unix)]
-                        padding.longest_minor_len,
+                        padding.minor,
                     ),
                 )?;
             }
@@ -2038,7 +1982,7 @@ fn display_item_long(
         #[cfg(unix)]
         {
             if config.inode {
-                write!(out, "{} ", pad_left("?", padding.longest_inode_len),)?;
+                write!(out, "{} ", pad_left("?", padding.inode))?;
             }
         }
 
@@ -2086,29 +2030,29 @@ fn display_item_long(
             } else {
                 ""
             },
-            pad_left("?", padding.longest_link_count_len),
+            pad_left("?", padding.link_count)
         )?;
 
         if config.long.owner {
-            write!(out, " {}", pad_right("?", padding.longest_uname_len))?;
+            write!(out, " {}", pad_right("?", padding.uname))?;
         }
 
         if config.long.group {
-            write!(out, " {}", pad_right("?", padding.longest_group_len))?;
+            write!(out, " {}", pad_right("?", padding.group))?;
         }
 
         if config.context {
             write!(
                 out,
                 " {}",
-                pad_right(&item.security_context, padding.longest_context_len)
+                pad_right(&item.security_context, padding.context)
             )?;
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
         // the owner, since GNU/Hurd is not currently supported by Rust.
         if config.long.author {
-            write!(out, " {}", pad_right("?", padding.longest_uname_len))?;
+            write!(out, " {}", pad_right("?", padding.uname))?;
         }
 
         let dfn = display_file_name(item, config, None, 0, out).contents;
@@ -2117,7 +2061,7 @@ fn display_item_long(
         writeln!(
             out,
             " {} {} {}",
-            pad_left("?", padding.longest_size_len),
+            pad_left("?", padding.size),
             pad_left("?", date_len),
             dfn,
         )?;
@@ -2573,4 +2517,78 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
     } else {
         substitute_string
     }
+}
+
+#[cfg(unix)]
+fn calculate_padding_collection(
+    items: &[PathData],
+    config: &Config,
+    out: &mut BufWriter<Stdout>,
+) -> PaddingCollection {
+    let mut padding_collections = PaddingCollection {
+        inode: 1,
+        link_count: 1,
+        uname: 1,
+        group: 1,
+        context: 1,
+        size: 1,
+        major: 1,
+        minor: 1,
+    };
+
+    for item in items {
+        let context_len = item.security_context.len();
+        let (link_count_len, uname_len, group_len, size_len, major_len, minor_len, inode_len) =
+            display_dir_entry_size(item, config, out);
+        padding_collections.inode = inode_len.max(padding_collections.inode);
+        padding_collections.link_count = link_count_len.max(padding_collections.link_count);
+        padding_collections.uname = uname_len.max(padding_collections.uname);
+        padding_collections.group = group_len.max(padding_collections.group);
+        if config.context {
+            padding_collections.context = context_len.max(padding_collections.context);
+        }
+        if items.len() == 1usize {
+            padding_collections.size = 0usize;
+            padding_collections.major = 0usize;
+            padding_collections.minor = 0usize;
+        } else {
+            padding_collections.major = major_len.max(padding_collections.major);
+            padding_collections.minor = minor_len.max(padding_collections.minor);
+            padding_collections.size = size_len
+                .max(padding_collections.size)
+                .max(padding_collections.major + padding_collections.minor + 2usize);
+        }
+    }
+
+    padding_collections
+}
+
+#[cfg(not(unix))]
+fn calculate_padding_collection(
+    items: &[PathData],
+    config: &Config,
+    out: &mut BufWriter<Stdout>,
+) -> PaddingCollection {
+    let mut padding_collections = PaddingCollection {
+        link_count: 1,
+        uname: 1,
+        group: 1,
+        context: 1,
+        size: 1,
+    };
+
+    for item in items {
+        let context_len = item.security_context.len();
+        let (link_count_len, uname_len, group_len, size_len, _major_len, _minor_len, _inode_len) =
+            display_dir_entry_size(item, config, out);
+        padding_collections.link_count = link_count_len.max(padding_collections.link_count);
+        padding_collections.uname = uname_len.max(padding_collections.uname);
+        padding_collections.group = group_len.max(padding_collections.group);
+        if config.context {
+            padding_collections.context = context_len.max(padding_collections.context);
+        }
+        padding_collections.size = size_len.max(padding_collections.size);
+    }
+
+    padding_collections
 }

@@ -11,15 +11,48 @@
 extern crate uucore;
 
 use clap::{crate_version, App, AppSettings, Arg};
+use memchr::{memchr3_iter, memchr_iter};
 use std::cmp::Ordering;
+use std::convert::From;
+use std::error::Error;
+use std::fmt::Display;
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, Split, Stdin, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Split, Stdin, Write};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UResult, USimpleError};
+use uucore::error::{set_exit_code, UError, UResult, USimpleError};
 
 static NAME: &str = "join";
+
+#[derive(Debug)]
+enum JoinError {
+    IOError(std::io::Error),
+    UnorderedInput(String),
+}
+
+impl UError for JoinError {
+    fn code(&self) -> i32 {
+        1
+    }
+}
+
+impl Error for JoinError {}
+
+impl Display for JoinError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            JoinError::IOError(e) => write!(f, "io error: {}", e),
+            JoinError::UnorderedInput(e) => f.write_str(e),
+        }
+    }
+}
+
+impl From<std::io::Error> for JoinError {
+    fn from(error: std::io::Error) -> Self {
+        Self::IOError(error)
+    }
+}
 
 #[derive(Copy, Clone, PartialEq)]
 enum FileNum {
@@ -34,7 +67,7 @@ enum LineEnding {
     Newline = b'\n',
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 enum Sep {
     Char(u8),
     Line,
@@ -112,34 +145,43 @@ impl<'a> Repr<'a> {
     }
 
     /// Print the field or empty filler if the field is not set.
-    fn print_field(&self, field: Option<&Vec<u8>>) -> Result<(), std::io::Error> {
+    fn print_field(
+        &self,
+        writer: &mut impl Write,
+        field: Option<&[u8]>,
+    ) -> Result<(), std::io::Error> {
         let value = match field {
             Some(field) => field,
             None => self.empty,
         };
 
-        stdout().write_all(value)
+        writer.write_all(value)
     }
 
     /// Print each field except the one at the index.
-    fn print_fields(&self, line: &Line, index: usize) -> Result<(), std::io::Error> {
-        for i in 0..line.fields.len() {
+    fn print_fields(
+        &self,
+        writer: &mut impl Write,
+        line: &Line,
+        index: usize,
+    ) -> Result<(), std::io::Error> {
+        for i in 0..line.field_ranges.len() {
             if i != index {
-                stdout().write_all(&[self.separator])?;
-                stdout().write_all(&line.fields[i])?;
+                writer.write_all(&[self.separator])?;
+                writer.write_all(line.get_field(i).unwrap())?;
             }
         }
         Ok(())
     }
 
     /// Print each field or the empty filler if the field is not set.
-    fn print_format<F>(&self, f: F) -> Result<(), std::io::Error>
+    fn print_format<F>(&self, writer: &mut impl Write, f: F) -> Result<(), std::io::Error>
     where
-        F: Fn(&Spec) -> Option<&'a Vec<u8>>,
+        F: Fn(&Spec) -> Option<&'a [u8]>,
     {
         for i in 0..self.format.len() {
             if i > 0 {
-                stdout().write_all(&[self.separator])?;
+                writer.write_all(&[self.separator])?;
             }
 
             let field = match f(&self.format[i]) {
@@ -147,13 +189,13 @@ impl<'a> Repr<'a> {
                 None => self.empty,
             };
 
-            stdout().write_all(field)?;
+            writer.write_all(field)?;
         }
         Ok(())
     }
 
-    fn print_line_ending(&self) -> Result<(), std::io::Error> {
-        stdout().write_all(&[self.line_ending as u8])
+    fn print_line_ending(&self, writer: &mut impl Write) -> Result<(), std::io::Error> {
+        writer.write_all(&[self.line_ending as u8])
     }
 }
 
@@ -173,7 +215,7 @@ impl Input {
         }
     }
 
-    fn compare(&self, field1: Option<&Vec<u8>>, field2: Option<&Vec<u8>>) -> Ordering {
+    fn compare(&self, field1: Option<&[u8]>, field2: Option<&[u8]>) -> Ordering {
         if let (Some(field1), Some(field2)) = (field1, field2) {
             if self.ignore_case {
                 field1
@@ -236,30 +278,41 @@ impl Spec {
 }
 
 struct Line {
-    fields: Vec<Vec<u8>>,
+    field_ranges: Vec<(usize, usize)>,
     string: Vec<u8>,
 }
 
 impl Line {
-    fn new(string: Vec<u8>, separator: Sep) -> Self {
-        let fields = match separator {
-            Sep::Whitespaces => string
-                // GNU join uses Bourne shell field splitters by default
-                .split(|c| matches!(*c, b' ' | b'\t' | b'\n'))
-                .filter(|f| !f.is_empty())
-                .map(Vec::from)
-                .collect(),
-            Sep::Char(sep) => string.split(|c| *c == sep).map(Vec::from).collect(),
-            Sep::Line => vec![string.clone()],
-        };
+    fn new(string: Vec<u8>, separator: Sep, len_guess: usize) -> Self {
+        let mut field_ranges = Vec::with_capacity(len_guess);
+        let mut last_end = 0;
+        if separator == Sep::Whitespaces {
+            // GNU join uses Bourne shell field splitters by default
+            for i in memchr3_iter(b' ', b'\t', b'\n', &string) {
+                if i > last_end {
+                    field_ranges.push((last_end, i));
+                }
+                last_end = i + 1;
+            }
+        } else if let Sep::Char(sep) = separator {
+            for i in memchr_iter(sep, &string) {
+                field_ranges.push((last_end, i));
+                last_end = i + 1;
+            }
+        }
+        field_ranges.push((last_end, string.len()));
 
-        Self { fields, string }
+        Self {
+            field_ranges,
+            string,
+        }
     }
 
     /// Get field at index.
-    fn get_field(&self, index: usize) -> Option<&Vec<u8>> {
-        if index < self.fields.len() {
-            Some(&self.fields[index])
+    fn get_field(&self, index: usize) -> Option<&[u8]> {
+        if index < self.field_ranges.len() {
+            let (low, high) = self.field_ranges[index];
+            Some(&self.string[low..high])
         } else {
             None
         }
@@ -272,6 +325,7 @@ struct State<'a> {
     file_num: FileNum,
     print_unpaired: bool,
     lines: Split<Box<dyn BufRead + 'a>>,
+    max_len: usize,
     seq: Vec<Line>,
     line_num: usize,
     has_failed: bool,
@@ -302,6 +356,7 @@ impl<'a> State<'a> {
             file_num,
             print_unpaired,
             lines: f.split(line_ending as u8),
+            max_len: 1,
             seq: Vec::new(),
             line_num: 0,
             has_failed: false,
@@ -310,54 +365,69 @@ impl<'a> State<'a> {
     }
 
     /// Skip the current unpaired line.
-    fn skip_line(&mut self, input: &Input, repr: &Repr) -> Result<(), std::io::Error> {
+    fn skip_line(
+        &mut self,
+        writer: &mut impl Write,
+        input: &Input,
+        repr: &Repr,
+    ) -> Result<(), JoinError> {
         if self.print_unpaired {
-            self.print_first_line(repr)?;
+            self.print_first_line(writer, repr)?;
         }
 
-        self.reset_next_line(input);
+        self.reset_next_line(input)?;
         Ok(())
     }
 
     /// Keep reading line sequence until the key does not change, return
     /// the first line whose key differs.
-    fn extend(&mut self, input: &Input) -> Option<Line> {
-        while let Some(line) = self.next_line(input) {
+    fn extend(&mut self, input: &Input) -> Result<Option<Line>, JoinError> {
+        while let Some(line) = self.next_line(input)? {
             let diff = input.compare(self.get_current_key(), line.get_field(self.key));
 
             if diff == Ordering::Equal {
                 self.seq.push(line);
             } else {
-                return Some(line);
+                return Ok(Some(line));
             }
         }
 
-        None
+        Ok(None)
     }
 
     /// Print lines in the buffers as headers.
-    fn print_headers(&self, other: &State, repr: &Repr) -> Result<(), std::io::Error> {
+    fn print_headers(
+        &self,
+        writer: &mut impl Write,
+        other: &State,
+        repr: &Repr,
+    ) -> Result<(), std::io::Error> {
         if self.has_line() {
             if other.has_line() {
-                self.combine(other, repr)?;
+                self.combine(writer, other, repr)?;
             } else {
-                self.print_first_line(repr)?;
+                self.print_first_line(writer, repr)?;
             }
         } else if other.has_line() {
-            other.print_first_line(repr)?;
+            other.print_first_line(writer, repr)?;
         }
 
         Ok(())
     }
 
     /// Combine two line sequences.
-    fn combine(&self, other: &State, repr: &Repr) -> Result<(), std::io::Error> {
+    fn combine(
+        &self,
+        writer: &mut impl Write,
+        other: &State,
+        repr: &Repr,
+    ) -> Result<(), std::io::Error> {
         let key = self.get_current_key();
 
         for line1 in &self.seq {
             for line2 in &other.seq {
                 if repr.uses_format() {
-                    repr.print_format(|spec| match *spec {
+                    repr.print_format(writer, |spec| match *spec {
                         Spec::Key => key,
                         Spec::Field(file_num, field_num) => {
                             if file_num == self.file_num {
@@ -372,12 +442,12 @@ impl<'a> State<'a> {
                         }
                     })?;
                 } else {
-                    repr.print_field(key)?;
-                    repr.print_fields(line1, self.key)?;
-                    repr.print_fields(line2, other.key)?;
+                    repr.print_field(writer, key)?;
+                    repr.print_fields(writer, line1, self.key)?;
+                    repr.print_fields(writer, line2, other.key)?;
                 }
 
-                repr.print_line_ending()?;
+                repr.print_line_ending(writer)?;
             }
         }
 
@@ -393,14 +463,16 @@ impl<'a> State<'a> {
         }
     }
 
-    fn reset_read_line(&mut self, input: &Input) {
-        let line = self.read_line(input.separator);
+    fn reset_read_line(&mut self, input: &Input) -> Result<(), std::io::Error> {
+        let line = self.read_line(input.separator)?;
         self.reset(line);
+        Ok(())
     }
 
-    fn reset_next_line(&mut self, input: &Input) {
-        let line = self.next_line(input);
+    fn reset_next_line(&mut self, input: &Input) -> Result<(), JoinError> {
+        let line = self.next_line(input)?;
         self.reset(line);
+        Ok(())
     }
 
     fn has_line(&self) -> bool {
@@ -408,29 +480,34 @@ impl<'a> State<'a> {
     }
 
     fn initialize(&mut self, read_sep: Sep, autoformat: bool) -> usize {
-        if let Some(line) = self.read_line(read_sep) {
+        if let Some(line) = crash_if_err!(1, self.read_line(read_sep)) {
             self.seq.push(line);
 
             if autoformat {
-                return self.seq[0].fields.len();
+                return self.seq[0].field_ranges.len();
             }
         }
         0
     }
 
-    fn finalize(&mut self, input: &Input, repr: &Repr) -> Result<(), std::io::Error> {
+    fn finalize(
+        &mut self,
+        writer: &mut impl Write,
+        input: &Input,
+        repr: &Repr,
+    ) -> Result<(), JoinError> {
         if self.has_line() {
             if self.print_unpaired {
-                self.print_first_line(repr)?;
+                self.print_first_line(writer, repr)?;
             }
 
-            let mut next_line = self.next_line(input);
+            let mut next_line = self.next_line(input)?;
             while let Some(line) = &next_line {
                 if self.print_unpaired {
-                    self.print_line(line, repr)?;
+                    self.print_line(writer, line, repr)?;
                 }
                 self.reset(next_line);
-                next_line = self.next_line(input);
+                next_line = self.next_line(input)?;
             }
         }
 
@@ -438,51 +515,66 @@ impl<'a> State<'a> {
     }
 
     /// Get the next line without the order check.
-    fn read_line(&mut self, sep: Sep) -> Option<Line> {
-        let value = self.lines.next()?;
-        self.line_num += 1;
-        Some(Line::new(crash_if_err!(1, value), sep))
+    fn read_line(&mut self, sep: Sep) -> Result<Option<Line>, std::io::Error> {
+        match self.lines.next() {
+            Some(value) => {
+                self.line_num += 1;
+                let line = Line::new(value?, sep, self.max_len);
+                if line.field_ranges.len() > self.max_len {
+                    self.max_len = line.field_ranges.len();
+                }
+                Ok(Some(line))
+            }
+            None => Ok(None),
+        }
     }
 
     /// Get the next line with the order check.
-    fn next_line(&mut self, input: &Input) -> Option<Line> {
-        let line = self.read_line(input.separator)?;
+    fn next_line(&mut self, input: &Input) -> Result<Option<Line>, JoinError> {
+        if let Some(line) = self.read_line(input.separator)? {
+            if input.check_order == CheckOrder::Disabled {
+                return Ok(Some(line));
+            }
 
-        if input.check_order == CheckOrder::Disabled {
-            return Some(line);
-        }
+            let diff = input.compare(self.get_current_key(), line.get_field(self.key));
 
-        let diff = input.compare(self.get_current_key(), line.get_field(self.key));
-
-        if diff == Ordering::Greater {
-            if input.check_order == CheckOrder::Enabled || (self.has_unpaired && !self.has_failed) {
-                eprintln!(
-                    "{}: {}:{}: is not sorted: {}",
-                    uucore::execution_phrase(),
+            if diff == Ordering::Greater
+                && (input.check_order == CheckOrder::Enabled
+                    || (self.has_unpaired && !self.has_failed))
+            {
+                let err_msg = format!(
+                    "{}:{}: is not sorted: {}",
                     self.file_name.maybe_quote(),
                     self.line_num,
                     String::from_utf8_lossy(&line.string)
                 );
-
+                // This is fatal if the check is enabled.
+                if input.check_order == CheckOrder::Enabled {
+                    return Err(JoinError::UnorderedInput(err_msg));
+                }
+                eprintln!("{}: {}", uucore::execution_phrase(), err_msg);
                 self.has_failed = true;
             }
-            // This is fatal if the check is enabled.
-            if input.check_order == CheckOrder::Enabled {
-                std::process::exit(1);
-            }
-        }
 
-        Some(line)
+            Ok(Some(line))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Gets the key value of the lines stored in seq.
-    fn get_current_key(&self) -> Option<&Vec<u8>> {
+    fn get_current_key(&self) -> Option<&[u8]> {
         self.seq[0].get_field(self.key)
     }
 
-    fn print_line(&self, line: &Line, repr: &Repr) -> Result<(), std::io::Error> {
+    fn print_line(
+        &self,
+        writer: &mut impl Write,
+        line: &Line,
+        repr: &Repr,
+    ) -> Result<(), std::io::Error> {
         if repr.uses_format() {
-            repr.print_format(|spec| match *spec {
+            repr.print_format(writer, |spec| match *spec {
                 Spec::Key => line.get_field(self.key),
                 Spec::Field(file_num, field_num) => {
                     if file_num == self.file_num {
@@ -493,15 +585,15 @@ impl<'a> State<'a> {
                 }
             })?;
         } else {
-            repr.print_field(line.get_field(self.key))?;
-            repr.print_fields(line, self.key)?;
+            repr.print_field(writer, line.get_field(self.key))?;
+            repr.print_fields(writer, line, self.key)?;
         }
 
-        repr.print_line_ending()
+        repr.print_line_ending(writer)
     }
 
-    fn print_first_line(&self, repr: &Repr) -> Result<(), std::io::Error> {
-        self.print_line(&self.seq[0], repr)
+    fn print_first_line(&self, writer: &mut impl Write, repr: &Repr) -> Result<(), std::io::Error> {
+        self.print_line(writer, &self.seq[0], repr)
     }
 }
 
@@ -718,7 +810,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
         )
 }
 
-fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), std::io::Error> {
+fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), JoinError> {
     let stdin = stdin();
 
     let mut state1 = State::new(
@@ -774,10 +866,13 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), std::io::Err
         &settings.empty,
     );
 
+    let stdout = stdout();
+    let mut writer = BufWriter::new(stdout.lock());
+
     if settings.headers {
-        state1.print_headers(&state2, &repr)?;
-        state1.reset_read_line(&input);
-        state2.reset_read_line(&input);
+        state1.print_headers(&mut writer, &state2, &repr)?;
+        state1.reset_read_line(&input)?;
+        state2.reset_read_line(&input)?;
     }
 
     while state1.has_line() && state2.has_line() {
@@ -785,21 +880,39 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), std::io::Err
 
         match diff {
             Ordering::Less => {
-                state1.skip_line(&input, &repr)?;
+                if let Err(e) = state1.skip_line(&mut writer, &input, &repr) {
+                    writer.flush()?;
+                    return Err(e);
+                }
                 state1.has_unpaired = true;
                 state2.has_unpaired = true;
             }
             Ordering::Greater => {
-                state2.skip_line(&input, &repr)?;
+                if let Err(e) = state2.skip_line(&mut writer, &input, &repr) {
+                    writer.flush()?;
+                    return Err(e);
+                }
                 state1.has_unpaired = true;
                 state2.has_unpaired = true;
             }
             Ordering::Equal => {
-                let next_line1 = state1.extend(&input);
-                let next_line2 = state2.extend(&input);
+                let next_line1 = match state1.extend(&input) {
+                    Ok(line) => line,
+                    Err(e) => {
+                        writer.flush()?;
+                        return Err(e);
+                    }
+                };
+                let next_line2 = match state2.extend(&input) {
+                    Ok(line) => line,
+                    Err(e) => {
+                        writer.flush()?;
+                        return Err(e);
+                    }
+                };
 
                 if settings.print_joined {
-                    state1.combine(&state2, &repr)?;
+                    state1.combine(&mut writer, &state2, &repr)?;
                 }
 
                 state1.reset(next_line1);
@@ -808,8 +921,16 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), std::io::Err
         }
     }
 
-    state1.finalize(&input, &repr)?;
-    state2.finalize(&input, &repr)?;
+    if let Err(e) = state1.finalize(&mut writer, &input, &repr) {
+        writer.flush()?;
+        return Err(e);
+    };
+    if let Err(e) = state2.finalize(&mut writer, &input, &repr) {
+        writer.flush()?;
+        return Err(e);
+    };
+
+    writer.flush()?;
 
     if state1.has_failed || state2.has_failed {
         eprintln!(

@@ -1,7 +1,7 @@
 // `cspell` settings
 {
-  // version of the setting file (always 0.1)
-  "version": "0.1",
+  // version of the setting file
+  "version": "0.2",
 
   // spelling language
   "language": "en",

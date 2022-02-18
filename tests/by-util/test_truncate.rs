@@ -411,3 +411,38 @@ fn test_underflow_relative_size() {
     assert!(at.file_exists(FILE1));
     assert!(at.read_bytes(FILE1).is_empty());
 }
+
+#[cfg(not(windows))]
+#[test]
+fn test_fifo_error_size_only() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    ucmd.args(&["-s", "0", "fifo"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("cannot open 'fifo' for writing: No such device or address");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_fifo_error_reference_file_only() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    at.make_file("reference_file");
+    ucmd.args(&["-r", "reference_file", "fifo"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("cannot open 'fifo' for writing: No such device or address");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_fifo_error_reference_and_size() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    at.make_file("reference_file");
+    ucmd.args(&["-r", "reference_file", "-s", "+0", "fifo"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("cannot open 'fifo' for writing: No such device or address");
+}

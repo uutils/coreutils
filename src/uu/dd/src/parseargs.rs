@@ -490,16 +490,11 @@ fn parse_flag_list<T: std::str::FromStr<Err = ParseError>>(
     tag: &str,
     matches: &Matches,
 ) -> Result<Vec<T>, ParseError> {
-    let mut flags = Vec::new();
-
-    if let Some(comma_str) = matches.value_of(tag) {
-        for s in comma_str.split(',') {
-            let flag = s.parse()?;
-            flags.push(flag);
-        }
-    }
-
-    Ok(flags)
+    matches
+        .values_of(tag)
+        .unwrap_or_default()
+        .map(|f| f.parse())
+        .collect()
 }
 
 /// Parse Conversion Options (Input Variety)
