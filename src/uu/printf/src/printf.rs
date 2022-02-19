@@ -284,7 +284,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec![],
     };
 
-    memo::Memo::run_all(format_string, &values[..]);
+    memo::Memo::run_all(format_string, &values[..])?;
     Ok(())
 }
 

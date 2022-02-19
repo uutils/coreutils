@@ -5,6 +5,7 @@
 // TODO: Support -f flag
 // spell-checker:ignore (ToDO) istr chiter argptr ilen extendedbigdecimal extendedbigint numberparse
 use std::io::{stdout, ErrorKind, Write};
+use std::process::exit;
 
 use clap::{crate_version, App, AppSettings, Arg};
 use num_traits::Zero;
@@ -12,6 +13,7 @@ use num_traits::Zero;
 use uucore::error::FromIo;
 use uucore::error::UResult;
 use uucore::memo::Memo;
+use uucore::show;
 
 mod error;
 mod extendedbigdecimal;
@@ -287,7 +289,10 @@ fn print_seq(
         match format {
             Some(f) => {
                 let s = format!("{}", value);
-                Memo::run_all(f, &[s]);
+                if let Err(x) = Memo::run_all(f, &[s]) {
+                    show!(x);
+                    exit(1);
+                }
             }
             None => write_value_float(
                 &mut stdout,
@@ -349,7 +354,10 @@ fn print_seq_integers(
         match format {
             Some(f) => {
                 let s = format!("{}", value);
-                Memo::run_all(f, &[s]);
+                if let Err(x) = Memo::run_all(f, &[s]) {
+                    show!(x);
+                    exit(1);
+                }
             }
             None => write_value_int(&mut stdout, &value, padding, pad, is_first_iteration)?,
         }

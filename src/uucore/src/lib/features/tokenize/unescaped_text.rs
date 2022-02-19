@@ -13,6 +13,8 @@ use std::process::exit;
 use std::slice::Iter;
 use std::str::Chars;
 
+use crate::error::UResult;
+
 use super::token;
 
 const EXIT_OK: i32 = 0;
@@ -266,8 +268,8 @@ impl token::Tokenizer for UnescapedText {
     fn from_it(
         it: &mut PutBackN<Chars>,
         _: &mut Peekable<Iter<String>>,
-    ) -> Option<Box<dyn token::Token>> {
-        Self::from_it_core(it, false)
+    ) -> UResult<Option<Box<dyn token::Token>>> {
+        Ok(Self::from_it_core(it, false))
     }
 }
 impl token::Token for UnescapedText {
