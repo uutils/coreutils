@@ -83,7 +83,8 @@ fn test_preserve_root() {
         new_ucmd!()
             .arg("--preserve-root")
             .arg("-R")
-            .arg("bin").arg(d)
+            .arg("bin")
+            .arg(d)
             .fails()
             .stderr_contains("chgrp: it is dangerous to operate recursively");
     }
@@ -102,7 +103,8 @@ fn test_preserve_root_symlink() {
         at.symlink_file(d, file);
         ucmd.arg("--preserve-root")
             .arg("-HR")
-            .arg("bin").arg(file)
+            .arg("bin")
+            .arg(file)
             .fails()
             .stderr_contains("chgrp: it is dangerous to operate recursively");
     }
@@ -111,7 +113,8 @@ fn test_preserve_root_symlink() {
     at.symlink_file("///usr", file);
     ucmd.arg("--preserve-root")
         .arg("-HR")
-        .arg("bin").arg(format!(".//{}/..//..//../../", file))
+        .arg("bin")
+        .arg(format!(".//{}/..//..//../../", file))
         .fails()
         .stderr_contains("chgrp: it is dangerous to operate recursively");
 
@@ -119,7 +122,8 @@ fn test_preserve_root_symlink() {
     at.symlink_file("/", "/tmp/__root__");
     ucmd.arg("--preserve-root")
         .arg("-R")
-        .arg("bin").arg("/tmp/__root__/.")
+        .arg("bin")
+        .arg("/tmp/__root__/.")
         .fails()
         .stderr_contains("chgrp: it is dangerous to operate recursively");
 
