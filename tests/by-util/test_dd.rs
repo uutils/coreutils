@@ -202,6 +202,13 @@ fn test_x_multiplier() {
 fn test_zero_multiplier_warning() {
     for arg in ["count", "seek", "skip"] {
         new_ucmd!()
+            .args(&[format!("{}=0", arg).as_str(), "status=none"])
+            .pipe_in("")
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+
+        new_ucmd!()
             .args(&[format!("{}=00x1", arg).as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
@@ -1062,4 +1069,13 @@ fn test_all_valid_ascii_ebcdic_ascii_roundtrip_conv_test() {
         .pipe_in(tmp)
         .succeeds()
         .stdout_is_fixture_bytes("all-valid-ascii-chars-37eff01866ba3f538421b30b7cbefcac.test");
+}
+
+#[test]
+fn test_skip_zero() {
+    new_ucmd!()
+        .args(&["skip=0", "status=noxfer"])
+        .succeeds()
+        .no_stdout()
+        .stderr_is("0+0 records in\n0+0 records out\n");
 }
