@@ -620,15 +620,24 @@ fn test_root_preserve() {
 #[test]
 #[cfg(unix)]
 fn test_root_preserve_indirect() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
 
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+
+    assert!(!user_name.is_empty());
+
+    let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("test");
     at.symlink_file("/", "test/root");
 
     let result = ucmd
         .arg("-RL")
         .arg("--preserve-root")
-        .arg("1000")
+        .arg(user_name)
         .arg("test")
         .fails();
     result.stderr_contains(&"chown: it is dangerous to operate recursively");
