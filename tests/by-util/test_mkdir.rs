@@ -1,6 +1,8 @@
 use crate::common::util::*;
 #[cfg(not(windows))]
 use std::os::unix::fs::PermissionsExt;
+extern crate libc;
+use self::libc::umask;
 
 static TEST_DIR1: &str = "mkdir_test1";
 static TEST_DIR2: &str = "mkdir_test2";
@@ -9,11 +11,7 @@ static TEST_DIR4: &str = "mkdir_test4/mkdir_test4_1";
 static TEST_DIR5: &str = "mkdir_test5/mkdir_test5_1";
 static TEST_DIR6: &str = "mkdir_test6";
 static TEST_FILE7: &str = "mkdir_test7";
-
-#[test]
-fn test_mkdir_mkdir() {
-    new_ucmd!().arg(TEST_DIR1).succeeds();
-}
+static TEST_DIR8: &str = "mkdir_test8";
 
 #[test]
 fn test_mkdir_verbose() {
@@ -99,4 +97,25 @@ fn test_multi_symbolic() {
         .succeeds();
     let perms = at.metadata(TEST_DIR1).permissions().mode();
     assert_eq!(perms, 0o40750);
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_umask_compliance() {
+    fn test_single_case(umask_set: u32) {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let original_umask = unsafe { umask(umask_set) };
+
+        ucmd.arg(TEST_DIR8).succeeds();
+        let perms = at.metadata(TEST_DIR8).permissions().mode();
+
+        assert_eq!(perms, (!umask_set & 0o0777) + 0o40000); // before compare, add the setguid, uid bits
+        unsafe { umask(original_umask); } // set umask back to original
+    }
+
+    for i in 0o0..0o777 { // tests all permission combinations
+        test_single_case(i);
+    }
+    
 }
