@@ -522,13 +522,13 @@ fn test_touch_changes_time_of_file_in_stdout() {
     assert!(at.file_exists(file));
     let (_, mtime) = get_file_times(&at, file);
 
-    ucmd.args(&["-", "1", "<"])
-        .pipe_in(file)
+    ucmd.args(&["-"])
+        .set_stdout(at.make_file(file))
         .succeeds()
         .no_stderr();
 
     let (_, mtime_after) = get_file_times(&at, file);
-    assert!(mtime_after > mtime);
+    assert!(mtime_after != mtime);
 }
 
 #[test]
