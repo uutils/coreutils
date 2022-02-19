@@ -14,6 +14,11 @@ static TEST_FILE7: &str = "mkdir_test7";
 static TEST_DIR8: &str = "mkdir_test8";
 
 #[test]
+fn test_mkdir_mkdir() {
+        new_ucmd!().arg(TEST_DIR1).succeeds();
+}
+
+#[test]
 fn test_mkdir_verbose() {
     let expected = "mkdir: created directory 'mkdir_test1'\n";
     new_ucmd!()
