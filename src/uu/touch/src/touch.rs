@@ -16,7 +16,7 @@ extern crate uucore;
 use clap::{crate_version, App, AppSettings, Arg, ArgGroup};
 use filetime::*;
 use std::fs::{self, File};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 
@@ -81,12 +81,14 @@ Try 'touch --help' for more information."##,
         };
 
     for filename in files {
-        let path = if filename == "-" {
-            // FIXME: not portable
-            Path::new("/dev/fd/1")
+        // FIXME: find a way to avoid having to clone the path
+        let pathbuf = if filename == "-" {
+            path_from_stdout()
         } else {
-            Path::new(filename)
+            PathBuf::from(filename)
         };
+
+        let path = pathbuf.as_path();
 
         if !path.exists() {
             if matches.is_present(options::NO_CREATE) {
@@ -307,4 +309,30 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
     }
 
     Ok(ft)
+}
+
+/// Returns a PathBuf to stdout.
+///
+/// On Windows, uses GetFinalPathNameByHandleA to attempt to get the path
+/// from the stdout file handle.
+fn path_from_stdout() -> PathBuf {
+    #[cfg(unix)]
+    {
+        PathBuf::from("/dev/stdout")
+    }
+    #[cfg(windows)]
+    {
+        // https://docs.microsoft.com/en-us/windows/win32/memory/obtaining-a-file-name-from-a-file-handle?redirectedfrom=MSDN
+        unsafe {
+            panic!("touch: '-' argument is not yet supported on Windows");
+            // TODO: Get on a Windows VM and finish this
+            // let handle = std::io::stdout().as_raw_handle();
+            // windows::Win32::Storage::FileSystem::GetFinalPathNameByHandleA(
+            //     handle,
+            //     std::ptr::null_mut(),
+            //     0,
+            //     0,
+            // )
+        }
+    }
 }
