@@ -21,8 +21,7 @@ use std::iter::FromIterator;
 #[cfg(unix)]
 use std::mem;
 
-#[cfg(windows)]
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::table::{DisplayRow, Header, Row};
 
@@ -160,7 +159,7 @@ impl Filesystem {
 }
 
 /// Whether to display the mount info given the inclusion settings.
-fn is_included(mi: &MountInfo, paths: &[String], opt: &Options) -> bool {
+fn is_included(mi: &MountInfo, paths: &mut [String], opt: &Options) -> bool {
     // Don't show remote filesystems if `--local` has been given.
     if mi.remote && opt.show_local_fs {
         return false;
@@ -178,11 +177,20 @@ fn is_included(mi: &MountInfo, paths: &[String], opt: &Options) -> bool {
 
     // Don't show filesystems other than the ones specified on the
     // command line, if any.
-    if !paths.is_empty() && !paths.contains(&mi.mount_dir) {
-        return false;
+    if paths.is_empty() || paths.contains(&mi.mount_dir) {
+        return true;
     }
 
-    true
+    // Checks if mount dir path is prefix for any path
+    for path in paths {
+        if path.starts_with(&mi.mount_dir) {
+            // Remove path so that recursive parent paths like "\" don't get added
+            path.clear();
+            return true;
+        }
+    }
+
+    false
 }
 
 /// Whether the mount info in `m2` should be prioritized over `m1`.
@@ -239,7 +247,7 @@ fn is_best(previous: &[MountInfo], mi: &MountInfo) -> bool {
 ///
 /// Finally, if there are duplicate entries, the one with the shorter
 /// path is kept.
-fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Vec<MountInfo> {
+fn filter_mount_list(vmi: Vec<MountInfo>, paths: &mut [String], opt: &Options) -> Vec<MountInfo> {
     let mut result = vec![];
     for mi in vmi {
         // TODO The running time of the `is_best()` function is linear
@@ -259,11 +267,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
-    let paths: Vec<String> = matches
+    let mut paths: Vec<String> = matches
         .values_of(OPT_PATHS)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
+    // Canonicalize all paths and clear invalid paths
+    let mut tmp_path: &Path;
+    for path in &mut paths {
+        tmp_path = Path::new(&path);
+        if tmp_path.exists() {
+            *path = tmp_path
+                .canonicalize()
+                .unwrap_or(PathBuf::new())
+                .into_os_string()
+                .into_string()
+                .unwrap_or(String::new());
+        } else {
+            // Remove invalid paths
+            path.clear();
+        }
+    }
     #[cfg(windows)]
     {
         if matches.is_present(OPT_INODES) {
@@ -274,8 +298,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let opt = Options::from(&matches);
 
-    let mounts = read_fs_list();
-    let data: Vec<Row> = filter_mount_list(mounts, &paths, &opt)
+    let mut mounts = read_fs_list();
+
+    // Sort mounts in desc ordered lexicographically
+    mounts.sort_by(|a, b| b.mount_dir.cmp(&a.mount_dir));
+    let data: Vec<Row> = filter_mount_list(mounts, &mut paths, &opt)
         .into_iter()
         .filter_map(Filesystem::new)
         .filter(|fs| fs.usage.blocks != 0 || opt.show_all_fs || opt.show_listed_fs)
