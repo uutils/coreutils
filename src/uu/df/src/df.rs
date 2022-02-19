@@ -21,7 +21,7 @@ use std::iter::FromIterator;
 #[cfg(unix)]
 use std::mem;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::table::{DisplayRow, Header, Row};
 
@@ -279,10 +279,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if tmp_path.exists() {
             *path = tmp_path
                 .canonicalize()
-                .unwrap_or(PathBuf::new())
+                .unwrap_or_default()
                 .into_os_string()
                 .into_string()
-                .unwrap_or(String::new());
+                .unwrap_or_default();
         } else {
             // Remove invalid paths
             path.clear();
