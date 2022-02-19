@@ -72,8 +72,8 @@ fn write_markdown(
     write_version(&mut w, app)?;
     write_usage(&mut w, app, name)?;
     write_description(&mut w, app)?;
-    write_examples(&mut w, name, tldr_zip)?;
-    write_options(&mut w, app)
+    write_options(&mut w, app)?;
+    write_examples(&mut w, name, tldr_zip)
 }
 
 fn write_version(w: &mut impl Write, app: &App) -> io::Result<()> {
@@ -201,7 +201,11 @@ fn write_options(w: &mut impl Write, app: &App) -> io::Result<()> {
             write!(w, "</code>")?;
         }
         writeln!(w, "</dt>")?;
-        writeln!(w, "<dd>\n\n{}\n\n</dd>", arg.get_help().unwrap_or_default())?;
+        writeln!(
+            w,
+            "<dd>\n\n{}\n\n</dd>",
+            arg.get_help().unwrap_or_default().replace("\n", "<br />")
+        )?;
     }
-    writeln!(w, "</dl>")
+    writeln!(w, "</dl>\n")
 }
