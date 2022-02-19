@@ -511,6 +511,27 @@ fn test_touch_no_such_file_error_msg() {
 }
 
 #[test]
+fn test_touch_changes_time_of_file_in_stdout() {
+    // command like: `touch - 1< ./c`
+    // should change the timestamp of c
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_changes_time_of_file_in_stdout";
+
+    at.touch(file);
+    assert!(at.file_exists(file));
+    let (_, mtime) = get_file_times(&at, file);
+
+    ucmd.args(&["-", "1", "<"])
+        .pipe_in(file)
+        .succeeds()
+        .no_stderr();
+
+    let (_, mtime_after) = get_file_times(&at, file);
+    assert!(mtime_after > mtime);
+}
+
+#[test]
 #[cfg(unix)]
 fn test_touch_permission_denied_error_msg() {
     let (at, mut ucmd) = at_and_ucmd!();
