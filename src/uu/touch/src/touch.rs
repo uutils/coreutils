@@ -81,7 +81,13 @@ Try 'touch --help' for more information."##,
         };
 
     for filename in files {
-        let path = Path::new(filename);
+        let path = if filename == "-" {
+            // FIXME: not portable
+            Path::new("/dev/fd/1")
+        } else {
+            Path::new(filename)
+        };
+
         if !path.exists() {
             if matches.is_present(options::NO_CREATE) {
                 continue;
