@@ -175,16 +175,17 @@ fn is_included(mi: &MountInfo, paths: &mut [String], opt: &Options) -> bool {
         return false;
     }
 
-    // Don't show filesystems other than the ones specified on the
-    // command line, if any.
-    if paths.is_empty() || paths.contains(&mi.mount_dir) {
+    // Print all suitable paths if input is empty
+    if paths.is_empty() {
         return true;
     }
 
     // Checks if mount dir path is prefix for any path
+    // This will also cover complete matches
     for path in paths {
         if path.starts_with(&mi.mount_dir) {
-            // Remove path so that recursive parent paths like "\" don't get added
+            // once a path is matched with mount_path, path is cleared to avoid 2nd matches like
+            // `/` will match as prefix for all paths
             path.clear();
             return true;
         }
@@ -300,8 +301,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut mounts = read_fs_list();
 
-    // Sort mounts in desc ordered lexicographically
-    mounts.sort_by(|a, b| b.mount_dir.cmp(&a.mount_dir));
+    // sorting mounts in order of decreasing length
+    // in prefix matching, only first match is considered. So if we have
+    // mounts['/','/boot',/boot/efi] and input_path is '/boot/efi'. Without sorting the selected
+    // mount path will be '/' and rest will be ignored, but correct selection is '/boot/efi'
+    mounts.sort_unstable_by_key(|k| std::cmp::Reverse(k.mount_dir.len()));
     let data: Vec<Row> = filter_mount_list(mounts, &mut paths, &opt)
         .into_iter()
         .filter_map(Filesystem::new)
