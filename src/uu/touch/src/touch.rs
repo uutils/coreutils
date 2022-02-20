@@ -79,7 +79,7 @@ Try 'touch --help' for more information."##,
     for filename in files {
         // FIXME: find a way to avoid having to clone the path
         let pathbuf = if filename == "-" {
-            path_from_stdout()
+            path_from_stdout()?
         } else {
             PathBuf::from(filename)
         };
@@ -312,7 +312,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
 ///
 /// On Windows, uses GetFinalPathNameByHandleW to attempt to get the path
 /// from the stdout handle.
-fn path_from_stdout() -> PathBuf {
+fn path_from_stdout() -> UResult<PathBuf> {
     #[cfg(unix)]
     {
         PathBuf::from("/dev/stdout")
@@ -327,32 +327,45 @@ fn path_from_stdout() -> PathBuf {
         use windows::Win32::Foundation::{GetLastError, HANDLE, MAX_PATH, PWSTR};
         use windows::Win32::Storage::FileSystem::FILE_NAME_OPENED;
 
-        // https://docs.microsoft.com/en-us/windows/win32/memory/obtaining-a-file-name-from-a-file-handle?redirectedfrom=MSDN
         unsafe {
             let handle = std::io::stdout().lock().as_raw_handle();
             let file_path_buffer = [0u16; MAX_PATH as usize];
 
+            // https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlea#examples
             let ret = windows::Win32::Storage::FileSystem::GetFinalPathNameByHandleW::<HANDLE>(
                 std::mem::transmute(handle),
                 PWSTR(file_path_buffer.as_ptr()),
                 MAX_PATH,
                 FILE_NAME_OPENED,
             );
-            let err = WIN32_ERROR(ret);
-            // TODO: there is probably a library or something for handling win32 errors
-            let bufsize: usize = match err {
-                // TODO: what actually should happen if the file is not here? error?
-                ERROR_PATH_NOT_FOUND => MAX_PATH as usize,
-                ERROR_NOT_ENOUGH_MEMORY => panic!("not enough memory to complete the operation"),
-                ERROR_INVALID_PARAMETER => panic!("Invalid dwFlags"),
-                e if e.0 >= MAX_PATH => panic!("need buffer size of {}", e.0),
-                e if e.0 == 0 => panic!("other error: {}", GetLastError().0),
-                e => e.0 as usize,
-            };
 
-            String::from_utf16(&file_path_buffer[0..bufsize])
-                .expect("failed to create String from UTF-16")
-                .into()
+            // TODO: there is probably a library or something for handling win32 errors
+            // more elegantly
+            let err = WIN32_ERROR(ret);
+            let bufsize = match err {
+                ERROR_PATH_NOT_FOUND => Err(USimpleError::new(
+                    1,
+                    "file pointed to by stdout does not exist (should never happen)",
+                )),
+                ERROR_NOT_ENOUGH_MEMORY => Err(USimpleError::new(
+                    1,
+                    "not enough memory to complete the operation",
+                )),
+                ERROR_INVALID_PARAMETER => Err(USimpleError::new(1, "Invalid dwFlags")),
+                e if e.0 >= MAX_PATH => {
+                    Err(USimpleError::new(1, format!("need buffer size of {}", e.0)))
+                }
+                e if e.0 == 0 => Err(USimpleError::new(
+                    1,
+                    format!("error code: {}", GetLastError().0),
+                )),
+                e => Ok(e.0 as usize),
+            }?;
+
+            // Don't include the null terminator
+            Ok(String::from_utf16(&file_path_buffer[0..bufsize])
+                .map_err(|e| USimpleError::new(1, e.to_string()))?
+                .into())
         }
     }
 }
