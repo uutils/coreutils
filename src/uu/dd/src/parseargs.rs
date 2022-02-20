@@ -437,7 +437,7 @@ fn parse_cbs(matches: &Matches) -> Result<Option<usize>, ParseError> {
     }
 }
 
-pub fn parse_status_level(matches: &Matches) -> Result<Option<StatusLevel>, ParseError> {
+pub(crate) fn parse_status_level(matches: &Matches) -> Result<Option<StatusLevel>, ParseError> {
     match matches.value_of(options::STATUS) {
         Some(s) => {
             let st = s.parse()?;
