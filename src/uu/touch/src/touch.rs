@@ -6,7 +6,7 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv
+// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv PWSTR lpszfilepath
 
 pub extern crate filetime;
 
@@ -351,7 +351,7 @@ fn path_from_stdout() -> UResult<PathBuf> {
 
         let win32_err = WIN32_ERROR(ret);
         let hresult = HRESULT::from(win32_err);
-        let bufsize = match win32_err {
+        let buffer_size = match win32_err {
             ERROR_PATH_NOT_FOUND | ERROR_NOT_ENOUGH_MEMORY | ERROR_INVALID_PARAMETER => {
                 return Err(USimpleError::new(1, hresult.message().to_string()))
             }
@@ -365,7 +365,7 @@ fn path_from_stdout() -> UResult<PathBuf> {
         };
 
         // Don't include the null terminator
-        Ok(String::from_utf16(&file_path_buffer[0..bufsize])
+        Ok(String::from_utf16(&file_path_buffer[0..buffer_size])
             .map_err(|e| USimpleError::new(1, e.to_string()))?
             .into())
     }
