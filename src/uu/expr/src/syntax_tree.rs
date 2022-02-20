@@ -10,7 +10,7 @@
 //! * `<https://en.wikipedia.org/wiki/Shunting-yard_algorithm>`
 //!
 
-// spell-checker:ignore (ToDO) binop binops ints paren prec
+// spell-checker:ignore (ToDO) binop binops ints paren prec multibytes
 
 use num_bigint::BigInt;
 use num_traits::{One, Zero};
@@ -465,7 +465,9 @@ fn operator_match(values: &[String]) -> Result<String, String> {
 
 fn prefix_operator_length(values: &[String]) -> String {
     assert!(values.len() == 1);
-    values[0].len().to_string()
+    // Use chars().count() as we can have some multibytes chars
+    // See https://github.com/uutils/coreutils/issues/3132
+    values[0].chars().count().to_string()
 }
 
 fn prefix_operator_index(values: &[String]) -> String {

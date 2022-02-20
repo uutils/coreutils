@@ -386,6 +386,24 @@ fn test_cp_arg_suffix() {
 }
 
 #[test]
+fn test_cp_arg_suffix_hyphen_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("-b")
+        .arg("--suffix")
+        .arg("-v")
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}-v", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
 fn test_cp_custom_backup_suffix_via_env() {
     let (at, mut ucmd) = at_and_ucmd!();
     let suffix = "super-suffix-of-the-century";
@@ -1457,4 +1475,13 @@ fn test_cp_fifo() {
         .no_stderr()
         .no_stdout();
     assert!(at.is_fifo("fifo2"));
+
+#[test]
+fn test_cp_dir_vs_file() {
+    new_ucmd!()
+        .arg("-R")
+        .arg(TEST_COPY_FROM_FOLDER)
+        .arg(TEST_EXISTING_FILE)
+        .fails()
+        .stderr_only("cp: cannot overwrite non-directory with directory");
 }

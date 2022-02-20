@@ -128,9 +128,9 @@ fn test_complement() {
 fn test_zero_terminated() {
     new_ucmd!()
         .args(&["-d_", "-z", "-f", "1"])
-        .pipe_in("9_1\n8_2\n\07_3")
+        .pipe_in("9_1\n8_2\n\x007_3")
         .succeeds()
-        .stdout_only("9\07\0");
+        .stdout_only("9\x007\0");
 }
 
 #[test]

@@ -181,6 +181,33 @@ fn test_symlink_custom_backup_suffix() {
 }
 
 #[test]
+fn test_symlink_custom_backup_suffix_hyphen_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_symlink_custom_backup_suffix";
+    let link = "test_symlink_custom_backup_suffix_link";
+    let suffix = "-v";
+
+    at.touch(file);
+    at.symlink_file(file, link);
+    assert!(at.file_exists(file));
+    assert!(at.is_symlink(link));
+    assert_eq!(at.resolve_link(link), file);
+
+    let arg = &format!("--suffix={}", suffix);
+    ucmd.args(&["-b", arg, "-s", file, link])
+        .succeeds()
+        .no_stderr();
+    assert!(at.file_exists(file));
+
+    assert!(at.is_symlink(link));
+    assert_eq!(at.resolve_link(link), file);
+
+    let backup = &format!("{}{}", link, suffix);
+    assert!(at.is_symlink(backup));
+    assert_eq!(at.resolve_link(backup), file);
+}
+
+#[test]
 fn test_symlink_backup_numbering() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_symlink_backup_numbering";

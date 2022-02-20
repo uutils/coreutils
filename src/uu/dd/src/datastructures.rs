@@ -7,49 +7,10 @@
 // spell-checker:ignore ctable, outfile
 
 use std::error::Error;
-use std::time;
 
 use uucore::error::UError;
 
 use crate::conversion_tables::*;
-
-pub struct ProgUpdate {
-    pub read_stat: ReadStat,
-    pub write_stat: WriteStat,
-    pub duration: time::Duration,
-}
-
-#[derive(Clone, Copy, Default)]
-pub struct ReadStat {
-    pub reads_complete: u64,
-    pub reads_partial: u64,
-    pub records_truncated: u32,
-}
-impl std::ops::AddAssign for ReadStat {
-    fn add_assign(&mut self, other: Self) {
-        *self = Self {
-            reads_complete: self.reads_complete + other.reads_complete,
-            reads_partial: self.reads_partial + other.reads_partial,
-            records_truncated: self.records_truncated + other.records_truncated,
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct WriteStat {
-    pub writes_complete: u64,
-    pub writes_partial: u64,
-    pub bytes_total: u128,
-}
-impl std::ops::AddAssign for WriteStat {
-    fn add_assign(&mut self, other: Self) {
-        *self = Self {
-            writes_complete: self.writes_complete + other.writes_complete,
-            writes_partial: self.writes_partial + other.writes_partial,
-            bytes_total: self.bytes_total + other.bytes_total,
-        }
-    }
-}
 
 type Cbs = usize;
 
@@ -114,15 +75,6 @@ pub struct OFlags {
     pub binary: bool,
     pub text: bool,
     pub seek_bytes: bool,
-}
-
-/// The value of the status cl-option.
-/// Controls printing of transfer stats
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum StatusLevel {
-    Progress,
-    Noxfer,
-    None,
 }
 
 /// The value of count=N

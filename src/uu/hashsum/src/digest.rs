@@ -81,7 +81,7 @@ impl Digest for blake2b_simd::State {
     }
 }
 
-impl Digest for sha1::Sha1 {
+impl Digest for blake3::Hasher {
     fn new() -> Self {
         Self::new()
     }
@@ -91,11 +91,34 @@ impl Digest for sha1::Sha1 {
     }
 
     fn result(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(&self.digest().bytes());
+        let hash_result = &self.finalize();
+        out.copy_from_slice(hash_result.as_bytes());
     }
 
     fn reset(&mut self) {
-        self.reset();
+        *self = Self::new();
+    }
+
+    fn output_bits(&self) -> usize {
+        256
+    }
+}
+
+impl Digest for sha1::Sha1 {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn input(&mut self, input: &[u8]) {
+        digest::Digest::update(self, input);
+    }
+
+    fn result(&mut self, out: &mut [u8]) {
+        digest::Digest::finalize_into_reset(self, out.into());
+    }
+
+    fn reset(&mut self) {
+        *self = Self::new();
     }
 
     fn output_bits(&self) -> usize {

@@ -19,7 +19,7 @@ pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>
         let mut has_num = false;
         let mut last_char = 0 as char;
         for (n, c) in &mut chars {
-            if c.is_numeric() {
+            if c.is_digit(10) {
                 has_num = true;
                 num_end = n;
             } else {
