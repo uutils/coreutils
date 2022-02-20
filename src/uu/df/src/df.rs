@@ -5,7 +5,7 @@
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
-// spell-checker:ignore itotal iused iavail ipcent pcent
+// spell-checker:ignore itotal iused iavail ipcent pcent tmpfs squashfs
 mod table;
 
 #[cfg(unix)]
@@ -430,4 +430,323 @@ pub fn uu_app<'a>() -> App<'a> {
                 .help("limit listing to file systems not of type TYPE"),
         )
         .arg(Arg::new(OPT_PATHS).multiple_occurrences(true))
+}
+
+#[cfg(test)]
+mod tests {
+
+    mod mount_info_lt {
+
+        use crate::mount_info_lt;
+        use uucore::fsext::MountInfo;
+
+        /// Instantiate a [`MountInfo`] with the given fields.
+        fn mount_info(dev_name: &str, mount_root: &str, mount_dir: &str) -> MountInfo {
+            MountInfo {
+                dev_id: String::new(),
+                dev_name: String::from(dev_name),
+                fs_type: String::new(),
+                mount_dir: String::from(mount_dir),
+                mount_option: String::new(),
+                mount_root: String::from(mount_root),
+                remote: false,
+                dummy: false,
+            }
+        }
+
+        #[test]
+        fn test_absolute() {
+            // Prefer device name "/dev/foo" over "dev_foo".
+            let m1 = mount_info("/dev/foo", "/", "/mnt/bar");
+            let m2 = mount_info("dev_foo", "/", "/mnt/bar");
+            assert!(!mount_info_lt(&m1, &m2));
+        }
+
+        #[test]
+        fn test_shorter() {
+            // Prefer mount directory "/mnt/bar" over "/mnt/bar/baz"...
+            let m1 = mount_info("/dev/foo", "/", "/mnt/bar");
+            let m2 = mount_info("/dev/foo", "/", "/mnt/bar/baz");
+            assert!(!mount_info_lt(&m1, &m2));
+
+            // ..but prefer mount root "/root" over "/".
+            let m1 = mount_info("/dev/foo", "/root", "/mnt/bar");
+            let m2 = mount_info("/dev/foo", "/", "/mnt/bar/baz");
+            assert!(mount_info_lt(&m1, &m2));
+        }
+
+        #[test]
+        fn test_over_mounted() {
+            // Prefer the earlier entry if the devices are different but
+            // the mount directory is the same.
+            let m1 = mount_info("/dev/foo", "/", "/mnt/baz");
+            let m2 = mount_info("/dev/bar", "/", "/mnt/baz");
+            assert!(!mount_info_lt(&m1, &m2));
+        }
+    }
+
+    mod is_best {
+
+        use crate::is_best;
+        use uucore::fsext::MountInfo;
+
+        /// Instantiate a [`MountInfo`] with the given fields.
+        fn mount_info(dev_id: &str, mount_dir: &str) -> MountInfo {
+            MountInfo {
+                dev_id: String::from(dev_id),
+                dev_name: String::new(),
+                fs_type: String::new(),
+                mount_dir: String::from(mount_dir),
+                mount_option: String::new(),
+                mount_root: String::new(),
+                remote: false,
+                dummy: false,
+            }
+        }
+
+        #[test]
+        fn test_empty() {
+            let m = mount_info("0", "/mnt/bar");
+            assert!(is_best(&[], &m));
+        }
+
+        #[test]
+        fn test_different_dev_id() {
+            let m1 = mount_info("0", "/mnt/bar");
+            let m2 = mount_info("1", "/mnt/bar");
+            assert!(is_best(&[m1.clone()], &m2));
+            assert!(is_best(&[m2], &m1));
+        }
+
+        #[test]
+        fn test_same_dev_id() {
+            // There are several conditions under which a `MountInfo` is
+            // considered "better" than the others, we're just checking
+            // one condition in this test.
+            let m1 = mount_info("0", "/mnt/bar");
+            let m2 = mount_info("0", "/mnt/bar/baz");
+            assert!(!is_best(&[m1.clone()], &m2));
+            assert!(is_best(&[m2], &m1));
+        }
+    }
+
+    mod is_included {
+
+        use crate::{is_included, FsSelector, Options};
+        use std::collections::HashSet;
+        use uucore::fsext::MountInfo;
+
+        /// Instantiate a [`MountInfo`] with the given fields.
+        fn mount_info(fs_type: &str, mount_dir: &str, remote: bool, dummy: bool) -> MountInfo {
+            MountInfo {
+                dev_id: String::new(),
+                dev_name: String::new(),
+                fs_type: String::from(fs_type),
+                mount_dir: String::from(mount_dir),
+                mount_option: String::new(),
+                mount_root: String::new(),
+                remote,
+                dummy,
+            }
+        }
+
+        #[test]
+        fn test_remote_included() {
+            let opt = Default::default();
+            let paths = [];
+            let m = mount_info("ext4", "/mnt/foo", true, false);
+            assert!(is_included(&m, &paths, &opt));
+        }
+
+        #[test]
+        fn test_remote_excluded() {
+            let opt = Options {
+                show_local_fs: true,
+                ..Default::default()
+            };
+            let paths = [];
+            let m = mount_info("ext4", "/mnt/foo", true, false);
+            assert!(!is_included(&m, &paths, &opt));
+        }
+
+        #[test]
+        fn test_dummy_included() {
+            let opt = Options {
+                show_all_fs: true,
+                show_listed_fs: true,
+                ..Default::default()
+            };
+            let paths = [];
+            let m = mount_info("ext4", "/mnt/foo", false, true);
+            assert!(is_included(&m, &paths, &opt));
+        }
+
+        #[test]
+        fn test_dummy_excluded() {
+            let opt = Default::default();
+            let paths = [];
+            let m = mount_info("ext4", "/mnt/foo", false, true);
+            assert!(!is_included(&m, &paths, &opt));
+        }
+
+        #[test]
+        fn test_exclude_match() {
+            let exclude = HashSet::from([String::from("ext4")]);
+            let fs_selector = FsSelector {
+                exclude,
+                ..Default::default()
+            };
+            let opt = Options {
+                fs_selector,
+                ..Default::default()
+            };
+            let paths = [];
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(!is_included(&m, &paths, &opt));
+        }
+
+        #[test]
+        fn test_exclude_no_match() {
+            let exclude = HashSet::from([String::from("tmpfs")]);
+            let fs_selector = FsSelector {
+                exclude,
+                ..Default::default()
+            };
+            let opt = Options {
+                fs_selector,
+                ..Default::default()
+            };
+            let paths = [];
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(is_included(&m, &paths, &opt));
+        }
+
+        #[test]
+        fn test_include_match() {
+            let include = HashSet::from([String::from("ext4")]);
+            let fs_selector = FsSelector {
+                include,
+                ..Default::default()
+            };
+            let opt = Options {
+                fs_selector,
+                ..Default::default()
+            };
+            let paths = [];
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(is_included(&m, &paths, &opt));
+        }
+
+        #[test]
+        fn test_include_no_match() {
+            let include = HashSet::from([String::from("tmpfs")]);
+            let fs_selector = FsSelector {
+                include,
+                ..Default::default()
+            };
+            let opt = Options {
+                fs_selector,
+                ..Default::default()
+            };
+            let paths = [];
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(!is_included(&m, &paths, &opt));
+        }
+
+        #[test]
+        fn test_include_and_exclude_match_neither() {
+            let include = HashSet::from([String::from("tmpfs")]);
+            let exclude = HashSet::from([String::from("squashfs")]);
+            let fs_selector = FsSelector { include, exclude };
+            let opt = Options {
+                fs_selector,
+                ..Default::default()
+            };
+            let paths = [];
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(!is_included(&m, &paths, &opt));
+        }
+
+        #[test]
+        fn test_include_and_exclude_match_exclude() {
+            let include = HashSet::from([String::from("tmpfs")]);
+            let exclude = HashSet::from([String::from("ext4")]);
+            let fs_selector = FsSelector { include, exclude };
+            let opt = Options {
+                fs_selector,
+                ..Default::default()
+            };
+            let paths = [];
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(!is_included(&m, &paths, &opt));
+        }
+
+        #[test]
+        fn test_include_and_exclude_match_include() {
+            let include = HashSet::from([String::from("ext4")]);
+            let exclude = HashSet::from([String::from("squashfs")]);
+            let fs_selector = FsSelector { include, exclude };
+            let opt = Options {
+                fs_selector,
+                ..Default::default()
+            };
+            let paths = [];
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(is_included(&m, &paths, &opt));
+        }
+
+        #[test]
+        fn test_include_and_exclude_match_both() {
+            // TODO The same filesystem type in both `include` and
+            // `exclude` should cause an error, but currently does
+            // not.
+            let include = HashSet::from([String::from("ext4")]);
+            let exclude = HashSet::from([String::from("ext4")]);
+            let fs_selector = FsSelector { include, exclude };
+            let opt = Options {
+                fs_selector,
+                ..Default::default()
+            };
+            let paths = [];
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(!is_included(&m, &paths, &opt));
+        }
+
+        #[test]
+        fn test_paths_empty() {
+            let opt = Default::default();
+            let paths = [];
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(is_included(&m, &paths, &opt));
+        }
+
+        #[test]
+        fn test_not_in_paths() {
+            let opt = Default::default();
+            let paths = [String::from("/mnt/foo")];
+            let m = mount_info("ext4", "/mnt/bar", false, false);
+            assert!(!is_included(&m, &paths, &opt));
+        }
+
+        #[test]
+        fn test_in_paths() {
+            let opt = Default::default();
+            let paths = [String::from("/mnt/foo")];
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(is_included(&m, &paths, &opt));
+        }
+    }
+
+    mod filter_mount_list {
+
+        use crate::filter_mount_list;
+
+        #[test]
+        fn test_empty() {
+            let opt = Default::default();
+            let paths = [];
+            let mount_infos = vec![];
+            assert!(filter_mount_list(mount_infos, &paths, &opt).is_empty());
+        }
+    }
 }
