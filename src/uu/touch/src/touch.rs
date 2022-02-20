@@ -308,6 +308,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
     Ok(ft)
 }
 
+// TODO: this may be a good candidate to put in fsext.rs
 /// Returns a PathBuf to stdout.
 ///
 /// On Windows, uses GetFinalPathNameByHandleW to attempt to get the path
@@ -315,7 +316,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
 fn path_from_stdout() -> UResult<PathBuf> {
     #[cfg(unix)]
     {
-        PathBuf::from("/dev/stdout")
+        Ok(PathBuf::from("/dev/stdout"))
     }
     #[cfg(windows)]
     {
