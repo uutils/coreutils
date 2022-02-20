@@ -104,6 +104,7 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
 }
 
 #[cfg(not(windows))]
+#[allow(clippy::ptr_arg)]
 fn build_command<'a, 'b>(args: &'a mut Vec<&'b str>) -> (Cow<'b, str>, &'a [&'b str]) {
     let progname = Cow::from(args[0]);
     (progname, &args[1..])

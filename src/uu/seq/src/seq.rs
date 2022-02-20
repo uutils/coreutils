@@ -5,6 +5,7 @@
 // TODO: Support -f flag
 // spell-checker:ignore (ToDO) istr chiter argptr ilen extendedbigdecimal extendedbigint numberparse
 use std::io::{stdout, ErrorKind, Write};
+use std::process::exit;
 
 use clap::{crate_version, App, AppSettings, Arg};
 use num_traits::Zero;
@@ -12,6 +13,7 @@ use num_traits::Zero;
 use uucore::error::FromIo;
 use uucore::error::UResult;
 use uucore::memo::Memo;
+use uucore::show;
 
 mod error;
 mod extendedbigdecimal;
@@ -198,41 +200,29 @@ fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> boo
 }
 
 /// Write a big decimal formatted according to the given parameters.
-///
-/// This method is an adapter to support displaying negative zero on
-/// Rust versions earlier than 1.53.0. After that version, we should be
-/// able to display negative zero using the default formatting provided
-/// by `-0.0f32`, for example.
 fn write_value_float(
     writer: &mut impl Write,
     value: &ExtendedBigDecimal,
     width: usize,
     precision: usize,
-    is_first_iteration: bool,
+    _is_first_iteration: bool,
 ) -> std::io::Result<()> {
-    let value_as_str = if *value == ExtendedBigDecimal::MinusZero && is_first_iteration {
-        format!(
-            "-{value:>0width$.precision$}",
-            value = value,
-            width = if width > 0 { width - 1 } else { width },
-            precision = precision,
-        )
-    } else if *value == ExtendedBigDecimal::Infinity || *value == ExtendedBigDecimal::MinusInfinity
-    {
-        format!(
-            "{value:>width$.precision$}",
-            value = value,
-            width = width,
-            precision = precision,
-        )
-    } else {
-        format!(
-            "{value:>0width$.precision$}",
-            value = value,
-            width = width,
-            precision = precision,
-        )
-    };
+    let value_as_str =
+        if *value == ExtendedBigDecimal::Infinity || *value == ExtendedBigDecimal::MinusInfinity {
+            format!(
+                "{value:>width$.precision$}",
+                value = value,
+                width = width,
+                precision = precision,
+            )
+        } else {
+            format!(
+                "{value:>0width$.precision$}",
+                value = value,
+                width = width,
+                precision = precision,
+            )
+        };
     write!(writer, "{}", value_as_str)
 }
 
@@ -299,7 +289,10 @@ fn print_seq(
         match format {
             Some(f) => {
                 let s = format!("{}", value);
-                Memo::run_all(f, &[s]);
+                if let Err(x) = Memo::run_all(f, &[s]) {
+                    show!(x);
+                    exit(1);
+                }
             }
             None => write_value_float(
                 &mut stdout,
@@ -361,7 +354,10 @@ fn print_seq_integers(
         match format {
             Some(f) => {
                 let s = format!("{}", value);
-                Memo::run_all(f, &[s]);
+                if let Err(x) = Memo::run_all(f, &[s]) {
+                    show!(x);
+                    exit(1);
+                }
             }
             None => write_value_int(&mut stdout, &value, padding, pad, is_first_iteration)?,
         }

@@ -429,3 +429,19 @@ fn sub_any_specifiers_after_second_param() {
         .succeeds()
         .stdout_only("3");
 }
+
+#[test]
+fn stop_after_additional_escape() {
+    new_ucmd!()
+        .args(&["A%sC\\cD%sF", "B", "E"]) //spell-checker:disable-line
+        .succeeds()
+        .stdout_only("ABC");
+}
+
+#[test]
+fn sub_float_leading_zeroes() {
+    new_ucmd!()
+        .args(&["%010f", "1"])
+        .succeeds()
+        .stdout_only("001.000000");
+}

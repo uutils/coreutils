@@ -2,7 +2,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes asciilowercase fghij klmno pqrst uvwxyz
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes asciilowercase fghij klmno pqrst uvwxyz fivelines twohundredfortyonebytes
 extern crate rand;
 extern crate regex;
 
@@ -228,6 +228,14 @@ fn test_split_additional_suffix() {
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
+#[test]
+fn test_additional_suffix_no_slash() {
+    new_ucmd!()
+        .args(&["--additional-suffix", "a/b"])
+        .fails()
+        .usage_error("invalid suffix 'a/b', contains directory separator");
+}
+
 // note: the test_filter* tests below are unix-only
 // windows support has been waived for now because of the difficulty of getting
 // the `cmd` call right
@@ -402,6 +410,28 @@ fn test_numeric_dynamic_suffix_length() {
 }
 
 #[test]
+fn test_hex_dynamic_suffix_length() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // Split into chunks of one byte each, use hexadecimal digits
+    // instead of letters as file suffixes.
+    //
+    // The input file has (16^2) - 16 + 1 = 241 bytes. This is just
+    // enough to force `split` to dynamically increase the length of
+    // the filename for the very last chunk.
+    //
+    //     x00, x01, x02, ..., xed, xee, xef, xf000
+    //
+    ucmd.args(&["-x", "-b", "1", "twohundredfortyonebytes.txt"])
+        .succeeds();
+    for i in 0..240 {
+        let filename = format!("x{:02x}", i);
+        let contents = file_read(&at, &filename);
+        assert_eq!(contents, "a");
+    }
+    assert_eq!(file_read(&at, "xf000"), "a");
+}
+
+#[test]
 fn test_suffixes_exhausted() {
     new_ucmd!()
         .args(&["-b", "1", "-a", "1", "asciilowercase.txt"])
@@ -438,5 +468,61 @@ fn test_number() {
     assert_eq!(file_read("xab"), "fghij");
     assert_eq!(file_read("xac"), "klmno");
     assert_eq!(file_read("xad"), "pqrst");
-    assert_eq!(file_read("xae"), "uvwxyz");
+    assert_eq!(file_read("xae"), "uvwxyz\n");
+}
+
+#[test]
+fn test_split_number_with_io_blksize() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_read = |f| {
+        let mut s = String::new();
+        at.open(f).read_to_string(&mut s).unwrap();
+        s
+    };
+    ucmd.args(&["-n", "5", "asciilowercase.txt", "---io-blksize", "1024"])
+        .succeeds();
+    assert_eq!(file_read("xaa"), "abcde");
+    assert_eq!(file_read("xab"), "fghij");
+    assert_eq!(file_read("xac"), "klmno");
+    assert_eq!(file_read("xad"), "pqrst");
+    assert_eq!(file_read("xae"), "uvwxyz\n");
+}
+
+#[test]
+fn test_split_default_with_io_blksize() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "split_default_with_io_blksize";
+    RandomFile::new(&at, name).add_lines(2000);
+    ucmd.args(&[name, "---io-blksize", "2M"]).succeeds();
+
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
+    assert_eq!(glob.count(), 2);
+    assert_eq!(glob.collate(), at.read_bytes(name));
+}
+
+#[test]
+fn test_invalid_suffix_length() {
+    new_ucmd!()
+        .args(&["-a", "xyz"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid suffix length: 'xyz'");
+}
+
+#[test]
+fn test_include_newlines() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-l", "2", "fivelines.txt"]).succeeds();
+
+    let mut s = String::new();
+    at.open("xaa").read_to_string(&mut s).unwrap();
+    assert_eq!(s, "1\n2\n");
+
+    let mut s = String::new();
+    at.open("xab").read_to_string(&mut s).unwrap();
+    assert_eq!(s, "3\n4\n");
+
+    let mut s = String::new();
+    at.open("xac").read_to_string(&mut s).unwrap();
+    assert_eq!(s, "5\n");
 }

@@ -157,11 +157,17 @@ fn test_negative_byte_syntax() {
 #[test]
 fn test_negative_zero_lines() {
     new_ucmd!()
-        .args(&["--lines=-0"])
+        .arg("--lines=-0")
         .pipe_in("a\nb\n")
         .succeeds()
         .stdout_is("a\nb\n");
+    new_ucmd!()
+        .arg("--lines=-0")
+        .pipe_in("a\nb")
+        .succeeds()
+        .stdout_is("a\nb");
 }
+
 #[test]
 fn test_negative_zero_bytes() {
     new_ucmd!()
@@ -220,9 +226,9 @@ fn test_zero_terminated() {
 fn test_obsolete_extras() {
     new_ucmd!()
         .args(&["-5zv"])
-        .pipe_in("1\02\03\04\05\06")
+        .pipe_in("1\x002\x003\x004\x005\x006")
         .succeeds()
-        .stdout_is("==> standard input <==\n1\02\03\04\05\0");
+        .stdout_is("==> standard input <==\n1\x002\x003\x004\x005\0");
 }
 
 #[test]
@@ -306,6 +312,10 @@ fn test_head_invalid_num() {
                 ));
         }
     }
+    new_ucmd!()
+        .args(&["-c", "-³"])
+        .fails()
+        .stderr_is("head: invalid number of bytes: '³'");
 }
 
 #[test]

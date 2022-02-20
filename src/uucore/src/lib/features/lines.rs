@@ -2,15 +2,17 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
+// spell-checker:ignore (vars)
 //! Iterate over lines, including the line ending character(s).
 //!
 //! This module provides the [`lines`] function, similar to the
 //! [`BufRead::lines`] method. While the [`BufRead::lines`] method
 //! yields [`String`] instances that do not include the line ending
-//! characters (`"\n"` or `"\r\n"`), our function yields [`String`]
-//! instances that include the line ending characters. This is useful
-//! if the input data does not end with a newline character and you
-//! want to preserve the exact form of the input data.
+//! characters (`"\n"` or `"\r\n"`), our functions yield
+//! [`Vec`]<['u8']> instances that include the line ending
+//! characters. This is useful if the input data does not end with a
+//! newline character and you want to preserve the exact form of the
+//! input data.
 use std::io::BufRead;
 
 /// Returns an iterator over the lines, including line ending characters.
@@ -51,7 +53,7 @@ use std::io::BufRead;
 /// assert_eq!(it.next(), Some(Vec::from("z")));
 /// assert_eq!(it.next(), None);
 /// ```
-pub(crate) fn lines<B>(reader: B, sep: u8) -> Lines<B>
+pub fn lines<B>(reader: B, sep: u8) -> Lines<B>
 where
     B: BufRead,
 {
@@ -62,7 +64,7 @@ where
 ///
 /// This struct is generally created by calling [`lines`] on a `BufRead`.
 /// Please see the documentation of [`lines`] for more details.
-pub(crate) struct Lines<B> {
+pub struct Lines<B> {
     buf: B,
     sep: u8,
 }
