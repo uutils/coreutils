@@ -322,17 +322,27 @@ fn path_from_stdout() -> PathBuf {
     }
     #[cfg(windows)]
     {
+        use std::os::windows::prelude::AsRawHandle;
+        use windows::Win32::Foundation::{HANDLE, MAX_PATH, PSTR};
+        use windows::Win32::Storage::FileSystem::FILE_NAME_OPENED;
+
         // https://docs.microsoft.com/en-us/windows/win32/memory/obtaining-a-file-name-from-a-file-handle?redirectedfrom=MSDN
         unsafe {
-            panic!("touch: '-' argument is not yet supported on Windows");
-            // TODO: Get on a Windows VM and finish this
-            // let handle = std::io::stdout().as_raw_handle();
-            // windows::Win32::Storage::FileSystem::GetFinalPathNameByHandleA(
-            //     handle,
-            //     std::ptr::null_mut(),
-            //     0,
-            //     0,
-            // )
+            let handle = std::io::stdout().lock().as_raw_handle();
+            // TODO: migrate away from std::mem::uninitialized
+            let file_path_buffer: [u8; MAX_PATH as usize] = std::mem::uninitialized();
+
+            windows::Win32::Storage::FileSystem::GetFinalPathNameByHandleA::<HANDLE>(
+                std::mem::transmute(handle),
+                PSTR(file_path_buffer.as_ptr()),
+                MAX_PATH,
+                FILE_NAME_OPENED,
+            );
+
+            // TODO: this is probably not correct (windows strings are incredibly hairy
+            // and the tests are showing really weird output
+            let asdf: String = String::from_utf8_lossy(&file_path_buffer).to_string();
+            PathBuf::from(asdf)
         }
     }
 }
