@@ -332,8 +332,7 @@ fn path_from_stdout() -> PathBuf {
         // https://docs.microsoft.com/en-us/windows/win32/memory/obtaining-a-file-name-from-a-file-handle?redirectedfrom=MSDN
         unsafe {
             let handle = std::io::stdout().lock().as_raw_handle();
-            // TODO: migrate away from std::mem::uninitialized
-            let file_path_buffer: [u16; MAX_PATH as usize] = std::mem::uninitialized();
+            let file_path_buffer = [0u16; MAX_PATH as usize];
 
             let ret = windows::Win32::Storage::FileSystem::GetFinalPathNameByHandleW::<HANDLE>(
                 std::mem::transmute(handle),
