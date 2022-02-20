@@ -1475,6 +1475,7 @@ fn test_cp_fifo() {
         .no_stderr()
         .no_stdout();
     assert!(at.is_fifo("fifo2"));
+}
 
 #[test]
 fn test_cp_dir_vs_file() {
