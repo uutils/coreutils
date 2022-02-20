@@ -324,9 +324,10 @@ fn path_from_stdout() -> UResult<PathBuf> {
     #[cfg(windows)]
     {
         use std::os::windows::prelude::AsRawHandle;
+        use windows::core::{Error, HRESULT};
         use windows::Win32::Foundation::{
-            GetLastError, ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND,
-            HANDLE, MAX_PATH, PWSTR, WIN32_ERROR,
+            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND, HANDLE,
+            MAX_PATH, PWSTR, WIN32_ERROR,
         };
         use windows::Win32::Storage::FileSystem::FILE_NAME_OPENED;
 
@@ -350,33 +351,20 @@ fn path_from_stdout() -> UResult<PathBuf> {
             )
         };
 
-        // TODO: there is probably a library or something for handling win32 errors
-        // more elegantly
-        let err = WIN32_ERROR(ret);
-        let bufsize = match err {
-            ERROR_PATH_NOT_FOUND => Err(USimpleError::new(
-                1,
-                "file pointed to by stdout does not exist (should never happen)",
-            )),
-            ERROR_NOT_ENOUGH_MEMORY => Err(USimpleError::new(
-                1,
-                "not enough memory to complete the operation",
-            )),
-            ERROR_INVALID_PARAMETER => Err(USimpleError::new(1, "Invalid dwFlags")),
-            e if e.0 >= MAX_PATH => {
-                Err(USimpleError::new(1, format!("need buffer size of {}", e.0)))
+        let win32_err = WIN32_ERROR(ret);
+        let hresult = HRESULT::from(win32_err);
+        let bufsize = match win32_err {
+            ERROR_PATH_NOT_FOUND | ERROR_NOT_ENOUGH_MEMORY | ERROR_INVALID_PARAMETER => {
+                return Err(USimpleError::new(1, hresult.message().to_string()))
             }
-            e if e.0 == 0 => Err(USimpleError::new(
-                1,
-                format!(
-                    "error code: {}",
-                    // SAFETY: We assume GetLastError() is safe to call because
-                    // it does not have any documented memory unsafety
-                    unsafe { GetLastError().0 }
-                ),
-            )),
-            e => Ok(e.0 as usize),
-        }?;
+            e if e.0 == 0 => {
+                return Err(USimpleError::new(
+                    1,
+                    Error::from_win32().message().to_string(),
+                ))
+            }
+            e => e.0 as usize,
+        };
 
         // Don't include the null terminator
         Ok(String::from_utf16(&file_path_buffer[0..bufsize])
