@@ -19,7 +19,6 @@ use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
-use windows::Win32::Foundation::GetLastError;
 
 static ABOUT: &str = "Update the access and modification times of each FILE to the current time.";
 pub mod options {
@@ -325,9 +324,9 @@ fn path_from_stdout() -> PathBuf {
     {
         use std::os::windows::prelude::AsRawHandle;
         use windows::Win32::Foundation::{
-            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND, WIN32_ERROR,
+            GetLastError, ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND,
+            HANDLE, MAX_PATH, PWSTR, WIN32_ERROR,
         };
-        use windows::Win32::Foundation::{HANDLE, MAX_PATH, PWSTR};
         use windows::Win32::Storage::FileSystem::FILE_NAME_OPENED;
 
         // https://docs.microsoft.com/en-us/windows/win32/memory/obtaining-a-file-name-from-a-file-handle?redirectedfrom=MSDN
