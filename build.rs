@@ -116,6 +116,8 @@ pub fn main() {
                 phf_map.entry("sha3-512sum", &map_value);
                 phf_map.entry("shake128sum", &map_value);
                 phf_map.entry("shake256sum", &map_value);
+                phf_map.entry("b2sum", &map_value);
+                phf_map.entry("b3sum", &map_value);
                 tf.write_all(
                     format!(
                         "#[path=\"{dir}/test_{krate}.rs\"]\nmod test_{krate};\n",

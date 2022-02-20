@@ -969,6 +969,16 @@ fn copy_directory(
         return copy_file(root, target, options, symlinked_files);
     }
 
+    // check if root is a prefix of target
+    if path_has_prefix(target, root)? {
+        return Err(format!(
+            "cannot copy a directory, {}, into itself, {}",
+            root.quote(),
+            target.quote()
+        )
+        .into());
+    }
+
     let current_dir =
         env::current_dir().unwrap_or_else(|e| crash!(1, "failed to get current directory {}", e));
 
@@ -1576,6 +1586,13 @@ pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> io::Result<bool> {
     let pathbuf2 = canonicalize(p2, MissingHandling::Normal, ResolveMode::Logical)?;
 
     Ok(pathbuf1 == pathbuf2)
+}
+
+pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
+    let pathbuf1 = canonicalize(p1, MissingHandling::Normal, ResolveMode::Logical)?;
+    let pathbuf2 = canonicalize(p2, MissingHandling::Normal, ResolveMode::Logical)?;
+
+    Ok(pathbuf1.starts_with(pathbuf2))
 }
 
 #[test]

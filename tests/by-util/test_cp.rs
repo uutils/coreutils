@@ -1478,6 +1478,51 @@ fn test_copy_symlink_with_no_dereference_and_attributes_only() {
 }
 
 #[test]
+fn test_dir_recursive_copy() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("parent1");
+    at.mkdir("parent2");
+    at.mkdir("parent1/child");
+    at.mkdir("parent2/child1");
+    at.mkdir("parent2/child1/child2");
+    at.mkdir("parent2/child1/child2/child3");
+
+    // case-1: copy parent1 -> parent1: should fail
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("parent1")
+        .arg("parent1")
+        .fails()
+        .stderr_contains("cannot copy a directory");
+    // case-2: copy parent1 -> parent1/child should fail
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("parent1")
+        .arg("parent1/child")
+        .fails()
+        .stderr_contains("cannot copy a directory");
+    // case-3: copy parent1/child -> parent2 should pass
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("parent1/child")
+        .arg("parent2")
+        .succeeds();
+    // case-4: copy parent2/child1/ -> parent2/child1/child2/child3
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("parent2/child1/")
+        .arg("parent2/child1/child2/child3")
+        .fails()
+        .stderr_contains("cannot copy a directory");
+}
+
+#[test]
 fn test_cp_dir_vs_file() {
     new_ucmd!()
         .arg("-R")

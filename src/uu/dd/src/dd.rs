@@ -5,10 +5,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat seekable
-
-#[cfg(test)]
-mod dd_unit_tests;
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, wlen, wstat seekable
 
 mod datastructures;
 use datastructures::*;
@@ -19,27 +16,23 @@ use parseargs::Matches;
 mod conversion_tables;
 use conversion_tables::*;
 
+mod progress;
+use progress::{gen_prog_updater, ProgUpdate, ReadStat, StatusLevel, WriteStat};
+
 use std::cmp;
 use std::convert::TryInto;
 use std::env;
-#[cfg(target_os = "linux")]
-use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, Write};
 #[cfg(target_os = "linux")]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 use std::sync::mpsc;
-#[cfg(target_os = "linux")]
-use std::sync::{atomic::AtomicUsize, atomic::Ordering, Arc};
 use std::thread;
 use std::time;
 
-use byte_unit::Byte;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use gcd::Gcd;
-#[cfg(target_os = "linux")]
-use signal_hook::consts::signal;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::show_error;
@@ -354,8 +347,8 @@ where
     fn print_stats<R: Read>(&self, i: &Input<R>, prog_update: &ProgUpdate) {
         match i.print_level {
             Some(StatusLevel::None) => {}
-            Some(StatusLevel::Noxfer) => print_io_lines(prog_update),
-            Some(StatusLevel::Progress) | None => print_transfer_stats(prog_update),
+            Some(StatusLevel::Noxfer) => prog_update.print_io_lines(),
+            Some(StatusLevel::Progress) | None => prog_update.print_transfer_stats(),
         }
     }
 
@@ -774,113 +767,6 @@ fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> std::io::Result<(Read
     }
 }
 
-// Print io lines of a status update:
-// <complete>+<partial> records in
-// <complete>+<partial> records out
-fn print_io_lines(update: &ProgUpdate) {
-    eprintln!(
-        "{}+{} records in",
-        update.read_stat.reads_complete, update.read_stat.reads_partial
-    );
-    if update.read_stat.records_truncated > 0 {
-        eprintln!("{} truncated records", update.read_stat.records_truncated);
-    }
-    eprintln!(
-        "{}+{} records out",
-        update.write_stat.writes_complete, update.write_stat.writes_partial
-    );
-}
-// Print the progress line of a status update:
-// <byte-count> bytes (<base-1000-size>, <base-2-size>) copied, <time> s, <base-2-rate>/s
-fn make_prog_line(update: &ProgUpdate) -> String {
-    let btotal_metric = Byte::from_bytes(update.write_stat.bytes_total)
-        .get_appropriate_unit(false)
-        .format(0);
-    let btotal_bin = Byte::from_bytes(update.write_stat.bytes_total)
-        .get_appropriate_unit(true)
-        .format(0);
-    let safe_millis = cmp::max(1, update.duration.as_millis());
-    let transfer_rate = Byte::from_bytes(1000 * (update.write_stat.bytes_total / safe_millis))
-        .get_appropriate_unit(false)
-        .format(1);
-
-    format!(
-        "{} bytes ({}, {}) copied, {:.1} s, {}/s",
-        update.write_stat.bytes_total,
-        btotal_metric,
-        btotal_bin,
-        update.duration.as_secs_f64(),
-        transfer_rate
-    )
-}
-// Print progress line only. Overwrite the current line.
-fn reprint_prog_line(update: &ProgUpdate) {
-    eprint!("\r{}", make_prog_line(update));
-}
-// Print progress line only. Print as a new line.
-fn print_prog_line(update: &ProgUpdate) {
-    eprintln!("{}", make_prog_line(update));
-}
-// Print both io lines and progress line.
-fn print_transfer_stats(update: &ProgUpdate) {
-    print_io_lines(update);
-    print_prog_line(update);
-}
-
-// Generate a progress updater that tracks progress, receives updates, and responds to progress update requests (signals).
-// Signals:
-// - SIGUSR1: Trigger progress line reprint. Linux (GNU & BSD) only.
-// - TODO: SIGINFO: Trigger progress line reprint. BSD-style Linux only.
-fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, print_level: Option<StatusLevel>) -> impl Fn() {
-    // --------------------------------------------------------------
-    #[cfg(target_os = "linux")]
-    const SIGUSR1_USIZE: usize = signal::SIGUSR1 as usize;
-    // --------------------------------------------------------------
-    #[cfg(target_os = "linux")]
-    fn posixly_correct() -> bool {
-        env::var("POSIXLY_CORRECT").is_ok()
-    }
-    #[cfg(target_os = "linux")]
-    fn register_linux_signal_handler(sigval: Arc<AtomicUsize>) -> Result<(), Box<dyn Error>> {
-        if !posixly_correct() {
-            signal_hook::flag::register_usize(signal::SIGUSR1, sigval, SIGUSR1_USIZE)?;
-        }
-
-        Ok(())
-    }
-    // --------------------------------------------------------------
-    move || {
-        #[cfg(target_os = "linux")]
-        let sigval = Arc::new(AtomicUsize::new(0));
-
-        #[cfg(target_os = "linux")]
-        register_linux_signal_handler(sigval.clone()).unwrap_or_else(|e| {
-            if Some(StatusLevel::None) != print_level {
-                eprintln!(
-                    "Internal dd Warning: Unable to register signal handler \n\t{}",
-                    e
-                );
-            }
-        });
-
-        let mut progress_as_secs = 0;
-        while let Ok(update) = rx.recv() {
-            // (Re)print status line if progress is requested.
-            if Some(StatusLevel::Progress) == print_level
-                && update.duration.as_secs() >= progress_as_secs
-            {
-                reprint_prog_line(&update);
-                progress_as_secs = update.duration.as_secs() + 1;
-            }
-            // Handle signals
-            #[cfg(target_os = "linux")]
-            if let SIGUSR1_USIZE = sigval.load(Ordering::Relaxed) {
-                print_transfer_stats(&update);
-            };
-        }
-    }
-}
-
 // Calculate a 'good' internal buffer size.
 // For performance of the read/write functions, the buffer should hold
 // both an integral number of reads and an integral number of writes. For
@@ -1192,4 +1078,455 @@ General-Flags
 
 ")
         )
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::datastructures::{IConvFlags, IFlags, OConvFlags};
+    use crate::ReadStat;
+    use crate::{block, calc_bsize, unblock, uu_app, Input, Output, OutputTrait};
+
+    use std::cmp;
+    use std::fs;
+    use std::fs::File;
+    use std::io;
+    use std::io::{BufReader, Read};
+
+    struct LazyReader<R: Read> {
+        src: R,
+    }
+
+    impl<R: Read> Read for LazyReader<R> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            let reduced = cmp::max(buf.len() / 2, 1);
+            self.src.read(&mut buf[..reduced])
+        }
+    }
+
+    const NEWLINE: u8 = b'\n';
+    const SPACE: u8 = b' ';
+
+    #[test]
+    fn block_test_no_nl() {
+        let mut rs = ReadStat::default();
+        let buf = [0u8, 1u8, 2u8, 3u8];
+        let res = block(&buf, 4, &mut rs);
+
+        assert_eq!(res, vec![vec![0u8, 1u8, 2u8, 3u8],]);
+    }
+
+    #[test]
+    fn block_test_no_nl_short_record() {
+        let mut rs = ReadStat::default();
+        let buf = [0u8, 1u8, 2u8, 3u8];
+        let res = block(&buf, 8, &mut rs);
+
+        assert_eq!(
+            res,
+            vec![vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],]
+        );
+    }
+
+    #[test]
+    fn block_test_no_nl_trunc() {
+        let mut rs = ReadStat::default();
+        let buf = [0u8, 1u8, 2u8, 3u8, 4u8];
+        let res = block(&buf, 4, &mut rs);
+
+        // Commented section(s) should be truncated and appear for reference only.
+        assert_eq!(res, vec![vec![0u8, 1u8, 2u8, 3u8 /*, 4u8*/],]);
+        assert_eq!(rs.records_truncated, 1);
+    }
+
+    #[test]
+    fn block_test_nl_gt_cbs_trunc() {
+        let mut rs = ReadStat::default();
+        let buf = [
+            0u8, 1u8, 2u8, 3u8, 4u8, NEWLINE, 0u8, 1u8, 2u8, 3u8, 4u8, NEWLINE, 5u8, 6u8, 7u8, 8u8,
+        ];
+        let res = block(&buf, 4, &mut rs);
+
+        assert_eq!(
+            res,
+            vec![
+                // Commented section(s) should be truncated and appear for reference only.
+                vec![0u8, 1u8, 2u8, 3u8],
+                // vec![4u8, SPACE, SPACE, SPACE],
+                vec![0u8, 1u8, 2u8, 3u8],
+                // vec![4u8, SPACE, SPACE, SPACE],
+                vec![5u8, 6u8, 7u8, 8u8],
+            ]
+        );
+        assert_eq!(rs.records_truncated, 2);
+    }
+
+    #[test]
+    fn block_test_surrounded_nl() {
+        let mut rs = ReadStat::default();
+        let buf = [0u8, 1u8, 2u8, 3u8, NEWLINE, 4u8, 5u8, 6u8, 7u8, 8u8];
+        let res = block(&buf, 8, &mut rs);
+
+        assert_eq!(
+            res,
+            vec![
+                vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
+                vec![4u8, 5u8, 6u8, 7u8, 8u8, SPACE, SPACE, SPACE],
+            ]
+        );
+    }
+
+    #[test]
+    fn block_test_multiple_nl_same_cbs_block() {
+        let mut rs = ReadStat::default();
+        let buf = [
+            0u8, 1u8, 2u8, 3u8, NEWLINE, 4u8, NEWLINE, 5u8, 6u8, 7u8, 8u8, 9u8,
+        ];
+        let res = block(&buf, 8, &mut rs);
+
+        assert_eq!(
+            res,
+            vec![
+                vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
+                vec![4u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE],
+                vec![5u8, 6u8, 7u8, 8u8, 9u8, SPACE, SPACE, SPACE],
+            ]
+        );
+    }
+
+    #[test]
+    fn block_test_multiple_nl_diff_cbs_block() {
+        let mut rs = ReadStat::default();
+        let buf = [
+            0u8, 1u8, 2u8, 3u8, NEWLINE, 4u8, 5u8, 6u8, 7u8, NEWLINE, 8u8, 9u8,
+        ];
+        let res = block(&buf, 8, &mut rs);
+
+        assert_eq!(
+            res,
+            vec![
+                vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
+                vec![4u8, 5u8, 6u8, 7u8, SPACE, SPACE, SPACE, SPACE],
+                vec![8u8, 9u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE],
+            ]
+        );
+    }
+
+    #[test]
+    fn block_test_end_nl_diff_cbs_block() {
+        let mut rs = ReadStat::default();
+        let buf = [0u8, 1u8, 2u8, 3u8, NEWLINE];
+        let res = block(&buf, 4, &mut rs);
+
+        assert_eq!(res, vec![vec![0u8, 1u8, 2u8, 3u8],]);
+    }
+
+    #[test]
+    fn block_test_end_nl_same_cbs_block() {
+        let mut rs = ReadStat::default();
+        let buf = [0u8, 1u8, 2u8, NEWLINE];
+        let res = block(&buf, 4, &mut rs);
+
+        assert_eq!(res, vec![vec![0u8, 1u8, 2u8, SPACE]]);
+    }
+
+    #[test]
+    fn block_test_double_end_nl() {
+        let mut rs = ReadStat::default();
+        let buf = [0u8, 1u8, 2u8, NEWLINE, NEWLINE];
+        let res = block(&buf, 4, &mut rs);
+
+        assert_eq!(
+            res,
+            vec![vec![0u8, 1u8, 2u8, SPACE], vec![SPACE, SPACE, SPACE, SPACE],]
+        );
+    }
+
+    #[test]
+    fn block_test_start_nl() {
+        let mut rs = ReadStat::default();
+        let buf = [NEWLINE, 0u8, 1u8, 2u8, 3u8];
+        let res = block(&buf, 4, &mut rs);
+
+        assert_eq!(
+            res,
+            vec![vec![SPACE, SPACE, SPACE, SPACE], vec![0u8, 1u8, 2u8, 3u8],]
+        );
+    }
+
+    #[test]
+    fn block_test_double_surrounded_nl_no_trunc() {
+        let mut rs = ReadStat::default();
+        let buf = [0u8, 1u8, 2u8, 3u8, NEWLINE, NEWLINE, 4u8, 5u8, 6u8, 7u8];
+        let res = block(&buf, 8, &mut rs);
+
+        assert_eq!(
+            res,
+            vec![
+                vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
+                vec![SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE],
+                vec![4u8, 5u8, 6u8, 7u8, SPACE, SPACE, SPACE, SPACE],
+            ]
+        );
+    }
+
+    #[test]
+    fn block_test_double_surrounded_nl_double_trunc() {
+        let mut rs = ReadStat::default();
+        let buf = [
+            0u8, 1u8, 2u8, 3u8, NEWLINE, NEWLINE, 4u8, 5u8, 6u8, 7u8, 8u8,
+        ];
+        let res = block(&buf, 4, &mut rs);
+
+        assert_eq!(
+            res,
+            vec![
+                // Commented section(s) should be truncated and appear for reference only.
+                vec![0u8, 1u8, 2u8, 3u8],
+                vec![SPACE, SPACE, SPACE, SPACE],
+                vec![4u8, 5u8, 6u8, 7u8 /*, 8u8*/],
+            ]
+        );
+        assert_eq!(rs.records_truncated, 1);
+    }
+
+    #[test]
+    fn unblock_test_full_cbs() {
+        let buf = [0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8];
+        let res = unblock(&buf, 8);
+
+        assert_eq!(res, vec![0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, NEWLINE],);
+    }
+
+    #[test]
+    fn unblock_test_all_space() {
+        let buf = [SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE];
+        let res = unblock(&buf, 8);
+
+        assert_eq!(res, vec![NEWLINE],);
+    }
+
+    #[test]
+    fn unblock_test_decoy_spaces() {
+        let buf = [0u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, 7u8];
+        let res = unblock(&buf, 8);
+
+        assert_eq!(
+            res,
+            vec![0u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, 7u8, NEWLINE],
+        );
+    }
+
+    #[test]
+    fn unblock_test_strip_single_cbs() {
+        let buf = [0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE];
+        let res = unblock(&buf, 8);
+
+        assert_eq!(res, vec![0u8, 1u8, 2u8, 3u8, NEWLINE],);
+    }
+
+    #[test]
+    fn unblock_test_strip_multi_cbs() {
+        let buf = vec![
+            vec![0u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE],
+            vec![0u8, 1u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE],
+            vec![0u8, 1u8, 2u8, SPACE, SPACE, SPACE, SPACE, SPACE],
+            vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+
+        let res = unblock(&buf, 8);
+
+        let exp = vec![
+            vec![0u8, NEWLINE],
+            vec![0u8, 1u8, NEWLINE],
+            vec![0u8, 1u8, 2u8, NEWLINE],
+            vec![0u8, 1u8, 2u8, 3u8, NEWLINE],
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+
+        assert_eq!(res, exp);
+    }
+
+    #[test]
+    fn bsize_test_primes() {
+        let (n, m) = (7901, 7919);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, n * m);
+    }
+
+    #[test]
+    fn bsize_test_rel_prime_obs_greater() {
+        let (n, m) = (7 * 5119, 13 * 5119);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, 7 * 13 * 5119);
+    }
+
+    #[test]
+    fn bsize_test_rel_prime_ibs_greater() {
+        let (n, m) = (13 * 5119, 7 * 5119);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, 7 * 13 * 5119);
+    }
+
+    #[test]
+    fn bsize_test_3fac_rel_prime() {
+        let (n, m) = (11 * 13 * 5119, 7 * 11 * 5119);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, 7 * 11 * 13 * 5119);
+    }
+
+    #[test]
+    fn bsize_test_ibs_greater() {
+        let (n, m) = (512 * 1024, 256 * 1024);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, n);
+    }
+
+    #[test]
+    fn bsize_test_obs_greater() {
+        let (n, m) = (256 * 1024, 512 * 1024);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, m);
+    }
+
+    #[test]
+    fn bsize_test_bs_eq() {
+        let (n, m) = (1024, 1024);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, m);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_nocreat_causes_failure_when_ofile_doesnt_exist() {
+        let args = vec![
+            String::from("dd"),
+            String::from("--conv=nocreat"),
+            String::from("--of=not-a-real.file"),
+        ];
+
+        let matches = uu_app().try_get_matches_from(args).unwrap();
+        let _ = Output::<File>::new(&matches).unwrap();
+    }
+
+    #[test]
+    fn test_deadbeef_16_delayed() {
+        let input = Input {
+            src: LazyReader {
+                src: File::open("./test-resources/deadbeef-16.test").unwrap(),
+            },
+            non_ascii: false,
+            ibs: 16,
+            print_level: None,
+            count: None,
+            cflags: IConvFlags {
+                sync: Some(0),
+                ..IConvFlags::default()
+            },
+            iflags: IFlags::default(),
+        };
+
+        let output = Output {
+            dst: File::create("./test-resources/FAILED-deadbeef-16-delayed.test").unwrap(),
+            obs: 32,
+            cflags: OConvFlags::default(),
+        };
+
+        output.dd_out(input).unwrap();
+
+        let tmp_fname = "./test-resources/FAILED-deadbeef-16-delayed.test";
+        let spec = File::open("./test-resources/deadbeef-16.spec").unwrap();
+
+        let res = File::open(tmp_fname).unwrap();
+        // Check test file isn't empty (unless spec file is too)
+        assert_eq!(
+            res.metadata().unwrap().len(),
+            spec.metadata().unwrap().len()
+        );
+
+        let spec = BufReader::new(spec);
+        let res = BufReader::new(res);
+
+        // Check all bytes match
+        for (b_res, b_spec) in res.bytes().zip(spec.bytes()) {
+            assert_eq!(b_res.unwrap(), b_spec.unwrap());
+        }
+
+        fs::remove_file(tmp_fname).unwrap();
+    }
+
+    #[test]
+    fn test_random_73k_test_lazy_fullblock() {
+        let input = Input {
+            src: LazyReader {
+                src: File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test")
+                    .unwrap(),
+            },
+            non_ascii: false,
+            ibs: 521,
+            print_level: None,
+            count: None,
+            cflags: IConvFlags::default(),
+            iflags: IFlags {
+                fullblock: true,
+                ..IFlags::default()
+            },
+        };
+
+        let output = Output {
+            dst: File::create("./test-resources/FAILED-random_73k_test_lazy_fullblock.test")
+                .unwrap(),
+            obs: 1031,
+            cflags: OConvFlags::default(),
+        };
+
+        output.dd_out(input).unwrap();
+
+        let tmp_fname = "./test-resources/FAILED-random_73k_test_lazy_fullblock.test";
+        let spec =
+            File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap();
+
+        let res = File::open(tmp_fname).unwrap();
+        // Check test file isn't empty (unless spec file is too)
+        assert_eq!(
+            res.metadata().unwrap().len(),
+            spec.metadata().unwrap().len()
+        );
+
+        let spec = BufReader::new(spec);
+        let res = BufReader::new(res);
+
+        // Check all bytes match
+        for (b_res, b_spec) in res.bytes().zip(spec.bytes()) {
+            assert_eq!(b_res.unwrap(), b_spec.unwrap());
+        }
+
+        fs::remove_file(tmp_fname).unwrap();
+    }
 }

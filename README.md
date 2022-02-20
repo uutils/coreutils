@@ -349,6 +349,10 @@ $ make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
 
 ### Comparing with GNU
 
+Below is the evolution of how many GNU tests uutils passes. A more detailed
+breakdown of the GNU test results of the main branch can be found
+[in the user manual](https://uutils.github.io/coreutils-docs/user/test_coverage.html).
+
 ![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
 
 To run locally:

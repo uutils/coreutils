@@ -2,7 +2,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes asciilowercase fghij klmno pqrst uvwxyz fivelines
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase fghij klmno pqrst uvwxyz fivelines twohundredfortyonebytes
 extern crate rand;
 extern crate regex;
 
@@ -410,6 +410,28 @@ fn test_numeric_dynamic_suffix_length() {
 }
 
 #[test]
+fn test_hex_dynamic_suffix_length() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // Split into chunks of one byte each, use hexadecimal digits
+    // instead of letters as file suffixes.
+    //
+    // The input file has (16^2) - 16 + 1 = 241 bytes. This is just
+    // enough to force `split` to dynamically increase the length of
+    // the filename for the very last chunk.
+    //
+    //     x00, x01, x02, ..., xed, xee, xef, xf000
+    //
+    ucmd.args(&["-x", "-b", "1", "twohundredfortyonebytes.txt"])
+        .succeeds();
+    for i in 0..240 {
+        let filename = format!("x{:02x}", i);
+        let contents = file_read(&at, &filename);
+        assert_eq!(contents, "a");
+    }
+    assert_eq!(file_read(&at, "xf000"), "a");
+}
+
+#[test]
 fn test_suffixes_exhausted() {
     new_ucmd!()
         .args(&["-b", "1", "-a", "1", "asciilowercase.txt"])
@@ -503,4 +525,30 @@ fn test_include_newlines() {
     let mut s = String::new();
     at.open("xac").read_to_string(&mut s).unwrap();
     assert_eq!(s, "5\n");
+}
+
+#[test]
+fn test_allow_empty_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n", "4", "threebytes.txt"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("xaa"), "a");
+    assert_eq!(at.read("xab"), "b");
+    assert_eq!(at.read("xac"), "c");
+    assert_eq!(at.read("xad"), "");
+}
+
+#[test]
+fn test_elide_empty_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-e", "-n", "4", "threebytes.txt"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("xaa"), "a");
+    assert_eq!(at.read("xab"), "b");
+    assert_eq!(at.read("xac"), "c");
+    assert!(!at.plus("xad").exists());
 }

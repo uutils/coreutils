@@ -12,6 +12,7 @@ mod number;
 mod platform;
 
 use crate::filenames::FilenameIterator;
+use crate::filenames::SuffixType;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::env;
 use std::fmt;
@@ -31,12 +32,14 @@ static OPT_ADDITIONAL_SUFFIX: &str = "additional-suffix";
 static OPT_FILTER: &str = "filter";
 static OPT_NUMBER: &str = "number";
 static OPT_NUMERIC_SUFFIXES: &str = "numeric-suffixes";
+static OPT_HEX_SUFFIXES: &str = "hex-suffixes";
 static OPT_SUFFIX_LENGTH: &str = "suffix-length";
 static OPT_DEFAULT_SUFFIX_LENGTH: &str = "0";
 static OPT_VERBOSE: &str = "verbose";
 //The ---io-blksize parameter is consumed and ignored.
 //The parameter is included to make GNU coreutils tests pass.
 static OPT_IO_BLKSIZE: &str = "-io-blksize";
+static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
 
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
@@ -127,6 +130,13 @@ pub fn uu_app<'a>() -> App<'a> {
             ),
         )
         .arg(
+            Arg::new(OPT_ELIDE_EMPTY_FILES)
+                .long(OPT_ELIDE_EMPTY_FILES)
+                .short('e')
+                .takes_value(false)
+                .help("do not generate empty output files with '-n'"),
+        )
+        .arg(
             Arg::new(OPT_NUMERIC_SUFFIXES)
                 .short('d')
                 .long(OPT_NUMERIC_SUFFIXES)
@@ -141,6 +151,14 @@ pub fn uu_app<'a>() -> App<'a> {
                 .takes_value(true)
                 .default_value(OPT_DEFAULT_SUFFIX_LENGTH)
                 .help("use suffixes of length N (default 2)"),
+        )
+        .arg(
+            Arg::new(OPT_HEX_SUFFIXES)
+                .short('x')
+                .long(OPT_HEX_SUFFIXES)
+                .takes_value(true)
+                .default_missing_value("0")
+                .help("use hex suffixes starting at 0, not alphabetic"),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
@@ -250,13 +268,24 @@ impl Strategy {
     }
 }
 
+/// Parse the suffix type from the command-line arguments.
+fn suffix_type_from(matches: &ArgMatches) -> SuffixType {
+    if matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0 {
+        SuffixType::NumericDecimal
+    } else if matches.occurrences_of(OPT_HEX_SUFFIXES) > 0 {
+        SuffixType::NumericHexadecimal
+    } else {
+        SuffixType::Alphabetic
+    }
+}
+
 /// Parameters that control how a file gets split.
 ///
 /// You can convert an [`ArgMatches`] instance into a [`Settings`]
 /// instance by calling [`Settings::from`].
 struct Settings {
     prefix: String,
-    numeric_suffix: bool,
+    suffix_type: SuffixType,
     suffix_length: usize,
     additional_suffix: String,
     input: String,
@@ -264,6 +293,16 @@ struct Settings {
     filter: Option<String>,
     strategy: Strategy,
     verbose: bool,
+
+    /// Whether to *not* produce empty files when using `-n`.
+    ///
+    /// The `-n` command-line argument gives a specific number of
+    /// chunks into which the input files will be split. If the number
+    /// of chunks is greater than the number of bytes, and this is
+    /// `false`, then empty files will be created for the excess
+    /// chunks. If this is `false`, then empty files will not be
+    /// created.
+    elide_empty_files: bool,
 }
 
 /// An error when parsing settings from command-line arguments.
@@ -324,13 +363,14 @@ impl Settings {
             suffix_length: suffix_length_str
                 .parse()
                 .map_err(|_| SettingsError::SuffixLength(suffix_length_str.to_string()))?,
-            numeric_suffix: matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0,
+            suffix_type: suffix_type_from(matches),
             additional_suffix,
             verbose: matches.occurrences_of("verbose") > 0,
             strategy: Strategy::from(matches).map_err(SettingsError::Strategy)?,
             input: matches.value_of(ARG_INPUT).unwrap().to_owned(),
             prefix: matches.value_of(ARG_PREFIX).unwrap().to_owned(),
             filter: matches.value_of(OPT_FILTER).map(|s| s.to_owned()),
+            elide_empty_files: matches.is_present(OPT_ELIDE_EMPTY_FILES),
         };
         #[cfg(windows)]
         if result.filter.is_some() {
@@ -384,7 +424,7 @@ impl<'a> ByteChunkWriter<'a> {
             &settings.prefix,
             &settings.additional_suffix,
             settings.suffix_length,
-            settings.numeric_suffix,
+            settings.suffix_type,
         );
         let filename = filename_iterator.next()?;
         if settings.verbose {
@@ -512,7 +552,7 @@ impl<'a> LineChunkWriter<'a> {
             &settings.prefix,
             &settings.additional_suffix,
             settings.suffix_length,
-            settings.numeric_suffix,
+            settings.suffix_type,
         );
         let filename = filename_iterator.next()?;
         if settings.verbose {
@@ -595,16 +635,31 @@ where
 {
     // Get the size of the input file in bytes and compute the number
     // of bytes per chunk.
+    //
+    // If the requested number of chunks exceeds the number of bytes
+    // in the file *and* the `elide_empty_files` parameter is enabled,
+    // then behave as if the number of chunks was set to the number of
+    // bytes in the file. This ensures that we don't write empty
+    // files. Otherwise, just write the `num_chunks - num_bytes` empty
+    // files.
     let metadata = metadata(&settings.input).unwrap();
     let num_bytes = metadata.len();
-    let chunk_size = (num_bytes / (num_chunks as u64)) as usize;
+    let will_have_empty_files = settings.elide_empty_files && num_chunks as u64 > num_bytes;
+    let (num_chunks, chunk_size) = if will_have_empty_files {
+        let num_chunks = num_bytes as usize;
+        let chunk_size = 1;
+        (num_chunks, chunk_size)
+    } else {
+        let chunk_size = ((num_bytes / (num_chunks as u64)) as usize).max(1);
+        (num_chunks, chunk_size)
+    };
 
     // This object is responsible for creating the filename for each chunk.
     let mut filename_iterator = FilenameIterator::new(
         &settings.prefix,
         &settings.additional_suffix,
         settings.suffix_length,
-        settings.numeric_suffix,
+        settings.suffix_type,
     );
 
     // Create one writer for each chunk. This will create each

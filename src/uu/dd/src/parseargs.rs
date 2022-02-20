@@ -325,6 +325,14 @@ impl std::str::FromStr for StatusLevel {
     }
 }
 
+fn show_zero_multiplier_warning() {
+    show_warning!(
+        "{} is a zero multiplier; use {} if that is intended",
+        "0x".quote(),
+        "00x".quote()
+    );
+}
+
 /// Parse bytes using str::parse, then map error if needed.
 fn parse_bytes_only(s: &str) -> Result<usize, ParseError> {
     s.parse()
@@ -357,13 +365,6 @@ fn parse_bytes_only(s: &str) -> Result<usize, ParseError> {
 /// assert_eq!(parse_bytes_no_x("2k").unwrap(), 2 * 1024);
 /// ```
 fn parse_bytes_no_x(s: &str) -> Result<usize, ParseError> {
-    if s == "0" {
-        show_warning!(
-            "{} is a zero multiplier; use {} if that is intended",
-            "0x".quote(),
-            "00x".quote()
-        );
-    }
     let (num, multiplier) = match (s.find('c'), s.rfind('w'), s.rfind('b')) {
         (None, None, None) => match uucore::parse_size::parse_size(s) {
             Ok(n) => (n, 1),
@@ -401,13 +402,20 @@ fn parse_bytes_with_opt_multiplier(s: &str) -> Result<usize, ParseError> {
 
     // Split on the 'x' characters. Each component will be parsed
     // individually, then multiplied together.
-    let mut total = 1;
-    for part in s.split('x') {
-        let num = parse_bytes_no_x(part).map_err(|e| e.with_arg(s.to_string()))?;
-        total *= num;
+    let parts: Vec<&str> = s.split('x').collect();
+    if parts.len() == 1 {
+        parse_bytes_no_x(parts[0]).map_err(|e| e.with_arg(s.to_string()))
+    } else {
+        let mut total = 1;
+        for part in parts {
+            if part == "0" {
+                show_zero_multiplier_warning();
+            }
+            let num = parse_bytes_no_x(part).map_err(|e| e.with_arg(s.to_string()))?;
+            total *= num;
+        }
+        Ok(total)
     }
-
-    Ok(total)
 }
 
 pub fn parse_ibs(matches: &Matches) -> Result<usize, ParseError> {
@@ -429,7 +437,7 @@ fn parse_cbs(matches: &Matches) -> Result<Option<usize>, ParseError> {
     }
 }
 
-pub fn parse_status_level(matches: &Matches) -> Result<Option<StatusLevel>, ParseError> {
+pub(crate) fn parse_status_level(matches: &Matches) -> Result<Option<StatusLevel>, ParseError> {
     match matches.value_of(options::STATUS) {
         Some(s) => {
             let st = s.parse()?;
