@@ -327,45 +327,57 @@ fn path_from_stdout() -> UResult<PathBuf> {
         use windows::Win32::Foundation::{GetLastError, HANDLE, MAX_PATH, PWSTR};
         use windows::Win32::Storage::FileSystem::FILE_NAME_OPENED;
 
-        unsafe {
-            let handle = std::io::stdout().lock().as_raw_handle();
-            let file_path_buffer = [0u16; MAX_PATH as usize];
+        let handle = std::io::stdout().lock().as_raw_handle();
+        let file_path_buffer = [0u16; MAX_PATH as usize];
 
-            // https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlea#examples
-            let ret = windows::Win32::Storage::FileSystem::GetFinalPathNameByHandleW::<HANDLE>(
+        // https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlea#examples
+        // SAFETY: We transmute the handle to be able to cast *mut c_void into a
+        // HANDLE (i32) so rustc will let us call GetFinalPathNameByHandleW. The
+        // reference example code for GetFinalPathNameByHandleW implies that
+        // it is safe for us to leave lpszfilepath uninitialized, so long as
+        // the buffer size is correct. We know the buffer size (MAX_PATH) at
+        // compile time. MAX_PATH is a small number (260) so we can cast it
+        // to a u32.
+        let ret = unsafe {
+            windows::Win32::Storage::FileSystem::GetFinalPathNameByHandleW::<HANDLE>(
                 std::mem::transmute(handle),
                 PWSTR(file_path_buffer.as_ptr()),
-                MAX_PATH,
+                file_path_buffer.len() as u32,
                 FILE_NAME_OPENED,
-            );
+            )
+        };
 
-            // TODO: there is probably a library or something for handling win32 errors
-            // more elegantly
-            let err = WIN32_ERROR(ret);
-            let bufsize = match err {
-                ERROR_PATH_NOT_FOUND => Err(USimpleError::new(
-                    1,
-                    "file pointed to by stdout does not exist (should never happen)",
-                )),
-                ERROR_NOT_ENOUGH_MEMORY => Err(USimpleError::new(
-                    1,
-                    "not enough memory to complete the operation",
-                )),
-                ERROR_INVALID_PARAMETER => Err(USimpleError::new(1, "Invalid dwFlags")),
-                e if e.0 >= MAX_PATH => {
-                    Err(USimpleError::new(1, format!("need buffer size of {}", e.0)))
-                }
-                e if e.0 == 0 => Err(USimpleError::new(
-                    1,
-                    format!("error code: {}", GetLastError().0),
-                )),
-                e => Ok(e.0 as usize),
-            }?;
+        // TODO: there is probably a library or something for handling win32 errors
+        // more elegantly
+        let err = WIN32_ERROR(ret);
+        let bufsize = match err {
+            ERROR_PATH_NOT_FOUND => Err(USimpleError::new(
+                1,
+                "file pointed to by stdout does not exist (should never happen)",
+            )),
+            ERROR_NOT_ENOUGH_MEMORY => Err(USimpleError::new(
+                1,
+                "not enough memory to complete the operation",
+            )),
+            ERROR_INVALID_PARAMETER => Err(USimpleError::new(1, "Invalid dwFlags")),
+            e if e.0 >= MAX_PATH => {
+                Err(USimpleError::new(1, format!("need buffer size of {}", e.0)))
+            }
+            e if e.0 == 0 => Err(USimpleError::new(
+                1,
+                format!(
+                    "error code: {}",
+                    // SAFETY: We assume GetLastError() is safe to call because
+                    // it does not have any documented memory unsafety
+                    unsafe { GetLastError().0 }
+                ),
+            )),
+            e => Ok(e.0 as usize),
+        }?;
 
-            // Don't include the null terminator
-            Ok(String::from_utf16(&file_path_buffer[0..bufsize])
-                .map_err(|e| USimpleError::new(1, e.to_string()))?
-                .into())
-        }
+        // Don't include the null terminator
+        Ok(String::from_utf16(&file_path_buffer[0..bufsize])
+            .map_err(|e| USimpleError::new(1, e.to_string()))?
+            .into())
     }
 }
