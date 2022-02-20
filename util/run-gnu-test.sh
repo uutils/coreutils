@@ -31,8 +31,6 @@ export RUST_BACKTRACE=1
 if test -n "$1"; then
     # if set, run only the test passed
     export RUN_TEST="TESTS=$1"
-elif test -n "$CI"; then
-    sudo make -j "$(nproc)" check-root SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
 fi
 
 # * timeout used to kill occasionally errant/"stuck" processes (note: 'release' testing takes ~1 hour; 'debug' testing takes ~2.5 hours)
@@ -40,3 +38,7 @@ fi
 # * `srcdir=..` specifies the GNU source directory for tests (fixing failing/confused 'tests/factor/tNN.sh' tests and causing no harm to other tests)
 #shellcheck disable=SC2086
 timeout -sKILL 4h make -j "$(nproc)" check ${RUN_TEST} SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" || : # Kill after 4 hours in case something gets stuck in make
+
+if test -z "$1" && test -n "$CI"; then
+    sudo make -j "$(nproc)" check-root SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
+fi
