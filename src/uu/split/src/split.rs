@@ -39,6 +39,7 @@ static OPT_VERBOSE: &str = "verbose";
 //The ---io-blksize parameter is consumed and ignored.
 //The parameter is included to make GNU coreutils tests pass.
 static OPT_IO_BLKSIZE: &str = "-io-blksize";
+static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
 
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
@@ -127,6 +128,13 @@ pub fn uu_app<'a>() -> App<'a> {
                 .help(
                 "write to shell COMMAND file name is $FILE (Currently not implemented for Windows)",
             ),
+        )
+        .arg(
+            Arg::new(OPT_ELIDE_EMPTY_FILES)
+                .long(OPT_ELIDE_EMPTY_FILES)
+                .short('e')
+                .takes_value(false)
+                .help("do not generate empty output files with '-n'"),
         )
         .arg(
             Arg::new(OPT_NUMERIC_SUFFIXES)
@@ -285,6 +293,16 @@ struct Settings {
     filter: Option<String>,
     strategy: Strategy,
     verbose: bool,
+
+    /// Whether to *not* produce empty files when using `-n`.
+    ///
+    /// The `-n` command-line argument gives a specific number of
+    /// chunks into which the input files will be split. If the number
+    /// of chunks is greater than the number of bytes, and this is
+    /// `false`, then empty files will be created for the excess
+    /// chunks. If this is `false`, then empty files will not be
+    /// created.
+    elide_empty_files: bool,
 }
 
 /// An error when parsing settings from command-line arguments.
@@ -352,6 +370,7 @@ impl Settings {
             input: matches.value_of(ARG_INPUT).unwrap().to_owned(),
             prefix: matches.value_of(ARG_PREFIX).unwrap().to_owned(),
             filter: matches.value_of(OPT_FILTER).map(|s| s.to_owned()),
+            elide_empty_files: matches.is_present(OPT_ELIDE_EMPTY_FILES),
         };
         #[cfg(windows)]
         if result.filter.is_some() {
@@ -616,9 +635,24 @@ where
 {
     // Get the size of the input file in bytes and compute the number
     // of bytes per chunk.
+    //
+    // If the requested number of chunks exceeds the number of bytes
+    // in the file *and* the `elide_empty_files` parameter is enabled,
+    // then behave as if the number of chunks was set to the number of
+    // bytes in the file. This ensures that we don't write empty
+    // files. Otherwise, just write the `num_chunks - num_bytes` empty
+    // files.
     let metadata = metadata(&settings.input).unwrap();
     let num_bytes = metadata.len();
-    let chunk_size = (num_bytes / (num_chunks as u64)) as usize;
+    let will_have_empty_files = settings.elide_empty_files && num_chunks as u64 > num_bytes;
+    let (num_chunks, chunk_size) = if will_have_empty_files {
+        let num_chunks = num_bytes as usize;
+        let chunk_size = 1;
+        (num_chunks, chunk_size)
+    } else {
+        let chunk_size = ((num_bytes / (num_chunks as u64)) as usize).max(1);
+        (num_chunks, chunk_size)
+    };
 
     // This object is responsible for creating the filename for each chunk.
     let mut filename_iterator = FilenameIterator::new(
