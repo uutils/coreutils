@@ -15,6 +15,7 @@ use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::format_usage;
 use uucore::parse_size::{parse_size, ParseSizeError};
 
 #[derive(Debug, Eq, PartialEq)]
@@ -74,6 +75,7 @@ impl TruncateMode {
 }
 
 static ABOUT: &str = "Shrink or extend the size of each file to the specified size.";
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 pub mod options {
     pub static IO_BLOCKS: &str = "io-blocks";
@@ -81,10 +83,6 @@ pub mod options {
     pub static REFERENCE: &str = "reference";
     pub static SIZE: &str = "size";
     pub static ARG_FILES: &str = "files";
-}
-
-fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 fn get_long_usage() -> String {
@@ -111,11 +109,9 @@ fn get_long_usage() -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let long_usage = get_long_usage();
 
     let matches = uu_app()
-        .override_usage(&usage[..])
         .after_help(&long_usage[..])
         .try_get_matches_from(args)
         .map_err(|e| {
@@ -146,6 +142,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::IO_BLOCKS)

@@ -9,23 +9,18 @@
 
 use clap::{crate_version, App, AppSettings, Arg};
 use std::env;
-use uucore::error::UResult;
+use uucore::{error::UResult, format_usage};
 
 static ABOUT: &str = "Display the values of the specified environment VARIABLE(s), or (with no VARIABLE) display name and value pairs for them all.";
+const USAGE: &str = "{} [VARIABLE]... [OPTION]...";
 
 static OPT_NULL: &str = "null";
 
 static ARG_VARIABLES: &str = "variables";
 
-fn usage() -> String {
-    format!("{0} [VARIABLE]... [OPTION]...", uucore::execution_phrase())
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let variables: Vec<String> = matches
         .values_of(ARG_VARIABLES)
@@ -65,6 +60,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_NULL)

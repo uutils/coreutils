@@ -18,10 +18,12 @@ use std::{
 use uucore::{
     display::{print_verbatim, Quotable},
     error::{FromIo, UResult},
+    format_usage,
     fs::{canonicalize, MissingHandling, ResolveMode},
 };
 
 static ABOUT: &str = "print the resolved path";
+const USAGE: &str = "{} [OPTION]... FILE...";
 
 static OPT_QUIET: &str = "quiet";
 static OPT_STRIP: &str = "strip";
@@ -33,15 +35,9 @@ const OPT_CANONICALIZE_EXISTING: &str = "canonicalize-existing";
 
 static ARG_FILES: &str = "files";
 
-fn usage() -> String {
-    format!("{0} [OPTION]... FILE...", uucore::execution_phrase())
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     /*  the list of files */
 
@@ -78,6 +74,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_QUIET)

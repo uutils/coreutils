@@ -19,15 +19,17 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::num::ParseIntError;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static NAME: &str = "ptx";
-static BRIEF: &str = "Usage: ptx [OPTION]... [INPUT]...   (without -G) or: \
-                 ptx -G [OPTION]... [INPUT [OUTPUT]] \n Output a permuted index, \
-                 including context, of the words in the input files. \n\n Mandatory \
-                 arguments to long options are mandatory for short options too.\n
-                 With no FILE, or when FILE is -, read standard input. \
-                Default is '-F /'.";
+const USAGE: &str = "\
+    {} [OPTION]... [INPUT]...
+    {} -G [OPTION]... [INPUT [OUTPUT]]";
+
+const ABOUT: &str = "\
+    Output a permuted index, including context, of the words in the input files. \n\n\
+    Mandatory arguments to long options are mandatory for short options too.\n\
+    With no FILE, or when FILE is -, read standard input. Default is '-F /'.";
 
 #[derive(Debug)]
 enum OutFormat {
@@ -703,8 +705,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
+        .about(ABOUT)
         .version(crate_version!())
-        .override_usage(BRIEF)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::FILE)

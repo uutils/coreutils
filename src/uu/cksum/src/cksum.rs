@@ -12,15 +12,15 @@ use std::io::{self, stdin, BufReader, Read};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::show;
 use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, show};
 
 // NOTE: CRC_TABLE_LEN *must* be <= 256 as we cast 0..CRC_TABLE_LEN to u8
 const CRC_TABLE_LEN: usize = 256;
 const CRC_TABLE: [u32; CRC_TABLE_LEN] = generate_crc_table();
 
 const NAME: &str = "cksum";
-const SYNTAX: &str = "[OPTIONS] [FILE]...";
+const USAGE: &str = "{} [OPTIONS] [FILE]...";
 const SUMMARY: &str = "Print CRC and size for each file";
 
 const fn generate_crc_table() -> [u32; CRC_TABLE_LEN] {
@@ -145,7 +145,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .name(NAME)
         .version(crate_version!())
         .about(SUMMARY)
-        .override_usage(SYNTAX)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::FILE)

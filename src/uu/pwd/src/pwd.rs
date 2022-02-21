@@ -9,11 +9,13 @@ use clap::{crate_version, App, AppSettings, Arg};
 use std::env;
 use std::io;
 use std::path::PathBuf;
+use uucore::format_usage;
 
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
 
 static ABOUT: &str = "Display the full filename of the current working directory.";
+const USAGE: &str = "{} [OPTION]... FILE...";
 static OPT_LOGICAL: &str = "logical";
 static OPT_PHYSICAL: &str = "physical";
 
@@ -120,15 +122,9 @@ fn logical_path() -> io::Result<PathBuf> {
     }
 }
 
-fn usage() -> String {
-    format!("{0} [OPTION]... FILE...", uucore::execution_phrase())
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
     let cwd = if matches.is_present(OPT_LOGICAL) {
         logical_path()
     } else {
@@ -156,6 +152,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_LOGICAL)

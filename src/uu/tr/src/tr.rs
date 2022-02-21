@@ -15,13 +15,14 @@ use clap::{crate_version, App, AppSettings, Arg};
 use nom::AsBytes;
 use operation::{translate_input, Sequence, SqueezeOperation, TranslateOperation};
 use std::io::{stdin, stdout, BufReader, BufWriter};
-use uucore::show;
+use uucore::{format_usage, show};
 
 use crate::operation::DeleteOperation;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::{display::Quotable, InvalidEncodingHandling};
 
 static ABOUT: &str = "translate or delete characters";
+const USAGE: &str = "{} [OPTION]... SET1 [SET2]";
 
 mod options {
     pub const COMPLEMENT: &str = "complement";
@@ -29,10 +30,6 @@ mod options {
     pub const SQUEEZE: &str = "squeeze-repeats";
     pub const TRUNCATE_SET1: &str = "truncate-set1";
     pub const SETS: &str = "sets";
-}
-
-fn get_usage() -> String {
-    format!("{} [OPTION]... SET1 [SET2]", uucore::execution_phrase())
 }
 
 fn get_long_usage() -> String {
@@ -47,13 +44,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let usage = get_usage();
     let after_help = get_long_usage();
 
-    let matches = uu_app()
-        .override_usage(&usage[..])
-        .after_help(&after_help[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
     let delete_flag = matches.is_present(options::DELETE);
     let complement_flag = matches.is_present(options::COMPLEMENT);
@@ -148,6 +141,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .setting(AppSettings::InferLongArgs)
         .arg(

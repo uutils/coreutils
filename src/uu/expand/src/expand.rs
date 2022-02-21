@@ -19,9 +19,11 @@ use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
+use uucore::format_usage;
 
 static ABOUT: &str = "Convert tabs in each FILE to spaces, writing to standard output.
  With no FILE, or when FILE is -, read standard input.";
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 pub mod options {
     pub static TABS: &str = "tabs";
@@ -33,10 +35,6 @@ pub mod options {
 static LONG_HELP: &str = "";
 
 static DEFAULT_TABSTOP: usize = 8;
-
-fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
-}
 
 /// The mode to use when replacing tabs beyond the last one specified in
 /// the `--tabs` argument.
@@ -173,8 +171,7 @@ impl Options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     expand(&Options::new(&matches)).map_err_context(|| "failed to write output".to_string())
 }
@@ -184,6 +181,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::INITIAL)
