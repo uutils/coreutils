@@ -36,28 +36,6 @@ pub trait Digest {
     }
 }
 
-impl Digest for md5::Md5 {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    fn input(&mut self, input: &[u8]) {
-        digest::Digest::update(self, input);
-    }
-
-    fn result(&mut self, out: &mut [u8]) {
-        digest::Digest::finalize_into_reset(self, out.into());
-    }
-
-    fn reset(&mut self) {
-        *self = Self::new();
-    }
-
-    fn output_bits(&self) -> usize {
-        128
-    }
-}
-
 impl Digest for blake2b_simd::State {
     fn new() -> Self {
         Self::new()
@@ -158,6 +136,7 @@ macro_rules! impl_digest_shake {
     };
 }
 
+impl_digest_sha!(md5::Md5, 128);
 impl_digest_sha!(sha1::Sha1, 160);
 impl_digest_sha!(sha2::Sha224, 224);
 impl_digest_sha!(sha2::Sha256, 256);
