@@ -159,7 +159,7 @@ impl Filesystem {
 }
 
 /// Whether to display the mount info given the inclusion settings.
-fn is_included(mi: &MountInfo, paths: &mut [String], opt: &Options) -> bool {
+fn is_included(mi: &MountInfo, opt: &Options) -> bool {
     // Don't show remote filesystems if `--local` has been given.
     if mi.remote && opt.show_local_fs {
         return false;
@@ -175,23 +175,7 @@ fn is_included(mi: &MountInfo, paths: &mut [String], opt: &Options) -> bool {
         return false;
     }
 
-    // Print all suitable paths if input is empty
-    if paths.is_empty() {
-        return true;
-    }
-
-    // Checks if mount dir path is prefix for any path
-    // This will also cover complete matches
-    for path in paths {
-        if path.starts_with(&mi.mount_dir) {
-            // once a path is matched with mount_path, path is cleared to avoid 2nd matches like
-            // `/` will match as prefix for all paths
-            path.clear();
-            return true;
-        }
-    }
-
-    false
+    true
 }
 
 /// Whether the mount info in `m2` should be prioritized over `m1`.
@@ -248,15 +232,34 @@ fn is_best(previous: &[MountInfo], mi: &MountInfo) -> bool {
 ///
 /// Finally, if there are duplicate entries, the one with the shorter
 /// path is kept.
-fn filter_mount_list(vmi: Vec<MountInfo>, paths: &mut [String], opt: &Options) -> Vec<MountInfo> {
+fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String]) -> Vec<MountInfo> {
     let mut result = vec![];
-    for mi in vmi {
+
+    // Choose MountInfo per input_path
+    // If paths are empty, skip filtering, else output is empty
+    let filtered_vmi: Vec<MountInfo>;
+    if paths.is_empty() {
+        filtered_vmi = vmi;
+    } else {
+        // Consider longest mount_point per input_path
+        filtered_vmi = paths
+            .iter()
+            .map(|p| {
+                vmi.iter()
+                    .filter(|mi| p.starts_with(&mi.mount_dir))
+                    .max_by_key(|mi| mi.mount_dir.len())
+                    .unwrap()
+                    .clone()
+            })
+            .collect::<Vec<MountInfo>>();
+    }
+    for mi in filtered_vmi {
         // TODO The running time of the `is_best()` function is linear
         // in the length of `result`. That makes the running time of
         // this loop quadratic in the length of `vmi`. This could be
         // improved by a more efficient implementation of `is_best()`,
         // but `vmi` is probably not very long in practice.
-        if is_included(&mi, paths, opt) && is_best(&result, &mi) {
+        if is_best(&result, &mi) {
             result.push(mi);
         }
     }
@@ -268,27 +271,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
 
-    let mut paths: Vec<String> = matches
+    // Verify and canonicalize the input_paths and then convert to string
+    let paths = matches
         .values_of(OPT_PATHS)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .map(Path::new)
+        .filter(|v| v.exists())
+        .filter_map(|v| v.canonicalize().ok())
+        .filter_map(|v| v.into_os_string().into_string().ok())
+        .collect::<Vec<_>>();
 
-    // Canonicalize all paths and clear invalid paths
-    let mut tmp_path: &Path;
-    for path in &mut paths {
-        tmp_path = Path::new(&path);
-        if tmp_path.exists() {
-            *path = tmp_path
-                .canonicalize()
-                .unwrap_or_default()
-                .into_os_string()
-                .into_string()
-                .unwrap_or_default();
-        } else {
-            // Remove invalid paths
-            path.clear();
-        }
-    }
     #[cfg(windows)]
     {
         if matches.is_present(OPT_INODES) {
@@ -299,14 +291,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let opt = Options::from(&matches);
 
-    let mut mounts = read_fs_list();
+    // Filter mounts by options
+    let mounts = read_fs_list()
+        .into_iter()
+        .filter(|mi| is_included(mi, &opt))
+        .collect();
 
-    // sorting mounts in order of decreasing length
-    // in prefix matching, only first match is considered. So if we have
-    // mounts['/','/boot',/boot/efi] and input_path is '/boot/efi'. Without sorting the selected
-    // mount path will be '/' and rest will be ignored, but correct selection is '/boot/efi'
-    mounts.sort_unstable_by_key(|k| std::cmp::Reverse(k.mount_dir.len()));
-    let data: Vec<Row> = filter_mount_list(mounts, &mut paths, &opt)
+    let data: Vec<Row> = filter_mount_list(mounts, &paths)
         .into_iter()
         .filter_map(Filesystem::new)
         .filter(|fs| fs.usage.blocks != 0 || opt.show_all_fs || opt.show_listed_fs)
