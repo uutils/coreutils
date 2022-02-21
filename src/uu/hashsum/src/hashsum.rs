@@ -22,7 +22,7 @@ use self::digest::DigestWriter;
 
 use clap::{App, AppSettings, Arg, ArgMatches};
 use hex::encode;
-use md5::Context as Md5;
+use md5::Md5;
 use regex::Regex;
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};

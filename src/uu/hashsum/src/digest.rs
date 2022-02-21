@@ -36,17 +36,17 @@ pub trait Digest {
     }
 }
 
-impl Digest for md5::Context {
+impl Digest for md5::Md5 {
     fn new() -> Self {
-        Self::new()
+        Self::default()
     }
 
     fn input(&mut self, input: &[u8]) {
-        self.consume(input);
+        digest::Digest::update(self, input);
     }
 
     fn result(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(&*self.compute());
+        digest::Digest::finalize_into_reset(self, out.into());
     }
 
     fn reset(&mut self) {
