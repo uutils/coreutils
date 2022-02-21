@@ -1095,3 +1095,10 @@ fn test_truncated_record() {
         .stdout_is("ac")
         .stderr_is("0+1 records in\n0+1 records out\n2 truncated records\n");
 }
+
+/// Test that the output file can be `/dev/null`.
+#[cfg(unix)]
+#[test]
+fn test_outfile_dev_null() {
+    new_ucmd!().arg("of=/dev/null").succeeds().no_stdout();
+}
