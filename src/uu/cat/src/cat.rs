@@ -36,10 +36,10 @@ use std::net::Shutdown;
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use unix_socket::UnixStream;
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static NAME: &str = "cat";
-static SYNTAX: &str = "[OPTION]... [FILE]...";
+static USAGE: &str = "{} [OPTION]... [FILE]...";
 static SUMMARY: &str = "Concatenate FILE(s), or standard input, to standard output
  With no FILE, or when FILE is -, read standard input.";
 
@@ -243,7 +243,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .override_usage(SYNTAX)
+        .override_usage(format_usage(USAGE))
         .about(SUMMARY)
         .setting(AppSettings::InferLongArgs)
         .arg(

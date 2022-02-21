@@ -22,6 +22,7 @@ use std::num::ParseIntError;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
+use uucore::format_usage;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::uio_error;
 
@@ -39,36 +40,20 @@ static OPT_VERBOSE: &str = "verbose";
 //The ---io-blksize parameter is consumed and ignored.
 //The parameter is included to make GNU coreutils tests pass.
 static OPT_IO_BLKSIZE: &str = "-io-blksize";
+static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
 
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
 
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... [INPUT [PREFIX]]",
-        uucore::execution_phrase()
-    )
-}
-fn get_long_usage() -> String {
-    format!(
-        "Usage:
-  {0}
-
-Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default
-size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
--, read standard input.",
-        usage()
-    )
-}
+const USAGE: &str = "{} [OPTION]... [INPUT [PREFIX]]";
+const AFTER_HELP: &str = "\
+    Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default \
+    size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is \
+    -, read standard input.";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-    let long_usage = get_long_usage();
-    let matches = uu_app()
-        .override_usage(&usage[..])
-        .after_help(&long_usage[..])
-        .get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
     match Settings::from(&matches) {
         Ok(settings) => split(&settings),
         Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{}", e))),
@@ -80,6 +65,8 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about("Create output files containing consecutive or interleaved sections of input")
+        .after_help(AFTER_HELP)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         // strategy (mutually exclusive)
         .arg(
@@ -129,6 +116,13 @@ pub fn uu_app<'a>() -> App<'a> {
             ),
         )
         .arg(
+            Arg::new(OPT_ELIDE_EMPTY_FILES)
+                .long(OPT_ELIDE_EMPTY_FILES)
+                .short('e')
+                .takes_value(false)
+                .help("do not generate empty output files with '-n'"),
+        )
+        .arg(
             Arg::new(OPT_NUMERIC_SUFFIXES)
                 .short('d')
                 .long(OPT_NUMERIC_SUFFIXES)
@@ -150,7 +144,7 @@ pub fn uu_app<'a>() -> App<'a> {
                 .long(OPT_HEX_SUFFIXES)
                 .takes_value(true)
                 .default_missing_value("0")
-                .help("use hex suffixes starting at 0, not alphabetic"),
+                .help("use hex suffixes instead of alphabetic"),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
@@ -263,9 +257,9 @@ impl Strategy {
 /// Parse the suffix type from the command-line arguments.
 fn suffix_type_from(matches: &ArgMatches) -> SuffixType {
     if matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0 {
-        SuffixType::NumericDecimal
+        SuffixType::Decimal
     } else if matches.occurrences_of(OPT_HEX_SUFFIXES) > 0 {
-        SuffixType::NumericHexadecimal
+        SuffixType::Hexadecimal
     } else {
         SuffixType::Alphabetic
     }
@@ -285,6 +279,16 @@ struct Settings {
     filter: Option<String>,
     strategy: Strategy,
     verbose: bool,
+
+    /// Whether to *not* produce empty files when using `-n`.
+    ///
+    /// The `-n` command-line argument gives a specific number of
+    /// chunks into which the input files will be split. If the number
+    /// of chunks is greater than the number of bytes, and this is
+    /// `false`, then empty files will be created for the excess
+    /// chunks. If this is `false`, then empty files will not be
+    /// created.
+    elide_empty_files: bool,
 }
 
 /// An error when parsing settings from command-line arguments.
@@ -293,10 +297,13 @@ enum SettingsError {
     Strategy(StrategyError),
 
     /// Invalid suffix length parameter.
-    SuffixLength(String),
+    SuffixNotParsable(String),
 
     /// Suffix contains a directory separator, which is not allowed.
     SuffixContainsSeparator(String),
+
+    /// Suffix is not large enough to split into specified chunks
+    SuffixTooSmall(usize),
 
     /// The `--filter` option is not supported on Windows.
     #[cfg(windows)]
@@ -317,7 +324,8 @@ impl fmt::Display for SettingsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Strategy(e) => e.fmt(f),
-            Self::SuffixLength(s) => write!(f, "invalid suffix length: {}", s.quote()),
+            Self::SuffixNotParsable(s) => write!(f, "invalid suffix length: {}", s.quote()),
+            Self::SuffixTooSmall(i) => write!(f, "the suffix length needs to be at least {}", i),
             Self::SuffixContainsSeparator(s) => write!(
                 f,
                 "invalid suffix {}, contains directory separator",
@@ -340,18 +348,33 @@ impl Settings {
         if additional_suffix.contains('/') {
             return Err(SettingsError::SuffixContainsSeparator(additional_suffix));
         }
+        let strategy = Strategy::from(matches).map_err(SettingsError::Strategy)?;
+        let suffix_type = suffix_type_from(matches);
         let suffix_length_str = matches.value_of(OPT_SUFFIX_LENGTH).unwrap();
+        let suffix_length: usize = suffix_length_str
+            .parse()
+            .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?;
+        if let Strategy::Number(chunks) = strategy {
+            if suffix_length != 0 {
+                let required_suffix_length =
+                    (chunks as f64).log(suffix_type.radix() as f64).ceil() as usize;
+                if suffix_length < required_suffix_length {
+                    return Err(SettingsError::SuffixTooSmall(required_suffix_length));
+                }
+            }
+        }
         let result = Self {
             suffix_length: suffix_length_str
                 .parse()
-                .map_err(|_| SettingsError::SuffixLength(suffix_length_str.to_string()))?,
-            suffix_type: suffix_type_from(matches),
+                .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?,
+            suffix_type,
             additional_suffix,
             verbose: matches.occurrences_of("verbose") > 0,
-            strategy: Strategy::from(matches).map_err(SettingsError::Strategy)?,
+            strategy,
             input: matches.value_of(ARG_INPUT).unwrap().to_owned(),
             prefix: matches.value_of(ARG_PREFIX).unwrap().to_owned(),
             filter: matches.value_of(OPT_FILTER).map(|s| s.to_owned()),
+            elide_empty_files: matches.is_present(OPT_ELIDE_EMPTY_FILES),
         };
         #[cfg(windows)]
         if result.filter.is_some() {
@@ -616,9 +639,24 @@ where
 {
     // Get the size of the input file in bytes and compute the number
     // of bytes per chunk.
+    //
+    // If the requested number of chunks exceeds the number of bytes
+    // in the file *and* the `elide_empty_files` parameter is enabled,
+    // then behave as if the number of chunks was set to the number of
+    // bytes in the file. This ensures that we don't write empty
+    // files. Otherwise, just write the `num_chunks - num_bytes` empty
+    // files.
     let metadata = metadata(&settings.input).unwrap();
     let num_bytes = metadata.len();
-    let chunk_size = (num_bytes / (num_chunks as u64)) as usize;
+    let will_have_empty_files = settings.elide_empty_files && num_chunks as u64 > num_bytes;
+    let (num_chunks, chunk_size) = if will_have_empty_files {
+        let num_chunks = num_bytes as usize;
+        let chunk_size = 1;
+        (num_chunks, chunk_size)
+    } else {
+        let chunk_size = ((num_bytes / (num_chunks as u64)) as usize).max(1);
+        (num_chunks, chunk_size)
+    };
 
     // This object is responsible for creating the filename for each chunk.
     let mut filename_iterator = FilenameIterator::new(

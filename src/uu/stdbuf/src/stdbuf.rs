@@ -21,11 +21,12 @@ use tempfile::tempdir;
 use tempfile::TempDir;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parse_size::parse_size;
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static ABOUT: &str =
     "Run COMMAND, with modified buffering operations for its standard streams.\n\n\
      Mandatory arguments to long options are mandatory for short options too.";
+const USAGE: &str = "{} OPTION... COMMAND";
 static LONG_HELP: &str = "If MODE is 'L' the corresponding stream will be line buffered.\n\
      This option is invalid with standard input.\n\n\
      If MODE is '0' the corresponding stream will be unbuffered.\n\n\
@@ -46,10 +47,6 @@ mod options {
     pub const ERROR: &str = "error";
     pub const ERROR_SHORT: char = 'e';
     pub const COMMAND: &str = "command";
-}
-
-fn usage() -> String {
-    format!("{0} OPTION... COMMAND", uucore::execution_phrase())
 }
 
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
@@ -154,9 +151,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
-    let usage = usage();
 
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let options = ProgramOptions::try_from(&matches).map_err(|e| UUsageError::new(125, e.0))?;
 
@@ -196,6 +192,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::TrailingVarArg)
         .setting(AppSettings::InferLongArgs)
         .arg(

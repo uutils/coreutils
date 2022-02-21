@@ -15,6 +15,7 @@ use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::io::{BufRead, Write};
 use uucore::display::Quotable;
 use uucore::error::UResult;
+use uucore::format_usage;
 use uucore::ranges::Range;
 
 pub mod errors;
@@ -50,10 +51,7 @@ FIELDS supports cut(1) style field ranges:
   -    all fields
 Multiple fields/ranges can be separated with commas
 ";
-
-fn usage() -> String {
-    format!("{0} [OPTION]... [NUMBER]...", uucore::execution_phrase())
-}
+const USAGE: &str = "{} [OPTION]... [NUMBER]...";
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions) -> UResult<()> {
     for l in args {
@@ -166,9 +164,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
 
@@ -195,6 +191,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::AllowNegativeNumbers)
         .setting(AppSettings::InferLongArgs)
         .arg(

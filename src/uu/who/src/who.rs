@@ -17,7 +17,7 @@ use std::borrow::Cow;
 use std::ffi::CStr;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 mod options {
     pub const ALL: &str = "all";
@@ -38,18 +38,12 @@ mod options {
 }
 
 static ABOUT: &str = "Print information about users who are currently logged in.";
+const USAGE: &str = "{} [OPTION]... [ FILE | ARG1 ARG2 ]";
 
 #[cfg(any(target_os = "linux"))]
 static RUNLEVEL_HELP: &str = "print current runlevel";
 #[cfg(not(target_os = "linux"))]
 static RUNLEVEL_HELP: &str = "print current runlevel (This is meaningless on non Linux)";
-
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... [ FILE | ARG1 ARG2 ]",
-        uucore::execution_phrase()
-    )
-}
 
 fn get_long_usage() -> String {
     format!(
@@ -65,13 +59,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = usage();
     let after_help = get_long_usage();
 
-    let matches = uu_app()
-        .override_usage(&usage[..])
-        .after_help(&after_help[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
     let files: Vec<String> = matches
         .values_of(options::FILE)
@@ -165,6 +155,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::ALL)

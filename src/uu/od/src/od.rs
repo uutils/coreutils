@@ -45,15 +45,17 @@ use crate::prn_char::format_ascii_dump;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 use uucore::parse_size::ParseSizeError;
 use uucore::InvalidEncodingHandling;
 
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
 static ABOUT: &str = "dump files in octal and other formats";
 
-static USAGE: &str = r#"od [OPTION]... [--] [FILENAME]...
-    od [-abcdDefFhHiIlLoOsxX] [FILENAME] [[+][0x]OFFSET[.][b]]
-    od --traditional [OPTION]... [FILENAME] [[+][0x]OFFSET[.][b] [[+][0x]LABEL[.][b]]]"#;
+static USAGE: &str = "\
+    {} [OPTION]... [--] [FILENAME]...
+    {} [-abcdDefFhHiIlLoOsxX] [FILENAME] [[+][0x]OFFSET[.][b]]
+    {} --traditional [OPTION]... [FILENAME] [[+][0x]OFFSET[.][b] [[+][0x]LABEL[.][b]]]";
 
 static LONG_HELP: &str = r#"
 Displays data in various human-readable formats. If multiple formats are
@@ -289,7 +291,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .override_usage(USAGE)
+        .override_usage(format_usage(USAGE))
         .after_help(LONG_HELP)
         .setting(
             AppSettings::TrailingVarArg |

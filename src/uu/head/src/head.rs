@@ -12,7 +12,7 @@ use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::lines::lines;
-use uucore::show;
+use uucore::{format_usage, show};
 
 const BUF_SIZE: usize = 65536;
 
@@ -26,7 +26,7 @@ const ABOUT: &str = "\
                      \n\
                      Mandatory arguments to long flags are mandatory for short flags too.\
                      ";
-const USAGE: &str = "head [FLAG]... [FILE]...";
+const USAGE: &str = "{} [FLAG]... [FILE]...";
 
 mod options {
     pub const BYTES_NAME: &str = "BYTES";
@@ -45,7 +45,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .override_usage(USAGE)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::BYTES_NAME)

@@ -16,9 +16,11 @@ use std::io::{stdout, Write};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::format_usage;
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 
 const ABOUT: &str = "Print value of a symbolic link or canonical file name.";
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 const OPT_CANONICALIZE: &str = "canonicalize";
 const OPT_CANONICALIZE_MISSING: &str = "canonicalize-missing";
 const OPT_CANONICALIZE_EXISTING: &str = "canonicalize-existing";
@@ -30,14 +32,9 @@ const OPT_ZERO: &str = "zero";
 
 const ARG_FILES: &str = "files";
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let mut no_newline = matches.is_present(OPT_NO_NEWLINE);
     let use_zero = matches.is_present(OPT_ZERO);
@@ -102,6 +99,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_help(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_CANONICALIZE)

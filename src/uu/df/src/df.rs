@@ -5,12 +5,13 @@
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
+// spell-checker:ignore itotal iused iavail ipcent pcent
 mod table;
 
-use uucore::error::UResult;
 #[cfg(unix)]
 use uucore::fsext::statfs_fn;
 use uucore::fsext::{read_fs_list, FsUsage, MountInfo};
+use uucore::{error::UResult, format_usage};
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
@@ -27,6 +28,7 @@ use crate::table::{DisplayRow, Header, Row};
 
 static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
                       or all file systems by default.";
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 static OPT_ALL: &str = "all";
 static OPT_BLOCKSIZE: &str = "blocksize";
@@ -45,6 +47,10 @@ static OPT_SYNC: &str = "sync";
 static OPT_TYPE: &str = "type";
 static OPT_PRINT_TYPE: &str = "print-type";
 static OPT_EXCLUDE_TYPE: &str = "exclude-type";
+static OUTPUT_FIELD_LIST: [&str; 12] = [
+    "source", "fstype", "itotal", "iused", "iavail", "ipcent", "size", "used", "avail", "pcent",
+    "file", "target",
+];
 
 /// Store names of file systems as a selector.
 /// Note: `exclude` takes priority over `include`.
@@ -91,10 +97,6 @@ impl Options {
 struct Filesystem {
     mount_info: MountInfo,
     usage: FsUsage,
-}
-
-fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 impl FsSelector {
@@ -268,8 +270,7 @@ fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String]) -> Vec<MountInfo> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     // Verify and canonicalize the input_paths and then convert to string
     let paths = matches
@@ -315,6 +316,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_ALL)
@@ -380,6 +382,10 @@ pub fn uu_app<'a>() -> App<'a> {
                 .long("output")
                 .takes_value(true)
                 .use_delimiter(true)
+                .possible_values(OUTPUT_FIELD_LIST)
+                .default_missing_values(&OUTPUT_FIELD_LIST)
+                .default_values(&["source", "size", "used", "avail", "pcent", "target"])
+                .conflicts_with_all(&[OPT_INODES, OPT_PORTABILITY, OPT_PRINT_TYPE])
                 .help(
                     "use the output format defined by FIELD_LIST,\
                      or print all fields if FIELD_LIST is omitted.",
@@ -403,7 +409,7 @@ pub fn uu_app<'a>() -> App<'a> {
                 .long("type")
                 .allow_invalid_utf8(true)
                 .takes_value(true)
-                .use_delimiter(true)
+                .multiple_occurrences(true)
                 .help("limit listing to file systems of type TYPE"),
         )
         .arg(

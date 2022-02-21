@@ -19,6 +19,7 @@ extern crate quick_error;
 extern crate uucore;
 
 use uucore::display::Quotable;
+use uucore::format_usage;
 use uucore::fs::FileInformation;
 #[cfg(windows)]
 use winapi::um::fileapi::CreateFileW;
@@ -230,14 +231,10 @@ static ABOUT: &str = "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
 static LONG_HELP: &str = "";
 static EXIT_ERR: i32 = 1;
 
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... [-T] SOURCE DEST
-    {0} [OPTION]... SOURCE... DIRECTORY
-    {0} [OPTION]... -t DIRECTORY SOURCE...",
-        uucore::execution_phrase()
-    )
-}
+const USAGE: &str = "\
+    {} [OPTION]... [-T] SOURCE DEST
+    {} [OPTION]... SOURCE... DIRECTORY
+    {} [OPTION]... -t DIRECTORY SOURCE...";
 
 // Argument constants
 mod options {
@@ -300,6 +297,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(Arg::new(options::TARGET_DIRECTORY)
              .short('t')
@@ -456,14 +454,12 @@ pub fn uu_app<'a>() -> App<'a> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let matches = uu_app()
         .after_help(&*format!(
             "{}\n{}",
             LONG_HELP,
             backup_control::BACKUP_CONTROL_LONG_HELP
         ))
-        .override_usage(&usage[..])
         .get_matches_from(args);
 
     let options = Options::from_matches(&matches)?;
@@ -967,6 +963,16 @@ fn copy_directory(
     // if no-dereference is enabled and this is a symlink, copy it as a file
     if !options.dereference && fs::symlink_metadata(root).unwrap().file_type().is_symlink() {
         return copy_file(root, target, options, symlinked_files);
+    }
+
+    // check if root is a prefix of target
+    if path_has_prefix(target, root)? {
+        return Err(format!(
+            "cannot copy a directory, {}, into itself, {}",
+            root.quote(),
+            target.quote()
+        )
+        .into());
     }
 
     let current_dir =
@@ -1571,6 +1577,13 @@ pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> io::Result<bool> {
     let pathbuf2 = canonicalize(p2, MissingHandling::Normal, ResolveMode::Logical)?;
 
     Ok(pathbuf1 == pathbuf2)
+}
+
+pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
+    let pathbuf1 = canonicalize(p1, MissingHandling::Normal, ResolveMode::Logical)?;
+    let pathbuf2 = canonicalize(p2, MissingHandling::Normal, ResolveMode::Logical)?;
+
+    Ok(pathbuf1.starts_with(pathbuf2))
 }
 
 #[test]

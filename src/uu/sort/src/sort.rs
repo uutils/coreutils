@@ -49,11 +49,14 @@ use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UError, UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::version_cmp::version_cmp;
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 use crate::tmp_dir::TmpDirWrapper;
 
-const ABOUT: &str = "Display sorted concatenation of all FILE(s).";
+const ABOUT: &str = "\
+    Display sorted concatenation of all FILE(s).\
+    With no FILE, or when FILE is -, read standard input.";
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 const LONG_HELP_KEYS: &str = "The key format is FIELD[.CHAR][OPTIONS][,FIELD[.CHAR]][OPTIONS].
 
@@ -1030,16 +1033,6 @@ impl FieldSelector {
     }
 }
 
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... [FILE]...
-Write the sorted concatenation of all FILE(s) to standard output.
-Mandatory arguments for long options are mandatory for short options too.
-With no FILE, or when FILE is -, read standard input.",
-        uucore::execution_phrase()
-    )
-}
-
 /// Creates an `Arg` that conflicts with all other sort modes.
 fn make_sort_mode_arg<'a>(mode: &'a str, short: char, help: &'a str) -> Arg<'a> {
     let mut arg = Arg::new(mode).short(short).long(mode).help(help);
@@ -1056,13 +1049,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
-    let usage = usage();
     let mut settings: GlobalSettings = Default::default();
 
-    let matches = match uu_app()
-        .override_usage(&usage[..])
-        .try_get_matches_from(args)
-    {
+    let matches = match uu_app().try_get_matches_from(args) {
         Ok(t) => t,
         Err(e) => {
             // not all clap "Errors" are because of a failure to parse arguments.
@@ -1276,6 +1265,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::modes::SORT)

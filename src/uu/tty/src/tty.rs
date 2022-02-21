@@ -13,27 +13,22 @@ use clap::{crate_version, App, AppSettings, Arg};
 use std::ffi::CStr;
 use std::io::Write;
 use uucore::error::{UResult, UUsageError};
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static ABOUT: &str = "Print the file name of the terminal connected to standard input.";
+const USAGE: &str = "{} [OPTION]...";
 
 mod options {
     pub const SILENT: &str = "silent";
 }
 
-fn usage() -> String {
-    format!("{0} [OPTION]...", uucore::execution_phrase())
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
     let matches = uu_app()
-        .override_usage(&usage[..])
         .try_get_matches_from(args)
         .map_err(|e| UUsageError::new(2, format!("{}", e)))?;
 
@@ -75,6 +70,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::SILENT)
