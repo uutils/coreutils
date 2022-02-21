@@ -104,28 +104,6 @@ impl Digest for blake3::Hasher {
     }
 }
 
-impl Digest for sha1::Sha1 {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    fn input(&mut self, input: &[u8]) {
-        digest::Digest::update(self, input);
-    }
-
-    fn result(&mut self, out: &mut [u8]) {
-        digest::Digest::finalize_into_reset(self, out.into());
-    }
-
-    fn reset(&mut self) {
-        *self = Self::new();
-    }
-
-    fn output_bits(&self) -> usize {
-        160
-    }
-}
-
 // Implements the Digest trait for sha2 / sha3 algorithms with fixed output
 macro_rules! impl_digest_sha {
     ($type: ty, $size: expr) => {
@@ -180,6 +158,7 @@ macro_rules! impl_digest_shake {
     };
 }
 
+impl_digest_sha!(sha1::Sha1, 160);
 impl_digest_sha!(sha2::Sha224, 224);
 impl_digest_sha!(sha2::Sha256, 256);
 impl_digest_sha!(sha2::Sha384, 384);
