@@ -83,7 +83,7 @@ impl Digest for blake3::Hasher {
 }
 
 // Implements the Digest trait for sha2 / sha3 algorithms with fixed output
-macro_rules! impl_digest_sha {
+macro_rules! impl_digest_rustcryptocommon {
     ($type: ty, $size: expr) => {
         impl Digest for $type {
             fn new() -> Self {
@@ -136,17 +136,17 @@ macro_rules! impl_digest_shake {
     };
 }
 
-impl_digest_sha!(md5::Md5, 128);
-impl_digest_sha!(sha1::Sha1, 160);
-impl_digest_sha!(sha2::Sha224, 224);
-impl_digest_sha!(sha2::Sha256, 256);
-impl_digest_sha!(sha2::Sha384, 384);
-impl_digest_sha!(sha2::Sha512, 512);
+impl_digest_rustcryptocommon!(md5::Md5, 128);
+impl_digest_rustcryptocommon!(sha1::Sha1, 160);
+impl_digest_rustcryptocommon!(sha2::Sha224, 224);
+impl_digest_rustcryptocommon!(sha2::Sha256, 256);
+impl_digest_rustcryptocommon!(sha2::Sha384, 384);
+impl_digest_rustcryptocommon!(sha2::Sha512, 512);
 
-impl_digest_sha!(sha3::Sha3_224, 224);
-impl_digest_sha!(sha3::Sha3_256, 256);
-impl_digest_sha!(sha3::Sha3_384, 384);
-impl_digest_sha!(sha3::Sha3_512, 512);
+impl_digest_rustcryptocommon!(sha3::Sha3_224, 224);
+impl_digest_rustcryptocommon!(sha3::Sha3_256, 256);
+impl_digest_rustcryptocommon!(sha3::Sha3_384, 384);
+impl_digest_rustcryptocommon!(sha3::Sha3_512, 512);
 impl_digest_shake!(sha3::Shake128);
 impl_digest_shake!(sha3::Shake256);
 
