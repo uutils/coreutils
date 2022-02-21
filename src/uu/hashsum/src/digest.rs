@@ -14,7 +14,7 @@ extern crate sha3;
 
 use std::io::Write;
 
-use hex::ToHex;
+use hex::encode;
 #[cfg(windows)]
 use memchr::memmem;
 
@@ -32,7 +32,7 @@ pub trait Digest {
     fn result_str(&mut self) -> String {
         let mut buf: Vec<u8> = vec![0; self.output_bytes()];
         self.result(&mut buf);
-        buf.to_hex()
+        encode(buf)
     }
 }
 
