@@ -3,11 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore tldr
+// spell-checker:ignore reqwest
 
 use clap::App;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::Cursor;
 use std::io::{self, Read, Seek, Write};
 use zip::ZipArchive;
 
@@ -15,13 +15,11 @@ include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
 fn main() -> io::Result<()> {
     println!("Downloading tldr archive");
-    let mut zip_reader = ureq::get("https://tldr.sh/assets/tldr.zip")
-        .call()
-        .unwrap()
-        .into_reader();
-    let mut buffer = Vec::new();
-    zip_reader.read_to_end(&mut buffer).unwrap();
-    let mut tldr_zip = ZipArchive::new(Cursor::new(buffer)).unwrap();
+    let mut tmpfile = tempfile::tempfile().unwrap();
+    let mut resp = reqwest::blocking::get("https://tldr.sh/assets/tldr.zip").unwrap();
+    let cp = resp.copy_to(&mut tmpfile).unwrap();
+    println!("Copied {} bytes for tldr.zip", cp);
+    let mut tldr_zip = ZipArchive::new(tmpfile).unwrap();
 
     let utils = util_map::<Box<dyn Iterator<Item = OsString>>>();
     match std::fs::create_dir("docs/src/utils/") {
