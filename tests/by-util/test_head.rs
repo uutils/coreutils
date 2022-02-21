@@ -18,6 +18,15 @@ fn test_stdin_default() {
 }
 
 #[test]
+fn test_presume_input_pipe_default() {
+    new_ucmd!()
+        .args(&["---presume-input-pipe"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("lorem_ipsum_default.expected");
+}
+
+#[test]
 fn test_stdin_1_line_obsolete() {
     new_ucmd!()
         .args(&["-1"])
@@ -48,6 +57,15 @@ fn test_stdin_negative_23_line() {
 fn test_stdin_5_chars() {
     new_ucmd!()
         .args(&["-c", "5"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("lorem_ipsum_5_chars.expected");
+}
+
+#[test]
+fn test_presume_input_pipe_5_chars() {
+    new_ucmd!()
+        .args(&["-c", "5", "---presume-input-pipe"])
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("lorem_ipsum_5_chars.expected");

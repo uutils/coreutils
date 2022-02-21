@@ -24,6 +24,15 @@ fn test_stdin_default() {
 }
 
 #[test]
+fn test_presume_input_pipe_default() {
+    new_ucmd!()
+        .arg("---presume-input-pipe")
+        .pipe_in_fixture(FOOBAR_TXT)
+        .run()
+        .stdout_is_fixture("foobar_stdin_default.expected");
+}
+
+#[test]
 fn test_stdin_explicit() {
     new_ucmd!()
         .pipe_in_fixture(FOOBAR_TXT)
