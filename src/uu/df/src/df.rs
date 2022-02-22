@@ -11,16 +11,19 @@ mod table;
 #[cfg(unix)]
 use uucore::fsext::statfs_fn;
 use uucore::fsext::{read_fs_list, FsUsage, MountInfo};
-use uucore::{error::UResult, format_usage};
+use uucore::{
+    error::{UError, UResult},
+    format_usage,
+};
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
-use std::collections::HashSet;
 #[cfg(unix)]
 use std::ffi::CString;
 use std::iter::FromIterator;
 #[cfg(unix)]
 use std::mem;
+use std::{collections::HashSet, error::Error, fmt::Display};
 
 #[cfg(windows)]
 use std::path::Path;
@@ -48,10 +51,35 @@ static OPT_SYNC: &str = "sync";
 static OPT_TYPE: &str = "type";
 static OPT_PRINT_TYPE: &str = "print-type";
 static OPT_EXCLUDE_TYPE: &str = "exclude-type";
-static OUTPUT_FIELD_LIST: [&str; 12] = [
+static OUTPUT_FIELD_LIST: [&str; 11] = [
     "source", "fstype", "itotal", "iused", "iavail", "ipcent", "size", "used", "avail", "pcent",
-    "file", "target",
+    /* "file", */ "target",
 ];
+
+#[derive(Debug)]
+enum DfError {
+    InvalidFieldSelector(String),
+    DuplicateFieldSelector(String),
+}
+
+impl Error for DfError {}
+
+impl UError for DfError {
+    fn usage(&self) -> bool {
+        true
+    }
+}
+
+impl Display for DfError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DfError::InvalidFieldSelector(s) => write!(f, "option --output: field '{}' unknown", s),
+            DfError::DuplicateFieldSelector(s) => {
+                write!(f, "option --output: field '{}' used more than once", s)
+            }
+        }
+    }
+}
 
 /// Store names of file systems as a selector.
 /// Note: `exclude` takes priority over `include`.
@@ -66,22 +94,19 @@ struct Options {
     show_local_fs: bool,
     show_all_fs: bool,
     show_listed_fs: bool,
-    show_fs_type: bool,
-    show_inode_instead: bool,
     // block_size: usize,
     human_readable_base: i64,
+    field_selectors: Vec<String>,
     fs_selector: FsSelector,
 }
 
 impl Options {
     /// Convert command-line arguments into [`Options`].
-    fn from(matches: &ArgMatches) -> Self {
-        Self {
+    fn from(matches: &ArgMatches) -> UResult<Self> {
+        Ok(Self {
             show_local_fs: matches.is_present(OPT_LOCAL),
             show_all_fs: matches.is_present(OPT_ALL),
             show_listed_fs: false,
-            show_fs_type: matches.is_present(OPT_PRINT_TYPE),
-            show_inode_instead: matches.is_present(OPT_INODES),
             human_readable_base: if matches.is_present(OPT_HUMAN_READABLE) {
                 1024
             } else if matches.is_present(OPT_HUMAN_READABLE_2) {
@@ -89,9 +114,50 @@ impl Options {
             } else {
                 -1
             },
+            field_selectors: parse_field_selectors(matches)?,
             fs_selector: FsSelector::from(matches),
-        }
+        })
     }
+}
+
+fn parse_field_selectors(matches: &ArgMatches) -> UResult<Vec<String>> {
+    let mut field_selectors = vec![];
+    matches
+        .values_of(OPT_OUTPUT)
+        .unwrap()
+        .try_for_each(|selector| -> UResult<()> {
+            if !OUTPUT_FIELD_LIST.contains(&selector) {
+                return Err(Box::new(DfError::InvalidFieldSelector(
+                    selector.to_string(),
+                )));
+            }
+            if field_selectors.contains(&selector.to_string()) {
+                return Err(Box::new(DfError::DuplicateFieldSelector(
+                    selector.to_string(),
+                )));
+            } else {
+                field_selectors.push(selector.to_string());
+            }
+            Ok(())
+        })?;
+    if matches.is_present(OPT_PRINT_TYPE) {
+        field_selectors.insert(1, "fstype".to_string());
+    }
+    if matches.is_present(OPT_INODES) {
+        let inode_fields = [
+            "itotal".to_string(),
+            "iused".to_string(),
+            "iavail".to_string(),
+            "ipcent".to_string(),
+        ];
+        let type_offset = if matches.is_present(OPT_PRINT_TYPE) {
+            1
+        } else {
+            0
+        };
+        field_selectors.splice(1 + type_offset..5 + type_offset, inode_fields);
+    }
+    Ok(field_selectors)
 }
 
 #[derive(Debug, Clone)]
@@ -273,7 +339,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let opt = Options::from(&matches);
+    let opt = Options::from(&matches)?;
 
     let mounts = read_fs_list();
     let data: Vec<Row> = filter_mount_list(mounts, &paths, &opt)

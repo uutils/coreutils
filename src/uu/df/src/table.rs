@@ -2,7 +2,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-// spell-checker:ignore tmpfs
+// spell-checker:ignore tmpfs itotal iused iavail ipcent pcent
 //! The filesystem usage data table.
 //!
 //! A table comprises a header row ([`Header`]) and a collection of
@@ -180,56 +180,44 @@ impl<'a> DisplayRow<'a> {
             Some(x) => format!("{:.0}%", 100.0 * x),
         }
     }
-
-    /// Write the bytes data for this row.
-    ///
-    /// # Errors
-    ///
-    /// If there is a problem writing to `f`.
-    ///
-    /// If the scaling factor is not 1000, 1024, or a negative number.
-    fn fmt_bytes(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{0: >12} ", self.scaled(self.row.bytes)?)?;
-        write!(f, "{0: >12} ", self.scaled(self.row.bytes_used)?)?;
-        write!(f, "{0: >12} ", self.scaled(self.row.bytes_free)?)?;
-        #[cfg(target_os = "macos")]
-        write!(
-            f,
-            "{0: >12} ",
-            DisplayRow::percentage(self.row.bytes_capacity)
-        )?;
-        write!(f, "{0: >5} ", DisplayRow::percentage(self.row.bytes_usage))?;
-        Ok(())
-    }
-
-    /// Write the inodes data for this row.
-    ///
-    /// # Errors
-    ///
-    /// If there is a problem writing to `f`.
-    ///
-    /// If the scaling factor is not 1000, 1024, or a negative number.
-    fn fmt_inodes(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{0: >12} ", self.scaled(self.row.inodes)?)?;
-        write!(f, "{0: >12} ", self.scaled(self.row.inodes_used)?)?;
-        write!(f, "{0: >12} ", self.scaled(self.row.inodes_free)?)?;
-        write!(f, "{0: >5} ", DisplayRow::percentage(self.row.inodes_usage))?;
-        Ok(())
-    }
 }
 
 impl fmt::Display for DisplayRow<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{0: <16} ", self.row.fs_device)?;
-        if self.options.show_fs_type {
-            write!(f, "{0: <5} ", self.row.fs_type)?;
+        for selector in &self.options.field_selectors {
+            match &selector[..] {
+                "source" => write!(f, "{0: <16} ", self.row.fs_device)?,
+                "fstype" => write!(f, "{0: <5} ", self.row.fs_type)?,
+                "itotal" => write!(f, "{0: >12} ", self.scaled(self.row.inodes)?)?,
+                "iused" => {
+                    write!(f, "{0: >12} ", self.scaled(self.row.inodes_used)?)?;
+                }
+                "iavail" => {
+                    write!(f, "{0: >12} ", self.scaled(self.row.inodes_free)?)?;
+                }
+                "ipcent" => {
+                    write!(f, "{0: >5} ", DisplayRow::percentage(self.row.inodes_usage))?;
+                }
+                "size" => write!(f, "{0: >12} ", self.scaled(self.row.bytes)?)?,
+                "used" => {
+                    write!(f, "{0: >12} ", self.scaled(self.row.bytes_used)?)?;
+                }
+                "avail" => {
+                    write!(f, "{0: >12} ", self.scaled(self.row.bytes_free)?)?;
+                }
+                #[cfg(target_os = "macos")]
+                "capacity" => write!(
+                    f,
+                    "{0: >12} ",
+                    DisplayRow::percentage(self.row.bytes_capacity)
+                )?,
+                "pcent" => {
+                    write!(f, "{0: >5} ", DisplayRow::percentage(self.row.bytes_usage))?;
+                }
+                "target" => write!(f, "{0: <16}", self.row.fs_mount)?,
+                _ => {}
+            }
         }
-        if self.options.show_inode_instead {
-            self.fmt_inodes(f)?;
-        } else {
-            self.fmt_bytes(f)?;
-        }
-        write!(f, "{0: <16}", self.row.fs_mount)?;
         Ok(())
     }
 }
@@ -251,28 +239,30 @@ impl<'a> Header<'a> {
 
 impl fmt::Display for Header<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{0: <16} ", "Filesystem")?;
-        if self.options.show_fs_type {
-            write!(f, "{0: <5} ", "Type")?;
+        for selector in &self.options.field_selectors {
+            match &selector[..] {
+                "source" => write!(f, "{0: <16} ", "Filesystem")?,
+                "fstype" => write!(f, "{0: <5} ", "Type")?,
+                "itotal" => write!(f, "{0: >12} ", "Inodes")?,
+                "iused" => write!(f, "{0: >12} ", "IUsed")?,
+                "iavail" => write!(f, "{0: >12} ", "IFree")?,
+                "ipcent" => write!(f, "{0: >5} ", "IUse%")?,
+                "size" => {
+                    if self.options.human_readable_base == -1 {
+                        write!(f, "{0: >12} ", "1k-blocks")?;
+                    } else {
+                        write!(f, "{0: >12} ", "Size")?;
+                    }
+                }
+                "used" => write!(f, "{0: >12} ", "Used")?,
+                "avail" => write!(f, "{0: >12} ", "Available")?,
+                #[cfg(target_os = "macos")]
+                "capacity" => write!(f, "{0: >12} ", "Capacity")?,
+                "pcent" => write!(f, "{0: >5} ", "Use%")?,
+                "target" => write!(f, "{0: <16} ", "Mounted on")?,
+                _ => {}
+            }
         }
-        if self.options.show_inode_instead {
-            write!(f, "{0: >12} ", "Inodes")?;
-            write!(f, "{0: >12} ", "IUsed")?;
-            write!(f, "{0: >12} ", "IFree")?;
-            write!(f, "{0: >5} ", "IUse%")?;
-        } else {
-            if self.options.human_readable_base == -1 {
-                write!(f, "{0: >12} ", "1k-blocks")?;
-            } else {
-                write!(f, "{0: >12} ", "Size")?;
-            };
-            write!(f, "{0: >12} ", "Used")?;
-            write!(f, "{0: >12} ", "Available")?;
-            #[cfg(target_os = "macos")]
-            write!(f, "{0: >12} ", "Capacity")?;
-            write!(f, "{0: >5} ", "Use%")?;
-        }
-        write!(f, "{0: <16} ", "Mounted on")?;
         Ok(())
     }
 }
