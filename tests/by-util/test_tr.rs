@@ -870,6 +870,26 @@ fn check_against_gnu_tr_tests_o_rep_2() {
 }
 
 #[test]
+fn octal_repeat_count_test() {
+    //below will result in 8'x' and 4'y' as octal 010 = decimal 8
+    new_ucmd!()
+        .args(&["abcdefghijkl", "[x*010]y"])
+        .pipe_in("abcdefghijklmnop")
+        .succeeds()
+        .stdout_is("xxxxxxxxyyyymnop");
+}
+
+#[test]
+fn non_octal_repeat_count_test() {
+    //below will result in 10'x' and 2'y' as the 10 does not have 0 prefix
+    new_ucmd!()
+        .args(&["abcdefghijkl", "[x*10]y"])
+        .pipe_in("abcdefghijklmnop")
+        .succeeds()
+        .stdout_is("xxxxxxxxxxyymnop");
+}
+
+#[test]
 fn check_against_gnu_tr_tests_esc() {
     // ['esc', qw('a\-z' A-Z), {IN=>'abc-z'}, {OUT=>'AbcBC'}],
     new_ucmd!()

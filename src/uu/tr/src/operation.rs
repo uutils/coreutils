@@ -19,6 +19,7 @@ use std::{
     error::Error,
     fmt::{Debug, Display},
     io::{BufRead, Write},
+    num::ParseIntError,
 };
 use uucore::error::UError;
 
@@ -277,13 +278,19 @@ impl Sequence {
             separated_pair(Self::parse_backslash_or_char, tag("*"), digit1),
             tag("]"),
         )(input)
-        .map(|(l, (c, str))| {
+        .map(|(l, (c, cnt_str))| {
+            let result: Result<usize, ParseIntError>;
+            if cnt_str.chars().next().unwrap() == '0' {
+                result = usize::from_str_radix(cnt_str, 8);
+            } else {
+                result = usize::from_str_radix(cnt_str, 10);
+            };
             (
                 l,
-                match usize::from_str_radix(str, 8) {
+                match result {
                     Ok(0) => Ok(Self::CharStar(c)),
                     Ok(count) => Ok(Self::CharRepeat(c, count)),
-                    Err(_) => Err(BadSequence::InvalidRepeatCount(str.to_string())),
+                    Err(_) => Err(BadSequence::InvalidRepeatCount(cnt_str.to_string())),
                 },
             )
         })
