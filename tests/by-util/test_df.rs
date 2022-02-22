@@ -1,3 +1,4 @@
+// spell-checker:ignore itotal iused iavail ipcent pcent
 use crate::common::util::*;
 
 #[test]
@@ -37,24 +38,23 @@ fn test_df_output() {
     }
 }
 
+#[test]
+fn test_df_specified_output_selectors() {
+    new_ucmd!().arg("--output=target,pcent,avail,used,size,ipcent,iavail,iused,itotal,fstype,source").arg("-total").succeeds().
+    stdout_only("Mounted on        Use%    Available         Used    1k-blocks IUse%        IFree        IUsed       Inodes Type  Filesystem       \n");
+}
+
 /// Test that the order of rows in the table does not change across executions.
 #[test]
 fn test_order_same() {
-    // TODO When #3057 is resolved, we should just use
-    //
-    //     new_ucmd!().arg("--output=source").succeeds().stdout_move_str();
-    //
-    // instead of parsing the entire `df` table as a string.
-    let output1 = new_ucmd!().succeeds().stdout_move_str();
-    let output2 = new_ucmd!().succeeds().stdout_move_str();
-    let output1: Vec<String> = output1
-        .lines()
-        .map(|l| String::from(l.split_once(' ').unwrap().0))
-        .collect();
-    let output2: Vec<String> = output2
-        .lines()
-        .map(|l| String::from(l.split_once(' ').unwrap().0))
-        .collect();
+    let output1 = new_ucmd!()
+        .arg("--output=source")
+        .succeeds()
+        .stdout_move_str();
+    let output2 = new_ucmd!()
+        .arg("--output=source")
+        .succeeds()
+        .stdout_move_str();
     assert_eq!(output1, output2);
 }
 
@@ -70,6 +70,7 @@ fn test_output_option() {
     new_ucmd!().arg("--output").succeeds();
     new_ucmd!().arg("--output=source,target").succeeds();
     new_ucmd!().arg("--output=invalid_option").fails();
+    new_ucmd!().arg("--output=size,size").fails();
 }
 
 #[test]

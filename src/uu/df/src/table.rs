@@ -271,7 +271,44 @@ impl fmt::Display for Header<'_> {
 mod tests {
 
     use crate::table::{DisplayRow, Header, Row};
-    use crate::Options;
+    use crate::{uu_app, Options};
+
+    #[test]
+    fn test_default_field_selector_parsing() {
+        let matches = uu_app().get_matches_from(vec!["df", "--output"]);
+        let options = Options::from(&matches).unwrap();
+        assert_eq!(
+            options.field_selectors,
+            vec![
+                "source", "fstype", "itotal", "iused", "iavail", "ipcent", "size", "used", "avail",
+                "pcent", "target",
+            ]
+        )
+    }
+
+    #[test]
+    fn test_specified_field_selector_parsing() {
+        let matches = uu_app().get_matches_from(vec![
+            "df",
+            "--output=target,pcent,avail,used,size,ipcent,iavail,iused,itotal,fstype,source",
+        ]);
+        let options = Options::from(&matches).unwrap();
+        assert_eq!(
+            options.field_selectors,
+            vec![
+                "target", "pcent", "avail", "used", "size", "ipcent", "iavail", "iused", "itotal",
+                "fstype", "source",
+            ]
+        )
+    }
+
+    #[test]
+    fn test_multiple_field_selector_parsing() {
+        let matches =
+            uu_app().get_matches_from(vec!["df", "--output=used", "--output", "--output=avail"]);
+        let options = Options::from(&matches).unwrap();
+        assert_eq!(options.field_selectors, vec!["used", "avail"])
+    }
 
     #[test]
     fn test_header_display() {
@@ -287,11 +324,8 @@ mod tests {
 
     #[test]
     fn test_header_display_fs_type() {
-        let options = Options {
-            human_readable_base: -1,
-            show_fs_type: true,
-            ..Default::default()
-        };
+        let matches = uu_app().get_matches_from(vec!["df", "--print-type"]);
+        let options = Options::from(&matches).unwrap();
         assert_eq!(
             Header::new(&options).to_string(),
             "Filesystem       Type     1k-blocks         Used    Available  Use% Mounted on       "
@@ -300,11 +334,8 @@ mod tests {
 
     #[test]
     fn test_header_display_inode() {
-        let options = Options {
-            human_readable_base: -1,
-            show_inode_instead: true,
-            ..Default::default()
-        };
+        let matches = uu_app().get_matches_from(vec!["df", "--inodes"]);
+        let options = Options::from(&matches).unwrap();
         assert_eq!(
             Header::new(&options).to_string(),
             "Filesystem             Inodes        IUsed        IFree IUse% Mounted on       "
@@ -367,11 +398,8 @@ mod tests {
 
     #[test]
     fn test_row_display_fs_type() {
-        let options = Options {
-            human_readable_base: -1,
-            show_fs_type: true,
-            ..Default::default()
-        };
+        let matches = uu_app().get_matches_from(vec!["df", "--print-type"]);
+        let options = Options::from(&matches).unwrap();
         let row = Row {
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
@@ -398,11 +426,8 @@ mod tests {
 
     #[test]
     fn test_row_display_inodes() {
-        let options = Options {
-            human_readable_base: -1,
-            show_inode_instead: true,
-            ..Default::default()
-        };
+        let matches = uu_app().get_matches_from(vec!["df", "--inodes"]);
+        let options = Options::from(&matches).unwrap();
         let row = Row {
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
@@ -429,11 +454,8 @@ mod tests {
 
     #[test]
     fn test_row_display_human_readable_si() {
-        let options = Options {
-            human_readable_base: 1000,
-            show_fs_type: true,
-            ..Default::default()
-        };
+        let matches = uu_app().get_matches_from(vec!["df", "--print-type", "-H"]);
+        let options = Options::from(&matches).unwrap();
         let row = Row {
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
@@ -460,11 +482,8 @@ mod tests {
 
     #[test]
     fn test_row_display_human_readable_binary() {
-        let options = Options {
-            human_readable_base: 1024,
-            show_fs_type: true,
-            ..Default::default()
-        };
+        let matches = uu_app().get_matches_from(vec!["df", "--print-type", "-h"]);
+        let options = Options::from(&matches).unwrap();
         let row = Row {
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
