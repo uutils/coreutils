@@ -70,17 +70,37 @@ sed -i 's|^"\$@|/usr/bin/timeout 600 "\$@|' build-aux/test-driver
 sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
 sed -i 's| tr | /usr/bin/tr |' tests/init.sh
 make -j "$(nproc)"
-if test ${UU_MAKE_PROFILE} != "debug"; then
+# Handle generated factor tests
+t_first=00
+t_max=36
+t_max_release=20
+if test "${UU_MAKE_PROFILE}" != "debug"; then
     # Generate the factor tests, so they can be fixed
     # * reduced to 20 to decrease log size (down from 36 expected by GNU)
     # * only for 'release', skipped for 'debug' as redundant and too time consuming (causing timeout errors)
-    for i in $(seq -w 0 20); do
+    seq=$(
+        i=${t_first}
+        while test "${i}" -le "${t_max_release}"; do
+            printf '%02d ' $i
+            i=$((i + 1))
+        done
+    )
+    for i in ${seq}; do
         make "tests/factor/t${i}.sh"
     done
-    sed -i -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*sh
+    cat
+    sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*.sh
+    t_first=$((t_max_release + 1))
 fi
 # strip all (debug) or just the longer (release) factor tests from Makefile
-for i in $(seq 20 36); do
+seq=$(
+    i=${t_first}
+    while test "${i}" -le "${t_max}"; do
+        printf '%02d ' ${i}
+        i=$((i + 1))
+    done
+)
+for i in ${seq}; do
     echo "strip t${i}.sh from Makefile"
     sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
 done
