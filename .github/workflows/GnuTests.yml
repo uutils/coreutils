@@ -1,6 +1,6 @@
 name: GnuTests
 
-# spell-checker:ignore (jargon) submodules ; (misc) lcov ; (names) gnulib gnutests Codecov ; (options) Ccodegen Coverflow Cpanic Zpanic ; (people) Dawid Dziurla * dawidd ; (utils) autopoint chksum gperf libexpect pyinotify shopt texinfo valgrind ; (vars) FILESET SUBDIRS XPASS
+# spell-checker:ignore (jargon) submodules ; (misc) lcov ; (names) gnulib gnutests Codecov ; (options) Ccodegen Coverflow Cpanic Zpanic ; (people) Dawid Dziurla * dawidd ; (shell) esac ; (utils) autopoint chksum gperf libexpect pyinotify shopt texinfo valgrind ; (vars) FILESET SUBDIRS XPASS
 
 # * note: to run a single test => `REPO/util/run-gnu-test.sh PATH/TO/TEST/SCRIPT`
 
@@ -40,6 +40,15 @@ jobs:
         TEST_SUMMARY_FILE='gnu-result.json'
         TEST_FULL_SUMMARY_FILE='gnu-full-result.json'
         outputs SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE
+        # * commit info
+        echo "github.event_name=${{ github.event_name }}"
+        echo "GITHUB_REF=${GITHUB_REF} (aka '${{ github.ref }}')"
+        echo "GITHUB_SHA=${GITHUB_SHA}"
+        REF_NAME=${GITHUB_REF#refs/*/}
+        unset REF_BRANCH ; case "${GITHUB_REF}" in refs/heads/*) REF_BRANCH=${GITHUB_REF#refs/heads/} ;; esac ;
+        unset REF_TAG ; case "${GITHUB_REF}" in refs/tags/*) REF_TAG=${GITHUB_REF#refs/tags/} ;; esac ;
+        REF_SHAS=${GITHUB_SHA:0:10}
+        outputs REF_NAME REF_BRANCH REF_TAG REF_SHAS
     - name: Checkout code (uutil)
       uses: actions/checkout@v2
       with:
