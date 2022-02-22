@@ -873,20 +873,20 @@ fn check_against_gnu_tr_tests_o_rep_2() {
 fn octal_repeat_count_test() {
     //below will result in 8'x' and 4'y' as octal 010 = decimal 8
     new_ucmd!()
-        .args(&["abcdefghijkl", "[x*010]y"])
-        .pipe_in("abcdefghijklmnop")
+        .args(&["ABCdefghijkl", "[x*010]Y"])
+        .pipe_in("ABCdefghijklmn12")
         .succeeds()
-        .stdout_is("xxxxxxxxyyyymnop");
+        .stdout_is("xxxxxxxxYYYYmn12");
 }
 
 #[test]
 fn non_octal_repeat_count_test() {
     //below will result in 10'x' and 2'y' as the 10 does not have 0 prefix
     new_ucmd!()
-        .args(&["abcdefghijkl", "[x*10]y"])
-        .pipe_in("abcdefghijklmnop")
+        .args(&["ABCdefghijkl", "[x*10]Y"])
+        .pipe_in("ABCdefghijklmn12")
         .succeeds()
-        .stdout_is("xxxxxxxxxxyymnop");
+        .stdout_is("xxxxxxxxxxYYmn12");
 }
 
 #[test]
