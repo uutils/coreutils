@@ -319,13 +319,6 @@ fn test_truncate_bytes_size() {
         .fails()
         .code_is(1)
         .stderr_only("truncate: Invalid number: '1Y': Value too large for defined data type");
-    #[cfg(target_pointer_width = "32")]
-    {
-        let sizes = ["1000G", "10T"];
-        for size in &sizes {
-            new_ucmd!().args(&["--size", size, "file"]).succeeds();
-        }
-    }
 }
 
 /// Test that truncating a non-existent file creates that file.
