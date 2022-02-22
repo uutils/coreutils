@@ -279,7 +279,7 @@ impl Sequence {
         )(input)
         .map(|(l, (c, cnt_str))| {
             let result = if cnt_str.starts_with('0') {
-                match  usize::from_str_radix(cnt_str, 8) {
+                match usize::from_str_radix(cnt_str, 8) {
                     Ok(0) => Ok(Self::CharStar(c)),
                     Ok(count) => Ok(Self::CharRepeat(c, count)),
                     Err(_) => Err(BadSequence::InvalidRepeatCount(cnt_str.to_string())),
@@ -291,10 +291,7 @@ impl Sequence {
                     Err(_) => Err(BadSequence::InvalidRepeatCount(cnt_str.to_string())),
                 }
             };
-            (
-                l,
-                result,
-            )
+            (l, result)
         })
     }
 
