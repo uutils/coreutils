@@ -6,6 +6,9 @@
 
 # spell-checker:ignore (env/vars) GNULIB SRCDIR SUBDIRS ; (utils) shellcheck
 
+# ref: [How the GNU coreutils are tested](https://www.pixelbeat.org/docs/coreutils-testing.html) @@ <https://archive.is/p2ITW>
+# * note: to run a single test => `make check TESTS=PATH/TO/TEST/SCRIPT SUBDIRS=. VERBOSE=yes`
+
 ME_dir="$(dirname -- "$(readlink -fm -- "$0")")"
 REPO_main_dir="$(dirname -- "${ME_dir}")"
 
