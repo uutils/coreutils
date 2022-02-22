@@ -323,14 +323,7 @@ fn test_truncate_bytes_size() {
     {
         let sizes = ["1000G", "10T"];
         for size in &sizes {
-            new_ucmd!()
-                .args(&["--size", size, "file"])
-                .fails()
-                .code_is(1)
-                .stderr_only(format!(
-                    "truncate: Invalid number: '{}': Value too large for defined data type",
-                    size
-                ));
+            new_ucmd!().args(&["--size", size, "file"]).succeeds();
         }
     }
 }
