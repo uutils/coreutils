@@ -109,7 +109,7 @@ impl From<Filesystem> for Row {
             inodes_usage: if files == 0 {
                 None
             } else {
-                Some(ffree as f64 / files as f64)
+                Some((files - ffree) as f64 / files as f64)
             },
         }
     }
