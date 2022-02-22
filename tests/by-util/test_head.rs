@@ -302,14 +302,7 @@ fn test_head_invalid_num() {
     {
         let sizes = ["1000G", "10T"];
         for size in &sizes {
-            new_ucmd!()
-                .args(&["-c", size])
-                .fails()
-                .code_is(1)
-                .stderr_only(format!(
-                    "head: invalid number of bytes: '{}': Value too large for defined data type",
-                    size
-                ));
+            new_ucmd!().args(&["-c", size]).succeeds();
         }
     }
     new_ucmd!()

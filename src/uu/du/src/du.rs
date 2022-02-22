@@ -12,7 +12,6 @@ use chrono::prelude::DateTime;
 use chrono::Local;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::collections::HashSet;
-use std::convert::TryFrom;
 use std::env;
 use std::fs;
 #[cfg(not(windows))]
@@ -248,7 +247,7 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
     result
 }
 
-fn read_block_size(s: Option<&str>) -> usize {
+fn read_block_size(s: Option<&str>) -> u64 {
     if let Some(s) = s {
         parse_size(s)
             .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::BLOCK_SIZE)))
@@ -483,7 +482,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         show_warning!("options --apparent-size and -b are ineffective with --inodes");
     }
 
-    let block_size = u64::try_from(read_block_size(matches.value_of(options::BLOCK_SIZE))).unwrap();
+    let block_size = read_block_size(matches.value_of(options::BLOCK_SIZE));
 
     let threshold = matches.value_of(options::THRESHOLD).map(|s| {
         Threshold::from_str(s)
@@ -807,7 +806,7 @@ impl FromStr for Threshold {
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         let offset = if s.starts_with(&['-', '+'][..]) { 1 } else { 0 };
 
-        let size = u64::try_from(parse_size(&s[offset..])?).unwrap();
+        let size = parse_size(&s[offset..])?;
 
         if s.starts_with('-') {
             Ok(Self::Upper(size))

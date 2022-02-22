@@ -29,6 +29,7 @@ mod prn_float;
 mod prn_int;
 
 use std::cmp;
+use std::convert::TryFrom;
 
 use crate::byteorder_io::*;
 use crate::formatteriteminfo::*;
@@ -111,9 +112,9 @@ pub(crate) mod options {
 
 struct OdOptions {
     byte_order: ByteOrder,
-    skip_bytes: usize,
-    read_bytes: Option<usize>,
-    label: Option<usize>,
+    skip_bytes: u64,
+    read_bytes: Option<u64>,
+    label: Option<u64>,
     input_strings: Vec<String>,
     formats: Vec<ParsedFormatterItemInfo>,
     line_bytes: usize,
@@ -148,7 +149,7 @@ impl OdOptions {
             },
         };
 
-        let mut label: Option<usize> = None;
+        let mut label: Option<u64> = None;
 
         let parsed_input = parse_inputs(matches)
             .map_err(|e| USimpleError::new(1, format!("Invalid inputs: {}", e)))?;
@@ -170,7 +171,8 @@ impl OdOptions {
                     16
                 } else {
                     match parse_number_of_bytes(s) {
-                        Ok(n) => n,
+                        Ok(n) => usize::try_from(n)
+                            .map_err(|_| USimpleError::new(1, format!("‘{}‘ is too large", s)))?,
                         Err(e) => {
                             return Err(USimpleError::new(
                                 1,
@@ -569,7 +571,7 @@ where
                     );
                 }
 
-                input_offset.increase_position(length);
+                input_offset.increase_position(length as u64);
             }
             Err(e) => {
                 show_error!("{}", e);
@@ -648,8 +650,8 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
 /// `read_bytes` is an optional limit to the number of bytes to read
 fn open_input_peek_reader(
     input_strings: &[String],
-    skip_bytes: usize,
-    read_bytes: Option<usize>,
+    skip_bytes: u64,
+    read_bytes: Option<u64>,
 ) -> PeekReader<PartialReader<MultifileReader>> {
     // should return  "impl PeekRead + Read + HasError" when supported in (stable) rust
     let inputs = input_strings

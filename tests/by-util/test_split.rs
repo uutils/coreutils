@@ -337,14 +337,7 @@ fn test_split_invalid_bytes_size() {
     {
         let sizes = ["1000G", "10T"];
         for size in &sizes {
-            new_ucmd!()
-                .args(&["-b", size])
-                .fails()
-                .code_is(1)
-                .stderr_only(format!(
-                    "split: invalid number of bytes: '{}': Value too large for defined data type",
-                    size
-                ));
+            new_ucmd!().args(&["-b", size]).succeeds();
         }
     }
 }

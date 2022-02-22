@@ -22,6 +22,7 @@ use chunks::ReverseChunks;
 
 use clap::{App, AppSettings, Arg};
 use std::collections::VecDeque;
+use std::convert::TryInto;
 use std::ffi::OsString;
 use std::fmt;
 use std::fs::{File, Metadata};
@@ -66,8 +67,8 @@ pub mod options {
 
 #[derive(Debug)]
 enum FilterMode {
-    Bytes(usize),
-    Lines(usize, u8), // (number of lines, delimiter)
+    Bytes(u64),
+    Lines(u64, u8), // (number of lines, delimiter)
 }
 
 impl Default for FilterMode {
@@ -440,7 +441,7 @@ fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) -> URes
 /// ```
 fn forwards_thru_file<R>(
     reader: &mut R,
-    num_delimiters: usize,
+    num_delimiters: u64,
     delimiter: u8,
 ) -> std::io::Result<usize>
 where
@@ -471,7 +472,7 @@ where
 /// Iterate over bytes in the file, in reverse, until we find the
 /// `num_delimiters` instance of `delimiter`. The `file` is left seek'd to the
 /// position just after that delimiter.
-fn backwards_thru_file(file: &mut File, num_delimiters: usize, delimiter: u8) {
+fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
     // This variable counts the number of delimiters found in the file
     // so far (reading from the end of the file toward the beginning).
     let mut counter = 0;
@@ -541,6 +542,18 @@ fn bounded_tail(file: &mut File, mode: &FilterMode, beginning: bool) {
     std::io::copy(file, &mut stdout).unwrap();
 }
 
+/// An alternative to [`Iterator::skip`] with u64 instead of usize. This is
+/// necessary because the usize limit doesn't make sense when iterating over
+/// something that's not in memory. For example, a very large file. This allows
+/// us to skip data larger than 4 GiB even on 32-bit platforms.
+fn skip_u64(iter: &mut impl Iterator, num: u64) {
+    for _ in 0..num {
+        if iter.next().is_none() {
+            break;
+        }
+    }
+}
+
 /// Collect the last elements of an iterator into a `VecDeque`.
 ///
 /// This function returns a [`VecDeque`] containing either the last
@@ -553,10 +566,10 @@ fn bounded_tail(file: &mut File, mode: &FilterMode, beginning: bool) {
 ///
 /// If any element of `iter` is an [`Err`], then this function panics.
 fn unbounded_tail_collect<T, E>(
-    iter: impl Iterator<Item = Result<T, E>>,
-    count: usize,
+    mut iter: impl Iterator<Item = Result<T, E>>,
+    count: u64,
     beginning: bool,
-) -> VecDeque<T>
+) -> UResult<VecDeque<T>>
 where
     E: fmt::Debug,
 {
@@ -564,9 +577,13 @@ where
         // GNU `tail` seems to index bytes and lines starting at 1, not
         // at 0. It seems to treat `+0` and `+1` as the same thing.
         let i = count.max(1) - 1;
-        iter.skip(i as usize).map(|r| r.unwrap()).collect()
+        skip_u64(&mut iter, i);
+        Ok(iter.map(|r| r.unwrap()).collect())
     } else {
-        RingBuffer::from_iter(iter.map(|r| r.unwrap()), count as usize).data
+        let count: usize = count
+            .try_into()
+            .map_err(|_| USimpleError::new(1, "Insufficient addressable memory"))?;
+        Ok(RingBuffer::from_iter(iter.map(|r| r.unwrap()), count).data)
     }
 }
 
@@ -577,14 +594,14 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
     match settings.mode {
         FilterMode::Lines(count, sep) => {
             let mut stdout = stdout();
-            for line in unbounded_tail_collect(lines(reader, sep), count, settings.beginning) {
+            for line in unbounded_tail_collect(lines(reader, sep), count, settings.beginning)? {
                 stdout
                     .write_all(&line)
                     .map_err_context(|| String::from("IO error"))?;
             }
         }
         FilterMode::Bytes(count) => {
-            for byte in unbounded_tail_collect(reader.bytes(), count, settings.beginning) {
+            for byte in unbounded_tail_collect(reader.bytes(), count, settings.beginning)? {
                 if let Err(err) = stdout().write(&[byte]) {
                     return Err(USimpleError::new(1, err.to_string()));
                 }
@@ -600,7 +617,7 @@ fn is_seekable<T: Seek>(file: &mut T) -> bool {
         && file.seek(SeekFrom::Start(0)).is_ok()
 }
 
-fn parse_num(src: &str) -> Result<(usize, bool), ParseSizeError> {
+fn parse_num(src: &str) -> Result<(u64, bool), ParseSizeError> {
     let mut size_string = src.trim();
     let mut starting_with = false;
 
