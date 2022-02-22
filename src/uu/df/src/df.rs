@@ -120,8 +120,11 @@ impl Options {
     }
 }
 
+/// Determine the fields to display based on the arguments.
 fn parse_field_selectors(matches: &ArgMatches) -> UResult<Vec<String>> {
     let mut field_selectors = vec![];
+    // Check for invalid or duplicate fields and throw the
+    // corresponding error.
     matches
         .values_of(OPT_OUTPUT)
         .unwrap()
@@ -140,22 +143,28 @@ fn parse_field_selectors(matches: &ArgMatches) -> UResult<Vec<String>> {
             }
             Ok(())
         })?;
-    if matches.is_present(OPT_PRINT_TYPE) {
-        field_selectors.insert(1, "fstype".to_string());
-    }
-    if matches.is_present(OPT_INODES) {
-        let inode_fields = [
-            "itotal".to_string(),
-            "iused".to_string(),
-            "iavail".to_string(),
-            "ipcent".to_string(),
-        ];
-        let type_offset = if matches.is_present(OPT_PRINT_TYPE) {
-            1
-        } else {
-            0
-        };
-        field_selectors.splice(1 + type_offset..5 + type_offset, inode_fields);
+    // This if check shouldn't be necessary - however, the
+    // `--output` argument, in spite of having `conficts_with_all`
+    // for -i, -T, and -P, fails to throw an error. The check stops
+    // -i or -T from displaying a duplicate column.
+    if matches.occurrences_of(OPT_OUTPUT) == 0 {
+        if matches.is_present(OPT_PRINT_TYPE) {
+            field_selectors.insert(1, "fstype".to_string());
+        }
+        if matches.is_present(OPT_INODES) {
+            let inode_fields = [
+                "itotal".to_string(),
+                "iused".to_string(),
+                "iavail".to_string(),
+                "ipcent".to_string(),
+            ];
+            let type_offset = if matches.is_present(OPT_PRINT_TYPE) {
+                1
+            } else {
+                0
+            };
+            field_selectors.splice(1 + type_offset..5 + type_offset, inode_fields);
+        }
     }
     Ok(field_selectors)
 }
