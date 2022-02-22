@@ -183,4 +183,33 @@ fn test_block_size_1024() {
     assert_eq!(get_header(34 * 1024 * 1024 * 1024), "34G-blocks");
 }
 
+// TODO The spacing does not match GNU df. Also we need to remove
+// trailing spaces from the heading row.
+#[test]
+fn test_output_selects_columns() {
+    let output = new_ucmd!()
+        .args(&["--output=source"])
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(output.lines().next().unwrap(), "Filesystem       ");
+
+    let output = new_ucmd!()
+        .args(&["--output=source,target"])
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(
+        output.lines().next().unwrap(),
+        "Filesystem       Mounted on       "
+    );
+
+    let output = new_ucmd!()
+        .args(&["--output=source,target,used"])
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(
+        output.lines().next().unwrap(),
+        "Filesystem       Mounted on               Used "
+    );
+}
+
 // ToDO: more tests...

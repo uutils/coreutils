@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 // spell-checker:ignore itotal iused iavail ipcent pcent squashfs
-use crate::{OPT_INODES, OPT_PRINT_TYPE};
+use crate::{OPT_INODES, OPT_OUTPUT, OPT_PRINT_TYPE};
 use clap::ArgMatches;
 
 /// The columns in the output table produced by `df`.
@@ -65,8 +65,9 @@ impl Column {
         match (
             matches.is_present(OPT_PRINT_TYPE),
             matches.is_present(OPT_INODES),
+            matches.occurrences_of(OPT_OUTPUT) > 0,
         ) {
-            (false, false) => vec![
+            (false, false, false) => vec![
                 Self::Source,
                 Self::Size,
                 Self::Used,
@@ -76,7 +77,20 @@ impl Column {
                 Self::Pcent,
                 Self::Target,
             ],
-            (false, true) => vec![
+            (false, false, true) => {
+                matches
+                    .values_of(OPT_OUTPUT)
+                    .unwrap()
+                    .map(|s| {
+                        // Unwrapping here should not panic because the
+                        // command-line argument parsing library should be
+                        // responsible for ensuring each comma-separated
+                        // string is a valid column label.
+                        Self::parse(s).unwrap()
+                    })
+                    .collect()
+            }
+            (false, true, false) => vec![
                 Self::Source,
                 Self::Itotal,
                 Self::Iused,
@@ -84,7 +98,7 @@ impl Column {
                 Self::Ipcent,
                 Self::Target,
             ],
-            (true, false) => vec![
+            (true, false, false) => vec![
                 Self::Source,
                 Self::Fstype,
                 Self::Size,
@@ -95,7 +109,7 @@ impl Column {
                 Self::Pcent,
                 Self::Target,
             ],
-            (true, true) => vec![
+            (true, true, false) => vec![
                 Self::Source,
                 Self::Fstype,
                 Self::Itotal,
@@ -104,6 +118,49 @@ impl Column {
                 Self::Ipcent,
                 Self::Target,
             ],
+            // The command-line arguments -T and -i are each mutually
+            // exclusive with --output, so the command-line argument
+            // parser should reject those combinations before we get
+            // to this point in the code.
+            _ => unreachable!(),
+        }
+    }
+
+    /// Convert a column name to the corresponding enumeration variant.
+    ///
+    /// There are twelve valid column names, one for each variant:
+    ///
+    /// - "source"
+    /// - "fstype"
+    /// - "itotal"
+    /// - "iused"
+    /// - "iavail"
+    /// - "ipcent"
+    /// - "size"
+    /// - "used"
+    /// - "avail"
+    /// - "pcent"
+    /// - "file"
+    /// - "target"
+    ///
+    /// # Errors
+    ///
+    /// If the string `s` is not one of the valid column names.
+    fn parse(s: &str) -> Result<Self, ()> {
+        match s {
+            "source" => Ok(Self::Source),
+            "fstype" => Ok(Self::Fstype),
+            "itotal" => Ok(Self::Itotal),
+            "iused" => Ok(Self::Iused),
+            "iavail" => Ok(Self::Iavail),
+            "ipcent" => Ok(Self::Ipcent),
+            "size" => Ok(Self::Size),
+            "used" => Ok(Self::Used),
+            "avail" => Ok(Self::Avail),
+            "pcent" => Ok(Self::Pcent),
+            "file" => Ok(Self::File),
+            "target" => Ok(Self::Target),
+            _ => Err(()),
         }
     }
 }
