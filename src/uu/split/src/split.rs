@@ -652,7 +652,10 @@ where
     // bytes in the file. This ensures that we don't write empty
     // files. Otherwise, just write the `num_chunks - num_bytes` empty
     // files.
-    let metadata = metadata(&settings.input).unwrap();
+    let metadata = metadata(&settings.input).map_err(|_| {
+        USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
+    })?;
+
     let num_bytes = metadata.len();
     let will_have_empty_files = settings.elide_empty_files && num_chunks > num_bytes;
     let (num_chunks, chunk_size) = if will_have_empty_files {
