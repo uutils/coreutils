@@ -61,6 +61,52 @@ struct FsSelector {
     exclude: HashSet<String>,
 }
 
+/// A block size to use in condensing the display of a large number of bytes.
+///
+/// The [`Bytes`] variant represents a static block size. The
+/// [`HumanReadableDecimal`] and [`HumanReadableBinary`] variants
+/// represent dynamic block sizes: as the number of bytes increases,
+/// the divisor increases as well (for example, from 1 to 1,000 to
+/// 1,000,000 and so on in the case of [`HumanReadableDecimal`]).
+///
+/// The default variant is `Bytes(1024)`.
+enum BlockSize {
+    /// A fixed number of bytes.
+    ///
+    /// The number must be positive.
+    Bytes(u64),
+
+    /// Use the largest divisor corresponding to a unit, like B, K, M, G, etc.
+    ///
+    /// This variant represents powers of 1,000. Contrast with
+    /// [`HumanReadableBinary`], which represents powers of 1,024.
+    HumanReadableDecimal,
+
+    /// Use the largest divisor corresponding to a unit, like B, K, M, G, etc.
+    ///
+    /// This variant represents powers of 1,000. Contrast with
+    /// [`HumanReadableBinary`], which represents powers of 1,024.
+    HumanReadableBinary,
+}
+
+impl Default for BlockSize {
+    fn default() -> Self {
+        Self::Bytes(1024)
+    }
+}
+
+impl From<&ArgMatches> for BlockSize {
+    fn from(matches: &ArgMatches) -> Self {
+        if matches.is_present(OPT_HUMAN_READABLE) {
+            Self::HumanReadableBinary
+        } else if matches.is_present(OPT_HUMAN_READABLE_2) {
+            Self::HumanReadableDecimal
+        } else {
+            Self::default()
+        }
+    }
+}
+
 #[derive(Default)]
 struct Options {
     show_local_fs: bool,
@@ -68,8 +114,7 @@ struct Options {
     show_listed_fs: bool,
     show_fs_type: bool,
     show_inode_instead: bool,
-    // block_size: usize,
-    human_readable_base: i64,
+    block_size: BlockSize,
     fs_selector: FsSelector,
 }
 
@@ -82,13 +127,7 @@ impl Options {
             show_listed_fs: false,
             show_fs_type: matches.is_present(OPT_PRINT_TYPE),
             show_inode_instead: matches.is_present(OPT_INODES),
-            human_readable_base: if matches.is_present(OPT_HUMAN_READABLE) {
-                1024
-            } else if matches.is_present(OPT_HUMAN_READABLE_2) {
-                1000
-            } else {
-                -1
-            },
+            block_size: BlockSize::from(matches),
             fs_selector: FsSelector::from(matches),
         }
     }
