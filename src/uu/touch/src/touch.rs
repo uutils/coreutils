@@ -324,15 +324,19 @@ fn path_from_stdout() -> UResult<PathBuf> {
     #[cfg(windows)]
     {
         use std::os::windows::prelude::AsRawHandle;
-        use windows::core::{Error, HRESULT};
-        use windows::Win32::Foundation::{
-            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND, HANDLE,
-            MAX_PATH, PWSTR, WIN32_ERROR,
+        use winapi::shared::minwindef::{DWORD, MAX_PATH};
+        use winapi::shared::winerror::{
+            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND,
         };
-        use windows::Win32::Storage::FileSystem::FILE_NAME_OPENED;
+        use winapi::um::errhandlingapi::GetLastError;
+        use winapi::um::fileapi::GetFinalPathNameByHandleW;
+        use winapi::um::winnt::WCHAR;
 
         let handle = std::io::stdout().lock().as_raw_handle();
-        let file_path_buffer = [0u16; MAX_PATH as usize];
+        let mut file_path_buffer: [WCHAR; MAX_PATH as usize] = [0; MAX_PATH as usize];
+
+        // Couldn't find this in winapi
+        const FILE_NAME_OPENED: DWORD = 0x8;
 
         // https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlea#examples
         // SAFETY: We transmute the handle to be able to cast *mut c_void into a
@@ -343,27 +347,32 @@ fn path_from_stdout() -> UResult<PathBuf> {
         // compile time. MAX_PATH is a small number (260) so we can cast it
         // to a u32.
         let ret = unsafe {
-            windows::Win32::Storage::FileSystem::GetFinalPathNameByHandleW::<HANDLE>(
+            GetFinalPathNameByHandleW(
                 std::mem::transmute(handle),
-                PWSTR(file_path_buffer.as_ptr()),
+                file_path_buffer.as_mut_ptr(),
                 file_path_buffer.len() as u32,
                 FILE_NAME_OPENED,
             )
         };
 
-        let win32_err = WIN32_ERROR(ret);
-        let hresult = HRESULT::from(win32_err);
-        let buffer_size = match win32_err {
+        let buffer_size = match ret {
             ERROR_PATH_NOT_FOUND | ERROR_NOT_ENOUGH_MEMORY | ERROR_INVALID_PARAMETER => {
-                return Err(USimpleError::new(1, hresult.message().to_string()))
-            }
-            e if e.0 == 0 => {
                 return Err(USimpleError::new(
                     1,
-                    Error::from_win32().message().to_string(),
+                    format!("GetFinalPathNameByHandleW failed with code {}", ret),
                 ))
             }
-            e => e.0 as usize,
+            e if e == 0 => {
+                return Err(USimpleError::new(
+                    1,
+                    format!(
+                        "GetFinalPathNameByHandleW failed with code {}",
+                        // SAFETY: GetLastError is thread-safe and has no documented memory unsafety.
+                        unsafe { GetLastError() }
+                    ),
+                ));
+            }
+            e => e as usize,
         };
 
         // Don't include the null terminator
