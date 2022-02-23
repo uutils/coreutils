@@ -79,7 +79,7 @@ Try 'touch --help' for more information."##,
     for filename in files {
         // FIXME: find a way to avoid having to clone the path
         let pathbuf = if filename == "-" {
-            path_from_stdout()?
+            pathbuf_from_stdout()?
         } else {
             PathBuf::from(filename)
         };
@@ -313,7 +313,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
 ///
 /// On Windows, uses GetFinalPathNameByHandleW to attempt to get the path
 /// from the stdout handle.
-fn path_from_stdout() -> UResult<PathBuf> {
+fn pathbuf_from_stdout() -> UResult<PathBuf> {
     #[cfg(unix)]
     {
         Ok(PathBuf::from("/dev/stdout"))
