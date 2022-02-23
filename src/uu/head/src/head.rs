@@ -438,10 +438,10 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 // must be converted from u64 to usize to fit in memory. If such conversion fails,
                 // it means the platform doesn't have enough memory to hold the buffer, so we fail.
                 if let Mode::AllButLastLines(n) | Mode::AllButLastBytes(n) = options.mode {
-                    if let Err(n) = usize::try_from(n) {
+                    if let Err(e) = usize::try_from(n) {
                         show!(USimpleError::new(
                             1,
-                            format!("{}: number of bytes is too large", n)
+                            format!("{}: number of bytes is too large", e)
                         ));
                         continue;
                     };

@@ -460,6 +460,20 @@ fn test_zeros_to_stdout() {
         .success();
 }
 
+#[cfg(target_pointer_width = "32")]
+#[test]
+fn test_oversized_bs_32_bit() {
+    for bs_param in &["bs", "ibs", "obs", "cbs"] {
+        new_ucmd!()
+            .args(&[format!("{}=5GB", bs_param)])
+            .run()
+            .no_stdout()
+            .failure()
+            .status_code(1)
+            .stderr_is(format!("dd: {}=N cannot fit into memory\n", bs_param));
+    }
+}
+
 #[test]
 fn test_to_stdout_with_ibs_obs() {
     let output: Vec<_> = String::from("y\n").bytes().cycle().take(1024).collect();
