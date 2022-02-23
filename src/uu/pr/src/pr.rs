@@ -235,6 +235,7 @@ pub fn uu_app<'a>() -> App<'a> {
                 character) is given, it is appended to the line number to separate it from whatever follows.  The default
                 for char is a <tab>.  Line numbers longer than width columns are truncated.")
                 .takes_value(true)
+                .allow_hyphen_values(true)
                 .value_name("[char][width]")
         )
         .arg(
@@ -453,7 +454,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 /// * `args` - Command line arguments
 fn recreate_arguments(args: &[String]) -> Vec<String> {
     let column_page_option = Regex::new(r"^[-+]\d+.*").unwrap();
-    let num_regex = Regex::new(r"(.\d+)|(\d+)|^[^-]$").unwrap();
+    let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
     //let a_file: Regex = Regex::new(r"^[^-+].*").unwrap();
     let n_regex = Regex::new(r"^-n\s*$").unwrap();
     let mut arguments = args.to_owned();
