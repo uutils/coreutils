@@ -226,58 +226,56 @@ fn is_best(previous: &[MountInfo], mi: &MountInfo) -> bool {
 
 /// Keep only the specified subset of [`MountInfo`] instances.
 ///
-/// If `paths` is non-empty, this function excludes any [`MountInfo`]
-/// that is not mounted at the specified path.
-///
 /// The `opt` argument specifies a variety of ways of excluding
 /// [`MountInfo`] instances; see [`Options`] for more information.
 ///
 /// Finally, if there are duplicate entries, the one with the shorter
 /// path is kept.
-fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String]) -> Vec<MountInfo> {
-    let mut result = vec![];
 
-    // Choose MountInfo per input_path
-    // If paths are empty, skip filtering, else output is empty
-    let filtered_vmi: Vec<MountInfo>;
-    if paths.is_empty() {
-        filtered_vmi = vmi;
-    } else {
-        // Consider longest mount_point per input_path
-        filtered_vmi = paths
-            .iter()
-            .map(|p| {
-                vmi.iter()
-                    .filter(|mi| p.starts_with(&mi.mount_dir))
-                    .max_by_key(|mi| mi.mount_dir.len())
-                    .unwrap()
-                    .clone()
-            })
-            .collect::<Vec<MountInfo>>();
-    }
-    for mi in filtered_vmi {
+fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
+    let mut result = vec![];
+    for mi in vmi {
         // TODO The running time of the `is_best()` function is linear
         // in the length of `result`. That makes the running time of
         // this loop quadratic in the length of `vmi`. This could be
         // improved by a more efficient implementation of `is_best()`,
         // but `vmi` is probably not very long in practice.
-        if is_best(&result, &mi) {
+        if is_included(&mi, opt) && is_best(&result, &mi) {
             result.push(mi);
         }
     }
     result
 }
 
+/// Assign 1 `MountInfo` entry to each path
+/// `lofs` enries are skipped and dummy mount points are skipped
+/// Only the longest matching prefix for that path is considered
+fn get_point_list(vmi: &[MountInfo], paths: &[String]) -> Vec<MountInfo> {
+    // Choose MountInfo per input_path
+    // Skip lofs, skip dummy and select longest match
+    paths
+        .iter()
+        .map(|p| {
+            vmi.iter()
+                .filter(|mi| mi.fs_type.ne("lofs"))
+                .filter(|mi| !mi.dummy)
+                .filter(|mi| p.starts_with(&mi.mount_dir))
+                .max_by_key(|mi| mi.mount_dir.len())
+                .unwrap()
+                .clone()
+        })
+        .collect::<Vec<MountInfo>>()
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
-    // Verify and canonicalize the input_paths and then convert to string
+    // Canonicalize the input_paths and then convert to string
     let paths = matches
         .values_of(OPT_PATHS)
         .unwrap_or_default()
         .map(Path::new)
-        .filter(|v| v.exists())
         .filter_map(|v| v.canonicalize().ok())
         .filter_map(|v| v.into_os_string().into_string().ok())
         .collect::<Vec<_>>();
@@ -292,13 +290,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let opt = Options::from(&matches);
 
-    // Filter mounts by options
-    let mounts = read_fs_list()
-        .into_iter()
-        .filter(|mi| is_included(mi, &opt))
-        .collect();
+    let mounts = read_fs_list();
 
-    let data: Vec<Row> = filter_mount_list(mounts, &paths)
+    let op_mount_points: Vec<MountInfo>;
+    if paths.is_empty() {
+        // Get all entries
+        op_mount_points = filter_mount_list(mounts, &opt);
+    } else {
+        // Get Point for each input_path
+        op_mount_points = get_point_list(&mounts, &paths);
+    }
+    let data: Vec<Row> = op_mount_points
         .into_iter()
         .filter_map(Filesystem::new)
         .filter(|fs| fs.usage.blocks != 0 || opt.show_all_fs || opt.show_listed_fs)
