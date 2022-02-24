@@ -58,24 +58,6 @@ fn test_order_same() {
     assert_eq!(output1, output2);
 }
 
-/// Test of mount_points are printed in the order of input_paths
-#[test]
-fn test_output_mp_order() {
-    let output1 = new_ucmd!()
-        .arg("/boot")
-        .arg("/")
-        .arg("/boot/efi")
-        .succeeds()
-        .stdout_move_str();
-    let output2 = new_ucmd!()
-        .arg("/boot/efi")
-        .arg("/")
-        .arg("/boot/")
-        .succeeds()
-        .stdout_move_str();
-    assert_ne!(output1, output2);
-}
-
 /// Test of mount point begin repeated
 #[test]
 fn test_output_mp_repeat() {
