@@ -204,7 +204,7 @@ fn write_options(w: &mut impl Write, app: &App) -> io::Result<()> {
         writeln!(
             w,
             "<dd>\n\n{}\n\n</dd>",
-            arg.get_help().unwrap_or_default().replace("\n", "<br />")
+            arg.get_help().unwrap_or_default().replace('\n', "<br />")
         )?;
     }
     writeln!(w, "</dl>\n")
