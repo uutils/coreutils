@@ -292,14 +292,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mounts = read_fs_list();
 
-    let op_mount_points: Vec<MountInfo>;
-    if paths.is_empty() {
+    let op_mount_points: Vec<MountInfo> = if paths.is_empty() {
         // Get all entries
-        op_mount_points = filter_mount_list(mounts, &opt);
+        filter_mount_list(mounts, &opt)
     } else {
         // Get Point for each input_path
-        op_mount_points = get_point_list(&mounts, &paths);
-    }
+        get_point_list(&mounts, &paths)
+    };
     let data: Vec<Row> = op_mount_points
         .into_iter()
         .filter_map(Filesystem::new)
