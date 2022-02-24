@@ -33,6 +33,7 @@ use numeric_str_cmp::{human_numeric_str_cmp, numeric_str_cmp, NumInfo, NumInfoPa
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
 use std::cmp::Ordering;
+use std::convert::TryFrom;
 use std::env;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
@@ -354,7 +355,13 @@ impl GlobalSettings {
             } else if size_string.ends_with('b') {
                 size_string.pop();
             }
-            parse_size(&size_string)
+            let size = parse_size(&size_string)?;
+            usize::try_from(size).map_err(|_| {
+                ParseSizeError::SizeTooBig(format!(
+                    "Buffer size {} does not fit in address space",
+                    size
+                ))
+            })
         } else {
             Err(ParseSizeError::ParseFailure("invalid suffix".to_string()))
         }
