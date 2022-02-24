@@ -63,11 +63,12 @@ struct FsSelector {
 
 /// A block size to use in condensing the display of a large number of bytes.
 ///
-/// The [`Bytes`] variant represents a static block size. The
-/// [`HumanReadableDecimal`] and [`HumanReadableBinary`] variants
-/// represent dynamic block sizes: as the number of bytes increases,
-/// the divisor increases as well (for example, from 1 to 1,000 to
-/// 1,000,000 and so on in the case of [`HumanReadableDecimal`]).
+/// The [`BlockSize::Bytes`] variant represents a static block
+/// size. The [`BlockSize::HumanReadableDecimal`] and
+/// [`BlockSize::HumanReadableBinary`] variants represent dynamic
+/// block sizes: as the number of bytes increases, the divisor
+/// increases as well (for example, from 1 to 1,000 to 1,000,000 and
+/// so on in the case of [`BlockSize::HumanReadableDecimal`]).
 ///
 /// The default variant is `Bytes(1024)`.
 enum BlockSize {
@@ -79,13 +80,15 @@ enum BlockSize {
     /// Use the largest divisor corresponding to a unit, like B, K, M, G, etc.
     ///
     /// This variant represents powers of 1,000. Contrast with
-    /// [`HumanReadableBinary`], which represents powers of 1,024.
+    /// [`BlockSize::HumanReadableBinary`], which represents powers of
+    /// 1,024.
     HumanReadableDecimal,
 
     /// Use the largest divisor corresponding to a unit, like B, K, M, G, etc.
     ///
-    /// This variant represents powers of 1,000. Contrast with
-    /// [`HumanReadableBinary`], which represents powers of 1,024.
+    /// This variant represents powers of 1,024. Contrast with
+    /// [`BlockSize::HumanReadableDecimal`], which represents powers
+    /// of 1,000.
     HumanReadableBinary,
 }
 
