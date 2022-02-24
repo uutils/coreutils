@@ -2,7 +2,7 @@ use crate::common::util::*;
 #[cfg(not(windows))]
 use std::os::unix::fs::PermissionsExt;
 extern crate libc;
-use self::libc::umask;
+use self::libc::{umask, mode_t};
 
 static TEST_DIR1: &str = "mkdir_test1";
 static TEST_DIR2: &str = "mkdir_test2";
@@ -107,7 +107,7 @@ fn test_multi_symbolic() {
 #[test]
 #[cfg(not(windows))]
 fn test_umask_compliance() {
-    fn test_single_case(umask_set: u32) {
+    fn test_single_case(umask_set: mode_t) {
         let (at, mut ucmd) = at_and_ucmd!();
 
         let original_umask = unsafe { umask(umask_set) };
