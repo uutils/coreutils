@@ -306,13 +306,12 @@ impl fmt::Display for Header<'_> {
             write!(f, "{0: >12} ", "IFree")?;
             write!(f, "{0: >5} ", "IUse%")?;
         } else {
-            // TODO Support arbitrary positive scaling factors (from
-            // the `--block-size` command-line argument).
-            if let BlockSize::Bytes(_) = self.options.block_size {
-                write!(f, "{0: >12} ", "1k-blocks")?;
-            } else {
-                write!(f, "{0: >12} ", "Size")?;
-            };
+            // `Display` is implemented for `BlockSize`, but `Display`
+            // only works when formatting an object into an empty
+            // format, `{}`. So we use `format!()` first to create the
+            // string, then use `write!()` to align the string and pad
+            // with spaces.
+            write!(f, "{0: >12} ", format!("{}", self.options.block_size))?;
             write!(f, "{0: >12} ", "Used")?;
             write!(f, "{0: >12} ", "Available")?;
             #[cfg(target_os = "macos")]
@@ -335,7 +334,7 @@ mod tests {
         let options = Default::default();
         assert_eq!(
             Header::new(&options).to_string(),
-            "Filesystem          1k-blocks         Used    Available  Use% Mounted on       "
+            "Filesystem          1K-blocks         Used    Available  Use% Mounted on       "
         );
     }
 
@@ -347,7 +346,7 @@ mod tests {
         };
         assert_eq!(
             Header::new(&options).to_string(),
-            "Filesystem       Type     1k-blocks         Used    Available  Use% Mounted on       "
+            "Filesystem       Type     1K-blocks         Used    Available  Use% Mounted on       "
         );
     }
 
@@ -360,6 +359,18 @@ mod tests {
         assert_eq!(
             Header::new(&options).to_string(),
             "Filesystem             Inodes        IUsed        IFree IUse% Mounted on       "
+        );
+    }
+
+    #[test]
+    fn test_header_display_block_size_1024() {
+        let options = Options {
+            block_size: BlockSize::Bytes(3 * 1024),
+            ..Default::default()
+        };
+        assert_eq!(
+            Header::new(&options).to_string(),
+            "Filesystem          3K-blocks         Used    Available  Use% Mounted on       "
         );
     }
 

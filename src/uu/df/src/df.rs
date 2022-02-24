@@ -9,20 +9,22 @@
 mod blocks;
 mod table;
 
+use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 #[cfg(unix)]
 use uucore::fsext::statfs;
 use uucore::fsext::{read_fs_list, FsUsage, MountInfo};
-use uucore::{error::UResult, format_usage};
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
 use std::collections::HashSet;
+use std::fmt;
 use std::iter::FromIterator;
 
 #[cfg(windows)]
 use std::path::Path;
 
-use crate::blocks::BlockSize;
+use crate::blocks::{block_size_from_matches, BlockSize};
 use crate::table::{DisplayRow, Header, Row};
 
 static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
@@ -78,19 +80,36 @@ struct Options {
     show_total: bool,
 }
 
+enum OptionsError {
+    InvalidBlockSize,
+}
+
+impl fmt::Display for OptionsError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            // TODO This should include the raw string provided as the argument.
+            //
+            // TODO This needs to vary based on whether `--block-size`
+            // or `-B` were provided.
+            Self::InvalidBlockSize => write!(f, "invalid --block-size argument"),
+        }
+    }
+}
+
 impl Options {
     /// Convert command-line arguments into [`Options`].
-    fn from(matches: &ArgMatches) -> Self {
-        Self {
+    fn from(matches: &ArgMatches) -> Result<Self, OptionsError> {
+        Ok(Self {
             show_local_fs: matches.is_present(OPT_LOCAL),
             show_all_fs: matches.is_present(OPT_ALL),
             show_listed_fs: false,
             show_fs_type: matches.is_present(OPT_PRINT_TYPE),
             show_inode_instead: matches.is_present(OPT_INODES),
-            block_size: BlockSize::from(matches),
+            block_size: block_size_from_matches(matches)
+                .map_err(|_| OptionsError::InvalidBlockSize)?,
             fs_selector: FsSelector::from(matches),
             show_total: matches.is_present(OPT_TOTAL),
-        }
+        })
     }
 }
 
@@ -260,7 +279,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let opt = Options::from(&matches);
+    let opt = Options::from(&matches).map_err(|e| USimpleError::new(1, format!("{}", e)))?;
 
     let mounts = read_fs_list();
     let data: Vec<Row> = filter_mount_list(mounts, &paths, &opt)
