@@ -401,3 +401,6 @@ path = "src/bin/coreutils.rs"
 [[bin]]
 name = "uudoc"
 path = "src/bin/uudoc.rs"
+
+[profile.release]
+strip = true
