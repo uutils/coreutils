@@ -113,7 +113,7 @@ fn test_umask_compliance() {
         let original_umask = unsafe { umask(umask_set) };
 
         ucmd.arg(TEST_DIR8).succeeds();
-        let perms = at.metadata(TEST_DIR8).permissions().mode();
+        let perms = at.metadata(TEST_DIR8).permissions().mode() as mode_t;
 
         assert_eq!(perms, (!umask_set & 0o0777) + 0o40000); // before compare, add the setguid, uid bits
         unsafe { umask(original_umask); } // set umask back to original
@@ -122,5 +122,5 @@ fn test_umask_compliance() {
     for i in 0o0..0o777 { // tests all permission combinations
         test_single_case(i);
     }
-    
+
 }
