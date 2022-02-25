@@ -1644,11 +1644,7 @@ fn test_ls_indicator_style() {
     // Same test as above, but with the alternate flags.
     let options = vec!["--classify", "--file-type", "-p"];
     for opt in options {
-        scene
-            .ucmd()
-            .arg(opt.to_string())
-            .succeeds()
-            .stdout_contains(&"/");
+        scene.ucmd().arg(opt).succeeds().stdout_contains(&"/");
     }
 
     // Classify and File-Type all contain indicators for pipes and links.
