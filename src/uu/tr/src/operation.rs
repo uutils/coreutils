@@ -277,15 +277,21 @@ impl Sequence {
             separated_pair(Self::parse_backslash_or_char, tag("*"), digit1),
             tag("]"),
         )(input)
-        .map(|(l, (c, str))| {
-            (
-                l,
-                match usize::from_str_radix(str, 8) {
+        .map(|(l, (c, cnt_str))| {
+            let result = if cnt_str.starts_with('0') {
+                match usize::from_str_radix(cnt_str, 8) {
                     Ok(0) => Ok(Self::CharStar(c)),
                     Ok(count) => Ok(Self::CharRepeat(c, count)),
-                    Err(_) => Err(BadSequence::InvalidRepeatCount(str.to_string())),
-                },
-            )
+                    Err(_) => Err(BadSequence::InvalidRepeatCount(cnt_str.to_string())),
+                }
+            } else {
+                match cnt_str.parse::<usize>() {
+                    Ok(0) => Ok(Self::CharStar(c)),
+                    Ok(count) => Ok(Self::CharRepeat(c, count)),
+                    Err(_) => Err(BadSequence::InvalidRepeatCount(cnt_str.to_string())),
+                }
+            };
+            (l, result)
         })
     }
 
