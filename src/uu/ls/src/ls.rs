@@ -15,6 +15,7 @@ extern crate lazy_static;
 
 mod quoting_style;
 
+use std::convert::TryInto;
 use clap::{crate_version, App, AppSettings, Arg};
 use glob::Pattern;
 use lscolors::LsColors;
@@ -49,16 +50,14 @@ use uucore::{
 use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
-use uucore::{fs::display_permissions, version_cmp::version_cmp};
+use uucore::{format_usage, fs::display_permissions, version_cmp::version_cmp};
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
 #[cfg(feature = "selinux")]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file";
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
-}
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 pub mod options {
 
@@ -335,18 +334,18 @@ struct LongFormat {
 }
 
 struct PaddingCollection {
-    longest_block_size_len: usize,
     #[cfg(unix)]
-    longest_inode_len: usize,
-    longest_link_count_len: usize,
-    longest_uname_len: usize,
-    longest_group_len: usize,
-    longest_context_len: usize,
-    longest_size_len: usize,
+    inode: usize,
+    link_count: usize,
+    uname: usize,
+    group: usize,
+    context: usize,
+    size: usize,
     #[cfg(unix)]
-    longest_major_len: usize,
+    major: usize,
     #[cfg(unix)]
-    longest_minor_len: usize,
+    minor: usize,
+    block_size: usize,
 }
 
 impl Config {
@@ -377,7 +376,7 @@ impl Config {
         }
 
         if let Ok(parsed_size) = parse_size(&trimmed_string) {
-            Some(parsed_size)
+            Some(parsed_size.try_into().unwrap())
         } else {
             show!(LsError::ParseError(trimmed_string.to_string()));
             None
@@ -831,9 +830,7 @@ impl Config {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let app = uu_app().override_usage(&usage[..]);
+    let app = uu_app();
 
     let matches = app.get_matches_from(args);
 
@@ -850,6 +847,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
+        .override_usage(format_usage(USAGE))
         .about(
             "By default, ls will list the files and contents of any directories on \
             the command line, expect that it will ignore files and directories \
@@ -1449,9 +1447,9 @@ only ignore '.' and '..'.",
         )
 }
 
-/// Represents a Path along with it's associated data
-/// Any data that will be reused several times makes sense to be added to this structure
-/// Caching data here helps eliminate redundant syscalls to fetch same information
+/// Represents a Path along with it's associated data.
+/// Any data that will be reused several times makes sense to be added to this structure.
+/// Caching data here helps eliminate redundant syscalls to fetch same information.
 #[derive(Debug)]
 struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
@@ -1553,7 +1551,8 @@ impl PathData {
                 // if not, check if we can use Path metadata
                 match get_metadata(self.p_buf.as_path(), self.must_dereference) {
                     Err(err) => {
-                        let _ = out.flush();
+                        // FIXME: A bit tricky to propagate the result here
+                        out.flush().unwrap();
                         let errno = err.raw_os_error().unwrap_or(1i32);
                         // a bad fd will throw an error when dereferenced,
                         // but GNU will not throw an error until a bad fd "dir"
@@ -1617,7 +1616,7 @@ fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     sort_entries(&mut files, config, &mut out);
     sort_entries(&mut dirs, config, &mut out);
 
-    display_items(&files, config, &mut out);
+    display_items(&files, config, &mut out)?;
 
     for (pos, path_data) in dirs.iter().enumerate() {
         // Do read_dir call here to match GNU semantics by printing
@@ -1625,7 +1624,7 @@ fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         let read_dir = match fs::read_dir(&path_data.p_buf) {
             Err(err) => {
                 // flush stdout buffer before the error to preserve formatting and order
-                let _ = out.flush();
+                out.flush()?;
                 show!(LsError::IOErrorContext(err, path_data.p_buf.clone()));
                 continue;
             }
@@ -1635,12 +1634,12 @@ fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         // Print dir heading - name... 'total' comes after error display
         if initial_locs_len > 1 || config.recursive {
             if pos.eq(&0usize) && files.is_empty() {
-                let _ = writeln!(out, "{}:", path_data.p_buf.display());
+                writeln!(out, "{}:", path_data.p_buf.display())?;
             } else {
-                let _ = writeln!(out, "\n{}:", path_data.p_buf.display());
+                writeln!(out, "\n{}:", path_data.p_buf.display())?;
             }
         }
-        enter_directory(path_data, read_dir, config, &mut out);
+        enter_directory(path_data, read_dir, config, &mut out)?;
     }
 
     Ok(())
@@ -1714,7 +1713,7 @@ fn enter_directory(
     read_dir: ReadDir,
     config: &Config,
     out: &mut BufWriter<Stdout>,
-) {
+) -> UResult<()> {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
         vec![
@@ -1744,7 +1743,7 @@ fn enter_directory(
         let dir_entry = match raw_entry {
             Ok(path) => path,
             Err(err) => {
-                let _ = out.flush();
+                out.flush()?;
                 show!(LsError::IOError(err));
                 continue;
             }
@@ -1765,7 +1764,7 @@ fn enter_directory(
         display_total(&entries, config, out);
     }
 
-    display_items(&entries, config, out);
+    display_items(&entries, config, out)?;
 
     if config.recursive {
         for e in entries
@@ -1777,17 +1776,19 @@ fn enter_directory(
         {
             match fs::read_dir(&e.p_buf) {
                 Err(err) => {
-                    let _ = out.flush();
+                    out.flush()?;
                     show!(LsError::IOErrorContext(err, e.p_buf.clone()));
                     continue;
                 }
                 Ok(rd) => {
-                    let _ = writeln!(out, "\n{}:", e.p_buf.display());
-                    enter_directory(e, rd, config, out);
+                    writeln!(out, "\n{}:", e.p_buf.display())?;
+                    enter_directory(e, rd, config, out)?;
                 }
             }
         }
     }
+
+    Ok(())
 }
 
 fn get_metadata(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
@@ -1881,7 +1882,7 @@ fn display_more_info(
             } else {
                 "?".to_owned()
             };
-            result.push_str(&format!("{} ", pad_left(&i, padding.longest_inode_len)));
+            result.push_str(&format!("{} ", pad_left(&i, padding.inode)));
         }
     }
     if config.alloc_size {
@@ -1903,130 +1904,24 @@ fn display_more_info(
         };
         result.push_str(&format!(
             "{} ",
-            pad_left(&s, padding.longest_block_size_len),
+            pad_left(&s, padding.block_size),
         ));
     }
     result
 }
 
-fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
+fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) -> UResult<()> {
     // `-Z`, `--context`:
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
     // option, print the security context to the left of the size column.
 
-    #[cfg(unix)]
-    let mut longest_inode_len = 1;
-    #[cfg(unix)]
-    if config.inode {
-        for item in items {
-            let inode_len = if let Some(md) = item.md(out) {
-                display_inode(md).len()
-            } else {
-                continue;
-            };
-            longest_inode_len = inode_len.max(longest_inode_len);
-        }
-    }
-
-    let mut longest_block_size_len = 1;
-    if config.alloc_size {
-        for item in items {
-            if let Some(md) = item.md(out) {
-                let block_size_len = match config.size_format {
-                    SizeFormat::Bytes => {
-                        display_size(customize_block_size(get_block_size(md), config), config).len()
-                    }
-                    SizeFormat::Binary | SizeFormat::Decimal => {
-                        match display_size_or_rdev(md, config) {
-                            SizeOrDeviceId::Device(_, _) => 1usize,
-                            SizeOrDeviceId::Size(size) => size.len(),
-                        }
-                    }
-                };
-                longest_block_size_len = block_size_len.max(longest_block_size_len);
-            } else {
-                continue;
-            };
-        }
-    }
-
     if config.format == Format::Long {
-        #[cfg(unix)]
-        let (
-            mut longest_link_count_len,
-            mut longest_uname_len,
-            mut longest_group_len,
-            mut longest_context_len,
-            mut longest_size_len,
-            mut longest_major_len,
-            mut longest_minor_len,
-        ) = (1, 1, 1, 1, 1, 1, 1);
-
-        #[cfg(not(unix))]
-        let (
-            mut longest_link_count_len,
-            mut longest_uname_len,
-            mut longest_group_len,
-            mut longest_context_len,
-            mut longest_size_len,
-        ) = (1, 1, 1, 1, 1);
-
-        #[cfg(unix)]
-        for item in items {
-            let context_len = item.security_context.len();
-            let (link_count_len, uname_len, group_len, size_len, major_len, minor_len) =
-                display_dir_entry_size(item, config, out);
-            longest_link_count_len = link_count_len.max(longest_link_count_len);
-            longest_uname_len = uname_len.max(longest_uname_len);
-            longest_group_len = group_len.max(longest_group_len);
-            if config.context {
-                longest_context_len = context_len.max(longest_context_len);
-            }
-            if items.len() == 1usize {
-                longest_size_len = 0usize;
-                longest_major_len = 0usize;
-                longest_minor_len = 0usize;
-            } else {
-                longest_major_len = major_len.max(longest_major_len);
-                longest_minor_len = minor_len.max(longest_minor_len);
-                longest_size_len = size_len
-                    .max(longest_size_len)
-                    .max(longest_major_len + longest_minor_len + 2usize);
-            }
-        }
-
-        #[cfg(not(unix))]
-        for item in items {
-            let context_len = item.security_context.len();
-            let (link_count_len, uname_len, group_len, size_len, _major_len, _minor_len) =
-                display_dir_entry_size(item, config, out);
-            longest_link_count_len = link_count_len.max(longest_link_count_len);
-            longest_uname_len = uname_len.max(longest_uname_len);
-            longest_group_len = group_len.max(longest_group_len);
-            if config.context {
-                longest_context_len = context_len.max(longest_context_len);
-            }
-            longest_size_len = size_len.max(longest_size_len);
-        }
+        let padding_collection = calculate_padding_collection(items, config, out);
 
         for item in items {
-            let padding = &PaddingCollection {
-                longest_block_size_len,
-                #[cfg(unix)]
-                longest_inode_len,
-                longest_link_count_len,
-                longest_uname_len,
-                longest_group_len,
-                longest_context_len,
-                longest_size_len,
-                #[cfg(unix)]
-                longest_major_len,
-                #[cfg(unix)]
-                longest_minor_len,
-            };
             #[cfg(unix)]
             if config.inode || config.alloc_size {
-                let more_info = display_more_info(item, padding, config, out);
+                let more_info = display_more_info(item, &padding_collection, config, out);
                 let _ = write!(out, "{}", more_info);
             }
             #[cfg(not(unix))]
@@ -2034,7 +1929,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                 let more_info = display_more_info(item, padding, config, out);
                 let _ = write!(out, "{}", more_info);
             }
-            display_item_long(item, padding, config, out);
+            display_item_long(item, &padding_collection, config, out)?;
         }
     } else {
         let mut longest_context_len = 1;
@@ -2048,24 +1943,57 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             None
         };
 
-        let padding = PaddingCollection {
-            longest_block_size_len,
-            #[cfg(unix)]
-            longest_inode_len,
-            longest_link_count_len: 0usize,
-            longest_uname_len: 0usize,
-            longest_group_len: 0usize,
-            longest_context_len: 0usize,
-            longest_size_len: 0usize,
-            #[cfg(unix)]
-            longest_major_len: 0usize,
-            #[cfg(unix)]
-            longest_minor_len: 0usize,
-        };
-
         let mut names_vec = Vec::new();
 
+        #[cfg(unix)]
+        let mut inode = 0;
+        let mut block_size = 0;
+        
         for i in items {
+            #[cfg(unix)]
+            if config.inode {
+                let inode_len = if let Some(md) = i.md(out) {
+                    display_inode(md).len()
+                } else {
+                    continue;
+                };
+                inode = inode_len.max(inode);
+            }
+
+            if config.alloc_size {
+                if let Some(md) = i.md(out) {
+                    let block_size_len = match config.size_format {
+                        SizeFormat::Bytes => {
+                            display_size(customize_block_size(get_block_size(md), config), config).len()
+                        }
+                        SizeFormat::Binary | SizeFormat::Decimal => {
+                            match display_size_or_rdev(md, config) {
+                                SizeOrDeviceId::Device(_, _) => 1usize,
+                                SizeOrDeviceId::Size(size) => size.len(),
+                            }
+                        }
+                    };
+                    block_size = block_size_len.max(block_size);
+                }
+            }
+        }
+
+        for i in items {
+            let padding = PaddingCollection {
+                #[cfg(unix)]
+                inode,
+                uname: 0usize,
+                group: 0usize,
+                link_count: 0usize,
+                context: 0usize,
+                size: 0usize,
+                #[cfg(unix)]
+                major: 0usize,
+                #[cfg(unix)]
+                minor: 0usize,
+                block_size,
+            };
+
             let more_info = display_more_info(i, &padding, config, out);
             let cell = display_file_name(i, config, prefix_context, more_info, out);
             names_vec.push(cell);
@@ -2074,13 +2002,13 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         let names = names_vec.into_iter();
 
         match config.format {
-            Format::Columns => display_grid(names, config.width, Direction::TopToBottom, out),
-            Format::Across => display_grid(names, config.width, Direction::LeftToRight, out),
+            Format::Columns => display_grid(names, config.width, Direction::TopToBottom, out)?,
+            Format::Across => display_grid(names, config.width, Direction::LeftToRight, out)?,
             Format::Commas => {
                 let mut current_col = 0;
                 let mut names = names;
                 if let Some(name) = names.next() {
-                    let _ = write!(out, "{}", name.contents);
+                    write!(out, "{}", name.contents)?;
                     current_col = name.width as u16 + 2;
                 }
                 for name in names {
@@ -2088,25 +2016,27 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                     // If the width is 0 we print one single line
                     if config.width != 0 && current_col + name_width + 1 > config.width {
                         current_col = name_width + 2;
-                        let _ = write!(out, ",\n{}", name.contents);
+                        write!(out, ",\n{}", name.contents)?;
                     } else {
                         current_col += name_width + 2;
-                        let _ = write!(out, ", {}", name.contents);
+                        write!(out, ", {}", name.contents)?;
                     }
                 }
                 // Current col is never zero again if names have been printed.
                 // So we print a newline.
                 if current_col > 0 {
-                    let _ = writeln!(out,);
+                    writeln!(out,)?;
                 }
             }
             _ => {
                 for name in names {
-                    let _ = writeln!(out, "{}", name.contents);
+                    writeln!(out, "{}", name.contents)?;
                 }
             }
-        }
+        };
     }
+
+    Ok(())
 }
 
 fn get_block_size(md: &Metadata) -> u64 {
@@ -2130,19 +2060,19 @@ fn display_grid(
     width: u16,
     direction: Direction,
     out: &mut BufWriter<Stdout>,
-) {
+) -> UResult<()> {
     if width == 0 {
         // If the width is 0 we print one single line
         let mut printed_something = false;
         for name in names {
             if printed_something {
-                let _ = write!(out, "  ");
+                write!(out, "  ")?;
             }
             printed_something = true;
-            let _ = write!(out, "{}", name.contents);
+            write!(out, "{}", name.contents)?;
         }
         if printed_something {
-            let _ = writeln!(out);
+            writeln!(out)?;
         }
     } else {
         let mut grid = Grid::new(GridOptions {
@@ -2156,14 +2086,15 @@ fn display_grid(
 
         match grid.fit_into_width(width as usize) {
             Some(output) => {
-                let _ = write!(out, "{}", output);
+                write!(out, "{}", output)?;
             }
             // Width is too small for the grid, so we fit it in one column
             None => {
-                let _ = write!(out, "{}", grid.fit_into_columns(1));
+                write!(out, "{}", grid.fit_into_columns(1))?;
             }
         }
     }
+    Ok(())
 }
 
 /// This writes to the BufWriter out a single string of the output of `ls -l`.
@@ -2199,7 +2130,7 @@ fn display_item_long(
     padding: &PaddingCollection,
     config: &Config,
     out: &mut BufWriter<Stdout>,
-) {
+) -> UResult<()> {
     if let Some(md) = item.md(out) {
         let _ = write!(
             out,
@@ -2212,49 +2143,49 @@ fn display_item_long(
             } else {
                 ""
             },
-            pad_left(&display_symlink_count(md), padding.longest_link_count_len),
-        );
+            pad_left(&display_symlink_count(md), padding.link_count)
+        )?;
 
         if config.long.owner {
-            let _ = write!(
+            write!(
                 out,
                 " {}",
-                pad_right(&display_uname(md, config), padding.longest_uname_len),
-            );
+                pad_right(&display_uname(md, config), padding.uname)
+            )?;
         }
 
         if config.long.group {
-            let _ = write!(
+            write!(
                 out,
                 " {}",
-                pad_right(&display_group(md, config), padding.longest_group_len),
-            );
+                pad_right(&display_group(md, config), padding.group)
+            )?;
         }
 
         if config.context {
-            let _ = write!(
+            write!(
                 out,
                 " {}",
-                pad_right(&item.security_context, padding.longest_context_len),
-            );
+                pad_right(&item.security_context, padding.context)
+            )?;
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
         // the owner, since GNU/Hurd is not currently supported by Rust.
         if config.long.author {
-            let _ = write!(
+            write!(
                 out,
                 " {}",
-                pad_right(&display_uname(md, config), padding.longest_uname_len),
-            );
+                pad_right(&display_uname(md, config), padding.uname)
+            )?;
         }
 
         match display_size_or_rdev(md, config) {
             SizeOrDeviceId::Size(size) => {
-                let _ = write!(out, " {}", pad_left(&size, padding.longest_size_len),);
+                write!(out, " {}", pad_left(&size, padding.size))?;
             }
             SizeOrDeviceId::Device(major, minor) => {
-                let _ = write!(
+                write!(
                     out,
                     " {}, {}",
                     pad_left(
@@ -2262,10 +2193,10 @@ fn display_item_long(
                         #[cfg(not(unix))]
                         0usize,
                         #[cfg(unix)]
-                        padding.longest_major_len.max(
+                        padding.major.max(
                             padding
-                                .longest_size_len
-                                .saturating_sub(padding.longest_minor_len.saturating_add(2usize))
+                                .size
+                                .saturating_sub(padding.minor.saturating_add(2usize))
                         )
                     ),
                     pad_left(
@@ -2273,15 +2204,15 @@ fn display_item_long(
                         #[cfg(not(unix))]
                         0usize,
                         #[cfg(unix)]
-                        padding.longest_minor_len,
+                        padding.minor,
                     ),
-                );
+                )?;
             }
         };
 
         let dfn = display_file_name(item, config, None, "".to_owned(), out).contents;
 
-        let _ = writeln!(out, " {} {}", display_date(md, config), dfn);
+        writeln!(out, " {} {}", display_date(md, config), dfn)?;
     } else {
         #[cfg(unix)]
         let leading_char = {
@@ -2316,7 +2247,7 @@ fn display_item_long(
             }
         };
 
-        let _ = write!(
+        write!(
             out,
             "{}{} {}",
             format_args!("{}?????????", leading_char),
@@ -2327,42 +2258,44 @@ fn display_item_long(
             } else {
                 ""
             },
-            pad_left("?", padding.longest_link_count_len),
-        );
+            pad_left("?", padding.link_count)
+        )?;
 
         if config.long.owner {
-            let _ = write!(out, " {}", pad_right("?", padding.longest_uname_len));
+            write!(out, " {}", pad_right("?", padding.uname))?;
         }
 
         if config.long.group {
-            let _ = write!(out, " {}", pad_right("?", padding.longest_group_len));
+            write!(out, " {}", pad_right("?", padding.group))?;
         }
 
         if config.context {
-            let _ = write!(
+            write!(
                 out,
                 " {}",
-                pad_right(&item.security_context, padding.longest_context_len)
-            );
+                pad_right(&item.security_context, padding.context)
+            )?;
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
         // the owner, since GNU/Hurd is not currently supported by Rust.
         if config.long.author {
-            let _ = write!(out, " {}", pad_right("?", padding.longest_uname_len));
+            write!(out, " {}", pad_right("?", padding.uname))?;
         }
 
         let dfn = display_file_name(item, config, None, "".to_owned(), out).contents;
         let date_len = 12;
 
-        let _ = writeln!(
+        writeln!(
             out,
             " {} {} {}",
-            pad_left("?", padding.longest_size_len),
+            pad_left("?", padding.size),
             pad_left("?", date_len),
             dfn,
-        );
+        )?;
     }
+
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -2804,4 +2737,111 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
     } else {
         substitute_string
     }
+}
+
+#[cfg(unix)]
+fn calculate_padding_collection(
+    items: &[PathData],
+    config: &Config,
+    out: &mut BufWriter<Stdout>,
+) -> PaddingCollection {
+    let mut padding_collections = PaddingCollection {
+        inode: 1,
+        link_count: 1,
+        uname: 1,
+        group: 1,
+        context: 1,
+        size: 1,
+        major: 1,
+        minor: 1,
+        block_size: 1,
+    };
+
+    for item in items {
+
+        #[cfg(unix)]
+        let mut inode = 1;
+        #[cfg(unix)]
+        if config.inode {
+            let inode_len = if let Some(md) = item.md(out) {
+                display_inode(md).len()
+            } else {
+                continue;
+            };
+            inode = inode_len.max(inode);
+            padding_collections.inode = inode;
+        }
+
+        let mut block_size = 1;
+        if config.alloc_size {
+            if let Some(md) = item.md(out) {
+                let block_size_len = match config.size_format {
+                    SizeFormat::Bytes => {
+                        display_size(customize_block_size(get_block_size(md), config), config).len()
+                    }
+                    SizeFormat::Binary | SizeFormat::Decimal => {
+                        match display_size_or_rdev(md, config) {
+                            SizeOrDeviceId::Device(_, _) => 1usize,
+                            SizeOrDeviceId::Size(size) => size.len(),
+                        }
+                    }
+                };
+                block_size = block_size_len.max(block_size);
+            }
+            padding_collections.block_size = block_size;
+        }
+
+        let context_len = item.security_context.len();
+        let (link_count_len, uname_len, group_len, size_len, major_len, minor_len) =
+            display_dir_entry_size(item, config, out);
+        padding_collections.link_count = link_count_len.max(padding_collections.link_count);
+        padding_collections.uname = uname_len.max(padding_collections.uname);
+        padding_collections.group = group_len.max(padding_collections.group);
+        if config.context {
+            padding_collections.context = context_len.max(padding_collections.context);
+        }
+        if items.len() == 1usize {
+            padding_collections.size = 0usize;
+            padding_collections.major = 0usize;
+            padding_collections.minor = 0usize;
+        } else {
+            padding_collections.major = major_len.max(padding_collections.major);
+            padding_collections.minor = minor_len.max(padding_collections.minor);
+            padding_collections.size = size_len
+                .max(padding_collections.size)
+                .max(padding_collections.major + padding_collections.minor + 2usize);
+        }
+    }
+
+    padding_collections
+}
+
+#[cfg(not(unix))]
+fn calculate_padding_collection(
+    items: &[PathData],
+    config: &Config,
+    out: &mut BufWriter<Stdout>,
+) -> PaddingCollection {
+    let mut padding_collections = PaddingCollection {
+        link_count: 1,
+        uname: 1,
+        group: 1,
+        context: 1,
+        size: 1,
+    };
+
+    for item in items {
+        let context_len = item.security_context.len();
+        let (link_count_len, uname_len, group_len, size_len, _major_len, _minor_len, _inode_len) =
+            display_dir_entry_size(item, config, out);
+        padding_collections.link_count = link_count_len.max(padding_collections.link_count);
+        padding_collections.uname = uname_len.max(padding_collections.uname);
+        padding_collections.group = group_len.max(padding_collections.group);
+        if config.context {
+            padding_collections.context = context_len.max(padding_collections.context);
+        }
+        padding_collections.size = size_len.max(padding_collections.size);
+    }
+
+    padding_collections
 }

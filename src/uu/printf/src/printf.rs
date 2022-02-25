@@ -4,12 +4,12 @@
 
 use clap::{crate_version, App, AppSettings, Arg};
 use uucore::error::{UResult, UUsageError};
-use uucore::memo;
 use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, memo};
 
 const VERSION: &str = "version";
 const HELP: &str = "help";
-const USAGE: &str = "printf FORMATSTRING [ARGUMENT]...";
+const USAGE: &str = "{} FORMATSTRING [ARGUMENT]...";
 const ABOUT: &str = "Print output based off of the format string and proceeding arguments.";
 const AFTER_HELP: &str = "
 basic anonymous string templating:
@@ -284,7 +284,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec![],
     };
 
-    memo::Memo::run_all(format_string, &values[..]);
+    memo::Memo::run_all(format_string, &values[..])?;
     Ok(())
 }
 
@@ -294,7 +294,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
-        .override_usage(USAGE)
+        .override_usage(format_usage(USAGE))
         .arg(Arg::new(HELP).long(HELP).help("Print help information"))
         .arg(
             Arg::new(VERSION)

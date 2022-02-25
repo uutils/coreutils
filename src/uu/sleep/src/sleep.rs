@@ -8,11 +8,17 @@
 use std::thread;
 use std::time::Duration;
 
-use uucore::error::{UResult, USimpleError};
+use uucore::{
+    error::{UResult, USimpleError},
+    format_usage,
+};
 
 use clap::{crate_version, App, AppSettings, Arg};
 
 static ABOUT: &str = "Pause for NUMBER seconds.";
+const USAGE: &str = "\
+    {} NUMBER[SUFFIX]...
+    {} OPTION";
 static LONG_HELP: &str = "Pause for NUMBER seconds.  SUFFIX may be 's' for seconds (the default),
 'm' for minutes, 'h' for hours or 'd' for days.  Unlike most implementations
 that require NUMBER be an integer, here NUMBER may be an arbitrary floating
@@ -23,19 +29,9 @@ mod options {
     pub const NUMBER: &str = "NUMBER";
 }
 
-fn usage() -> String {
-    format!(
-        "{0} {1}[SUFFIX]... \n    {0} OPTION",
-        uucore::execution_phrase(),
-        options::NUMBER
-    )
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     if let Some(values) = matches.values_of(options::NUMBER) {
         let numbers = values.collect::<Vec<_>>();
@@ -50,6 +46,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::NUMBER)

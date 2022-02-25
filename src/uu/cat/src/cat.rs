@@ -36,10 +36,10 @@ use std::net::Shutdown;
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use unix_socket::UnixStream;
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static NAME: &str = "cat";
-static SYNTAX: &str = "[OPTION]... [FILE]...";
+static USAGE: &str = "{} [OPTION]... [FILE]...";
 static SUMMARY: &str = "Concatenate FILE(s), or standard input, to standard output
  With no FILE, or when FILE is -, read standard input.";
 
@@ -243,7 +243,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .override_usage(SYNTAX)
+        .override_usage(format_usage(USAGE))
         .about(SUMMARY)
         .setting(AppSettings::InferLongArgs)
         .arg(
@@ -325,15 +325,15 @@ fn cat_path(
     state: &mut OutputState,
     out_info: Option<&FileInformation>,
 ) -> CatResult<()> {
-    if path == "-" {
-        let stdin = io::stdin();
-        let mut handle = InputHandle {
-            reader: stdin,
-            is_interactive: atty::is(atty::Stream::Stdin),
-        };
-        return cat_handle(&mut handle, options, state);
-    }
     match get_input_type(path)? {
+        InputType::StdIn => {
+            let stdin = io::stdin();
+            let mut handle = InputHandle {
+                reader: stdin,
+                is_interactive: atty::is(atty::Stream::Stdin),
+            };
+            cat_handle(&mut handle, options, state)
+        }
         InputType::Directory => Err(CatError::IsDirectory),
         #[cfg(unix)]
         InputType::Socket => {
@@ -560,13 +560,12 @@ fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
         {
             Some(p) => {
                 writer.write_all(&in_buf[..p]).unwrap();
-                if in_buf[p] == b'\n' {
-                    return count + p;
-                } else if in_buf[p] == b'\t' {
+                if in_buf[p] == b'\t' {
                     writer.write_all(b"^I").unwrap();
                     in_buf = &in_buf[p + 1..];
                     count += p + 1;
                 } else {
+                    // b'\n' or b'\r'
                     return count + p;
                 }
             }
@@ -589,10 +588,10 @@ fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) ->
             9 => writer.write_all(tab),
             0..=8 | 10..=31 => writer.write_all(&[b'^', byte + 64]),
             32..=126 => writer.write_all(&[byte]),
-            127 => writer.write_all(&[b'^', byte - 64]),
+            127 => writer.write_all(&[b'^', b'?']),
             128..=159 => writer.write_all(&[b'M', b'-', b'^', byte - 64]),
             160..=254 => writer.write_all(&[b'M', b'-', byte - 128]),
-            _ => writer.write_all(&[b'M', b'-', b'^', 63]),
+            _ => writer.write_all(&[b'M', b'-', b'^', b'?']),
         }
         .unwrap();
         count += 1;

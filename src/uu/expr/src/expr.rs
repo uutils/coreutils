@@ -14,12 +14,23 @@ mod tokens;
 
 const VERSION: &str = "version";
 const HELP: &str = "help";
+static ABOUT: &str = "Print the value of EXPRESSION to standard output";
+static USAGE: &str = r#"
+    expr [EXPRESSION]
+    expr [OPTIONS]"#;
 
 pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
+        .version(crate_version!())
+        .about(ABOUT)
+        .override_usage(USAGE)
         .setting(AppSettings::InferLongArgs)
-        .arg(Arg::new(VERSION).long(VERSION))
-        .arg(Arg::new(HELP).long(HELP))
+        .arg(
+            Arg::new(VERSION)
+                .long(VERSION)
+                .help("output version information and exit"),
+        )
+        .arg(Arg::new(HELP).long(HELP).help("display this help and exit"))
 }
 
 #[uucore::main]

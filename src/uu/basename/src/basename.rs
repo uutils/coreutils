@@ -11,18 +11,13 @@ use clap::{crate_version, App, AppSettings, Arg};
 use std::path::{is_separator, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError};
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static SUMMARY: &str = "Print NAME with any leading directory components removed
 If specified, also remove a trailing SUFFIX";
 
-fn usage() -> String {
-    format!(
-        "{0} NAME [SUFFIX]
-    {0} OPTION... NAME...",
-        uucore::execution_phrase()
-    )
-}
+const USAGE: &str = "{} NAME [SUFFIX]
+    {} OPTION... NAME...";
 
 pub mod options {
     pub static MULTIPLE: &str = "multiple";
@@ -36,11 +31,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
-    let usage = usage();
     //
     // Argument parsing
     //
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     // too few arguments
     if !matches.is_present(options::NAME) {
@@ -97,6 +91,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::MULTIPLE)

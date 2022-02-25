@@ -5,10 +5,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat seekable
-
-#[cfg(test)]
-mod dd_unit_tests;
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable
 
 mod datastructures;
 use datastructures::*;
@@ -19,35 +16,32 @@ use parseargs::Matches;
 mod conversion_tables;
 use conversion_tables::*;
 
+mod progress;
+use progress::{gen_prog_updater, ProgUpdate, ReadStat, StatusLevel, WriteStat};
+
+mod blocks;
+use blocks::conv_block_unblock_helper;
+
 use std::cmp;
 use std::convert::TryInto;
 use std::env;
-#[cfg(target_os = "linux")]
-use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, Write};
 #[cfg(target_os = "linux")]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 use std::sync::mpsc;
-#[cfg(target_os = "linux")]
-use std::sync::{atomic::AtomicUsize, atomic::Ordering, Arc};
 use std::thread;
 use std::time;
 
-use byte_unit::Byte;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use gcd::Gcd;
-#[cfg(target_os = "linux")]
-use signal_hook::consts::signal;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::InvalidEncodingHandling;
+use uucore::error::{FromIo, UResult};
+use uucore::{show_error, InvalidEncodingHandling};
 
 const ABOUT: &str = "copy, and optionally convert, a file system resource";
 const BUF_INIT_BYTE: u8 = 0xDD;
-const NEWLINE: u8 = b'\n';
-const SPACE: u8 = b' ';
 
 struct Input<R: Read> {
     src: R,
@@ -80,9 +74,14 @@ impl Input<io::Stdin> {
         };
 
         if let Some(amt) = skip {
-            let mut buf = vec![BUF_INIT_BYTE; amt];
-            i.force_fill(&mut buf, amt)
-                .map_err_context(|| "failed to read input".to_string())?;
+            if let Err(e) = i.read_skip(amt) {
+                if let io::ErrorKind::UnexpectedEof = e.kind() {
+                    show_error!("'standard input': cannot skip to specified offset");
+                } else {
+                    return io::Result::Err(e)
+                        .map_err_context(|| "I/O error while skipping".to_string());
+                }
+            }
         }
 
         Ok(i)
@@ -150,9 +149,6 @@ impl Input<File> {
             };
 
             if let Some(amt) = skip {
-                let amt: u64 = amt
-                    .try_into()
-                    .map_err(|_| USimpleError::new(1, "failed to parse seek amount"))?;
                 src.seek(io::SeekFrom::Start(amt))
                     .map_err_context(|| "failed to seek in input file".to_string())?;
             }
@@ -264,17 +260,18 @@ impl<R: Read> Input<R> {
         })
     }
 
-    /// Force-fills a buffer, ignoring zero-length reads which would otherwise be
-    /// interpreted as EOF.
-    /// Note: This will not return unless the source (eventually) produces
-    /// enough bytes to meet target_len.
-    fn force_fill(&mut self, buf: &mut [u8], target_len: usize) -> std::io::Result<usize> {
-        let mut base_idx = 0;
-        while base_idx < target_len {
-            base_idx += self.read(&mut buf[base_idx..target_len])?;
+    /// Skips amount_to_read bytes from the Input by copying into a sink
+    fn read_skip(&mut self, amount_to_read: u64) -> std::io::Result<()> {
+        let copy_result = io::copy(&mut self.src.by_ref().take(amount_to_read), &mut io::sink());
+        if let Ok(n) = copy_result {
+            if n != amount_to_read {
+                io::Result::Err(io::Error::new(io::ErrorKind::UnexpectedEof, ""))
+            } else {
+                Ok(())
+            }
+        } else {
+            io::Result::Err(copy_result.unwrap_err())
         }
-
-        Ok(base_idx)
     }
 }
 
@@ -301,8 +298,7 @@ impl OutputTrait for Output<io::Stdout> {
 
         // stdout is not seekable, so we just write null bytes.
         if let Some(amt) = seek {
-            let bytes = vec![b'\0'; amt];
-            dst.write_all(&bytes)
+            io::copy(&mut io::repeat(0u8).take(amt as u64), &mut dst)
                 .map_err_context(|| String::from("write error"))?;
         }
 
@@ -328,16 +324,13 @@ where
         let mut bytes_total = 0;
 
         for chunk in buf.chunks(self.obs) {
-            match self.write(chunk)? {
-                wlen if wlen < chunk.len() => {
-                    writes_partial += 1;
-                    bytes_total += wlen;
-                }
-                wlen => {
-                    writes_complete += 1;
-                    bytes_total += wlen;
-                }
+            let wlen = self.write(chunk)?;
+            if wlen < self.obs {
+                writes_partial += 1;
+            } else {
+                writes_complete += 1;
             }
+            bytes_total += wlen;
         }
 
         Ok(WriteStat {
@@ -351,8 +344,8 @@ where
     fn print_stats<R: Read>(&self, i: &Input<R>, prog_update: &ProgUpdate) {
         match i.print_level {
             Some(StatusLevel::None) => {}
-            Some(StatusLevel::Noxfer) => print_io_lines(prog_update),
-            Some(StatusLevel::Progress) | None => print_transfer_stats(prog_update),
+            Some(StatusLevel::Noxfer) => prog_update.print_io_lines(),
+            Some(StatusLevel::Progress) | None => prog_update.print_transfer_stats(),
         }
     }
 
@@ -521,10 +514,17 @@ impl OutputTrait for Output<File> {
             let mut dst = open_dst(Path::new(&fname), &cflags, &oflags)
                 .map_err_context(|| format!("failed to open {}", fname.quote()))?;
 
-            let i = seek.unwrap_or(0).try_into().unwrap();
+            // Seek to the index in the output file, truncating if requested.
+            //
+            // Calling `set_len()` may result in an error (for
+            // example, when calling it on `/dev/null`), but we don't
+            // want to terminate the process when that happens.
+            // Instead, we suppress the error by calling
+            // `Result::ok()`. This matches the behavior of GNU `dd`
+            // when given the command-line argument `of=/dev/null`.
+            let i = seek.unwrap_or(0);
             if !cflags.notrunc {
-                dst.set_len(i)
-                    .map_err_context(|| "failed to truncate output file".to_string())?;
+                dst.set_len(i).ok();
             }
             dst.seek(io::SeekFrom::Start(i))
                 .map_err_context(|| "failed to seek in output file".to_string())?;
@@ -589,146 +589,6 @@ impl Write for Output<io::Stdout> {
     }
 }
 
-/// Splits the content of buf into cbs-length blocks
-/// Appends padding as specified by conv=block and cbs=N
-/// Expects ascii encoded data
-fn block(buf: &[u8], cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
-    let mut blocks = buf
-        .split(|&e| e == NEWLINE)
-        .map(|split| split.to_vec())
-        .fold(Vec::new(), |mut blocks, mut split| {
-            if split.len() > cbs {
-                rstat.records_truncated += 1;
-            }
-            split.resize(cbs, SPACE);
-            blocks.push(split);
-
-            blocks
-        });
-
-    if let Some(last) = blocks.last() {
-        if last.iter().all(|&e| e == SPACE) {
-            blocks.pop();
-        }
-    }
-
-    blocks
-}
-
-/// Trims padding from each cbs-length partition of buf
-/// as specified by conv=unblock and cbs=N
-/// Expects ascii encoded data
-fn unblock(buf: &[u8], cbs: usize) -> Vec<u8> {
-    buf.chunks(cbs).fold(Vec::new(), |mut acc, block| {
-        if let Some(last_char_idx) = block.iter().rposition(|&e| e != SPACE) {
-            // Include text up to last space.
-            acc.extend(&block[..=last_char_idx]);
-        }
-
-        acc.push(NEWLINE);
-        acc
-    })
-}
-
-/// A helper for teasing out which options must be applied and in which order.
-/// Some user options, such as the presence of conversion tables, will determine whether the input is assumed to be ascii. The parser sets the Input::non_ascii flag accordingly.
-/// Examples:
-///     - If conv=ebcdic or conv=ibm is specified then block, unblock or swab must be performed before the conversion happens since the source will start in ascii.
-///     - If conv=ascii is specified then block, unblock or swab must be performed after the conversion since the source starts in ebcdic.
-///     - If no conversion is specified then the source is assumed to be in ascii.
-/// For more info see `info dd`
-fn conv_block_unblock_helper<R: Read>(
-    mut buf: Vec<u8>,
-    i: &mut Input<R>,
-    rstat: &mut ReadStat,
-) -> Result<Vec<u8>, InternalError> {
-    // Local Predicate Fns -------------------------------------------------
-    fn should_block_then_conv<R: Read>(i: &Input<R>) -> bool {
-        !i.non_ascii && i.cflags.block.is_some()
-    }
-    fn should_conv_then_block<R: Read>(i: &Input<R>) -> bool {
-        i.non_ascii && i.cflags.block.is_some()
-    }
-    fn should_unblock_then_conv<R: Read>(i: &Input<R>) -> bool {
-        !i.non_ascii && i.cflags.unblock.is_some()
-    }
-    fn should_conv_then_unblock<R: Read>(i: &Input<R>) -> bool {
-        i.non_ascii && i.cflags.unblock.is_some()
-    }
-    fn conv_only<R: Read>(i: &Input<R>) -> bool {
-        i.cflags.ctable.is_some() && i.cflags.block.is_none() && i.cflags.unblock.is_none()
-    }
-    // Local Helper Fns ----------------------------------------------------
-    fn apply_conversion(buf: &mut [u8], ct: &ConversionTable) {
-        for idx in 0..buf.len() {
-            buf[idx] = ct[buf[idx] as usize];
-        }
-    }
-    // --------------------------------------------------------------------
-    if conv_only(i) {
-        // no block/unblock
-        let ct = i.cflags.ctable.unwrap();
-        apply_conversion(&mut buf, ct);
-
-        Ok(buf)
-    } else if should_block_then_conv(i) {
-        // ascii input so perform the block first
-        let cbs = i.cflags.block.unwrap();
-
-        let mut blocks = block(&buf, cbs, rstat);
-
-        if let Some(ct) = i.cflags.ctable {
-            for buf in &mut blocks {
-                apply_conversion(buf, ct);
-            }
-        }
-
-        let blocks = blocks.into_iter().flatten().collect();
-
-        Ok(blocks)
-    } else if should_conv_then_block(i) {
-        // Non-ascii so perform the conversion first
-        let cbs = i.cflags.block.unwrap();
-
-        if let Some(ct) = i.cflags.ctable {
-            apply_conversion(&mut buf, ct);
-        }
-
-        let blocks = block(&buf, cbs, rstat).into_iter().flatten().collect();
-
-        Ok(blocks)
-    } else if should_unblock_then_conv(i) {
-        // ascii input so perform the unblock first
-        let cbs = i.cflags.unblock.unwrap();
-
-        let mut buf = unblock(&buf, cbs);
-
-        if let Some(ct) = i.cflags.ctable {
-            apply_conversion(&mut buf, ct);
-        }
-
-        Ok(buf)
-    } else if should_conv_then_unblock(i) {
-        // Non-ascii input so perform the conversion first
-        let cbs = i.cflags.unblock.unwrap();
-
-        if let Some(ct) = i.cflags.ctable {
-            apply_conversion(&mut buf, ct);
-        }
-
-        let buf = unblock(&buf, cbs);
-
-        Ok(buf)
-    } else {
-        // The following error should not happen, as it results from
-        // insufficient command line data. This case should be caught
-        // by the parser before making it this far.
-        // Producing this error is an alternative to risking an unwrap call
-        // on 'cbs' if the required data is not provided.
-        Err(InternalError::InvalidConvBlockUnblockCase)
-    }
-}
-
 /// Read helper performs read operations common to all dd reads, and dispatches the buffer to relevant helper functions as dictated by the operations requested by the user.
 fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> std::io::Result<(ReadStat, Vec<u8>)> {
     // Local Predicate Fns -----------------------------------------------
@@ -771,109 +631,6 @@ fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> std::io::Result<(Read
     }
 }
 
-// Print io lines of a status update:
-// <complete>+<partial> records in
-// <complete>+<partial> records out
-fn print_io_lines(update: &ProgUpdate) {
-    eprintln!(
-        "{}+{} records in",
-        update.read_stat.reads_complete, update.read_stat.reads_partial
-    );
-    if update.read_stat.records_truncated > 0 {
-        eprintln!("{} truncated records", update.read_stat.records_truncated);
-    }
-    eprintln!(
-        "{}+{} records out",
-        update.write_stat.writes_complete, update.write_stat.writes_partial
-    );
-}
-// Print the progress line of a status update:
-// <byte-count> bytes (<base-1000-size>, <base-2-size>) copied, <time> s, <base-2-rate>/s
-fn make_prog_line(update: &ProgUpdate) -> String {
-    let btotal_metric = Byte::from_bytes(update.write_stat.bytes_total)
-        .get_appropriate_unit(false)
-        .format(0);
-    let btotal_bin = Byte::from_bytes(update.write_stat.bytes_total)
-        .get_appropriate_unit(true)
-        .format(0);
-    let safe_millis = cmp::max(1, update.duration.as_millis());
-    let transfer_rate = Byte::from_bytes(1000 * (update.write_stat.bytes_total / safe_millis))
-        .get_appropriate_unit(false)
-        .format(1);
-
-    format!(
-        "{} bytes ({}, {}) copied, {:.1} s, {}/s",
-        update.write_stat.bytes_total,
-        btotal_metric,
-        btotal_bin,
-        update.duration.as_secs_f64(),
-        transfer_rate
-    )
-}
-// Print progress line only. Overwrite the current line.
-fn reprint_prog_line(update: &ProgUpdate) {
-    eprint!("\r{}", make_prog_line(update));
-}
-// Print progress line only. Print as a new line.
-fn print_prog_line(update: &ProgUpdate) {
-    eprintln!("{}", make_prog_line(update));
-}
-// Print both io lines and progress line.
-fn print_transfer_stats(update: &ProgUpdate) {
-    print_io_lines(update);
-    print_prog_line(update);
-}
-
-// Generate a progress updater that tracks progress, receives updates, and responds to progress update requests (signals).
-// Signals:
-// - SIGUSR1: Trigger progress line reprint. Linux (GNU & BSD) only.
-// - TODO: SIGINFO: Trigger progress line reprint. BSD-style Linux only.
-fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, print_level: Option<StatusLevel>) -> impl Fn() {
-    // --------------------------------------------------------------
-    #[cfg(target_os = "linux")]
-    const SIGUSR1_USIZE: usize = signal::SIGUSR1 as usize;
-    // --------------------------------------------------------------
-    #[cfg(target_os = "linux")]
-    fn posixly_correct() -> bool {
-        env::var("POSIXLY_CORRECT").is_ok()
-    }
-    #[cfg(target_os = "linux")]
-    fn register_linux_signal_handler(sigval: Arc<AtomicUsize>) -> Result<(), Box<dyn Error>> {
-        if !posixly_correct() {
-            signal_hook::flag::register_usize(signal::SIGUSR1, sigval, SIGUSR1_USIZE)?;
-        }
-
-        Ok(())
-    }
-    // --------------------------------------------------------------
-    move || {
-        #[cfg(target_os = "linux")]
-        let sigval = Arc::new(AtomicUsize::new(0));
-
-        #[cfg(target_os = "linux")]
-        register_linux_signal_handler(sigval.clone()).unwrap_or_else(|e| {
-            if Some(StatusLevel::None) != print_level {
-                eprintln!(
-                    "Internal dd Warning: Unable to register signal handler \n\t{}",
-                    e
-                );
-            }
-        });
-
-        while let Ok(update) = rx.recv() {
-            // (Re)print status line if progress is requested.
-            if Some(StatusLevel::Progress) == print_level {
-                reprint_prog_line(&update);
-            }
-            // Handle signals
-            #[cfg(target_os = "linux")]
-            if let SIGUSR1_USIZE = sigval.load(Ordering::Relaxed) {
-                print_transfer_stats(&update);
-            };
-        }
-    }
-}
-
 // Calculate a 'good' internal buffer size.
 // For performance of the read/write functions, the buffer should hold
 // both an integral number of reads and an integral number of writes. For
@@ -897,15 +654,14 @@ fn calc_loop_bsize(
 ) -> usize {
     match count {
         Some(CountType::Reads(rmax)) => {
-            let rmax: u64 = (*rmax).try_into().unwrap();
             let rsofar = rstat.reads_complete + rstat.reads_partial;
-            let rremain: usize = (rmax - rsofar).try_into().unwrap();
-            cmp::min(ideal_bsize, rremain * ibs)
+            let rremain = rmax - rsofar;
+            cmp::min(ideal_bsize as u64, rremain * ibs as u64) as usize
         }
         Some(CountType::Bytes(bmax)) => {
             let bmax: u128 = (*bmax).try_into().unwrap();
-            let bremain: usize = (bmax - wstat.bytes_total).try_into().unwrap();
-            cmp::min(ideal_bsize, bremain)
+            let bremain: u128 = bmax - wstat.bytes_total;
+            cmp::min(ideal_bsize as u128, bremain as u128) as usize
         }
         None => ideal_bsize,
     }
@@ -916,7 +672,7 @@ fn calc_loop_bsize(
 fn below_count_limit(count: &Option<CountType>, rstat: &ReadStat, wstat: &WriteStat) -> bool {
     match count {
         Some(CountType::Reads(n)) => {
-            let n = (*n).try_into().unwrap();
+            let n = *n;
             rstat.reads_complete + rstat.reads_partial <= n
         }
         Some(CountType::Bytes(n)) => {
@@ -982,6 +738,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::INFILE)
                 .long(options::INFILE)
+                .overrides_with(options::INFILE)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("FILE")
@@ -990,6 +747,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::OUTFILE)
                 .long(options::OUTFILE)
+                .overrides_with(options::OUTFILE)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("FILE")
@@ -998,6 +756,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::IBS)
                 .long(options::IBS)
+                .overrides_with(options::IBS)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1006,6 +765,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::OBS)
                 .long(options::OBS)
+                .overrides_with(options::OBS)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1014,6 +774,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::BS)
                 .long(options::BS)
+                .overrides_with(options::BS)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1022,6 +783,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::CBS)
                 .long(options::CBS)
+                .overrides_with(options::CBS)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1030,6 +792,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::SKIP)
                 .long(options::SKIP)
+                .overrides_with(options::SKIP)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1038,6 +801,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::SEEK)
                 .long(options::SEEK)
+                .overrides_with(options::SEEK)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1046,6 +810,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::COUNT)
                 .long(options::COUNT)
+                .overrides_with(options::COUNT)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("N")
@@ -1054,6 +819,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(
             Arg::new(options::STATUS)
                 .long(options::STATUS)
+                .overrides_with(options::STATUS)
                 .takes_value(true)
                 .require_equals(true)
                 .value_name("LEVEL")
@@ -1079,6 +845,10 @@ Printing performance stats is also triggered by the INFO signal (where supported
             Arg::new(options::CONV)
                 .long(options::CONV)
                 .takes_value(true)
+                .multiple_occurrences(true)
+                .use_delimiter(true)
+                .require_delimiter(true)
+                .multiple_values(true)
                 .require_equals(true)
                 .value_name("CONV")
                 .help("(alternatively conv=CONV[,CONV]) specifies a comma-separated list of conversion options or (for legacy reasons) file flags. Conversion options and file flags may be intermixed.
@@ -1116,6 +886,10 @@ Conversion Flags:
             Arg::new(options::IFLAG)
                 .long(options::IFLAG)
                 .takes_value(true)
+                .multiple_occurrences(true)
+                .use_delimiter(true)
+                .require_delimiter(true)
+                .multiple_values(true)
                 .require_equals(true)
                 .value_name("FLAG")
                 .help("(alternatively iflag=FLAG[,FLAG]) a comma separated list of input flags which specify how the input source is treated. FLAG may be any of the input-flags or general-flags specified below.
@@ -1142,6 +916,10 @@ General-Flags
             Arg::new(options::OFLAG)
                 .long(options::OFLAG)
                 .takes_value(true)
+                .multiple_occurrences(true)
+                .use_delimiter(true)
+                .require_delimiter(true)
+                .multiple_values(true)
                 .require_equals(true)
                 .value_name("FLAG")
                 .help("(alternatively oflag=FLAG[,FLAG]) a comma separated list of output flags which specify how the output source is treated. FLAG may be any of the output-flags or general-flags specified below.
@@ -1163,4 +941,206 @@ General-Flags
 
 ")
         )
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::datastructures::{IConvFlags, IFlags, OConvFlags};
+    use crate::{calc_bsize, uu_app, Input, Output, OutputTrait};
+
+    use std::cmp;
+    use std::fs;
+    use std::fs::File;
+    use std::io;
+    use std::io::{BufReader, Read};
+
+    struct LazyReader<R: Read> {
+        src: R,
+    }
+
+    impl<R: Read> Read for LazyReader<R> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            let reduced = cmp::max(buf.len() / 2, 1);
+            self.src.read(&mut buf[..reduced])
+        }
+    }
+
+    #[test]
+    fn bsize_test_primes() {
+        let (n, m) = (7901, 7919);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, n * m);
+    }
+
+    #[test]
+    fn bsize_test_rel_prime_obs_greater() {
+        let (n, m) = (7 * 5119, 13 * 5119);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, 7 * 13 * 5119);
+    }
+
+    #[test]
+    fn bsize_test_rel_prime_ibs_greater() {
+        let (n, m) = (13 * 5119, 7 * 5119);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, 7 * 13 * 5119);
+    }
+
+    #[test]
+    fn bsize_test_3fac_rel_prime() {
+        let (n, m) = (11 * 13 * 5119, 7 * 11 * 5119);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, 7 * 11 * 13 * 5119);
+    }
+
+    #[test]
+    fn bsize_test_ibs_greater() {
+        let (n, m) = (512 * 1024, 256 * 1024);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, n);
+    }
+
+    #[test]
+    fn bsize_test_obs_greater() {
+        let (n, m) = (256 * 1024, 512 * 1024);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, m);
+    }
+
+    #[test]
+    fn bsize_test_bs_eq() {
+        let (n, m) = (1024, 1024);
+        let res = calc_bsize(n, m);
+        assert!(res % n == 0);
+        assert!(res % m == 0);
+
+        assert_eq!(res, m);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_nocreat_causes_failure_when_ofile_doesnt_exist() {
+        let args = vec![
+            String::from("dd"),
+            String::from("--conv=nocreat"),
+            String::from("--of=not-a-real.file"),
+        ];
+
+        let matches = uu_app().try_get_matches_from(args).unwrap();
+        let _ = Output::<File>::new(&matches).unwrap();
+    }
+
+    #[test]
+    fn test_deadbeef_16_delayed() {
+        let input = Input {
+            src: LazyReader {
+                src: File::open("./test-resources/deadbeef-16.test").unwrap(),
+            },
+            non_ascii: false,
+            ibs: 16,
+            print_level: None,
+            count: None,
+            cflags: IConvFlags {
+                sync: Some(0),
+                ..IConvFlags::default()
+            },
+            iflags: IFlags::default(),
+        };
+
+        let output = Output {
+            dst: File::create("./test-resources/FAILED-deadbeef-16-delayed.test").unwrap(),
+            obs: 32,
+            cflags: OConvFlags::default(),
+        };
+
+        output.dd_out(input).unwrap();
+
+        let tmp_fname = "./test-resources/FAILED-deadbeef-16-delayed.test";
+        let spec = File::open("./test-resources/deadbeef-16.spec").unwrap();
+
+        let res = File::open(tmp_fname).unwrap();
+        // Check test file isn't empty (unless spec file is too)
+        assert_eq!(
+            res.metadata().unwrap().len(),
+            spec.metadata().unwrap().len()
+        );
+
+        let spec = BufReader::new(spec);
+        let res = BufReader::new(res);
+
+        // Check all bytes match
+        for (b_res, b_spec) in res.bytes().zip(spec.bytes()) {
+            assert_eq!(b_res.unwrap(), b_spec.unwrap());
+        }
+
+        fs::remove_file(tmp_fname).unwrap();
+    }
+
+    #[test]
+    fn test_random_73k_test_lazy_fullblock() {
+        let input = Input {
+            src: LazyReader {
+                src: File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test")
+                    .unwrap(),
+            },
+            non_ascii: false,
+            ibs: 521,
+            print_level: None,
+            count: None,
+            cflags: IConvFlags::default(),
+            iflags: IFlags {
+                fullblock: true,
+                ..IFlags::default()
+            },
+        };
+
+        let output = Output {
+            dst: File::create("./test-resources/FAILED-random_73k_test_lazy_fullblock.test")
+                .unwrap(),
+            obs: 1031,
+            cflags: OConvFlags::default(),
+        };
+
+        output.dd_out(input).unwrap();
+
+        let tmp_fname = "./test-resources/FAILED-random_73k_test_lazy_fullblock.test";
+        let spec =
+            File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap();
+
+        let res = File::open(tmp_fname).unwrap();
+        // Check test file isn't empty (unless spec file is too)
+        assert_eq!(
+            res.metadata().unwrap().len(),
+            spec.metadata().unwrap().len()
+        );
+
+        let spec = BufReader::new(spec);
+        let res = BufReader::new(res);
+
+        // Check all bytes match
+        for (b_res, b_spec) in res.bytes().zip(spec.bytes()) {
+            assert_eq!(b_res.unwrap(), b_spec.unwrap());
+        }
+
+        fs::remove_file(tmp_fname).unwrap();
+    }
 }

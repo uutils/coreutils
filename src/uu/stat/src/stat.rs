@@ -8,13 +8,13 @@
 #[macro_use]
 extern crate uucore;
 use uucore::display::Quotable;
-use uucore::entries;
 use uucore::error::{UResult, USimpleError};
 use uucore::fs::display_permissions;
 use uucore::fsext::{
     pretty_filetype, pretty_fstype, pretty_time, read_fs_list, statfs, BirthTime, FsMeta,
 };
 use uucore::libc::mode_t;
+use uucore::{entries, format_usage};
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::borrow::Cow;
@@ -87,6 +87,7 @@ macro_rules! print_adjusted {
 }
 
 static ABOUT: &str = "Display file or file system status.";
+const USAGE: &str = "{} [OPTION]... FILE...";
 
 pub mod options {
     pub static DEREFERENCE: &str = "dereference";
@@ -893,10 +894,6 @@ impl Stater {
     }
 }
 
-fn usage() -> String {
-    format!("{0} [OPTION]... FILE...", uucore::execution_phrase())
-}
-
 fn get_long_usage() -> String {
     String::from(
         "
@@ -957,13 +954,9 @@ for details about the options it supports.
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let long_usage = get_long_usage();
 
-    let matches = uu_app()
-        .override_usage(&usage[..])
-        .after_help(&long_usage[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&long_usage[..]).get_matches_from(args);
 
     let stater = Stater::new(&matches)?;
     let exit_status = stater.exec();
@@ -978,6 +971,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::DEREFERENCE)

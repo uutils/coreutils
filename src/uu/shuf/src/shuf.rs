@@ -14,7 +14,7 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 mod rand_read_adapter;
 
@@ -25,15 +25,14 @@ enum Mode {
 }
 
 static NAME: &str = "shuf";
-static USAGE: &str = r#"shuf [OPTION]... [FILE]
-  or:  shuf -e [OPTION]... [ARG]...
-  or:  shuf -i LO-HI [OPTION]...
-Write a random permutation of the input lines to standard output.
-
-With no FILE, or when FILE is -, read standard input.
-"#;
-static ABOUT: &str = "Shuffle the input by outputting a random permutation of input lines. Each output permutation is equally likely.";
-static TEMPLATE: &str = "Usage: {usage}\nMandatory arguments to long options are mandatory for short options too.\n{options}";
+static USAGE: &str = "\
+    {} [OPTION]... [FILE]
+    {} -e [OPTION]... [ARG]...
+    {} -i LO-HI [OPTION]...";
+static ABOUT: &str = "\
+    Shuffle the input by outputting a random permutation of input lines.\
+    Each output permutation is equally likely.\
+    With no FILE, or when FILE is -, read standard input.";
 
 struct Options {
     head_count: usize,
@@ -125,8 +124,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .name(NAME)
         .about(ABOUT)
         .version(crate_version!())
-        .help_template(TEMPLATE)
-        .override_usage(USAGE)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::ECHO)

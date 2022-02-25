@@ -37,4 +37,44 @@ fn test_df_output() {
     }
 }
 
+/// Test that the order of rows in the table does not change across executions.
+#[test]
+fn test_order_same() {
+    // TODO When #3057 is resolved, we should just use
+    //
+    //     new_ucmd!().arg("--output=source").succeeds().stdout_move_str();
+    //
+    // instead of parsing the entire `df` table as a string.
+    let output1 = new_ucmd!().succeeds().stdout_move_str();
+    let output2 = new_ucmd!().succeeds().stdout_move_str();
+    let output1: Vec<String> = output1
+        .lines()
+        .map(|l| String::from(l.split_once(' ').unwrap().0))
+        .collect();
+    let output2: Vec<String> = output2
+        .lines()
+        .map(|l| String::from(l.split_once(' ').unwrap().0))
+        .collect();
+    assert_eq!(output1, output2);
+}
+
+#[test]
+fn test_output_conflict_options() {
+    for option in ["-i", "-T", "-P"] {
+        new_ucmd!().arg("--output=source").arg(option).fails();
+    }
+}
+
+#[test]
+fn test_output_option() {
+    new_ucmd!().arg("--output").succeeds();
+    new_ucmd!().arg("--output=source,target").succeeds();
+    new_ucmd!().arg("--output=invalid_option").fails();
+}
+
+#[test]
+fn test_type_option() {
+    new_ucmd!().args(&["-t", "ext4", "-t", "ext3"]).succeeds();
+}
+
 // ToDO: more tests...

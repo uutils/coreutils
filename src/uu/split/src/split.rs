@@ -12,17 +12,21 @@ mod number;
 mod platform;
 
 use crate::filenames::FilenameIterator;
+use crate::filenames::SuffixType;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
-use std::convert::TryFrom;
+use std::convert::TryInto;
 use std::env;
 use std::fmt;
-use std::fs::{metadata, remove_file, File};
-use std::io::{stdin, BufRead, BufReader, BufWriter, Read, Write};
+use std::fs::{metadata, File};
+use std::io;
+use std::io::{stdin, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::num::ParseIntError;
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
+use uucore::format_usage;
 use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::uio_error;
 
 static OPT_BYTES: &str = "bytes";
 static OPT_LINE_BYTES: &str = "line-bytes";
@@ -31,39 +35,27 @@ static OPT_ADDITIONAL_SUFFIX: &str = "additional-suffix";
 static OPT_FILTER: &str = "filter";
 static OPT_NUMBER: &str = "number";
 static OPT_NUMERIC_SUFFIXES: &str = "numeric-suffixes";
+static OPT_HEX_SUFFIXES: &str = "hex-suffixes";
 static OPT_SUFFIX_LENGTH: &str = "suffix-length";
 static OPT_DEFAULT_SUFFIX_LENGTH: &str = "0";
 static OPT_VERBOSE: &str = "verbose";
+//The ---io-blksize parameter is consumed and ignored.
+//The parameter is included to make GNU coreutils tests pass.
+static OPT_IO_BLKSIZE: &str = "-io-blksize";
+static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
 
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
 
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... [INPUT [PREFIX]]",
-        uucore::execution_phrase()
-    )
-}
-fn get_long_usage() -> String {
-    format!(
-        "Usage:
-  {0}
-
-Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default
-size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
--, read standard input.",
-        usage()
-    )
-}
+const USAGE: &str = "{} [OPTION]... [INPUT [PREFIX]]";
+const AFTER_HELP: &str = "\
+    Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default \
+    size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is \
+    -, read standard input.";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-    let long_usage = get_long_usage();
-    let matches = uu_app()
-        .override_usage(&usage[..])
-        .after_help(&long_usage[..])
-        .get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
     match Settings::from(&matches) {
         Ok(settings) => split(&settings),
         Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{}", e))),
@@ -75,6 +67,8 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about("Create output files containing consecutive or interleaved sections of input")
+        .after_help(AFTER_HELP)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         // strategy (mutually exclusive)
         .arg(
@@ -124,6 +118,13 @@ pub fn uu_app<'a>() -> App<'a> {
             ),
         )
         .arg(
+            Arg::new(OPT_ELIDE_EMPTY_FILES)
+                .long(OPT_ELIDE_EMPTY_FILES)
+                .short('e')
+                .takes_value(false)
+                .help("do not generate empty output files with '-n'"),
+        )
+        .arg(
             Arg::new(OPT_NUMERIC_SUFFIXES)
                 .short('d')
                 .long(OPT_NUMERIC_SUFFIXES)
@@ -140,9 +141,24 @@ pub fn uu_app<'a>() -> App<'a> {
                 .help("use suffixes of length N (default 2)"),
         )
         .arg(
+            Arg::new(OPT_HEX_SUFFIXES)
+                .short('x')
+                .long(OPT_HEX_SUFFIXES)
+                .takes_value(true)
+                .default_missing_value("0")
+                .help("use hex suffixes instead of alphabetic"),
+        )
+        .arg(
             Arg::new(OPT_VERBOSE)
                 .long(OPT_VERBOSE)
                 .help("print a diagnostic just before each output file is opened"),
+        )
+        .arg(
+            Arg::new(OPT_IO_BLKSIZE)
+                .long(OPT_IO_BLKSIZE)
+                .alias(OPT_IO_BLKSIZE)
+                .takes_value(true)
+                .hide(true),
         )
         .arg(
             Arg::new(ARG_INPUT)
@@ -161,17 +177,17 @@ pub fn uu_app<'a>() -> App<'a> {
 /// The strategy for breaking up the input file into chunks.
 enum Strategy {
     /// Each chunk has the specified number of lines.
-    Lines(usize),
+    Lines(u64),
 
     /// Each chunk has the specified number of bytes.
-    Bytes(usize),
+    Bytes(u64),
 
     /// Each chunk has as many lines as possible without exceeding the
     /// specified number of bytes.
-    LineBytes(usize),
+    LineBytes(u64),
 
     /// Split the file into this many chunks.
-    Number(usize),
+    Number(u64),
 }
 
 /// An error when parsing a chunking strategy from command-line arguments.
@@ -232,11 +248,22 @@ impl Strategy {
             }
             (0, 0, 0, 1) => {
                 let s = matches.value_of(OPT_NUMBER).unwrap();
-                let n = s.parse::<usize>().map_err(StrategyError::NumberOfChunks)?;
+                let n = s.parse::<u64>().map_err(StrategyError::NumberOfChunks)?;
                 Ok(Self::Number(n))
             }
             _ => Err(StrategyError::MultipleWays),
         }
+    }
+}
+
+/// Parse the suffix type from the command-line arguments.
+fn suffix_type_from(matches: &ArgMatches) -> SuffixType {
+    if matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0 {
+        SuffixType::Decimal
+    } else if matches.occurrences_of(OPT_HEX_SUFFIXES) > 0 {
+        SuffixType::Hexadecimal
+    } else {
+        SuffixType::Alphabetic
     }
 }
 
@@ -246,7 +273,7 @@ impl Strategy {
 /// instance by calling [`Settings::from`].
 struct Settings {
     prefix: String,
-    numeric_suffix: bool,
+    suffix_type: SuffixType,
     suffix_length: usize,
     additional_suffix: String,
     input: String,
@@ -254,6 +281,16 @@ struct Settings {
     filter: Option<String>,
     strategy: Strategy,
     verbose: bool,
+
+    /// Whether to *not* produce empty files when using `-n`.
+    ///
+    /// The `-n` command-line argument gives a specific number of
+    /// chunks into which the input files will be split. If the number
+    /// of chunks is greater than the number of bytes, and this is
+    /// `false`, then empty files will be created for the excess
+    /// chunks. If this is `false`, then empty files will not be
+    /// created.
+    elide_empty_files: bool,
 }
 
 /// An error when parsing settings from command-line arguments.
@@ -262,7 +299,13 @@ enum SettingsError {
     Strategy(StrategyError),
 
     /// Invalid suffix length parameter.
-    SuffixLength(String),
+    SuffixNotParsable(String),
+
+    /// Suffix contains a directory separator, which is not allowed.
+    SuffixContainsSeparator(String),
+
+    /// Suffix is not large enough to split into specified chunks
+    SuffixTooSmall(usize),
 
     /// The `--filter` option is not supported on Windows.
     #[cfg(windows)]
@@ -272,7 +315,10 @@ enum SettingsError {
 impl SettingsError {
     /// Whether the error demands a usage message.
     fn requires_usage(&self) -> bool {
-        matches!(self, Self::Strategy(StrategyError::MultipleWays))
+        matches!(
+            self,
+            Self::Strategy(StrategyError::MultipleWays) | Self::SuffixContainsSeparator(_)
+        )
     }
 }
 
@@ -280,7 +326,13 @@ impl fmt::Display for SettingsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Strategy(e) => e.fmt(f),
-            Self::SuffixLength(s) => write!(f, "invalid suffix length: {}", s.quote()),
+            Self::SuffixNotParsable(s) => write!(f, "invalid suffix length: {}", s.quote()),
+            Self::SuffixTooSmall(i) => write!(f, "the suffix length needs to be at least {}", i),
+            Self::SuffixContainsSeparator(s) => write!(
+                f,
+                "invalid suffix {}, contains directory separator",
+                s.quote()
+            ),
             #[cfg(windows)]
             Self::NotSupported => write!(
                 f,
@@ -294,18 +346,37 @@ impl fmt::Display for SettingsError {
 impl Settings {
     /// Parse a strategy from the command-line arguments.
     fn from(matches: &ArgMatches) -> Result<Self, SettingsError> {
+        let additional_suffix = matches.value_of(OPT_ADDITIONAL_SUFFIX).unwrap().to_string();
+        if additional_suffix.contains('/') {
+            return Err(SettingsError::SuffixContainsSeparator(additional_suffix));
+        }
+        let strategy = Strategy::from(matches).map_err(SettingsError::Strategy)?;
+        let suffix_type = suffix_type_from(matches);
         let suffix_length_str = matches.value_of(OPT_SUFFIX_LENGTH).unwrap();
+        let suffix_length: usize = suffix_length_str
+            .parse()
+            .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?;
+        if let Strategy::Number(chunks) = strategy {
+            if suffix_length != 0 {
+                let required_suffix_length =
+                    (chunks as f64).log(suffix_type.radix() as f64).ceil() as usize;
+                if suffix_length < required_suffix_length {
+                    return Err(SettingsError::SuffixTooSmall(required_suffix_length));
+                }
+            }
+        }
         let result = Self {
             suffix_length: suffix_length_str
                 .parse()
-                .map_err(|_| SettingsError::SuffixLength(suffix_length_str.to_string()))?,
-            numeric_suffix: matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0,
-            additional_suffix: matches.value_of(OPT_ADDITIONAL_SUFFIX).unwrap().to_owned(),
+                .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?,
+            suffix_type,
+            additional_suffix,
             verbose: matches.occurrences_of("verbose") > 0,
-            strategy: Strategy::from(matches).map_err(SettingsError::Strategy)?,
+            strategy,
             input: matches.value_of(ARG_INPUT).unwrap().to_owned(),
             prefix: matches.value_of(ARG_PREFIX).unwrap().to_owned(),
             filter: matches.value_of(OPT_FILTER).map(|s| s.to_owned()),
+            elide_empty_files: matches.is_present(OPT_ELIDE_EMPTY_FILES),
         };
         #[cfg(windows)]
         if result.filter.is_some() {
@@ -317,102 +388,239 @@ impl Settings {
     }
 }
 
-trait Splitter {
-    // Consume as much as possible from `reader` so as to saturate `writer`.
-    // Equivalent to finishing one of the part files. Returns the number of
-    // bytes that have been moved.
-    fn consume(
-        &mut self,
-        reader: &mut BufReader<Box<dyn Read>>,
-        writer: &mut BufWriter<Box<dyn Write>>,
-    ) -> std::io::Result<u128>;
+/// Write a certain number of bytes to one file, then move on to another one.
+///
+/// This struct maintains an underlying writer representing the
+/// current chunk of the output. If a call to [`write`] would cause
+/// the underlying writer to write more than the allowed number of
+/// bytes, a new writer is created and the excess bytes are written to
+/// that one instead. As many new underlying writers are created as
+/// needed to write all the bytes in the input buffer.
+struct ByteChunkWriter<'a> {
+    /// Parameters for creating the underlying writer for each new chunk.
+    settings: &'a Settings,
+
+    /// The maximum number of bytes allowed for a single chunk of output.
+    chunk_size: u64,
+
+    /// Running total of number of chunks that have been completed.
+    num_chunks_written: u64,
+
+    /// Remaining capacity in number of bytes in the current chunk.
+    ///
+    /// This number starts at `chunk_size` and decreases as bytes are
+    /// written. Once it reaches zero, a writer for a new chunk is
+    /// initialized and this number gets reset to `chunk_size`.
+    num_bytes_remaining_in_current_chunk: u64,
+
+    /// The underlying writer for the current chunk.
+    ///
+    /// Once the number of bytes written to this writer exceeds
+    /// `chunk_size`, a new writer is initialized and assigned to this
+    /// field.
+    inner: BufWriter<Box<dyn Write>>,
+
+    /// Iterator that yields filenames for each chunk.
+    filename_iterator: FilenameIterator<'a>,
 }
 
-struct LineSplitter {
-    lines_per_split: usize,
-}
-
-impl LineSplitter {
-    fn new(chunk_size: usize) -> Self {
-        Self {
-            lines_per_split: chunk_size,
+impl<'a> ByteChunkWriter<'a> {
+    fn new(chunk_size: u64, settings: &'a Settings) -> Option<ByteChunkWriter<'a>> {
+        let mut filename_iterator = FilenameIterator::new(
+            &settings.prefix,
+            &settings.additional_suffix,
+            settings.suffix_length,
+            settings.suffix_type,
+        );
+        let filename = filename_iterator.next()?;
+        if settings.verbose {
+            println!("creating file {}", filename.quote());
         }
+        let inner = platform::instantiate_current_writer(&settings.filter, &filename);
+        Some(ByteChunkWriter {
+            settings,
+            chunk_size,
+            num_bytes_remaining_in_current_chunk: chunk_size,
+            num_chunks_written: 0,
+            inner,
+            filename_iterator,
+        })
     }
 }
 
-impl Splitter for LineSplitter {
-    fn consume(
-        &mut self,
-        reader: &mut BufReader<Box<dyn Read>>,
-        writer: &mut BufWriter<Box<dyn Write>>,
-    ) -> std::io::Result<u128> {
-        let mut bytes_consumed = 0u128;
-        let mut buffer = String::with_capacity(1024);
-        for _ in 0..self.lines_per_split {
-            let bytes_read = reader.read_line(&mut buffer)?;
-            // If we ever read 0 bytes then we know we've hit EOF.
-            if bytes_read == 0 {
-                return Ok(bytes_consumed);
+impl<'a> Write for ByteChunkWriter<'a> {
+    fn write(&mut self, mut buf: &[u8]) -> std::io::Result<usize> {
+        // If the length of `buf` exceeds the number of bytes remaining
+        // in the current chunk, we will need to write to multiple
+        // different underlying writers. In that case, each iteration of
+        // this loop writes to the underlying writer that corresponds to
+        // the current chunk number.
+        let mut carryover_bytes_written: usize = 0;
+        loop {
+            if buf.is_empty() {
+                return Ok(carryover_bytes_written);
             }
 
-            writer.write_all(buffer.as_bytes())?;
-            // Empty out the String buffer since `read_line` appends instead of
-            // replaces.
-            buffer.clear();
-
-            bytes_consumed += bytes_read as u128;
-        }
-
-        Ok(bytes_consumed)
-    }
-}
-
-struct ByteSplitter {
-    bytes_per_split: u128,
-}
-
-impl ByteSplitter {
-    fn new(chunk_size: usize) -> Self {
-        Self {
-            bytes_per_split: u128::try_from(chunk_size).unwrap(),
-        }
-    }
-}
-
-impl Splitter for ByteSplitter {
-    fn consume(
-        &mut self,
-        reader: &mut BufReader<Box<dyn Read>>,
-        writer: &mut BufWriter<Box<dyn Write>>,
-    ) -> std::io::Result<u128> {
-        // We buffer reads and writes. We proceed until `bytes_consumed` is
-        // equal to `self.bytes_per_split` or we reach EOF.
-        let mut bytes_consumed = 0u128;
-        const BUFFER_SIZE: usize = 1024;
-        let mut buffer = [0u8; BUFFER_SIZE];
-        while bytes_consumed < self.bytes_per_split {
-            // Don't overshoot `self.bytes_per_split`! Note: Using std::cmp::min
-            // doesn't really work since we have to get types to match which
-            // can't be done in a way that keeps all conversions safe.
-            let bytes_desired = if (BUFFER_SIZE as u128) <= self.bytes_per_split - bytes_consumed {
-                BUFFER_SIZE
+            // If the capacity of this chunk is greater than the number of
+            // bytes in `buf`, then write all the bytes in `buf`. Otherwise,
+            // write enough bytes to fill the current chunk, then increment
+            // the chunk number and repeat.
+            let n = buf.len();
+            if (n as u64) < self.num_bytes_remaining_in_current_chunk {
+                let num_bytes_written = self.inner.write(buf)?;
+                self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
+                return Ok(carryover_bytes_written + num_bytes_written);
             } else {
-                // This is a safe conversion since the difference must be less
-                // than BUFFER_SIZE in this branch.
-                (self.bytes_per_split - bytes_consumed) as usize
-            };
-            let bytes_read = reader.read(&mut buffer[0..bytes_desired])?;
-            // If we ever read 0 bytes then we know we've hit EOF.
-            if bytes_read == 0 {
-                return Ok(bytes_consumed);
+                // Write enough bytes to fill the current chunk.
+                //
+                // Conversion to usize is safe because we checked that
+                // self.num_bytes_remaining_in_current_chunk is lower than
+                // n, which is already usize.
+                let i = self.num_bytes_remaining_in_current_chunk as usize;
+                let num_bytes_written = self.inner.write(&buf[..i])?;
+
+                // It's possible that the underlying writer did not
+                // write all the bytes.
+                if num_bytes_written < i {
+                    self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
+                    return Ok(carryover_bytes_written + num_bytes_written);
+                } else {
+                    // Move the window to look at only the remaining bytes.
+                    buf = &buf[i..];
+
+                    // Increment the chunk number, reset the number of
+                    // bytes remaining, and instantiate the new
+                    // underlying writer.
+                    self.num_chunks_written += 1;
+                    self.num_bytes_remaining_in_current_chunk = self.chunk_size;
+
+                    // Remember for the next iteration that we wrote these bytes.
+                    carryover_bytes_written += num_bytes_written;
+
+                    // Only create the writer for the next chunk if
+                    // there are any remaining bytes to write. This
+                    // check prevents us from creating a new empty
+                    // file.
+                    if !buf.is_empty() {
+                        let filename = self.filename_iterator.next().ok_or_else(|| {
+                            std::io::Error::new(ErrorKind::Other, "output file suffixes exhausted")
+                        })?;
+                        if self.settings.verbose {
+                            println!("creating file {}", filename.quote());
+                        }
+                        self.inner =
+                            platform::instantiate_current_writer(&self.settings.filter, &filename);
+                    }
+                }
+            }
+        }
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+/// Write a certain number of lines to one file, then move on to another one.
+///
+/// This struct maintains an underlying writer representing the
+/// current chunk of the output. If a call to [`write`] would cause
+/// the underlying writer to write more than the allowed number of
+/// lines, a new writer is created and the excess lines are written to
+/// that one instead. As many new underlying writers are created as
+/// needed to write all the lines in the input buffer.
+struct LineChunkWriter<'a> {
+    /// Parameters for creating the underlying writer for each new chunk.
+    settings: &'a Settings,
+
+    /// The maximum number of lines allowed for a single chunk of output.
+    chunk_size: u64,
+
+    /// Running total of number of chunks that have been completed.
+    num_chunks_written: u64,
+
+    /// Remaining capacity in number of lines in the current chunk.
+    ///
+    /// This number starts at `chunk_size` and decreases as lines are
+    /// written. Once it reaches zero, a writer for a new chunk is
+    /// initialized and this number gets reset to `chunk_size`.
+    num_lines_remaining_in_current_chunk: u64,
+
+    /// The underlying writer for the current chunk.
+    ///
+    /// Once the number of lines written to this writer exceeds
+    /// `chunk_size`, a new writer is initialized and assigned to this
+    /// field.
+    inner: BufWriter<Box<dyn Write>>,
+
+    /// Iterator that yields filenames for each chunk.
+    filename_iterator: FilenameIterator<'a>,
+}
+
+impl<'a> LineChunkWriter<'a> {
+    fn new(chunk_size: u64, settings: &'a Settings) -> Option<LineChunkWriter<'a>> {
+        let mut filename_iterator = FilenameIterator::new(
+            &settings.prefix,
+            &settings.additional_suffix,
+            settings.suffix_length,
+            settings.suffix_type,
+        );
+        let filename = filename_iterator.next()?;
+        if settings.verbose {
+            println!("creating file {}", filename.quote());
+        }
+        let inner = platform::instantiate_current_writer(&settings.filter, &filename);
+        Some(LineChunkWriter {
+            settings,
+            chunk_size,
+            num_lines_remaining_in_current_chunk: chunk_size,
+            num_chunks_written: 0,
+            inner,
+            filename_iterator,
+        })
+    }
+}
+
+impl<'a> Write for LineChunkWriter<'a> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        // If the number of lines in `buf` exceeds the number of lines
+        // remaining in the current chunk, we will need to write to
+        // multiple different underlying writers. In that case, each
+        // iteration of this loop writes to the underlying writer that
+        // corresponds to the current chunk number.
+        let mut prev = 0;
+        let mut total_bytes_written = 0;
+        for i in memchr::memchr_iter(b'\n', buf) {
+            // If we have exceeded the number of lines to write in the
+            // current chunk, then start a new chunk and its
+            // corresponding writer.
+            if self.num_lines_remaining_in_current_chunk == 0 {
+                self.num_chunks_written += 1;
+                let filename = self.filename_iterator.next().ok_or_else(|| {
+                    std::io::Error::new(ErrorKind::Other, "output file suffixes exhausted")
+                })?;
+                if self.settings.verbose {
+                    println!("creating file {}", filename.quote());
+                }
+                self.inner = platform::instantiate_current_writer(&self.settings.filter, &filename);
+                self.num_lines_remaining_in_current_chunk = self.chunk_size;
             }
 
-            writer.write_all(&buffer[0..bytes_read])?;
-
-            bytes_consumed += bytes_read as u128;
+            // Write the line, starting from *after* the previous
+            // newline character and ending *after* the current
+            // newline character.
+            let n = self.inner.write(&buf[prev..i + 1])?;
+            total_bytes_written += n;
+            prev = i + 1;
+            self.num_lines_remaining_in_current_chunk -= 1;
         }
 
-        Ok(bytes_consumed)
+        let n = self.inner.write(&buf[prev..buf.len()])?;
+        total_bytes_written += n;
+        Ok(total_bytes_written)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
     }
 }
 
@@ -430,23 +638,45 @@ impl Splitter for ByteSplitter {
 fn split_into_n_chunks_by_byte<R>(
     settings: &Settings,
     reader: &mut R,
-    num_chunks: usize,
+    num_chunks: u64,
 ) -> UResult<()>
 where
     R: Read,
 {
     // Get the size of the input file in bytes and compute the number
     // of bytes per chunk.
-    let metadata = metadata(&settings.input).unwrap();
+    //
+    // If the requested number of chunks exceeds the number of bytes
+    // in the file *and* the `elide_empty_files` parameter is enabled,
+    // then behave as if the number of chunks was set to the number of
+    // bytes in the file. This ensures that we don't write empty
+    // files. Otherwise, just write the `num_chunks - num_bytes` empty
+    // files.
+    let metadata = metadata(&settings.input).map_err(|_| {
+        USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
+    })?;
+
     let num_bytes = metadata.len();
-    let chunk_size = (num_bytes / (num_chunks as u64)) as usize;
+    let will_have_empty_files = settings.elide_empty_files && num_chunks > num_bytes;
+    let (num_chunks, chunk_size) = if will_have_empty_files {
+        let num_chunks = num_bytes;
+        let chunk_size = 1;
+        (num_chunks, chunk_size)
+    } else {
+        let chunk_size = (num_bytes / (num_chunks)).max(1);
+        (num_chunks, chunk_size)
+    };
+
+    let num_chunks: usize = num_chunks
+        .try_into()
+        .map_err(|_| USimpleError::new(1, "Number of chunks too big"))?;
 
     // This object is responsible for creating the filename for each chunk.
     let mut filename_iterator = FilenameIterator::new(
         &settings.prefix,
         &settings.additional_suffix,
         settings.suffix_length,
-        settings.numeric_suffix,
+        settings.suffix_type,
     );
 
     // Create one writer for each chunk. This will create each
@@ -465,29 +695,17 @@ where
         // Write `chunk_size` bytes from the reader into each writer
         // except the last.
         //
-        // Re-use the buffer to avoid re-allocating a `Vec` on each
-        // iteration. The contents will be completely overwritten each
-        // time we call `read_exact()`.
-        //
         // The last writer gets all remaining bytes so that if the number
         // of bytes in the input file was not evenly divisible by
         // `num_chunks`, we don't leave any bytes behind.
-        let mut buf = vec![0u8; chunk_size];
         for writer in writers.iter_mut().take(num_chunks - 1) {
-            reader.read_exact(&mut buf)?;
-            writer.write_all(&buf)?;
+            io::copy(&mut reader.by_ref().take(chunk_size), writer)?;
         }
 
         // Write all the remaining bytes to the last chunk.
-        //
-        // To do this, we resize our buffer to have the necessary number
-        // of bytes.
         let i = num_chunks - 1;
-        let last_chunk_size = num_bytes as usize - (chunk_size * (num_chunks - 1));
-        buf.resize(last_chunk_size, 0);
-
-        reader.read_exact(&mut buf)?;
-        writers[i].write_all(&buf)?;
+        let last_chunk_size = num_bytes - (chunk_size * (num_chunks as u64 - 1));
+        io::copy(&mut reader.by_ref().take(last_chunk_size), &mut writers[i])?;
 
         Ok(())
     }
@@ -507,65 +725,47 @@ fn split(settings: &Settings) -> UResult<()> {
         Box::new(r) as Box<dyn Read>
     });
 
-    if let Strategy::Number(num_chunks) = settings.strategy {
-        return split_into_n_chunks_by_byte(settings, &mut reader, num_chunks);
-    }
-
-    let mut splitter: Box<dyn Splitter> = match settings.strategy {
-        Strategy::Lines(chunk_size) => Box::new(LineSplitter::new(chunk_size)),
-        Strategy::Bytes(chunk_size) | Strategy::LineBytes(chunk_size) => {
-            Box::new(ByteSplitter::new(chunk_size))
+    match settings.strategy {
+        Strategy::Number(num_chunks) => {
+            split_into_n_chunks_by_byte(settings, &mut reader, num_chunks)
         }
-        _ => unreachable!(),
-    };
-
-    // This object is responsible for creating the filename for each chunk.
-    let mut filename_iterator = FilenameIterator::new(
-        &settings.prefix,
-        &settings.additional_suffix,
-        settings.suffix_length,
-        settings.numeric_suffix,
-    );
-    loop {
-        // Get a new part file set up, and construct `writer` for it.
-        let filename = filename_iterator
-            .next()
-            .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
-        let mut writer = platform::instantiate_current_writer(&settings.filter, filename.as_str());
-
-        let bytes_consumed = splitter
-            .consume(&mut reader, &mut writer)
-            .map_err_context(|| "input/output error".to_string())?;
-        writer
-            .flush()
-            .map_err_context(|| "error flushing to output file".to_string())?;
-
-        // If we didn't write anything we should clean up the empty file, and
-        // break from the loop.
-        if bytes_consumed == 0 {
-            // The output file is only ever created if --filter isn't used.
-            // Complicated, I know...
-            if settings.filter.is_none() {
-                remove_file(filename)
-                    .map_err_context(|| "error removing empty file".to_string())?;
+        Strategy::Lines(chunk_size) => {
+            let mut writer = LineChunkWriter::new(chunk_size, settings)
+                .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+            match std::io::copy(&mut reader, &mut writer) {
+                Ok(_) => Ok(()),
+                Err(e) => match e.kind() {
+                    // TODO Since the writer object controls the creation of
+                    // new files, we need to rely on the `std::io::Result`
+                    // returned by its `write()` method to communicate any
+                    // errors to this calling scope. If a new file cannot be
+                    // created because we have exceeded the number of
+                    // allowable filenames, we use `ErrorKind::Other` to
+                    // indicate that. A special error message needs to be
+                    // printed in that case.
+                    ErrorKind::Other => Err(USimpleError::new(1, "output file suffixes exhausted")),
+                    _ => Err(uio_error!(e, "input/output error")),
+                },
             }
-            break;
         }
-
-        // TODO It is silly to have the "creating file" message here
-        // after the file has been already created. However, because
-        // of the way the main loop has been written, an extra file
-        // gets created and then deleted in the last iteration of the
-        // loop. So we need to make sure we are not in that case when
-        // printing this message.
-        //
-        // This is only here temporarily while we make some
-        // improvements to the architecture of the main loop in this
-        // function. In the future, it will move to a more appropriate
-        // place---at the point where the file is actually created.
-        if settings.verbose {
-            println!("creating file {}", filename.quote());
+        Strategy::Bytes(chunk_size) | Strategy::LineBytes(chunk_size) => {
+            let mut writer = ByteChunkWriter::new(chunk_size, settings)
+                .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+            match std::io::copy(&mut reader, &mut writer) {
+                Ok(_) => Ok(()),
+                Err(e) => match e.kind() {
+                    // TODO Since the writer object controls the creation of
+                    // new files, we need to rely on the `std::io::Result`
+                    // returned by its `write()` method to communicate any
+                    // errors to this calling scope. If a new file cannot be
+                    // created because we have exceeded the number of
+                    // allowable filenames, we use `ErrorKind::Other` to
+                    // indicate that. A special error message needs to be
+                    // printed in that case.
+                    ErrorKind::Other => Err(USimpleError::new(1, "output file suffixes exhausted")),
+                    _ => Err(uio_error!(e, "input/output error")),
+                },
+            }
         }
     }
-    Ok(())
 }

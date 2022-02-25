@@ -40,13 +40,19 @@ impl Error for Overflow {}
 /// specifically for the `split` program. See the
 /// [`DynamicWidthNumber`] documentation for more information.
 ///
-/// Numbers of radix 10 are displayable and rendered as decimal
-/// numbers (for example, "00" or "917"). Numbers of radix 26 are
-/// displayable and rendered as lowercase ASCII alphabetic characters
-/// (for example, "aa" or "zax"). Numbers of other radices cannot be
-/// displayed. The display of a [`DynamicWidthNumber`] includes a
-/// prefix whose length depends on the width of the number. See the
-/// [`DynamicWidthNumber`] documentation for more information.
+/// Numbers of radix
+///
+/// * 10 are displayable and rendered as decimal numbers (for example,
+///   "00" or "917"),
+/// * 16 are displayable and rendered as hexadecimal numbers (for example,
+///   "00" or "e7f"),
+/// * 26 are displayable and rendered as lowercase ASCII alphabetic
+///   characters (for example, "aa" or "zax").
+///
+/// Numbers of other radices cannot be displayed. The display of a
+/// [`DynamicWidthNumber`] includes a prefix whose length depends on
+/// the width of the number. See the [`DynamicWidthNumber`]
+/// documentation for more information.
 ///
 /// The digits of a number are accessible via the [`Number::digits`]
 /// method. The digits are represented as a [`Vec<u8>`] with the most
@@ -169,12 +175,12 @@ impl Display for Number {
 ///
 /// # Displaying
 ///
-/// This number is only displayable if `radix` is 10 or `radix` is
-/// 26. If `radix` is 10, then the digits are concatenated and
-/// displayed as a fixed-width decimal number. If `radix` is 26, then
-/// each digit is translated to the corresponding lowercase ASCII
-/// alphabetic character (that is, 'a', 'b', 'c', etc.) and
-/// concatenated.
+/// This number is only displayable if `radix` is 10, 26, or 26. If
+/// `radix` is 10 or 16, then the digits are concatenated and
+/// displayed as a fixed-width decimal or hexadecimal number,
+/// respectively. If `radix` is 26, then each digit is translated to
+/// the corresponding lowercase ASCII alphabetic character (that is,
+/// 'a', 'b', 'c', etc.) and concatenated.
 #[derive(Clone)]
 pub struct FixedWidthNumber {
     radix: u8,
@@ -228,6 +234,14 @@ impl Display for FixedWidthNumber {
                 let digits: String = self.digits.iter().map(|d| (b'0' + d) as char).collect();
                 write!(f, "{}", digits)
             }
+            16 => {
+                let digits: String = self
+                    .digits
+                    .iter()
+                    .map(|d| (if *d < 10 { b'0' + d } else { b'a' + (d - 10) }) as char)
+                    .collect();
+                write!(f, "{}", digits)
+            }
             26 => {
                 let digits: String = self.digits.iter().map(|d| (b'a' + d) as char).collect();
                 write!(f, "{}", digits)
@@ -264,14 +278,15 @@ impl Display for FixedWidthNumber {
 ///
 /// # Displaying
 ///
-/// This number is only displayable if `radix` is 10 or `radix` is
-/// 26. If `radix` is 10, then the digits are concatenated and
-/// displayed as a fixed-width decimal number with a prefix of `n - 2`
-/// instances of the character '9', where `n` is the number of digits.
-/// If `radix` is 26, then each digit is translated to the
-/// corresponding lowercase ASCII alphabetic character (that is, 'a',
-/// 'b', 'c', etc.) and concatenated with a prefix of `n - 2`
-/// instances of the character 'z'.
+/// This number is only displayable if `radix` is 10, 16, or 26. If
+/// `radix` is 10 or 16, then the digits are concatenated and
+/// displayed as a fixed-width decimal or hexadecimal number,
+/// respectively, with a prefix of `n - 2` instances of the character
+/// '9' of 'f', respectively, where `n` is the number of digits.  If
+/// `radix` is 26, then each digit is translated to the corresponding
+/// lowercase ASCII alphabetic character (that is, 'a', 'b', 'c',
+/// etc.) and concatenated with a prefix of `n - 2` instances of the
+/// character 'z'.
 ///
 /// This notion of displaying the number is specific to the `split`
 /// program.
@@ -344,6 +359,21 @@ impl Display for DynamicWidthNumber {
                 write!(
                     f,
                     "{empty:9<num_fill_chars$}{digits}",
+                    empty = "",
+                    num_fill_chars = num_fill_chars,
+                    digits = digits,
+                )
+            }
+            16 => {
+                let num_fill_chars = self.digits.len() - 2;
+                let digits: String = self
+                    .digits
+                    .iter()
+                    .map(|d| (if *d < 10 { b'0' + d } else { b'a' + (d - 10) }) as char)
+                    .collect();
+                write!(
+                    f,
+                    "{empty:f<num_fill_chars$}{digits}",
                     empty = "",
                     num_fill_chars = num_fill_chars,
                     digits = digits,
@@ -424,7 +454,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dynamic_width_number_display_numeric() {
+    fn test_dynamic_width_number_display_numeric_decimal() {
         fn num(n: usize) -> Number {
             let mut number = Number::DynamicWidth(DynamicWidthNumber::new(10));
             for _ in 0..n {
@@ -442,6 +472,30 @@ mod tests {
         assert_eq!(format!("{}", num(10 * 99 - 1)), "9899");
         assert_eq!(format!("{}", num(10 * 99)), "990000");
         assert_eq!(format!("{}", num(10 * 99 + 1)), "990001");
+    }
+
+    #[test]
+    fn test_dynamic_width_number_display_numeric_hexadecimal() {
+        fn num(n: usize) -> Number {
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(16));
+            for _ in 0..n {
+                number.increment().unwrap()
+            }
+            number
+        }
+
+        assert_eq!(format!("{}", num(0)), "00");
+        assert_eq!(format!("{}", num(15)), "0f");
+        assert_eq!(format!("{}", num(16)), "10");
+        assert_eq!(format!("{}", num(17)), "11");
+        assert_eq!(format!("{}", num(18)), "12");
+
+        assert_eq!(format!("{}", num(16 * 15 - 1)), "ef");
+        assert_eq!(format!("{}", num(16 * 15)), "f000");
+        assert_eq!(format!("{}", num(16 * 15 + 1)), "f001");
+        assert_eq!(format!("{}", num(16 * 255 - 1)), "feff");
+        assert_eq!(format!("{}", num(16 * 255)), "ff0000");
+        assert_eq!(format!("{}", num(16 * 255 + 1)), "ff0001");
     }
 
     #[test]
@@ -493,7 +547,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fixed_width_number_display_numeric() {
+    fn test_fixed_width_number_display_numeric_decimal() {
         fn num(n: usize) -> Result<Number, Overflow> {
             let mut number = Number::FixedWidth(FixedWidthNumber::new(10, 2));
             for _ in 0..n {
@@ -509,5 +563,24 @@ mod tests {
         assert_eq!(format!("{}", num(10 * 9).unwrap()), "90");
         assert_eq!(format!("{}", num(10 * 10 - 1).unwrap()), "99");
         assert!(num(10 * 10).is_err());
+    }
+
+    #[test]
+    fn test_fixed_width_number_display_numeric_hexadecimal() {
+        fn num(n: usize) -> Result<Number, Overflow> {
+            let mut number = Number::FixedWidth(FixedWidthNumber::new(16, 2));
+            for _ in 0..n {
+                number.increment()?;
+            }
+            Ok(number)
+        }
+
+        assert_eq!(format!("{}", num(0).unwrap()), "00");
+        assert_eq!(format!("{}", num(15).unwrap()), "0f");
+        assert_eq!(format!("{}", num(17).unwrap()), "11");
+        assert_eq!(format!("{}", num(16 * 15 - 1).unwrap()), "ef");
+        assert_eq!(format!("{}", num(16 * 15).unwrap()), "f0");
+        assert_eq!(format!("{}", num(16 * 16 - 1).unwrap()), "ff");
+        assert!(num(16 * 16).is_err());
     }
 }

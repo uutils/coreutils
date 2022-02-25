@@ -12,9 +12,13 @@
 
 use clap::{crate_version, App, AppSettings, Arg};
 use platform_info::*;
-use uucore::error::{FromIo, UResult};
+use uucore::{
+    error::{FromIo, UResult},
+    format_usage,
+};
 
 const ABOUT: &str = "Print certain system information.  With no OPTION, same as -s.";
+const USAGE: &str = "{} [OPTION]...";
 
 pub mod options {
     pub static ALL: &str = "all";
@@ -49,8 +53,7 @@ const HOST_OS: &str = "Redox";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = format!("{} [OPTION]...", uucore::execution_phrase());
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let uname =
         PlatformInfo::new().map_err_context(|| "failed to create PlatformInfo".to_string())?;
@@ -122,6 +125,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(Arg::new(options::ALL)
             .short('a')

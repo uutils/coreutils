@@ -26,6 +26,7 @@ use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
+use uucore::format_usage;
 
 use fs_extra::dir::{move_dir, CopyOptions as DirCopyOptions};
 
@@ -51,6 +52,10 @@ pub enum OverwriteMode {
 
 static ABOUT: &str = "Move SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
 static LONG_HELP: &str = "";
+const USAGE: &str = "\
+    {} [OPTION]... [-T] SOURCE DEST
+    {} [OPTION]... SOURCE... DIRECTORY
+    {} [OPTION]... -t DIRECTORY SOURCE...";
 
 static OPT_FORCE: &str = "force";
 static OPT_INTERACTIVE: &str = "interactive";
@@ -63,26 +68,14 @@ static OPT_VERBOSE: &str = "verbose";
 
 static ARG_FILES: &str = "files";
 
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... [-T] SOURCE DEST
-{0} [OPTION]... SOURCE... DIRECTORY
-{0} [OPTION]... -t DIRECTORY SOURCE...",
-        uucore::execution_phrase()
-    )
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
     let matches = uu_app()
         .after_help(&*format!(
             "{}\n{}",
             LONG_HELP,
             backup_control::BACKUP_CONTROL_LONG_HELP
         ))
-        .override_usage(&usage[..])
         .get_matches_from(args);
 
     let files: Vec<OsString> = matches
@@ -123,6 +116,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
     .arg(
         backup_control::arguments::backup()

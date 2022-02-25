@@ -38,12 +38,10 @@ const ENCODINGS: &[(&str, Format)] = &[
     ("z85", Format::Z85),
 ];
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]", uucore::execution_phrase())
-}
+const USAGE: &str = "{} [OPTION]... [FILE]";
 
 pub fn uu_app<'a>() -> App<'a> {
-    let mut app = base_common::base_app(ABOUT);
+    let mut app = base_common::base_app(ABOUT, USAGE);
     for encoding in ENCODINGS {
         app = app.arg(Arg::new(encoding.0).long(encoding.0));
     }
@@ -51,8 +49,7 @@ pub fn uu_app<'a>() -> App<'a> {
 }
 
 fn parse_cmd_args(args: impl uucore::Args) -> UResult<(Config, Format)> {
-    let usage = usage();
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(
+    let matches = uu_app().get_matches_from(
         args.collect_str(InvalidEncodingHandling::ConvertLossy)
             .accept_any(),
     );

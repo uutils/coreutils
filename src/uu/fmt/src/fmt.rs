@@ -17,6 +17,7 @@ use std::io::{stdin, stdout, Write};
 use std::io::{BufReader, BufWriter, Read};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::format_usage;
 
 use self::linebreak::break_lines;
 use self::parasplit::ParagraphStream;
@@ -25,6 +26,7 @@ mod linebreak;
 mod parasplit;
 
 static ABOUT: &str = "Reformat paragraphs from input files (or stdin) to stdout.";
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 static MAX_WIDTH: usize = 2500;
 
 static OPT_CROWN_MARGIN: &str = "crown-margin";
@@ -42,10 +44,6 @@ static OPT_QUICK: &str = "quick";
 static OPT_TAB_WIDTH: &str = "tab-width";
 
 static ARG_FILES: &str = "files";
-
-fn usage() -> String {
-    format!("{} [OPTION]... [FILE]...", uucore::execution_phrase())
-}
 
 pub type FileOrStdReader = BufReader<Box<dyn Read + 'static>>;
 pub struct FmtOptions {
@@ -69,9 +67,7 @@ pub struct FmtOptions {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let mut files: Vec<String> = matches
         .values_of(ARG_FILES)
@@ -226,6 +222,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_CROWN_MARGIN)

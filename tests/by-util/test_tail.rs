@@ -485,10 +485,7 @@ fn test_tail_invalid_num() {
                 .args(&["-c", size])
                 .fails()
                 .code_is(1)
-                .stderr_only(format!(
-                    "tail: invalid number of bytes: '{}': Value too large for defined data type",
-                    size
-                ));
+                .stderr_only("tail: Insufficient addressable memory");
         }
     }
     new_ucmd!()

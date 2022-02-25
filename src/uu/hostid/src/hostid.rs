@@ -9,9 +9,9 @@
 
 use clap::{crate_version, App, AppSettings};
 use libc::c_long;
-use uucore::error::UResult;
+use uucore::{error::UResult, format_usage};
 
-static SYNTAX: &str = "[options]";
+const USAGE: &str = "{} [options]";
 const SUMMARY: &str = "Print the numeric identifier (in hexadecimal) for the current host";
 
 // currently rust libc interface doesn't include gethostid
@@ -30,7 +30,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
-        .override_usage(SYNTAX)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
 }
 

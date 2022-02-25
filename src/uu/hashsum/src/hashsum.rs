@@ -21,8 +21,8 @@ use self::digest::Digest;
 use self::digest::DigestWriter;
 
 use clap::{App, AppSettings, Arg, ArgMatches};
-use hex::ToHex;
-use md5::Context as Md5;
+use hex::encode;
+use md5::Md5;
 use regex::Regex;
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
@@ -70,6 +70,7 @@ fn is_custom_binary(program: &str) -> bool {
             | "shake128sum"
             | "shake256sum"
             | "b2sum"
+            | "b3sum"
     )
 }
 
@@ -92,6 +93,11 @@ fn detect_algo(
             "BLAKE2",
             Box::new(blake2b_simd::State::new()) as Box<dyn Digest>,
             512,
+        ),
+        "b3sum" => (
+            "BLAKE3",
+            Box::new(blake3::Hasher::new()) as Box<dyn Digest>,
+            256,
         ),
         "sha3sum" => match matches.value_of("bits") {
             Some(bits_str) => match (bits_str).parse::<usize>() {
@@ -195,6 +201,9 @@ fn detect_algo(
                 }
                 if matches.is_present("b2sum") {
                     set_or_crash("BLAKE2", Box::new(blake2b_simd::State::new()), 512);
+                }
+                if matches.is_present("b3sum") {
+                    set_or_crash("BLAKE3", Box::new(blake3::Hasher::new()), 256);
                 }
                 if matches.is_present("sha3") {
                     match matches.value_of("bits") {
@@ -433,6 +442,7 @@ pub fn uu_app_custom<'a>() -> App<'a> {
             "work with SHAKE256 using BITS for the output size",
         ),
         ("b2sum", "work with BLAKE2"),
+        ("b3sum", "work with BLAKE3"),
     ];
 
     for (name, desc) in algorithms {
@@ -642,6 +652,6 @@ fn digest_reader<T: Read>(
         let mut bytes = Vec::new();
         bytes.resize((output_bits + 7) / 8, 0);
         digest.result(&mut bytes);
-        Ok(bytes.to_hex())
+        Ok(encode(bytes))
     }
 }

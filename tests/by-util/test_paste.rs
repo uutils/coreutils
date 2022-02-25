@@ -60,6 +60,24 @@ static EXAMPLE_DATA: &[TestData] = &[
         ins: &["1\na\n", "2\nb\n"],
         out: "1 2\na b\n",
     },
+    TestData {
+        name: "multibyte-delim",
+        args: &["-d", "💣"],
+        ins: &["1\na\n", "2\nb\n"],
+        out: "1💣2\na💣b\n",
+    },
+    TestData {
+        name: "multibyte-delim-serial",
+        args: &["-d", "💣", "-s"],
+        ins: &["1\na\n", "2\nb\n"],
+        out: "1💣a\n2💣b\n",
+    },
+    TestData {
+        name: "trailing whitespace",
+        args: &["-d", "|"],
+        ins: &["1 \na \n", "2\t\nb\t\n"],
+        out: "1 |2\t\na |b\t\n",
+    },
 ];
 
 #[test]

@@ -44,6 +44,7 @@ termsize
 termwidth
 textwrap
 thiserror
+ureq
 walkdir
 winapi
 xattr

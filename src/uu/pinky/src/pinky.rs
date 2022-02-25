@@ -20,11 +20,12 @@ use std::os::unix::fs::MetadataExt;
 
 use clap::{crate_version, App, AppSettings, Arg};
 use std::path::PathBuf;
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 const BUFSIZE: usize = 1024;
 
 static ABOUT: &str = "pinky - lightweight finger";
+const USAGE: &str = "{} [OPTION]... [USER]...";
 
 mod options {
     pub const LONG_FORMAT: &str = "long_format";
@@ -37,10 +38,6 @@ mod options {
     pub const OMIT_NAME_HOST: &str = "omit_name_host";
     pub const OMIT_NAME_HOST_TIME: &str = "omit_name_host_time";
     pub const USER: &str = "user";
-}
-
-fn usage() -> String {
-    format!("{0} [OPTION]... [USER]...", uucore::execution_phrase())
 }
 
 fn get_long_usage() -> String {
@@ -57,13 +54,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = usage();
     let after_help = get_long_usage();
 
-    let matches = uu_app()
-        .override_usage(&usage[..])
-        .after_help(&after_help[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
     let users: Vec<String> = matches
         .values_of(options::USER)
@@ -136,6 +129,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::LONG_FORMAT)
