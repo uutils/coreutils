@@ -15,13 +15,13 @@ extern crate lazy_static;
 
 mod quoting_style;
 
-use std::convert::TryInto;
 use clap::{crate_version, App, AppSettings, Arg};
 use glob::Pattern;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
+use std::convert::TryInto;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -1902,10 +1902,7 @@ fn display_more_info(
         } else {
             "?".to_owned()
         };
-        result.push_str(&format!(
-            "{} ",
-            pad_left(&s, padding.block_size),
-        ));
+        result.push_str(&format!("{} ", pad_left(&s, padding.block_size),));
     }
     result
 }
@@ -1948,7 +1945,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         #[cfg(unix)]
         let mut inode = 0;
         let mut block_size = 0;
-        
+
         for i in items {
             #[cfg(unix)]
             if config.inode {
@@ -1964,7 +1961,8 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                 if let Some(md) = i.md(out) {
                     let block_size_len = match config.size_format {
                         SizeFormat::Bytes => {
-                            display_size(customize_block_size(get_block_size(md), config), config).len()
+                            display_size(customize_block_size(get_block_size(md), config), config)
+                                .len()
                         }
                         SizeFormat::Binary | SizeFormat::Decimal => {
                             match display_size_or_rdev(md, config) {
@@ -1978,22 +1976,22 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             }
         }
 
-        for i in items {
-            let padding = PaddingCollection {
-                #[cfg(unix)]
-                inode,
-                uname: 0usize,
-                group: 0usize,
-                link_count: 0usize,
-                context: 0usize,
-                size: 0usize,
-                #[cfg(unix)]
-                major: 0usize,
-                #[cfg(unix)]
-                minor: 0usize,
-                block_size,
-            };
+        let padding = PaddingCollection {
+            #[cfg(unix)]
+            inode,
+            uname: 0usize,
+            group: 0usize,
+            link_count: 0usize,
+            context: 0usize,
+            size: 0usize,
+            #[cfg(unix)]
+            major: 0usize,
+            #[cfg(unix)]
+            minor: 0usize,
+            block_size,
+        };
 
+        for i in items {
             let more_info = display_more_info(i, &padding, config, out);
             let cell = display_file_name(i, config, prefix_context, more_info, out);
             names_vec.push(cell);
@@ -2758,7 +2756,6 @@ fn calculate_padding_collection(
     };
 
     for item in items {
-
         #[cfg(unix)]
         let mut inode = 1;
         #[cfg(unix)]
