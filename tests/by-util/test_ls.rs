@@ -2742,22 +2742,14 @@ fn test_ls_dangling_symlinks() {
         .succeeds()
         .stdout_contains("dangle");
 
-    #[cfg(not(windows))]
     scene
         .ucmd()
         .arg("-Li")
         .arg("temp_dir")
         .fails()
         .stderr_contains("cannot access")
-        .stdout_contains("? dangle");
-
-    #[cfg(windows)]
-    scene
-        .ucmd()
-        .arg("-Li")
-        .arg("temp_dir")
-        .succeeds()
-        .stdout_contains("dangle");
+        .stderr_contains("No such file or directory")
+        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
 
     scene
         .ucmd()
