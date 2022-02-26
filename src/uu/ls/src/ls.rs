@@ -1940,56 +1940,9 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             None
         };
 
+        let padding = calculate_padding_collection(items, config, out);
+
         let mut names_vec = Vec::new();
-
-        #[cfg(unix)]
-        let mut inode = 0;
-        let mut block_size = 0;
-
-        for i in items {
-            #[cfg(unix)]
-            if config.inode {
-                let inode_len = if let Some(md) = i.md(out) {
-                    display_inode(md).len()
-                } else {
-                    continue;
-                };
-                inode = inode_len.max(inode);
-            }
-
-            if config.alloc_size {
-                if let Some(md) = i.md(out) {
-                    let block_size_len = match config.size_format {
-                        SizeFormat::Bytes => {
-                            display_size(customize_block_size(get_block_size(md), config), config)
-                                .len()
-                        }
-                        SizeFormat::Binary | SizeFormat::Decimal => {
-                            match display_size_or_rdev(md, config) {
-                                SizeOrDeviceId::Device(_, _) => 1usize,
-                                SizeOrDeviceId::Size(size) => size.len(),
-                            }
-                        }
-                    };
-                    block_size = block_size_len.max(block_size);
-                }
-            }
-        }
-
-        let padding = PaddingCollection {
-            #[cfg(unix)]
-            inode,
-            uname: 0usize,
-            group: 0usize,
-            link_count: 0usize,
-            context: 0usize,
-            size: 0usize,
-            #[cfg(unix)]
-            major: 0usize,
-            #[cfg(unix)]
-            minor: 0usize,
-            block_size,
-        };
 
         for i in items {
             let more_info = display_more_info(i, &padding, config, out);
@@ -2788,25 +2741,27 @@ fn calculate_padding_collection(
             padding_collections.block_size = block_size;
         }
 
-        let context_len = item.security_context.len();
-        let (link_count_len, uname_len, group_len, size_len, major_len, minor_len) =
-            display_dir_entry_size(item, config, out);
-        padding_collections.link_count = link_count_len.max(padding_collections.link_count);
-        padding_collections.uname = uname_len.max(padding_collections.uname);
-        padding_collections.group = group_len.max(padding_collections.group);
-        if config.context {
-            padding_collections.context = context_len.max(padding_collections.context);
-        }
-        if items.len() == 1usize {
-            padding_collections.size = 0usize;
-            padding_collections.major = 0usize;
-            padding_collections.minor = 0usize;
-        } else {
-            padding_collections.major = major_len.max(padding_collections.major);
-            padding_collections.minor = minor_len.max(padding_collections.minor);
-            padding_collections.size = size_len
-                .max(padding_collections.size)
-                .max(padding_collections.major + padding_collections.minor + 2usize);
+        if config.format == Format::Long {
+            let context_len = item.security_context.len();
+            let (link_count_len, uname_len, group_len, size_len, major_len, minor_len) =
+                display_dir_entry_size(item, config, out);
+            padding_collections.link_count = link_count_len.max(padding_collections.link_count);
+            padding_collections.uname = uname_len.max(padding_collections.uname);
+            padding_collections.group = group_len.max(padding_collections.group);
+            if config.context {
+                padding_collections.context = context_len.max(padding_collections.context);
+            }
+            if items.len() == 1usize {
+                padding_collections.size = 0usize;
+                padding_collections.major = 0usize;
+                padding_collections.minor = 0usize;
+            } else {
+                padding_collections.major = major_len.max(padding_collections.major);
+                padding_collections.minor = minor_len.max(padding_collections.minor);
+                padding_collections.size = size_len
+                    .max(padding_collections.size)
+                    .max(padding_collections.major + padding_collections.minor + 2usize);
+            }
         }
     }
 
