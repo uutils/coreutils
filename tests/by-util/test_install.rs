@@ -1100,3 +1100,27 @@ fn test_install_backup_off() {
     assert!(at.file_exists(file_b));
     assert!(!at.file_exists(&format!("{}~", file_b)));
 }
+
+#[test]
+fn test_install_missing_arguments() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .fails()
+        .stderr_contains("install: missing file operand");
+}
+
+#[test]
+fn test_install_missing_destination() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_1 = "source_file1";
+
+    at.touch(file_1);
+    scene.ucmd().arg(file_1).fails().stderr_contains(format!(
+        "install: missing destination file operand after '{}'",
+        file_1
+    ));
+}

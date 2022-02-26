@@ -18,7 +18,7 @@ use filetime::{set_file_times, FileTime};
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
-use uucore::error::{FromIo, UError, UIoError, UResult};
+use uucore::error::{FromIo, UError, UIoError, UResult, UUsageError};
 use uucore::format_usage;
 use uucore::mode::get_umask;
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
@@ -442,11 +442,14 @@ fn is_new_file_path(path: &Path) -> bool {
 /// Returns a Result type with the Err variant containing the error message.
 ///
 fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
-    let target: PathBuf = b
-        .target_dir
-        .clone()
-        .unwrap_or_else(|| paths.pop().unwrap())
-        .into();
+    let target: PathBuf = if let Some(path) = &b.target_dir {
+        path.into()
+    } else {
+        paths
+            .pop()
+            .ok_or_else(|| UUsageError::new(1, "missing file operand"))?
+            .into()
+    };
 
     let sources = &paths.iter().map(PathBuf::from).collect::<Vec<_>>();
 
@@ -468,7 +471,19 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
         }
 
         if target.is_file() || is_new_file_path(&target) {
-            copy(&sources[0], &target, b)
+            copy(
+                sources.get(0).ok_or_else(|| {
+                    UUsageError::new(
+                        1,
+                        format!(
+                            "missing destination file operand after '{}'",
+                            target.to_str().unwrap()
+                        ),
+                    )
+                })?,
+                &target,
+                b,
+            )
         } else {
             Err(InstallError::InvalidTarget(target).into())
         }
