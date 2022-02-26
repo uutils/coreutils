@@ -1923,7 +1923,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             }
             #[cfg(not(unix))]
             if config.alloc_size {
-                let more_info = display_more_info(item, padding, config, out);
+                let more_info = display_more_info(item, &padding_collection, config, out);
                 let _ = write!(out, "{}", more_info);
             }
             display_item_long(item, &padding_collection, config, out)?;
@@ -2710,19 +2710,15 @@ fn calculate_padding_collection(
 
     for item in items {
         #[cfg(unix)]
-        let mut inode = 1;
-        #[cfg(unix)]
         if config.inode {
             let inode_len = if let Some(md) = item.md(out) {
                 display_inode(md).len()
             } else {
                 continue;
             };
-            inode = inode_len.max(inode);
-            padding_collections.inode = inode;
+            padding_collections.inode = inode_len.max(padding_collections.inode);
         }
 
-        let mut block_size = 1;
         if config.alloc_size {
             if let Some(md) = item.md(out) {
                 let block_size_len = match config.size_format {
@@ -2736,9 +2732,8 @@ fn calculate_padding_collection(
                         }
                     }
                 };
-                block_size = block_size_len.max(block_size);
+                padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }
-            padding_collections.block_size = block_size;
         }
 
         if config.format == Format::Long {
@@ -2780,11 +2775,29 @@ fn calculate_padding_collection(
         group: 1,
         context: 1,
         size: 1,
+        block_size: 1,
     };
 
     for item in items {
+        if config.alloc_size {
+            if let Some(md) = item.md(out) {
+                let block_size_len = match config.size_format {
+                    SizeFormat::Bytes => {
+                        display_size(customize_block_size(get_block_size(md), config), config).len()
+                    }
+                    SizeFormat::Binary | SizeFormat::Decimal => {
+                        match display_size_or_rdev(md, config) {
+                            SizeOrDeviceId::Device(_, _) => 1usize,
+                            SizeOrDeviceId::Size(size) => size.len(),
+                        }
+                    }
+                };
+                padding_collections.block_size = block_size_len.max(padding_collections.block_size);
+            }
+        }
+
         let context_len = item.security_context.len();
-        let (link_count_len, uname_len, group_len, size_len, _major_len, _minor_len, _inode_len) =
+        let (link_count_len, uname_len, group_len, size_len, _major_len, _minor_len) =
             display_dir_entry_size(item, config, out);
         padding_collections.link_count = link_count_len.max(padding_collections.link_count);
         padding_collections.uname = uname_len.max(padding_collections.uname);
