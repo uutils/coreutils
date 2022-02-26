@@ -5,7 +5,7 @@
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
-// spell-checker:ignore itotal iused iavail ipcent pcent
+// spell-checker:ignore itotal iused iavail ipcent pcent lofs
 mod table;
 
 #[cfg(unix)]
@@ -248,7 +248,7 @@ fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
 }
 
 /// Assign 1 `MountInfo` entry to each path
-/// `lofs` enries are skipped and dummy mount points are skipped
+/// `lofs` entries are skipped and dummy mount points are skipped
 /// Only the longest matching prefix for that path is considered
 fn get_point_list(vmi: &[MountInfo], paths: &[String]) -> Vec<MountInfo> {
     // Choose MountInfo per input_path
