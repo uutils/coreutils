@@ -21,8 +21,8 @@ use self::digest::Digest;
 use self::digest::DigestWriter;
 
 use clap::{App, AppSettings, Arg, ArgMatches};
-use hex::ToHex;
-use md5::Context as Md5;
+use hex::encode;
+use md5::Md5;
 use regex::Regex;
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
@@ -652,6 +652,6 @@ fn digest_reader<T: Read>(
         let mut bytes = Vec::new();
         bytes.resize((output_bits + 7) / 8, 0);
         digest.result(&mut bytes);
-        Ok(bytes.to_hex())
+        Ok(encode(bytes))
     }
 }

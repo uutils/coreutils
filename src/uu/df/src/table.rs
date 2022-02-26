@@ -11,7 +11,7 @@
 //! [`DisplayRow`] implements [`std::fmt::Display`].
 use number_prefix::NumberPrefix;
 
-use crate::{Filesystem, Options};
+use crate::{BlockSize, Filesystem, Options};
 use uucore::fsext::{FsUsage, MountInfo};
 
 use std::fmt;
@@ -147,23 +147,10 @@ impl<'a> DisplayRow<'a> {
     ///
     /// If the scaling factor is not 1000, 1024, or a negative number.
     fn scaled(&self, size: u64) -> Result<String, fmt::Error> {
-        // TODO The argument-parsing code should be responsible for
-        // ensuring that the `human_readable_base` number is
-        // positive. Then we could remove the `Err` case from this
-        // function.
-        //
-        // TODO We should not be using a negative number to indicate
-        // default behavior. The default behavior for `df` is to show
-        // sizes in blocks of 1K bytes each, so we should just do
-        // that.
-        //
-        // TODO Support arbitrary positive scaling factors (from the
-        // `--block-size` command-line argument).
-        let number_prefix = match self.options.human_readable_base {
-            1000 => NumberPrefix::decimal(size as f64),
-            1024 => NumberPrefix::binary(size as f64),
-            d if d < 0 => return Ok(size.to_string()),
-            _ => return Err(fmt::Error {}),
+        let number_prefix = match self.options.block_size {
+            BlockSize::HumanReadableDecimal => NumberPrefix::decimal(size as f64),
+            BlockSize::HumanReadableBinary => NumberPrefix::binary(size as f64),
+            BlockSize::Bytes(d) => return Ok((size / d).to_string()),
         };
         match number_prefix {
             NumberPrefix::Standalone(bytes) => Ok(bytes.to_string()),
@@ -261,7 +248,9 @@ impl fmt::Display for Header<'_> {
             write!(f, "{0: >12} ", "IFree")?;
             write!(f, "{0: >5} ", "IUse%")?;
         } else {
-            if self.options.human_readable_base == -1 {
+            // TODO Support arbitrary positive scaling factors (from
+            // the `--block-size` command-line argument).
+            if let BlockSize::Bytes(_) = self.options.block_size {
                 write!(f, "{0: >12} ", "1k-blocks")?;
             } else {
                 write!(f, "{0: >12} ", "Size")?;
@@ -281,14 +270,11 @@ impl fmt::Display for Header<'_> {
 mod tests {
 
     use crate::table::{DisplayRow, Header, Row};
-    use crate::Options;
+    use crate::{BlockSize, Options};
 
     #[test]
     fn test_header_display() {
-        let options = Options {
-            human_readable_base: -1,
-            ..Default::default()
-        };
+        let options = Default::default();
         assert_eq!(
             Header::new(&options).to_string(),
             "Filesystem          1k-blocks         Used    Available  Use% Mounted on       "
@@ -298,7 +284,6 @@ mod tests {
     #[test]
     fn test_header_display_fs_type() {
         let options = Options {
-            human_readable_base: -1,
             show_fs_type: true,
             ..Default::default()
         };
@@ -311,7 +296,6 @@ mod tests {
     #[test]
     fn test_header_display_inode() {
         let options = Options {
-            human_readable_base: -1,
             show_inode_instead: true,
             ..Default::default()
         };
@@ -324,7 +308,7 @@ mod tests {
     #[test]
     fn test_header_display_human_readable_binary() {
         let options = Options {
-            human_readable_base: 1024,
+            block_size: BlockSize::HumanReadableBinary,
             ..Default::default()
         };
         assert_eq!(
@@ -336,7 +320,7 @@ mod tests {
     #[test]
     fn test_header_display_human_readable_si() {
         let options = Options {
-            human_readable_base: 1000,
+            block_size: BlockSize::HumanReadableDecimal,
             ..Default::default()
         };
         assert_eq!(
@@ -348,7 +332,7 @@ mod tests {
     #[test]
     fn test_row_display() {
         let options = Options {
-            human_readable_base: -1,
+            block_size: BlockSize::Bytes(1),
             ..Default::default()
         };
         let row = Row {
@@ -378,7 +362,7 @@ mod tests {
     #[test]
     fn test_row_display_fs_type() {
         let options = Options {
-            human_readable_base: -1,
+            block_size: BlockSize::Bytes(1),
             show_fs_type: true,
             ..Default::default()
         };
@@ -409,7 +393,7 @@ mod tests {
     #[test]
     fn test_row_display_inodes() {
         let options = Options {
-            human_readable_base: -1,
+            block_size: BlockSize::Bytes(1),
             show_inode_instead: true,
             ..Default::default()
         };
@@ -440,7 +424,7 @@ mod tests {
     #[test]
     fn test_row_display_human_readable_si() {
         let options = Options {
-            human_readable_base: 1000,
+            block_size: BlockSize::HumanReadableDecimal,
             show_fs_type: true,
             ..Default::default()
         };
@@ -471,7 +455,7 @@ mod tests {
     #[test]
     fn test_row_display_human_readable_binary() {
         let options = Options {
-            human_readable_base: 1024,
+            block_size: BlockSize::HumanReadableBinary,
             show_fs_type: true,
             ..Default::default()
         };

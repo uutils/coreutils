@@ -11,7 +11,7 @@
 extern crate uucore;
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::{self, Write};
 use std::os::unix::process::ExitStatusExt;
@@ -117,7 +117,14 @@ fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramO
             }
             x => parse_size(x).map_or_else(
                 |e| crash!(125, "invalid mode {}", e),
-                |m| Ok(BufferType::Size(m)),
+                |m| {
+                    Ok(BufferType::Size(m.try_into().map_err(|_| {
+                        ProgramOptionsError(format!(
+                            "invalid mode '{}': Value too large for defined data type",
+                            x
+                        ))
+                    })?))
+                },
             ),
         },
         None => Ok(BufferType::Default),

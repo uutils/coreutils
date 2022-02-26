@@ -37,9 +37,8 @@ use std::time;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use gcd::Gcd;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::show_error;
-use uucore::InvalidEncodingHandling;
+use uucore::error::{FromIo, UResult};
+use uucore::{show_error, InvalidEncodingHandling};
 
 const ABOUT: &str = "copy, and optionally convert, a file system resource";
 const BUF_INIT_BYTE: u8 = 0xDD;
@@ -75,11 +74,13 @@ impl Input<io::Stdin> {
         };
 
         if let Some(amt) = skip {
-            let num_bytes_read = i
-                .force_fill(amt.try_into().unwrap())
-                .map_err_context(|| "failed to read input".to_string())?;
-            if num_bytes_read < amt {
-                show_error!("'standard input': cannot skip to specified offset");
+            if let Err(e) = i.read_skip(amt) {
+                if let io::ErrorKind::UnexpectedEof = e.kind() {
+                    show_error!("'standard input': cannot skip to specified offset");
+                } else {
+                    return io::Result::Err(e)
+                        .map_err_context(|| "I/O error while skipping".to_string());
+                }
             }
         }
 
@@ -148,9 +149,6 @@ impl Input<File> {
             };
 
             if let Some(amt) = skip {
-                let amt: u64 = amt
-                    .try_into()
-                    .map_err(|_| USimpleError::new(1, "failed to parse seek amount"))?;
                 src.seek(io::SeekFrom::Start(amt))
                     .map_err_context(|| "failed to seek in input file".to_string())?;
             }
@@ -262,19 +260,18 @@ impl<R: Read> Input<R> {
         })
     }
 
-    /// Read the specified number of bytes from this reader.
-    ///
-    /// On success, this method returns the number of bytes read. If
-    /// this reader has fewer than `n` bytes available, then it reads
-    /// as many as possible. In that case, this method returns a
-    /// number less than `n`.
-    ///
-    /// # Errors
-    ///
-    /// If there is a problem reading.
-    fn force_fill(&mut self, n: u64) -> std::io::Result<usize> {
-        let mut buf = vec![];
-        self.take(n).read_to_end(&mut buf)
+    /// Skips amount_to_read bytes from the Input by copying into a sink
+    fn read_skip(&mut self, amount_to_read: u64) -> std::io::Result<()> {
+        let copy_result = io::copy(&mut self.src.by_ref().take(amount_to_read), &mut io::sink());
+        if let Ok(n) = copy_result {
+            if n != amount_to_read {
+                io::Result::Err(io::Error::new(io::ErrorKind::UnexpectedEof, ""))
+            } else {
+                Ok(())
+            }
+        } else {
+            io::Result::Err(copy_result.unwrap_err())
+        }
     }
 }
 
@@ -301,8 +298,7 @@ impl OutputTrait for Output<io::Stdout> {
 
         // stdout is not seekable, so we just write null bytes.
         if let Some(amt) = seek {
-            let bytes = vec![b'\0'; amt];
-            dst.write_all(&bytes)
+            io::copy(&mut io::repeat(0u8).take(amt as u64), &mut dst)
                 .map_err_context(|| String::from("write error"))?;
         }
 
@@ -526,7 +522,7 @@ impl OutputTrait for Output<File> {
             // Instead, we suppress the error by calling
             // `Result::ok()`. This matches the behavior of GNU `dd`
             // when given the command-line argument `of=/dev/null`.
-            let i = seek.unwrap_or(0).try_into().unwrap();
+            let i = seek.unwrap_or(0);
             if !cflags.notrunc {
                 dst.set_len(i).ok();
             }
@@ -658,15 +654,14 @@ fn calc_loop_bsize(
 ) -> usize {
     match count {
         Some(CountType::Reads(rmax)) => {
-            let rmax: u64 = (*rmax).try_into().unwrap();
             let rsofar = rstat.reads_complete + rstat.reads_partial;
-            let rremain: usize = (rmax - rsofar).try_into().unwrap();
-            cmp::min(ideal_bsize, rremain * ibs)
+            let rremain = rmax - rsofar;
+            cmp::min(ideal_bsize as u64, rremain * ibs as u64) as usize
         }
         Some(CountType::Bytes(bmax)) => {
             let bmax: u128 = (*bmax).try_into().unwrap();
-            let bremain: usize = (bmax - wstat.bytes_total).try_into().unwrap();
-            cmp::min(ideal_bsize, bremain)
+            let bremain: u128 = bmax - wstat.bytes_total;
+            cmp::min(ideal_bsize as u128, bremain as u128) as usize
         }
         None => ideal_bsize,
     }
@@ -677,7 +672,7 @@ fn calc_loop_bsize(
 fn below_count_limit(count: &Option<CountType>, rstat: &ReadStat, wstat: &WriteStat) -> bool {
     match count {
         Some(CountType::Reads(n)) => {
-            let n = (*n).try_into().unwrap();
+            let n = *n;
             rstat.reads_complete + rstat.reads_partial <= n
         }
         Some(CountType::Bytes(n)) => {
