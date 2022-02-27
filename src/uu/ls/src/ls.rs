@@ -1303,16 +1303,6 @@ only ignore '.' and '..'.",
         )
 }
 
-// Helper values that must exist if metadata exists
-struct CachedMetadata<'a> {
-    md: &'a Metadata,
-    ft: Option<&'a FileType>,
-    sodi: Option<&'a SizeOrDeviceId>,
-    uname: Option<&'a String>,
-    group: Option<&'a String>,
-    inode: Option<&'a String>,
-}
-
 /// Represents a Path along with it's associated data.
 /// Any data that will be reused several times makes sense to be added to this structure.
 /// Caching data here helps eliminate redundant syscalls to fetch same information.
@@ -1454,15 +1444,6 @@ impl PathData {
             .as_ref()
     }
 
-    fn display_size_or_rdev(
-        &self,
-        size_format: SizeFormat,
-        out: &mut BufWriter<Stdout>,
-    ) -> Option<&SizeOrDeviceId> {
-        let metadata = self.md(out)?;
-        Some(self.display_size_or_rdev_given_md(size_format, metadata))
-    }
-
     fn display_size_or_rdev_given_md(
         &self,
         size_format: SizeFormat,
@@ -1494,11 +1475,6 @@ impl PathData {
         })
     }
 
-    fn display_symlink_count(&self, out: &mut BufWriter<Stdout>) -> Option<&String> {
-        let metadata = self.md(out)?;
-        Some(self.display_symlink_count_given_md(metadata))
-    }
-
     fn display_symlink_count_given_md(&self, metadata: &Metadata) -> &String {
         #[cfg(unix)]
         {
@@ -1512,11 +1488,6 @@ impl PathData {
             // Git Bash looks like it may do the same thing.
             String::from("1")
         }
-    }
-
-    fn display_uname(&self, config: &Config, out: &mut BufWriter<Stdout>) -> Option<&String> {
-        let metadata = self.md(out)?;
-        Some(self.display_uname_given_md(config, metadata))
     }
 
     fn display_uname_given_md(&self, config: &Config, metadata: &Metadata) -> &String {
@@ -1535,11 +1506,6 @@ impl PathData {
         {
             self.uname.get_or_init(|| "somebody".to_string())
         }
-    }
-
-    fn display_group(&self, config: &Config, out: &mut BufWriter<Stdout>) -> Option<&String> {
-        let metadata = self.md(out)?;
-        Some(self.display_group_given_md(config, metadata))
     }
 
     fn display_group_given_md(&self, config: &Config, metadata: &Metadata) -> &String {
@@ -2059,14 +2025,14 @@ fn display_item_long(
             } else {
                 ""
             },
-            pad_left(&item.display_symlink_count_given_md(md), padding.link_count)
+            pad_left(item.display_symlink_count_given_md(md), padding.link_count)
         )?;
 
         if config.long.owner {
             write!(
                 out,
                 " {}",
-                pad_right(&item.display_uname_given_md(config, md), padding.uname)
+                pad_right(item.display_uname_given_md(config, md), padding.uname)
             )?;
         }
 
@@ -2074,7 +2040,7 @@ fn display_item_long(
             write!(
                 out,
                 " {}",
-                pad_right(&item.display_group_given_md(config, md), padding.group)
+                pad_right(item.display_group_given_md(config, md), padding.group)
             )?;
         }
 
@@ -2092,7 +2058,7 @@ fn display_item_long(
             write!(
                 out,
                 " {}",
-                pad_right(&item.display_uname_given_md(config, md), padding.uname)
+                pad_right(item.display_uname_given_md(config, md), padding.uname)
             )?;
         }
 
@@ -2105,7 +2071,7 @@ fn display_item_long(
                     out,
                     " {}, {}",
                     pad_left(
-                        &major,
+                        major,
                         #[cfg(not(unix))]
                         0usize,
                         #[cfg(unix)]
@@ -2116,7 +2082,7 @@ fn display_item_long(
                         )
                     ),
                     pad_left(
-                        &minor,
+                        minor,
                         #[cfg(not(unix))]
                         0usize,
                         #[cfg(unix)]
