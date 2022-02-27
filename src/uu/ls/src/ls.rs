@@ -245,6 +245,7 @@ enum Sort {
     Extension,
 }
 
+#[derive(Clone, Copy)]
 enum SizeFormat {
     Bytes,
     Binary,  // Powers of 1024, --human-readable, -h
@@ -1302,6 +1303,16 @@ only ignore '.' and '..'.",
         )
 }
 
+// Helper values that must exist if metadata exists
+struct CachedMetadata<'a> {
+    md: &'a Metadata,
+    ft: Option<&'a FileType>,
+    sodi: Option<&'a SizeOrDeviceId>,
+    uname: Option<&'a String>,
+    group: Option<&'a String>,
+    inode: Option<&'a String>,
+}
+
 /// Represents a Path along with it's associated data.
 /// Any data that will be reused several times makes sense to be added to this structure.
 /// Caching data here helps eliminate redundant syscalls to fetch same information.
@@ -1310,6 +1321,11 @@ struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
+    sodi: OnceCell<SizeOrDeviceId>,
+    uname: OnceCell<String>,
+    group: OnceCell<String>,
+    inode: OnceCell<String>,
+    symlink_count: OnceCell<String>,
     de: Option<DirEntry>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
@@ -1385,6 +1401,11 @@ impl PathData {
         Self {
             md: OnceCell::new(),
             ft,
+            sodi: OnceCell::new(),
+            symlink_count: OnceCell::new(),
+            uname: OnceCell::new(),
+            group: OnceCell::new(),
+            inode: OnceCell::new(),
             de,
             display_name,
             p_buf,
@@ -1431,6 +1452,135 @@ impl PathData {
         self.ft
             .get_or_init(|| self.md(out).map(|md| md.file_type()))
             .as_ref()
+    }
+
+    fn display_size_or_rdev(
+        &self,
+        size_format: SizeFormat,
+        out: &mut BufWriter<Stdout>,
+    ) -> Option<&SizeOrDeviceId> {
+        let metadata = self.md(out)?;
+        Some(self.display_size_or_rdev_given_md(size_format, metadata))
+    }
+
+    fn display_size_or_rdev_given_md(
+        &self,
+        size_format: SizeFormat,
+        metadata: &Metadata,
+    ) -> &SizeOrDeviceId {
+        self.sodi.get_or_init(|| {
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            {
+                let ft = metadata.file_type();
+                if ft.is_char_device() || ft.is_block_device() {
+                    let dev: u64 = metadata.rdev();
+                    let major = (dev >> 24) as u8;
+                    let minor = (dev & 0xff) as u8;
+                    return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
+                }
+            }
+            #[cfg(target_os = "linux")]
+            {
+                let ft = metadata.file_type();
+                if ft.is_char_device() || ft.is_block_device() {
+                    let dev: u64 = metadata.rdev();
+                    let major = (dev >> 8) as u8;
+                    let minor = (dev & 0xff) as u8;
+                    return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
+                }
+            }
+
+            SizeOrDeviceId::Size(display_size(metadata.len(), size_format))
+        })
+    }
+
+    fn display_symlink_count(&self, out: &mut BufWriter<Stdout>) -> Option<&String> {
+        let metadata = self.md(out)?;
+        Some(self.display_symlink_count_given_md(metadata))
+    }
+
+    fn display_symlink_count_given_md(&self, metadata: &Metadata) -> &String {
+        #[cfg(unix)]
+        {
+            self.symlink_count
+                .get_or_init(|| metadata.nlink().to_string())
+        }
+
+        #[cfg(not(unix))]
+        {
+            // Currently not sure of how to get this on Windows, so I'm punting.
+            // Git Bash looks like it may do the same thing.
+            String::from("1")
+        }
+    }
+
+    fn display_uname(&self, config: &Config, out: &mut BufWriter<Stdout>) -> Option<&String> {
+        let metadata = self.md(out)?;
+        Some(self.display_uname_given_md(config, metadata))
+    }
+
+    fn display_uname_given_md(&self, config: &Config, metadata: &Metadata) -> &String {
+        #[cfg(unix)]
+        {
+            self.uname.get_or_init(|| {
+                if config.long.numeric_uid_gid {
+                    metadata.uid().to_string()
+                } else {
+                    cached_uid2usr(metadata.uid())
+                }
+            })
+        }
+
+        #[cfg(not(unix))]
+        {
+            self.uname.get_or_init(|| "somebody".to_string())
+        }
+    }
+
+    fn display_group(&self, config: &Config, out: &mut BufWriter<Stdout>) -> Option<&String> {
+        let metadata = self.md(out)?;
+        Some(self.display_group_given_md(config, metadata))
+    }
+
+    fn display_group_given_md(&self, config: &Config, metadata: &Metadata) -> &String {
+        #[cfg(all(unix, not(target_os = "redox")))]
+        {
+            self.group.get_or_init(|| {
+                if config.long.numeric_uid_gid {
+                    metadata.gid().to_string()
+                } else {
+                    cached_gid2grp(metadata.gid())
+                }
+            })
+        }
+
+        #[cfg(target_os = "redox")]
+        {
+            let metadata = self.md(out)?;
+            self.group.get_or_init(|| metadata.gid().to_string())
+        }
+
+        #[cfg(not(unix))]
+        {
+            self.group.get_or_init(|| "somegroup".to_string())
+        }
+    }
+
+    #[allow(unused_variables)]
+    fn display_inode(&self, out: &mut BufWriter<Stdout>) -> Option<&String> {
+        let metadata = self.md(out)?;
+        Some(self.display_inode_given_md(metadata))
+    }
+
+    fn display_inode_given_md(&self, metadata: &Metadata) -> &String {
+        #[cfg(unix)]
+        {
+            self.inode.get_or_init(|| get_inode(metadata))
+        }
+        #[cfg(not(unix))]
+        {
+            "".to_string()
+        }
     }
 }
 
@@ -1661,22 +1811,23 @@ fn display_dir_entry_size(
 ) -> (usize, usize, usize, usize, usize, usize, usize) {
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
     if let Some(md) = entry.md(out) {
-        let (size_len, major_len, minor_len) = match display_size_or_rdev(md, config) {
-            SizeOrDeviceId::Device(major, minor) => (
-                (major.len() + minor.len() + 2usize),
-                major.len(),
-                minor.len(),
-            ),
-            SizeOrDeviceId::Size(size) => (size.len(), 0usize, 0usize),
-        };
+        let (size_len, major_len, minor_len) =
+            match entry.display_size_or_rdev_given_md(config.size_format, md) {
+                SizeOrDeviceId::Device(major, minor) => (
+                    (major.len() + minor.len() + 2usize),
+                    major.len(),
+                    minor.len(),
+                ),
+                SizeOrDeviceId::Size(size) => (size.len(), 0usize, 0usize),
+            };
         (
-            display_symlink_count(md).len(),
-            display_uname(md, config).len(),
-            display_group(md, config).len(),
+            entry.display_symlink_count_given_md(md).len(),
+            entry.display_uname_given_md(config, md).len(),
+            entry.display_group_given_md(config, md).len(),
             size_len,
             major_len,
             minor_len,
-            display_inode(md).len(),
+            entry.display_inode_given_md(md).len(),
         )
     } else {
         (0, 0, 0, 0, 0, 0, 0)
@@ -1699,7 +1850,11 @@ fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             .as_ref()
             .map_or(0, |md| get_block_size(md, config));
     }
-    writeln!(out, "total {}", display_size(total_size, config))?;
+    writeln!(
+        out,
+        "total {}",
+        display_size(total_size, config.size_format)
+    )?;
     Ok(())
 }
 
@@ -1733,8 +1888,8 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         #[cfg(unix)]
         if config.inode {
             for item in items {
-                let inode_len = if let Some(md) = item.md(out) {
-                    display_inode(md).len()
+                let inode_len = if let Some(inode) = item.display_inode(out) {
+                    inode.len()
                 } else {
                     continue;
                 };
@@ -1904,14 +2059,14 @@ fn display_item_long(
             } else {
                 ""
             },
-            pad_left(&display_symlink_count(md), padding.link_count)
+            pad_left(&item.display_symlink_count_given_md(md), padding.link_count)
         )?;
 
         if config.long.owner {
             write!(
                 out,
                 " {}",
-                pad_right(&display_uname(md, config), padding.uname)
+                pad_right(&item.display_uname_given_md(config, md), padding.uname)
             )?;
         }
 
@@ -1919,7 +2074,7 @@ fn display_item_long(
             write!(
                 out,
                 " {}",
-                pad_right(&display_group(md, config), padding.group)
+                pad_right(&item.display_group_given_md(config, md), padding.group)
             )?;
         }
 
@@ -1937,11 +2092,11 @@ fn display_item_long(
             write!(
                 out,
                 " {}",
-                pad_right(&display_uname(md, config), padding.uname)
+                pad_right(&item.display_uname_given_md(config, md), padding.uname)
             )?;
         }
 
-        match display_size_or_rdev(md, config) {
+        match item.display_size_or_rdev_given_md(config.size_format, md) {
             SizeOrDeviceId::Size(size) => {
                 write!(out, " {}", pad_left(&size, padding.size))?;
             }
@@ -2092,15 +2247,6 @@ fn cached_uid2usr(uid: u32) -> String {
         .clone()
 }
 
-#[cfg(unix)]
-fn display_uname(metadata: &Metadata, config: &Config) -> String {
-    if config.long.numeric_uid_gid {
-        metadata.uid().to_string()
-    } else {
-        cached_uid2usr(metadata.uid())
-    }
-}
-
 #[cfg(all(unix, not(target_os = "redox")))]
 fn cached_gid2grp(gid: u32) -> String {
     lazy_static! {
@@ -2112,30 +2258,6 @@ fn cached_gid2grp(gid: u32) -> String {
         .entry(gid)
         .or_insert_with(|| entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()))
         .clone()
-}
-
-#[cfg(all(unix, not(target_os = "redox")))]
-fn display_group(metadata: &Metadata, config: &Config) -> String {
-    if config.long.numeric_uid_gid {
-        metadata.gid().to_string()
-    } else {
-        cached_gid2grp(metadata.gid())
-    }
-}
-
-#[cfg(target_os = "redox")]
-fn display_group(metadata: &Metadata, config: &Config) -> String {
-    metadata.gid().to_string()
-}
-
-#[cfg(not(unix))]
-fn display_uname(_metadata: &Metadata, _config: &Config) -> String {
-    "somebody".to_string()
-}
-
-#[cfg(not(unix))]
-fn display_group(_metadata: &Metadata, _config: &Config) -> String {
-    "somegroup".to_string()
 }
 
 // The implementations for get_time are separated because some options, such
@@ -2219,40 +2341,16 @@ fn format_prefixed(prefixed: &NumberPrefix<f64>) -> String {
 }
 
 #[allow(dead_code)]
+#[derive(Debug)]
 enum SizeOrDeviceId {
     Size(String),
     Device(String, String),
 }
 
-fn display_size_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
-    {
-        let ft = metadata.file_type();
-        if ft.is_char_device() || ft.is_block_device() {
-            let dev: u64 = metadata.rdev();
-            let major = (dev >> 24) as u8;
-            let minor = (dev & 0xff) as u8;
-            return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
-        }
-    }
-    #[cfg(target_os = "linux")]
-    {
-        let ft = metadata.file_type();
-        if ft.is_char_device() || ft.is_block_device() {
-            let dev: u64 = metadata.rdev();
-            let major = (dev >> 8) as u8;
-            let minor = (dev & 0xff) as u8;
-            return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
-        }
-    }
-
-    SizeOrDeviceId::Size(display_size(metadata.len(), config))
-}
-
-fn display_size(size: u64, config: &Config) -> String {
+fn display_size(size: u64, size_format: SizeFormat) -> String {
     // NOTE: The human-readable behavior deviates from the GNU ls.
     // The GNU ls uses binary prefixes by default.
-    match config.size_format {
+    match size_format {
         SizeFormat::Binary => format_prefixed(&NumberPrefix::binary(size as f64)),
         SizeFormat::Decimal => format_prefixed(&NumberPrefix::decimal(size as f64)),
         SizeFormat::Bytes => size.to_string(),
@@ -2450,30 +2548,6 @@ fn color_name(ls_colors: &LsColors, path: &Path, name: String, md: &Metadata) ->
     match ls_colors.style_for_path_with_metadata(path, Some(md)) {
         Some(style) => style.to_ansi_term_style().paint(name).to_string(),
         None => name,
-    }
-}
-
-#[cfg(not(unix))]
-fn display_symlink_count(_metadata: &Metadata) -> String {
-    // Currently not sure of how to get this on Windows, so I'm punting.
-    // Git Bash looks like it may do the same thing.
-    String::from("1")
-}
-
-#[cfg(unix)]
-fn display_symlink_count(metadata: &Metadata) -> String {
-    metadata.nlink().to_string()
-}
-
-#[allow(unused_variables)]
-fn display_inode(metadata: &Metadata) -> String {
-    #[cfg(unix)]
-    {
-        get_inode(metadata)
-    }
-    #[cfg(not(unix))]
-    {
-        "".to_string()
     }
 }
 
