@@ -292,9 +292,9 @@ fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
 /// Assign 1 `MountInfo` entry to each path
 /// `lofs` entries are skipped and dummy mount points are skipped
 /// Only the longest matching prefix for that path is considered
+/// `lofs` is for Solaris style loopback filesystem and is present in Solaris and FreeBSD.
+/// It works similar to symlinks
 fn get_point_list(vmi: &[MountInfo], paths: &[String]) -> Vec<MountInfo> {
-    // Choose MountInfo per input_path
-    // Skip lofs, skip dummy and select longest match
     paths
         .iter()
         .map(|p| {

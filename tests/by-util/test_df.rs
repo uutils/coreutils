@@ -59,6 +59,7 @@ fn test_order_same() {
 }
 
 /// Test of mount point begin repeated
+#[cfg(unix)]
 #[test]
 fn test_output_mp_repeat() {
     let output1 = new_ucmd!().arg("/").arg("/").succeeds().stdout_move_str();
