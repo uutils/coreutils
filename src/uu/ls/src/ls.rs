@@ -572,13 +572,7 @@ impl Config {
             } else {
                 None
             }
-        } else if std::env::var_os("POSIXLY_CORRECT").is_some() {
-            if std::env::var_os("POSIXLY_CORRECT")
-                .unwrap()
-                .eq(&OsString::from("true"))
-                || std::env::var_os("POSIXLY_CORRECT")
-                    .unwrap()
-                    .eq(&OsString::from("1"))
+        } else if let Some("true" | "1") = std::env::var("POSIXLY_CORRECT") {
             {
                 Some(POSIXLY_CORRECT_BLOCK_SIZE)
             } else {
