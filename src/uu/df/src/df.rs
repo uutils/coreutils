@@ -309,7 +309,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect();
     println!("{}", Header::new(&opt));
     for row in data {
-        println!("{}", DisplayRow::new(row, &opt));
+        println!("{}", DisplayRow::new(&row, &opt));
     }
 
     Ok(())
