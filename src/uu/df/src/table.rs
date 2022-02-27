@@ -120,7 +120,7 @@ impl From<Filesystem> for Row {
 /// The `options` control how the information in the row gets displayed.
 pub(crate) struct DisplayRow<'a> {
     /// The data in this row.
-    row: Row,
+    row: &'a Row,
 
     /// Options that control how to display the data.
     options: &'a Options,
@@ -135,7 +135,7 @@ pub(crate) struct DisplayRow<'a> {
 
 impl<'a> DisplayRow<'a> {
     /// Instantiate this struct.
-    pub(crate) fn new(row: Row, options: &'a Options) -> Self {
+    pub(crate) fn new(row: &'a Row, options: &'a Options) -> Self {
         Self { row, options }
     }
 
@@ -354,7 +354,7 @@ mod tests {
             inodes_usage: Some(0.2),
         };
         assert_eq!(
-            DisplayRow::new(row, &options).to_string(),
+            DisplayRow::new(&row, &options).to_string(),
             "my_device                 100           25           75   25% my_mount        "
         );
     }
@@ -385,7 +385,7 @@ mod tests {
             inodes_usage: Some(0.2),
         };
         assert_eq!(
-            DisplayRow::new(row, &options).to_string(),
+            DisplayRow::new(&row, &options).to_string(),
             "my_device        my_type          100           25           75   25% my_mount        "
         );
     }
@@ -416,7 +416,7 @@ mod tests {
             inodes_usage: Some(0.2),
         };
         assert_eq!(
-            DisplayRow::new(row, &options).to_string(),
+            DisplayRow::new(&row, &options).to_string(),
             "my_device                  10            2            8   20% my_mount        "
         );
     }
@@ -447,7 +447,7 @@ mod tests {
             inodes_usage: Some(0.2),
         };
         assert_eq!(
-            DisplayRow::new(row, &options).to_string(),
+            DisplayRow::new(&row, &options).to_string(),
             "my_device        my_type         4.0k         1.0k         3.0k   25% my_mount        "
         );
     }
@@ -478,7 +478,7 @@ mod tests {
             inodes_usage: Some(0.2),
         };
         assert_eq!(
-            DisplayRow::new(row, &options).to_string(),
+            DisplayRow::new(&row, &options).to_string(),
             "my_device        my_type        4.0Ki        1.0Ki        3.0Ki   25% my_mount        "
         );
     }
