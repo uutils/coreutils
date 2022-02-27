@@ -633,8 +633,8 @@ impl Config {
         let opt_quoting_style = if let Some(cmd_line_qs) = options.value_of(options::QUOTING_STYLE)
         {
             Some(cmd_line_qs.to_owned())
-        } else if std::env::var_os("QUOTING_STYLE").is_some() {
-            Self::parse_byte_count(&std::env::var_os("QUOTING_STYLE").unwrap().to_string_lossy())
+        } else if let Some(style) = std::env::var("QUOTING_STYLE") {
+            Self::parse_byte_count(&style)
                 .map(|parsed| parsed.to_string())
         } else {
             None
