@@ -15,6 +15,7 @@ use crate::{BlockSize, Filesystem, Options};
 use uucore::fsext::{FsUsage, MountInfo};
 
 use std::fmt;
+use std::ops::AddAssign;
 
 /// A row in the filesystem usage data table.
 ///
@@ -65,6 +66,63 @@ pub(crate) struct Row {
     ///
     /// If the filesystem has zero bytes, then this is `None`.
     inodes_usage: Option<f64>,
+}
+
+impl Row {
+    pub(crate) fn new(source: &str) -> Self {
+        Self {
+            fs_device: source.into(),
+            fs_type: "-".into(),
+            fs_mount: "-".into(),
+            bytes: 0,
+            bytes_used: 0,
+            bytes_free: 0,
+            bytes_usage: None,
+            #[cfg(target_os = "macos")]
+            bytes_capacity: None,
+            inodes: 0,
+            inodes_used: 0,
+            inodes_free: 0,
+            inodes_usage: None,
+        }
+    }
+}
+
+impl AddAssign for Row {
+    /// Sum the numeric values of two rows.
+    ///
+    /// The `Row::fs_device` field is set to `"total"` and the
+    /// remaining `String` fields are set to `"-"`.
+    fn add_assign(&mut self, rhs: Self) {
+        let bytes = self.bytes + rhs.bytes;
+        let bytes_used = self.bytes_used + rhs.bytes_used;
+        let inodes = self.inodes + rhs.inodes;
+        let inodes_used = self.inodes_used + rhs.inodes_used;
+        *self = Self {
+            fs_device: "total".into(),
+            fs_type: "-".into(),
+            fs_mount: "-".into(),
+            bytes,
+            bytes_used,
+            bytes_free: self.bytes_free + rhs.bytes_free,
+            bytes_usage: if bytes == 0 {
+                None
+            } else {
+                Some(bytes_used as f64 / bytes as f64)
+            },
+            // TODO Figure out how to compute this.
+            #[cfg(target_os = "macos")]
+            bytes_capacity: None,
+            inodes,
+            inodes_used,
+            inodes_free: self.inodes_free + rhs.inodes_free,
+            inodes_usage: if inodes == 0 {
+                None
+            } else {
+                Some(inodes_used as f64 / inodes as f64)
+            },
+        }
+    }
 }
 
 impl From<Filesystem> for Row {

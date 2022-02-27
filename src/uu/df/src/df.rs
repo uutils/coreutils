@@ -106,6 +106,11 @@ impl From<&ArgMatches> for BlockSize {
     }
 }
 
+/// Parameters that control the behavior of `df`.
+///
+/// Most of these parameters control which rows and which columns are
+/// displayed. The `block_size` determines the units to use when
+/// displaying numbers of bytes or inodes.
 #[derive(Default)]
 struct Options {
     show_local_fs: bool,
@@ -115,6 +120,9 @@ struct Options {
     show_inode_instead: bool,
     block_size: BlockSize,
     fs_selector: FsSelector,
+
+    /// Whether to show a final row comprising the totals for each column.
+    show_total: bool,
 }
 
 impl Options {
@@ -128,6 +136,7 @@ impl Options {
             show_inode_instead: matches.is_present(OPT_INODES),
             block_size: BlockSize::from(matches),
             fs_selector: FsSelector::from(matches),
+            show_total: matches.is_present(OPT_TOTAL),
         }
     }
 }
@@ -307,9 +316,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .filter(|fs| fs.usage.blocks != 0 || opt.show_all_fs || opt.show_listed_fs)
         .map(Into::into)
         .collect();
+
     println!("{}", Header::new(&opt));
+    let mut total = Row::new("total");
     for row in data {
         println!("{}", DisplayRow::new(&row, &opt));
+        total += row;
+    }
+    if opt.show_total {
+        println!("{}", DisplayRow::new(&total, &opt));
     }
 
     Ok(())
