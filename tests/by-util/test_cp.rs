@@ -1477,7 +1477,7 @@ fn test_cp_fifo() {
     assert!(at.is_fifo("fifo2"));
 }
 
-#[test] 
+#[test]
 fn test_dir_recursive_copy() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
