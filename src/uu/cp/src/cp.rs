@@ -363,7 +363,7 @@ pub fn uu_app<'a>() -> App<'a> {
              .long(options::REMOVE_DESTINATION)
              .overrides_with(options::FORCE)
              .help("remove each existing destination file before attempting to open it \
-                    (contrast with --force). On Windows, current only works for writeable files."))
+                    (contrast with --force). On Windows, currently only works for writeable files."))
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
         .arg(backup_control::arguments::suffix())
