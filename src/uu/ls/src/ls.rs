@@ -141,8 +141,8 @@ pub mod options {
 }
 
 const DEFAULT_TERM_WIDTH: u16 = 80;
+#[cfg(unix)]
 const DEFAULT_BLOCK_SIZE: u64 = 1024;
-const LEN_BLOCK_SIZE: u64 = 1;
 const POSIXLY_CORRECT_BLOCK_SIZE: u64 = 512;
 
 #[derive(Debug)]
@@ -1790,25 +1790,12 @@ fn pad_right(string: &str, count: usize) -> String {
 fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) -> UResult<()> {
     let mut total_size = 0;
     for item in items {
-        total_size += item.md(out).as_ref().map_or(0, |md| get_block_size(md));
+        total_size += item
+            .md(out)
+            .as_ref()
+            .map_or(0, |md| get_block_size(md, config));
     }
-    let display_total = match config.size_format {
-        // Windows does not give us size in blocks, blocks(),
-        // so get_block_size on Windows is just len().
-        // Thus, no need to convert to a custom block size.
-        SizeFormat::Bytes => {
-            #[cfg(unix)]
-            {
-                display_size(adjust_block_size(total_size, config, false), config)
-            }
-            #[cfg(not(unix))]
-            {
-                display_size(total_size, config)
-            }
-        }
-        SizeFormat::Binary | SizeFormat::Decimal => display_size(total_size, config),
-    };
-    writeln!(out, "total {}", display_total)?;
+    writeln!(out, "total {}", display_size(total_size, config))?;
     Ok(())
 }
 
@@ -1832,55 +1819,8 @@ fn display_additional_leading_info(
     }
     #[allow(unused_variables)]
     if config.alloc_size {
-        let s = if let Some(ft) = item.file_type(out) {
-            #[cfg(unix)]
-            {
-                if ft.is_char_device() || ft.is_block_device() {
-                    "0".to_owned()
-                } else {
-                    match config.size_format {
-                        SizeFormat::Binary | SizeFormat::Decimal => {
-                            display_size(get_block_size(item.md(out).unwrap()), config)
-                        }
-                        SizeFormat::Bytes => {
-                            if cfg!(unix) {
-                                display_size(
-                                    adjust_block_size(
-                                        get_block_size(item.md(out).unwrap()),
-                                        config,
-                                        false,
-                                    ),
-                                    config,
-                                )
-                            } else {
-                                display_size(get_block_size(item.md(out).unwrap()), config)
-                            }
-                        }
-                    }
-                }
-            }
-            #[cfg(not(unix))]
-            {
-                match config.size_format {
-                    SizeFormat::Binary | SizeFormat::Decimal => {
-                        display_size(get_block_size(item.md(out).unwrap()), config)
-                    }
-                    SizeFormat::Bytes => {
-                        if cfg!(unix) {
-                            display_size(
-                                adjust_block_size(
-                                    get_block_size(item.md(out).unwrap()),
-                                    config,
-                                    false,
-                                ),
-                                config,
-                            )
-                        } else {
-                            display_size(get_block_size(item.md(out).unwrap()), config)
-                        }
-                    }
-                }
-            }
+        let s = if let Some(md) = item.md(out) {
+            display_size(get_block_size(md, config), config)
         } else {
             "?".to_owned()
         };
@@ -1974,23 +1914,32 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
     Ok(())
 }
 
-fn adjust_block_size(size: u64, config: &Config, is_len: bool) -> u64 {
-    if config.block_size.is_some() {
-        size / config.block_size.unwrap()
-    } else if is_len {
-        size / LEN_BLOCK_SIZE
-    } else {
-        size / DEFAULT_BLOCK_SIZE
-    }
-}
-
-fn get_block_size(md: &Metadata) -> u64 {
+#[allow(unused_variables)]
+fn get_block_size(md: &Metadata, config: &Config) -> u64 {
     /* GNU ls will display sizes in terms of block size
        md.len() will differ from this value when the file has some holes
     */
     #[cfg(unix)]
     {
-        md.blocks() * 512
+        let raw_blocks = if md.file_type().is_char_device() || md.file_type().is_block_device() {
+            0u64
+        } else {
+            md.blocks() * 512
+        };
+        match config.size_format {
+            SizeFormat::Binary | SizeFormat::Decimal => raw_blocks,
+            SizeFormat::Bytes => {
+                if cfg!(unix) {
+                    if config.block_size.is_some() {
+                        raw_blocks / config.block_size.unwrap()
+                    } else {
+                        raw_blocks / DEFAULT_BLOCK_SIZE
+                    }
+                } else {
+                    raw_blocks
+                }
+            }
+        }
     }
     #[cfg(not(unix))]
     {
@@ -2420,10 +2369,13 @@ fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
             return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
         }
     }
-    SizeOrDeviceId::Size(display_size(
-        adjust_block_size(metadata.len(), config, true),
-        config,
-    ))
+    // Reported file len only adjusted for block_size when block_size is set
+    if config.block_size.is_none() {
+        SizeOrDeviceId::Size(display_size(metadata.len(), config))
+    } else {
+        let len_adjusted = metadata.len() / config.block_size.unwrap();
+        SizeOrDeviceId::Size(display_size(len_adjusted, config))
+    }
 }
 
 fn display_size(size: u64, config: &Config) -> String {
@@ -2710,26 +2662,7 @@ fn calculate_padding_collection(
 
         if config.alloc_size {
             if let Some(md) = item.md(out) {
-                let block_size_len = match config.size_format {
-                    SizeFormat::Bytes => {
-                        display_size(adjust_block_size(get_block_size(md), config, false), config)
-                            .len()
-                    }
-                    SizeFormat::Binary | SizeFormat::Decimal => {
-                        #[cfg(unix)]
-                        {
-                            if md.file_type().is_block_device() || md.file_type().is_char_device() {
-                                1usize
-                            } else {
-                                display_size(get_block_size(item.md(out).unwrap()), config).len()
-                            }
-                        }
-                        #[cfg(not(unix))]
-                        {
-                            display_size(get_block_size(item.md(out).unwrap()), config).len()
-                        }
-                    }
-                };
+                let block_size_len = display_size(get_block_size(md, config), config).len();
                 padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }
         }
@@ -2779,15 +2712,7 @@ fn calculate_padding_collection(
     for item in items {
         if config.alloc_size {
             if let Some(md) = item.md(out) {
-                let block_size_len = match config.size_format {
-                    SizeFormat::Bytes => {
-                        display_size(adjust_block_size(get_block_size(md), config, false), config)
-                            .len()
-                    }
-                    SizeFormat::Binary | SizeFormat::Decimal => {
-                        display_size(get_block_size(item.md(out).unwrap()), config).len()
-                    }
-                };
+                let block_size_len = display_size(get_block_size(md, config), config).len();
                 padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }
         }
