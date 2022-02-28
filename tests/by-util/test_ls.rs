@@ -93,6 +93,15 @@ fn test_ls_allocation_size() {
         .arg("4M")
         .arg("some-dir1/file-with-holes")
         .succeeds();
+    
+    // fill empty file with zeros
+    scene
+        .ccmd("dd")
+        .arg("--if=/dev/zero")
+        .arg("--of=some-dir1/zero-file")
+        .arg("bs=1024")
+        .arg("count=4096")
+        .succeeds();
 
     #[cfg(unix)]
     {
@@ -101,7 +110,7 @@ fn test_ls_allocation_size() {
             .arg("-s1")
             .arg("some-dir1")
             .succeeds()
-            .stdout_is("total 0\n0 empty-file\n0 file-with-holes\n");
+            .stdout_is("total 4096\n   0 empty-file\n   0 file-with-holes\n4096 zero-file\n");
 
         scene
             .ucmd()
@@ -111,22 +120,13 @@ fn test_ls_allocation_size() {
             // block size is 0 whereas size/len is 4194304
             .stdout_contains("4194304");
 
-        // fill empty file with zeros
-        scene
-            .ccmd("dd")
-            .arg("--if=/dev/zero")
-            .arg("--of=some-dir1/file-with-holes")
-            .arg("bs=1024")
-            .arg("count=4096")
-            .succeeds();
-
         scene
             .ucmd()
             .arg("-s1")
             .arg("some-dir1")
             .succeeds()
             .stdout_contains("0 empty-file")
-            .stdout_contains("4096 file-with-holes");
+            .stdout_contains("4096 zero-file");
 
         // Test alignment of different block sized files
         let res = scene.ucmd().arg("-si1").arg("some-dir1").succeeds();
@@ -162,7 +162,8 @@ fn test_ls_allocation_size() {
             .succeeds()
             .stdout_contains("total 512")
             .stdout_contains("0 empty-file")
-            .stdout_contains("512 file-with-holes");
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("512 zero-file");
 
         scene
             .ucmd()
@@ -172,17 +173,8 @@ fn test_ls_allocation_size() {
             .succeeds()
             .stdout_contains("total 1024")
             .stdout_contains("0 empty-file")
-            .stdout_contains("1024 file-with-holes");
-
-        scene
-            .ucmd()
-            .env("BLOCK_SIZE", "4K")
-            .arg("-s1h")
-            .arg("some-dir1")
-            .succeeds()
-            .stdout_contains("total 4.0M")
-            .stdout_contains("0 empty-file")
-            .stdout_contains("4.0M file-with-holes");
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("1024 zero-file");
 
         scene
             .ucmd()
@@ -193,7 +185,8 @@ fn test_ls_allocation_size() {
             .succeeds()
             .stdout_contains("total 4.2M")
             .stdout_contains("0 empty-file")
-            .stdout_contains("4.2M file-with-holes");
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("4.2M zero-file");
 
         scene
             .ucmd()
@@ -203,7 +196,8 @@ fn test_ls_allocation_size() {
             .succeeds()
             .stdout_contains("total 1024")
             .stdout_contains("0 empty-file")
-            .stdout_contains("1024 file-with-holes");
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("1024 zero-file");
 
         scene
             .ucmd()
@@ -213,7 +207,8 @@ fn test_ls_allocation_size() {
             .succeeds()
             .stdout_contains("total 8192")
             .stdout_contains("0 empty-file")
-            .stdout_contains("8192 file-with-holes");
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("8192 zero-file");
 
         // -k should make 'ls' ignore the env var
         scene
@@ -224,7 +219,8 @@ fn test_ls_allocation_size() {
             .succeeds()
             .stdout_contains("total 4096")
             .stdout_contains("0 empty-file")
-            .stdout_contains("4096 file-with-holes");
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("4096 zero-file");
 
         // but manually specified blocksize overrides -k
         scene
@@ -235,7 +231,8 @@ fn test_ls_allocation_size() {
             .succeeds()
             .stdout_contains("total 1024")
             .stdout_contains("0 empty-file")
-            .stdout_contains("1024 file-with-holes");
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("1024 zero-file");
 
         scene
             .ucmd()
@@ -245,7 +242,8 @@ fn test_ls_allocation_size() {
             .succeeds()
             .stdout_contains("total 1024")
             .stdout_contains("0 empty-file")
-            .stdout_contains("1024 file-with-holes");
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("1024 zero-file");
 
         // si option should always trump the human-readable option
         scene
@@ -256,7 +254,8 @@ fn test_ls_allocation_size() {
             .succeeds()
             .stdout_contains("total 4.2M")
             .stdout_contains("0 empty-file")
-            .stdout_contains("4.2M file-with-holes");
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("4.2M zero-file");
 
         scene
             .ucmd()
@@ -266,7 +265,8 @@ fn test_ls_allocation_size() {
             .succeeds()
             .stdout_contains("total 4.0M")
             .stdout_contains("0 empty-file")
-            .stdout_contains("4.0M file-with-holes");
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("4.0M zero-file");
 
         scene
             .ucmd()
@@ -276,7 +276,8 @@ fn test_ls_allocation_size() {
             .succeeds()
             .stdout_contains("total 4.2M")
             .stdout_contains("0 empty-file")
-            .stdout_contains("4.2M file-with-holes");
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("4.2M zero-file");
     }
 }
 
