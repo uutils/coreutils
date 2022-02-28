@@ -21,6 +21,7 @@ use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
+use std::ffi::OsStr;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -489,29 +490,31 @@ impl Config {
             && options
                 .value_of(options::size::BLOCK_SIZE)
                 .unwrap()
-                .eq("si") || options.is_present(options::size::SI);
+                .eq("si")
+            || options.is_present(options::size::SI);
         let opt_hr = (cmd_line_bs.is_some()
             && options
                 .value_of(options::size::BLOCK_SIZE)
                 .unwrap()
-                .eq("human-readable")) || options.is_present(options::size::HUMAN_READABLE);
+                .eq("human-readable"))
+            || options.is_present(options::size::HUMAN_READABLE);
         let opt_kb = options.is_present(options::size::KIBIBYTES);
 
         let bs_env_var = std::env::var_os("BLOCK_SIZE");
         let ls_bs_env_var = std::env::var_os("LS_BLOCK_SIZE");
         let pc_env_var = std::env::var_os("POSIXLY_CORRECT");
-        
+
         let size_format = if opt_si {
             SizeFormat::Decimal
         } else if opt_hr {
             SizeFormat::Binary
         } else {
-            SizeFormat::Bytes 
+            SizeFormat::Bytes
         };
-        
-        let block_size: Option<u64> = if cmd_line_bs.is_some() {
+
+        let block_size: Option<u64> = if let Some(bs) = cmd_line_bs {
             if !opt_si && !opt_hr {
-                match parse_size(cmd_line_bs.unwrap()) {
+                match parse_size(bs) {
                     Ok(size) => Some(size),
                     Err(_) => {
                         show!(LsError::BlockSizeParseError(
@@ -539,7 +542,7 @@ impl Config {
                                 bs_num.to_string_lossy().to_string()
                             ));
                             None
-                        },
+                        }
                     }
                 } else {
                     None
@@ -547,9 +550,8 @@ impl Config {
             } else {
                 None
             }
-
         } else if let Some(pc) = pc_env_var {
-            if pc == OsString::from("true") || pc == OsString::from("1") {
+            if pc.as_os_str() == OsStr::new("true") || pc == OsStr::new("1") {
                 Some(POSIXLY_CORRECT_BLOCK_SIZE)
             } else {
                 None
@@ -606,12 +608,9 @@ impl Config {
             !atty::is(atty::Stream::Stdout)
         };
 
-        let opt_quoting_style = if let Some(cmd_line_qs) = options.value_of(options::QUOTING_STYLE)
-        {
-            Some(cmd_line_qs.to_owned())
-        } else {
-            None
-        };
+        let opt_quoting_style = options
+            .value_of(options::QUOTING_STYLE)
+            .map(|cmd_line_qs| cmd_line_qs.to_owned());
 
         let quoting_style = if let Some(style) = opt_quoting_style {
             match style.as_str() {
@@ -1845,22 +1844,55 @@ fn display_additional_leading_info(
             result.push_str(&format!("{} ", pad_left(&i, padding.inode)));
         }
     }
+    #[allow(unused_variables)]
     if config.alloc_size {
         let s = if let Some(ft) = item.file_type(out) {
-            if ft.is_char_device() || ft.is_block_device() {
-                "0".to_string()
-            } else { 
-                match config.size_format {   
+            #[cfg(unix)]
+            {
+                if ft.is_char_device() || ft.is_block_device() {
+                    "0".to_owned()
+                } else {
+                    match config.size_format {
+                        SizeFormat::Binary | SizeFormat::Decimal => {
+                            display_size(get_block_size(item.md(out).unwrap()), config)
+                        }
+                        SizeFormat::Bytes => {
+                            if cfg!(unix) {
+                                display_size(
+                                    adjust_block_size(
+                                        get_block_size(item.md(out).unwrap()),
+                                        config,
+                                        false,
+                                    ),
+                                    config,
+                                )
+                            } else {
+                                display_size(get_block_size(item.md(out).unwrap()), config)
+                            }
+                        }
+                    }
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                match config.size_format {
                     SizeFormat::Binary | SizeFormat::Decimal => {
                         display_size(get_block_size(item.md(out).unwrap()), config)
-                    },
+                    }
                     SizeFormat::Bytes => {
                         if cfg!(unix) {
-                            display_size(adjust_block_size(get_block_size(item.md(out).unwrap()), config, false), config)
+                            display_size(
+                                adjust_block_size(
+                                    get_block_size(item.md(out).unwrap()),
+                                    config,
+                                    false,
+                                ),
+                                config,
+                            )
                         } else {
                             display_size(get_block_size(item.md(out).unwrap()), config)
-                        }                        
-                    },    
+                        }
+                    }
                 }
             }
         } else {
@@ -1963,7 +1995,7 @@ fn adjust_block_size(size: u64, config: &Config, is_len: bool) -> u64 {
         size / LEN_BLOCK_SIZE
     } else {
         size / DEFAULT_BLOCK_SIZE
-    } 
+    }
 }
 
 fn get_block_size(md: &Metadata) -> u64 {
@@ -2402,7 +2434,10 @@ fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
             return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
         }
     }
-    SizeOrDeviceId::Size(display_size(adjust_block_size(metadata.len(), config, true), config))
+    SizeOrDeviceId::Size(display_size(
+        adjust_block_size(metadata.len(), config, true),
+        config,
+    ))
 }
 
 fn display_size(size: u64, config: &Config) -> String {
@@ -2691,12 +2726,20 @@ fn calculate_padding_collection(
             if let Some(md) = item.md(out) {
                 let block_size_len = match config.size_format {
                     SizeFormat::Bytes => {
-                        display_size(adjust_block_size(get_block_size(md), config, false), config).len()
+                        display_size(adjust_block_size(get_block_size(md), config, false), config)
+                            .len()
                     }
                     SizeFormat::Binary | SizeFormat::Decimal => {
-                        if md.file_type().is_block_device() || md.file_type().is_char_device() {
-                            1usize
-                        } else {
+                        #[cfg(unix)]
+                        {
+                            if md.file_type().is_block_device() || md.file_type().is_char_device() {
+                                1usize
+                            } else {
+                                display_size(get_block_size(item.md(out).unwrap()), config).len()
+                            }
+                        }
+                        #[cfg(not(unix))]
+                        {
                             display_size(get_block_size(item.md(out).unwrap()), config).len()
                         }
                     }
@@ -2752,7 +2795,8 @@ fn calculate_padding_collection(
             if let Some(md) = item.md(out) {
                 let block_size_len = match config.size_format {
                     SizeFormat::Bytes => {
-                        display_size(adjust_block_size(get_block_size(md), config, false), config).len()
+                        display_size(adjust_block_size(get_block_size(md), config, false), config)
+                            .len()
                     }
                     SizeFormat::Binary | SizeFormat::Decimal => {
                         display_size(get_block_size(item.md(out).unwrap()), config).len()

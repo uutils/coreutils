@@ -93,7 +93,7 @@ fn test_ls_allocation_size() {
         .arg("4M")
         .arg("some-dir1/file-with-holes")
         .succeeds();
-    
+
     // fill empty file with zeros
     scene
         .ccmd("dd")
