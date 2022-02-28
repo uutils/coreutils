@@ -9,18 +9,14 @@
 mod table;
 
 #[cfg(unix)]
-use uucore::fsext::statfs_fn;
+use uucore::fsext::statfs;
 use uucore::fsext::{read_fs_list, FsUsage, MountInfo};
 use uucore::{error::UResult, format_usage};
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
 use std::collections::HashSet;
-#[cfg(unix)]
-use std::ffi::CString;
 use std::iter::FromIterator;
-#[cfg(unix)]
-use std::mem;
 
 #[cfg(windows)]
 use std::path::Path;
@@ -183,23 +179,10 @@ impl Filesystem {
             }
         };
         #[cfg(unix)]
-        unsafe {
-            let path = CString::new(_stat_path).unwrap();
-            let mut statvfs = mem::zeroed();
-            if statfs_fn(path.as_ptr(), &mut statvfs) < 0 {
-                None
-            } else {
-                Some(Self {
-                    mount_info,
-                    usage: FsUsage::new(statvfs),
-                })
-            }
-        }
+        let usage = FsUsage::new(statfs(_stat_path).ok()?);
         #[cfg(windows)]
-        Some(Self {
-            mount_info,
-            usage: FsUsage::new(Path::new(&_stat_path)),
-        })
+        let usage = FsUsage::new(Path::new(&_stat_path));
+        Some(Self { mount_info, usage })
     }
 }
 
