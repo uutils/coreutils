@@ -512,43 +512,29 @@ impl Config {
             SizeFormat::Bytes
         };
 
-        let block_size: Option<u64> = if let Some(bs) = cmd_line_bs {
-            if !opt_si && !opt_hr {
-                match parse_size(bs) {
-                    Ok(size) => Some(size),
-                    Err(_) => {
-                        show!(LsError::BlockSizeParseError(
-                            cmd_line_bs.unwrap().to_owned()
-                        ));
-                        None
-                    }
-                }
-            } else {
-                None
-            }
-        } else if !opt_kb && (ls_bs_env_var.is_some() || bs_env_var.is_some()) {
-            let bs = if ls_bs_env_var.is_some() {
+        let raw_bs = if let Some(cmd_line_bs) = cmd_line_bs {
+            OsString::from(cmd_line_bs)
+        } else if !opt_kb {
+            if let Some(ls_bs_env_var) = ls_bs_env_var {
                 ls_bs_env_var
-            } else {
+            } else if let Some(bs_env_var) = bs_env_var {
                 bs_env_var
-            };
+            } else {
+                OsString::from("")
+            }
+        } else {
+            OsString::from("")
+        };
 
-            if !opt_si && !opt_hr {
-                if let Some(bs_num) = bs {
-                    match parse_size(&bs_num.to_string_lossy()) {
-                        Ok(size) => Some(size),
-                        Err(_) => {
-                            show!(LsError::BlockSizeParseError(
-                                bs_num.to_string_lossy().to_string()
-                            ));
-                            None
-                        }
-                    }
-                } else {
+        let block_size: Option<u64> = if !opt_si && !opt_hr && !raw_bs.is_empty() {
+            match parse_size(&raw_bs.to_string_lossy()) {
+                Ok(size) => Some(size),
+                Err(_) => {
+                    show!(LsError::BlockSizeParseError(
+                        cmd_line_bs.unwrap().to_owned()
+                    ));
                     None
                 }
-            } else {
-                None
             }
         } else if let Some(pc) = pc_env_var {
             if pc.as_os_str() == OsStr::new("true") || pc == OsStr::new("1") {
