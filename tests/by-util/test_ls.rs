@@ -87,24 +87,24 @@ fn test_ls_allocation_size() {
     at.mkdir("some-dir1");
     at.touch("some-dir1/empty-file");
 
-    scene
-        .ccmd("truncate")
-        .arg("-s")
-        .arg("4M")
-        .arg("some-dir1/file-with-holes")
-        .succeeds();
-
-    // fill empty file with zeros
-    scene
-        .ccmd("dd")
-        .arg("--if=/dev/zero")
-        .arg("--of=some-dir1/zero-file")
-        .arg("bs=1024")
-        .arg("count=4096")
-        .succeeds();
-
     #[cfg(unix)]
     {
+        scene
+            .ccmd("truncate")
+            .arg("-s")
+            .arg("4M")
+            .arg("some-dir1/file-with-holes")
+            .succeeds();
+
+        // fill empty file with zeros
+        scene
+            .ccmd("dd")
+            .arg("--if=/dev/zero")
+            .arg("--of=some-dir1/zero-file")
+            .arg("bs=1024")
+            .arg("count=4096")
+            .succeeds();
+
         scene
             .ucmd()
             .arg("-s1")
