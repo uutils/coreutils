@@ -58,4 +58,23 @@ fn test_order_same() {
     assert_eq!(output1, output2);
 }
 
+#[test]
+fn test_output_conflict_options() {
+    for option in ["-i", "-T", "-P"] {
+        new_ucmd!().arg("--output=source").arg(option).fails();
+    }
+}
+
+#[test]
+fn test_output_option() {
+    new_ucmd!().arg("--output").succeeds();
+    new_ucmd!().arg("--output=source,target").succeeds();
+    new_ucmd!().arg("--output=invalid_option").fails();
+}
+
+#[test]
+fn test_type_option() {
+    new_ucmd!().args(&["-t", "ext4", "-t", "ext3"]).succeeds();
+}
+
 // ToDO: more tests...

@@ -33,14 +33,14 @@ use crate::display::Quotable;
 /// assert_eq!(Ok(9 * 1000), parse_size("9kB")); // kB is 1000
 /// assert_eq!(Ok(2 * 1024), parse_size("2K")); // K is 1024
 /// ```
-pub fn parse_size(size: &str) -> Result<usize, ParseSizeError> {
+pub fn parse_size(size: &str) -> Result<u64, ParseSizeError> {
     if size.is_empty() {
         return Err(ParseSizeError::parse_failure(size));
     }
     // Get the numeric part of the size argument. For example, if the
     // argument is "123K", then the numeric part is "123".
     let numeric_string: String = size.chars().take_while(|c| c.is_digit(10)).collect();
-    let number: usize = if !numeric_string.is_empty() {
+    let number: u64 = if !numeric_string.is_empty() {
         match numeric_string.parse() {
             Ok(n) => n,
             Err(_) => return Err(ParseSizeError::parse_failure(size)),
@@ -75,7 +75,7 @@ pub fn parse_size(size: &str) -> Result<usize, ParseSizeError> {
         "YB" | "yB" => (1000, 8),
         _ => return Err(ParseSizeError::parse_failure(size)),
     };
-    let factor = match usize::try_from(base.pow(exponent)) {
+    let factor = match u64::try_from(base.pow(exponent)) {
         Ok(n) => n,
         Err(_) => return Err(ParseSizeError::size_too_big(size)),
     };
@@ -181,7 +181,7 @@ mod tests {
 
     #[test]
     fn all_suffixes() {
-        // Units  are  K,M,G,T,P,E,Z,Y  (powers  of 1024) or KB,MB,... (powers of 1000).
+        // Units  are  K,M,G,T,P,E,Z,Y (powers of 1024) or KB,MB,... (powers of 1000).
         // Binary prefixes can be used, too: KiB=K, MiB=M, and so on.
         let suffixes = [
             ('K', 1u32),
@@ -190,31 +190,30 @@ mod tests {
             ('T', 4u32),
             ('P', 5u32),
             ('E', 6u32),
-            #[cfg(target_pointer_width = "128")]
-            ('Z', 7u32), // ParseSizeError::SizeTooBig on x64
-            #[cfg(target_pointer_width = "128")]
-            ('Y', 8u32), // ParseSizeError::SizeTooBig on x64
+            // The following will always result ParseSizeError::SizeTooBig as they cannot fit in u64
+            // ('Z', 7u32),
+            // ('Y', 8u32),
         ];
 
         for &(c, exp) in &suffixes {
             let s = format!("2{}B", c); // KB
-            assert_eq!(Ok((2 * (1000_u128).pow(exp)) as usize), parse_size(&s));
+            assert_eq!(Ok((2 * (1000_u128).pow(exp)) as u64), parse_size(&s));
             let s = format!("2{}", c); // K
-            assert_eq!(Ok((2 * (1024_u128).pow(exp)) as usize), parse_size(&s));
+            assert_eq!(Ok((2 * (1024_u128).pow(exp)) as u64), parse_size(&s));
             let s = format!("2{}iB", c); // KiB
-            assert_eq!(Ok((2 * (1024_u128).pow(exp)) as usize), parse_size(&s));
+            assert_eq!(Ok((2 * (1024_u128).pow(exp)) as u64), parse_size(&s));
             let s = format!("2{}iB", c.to_lowercase()); // kiB
-            assert_eq!(Ok((2 * (1024_u128).pow(exp)) as usize), parse_size(&s));
+            assert_eq!(Ok((2 * (1024_u128).pow(exp)) as u64), parse_size(&s));
 
             // suffix only
             let s = format!("{}B", c); // KB
-            assert_eq!(Ok(((1000_u128).pow(exp)) as usize), parse_size(&s));
+            assert_eq!(Ok(((1000_u128).pow(exp)) as u64), parse_size(&s));
             let s = format!("{}", c); // K
-            assert_eq!(Ok(((1024_u128).pow(exp)) as usize), parse_size(&s));
+            assert_eq!(Ok(((1024_u128).pow(exp)) as u64), parse_size(&s));
             let s = format!("{}iB", c); // KiB
-            assert_eq!(Ok(((1024_u128).pow(exp)) as usize), parse_size(&s));
+            assert_eq!(Ok(((1024_u128).pow(exp)) as u64), parse_size(&s));
             let s = format!("{}iB", c.to_lowercase()); // kiB
-            assert_eq!(Ok(((1024_u128).pow(exp)) as usize), parse_size(&s));
+            assert_eq!(Ok(((1024_u128).pow(exp)) as u64), parse_size(&s));
         }
     }
 
@@ -237,19 +236,6 @@ mod tests {
             ParseSizeError::SizeTooBig("'1Y': Value too large for defined data type".to_string()),
             parse_size("1Y").unwrap_err()
         );
-    }
-
-    #[test]
-    #[cfg(target_pointer_width = "32")]
-    fn overflow_x32() {
-        assert!(variant_eq(
-            &parse_size("1T").unwrap_err(),
-            &ParseSizeError::SizeTooBig(String::new())
-        ));
-        assert!(variant_eq(
-            &parse_size("1000G").unwrap_err(),
-            &ParseSizeError::SizeTooBig(String::new())
-        ));
     }
 
     #[test]

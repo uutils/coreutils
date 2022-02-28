@@ -13,12 +13,13 @@ use std::io::{self, stdin, BufRead, BufReader, Stdin};
 use std::path::Path;
 use uucore::error::FromIo;
 use uucore::error::UResult;
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
 static ABOUT: &str = "compare two sorted files line by line";
 static LONG_HELP: &str = "";
+const USAGE: &str = "{} [OPTION]... FILE1 FILE2";
 
 mod options {
     pub const COLUMN_1: &str = "1";
@@ -28,10 +29,6 @@ mod options {
     pub const DELIMITER_DEFAULT: &str = "\t";
     pub const FILE_1: &str = "FILE1";
     pub const FILE_2: &str = "FILE2";
-}
-
-fn usage() -> String {
-    format!("{} [OPTION]... FILE1 FILE2", uucore::execution_phrase())
 }
 
 fn mkdelim(col: usize, opts: &ArgMatches) -> String {
@@ -132,12 +129,11 @@ fn open_file(name: &str) -> io::Result<LineReader> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
     let filename1 = matches.value_of(options::FILE_1).unwrap();
     let filename2 = matches.value_of(options::FILE_2).unwrap();
     let mut f1 = open_file(filename1).map_err_context(|| filename1.to_string())?;
@@ -152,6 +148,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::COLUMN_1)

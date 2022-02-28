@@ -13,8 +13,10 @@ use clap::{crate_version, App, AppSettings, Arg};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 
 static ABOUT: &str = "Synchronize cached writes to persistent storage";
+const USAGE: &str = "{} [OPTION]... FILE...";
 pub mod options {
     pub static FILE_SYSTEM: &str = "file-system";
     pub static DATA: &str = "data";
@@ -157,15 +159,9 @@ mod platform {
     }
 }
 
-fn usage() -> String {
-    format!("{0} [OPTION]... FILE...", uucore::execution_phrase())
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let files: Vec<String> = matches
         .values_of(ARG_FILES)
@@ -198,6 +194,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::FILE_SYSTEM)

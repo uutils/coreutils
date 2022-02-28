@@ -14,14 +14,17 @@ mod platform;
 use crate::filenames::FilenameIterator;
 use crate::filenames::SuffixType;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
+use std::convert::TryInto;
 use std::env;
 use std::fmt;
 use std::fs::{metadata, File};
+use std::io;
 use std::io::{stdin, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::num::ParseIntError;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
+use uucore::format_usage;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::uio_error;
 
@@ -39,36 +42,20 @@ static OPT_VERBOSE: &str = "verbose";
 //The ---io-blksize parameter is consumed and ignored.
 //The parameter is included to make GNU coreutils tests pass.
 static OPT_IO_BLKSIZE: &str = "-io-blksize";
+static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
 
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
 
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... [INPUT [PREFIX]]",
-        uucore::execution_phrase()
-    )
-}
-fn get_long_usage() -> String {
-    format!(
-        "Usage:
-  {0}
-
-Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default
-size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
--, read standard input.",
-        usage()
-    )
-}
+const USAGE: &str = "{} [OPTION]... [INPUT [PREFIX]]";
+const AFTER_HELP: &str = "\
+    Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default \
+    size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is \
+    -, read standard input.";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-    let long_usage = get_long_usage();
-    let matches = uu_app()
-        .override_usage(&usage[..])
-        .after_help(&long_usage[..])
-        .get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
     match Settings::from(&matches) {
         Ok(settings) => split(&settings),
         Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{}", e))),
@@ -80,6 +67,8 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about("Create output files containing consecutive or interleaved sections of input")
+        .after_help(AFTER_HELP)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         // strategy (mutually exclusive)
         .arg(
@@ -129,6 +118,13 @@ pub fn uu_app<'a>() -> App<'a> {
             ),
         )
         .arg(
+            Arg::new(OPT_ELIDE_EMPTY_FILES)
+                .long(OPT_ELIDE_EMPTY_FILES)
+                .short('e')
+                .takes_value(false)
+                .help("do not generate empty output files with '-n'"),
+        )
+        .arg(
             Arg::new(OPT_NUMERIC_SUFFIXES)
                 .short('d')
                 .long(OPT_NUMERIC_SUFFIXES)
@@ -150,7 +146,7 @@ pub fn uu_app<'a>() -> App<'a> {
                 .long(OPT_HEX_SUFFIXES)
                 .takes_value(true)
                 .default_missing_value("0")
-                .help("use hex suffixes starting at 0, not alphabetic"),
+                .help("use hex suffixes instead of alphabetic"),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
@@ -181,17 +177,17 @@ pub fn uu_app<'a>() -> App<'a> {
 /// The strategy for breaking up the input file into chunks.
 enum Strategy {
     /// Each chunk has the specified number of lines.
-    Lines(usize),
+    Lines(u64),
 
     /// Each chunk has the specified number of bytes.
-    Bytes(usize),
+    Bytes(u64),
 
     /// Each chunk has as many lines as possible without exceeding the
     /// specified number of bytes.
-    LineBytes(usize),
+    LineBytes(u64),
 
     /// Split the file into this many chunks.
-    Number(usize),
+    Number(u64),
 }
 
 /// An error when parsing a chunking strategy from command-line arguments.
@@ -252,7 +248,7 @@ impl Strategy {
             }
             (0, 0, 0, 1) => {
                 let s = matches.value_of(OPT_NUMBER).unwrap();
-                let n = s.parse::<usize>().map_err(StrategyError::NumberOfChunks)?;
+                let n = s.parse::<u64>().map_err(StrategyError::NumberOfChunks)?;
                 Ok(Self::Number(n))
             }
             _ => Err(StrategyError::MultipleWays),
@@ -263,9 +259,9 @@ impl Strategy {
 /// Parse the suffix type from the command-line arguments.
 fn suffix_type_from(matches: &ArgMatches) -> SuffixType {
     if matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0 {
-        SuffixType::NumericDecimal
+        SuffixType::Decimal
     } else if matches.occurrences_of(OPT_HEX_SUFFIXES) > 0 {
-        SuffixType::NumericHexadecimal
+        SuffixType::Hexadecimal
     } else {
         SuffixType::Alphabetic
     }
@@ -285,6 +281,16 @@ struct Settings {
     filter: Option<String>,
     strategy: Strategy,
     verbose: bool,
+
+    /// Whether to *not* produce empty files when using `-n`.
+    ///
+    /// The `-n` command-line argument gives a specific number of
+    /// chunks into which the input files will be split. If the number
+    /// of chunks is greater than the number of bytes, and this is
+    /// `false`, then empty files will be created for the excess
+    /// chunks. If this is `false`, then empty files will not be
+    /// created.
+    elide_empty_files: bool,
 }
 
 /// An error when parsing settings from command-line arguments.
@@ -293,10 +299,13 @@ enum SettingsError {
     Strategy(StrategyError),
 
     /// Invalid suffix length parameter.
-    SuffixLength(String),
+    SuffixNotParsable(String),
 
     /// Suffix contains a directory separator, which is not allowed.
     SuffixContainsSeparator(String),
+
+    /// Suffix is not large enough to split into specified chunks
+    SuffixTooSmall(usize),
 
     /// The `--filter` option is not supported on Windows.
     #[cfg(windows)]
@@ -317,7 +326,8 @@ impl fmt::Display for SettingsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Strategy(e) => e.fmt(f),
-            Self::SuffixLength(s) => write!(f, "invalid suffix length: {}", s.quote()),
+            Self::SuffixNotParsable(s) => write!(f, "invalid suffix length: {}", s.quote()),
+            Self::SuffixTooSmall(i) => write!(f, "the suffix length needs to be at least {}", i),
             Self::SuffixContainsSeparator(s) => write!(
                 f,
                 "invalid suffix {}, contains directory separator",
@@ -340,18 +350,33 @@ impl Settings {
         if additional_suffix.contains('/') {
             return Err(SettingsError::SuffixContainsSeparator(additional_suffix));
         }
+        let strategy = Strategy::from(matches).map_err(SettingsError::Strategy)?;
+        let suffix_type = suffix_type_from(matches);
         let suffix_length_str = matches.value_of(OPT_SUFFIX_LENGTH).unwrap();
+        let suffix_length: usize = suffix_length_str
+            .parse()
+            .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?;
+        if let Strategy::Number(chunks) = strategy {
+            if suffix_length != 0 {
+                let required_suffix_length =
+                    (chunks as f64).log(suffix_type.radix() as f64).ceil() as usize;
+                if suffix_length < required_suffix_length {
+                    return Err(SettingsError::SuffixTooSmall(required_suffix_length));
+                }
+            }
+        }
         let result = Self {
             suffix_length: suffix_length_str
                 .parse()
-                .map_err(|_| SettingsError::SuffixLength(suffix_length_str.to_string()))?,
-            suffix_type: suffix_type_from(matches),
+                .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?,
+            suffix_type,
             additional_suffix,
             verbose: matches.occurrences_of("verbose") > 0,
-            strategy: Strategy::from(matches).map_err(SettingsError::Strategy)?,
+            strategy,
             input: matches.value_of(ARG_INPUT).unwrap().to_owned(),
             prefix: matches.value_of(ARG_PREFIX).unwrap().to_owned(),
             filter: matches.value_of(OPT_FILTER).map(|s| s.to_owned()),
+            elide_empty_files: matches.is_present(OPT_ELIDE_EMPTY_FILES),
         };
         #[cfg(windows)]
         if result.filter.is_some() {
@@ -376,17 +401,17 @@ struct ByteChunkWriter<'a> {
     settings: &'a Settings,
 
     /// The maximum number of bytes allowed for a single chunk of output.
-    chunk_size: usize,
+    chunk_size: u64,
 
     /// Running total of number of chunks that have been completed.
-    num_chunks_written: usize,
+    num_chunks_written: u64,
 
     /// Remaining capacity in number of bytes in the current chunk.
     ///
     /// This number starts at `chunk_size` and decreases as bytes are
     /// written. Once it reaches zero, a writer for a new chunk is
     /// initialized and this number gets reset to `chunk_size`.
-    num_bytes_remaining_in_current_chunk: usize,
+    num_bytes_remaining_in_current_chunk: u64,
 
     /// The underlying writer for the current chunk.
     ///
@@ -400,7 +425,7 @@ struct ByteChunkWriter<'a> {
 }
 
 impl<'a> ByteChunkWriter<'a> {
-    fn new(chunk_size: usize, settings: &'a Settings) -> Option<ByteChunkWriter<'a>> {
+    fn new(chunk_size: u64, settings: &'a Settings) -> Option<ByteChunkWriter<'a>> {
         let mut filename_iterator = FilenameIterator::new(
             &settings.prefix,
             &settings.additional_suffix,
@@ -430,7 +455,7 @@ impl<'a> Write for ByteChunkWriter<'a> {
         // different underlying writers. In that case, each iteration of
         // this loop writes to the underlying writer that corresponds to
         // the current chunk number.
-        let mut carryover_bytes_written = 0;
+        let mut carryover_bytes_written: usize = 0;
         loop {
             if buf.is_empty() {
                 return Ok(carryover_bytes_written);
@@ -441,19 +466,23 @@ impl<'a> Write for ByteChunkWriter<'a> {
             // write enough bytes to fill the current chunk, then increment
             // the chunk number and repeat.
             let n = buf.len();
-            if n < self.num_bytes_remaining_in_current_chunk {
+            if (n as u64) < self.num_bytes_remaining_in_current_chunk {
                 let num_bytes_written = self.inner.write(buf)?;
-                self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
+                self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
                 return Ok(carryover_bytes_written + num_bytes_written);
             } else {
                 // Write enough bytes to fill the current chunk.
-                let i = self.num_bytes_remaining_in_current_chunk;
+                //
+                // Conversion to usize is safe because we checked that
+                // self.num_bytes_remaining_in_current_chunk is lower than
+                // n, which is already usize.
+                let i = self.num_bytes_remaining_in_current_chunk as usize;
                 let num_bytes_written = self.inner.write(&buf[..i])?;
 
                 // It's possible that the underlying writer did not
                 // write all the bytes.
                 if num_bytes_written < i {
-                    self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
+                    self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
                     return Ok(carryover_bytes_written + num_bytes_written);
                 } else {
                     // Move the window to look at only the remaining bytes.
@@ -504,17 +533,17 @@ struct LineChunkWriter<'a> {
     settings: &'a Settings,
 
     /// The maximum number of lines allowed for a single chunk of output.
-    chunk_size: usize,
+    chunk_size: u64,
 
     /// Running total of number of chunks that have been completed.
-    num_chunks_written: usize,
+    num_chunks_written: u64,
 
     /// Remaining capacity in number of lines in the current chunk.
     ///
     /// This number starts at `chunk_size` and decreases as lines are
     /// written. Once it reaches zero, a writer for a new chunk is
     /// initialized and this number gets reset to `chunk_size`.
-    num_lines_remaining_in_current_chunk: usize,
+    num_lines_remaining_in_current_chunk: u64,
 
     /// The underlying writer for the current chunk.
     ///
@@ -528,7 +557,7 @@ struct LineChunkWriter<'a> {
 }
 
 impl<'a> LineChunkWriter<'a> {
-    fn new(chunk_size: usize, settings: &'a Settings) -> Option<LineChunkWriter<'a>> {
+    fn new(chunk_size: u64, settings: &'a Settings) -> Option<LineChunkWriter<'a>> {
         let mut filename_iterator = FilenameIterator::new(
             &settings.prefix,
             &settings.additional_suffix,
@@ -609,16 +638,38 @@ impl<'a> Write for LineChunkWriter<'a> {
 fn split_into_n_chunks_by_byte<R>(
     settings: &Settings,
     reader: &mut R,
-    num_chunks: usize,
+    num_chunks: u64,
 ) -> UResult<()>
 where
     R: Read,
 {
     // Get the size of the input file in bytes and compute the number
     // of bytes per chunk.
-    let metadata = metadata(&settings.input).unwrap();
+    //
+    // If the requested number of chunks exceeds the number of bytes
+    // in the file *and* the `elide_empty_files` parameter is enabled,
+    // then behave as if the number of chunks was set to the number of
+    // bytes in the file. This ensures that we don't write empty
+    // files. Otherwise, just write the `num_chunks - num_bytes` empty
+    // files.
+    let metadata = metadata(&settings.input).map_err(|_| {
+        USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
+    })?;
+
     let num_bytes = metadata.len();
-    let chunk_size = (num_bytes / (num_chunks as u64)) as usize;
+    let will_have_empty_files = settings.elide_empty_files && num_chunks > num_bytes;
+    let (num_chunks, chunk_size) = if will_have_empty_files {
+        let num_chunks = num_bytes;
+        let chunk_size = 1;
+        (num_chunks, chunk_size)
+    } else {
+        let chunk_size = (num_bytes / (num_chunks)).max(1);
+        (num_chunks, chunk_size)
+    };
+
+    let num_chunks: usize = num_chunks
+        .try_into()
+        .map_err(|_| USimpleError::new(1, "Number of chunks too big"))?;
 
     // This object is responsible for creating the filename for each chunk.
     let mut filename_iterator = FilenameIterator::new(
@@ -644,29 +695,17 @@ where
         // Write `chunk_size` bytes from the reader into each writer
         // except the last.
         //
-        // Re-use the buffer to avoid re-allocating a `Vec` on each
-        // iteration. The contents will be completely overwritten each
-        // time we call `read_exact()`.
-        //
         // The last writer gets all remaining bytes so that if the number
         // of bytes in the input file was not evenly divisible by
         // `num_chunks`, we don't leave any bytes behind.
-        let mut buf = vec![0u8; chunk_size];
         for writer in writers.iter_mut().take(num_chunks - 1) {
-            reader.read_exact(&mut buf)?;
-            writer.write_all(&buf)?;
+            io::copy(&mut reader.by_ref().take(chunk_size), writer)?;
         }
 
         // Write all the remaining bytes to the last chunk.
-        //
-        // To do this, we resize our buffer to have the necessary number
-        // of bytes.
         let i = num_chunks - 1;
-        let last_chunk_size = num_bytes as usize - (chunk_size * (num_chunks - 1));
-        buf.resize(last_chunk_size, 0);
-
-        reader.read_exact(&mut buf)?;
-        writers[i].write_all(&buf)?;
+        let last_chunk_size = num_bytes - (chunk_size * (num_chunks as u64 - 1));
+        io::copy(&mut reader.by_ref().take(last_chunk_size), &mut writers[i])?;
 
         Ok(())
     }

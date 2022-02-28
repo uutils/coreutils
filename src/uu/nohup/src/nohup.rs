@@ -22,7 +22,7 @@ use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UError, UResult};
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static ABOUT: &str = "Run COMMAND ignoring hangup signals.";
 static LONG_HELP: &str = "
@@ -31,6 +31,9 @@ If standard output is terminal, it'll be appended to nohup.out instead,
 or $HOME/nohup.out, if nohup.out open failed.
 If standard error is terminal, it'll be redirected to stdout.
 ";
+const USAGE: &str = "\
+    {} COMMAND [ARG]...
+    {} FLAG";
 static NOHUP_OUT: &str = "nohup.out";
 // exit codes that match the GNU implementation
 static EXIT_CANCELED: i32 = 125;
@@ -83,12 +86,11 @@ impl Display for NohupError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     replace_fds()?;
 
@@ -119,6 +121,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
+        .override_usage(format_usage(USAGE))
         .arg(
             Arg::new(options::CMD)
                 .hide(true)
@@ -203,13 +206,6 @@ fn find_stdout() -> UResult<File> {
             }
         }
     }
-}
-
-fn usage() -> String {
-    format!(
-        "{0} COMMAND [ARG]...\n    {0} FLAG",
-        uucore::execution_phrase()
-    )
 }
 
 #[cfg(target_vendor = "apple")]

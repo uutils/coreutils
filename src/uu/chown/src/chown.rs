@@ -9,6 +9,7 @@
 
 use uucore::display::Quotable;
 pub use uucore::entries::{self, Group, Locate, Passwd};
+use uucore::format_usage;
 use uucore::perms::{chown_base, options, IfFrom};
 
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -20,12 +21,9 @@ use std::os::unix::fs::MetadataExt;
 
 static ABOUT: &str = "change file owner and group";
 
-fn get_usage() -> String {
-    format!(
-        "{0} [OPTION]... [OWNER][:[GROUP]] FILE...\n{0} [OPTION]... --reference=RFILE FILE...",
-        uucore::execution_phrase()
-    )
-}
+const USAGE: &str = "\
+    {} [OPTION]... [OWNER][:[GROUP]] FILE...
+    {} [OPTION]... --reference=RFILE FILE...";
 
 fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>, IfFrom)> {
     let filter = if let Some(spec) = matches.value_of(options::FROM) {
@@ -56,10 +54,8 @@ fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<(Option<u32>, Optio
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = get_usage();
-
     chown_base(
-        uu_app().override_usage(&usage[..]),
+        uu_app(),
         args,
         options::ARG_OWNER,
         parse_gid_uid_and_filter,
@@ -71,6 +67,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::verbosity::CHANGES)

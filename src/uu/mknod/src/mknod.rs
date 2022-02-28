@@ -15,10 +15,10 @@ use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOT
 
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UResult, USimpleError, UUsageError};
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static ABOUT: &str = "Create the special file NAME of the given TYPE.";
-static USAGE: &str = "mknod [OPTION]... NAME TYPE [MAJOR MINOR]";
+static USAGE: &str = "{} [OPTION]... NAME TYPE [MAJOR MINOR]";
 static LONG_HELP: &str = "Mandatory arguments to long options are mandatory for short options too.
 -m, --mode=MODE    set file permission bits to MODE, not a=rw - umask
 --help     display this help and exit
@@ -146,7 +146,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
-        .override_usage(USAGE)
+        .override_usage(format_usage(USAGE))
         .after_help(LONG_HELP)
         .about(ABOUT)
         .setting(AppSettings::InferLongArgs)
