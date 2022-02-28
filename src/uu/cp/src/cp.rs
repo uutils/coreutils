@@ -294,6 +294,13 @@ static DEFAULT_ATTRIBUTES: &[Attribute] = &[
 ];
 
 pub fn uu_app<'a>() -> App<'a> {
+    const MODE_ARGS: &[&str] = &[
+        options::LINK,
+        options::REFLINK,
+        options::SYMBOLIC_LINK,
+        options::ATTRIBUTES_ONLY,
+        options::COPY_CONTENTS,
+    ];
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -314,17 +321,17 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(Arg::new(options::INTERACTIVE)
              .short('i')
              .long(options::INTERACTIVE)
-             .conflicts_with(options::NO_CLOBBER)
+             .overrides_with(options::NO_CLOBBER)
              .help("ask before overwriting files"))
         .arg(Arg::new(options::LINK)
              .short('l')
              .long(options::LINK)
-             .overrides_with(options::REFLINK)
+             .overrides_with_all(MODE_ARGS)
              .help("hard-link files instead of copying"))
         .arg(Arg::new(options::NO_CLOBBER)
              .short('n')
              .long(options::NO_CLOBBER)
-             .conflicts_with(options::INTERACTIVE)
+             .overrides_with(options::INTERACTIVE)
              .help("don't overwrite a file that already exists"))
         .arg(Arg::new(options::RECURSIVE)
              .short('r')
@@ -344,8 +351,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(Arg::new(options::SYMBOLIC_LINK)
              .short('s')
              .long(options::SYMBOLIC_LINK)
-             .conflicts_with(options::LINK)
-             .overrides_with(options::REFLINK)
+             .overrides_with_all(MODE_ARGS)
              .help("make symbolic links instead of copying"))
         .arg(Arg::new(options::FORCE)
              .short('f')
@@ -355,7 +361,7 @@ pub fn uu_app<'a>() -> App<'a> {
                     Currently not implemented for Windows."))
         .arg(Arg::new(options::REMOVE_DESTINATION)
              .long(options::REMOVE_DESTINATION)
-             .conflicts_with(options::FORCE)
+             .overrides_with(options::FORCE)
              .help("remove each existing destination file before attempting to open it \
                     (contrast with --force). On Windows, current only works for writeable files."))
         .arg(backup_control::arguments::backup())
@@ -370,11 +376,11 @@ pub fn uu_app<'a>() -> App<'a> {
              .long(options::REFLINK)
              .takes_value(true)
              .value_name("WHEN")
+             .overrides_with_all(MODE_ARGS)
              .help("control clone/CoW copies. See below"))
         .arg(Arg::new(options::ATTRIBUTES_ONLY)
              .long(options::ATTRIBUTES_ONLY)
-             .conflicts_with(options::COPY_CONTENTS)
-             .overrides_with(options::REFLINK)
+             .overrides_with_all(MODE_ARGS)
              .help("Don't copy the file data, just the attributes"))
         .arg(Arg::new(options::PRESERVE)
              .long(options::PRESERVE)
@@ -384,7 +390,7 @@ pub fn uu_app<'a>() -> App<'a> {
              .possible_values(PRESERVABLE_ATTRIBUTES)
              .min_values(0)
              .value_name("ATTR_LIST")
-             .conflicts_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::NO_PRESERVE])
+             .overrides_with_all(&[options::ARCHIVE, options::PRESERVE_DEFAULT_ATTRIBUTES, options::NO_PRESERVE])
              // -d sets this option
              // --archive sets this option
              .help("Preserve the specified attributes (default: mode, ownership (unix only), timestamps), \
@@ -392,13 +398,13 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(Arg::new(options::PRESERVE_DEFAULT_ATTRIBUTES)
              .short('p')
              .long(options::PRESERVE_DEFAULT_ATTRIBUTES)
-             .conflicts_with_all(&[options::PRESERVE, options::NO_PRESERVE, options::ARCHIVE])
+             .overrides_with_all(&[options::PRESERVE, options::NO_PRESERVE, options::ARCHIVE])
              .help("same as --preserve=mode,ownership(unix only),timestamps"))
         .arg(Arg::new(options::NO_PRESERVE)
              .long(options::NO_PRESERVE)
              .takes_value(true)
              .value_name("ATTR_LIST")
-             .conflicts_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::PRESERVE, options::ARCHIVE])
+             .overrides_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::PRESERVE, options::ARCHIVE])
              .help("don't preserve the specified attributes"))
         .arg(Arg::new(options::PARENTS)
             .long(options::PARENTS)
@@ -407,18 +413,18 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(Arg::new(options::NO_DEREFERENCE)
              .short('P')
              .long(options::NO_DEREFERENCE)
-             .conflicts_with(options::DEREFERENCE)
+             .overrides_with(options::DEREFERENCE)
              // -d sets this option
              .help("never follow symbolic links in SOURCE"))
         .arg(Arg::new(options::DEREFERENCE)
              .short('L')
              .long(options::DEREFERENCE)
-             .conflicts_with(options::NO_DEREFERENCE)
+             .overrides_with(options::NO_DEREFERENCE)
              .help("always follow symbolic links in SOURCE"))
         .arg(Arg::new(options::ARCHIVE)
              .short('a')
              .long(options::ARCHIVE)
-             .conflicts_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::PRESERVE, options::NO_PRESERVE])
+             .overrides_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::PRESERVE, options::NO_PRESERVE])
              .help("Same as -dR --preserve=all"))
         .arg(Arg::new(options::NO_DEREFERENCE_PRESERVE_LINKS)
              .short('d')
@@ -431,7 +437,7 @@ pub fn uu_app<'a>() -> App<'a> {
         // TODO: implement the following args
         .arg(Arg::new(options::COPY_CONTENTS)
              .long(options::COPY_CONTENTS)
-             .conflicts_with(options::ATTRIBUTES_ONLY)
+             .overrides_with(options::ATTRIBUTES_ONLY)
              .help("NotImplemented: copy contents of special files when recursive"))
         .arg(Arg::new(options::SPARSE)
              .long(options::SPARSE)
