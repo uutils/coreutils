@@ -190,7 +190,7 @@ fn test_cp_target_directory_is_file() {
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg(TEST_HELLO_WORLD_SOURCE)
         .fails()
-        .stderr_contains("must specify a directory");
+        .stderr_contains(format!("'{}' is not a directory", TEST_HOW_ARE_YOU_SOURCE));
 }
 
 #[test]

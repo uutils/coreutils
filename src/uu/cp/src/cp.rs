@@ -475,7 +475,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             LONG_HELP,
             backup_control::BACKUP_CONTROL_LONG_HELP
         ))
-        .get_matches_from(args);
+        .try_get_matches_from(args)?;
 
     let options = Options::from_matches(&matches)?;
 
