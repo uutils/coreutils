@@ -51,7 +51,7 @@ struct Config {
 }
 
 impl Config {
-    fn from(options: &clap::ArgMatches) -> Self {
+    fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let signal = match options.value_of(options::SIGNAL) {
             Some(signal_) => {
                 let signal_result = signal_by_name_or_value(signal_);
@@ -69,8 +69,11 @@ impl Config {
             .value_of(options::KILL_AFTER)
             .map(|time| uucore::parse_time::from_str(time).unwrap());
 
-        let duration: Duration =
-            uucore::parse_time::from_str(options.value_of(options::DURATION).unwrap()).unwrap();
+        let duration =
+            match uucore::parse_time::from_str(options.value_of(options::DURATION).unwrap()) {
+                Ok(duration) => duration,
+                Err(err) => return Err(USimpleError::new(1, err)),
+            };
 
         let preserve_status: bool = options.is_present(options::PRESERVE_STATUS);
         let foreground = options.is_present(options::FOREGROUND);
@@ -82,7 +85,7 @@ impl Config {
             .map(String::from)
             .collect::<Vec<_>>();
 
-        Self {
+        Ok(Self {
             foreground,
             kill_after,
             signal,
@@ -90,7 +93,7 @@ impl Config {
             preserve_status,
             verbose,
             command,
-        }
+        })
     }
 }
 
@@ -104,7 +107,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = app.get_matches_from(args);
 
-    let config = Config::from(&matches);
+    let config = Config::from(&matches)?;
     timeout(
         &config.command,
         config.duration,
