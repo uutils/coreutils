@@ -320,10 +320,11 @@ fn path_from_stdout() -> PathBuf {
     #[cfg(windows)]
     {
         use std::os::windows::prelude::AsRawHandle;
-        use windows::Win32::Foundation::{GetLastError, HANDLE, MAX_PATH, PWSTR};
         use windows::Win32::Foundation::{
-            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND, WIN32_ERROR,
+            GetLastError, ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND,
+            HANDLE, MAX_PATH, PWSTR, WIN32_ERROR,
         };
+        use windows::Win32::Foundation::{GetLastError, HANDLE, MAX_PATH, PWSTR};
         use windows::Win32::Storage::FileSystem::FILE_NAME_OPENED;
 
         // https://docs.microsoft.com/en-us/windows/win32/memory/obtaining-a-file-name-from-a-file-handle?redirectedfrom=MSDN
