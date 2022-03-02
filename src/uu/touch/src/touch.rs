@@ -310,8 +310,8 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
 
 /// Returns a PathBuf to stdout.
 ///
-/// On Windows, uses GetFinalPathNameByHandleA to attempt to get the path
-/// from the stdout file handle.
+/// On Windows, uses GetFinalPathNameByHandleW to attempt to get the path
+/// from the stdout handle.
 fn path_from_stdout() -> PathBuf {
     #[cfg(unix)]
     {
@@ -320,26 +320,39 @@ fn path_from_stdout() -> PathBuf {
     #[cfg(windows)]
     {
         use std::os::windows::prelude::AsRawHandle;
-        use windows::Win32::Foundation::{HANDLE, MAX_PATH, PSTR};
+        use windows::Win32::Foundation::{GetLastError, HANDLE, MAX_PATH, PWSTR};
+        use windows::Win32::Foundation::{
+            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND, WIN32_ERROR,
+        };
         use windows::Win32::Storage::FileSystem::FILE_NAME_OPENED;
 
         // https://docs.microsoft.com/en-us/windows/win32/memory/obtaining-a-file-name-from-a-file-handle?redirectedfrom=MSDN
         unsafe {
             let handle = std::io::stdout().lock().as_raw_handle();
             // TODO: migrate away from std::mem::uninitialized
-            let file_path_buffer: [u8; MAX_PATH as usize] = std::mem::uninitialized();
+            let file_path_buffer: [u16; MAX_PATH as usize] = std::mem::uninitialized();
 
-            windows::Win32::Storage::FileSystem::GetFinalPathNameByHandleA::<HANDLE>(
+            let ret = windows::Win32::Storage::FileSystem::GetFinalPathNameByHandleW::<HANDLE>(
                 std::mem::transmute(handle),
-                PSTR(file_path_buffer.as_ptr()),
+                PWSTR(file_path_buffer.as_ptr()),
                 MAX_PATH,
                 FILE_NAME_OPENED,
             );
+            let err = WIN32_ERROR(ret);
+            // TODO: there is probably a library or something for handling win32 errors
+            let bufsize: usize = match err {
+                // TODO: what actually should happen if the file is not here? error?
+                ERROR_PATH_NOT_FOUND => MAX_PATH as usize,
+                ERROR_NOT_ENOUGH_MEMORY => panic!("not enough memory to complete the operation"),
+                ERROR_INVALID_PARAMETER => panic!("Invalid dwFlags"),
+                e if e.0 >= MAX_PATH => panic!("need buffer size of {}", e.0),
+                e if e.0 == 0 => panic!("other error: {}", GetLastError().0),
+                e => e.0 as usize,
+            };
 
-            // TODO: this is probably not correct (windows strings are incredibly hairy
-            // and the tests are showing really weird output
-            let asdf: String = String::from_utf8_lossy(&file_path_buffer).to_string();
-            PathBuf::from(asdf)
+            String::from_utf16(&file_path_buffer[0..bufsize])
+                .expect("failed to create String from UTF-16")
+                .into()
         }
     }
 }
