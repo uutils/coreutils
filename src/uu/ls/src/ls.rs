@@ -2370,11 +2370,23 @@ fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
         }
     }
     // Reported file len only adjusted for block_size when block_size is set
-    if config.block_size.is_none() {
-        SizeOrDeviceId::Size(display_size(metadata.len(), config))
-    } else {
-        let len_adjusted = metadata.len() / config.block_size.unwrap();
+    if let Some(block_size) = config.block_size {
+        // ordinary division of unsigned integers rounds down,
+        // this is similar to the Rust API for division that rounds up, currently in nightly only
+        // once https://github.com/rust-lang/rust/pull/88582 :
+        // "div_ceil" is stable we should use that instead
+        let len_adjusted = {
+            let d = metadata.len() / block_size;
+            let r = metadata.len() % block_size;
+            if r == 0 {
+                d
+            } else {
+                d + 1
+            }
+        };
         SizeOrDeviceId::Size(display_size(len_adjusted, config))
+    } else {
+        SizeOrDeviceId::Size(display_size(metadata.len(), config))
     }
 }
 

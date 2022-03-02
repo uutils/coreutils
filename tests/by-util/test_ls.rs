@@ -106,6 +106,22 @@ fn test_ls_allocation_size() {
             .succeeds();
 
         scene
+            .ccmd("dd")
+            .arg("--if=/dev/zero")
+            .arg("--of=irregular-file")
+            .arg("bs=1")
+            .arg("count=777")
+            .succeeds();
+
+        scene
+            .ucmd()
+            .arg("-l")
+            .arg("--block-size=512")
+            .arg("irregular-file")
+            .succeeds()
+            .stdout_matches(&Regex::new("[^ ] 2 [^ ]").unwrap());
+
+        scene
             .ucmd()
             .arg("-s1")
             .arg("some-dir1")
