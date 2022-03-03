@@ -17,7 +17,7 @@ use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::{show_error, InvalidEncodingHandling};
+use uucore::{format_usage, show_error, InvalidEncodingHandling};
 use walkdir::WalkDir;
 
 static ABOUT: &str = "Change the mode of each FILE to MODE.
@@ -35,14 +35,10 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... MODE[,MODE]... FILE...
-or: {0} [OPTION]... OCTAL-MODE FILE...
-or: {0} [OPTION]... --reference=RFILE FILE...",
-        uucore::execution_phrase()
-    )
-}
+const USAGE: &str = "\
+    {} [OPTION]... MODE[,MODE]... FILE...
+    {} [OPTION]... OCTAL-MODE FILE...
+    {} [OPTION]... --reference=RFILE FILE...";
 
 fn get_long_usage() -> String {
     String::from("Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.")
@@ -58,13 +54,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").
     let mode_had_minus_prefix = mode::strip_minus_from_mode(&mut args);
 
-    let usage = usage();
     let after_help = get_long_usage();
 
-    let matches = uu_app()
-        .override_usage(&usage[..])
-        .after_help(&after_help[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
     let changes = matches.is_present(options::CHANGES);
     let quiet = matches.is_present(options::QUIET);
@@ -125,6 +117,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::CHANGES)

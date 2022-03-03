@@ -31,6 +31,10 @@ pub enum ParseError {
     BlockUnblockWithoutCBS,
     StatusLevelNotRecognized(String),
     Unimplemented(String),
+    BsOutOfRange,
+    IbsOutOfRange,
+    ObsOutOfRange,
+    CbsOutOfRange,
 }
 
 impl ParseError {
@@ -48,6 +52,10 @@ impl ParseError {
             Self::BlockUnblockWithoutCBS => Self::BlockUnblockWithoutCBS,
             Self::StatusLevelNotRecognized(_) => Self::StatusLevelNotRecognized(s),
             Self::Unimplemented(_) => Self::Unimplemented(s),
+            Self::BsOutOfRange => Self::BsOutOfRange,
+            Self::IbsOutOfRange => Self::IbsOutOfRange,
+            Self::ObsOutOfRange => Self::ObsOutOfRange,
+            Self::CbsOutOfRange => Self::CbsOutOfRange,
         }
     }
 }
@@ -91,6 +99,18 @@ impl std::fmt::Display for ParseError {
             }
             Self::StatusLevelNotRecognized(arg) => {
                 write!(f, "status=LEVEL not recognized -> {}", arg)
+            }
+            ParseError::BsOutOfRange => {
+                write!(f, "bs=N cannot fit into memory")
+            }
+            ParseError::IbsOutOfRange => {
+                write!(f, "ibs=N cannot fit into memory")
+            }
+            ParseError::ObsOutOfRange => {
+                write!(f, "obs=N cannot fit into memory")
+            }
+            ParseError::CbsOutOfRange => {
+                write!(f, "cbs=N cannot fit into memory")
             }
             Self::Unimplemented(arg) => {
                 write!(f, "feature not implemented on this system -> {}", arg)
@@ -334,7 +354,7 @@ fn show_zero_multiplier_warning() {
 }
 
 /// Parse bytes using str::parse, then map error if needed.
-fn parse_bytes_only(s: &str) -> Result<usize, ParseError> {
+fn parse_bytes_only(s: &str) -> Result<u64, ParseError> {
     s.parse()
         .map_err(|_| ParseError::MultiplierStringParseFailure(s.to_string()))
 }
@@ -364,7 +384,7 @@ fn parse_bytes_only(s: &str) -> Result<usize, ParseError> {
 /// assert_eq!(parse_bytes_no_x("2b").unwrap(), 2 * 512);
 /// assert_eq!(parse_bytes_no_x("2k").unwrap(), 2 * 1024);
 /// ```
-fn parse_bytes_no_x(s: &str) -> Result<usize, ParseError> {
+fn parse_bytes_no_x(s: &str) -> Result<u64, ParseError> {
     let (num, multiplier) = match (s.find('c'), s.rfind('w'), s.rfind('b')) {
         (None, None, None) => match uucore::parse_size::parse_size(s) {
             Ok(n) => (n, 1),
@@ -387,7 +407,7 @@ fn parse_bytes_no_x(s: &str) -> Result<usize, ParseError> {
 /// Parse byte and multiplier like 512, 5KiB, or 1G.
 /// Uses uucore::parse_size, and adds the 'w' and 'c' suffixes which are mentioned
 /// in dd's info page.
-fn parse_bytes_with_opt_multiplier(s: &str) -> Result<usize, ParseError> {
+fn parse_bytes_with_opt_multiplier(s: &str) -> Result<u64, ParseError> {
     // TODO On my Linux system, there seems to be a maximum block size of 4096 bytes:
     //
     //     $ printf "%0.sa" {1..10000} | dd bs=4095 count=1 status=none | wc -c
@@ -420,9 +440,27 @@ fn parse_bytes_with_opt_multiplier(s: &str) -> Result<usize, ParseError> {
 
 pub fn parse_ibs(matches: &Matches) -> Result<usize, ParseError> {
     if let Some(mixed_str) = matches.value_of(options::BS) {
-        parse_bytes_with_opt_multiplier(mixed_str)
+        parse_bytes_with_opt_multiplier(mixed_str)?
+            .try_into()
+            .map_err(|_| ParseError::BsOutOfRange)
     } else if let Some(mixed_str) = matches.value_of(options::IBS) {
-        parse_bytes_with_opt_multiplier(mixed_str)
+        parse_bytes_with_opt_multiplier(mixed_str)?
+            .try_into()
+            .map_err(|_| ParseError::IbsOutOfRange)
+    } else {
+        Ok(512)
+    }
+}
+
+pub fn parse_obs(matches: &Matches) -> Result<usize, ParseError> {
+    if let Some(mixed_str) = matches.value_of("bs") {
+        parse_bytes_with_opt_multiplier(mixed_str)?
+            .try_into()
+            .map_err(|_| ParseError::BsOutOfRange)
+    } else if let Some(mixed_str) = matches.value_of("obs") {
+        parse_bytes_with_opt_multiplier(mixed_str)?
+            .try_into()
+            .map_err(|_| ParseError::ObsOutOfRange)
     } else {
         Ok(512)
     }
@@ -430,7 +468,9 @@ pub fn parse_ibs(matches: &Matches) -> Result<usize, ParseError> {
 
 fn parse_cbs(matches: &Matches) -> Result<Option<usize>, ParseError> {
     if let Some(s) = matches.value_of(options::CBS) {
-        let bytes = parse_bytes_with_opt_multiplier(s)?;
+        let bytes = parse_bytes_with_opt_multiplier(s)?
+            .try_into()
+            .map_err(|_| ParseError::CbsOutOfRange)?;
         Ok(Some(bytes))
     } else {
         Ok(None)
@@ -444,16 +484,6 @@ pub(crate) fn parse_status_level(matches: &Matches) -> Result<Option<StatusLevel
             Ok(Some(st))
         }
         None => Ok(None),
-    }
-}
-
-pub fn parse_obs(matches: &Matches) -> Result<usize, ParseError> {
-    if let Some(mixed_str) = matches.value_of("bs") {
-        parse_bytes_with_opt_multiplier(mixed_str)
-    } else if let Some(mixed_str) = matches.value_of("obs") {
-        parse_bytes_with_opt_multiplier(mixed_str)
-    } else {
-        Ok(512)
     }
 }
 
@@ -715,13 +745,13 @@ pub fn parse_skip_amt(
     ibs: &usize,
     iflags: &IFlags,
     matches: &Matches,
-) -> Result<Option<usize>, ParseError> {
+) -> Result<Option<u64>, ParseError> {
     if let Some(amt) = matches.value_of(options::SKIP) {
         let n = parse_bytes_with_opt_multiplier(amt)?;
         if iflags.skip_bytes {
             Ok(Some(n))
         } else {
-            Ok(Some(ibs * n))
+            Ok(Some(*ibs as u64 * n))
         }
     } else {
         Ok(None)
@@ -733,13 +763,13 @@ pub fn parse_seek_amt(
     obs: &usize,
     oflags: &OFlags,
     matches: &Matches,
-) -> Result<Option<usize>, ParseError> {
+) -> Result<Option<u64>, ParseError> {
     if let Some(amt) = matches.value_of(options::SEEK) {
         let n = parse_bytes_with_opt_multiplier(amt)?;
         if oflags.seek_bytes {
             Ok(Some(n))
         } else {
-            Ok(Some(obs * n))
+            Ok(Some(*obs as u64 * n))
         }
     } else {
         Ok(None)

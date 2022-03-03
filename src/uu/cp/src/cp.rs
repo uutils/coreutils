@@ -19,6 +19,7 @@ extern crate quick_error;
 extern crate uucore;
 
 use uucore::display::Quotable;
+use uucore::format_usage;
 use uucore::fs::FileInformation;
 #[cfg(windows)]
 use winapi::um::fileapi::CreateFileW;
@@ -29,6 +30,8 @@ use std::borrow::Cow;
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use filetime::FileTime;
+#[cfg(unix)]
+use libc::mkfifo;
 use quick_error::ResultExt;
 use std::collections::HashSet;
 use std::env;
@@ -42,6 +45,10 @@ use std::fs::OpenOptions;
 use std::io;
 use std::io::{stdin, stdout, Write};
 use std::mem;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
+#[cfg(unix)]
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 #[cfg(target_os = "linux")]
 use std::os::unix::io::AsRawFd;
 #[cfg(windows)]
@@ -53,9 +60,6 @@ use uucore::backup_control::{self, BackupMode};
 use uucore::error::{set_exit_code, ExitCode, UError, UResult};
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use walkdir::WalkDir;
-
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 
 #[cfg(target_os = "linux")]
 ioctl!(write ficlone with 0x94, 9; std::os::raw::c_int);
@@ -149,7 +153,7 @@ pub type Target = PathBuf;
 pub type TargetSlice = Path;
 
 /// Specifies whether when overwrite files
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum ClobberMode {
     Force,
     RemoveDestination,
@@ -157,7 +161,7 @@ pub enum ClobberMode {
 }
 
 /// Specifies whether when overwrite files
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum OverwriteMode {
     /// [Default] Always overwrite existing files
     Clobber(ClobberMode),
@@ -230,14 +234,10 @@ static ABOUT: &str = "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
 static LONG_HELP: &str = "";
 static EXIT_ERR: i32 = 1;
 
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... [-T] SOURCE DEST
-    {0} [OPTION]... SOURCE... DIRECTORY
-    {0} [OPTION]... -t DIRECTORY SOURCE...",
-        uucore::execution_phrase()
-    )
-}
+const USAGE: &str = "\
+    {} [OPTION]... [-T] SOURCE DEST
+    {} [OPTION]... SOURCE... DIRECTORY
+    {} [OPTION]... -t DIRECTORY SOURCE...";
 
 // Argument constants
 mod options {
@@ -297,9 +297,17 @@ static DEFAULT_ATTRIBUTES: &[Attribute] = &[
 ];
 
 pub fn uu_app<'a>() -> App<'a> {
+    const MODE_ARGS: &[&str] = &[
+        options::LINK,
+        options::REFLINK,
+        options::SYMBOLIC_LINK,
+        options::ATTRIBUTES_ONLY,
+        options::COPY_CONTENTS,
+    ];
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(Arg::new(options::TARGET_DIRECTORY)
              .short('t')
@@ -316,17 +324,17 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(Arg::new(options::INTERACTIVE)
              .short('i')
              .long(options::INTERACTIVE)
-             .conflicts_with(options::NO_CLOBBER)
+             .overrides_with(options::NO_CLOBBER)
              .help("ask before overwriting files"))
         .arg(Arg::new(options::LINK)
              .short('l')
              .long(options::LINK)
-             .overrides_with(options::REFLINK)
+             .overrides_with_all(MODE_ARGS)
              .help("hard-link files instead of copying"))
         .arg(Arg::new(options::NO_CLOBBER)
              .short('n')
              .long(options::NO_CLOBBER)
-             .conflicts_with(options::INTERACTIVE)
+             .overrides_with(options::INTERACTIVE)
              .help("don't overwrite a file that already exists"))
         .arg(Arg::new(options::RECURSIVE)
              .short('r')
@@ -346,8 +354,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(Arg::new(options::SYMBOLIC_LINK)
              .short('s')
              .long(options::SYMBOLIC_LINK)
-             .conflicts_with(options::LINK)
-             .overrides_with(options::REFLINK)
+             .overrides_with_all(MODE_ARGS)
              .help("make symbolic links instead of copying"))
         .arg(Arg::new(options::FORCE)
              .short('f')
@@ -357,9 +364,9 @@ pub fn uu_app<'a>() -> App<'a> {
                     Currently not implemented for Windows."))
         .arg(Arg::new(options::REMOVE_DESTINATION)
              .long(options::REMOVE_DESTINATION)
-             .conflicts_with(options::FORCE)
+             .overrides_with(options::FORCE)
              .help("remove each existing destination file before attempting to open it \
-                    (contrast with --force). On Windows, current only works for writeable files."))
+                    (contrast with --force). On Windows, currently only works for writeable files."))
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
         .arg(backup_control::arguments::suffix())
@@ -372,11 +379,11 @@ pub fn uu_app<'a>() -> App<'a> {
              .long(options::REFLINK)
              .takes_value(true)
              .value_name("WHEN")
+             .overrides_with_all(MODE_ARGS)
              .help("control clone/CoW copies. See below"))
         .arg(Arg::new(options::ATTRIBUTES_ONLY)
              .long(options::ATTRIBUTES_ONLY)
-             .conflicts_with(options::COPY_CONTENTS)
-             .overrides_with(options::REFLINK)
+             .overrides_with_all(MODE_ARGS)
              .help("Don't copy the file data, just the attributes"))
         .arg(Arg::new(options::PRESERVE)
              .long(options::PRESERVE)
@@ -386,7 +393,7 @@ pub fn uu_app<'a>() -> App<'a> {
              .possible_values(PRESERVABLE_ATTRIBUTES)
              .min_values(0)
              .value_name("ATTR_LIST")
-             .conflicts_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::NO_PRESERVE])
+             .overrides_with_all(&[options::ARCHIVE, options::PRESERVE_DEFAULT_ATTRIBUTES, options::NO_PRESERVE])
              // -d sets this option
              // --archive sets this option
              .help("Preserve the specified attributes (default: mode, ownership (unix only), timestamps), \
@@ -394,13 +401,13 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(Arg::new(options::PRESERVE_DEFAULT_ATTRIBUTES)
              .short('p')
              .long(options::PRESERVE_DEFAULT_ATTRIBUTES)
-             .conflicts_with_all(&[options::PRESERVE, options::NO_PRESERVE, options::ARCHIVE])
+             .overrides_with_all(&[options::PRESERVE, options::NO_PRESERVE, options::ARCHIVE])
              .help("same as --preserve=mode,ownership(unix only),timestamps"))
         .arg(Arg::new(options::NO_PRESERVE)
              .long(options::NO_PRESERVE)
              .takes_value(true)
              .value_name("ATTR_LIST")
-             .conflicts_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::PRESERVE, options::ARCHIVE])
+             .overrides_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::PRESERVE, options::ARCHIVE])
              .help("don't preserve the specified attributes"))
         .arg(Arg::new(options::PARENTS)
             .long(options::PARENTS)
@@ -409,18 +416,18 @@ pub fn uu_app<'a>() -> App<'a> {
         .arg(Arg::new(options::NO_DEREFERENCE)
              .short('P')
              .long(options::NO_DEREFERENCE)
-             .conflicts_with(options::DEREFERENCE)
+             .overrides_with(options::DEREFERENCE)
              // -d sets this option
              .help("never follow symbolic links in SOURCE"))
         .arg(Arg::new(options::DEREFERENCE)
              .short('L')
              .long(options::DEREFERENCE)
-             .conflicts_with(options::NO_DEREFERENCE)
+             .overrides_with(options::NO_DEREFERENCE)
              .help("always follow symbolic links in SOURCE"))
         .arg(Arg::new(options::ARCHIVE)
              .short('a')
              .long(options::ARCHIVE)
-             .conflicts_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::PRESERVE, options::NO_PRESERVE])
+             .overrides_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::PRESERVE, options::NO_PRESERVE])
              .help("Same as -dR --preserve=all"))
         .arg(Arg::new(options::NO_DEREFERENCE_PRESERVE_LINKS)
              .short('d')
@@ -433,7 +440,7 @@ pub fn uu_app<'a>() -> App<'a> {
         // TODO: implement the following args
         .arg(Arg::new(options::COPY_CONTENTS)
              .long(options::COPY_CONTENTS)
-             .conflicts_with(options::ATTRIBUTES_ONLY)
+             .overrides_with(options::ATTRIBUTES_ONLY)
              .help("NotImplemented: copy contents of special files when recursive"))
         .arg(Arg::new(options::SPARSE)
              .long(options::SPARSE)
@@ -456,14 +463,12 @@ pub fn uu_app<'a>() -> App<'a> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let matches = uu_app()
         .after_help(&*format!(
             "{}\n{}",
             LONG_HELP,
             backup_control::BACKUP_CONTROL_LONG_HELP
         ))
-        .override_usage(&usage[..])
         .get_matches_from(args);
 
     let options = Options::from_matches(&matches)?;
@@ -969,6 +974,16 @@ fn copy_directory(
         return copy_file(root, target, options, symlinked_files);
     }
 
+    // check if root is a prefix of target
+    if path_has_prefix(target, root)? {
+        return Err(format!(
+            "cannot copy a directory, {}, into itself, {}",
+            root.quote(),
+            target.quote()
+        )
+        .into());
+    }
+
     let current_dir =
         env::current_dir().unwrap_or_else(|e| crash!(1, "failed to get current directory {}", e));
 
@@ -1388,12 +1403,23 @@ fn copy_helper(
         let parent = dest.parent().unwrap_or(dest);
         fs::create_dir_all(parent)?;
     }
-    let is_symlink = fs::symlink_metadata(&source)?.file_type().is_symlink();
+
+    let file_type = fs::symlink_metadata(&source)?.file_type();
+    let is_symlink = file_type.is_symlink();
+
+    #[cfg(unix)]
+    let is_fifo = file_type.is_fifo();
+    #[cfg(not(unix))]
+    let is_fifo = false;
+
     if source.as_os_str() == "/dev/null" {
         /* workaround a limitation of fs::copy
          * https://github.com/rust-lang/rust/issues/79390
          */
         File::create(dest).context(dest.display().to_string())?;
+    } else if is_fifo && options.recursive {
+        #[cfg(unix)]
+        copy_fifo(dest, options.overwrite)?;
     } else if is_symlink {
         copy_link(source, dest, symlinked_files)?;
     } else if options.reflink_mode != ReflinkMode::Never {
@@ -1410,6 +1436,23 @@ fn copy_helper(
         fs::copy(source, dest).context(context)?;
     }
 
+    Ok(())
+}
+
+// "Copies" a FIFO by creating a new one. This workaround is because Rust's
+// built-in fs::copy does not handle FIFOs (see rust-lang/rust/issues/79390).
+#[cfg(unix)]
+fn copy_fifo(dest: &Path, overwrite: OverwriteMode) -> CopyResult<()> {
+    if dest.exists() {
+        overwrite.verify(dest)?;
+        fs::remove_file(&dest)?;
+    }
+
+    let name = CString::new(dest.as_os_str().as_bytes()).unwrap();
+    let err = unsafe { mkfifo(name.as_ptr(), 0o666) };
+    if err == -1 {
+        return Err(format!("cannot create fifo {}: File exists", dest.quote()).into());
+    }
     Ok(())
 }
 
@@ -1496,7 +1539,6 @@ fn copy_on_write_macos(
     // Extract paths in a form suitable to be passed to a syscall.
     // The unwrap() is safe because they come from the command-line and so contain non nul
     // character.
-    use std::os::unix::ffi::OsStrExt;
     let src = CString::new(source.as_os_str().as_bytes()).unwrap();
     let dst = CString::new(dest.as_os_str().as_bytes()).unwrap();
 
@@ -1580,6 +1622,13 @@ pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> io::Result<bool> {
     let pathbuf2 = canonicalize(p2, MissingHandling::Normal, ResolveMode::Logical)?;
 
     Ok(pathbuf1 == pathbuf2)
+}
+
+pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
+    let pathbuf1 = canonicalize(p1, MissingHandling::Normal, ResolveMode::Logical)?;
+    let pathbuf2 = canonicalize(p2, MissingHandling::Normal, ResolveMode::Logical)?;
+
+    Ok(pathbuf1.starts_with(pathbuf2))
 }
 
 #[test]

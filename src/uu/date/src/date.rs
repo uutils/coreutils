@@ -21,7 +21,7 @@ use uucore::display::Quotable;
 #[cfg(not(any(target_os = "macos", target_os = "redox")))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::show_error;
+use uucore::{format_usage, show_error};
 #[cfg(windows)]
 use winapi::{
     shared::minwindef::WORD,
@@ -38,8 +38,10 @@ const MINUTE: &str = "minute";
 const SECOND: &str = "second";
 const NS: &str = "ns";
 
-const NAME: &str = "date";
 const ABOUT: &str = "print or set the system date and time";
+const USAGE: &str = "\
+    {} [OPTION]... [+FORMAT]...
+    {} [OPTION]... [MMDDhhmm[[CC]YY][.ss]]";
 
 const OPT_DATE: &str = "date";
 const OPT_FORMAT: &str = "format";
@@ -142,12 +144,7 @@ impl<'a> From<&'a str> for Rfc3339Format {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let syntax = format!(
-        "{0} [OPTION]... [+FORMAT]...
- {0} [OPTION]... [MMDDhhmm[[CC]YY][.ss]]",
-        NAME
-    );
-    let matches = uu_app().override_usage(&syntax[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let format = if let Some(form) = matches.value_of(OPT_FORMAT) {
         if !form.starts_with('+') {
@@ -261,6 +258,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_DATE)

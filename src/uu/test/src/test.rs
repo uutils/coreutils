@@ -15,12 +15,14 @@ use parser::{parse, Operator, Symbol, UnaryOperator};
 use std::ffi::{OsStr, OsString};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 
-const USAGE: &str = "test EXPRESSION
-or:  test
-or:  [ EXPRESSION ]
-or:  [ ]
-or:  [ OPTION";
+const USAGE: &str = "\
+    {} EXPRESSION
+    {}
+    [ EXPRESSION ]
+    [ ]
+    [ OPTION";
 
 // We use after_help so that this comes after the usage string (it would come before if we used about)
 const AFTER_HELP: &str = "
@@ -92,7 +94,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .override_usage(USAGE)
+        .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)
 }
 
@@ -109,7 +111,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
             App::new(binary_name)
                 .version(crate_version!())
                 .about(ABOUT)
-                .override_usage(USAGE)
+                .override_usage(format_usage(USAGE))
                 .after_help(AFTER_HELP)
                 // Disable printing of -h and -v as valid alternatives for --help and --version,
                 // since we don't recognize -h and -v as help/version flags.

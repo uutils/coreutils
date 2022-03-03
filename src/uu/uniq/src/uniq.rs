@@ -13,8 +13,10 @@ use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::format_usage;
 
 static ABOUT: &str = "Report or omit repeated lines.";
+const USAGE: &str = "{} [OPTION]... [INPUT [OUTPUT]]...";
 pub mod options {
     pub static ALL_REPEATED: &str = "all-repeated";
     pub static CHECK_CHARS: &str = "check-chars";
@@ -239,13 +241,6 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> UResult<Optio
     })
 }
 
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... [INPUT [OUTPUT]]...",
-        uucore::execution_phrase()
-    )
-}
-
 fn get_long_usage() -> String {
     String::from(
         "Filter adjacent matching lines from INPUT (or standard input),\n\
@@ -257,13 +252,9 @@ fn get_long_usage() -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let long_usage = get_long_usage();
 
-    let matches = uu_app()
-        .override_usage(&usage[..])
-        .after_help(&long_usage[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&long_usage[..]).get_matches_from(args);
 
     let files: Vec<String> = matches
         .values_of(ARG_FILES)
@@ -303,6 +294,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::ALL_REPEATED)

@@ -18,7 +18,8 @@ use filetime::{set_file_times, FileTime};
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
-use uucore::error::{FromIo, UError, UIoError, UResult};
+use uucore::error::{FromIo, UError, UIoError, UResult, UUsageError};
+use uucore::format_usage;
 use uucore::mode::get_umask;
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 
@@ -144,6 +145,7 @@ impl Behavior {
 
 static ABOUT: &str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
  DIRECTORY, while setting permission modes and owner/group";
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 static OPT_COMPARE: &str = "compare";
 static OPT_DIRECTORY: &str = "directory";
@@ -163,19 +165,13 @@ static OPT_CONTEXT: &str = "context";
 
 static ARG_FILES: &str = "files";
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
-}
-
 /// Main install utility function, called from main.rs.
 ///
 /// Returns a program return code.
 ///
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let paths: Vec<String> = matches
         .values_of(ARG_FILES)
@@ -196,6 +192,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             backup_control::arguments::backup()
@@ -445,11 +442,14 @@ fn is_new_file_path(path: &Path) -> bool {
 /// Returns a Result type with the Err variant containing the error message.
 ///
 fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
-    let target: PathBuf = b
-        .target_dir
-        .clone()
-        .unwrap_or_else(|| paths.pop().unwrap())
-        .into();
+    let target: PathBuf = if let Some(path) = &b.target_dir {
+        path.into()
+    } else {
+        paths
+            .pop()
+            .ok_or_else(|| UUsageError::new(1, "missing file operand"))?
+            .into()
+    };
 
     let sources = &paths.iter().map(PathBuf::from).collect::<Vec<_>>();
 
@@ -471,7 +471,19 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
         }
 
         if target.is_file() || is_new_file_path(&target) {
-            copy(&sources[0], &target, b)
+            copy(
+                sources.get(0).ok_or_else(|| {
+                    UUsageError::new(
+                        1,
+                        format!(
+                            "missing destination file operand after '{}'",
+                            target.to_str().unwrap()
+                        ),
+                    )
+                })?,
+                &target,
+                b,
+            )
         } else {
             Err(InstallError::InvalidTarget(target).into())
         }

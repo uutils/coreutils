@@ -16,24 +16,19 @@ use std::io;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UResult};
-use uucore::util_name;
+use uucore::{format_usage, util_name};
 
 static ABOUT: &str = "Remove the DIRECTORY(ies), if they are empty.";
+const USAGE: &str = "{} [OPTION]... DIRECTORY...";
 static OPT_IGNORE_FAIL_NON_EMPTY: &str = "ignore-fail-on-non-empty";
 static OPT_PARENTS: &str = "parents";
 static OPT_VERBOSE: &str = "verbose";
 
 static ARG_DIRS: &str = "dirs";
 
-fn usage() -> String {
-    format!("{0} [OPTION]... DIRECTORY...", uucore::execution_phrase())
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let opts = Opts {
         ignore: matches.is_present(OPT_IGNORE_FAIL_NON_EMPTY),
@@ -179,6 +174,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_IGNORE_FAIL_NON_EMPTY)
