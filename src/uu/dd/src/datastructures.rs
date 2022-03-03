@@ -83,8 +83,8 @@ pub struct OFlags {
 /// then becomes Bytes(N)
 #[derive(Debug, PartialEq)]
 pub enum CountType {
-    Reads(usize),
-    Bytes(usize),
+    Reads(u64),
+    Bytes(u64),
 }
 
 #[derive(Debug)]

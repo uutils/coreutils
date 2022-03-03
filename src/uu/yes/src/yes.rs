@@ -15,9 +15,12 @@ extern crate clap;
 
 use clap::{App, AppSettings, Arg};
 use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod splice;
+
+const USAGE: &str = "{} [STRING]...";
 
 // it's possible that using a smaller or larger buffer might provide better performance on some
 // systems, but honestly this is good enough
@@ -48,6 +51,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app<'a>() -> App<'a> {
     app_from_crate!()
+        .override_usage(format_usage(USAGE))
         .arg(Arg::new("STRING").index(1).multiple_occurrences(true))
         .setting(AppSettings::InferLongArgs)
 }

@@ -19,13 +19,13 @@ use std::{
 use uucore::display::Quotable;
 use uucore::error::UError;
 use uucore::error::UResult;
-use uucore::show;
 use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, show};
 
 use crate::error::TacError;
 
 static NAME: &str = "tac";
-static USAGE: &str = "[OPTION]... [FILE]...";
+static USAGE: &str = "{} [OPTION]... [FILE]...";
 static SUMMARY: &str = "Write each file to standard output, last line first.";
 
 mod options {
@@ -64,7 +64,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .override_usage(USAGE)
+        .override_usage(format_usage(USAGE))
         .about(SUMMARY)
         .setting(AppSettings::InferLongArgs)
         .arg(

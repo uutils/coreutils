@@ -14,7 +14,7 @@ extern crate sha3;
 
 use std::io::Write;
 
-use hex::ToHex;
+use hex::encode;
 #[cfg(windows)]
 use memchr::memmem;
 
@@ -32,29 +32,7 @@ pub trait Digest {
     fn result_str(&mut self) -> String {
         let mut buf: Vec<u8> = vec![0; self.output_bytes()];
         self.result(&mut buf);
-        buf.to_hex()
-    }
-}
-
-impl Digest for md5::Context {
-    fn new() -> Self {
-        Self::new()
-    }
-
-    fn input(&mut self, input: &[u8]) {
-        self.consume(input);
-    }
-
-    fn result(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(&*self.compute());
-    }
-
-    fn reset(&mut self) {
-        *self = Self::new();
-    }
-
-    fn output_bits(&self) -> usize {
-        128
+        encode(buf)
     }
 }
 
@@ -104,30 +82,8 @@ impl Digest for blake3::Hasher {
     }
 }
 
-impl Digest for sha1::Sha1 {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    fn input(&mut self, input: &[u8]) {
-        digest::Digest::update(self, input);
-    }
-
-    fn result(&mut self, out: &mut [u8]) {
-        digest::Digest::finalize_into_reset(self, out.into());
-    }
-
-    fn reset(&mut self) {
-        *self = Self::new();
-    }
-
-    fn output_bits(&self) -> usize {
-        160
-    }
-}
-
 // Implements the Digest trait for sha2 / sha3 algorithms with fixed output
-macro_rules! impl_digest_sha {
+macro_rules! impl_digest_common {
     ($type: ty, $size: expr) => {
         impl Digest for $type {
             fn new() -> Self {
@@ -180,15 +136,17 @@ macro_rules! impl_digest_shake {
     };
 }
 
-impl_digest_sha!(sha2::Sha224, 224);
-impl_digest_sha!(sha2::Sha256, 256);
-impl_digest_sha!(sha2::Sha384, 384);
-impl_digest_sha!(sha2::Sha512, 512);
+impl_digest_common!(md5::Md5, 128);
+impl_digest_common!(sha1::Sha1, 160);
+impl_digest_common!(sha2::Sha224, 224);
+impl_digest_common!(sha2::Sha256, 256);
+impl_digest_common!(sha2::Sha384, 384);
+impl_digest_common!(sha2::Sha512, 512);
 
-impl_digest_sha!(sha3::Sha3_224, 224);
-impl_digest_sha!(sha3::Sha3_256, 256);
-impl_digest_sha!(sha3::Sha3_384, 384);
-impl_digest_sha!(sha3::Sha3_512, 512);
+impl_digest_common!(sha3::Sha3_224, 224);
+impl_digest_common!(sha3::Sha3_256, 256);
+impl_digest_common!(sha3::Sha3_384, 384);
+impl_digest_common!(sha3::Sha3_512, 512);
 impl_digest_shake!(sha3::Shake128);
 impl_digest_shake!(sha3::Shake256);
 

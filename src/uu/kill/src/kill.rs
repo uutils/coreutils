@@ -16,9 +16,10 @@ use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::signals::{signal_by_name_or_value, ALL_SIGNALS};
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static ABOUT: &str = "Send signal to processes or list information about signals.";
+const USAGE: &str = "{} [OPTIONS]... PID...";
 
 pub mod options {
     pub static PIDS_OR_SIGNALS: &str = "pids_of_signals";
@@ -42,8 +43,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .accept_any();
     let obs_signal = handle_obsolete(&mut args);
 
-    let usage = format!("{} [OPTIONS]... PID...", uucore::execution_phrase());
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let mode = if matches.is_present(options::TABLE) || matches.is_present(options::TABLE_OLD) {
         Mode::Table
@@ -82,6 +82,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::LIST)

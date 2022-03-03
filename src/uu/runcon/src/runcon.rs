@@ -4,6 +4,7 @@ use uucore::error::{UResult, UUsageError};
 
 use clap::{App, AppSettings, Arg};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
+use uucore::format_usage;
 
 use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
@@ -18,6 +19,9 @@ use errors::{Error, Result, RunconError};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const ABOUT: &str = "Run command with specified security context.";
+const USAGE: &str = "\
+    {} [CONTEXT COMMAND [ARG...]]
+    {} [-c] [-u USER] [-r ROLE] [-t TYPE] [-l RANGE] COMMAND [ARG...]";
 const DESCRIPTION: &str = "Run COMMAND with completely-specified CONTEXT, or with current or \
                       transitioned security context modified by one or more of \
                       LEVEL, ROLE, TYPE, and USER.\n\n\
@@ -36,19 +40,9 @@ pub mod options {
     pub const RANGE: &str = "range";
 }
 
-fn get_usage() -> String {
-    format!(
-        "{0} [CONTEXT COMMAND [ARG...]]\n    \
-         {0} [-c] [-u USER] [-r ROLE] [-t TYPE] [-l RANGE] COMMAND [ARG...]",
-        uucore::execution_phrase()
-    )
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = get_usage();
-
-    let config = uu_app().override_usage(usage.as_ref());
+    let config = uu_app();
 
     let options = match parse_command_line(config, args) {
         Ok(r) => r,
@@ -114,6 +108,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(VERSION)
         .about(ABOUT)
         .after_help(DESCRIPTION)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::COMPUTE)

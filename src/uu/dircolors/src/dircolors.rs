@@ -24,7 +24,7 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-static SYNTAX: &str = "[OPTION]... [FILE]";
+static USAGE: &str = "{} [OPTION]... [FILE]";
 static SUMMARY: &str = "Output commands to set the LS_COLORS environment variable.";
 static LONG_HELP: &str = "
  If FILE is specified, read it to determine which colors to use for which
@@ -61,19 +61,13 @@ pub fn guess_syntax() -> OutputFmt {
     }
 }
 
-fn usage() -> String {
-    format!("{0} {1}", uucore::execution_phrase(), SYNTAX)
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = usage();
-
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(&args);
+    let matches = uu_app().get_matches_from(&args);
 
     let files = matches
         .values_of(options::FILE)
@@ -165,6 +159,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(LONG_HELP)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::BOURNE_SHELL)
@@ -257,7 +252,7 @@ enum ParseState {
     Pass,
 }
 use std::collections::HashMap;
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 fn parse<T>(lines: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
 where

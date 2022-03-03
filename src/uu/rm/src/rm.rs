@@ -19,6 +19,7 @@ use std::ops::BitOr;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::format_usage;
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
@@ -40,6 +41,7 @@ struct Options {
 }
 
 static ABOUT: &str = "Remove (unlink) the FILE(s)";
+const USAGE: &str = "{} [OPTION]... FILE...";
 static OPT_DIR: &str = "dir";
 static OPT_INTERACTIVE: &str = "interactive";
 static OPT_FORCE: &str = "force";
@@ -54,10 +56,6 @@ static OPT_VERBOSE: &str = "verbose";
 static PRESUME_INPUT_TTY: &str = "-presume-input-tty";
 
 static ARG_FILES: &str = "files";
-
-fn usage() -> String {
-    format!("{0} [OPTION]... FILE...", uucore::execution_phrase())
-}
 
 fn get_long_usage() -> String {
     String::from(
@@ -78,13 +76,9 @@ fn get_long_usage() -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let long_usage = get_long_usage();
 
-    let matches = uu_app()
-        .override_usage(&usage[..])
-        .after_help(&long_usage[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&long_usage[..]).get_matches_from(args);
 
     let files: Vec<String> = matches
         .values_of(ARG_FILES)
@@ -149,6 +143,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_FORCE)

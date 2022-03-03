@@ -75,5 +75,15 @@ fn test_stdbuf_invalid_mode_fails() {
             .fails()
             .code_is(125)
             .stderr_contains("stdbuf: invalid mode '1Y': Value too large for defined data type");
+        #[cfg(target_pointer_width = "32")]
+        {
+            new_ucmd!()
+                .args(&[*option, "5GB", "head"])
+                .fails()
+                .code_is(125)
+                .stderr_contains(
+                    "stdbuf: invalid mode '5GB': Value too large for defined data type",
+                );
+        }
     }
 }

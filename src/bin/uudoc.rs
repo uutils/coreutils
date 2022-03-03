@@ -94,7 +94,7 @@ fn write_usage(w: &mut impl Write, app: &mut App, name: &str) -> io::Result<()> 
         .filter(|l| !l.is_empty())
         .collect::<Vec<_>>()
         .join("\n");
-    usage = usage.replace(app.get_name(), name);
+    usage = usage.replace(uucore::execution_phrase(), name);
     writeln!(w, "{}", usage)?;
     writeln!(w, "```")
 }
@@ -204,7 +204,7 @@ fn write_options(w: &mut impl Write, app: &App) -> io::Result<()> {
         writeln!(
             w,
             "<dd>\n\n{}\n\n</dd>",
-            arg.get_help().unwrap_or_default().replace("\n", "<br />")
+            arg.get_help().unwrap_or_default().replace('\n', "<br />")
         )?;
     }
     writeln!(w, "</dl>\n")

@@ -10,6 +10,7 @@
 use uucore::display::Quotable;
 pub use uucore::entries;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::format_usage;
 use uucore::perms::{chown_base, options, IfFrom};
 
 use clap::{App, AppSettings, Arg, ArgMatches};
@@ -20,12 +21,9 @@ use std::os::unix::fs::MetadataExt;
 static ABOUT: &str = "Change the group of each FILE to GROUP.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-fn get_usage() -> String {
-    format!(
-        "{0} [OPTION]... GROUP FILE...\n    {0} [OPTION]... --reference=RFILE FILE...",
-        uucore::execution_phrase()
-    )
-}
+const USAGE: &str = "\
+    {} [OPTION]... GROUP FILE...\n    \
+    {} [OPTION]... --reference=RFILE FILE...";
 
 fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>, IfFrom)> {
     let dest_gid = if let Some(file) = matches.value_of(options::REFERENCE) {
@@ -53,21 +51,14 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>,
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = get_usage();
-
-    chown_base(
-        uu_app().override_usage(&usage[..]),
-        args,
-        options::ARG_GROUP,
-        parse_gid_and_uid,
-        true,
-    )
+    chown_base(uu_app(), args, options::ARG_GROUP, parse_gid_and_uid, true)
 }
 
 pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::verbosity::CHANGES)

@@ -1478,6 +1478,19 @@ fn test_copy_symlink_with_no_dereference_and_attributes_only() {
 }
 
 #[test]
+fn test_cp_fifo() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    ucmd.arg("-r")
+        .arg("fifo")
+        .arg("fifo2")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert!(at.is_fifo("fifo2"));
+}
+
+#[test]
 fn test_dir_recursive_copy() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1530,4 +1543,29 @@ fn test_cp_dir_vs_file() {
         .arg(TEST_EXISTING_FILE)
         .fails()
         .stderr_only("cp: cannot overwrite non-directory with directory");
+}
+
+#[test]
+fn test_cp_overriding_arguments() {
+    let s = TestScenario::new(util_name!());
+    s.fixtures.touch("file1");
+    for (arg1, arg2) in &[
+        #[cfg(not(windows))]
+        ("--remove-destination", "--force"),
+        #[cfg(not(windows))]
+        ("--force", "--remove-destination"),
+        ("--interactive", "--no-clobber"),
+        ("--link", "--symbolic-link"),
+        ("--symbolic-link", "--link"),
+        ("--dereference", "--no-dereference"),
+        ("--no-dereference", "--dereference"),
+    ] {
+        s.ucmd()
+            .arg(arg1)
+            .arg(arg2)
+            .arg("file1")
+            .arg("file2")
+            .succeeds();
+        s.fixtures.remove("file2");
+    }
 }
