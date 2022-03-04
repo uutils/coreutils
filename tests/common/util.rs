@@ -701,6 +701,11 @@ impl AtPath {
         symlink_file(&self.plus(original), &self.plus(link)).unwrap();
     }
 
+    pub fn relative_symlink_file(&self, original: &str, link: &str) {
+        log_info("symlink", &format!("{},{}", original, link));
+        symlink_file(original, link).unwrap();
+    }
+
     pub fn symlink_dir(&self, original: &str, link: &str) {
         log_info(
             "symlink",
