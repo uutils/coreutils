@@ -107,7 +107,7 @@ impl std::fmt::Display for ParseError {
                 write!(f, "ibs=N cannot fit into memory")
             }
             ParseError::ObsOutOfRange => {
-                write!(f, "ibs=N cannot fit into memory")
+                write!(f, "obs=N cannot fit into memory")
             }
             ParseError::CbsOutOfRange => {
                 write!(f, "cbs=N cannot fit into memory")

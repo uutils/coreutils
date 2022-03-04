@@ -9,18 +9,14 @@
 mod table;
 
 #[cfg(unix)]
-use uucore::fsext::statfs_fn;
+use uucore::fsext::statfs;
 use uucore::fsext::{read_fs_list, FsUsage, MountInfo};
 use uucore::{error::UResult, format_usage};
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
 use std::collections::HashSet;
-#[cfg(unix)]
-use std::ffi::CString;
 use std::iter::FromIterator;
-#[cfg(unix)]
-use std::mem;
 
 #[cfg(windows)]
 use std::path::Path;
@@ -61,6 +57,55 @@ struct FsSelector {
     exclude: HashSet<String>,
 }
 
+/// A block size to use in condensing the display of a large number of bytes.
+///
+/// The [`BlockSize::Bytes`] variant represents a static block
+/// size. The [`BlockSize::HumanReadableDecimal`] and
+/// [`BlockSize::HumanReadableBinary`] variants represent dynamic
+/// block sizes: as the number of bytes increases, the divisor
+/// increases as well (for example, from 1 to 1,000 to 1,000,000 and
+/// so on in the case of [`BlockSize::HumanReadableDecimal`]).
+///
+/// The default variant is `Bytes(1024)`.
+enum BlockSize {
+    /// A fixed number of bytes.
+    ///
+    /// The number must be positive.
+    Bytes(u64),
+
+    /// Use the largest divisor corresponding to a unit, like B, K, M, G, etc.
+    ///
+    /// This variant represents powers of 1,000. Contrast with
+    /// [`BlockSize::HumanReadableBinary`], which represents powers of
+    /// 1,024.
+    HumanReadableDecimal,
+
+    /// Use the largest divisor corresponding to a unit, like B, K, M, G, etc.
+    ///
+    /// This variant represents powers of 1,024. Contrast with
+    /// [`BlockSize::HumanReadableDecimal`], which represents powers
+    /// of 1,000.
+    HumanReadableBinary,
+}
+
+impl Default for BlockSize {
+    fn default() -> Self {
+        Self::Bytes(1024)
+    }
+}
+
+impl From<&ArgMatches> for BlockSize {
+    fn from(matches: &ArgMatches) -> Self {
+        if matches.is_present(OPT_HUMAN_READABLE) {
+            Self::HumanReadableBinary
+        } else if matches.is_present(OPT_HUMAN_READABLE_2) {
+            Self::HumanReadableDecimal
+        } else {
+            Self::default()
+        }
+    }
+}
+
 #[derive(Default)]
 struct Options {
     show_local_fs: bool,
@@ -68,8 +113,7 @@ struct Options {
     show_listed_fs: bool,
     show_fs_type: bool,
     show_inode_instead: bool,
-    // block_size: usize,
-    human_readable_base: i64,
+    block_size: BlockSize,
     fs_selector: FsSelector,
 }
 
@@ -82,13 +126,7 @@ impl Options {
             show_listed_fs: false,
             show_fs_type: matches.is_present(OPT_PRINT_TYPE),
             show_inode_instead: matches.is_present(OPT_INODES),
-            human_readable_base: if matches.is_present(OPT_HUMAN_READABLE) {
-                1024
-            } else if matches.is_present(OPT_HUMAN_READABLE_2) {
-                1000
-            } else {
-                -1
-            },
+            block_size: BlockSize::from(matches),
             fs_selector: FsSelector::from(matches),
         }
     }
@@ -141,23 +179,10 @@ impl Filesystem {
             }
         };
         #[cfg(unix)]
-        unsafe {
-            let path = CString::new(_stat_path).unwrap();
-            let mut statvfs = mem::zeroed();
-            if statfs_fn(path.as_ptr(), &mut statvfs) < 0 {
-                None
-            } else {
-                Some(Self {
-                    mount_info,
-                    usage: FsUsage::new(statvfs),
-                })
-            }
-        }
+        let usage = FsUsage::new(statfs(_stat_path).ok()?);
         #[cfg(windows)]
-        Some(Self {
-            mount_info,
-            usage: FsUsage::new(Path::new(&_stat_path)),
-        })
+        let usage = FsUsage::new(Path::new(&_stat_path));
+        Some(Self { mount_info, usage })
     }
 }
 

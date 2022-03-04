@@ -342,6 +342,31 @@ fn test_split_invalid_bytes_size() {
     }
 }
 
+#[test]
+fn test_split_chunks_num_chunks_oversized_32() {
+    #[cfg(target_pointer_width = "32")]
+    {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.touch("file");
+        scene
+            .ucmd()
+            .args(&["--number", "5000000000", "file"])
+            .fails()
+            .code_is(1)
+            .stderr_only("split: Number of chunks too big");
+    }
+}
+
+#[test]
+fn test_split_stdin_num_chunks() {
+    new_ucmd!()
+        .args(&["--number=1"])
+        .fails()
+        .code_is(1)
+        .stderr_only("split: -: cannot determine file size");
+}
+
 fn file_read(at: &AtPath, filename: &str) -> String {
     let mut s = String::new();
     at.open(filename).read_to_string(&mut s).unwrap();
@@ -544,4 +569,21 @@ fn test_elide_empty_files() {
     assert_eq!(at.read("xab"), "b");
     assert_eq!(at.read("xac"), "c");
     assert!(!at.plus("xad").exists());
+}
+
+#[test]
+fn test_lines() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file_read = |f| {
+        let mut s = String::new();
+        at.open(f).read_to_string(&mut s).unwrap();
+        s
+    };
+
+    // Split into two files without splitting up lines.
+    ucmd.args(&["-n", "l/2", "fivelines.txt"]).succeeds();
+
+    assert_eq!(file_read("xaa"), "1\n2\n3\n");
+    assert_eq!(file_read("xab"), "4\n5\n");
 }
