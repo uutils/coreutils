@@ -600,12 +600,7 @@ fn format_tex_line(
         "}"
     ));
     if config.auto_ref || config.input_ref {
-        output.push_str(&format!(
-            "{}{}{}",
-            "{",
-            format_tex_field(&word_ref.input_reference),
-            "}"
-        ));
+        output.push_str(&format!("{}{}{}", "{", format_tex_field(reference), "}"));
     }
     output
 }
@@ -642,10 +637,7 @@ fn format_roff_line(
         format_roff_field(&output_chunk.head)
     ));
     if config.auto_ref || config.input_ref {
-        output.push_str(&format!(
-            " \"{}\"",
-            format_roff_field(&word_ref.input_reference)
-        ));
+        output.push_str(&format!(" \"{}\"", format_roff_field(reference)));
     }
     output
 }
