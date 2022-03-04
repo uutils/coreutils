@@ -1462,6 +1462,66 @@ fn test_cp_archive_on_nonexistent_file() {
             "cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)",
         );
 }
+
+#[test]
+#[cfg(unix)]
+fn test_cp_fifo() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    ucmd.arg("-r")
+        .arg("fifo")
+        .arg("fifo2")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert!(at.is_fifo("fifo2"));
+}
+
+#[test]
+fn test_dir_recursive_copy() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("parent1");
+    at.mkdir("parent2");
+    at.mkdir("parent1/child");
+    at.mkdir("parent2/child1");
+    at.mkdir("parent2/child1/child2");
+    at.mkdir("parent2/child1/child2/child3");
+
+    // case-1: copy parent1 -> parent1: should fail
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("parent1")
+        .arg("parent1")
+        .fails()
+        .stderr_contains("cannot copy a directory");
+    // case-2: copy parent1 -> parent1/child should fail
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("parent1")
+        .arg("parent1/child")
+        .fails()
+        .stderr_contains("cannot copy a directory");
+    // case-3: copy parent1/child -> parent2 should pass
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("parent1/child")
+        .arg("parent2")
+        .succeeds();
+    // case-4: copy parent2/child1/ -> parent2/child1/child2/child3
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("parent2/child1/")
+        .arg("parent2/child1/child2/child3")
+        .fails()
+        .stderr_contains("cannot copy a directory");
+}
+
 #[test]
 fn test_cp_dir_vs_file() {
     new_ucmd!()
@@ -1470,4 +1530,29 @@ fn test_cp_dir_vs_file() {
         .arg(TEST_EXISTING_FILE)
         .fails()
         .stderr_only("cp: cannot overwrite non-directory with directory");
+}
+
+#[test]
+fn test_cp_overriding_arguments() {
+    let s = TestScenario::new(util_name!());
+    s.fixtures.touch("file1");
+    for (arg1, arg2) in &[
+        #[cfg(not(windows))]
+        ("--remove-destination", "--force"),
+        #[cfg(not(windows))]
+        ("--force", "--remove-destination"),
+        ("--interactive", "--no-clobber"),
+        ("--link", "--symbolic-link"),
+        ("--symbolic-link", "--link"),
+        ("--dereference", "--no-dereference"),
+        ("--no-dereference", "--dereference"),
+    ] {
+        s.ucmd()
+            .arg(arg1)
+            .arg(arg2)
+            .arg("file1")
+            .arg("file2")
+            .succeeds();
+        s.fixtures.remove("file2");
+    }
 }

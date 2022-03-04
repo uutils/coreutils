@@ -23,6 +23,7 @@ use uucore::{
     display::Quotable,
     entries::{get_groups_gnu, gid2grp, Locate, Passwd},
     error::{UError, UResult},
+    format_usage,
 };
 
 use clap::{crate_version, App, AppSettings, Arg};
@@ -34,9 +35,7 @@ static ABOUT: &str = "Print group memberships for each USERNAME or, \
                       if no USERNAME is specified, for\nthe current process \
                       (which may differ if the groups data‐base has changed).";
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [USERNAME]...", uucore::execution_phrase())
-}
+const USAGE: &str = "{} [OPTION]... [USERNAME]...";
 
 #[derive(Debug)]
 enum GroupsError {
@@ -71,9 +70,7 @@ fn infallible_gid2grp(gid: &u32) -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let users: Vec<String> = matches
         .values_of(options::USERS)
@@ -109,6 +106,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::USERS)

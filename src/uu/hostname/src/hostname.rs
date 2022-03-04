@@ -13,9 +13,13 @@ use std::str;
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
-use uucore::error::{FromIo, UResult};
+use uucore::{
+    error::{FromIo, UResult},
+    format_usage,
+};
 
 static ABOUT: &str = "Display or set the system's host name.";
+const USAGE: &str = "{} [OPTION]... [HOSTNAME]";
 
 static OPT_DOMAIN: &str = "domain";
 static OPT_IP_ADDRESS: &str = "ip-address";
@@ -54,14 +58,9 @@ mod wsa {
     }
 }
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [HOSTNAME]", uucore::execution_phrase())
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     #[cfg(windows)]
     let _handle = wsa::start().map_err_context(|| "failed to start Winsock".to_owned())?;
@@ -76,6 +75,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_DOMAIN)

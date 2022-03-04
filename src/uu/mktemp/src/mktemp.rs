@@ -11,6 +11,7 @@
 use clap::{crate_version, App, AppSettings, Arg};
 use uucore::display::{println_verbatim, Quotable};
 use uucore::error::{FromIo, UError, UResult};
+use uucore::format_usage;
 
 use std::env;
 use std::error::Error;
@@ -22,6 +23,7 @@ use rand::Rng;
 use tempfile::Builder;
 
 static ABOUT: &str = "create a temporary file or directory.";
+const USAGE: &str = "{} [OPTION]... [TEMPLATE]";
 
 static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
 
@@ -33,10 +35,6 @@ static OPT_TMPDIR: &str = "tmpdir";
 static OPT_T: &str = "t";
 
 static ARG_TEMPLATE: &str = "template";
-
-fn usage() -> String {
-    format!("{0} [OPTION]... [TEMPLATE]", uucore::execution_phrase())
-}
 
 #[derive(Debug)]
 enum MkTempError {
@@ -76,9 +74,7 @@ impl Display for MkTempError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let template = matches.value_of(ARG_TEMPLATE).unwrap();
     let tmpdir = matches.value_of(OPT_TMPDIR).unwrap_or_default();
@@ -139,6 +135,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_DIRECTORY)

@@ -14,13 +14,12 @@ use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
 use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 mod helper;
 
 static NAME: &str = "nl";
-static USAGE: &str = "nl [OPTION]... [FILE]...";
-// A regular expression matching everything.
+static USAGE: &str = "{} [OPTION]... [FILE]...";
 
 // Settings store options used by nl to produce its output.
 pub struct Settings {
@@ -144,7 +143,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .override_usage(USAGE)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::FILE)

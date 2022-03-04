@@ -11,6 +11,7 @@ use clap::{crate_version, App, AppSettings, Arg};
 use std::env;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 
 #[cfg(target_os = "linux")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;
@@ -25,15 +26,11 @@ static OPT_ALL: &str = "all";
 static OPT_IGNORE: &str = "ignore";
 
 static ABOUT: &str = "Print the number of cores available to the current process.";
-
-fn usage() -> String {
-    format!("{0} [OPTIONS]...", uucore::execution_phrase())
-}
+const USAGE: &str = "{} [OPTIONS]...";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let mut ignore = match matches.value_of(OPT_IGNORE) {
         Some(numstr) => match numstr.parse() {
@@ -75,6 +72,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_ALL)

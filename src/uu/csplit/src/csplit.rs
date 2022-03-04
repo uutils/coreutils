@@ -16,7 +16,7 @@ use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use regex::Regex;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 mod csplit_error;
 mod patterns;
@@ -27,6 +27,7 @@ use crate::split_name::SplitName;
 
 static SUMMARY: &str = "split a file into sections determined by context lines";
 static LONG_HELP: &str = "Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output.";
+const USAGE: &str = "{} [OPTION]... FILE PATTERN...";
 
 mod options {
     pub const SUFFIX_FORMAT: &str = "suffix-format";
@@ -38,13 +39,6 @@ mod options {
     pub const ELIDE_EMPTY_FILES: &str = "elide-empty-files";
     pub const FILE: &str = "file";
     pub const PATTERN: &str = "pattern";
-}
-
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... FILE PATTERN...",
-        uucore::execution_phrase()
-    )
 }
 
 /// Command line options for csplit.
@@ -719,12 +713,11 @@ mod tests {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     // get the file to split
     let file_name = matches.value_of(options::FILE).unwrap();
@@ -757,6 +750,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::SUFFIX_FORMAT)

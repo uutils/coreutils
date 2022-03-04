@@ -9,17 +9,14 @@ use clap::{crate_version, App, AppSettings, Arg};
 use std::path::Path;
 use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static ABOUT: &str = "strip last component from file name";
+const USAGE: &str = "{} [OPTION] NAME...";
 
 mod options {
     pub const ZERO: &str = "zero";
     pub const DIR: &str = "dir";
-}
-
-fn usage() -> String {
-    format!("{0} [OPTION] NAME...", uucore::execution_phrase())
 }
 
 fn get_long_usage() -> String {
@@ -35,13 +32,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let usage = usage();
     let after_help = get_long_usage();
 
-    let matches = uu_app()
-        .override_usage(&usage[..])
-        .after_help(&after_help[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
     let separator = if matches.is_present(options::ZERO) {
         "\0"
@@ -87,6 +80,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .about(ABOUT)
         .version(crate_version!())
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::ZERO)

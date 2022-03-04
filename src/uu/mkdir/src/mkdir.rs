@@ -17,11 +17,13 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static DEFAULT_PERM: u32 = 0o755;
 
 static ABOUT: &str = "Create the given DIRECTORY(ies) if they do not exist";
+const USAGE: &str = "{} [OPTION]... [USER]";
+
 mod options {
     pub const MODE: &str = "mode";
     pub const PARENTS: &str = "parents";
@@ -29,9 +31,6 @@ mod options {
     pub const DIRS: &str = "dirs";
 }
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [USER]", uucore::execution_phrase())
-}
 fn get_long_usage() -> String {
     String::from("Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.")
 }
@@ -90,17 +89,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Before we can parse 'args' with clap (and previously getopts),
     // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").
     let mode_had_minus_prefix = strip_minus_from_mode(&mut args);
-
-    let usage = usage();
     let after_help = get_long_usage();
 
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
-    let matches = uu_app()
-        .override_usage(&usage[..])
-        .after_help(&after_help[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
     let dirs = matches.values_of_os(options::DIRS).unwrap_or_default();
     let verbose = matches.is_present(options::VERBOSE);
@@ -116,6 +110,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::MODE)

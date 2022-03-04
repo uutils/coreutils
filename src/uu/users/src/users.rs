@@ -12,15 +12,13 @@ use std::path::Path;
 
 use clap::{crate_version, App, AppSettings, Arg};
 use uucore::error::UResult;
+use uucore::format_usage;
 use uucore::utmpx::{self, Utmpx};
 
 static ABOUT: &str = "Print the user names of users currently logged in to the current host";
+const USAGE: &str = "{} [FILE]";
 
 static ARG_FILES: &str = "files";
-
-fn usage() -> String {
-    format!("{0} [FILE]", uucore::execution_phrase())
-}
 
 fn get_long_usage() -> String {
     format!(
@@ -32,13 +30,9 @@ If FILE is not specified, use {}.  /var/log/wtmp as FILE is common.",
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let after_help = get_long_usage();
 
-    let matches = uu_app()
-        .override_usage(&usage[..])
-        .after_help(&after_help[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
     let files: Vec<&Path> = matches
         .values_of_os(ARG_FILES)
@@ -68,6 +62,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(Arg::new(ARG_FILES).takes_value(true).max_values(1))
 }
