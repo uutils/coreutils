@@ -19,8 +19,7 @@ use std::env;
 use std::fmt;
 use std::fs::{metadata, File};
 use std::io;
-use std::io::{stdin, BufReader, BufWriter, ErrorKind, Read, Write};
-use std::num::ParseIntError;
+use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
@@ -174,6 +173,134 @@ pub fn uu_app<'a>() -> App<'a> {
         )
 }
 
+/// Sub-strategy to use when splitting a file into a specific number of chunks.
+#[derive(Debug, PartialEq)]
+enum NumberType {
+    /// Split into a specific number of chunks by byte.
+    Bytes(u64),
+
+    /// Split into a specific number of chunks by line (approximately).
+    Lines(u64),
+
+    /// Split into a specific number of chunks by line
+    /// (approximately), but output only the *k*th chunk.
+    KthLines(u64, u64),
+
+    /// Assign lines via round-robin to the specified number of output chunks.
+    RoundRobin(u64),
+
+    /// Assign lines via round-robin to the specified number of output
+    /// chunks, but output only the *k*th chunk.
+    KthRoundRobin(u64, u64),
+}
+
+impl NumberType {
+    /// The number of chunks for this number type.
+    fn num_chunks(&self) -> u64 {
+        match self {
+            Self::Bytes(n) => *n,
+            Self::Lines(n) => *n,
+            Self::KthLines(_, n) => *n,
+            Self::RoundRobin(n) => *n,
+            Self::KthRoundRobin(_, n) => *n,
+        }
+    }
+}
+
+/// An error due to an invalid parameter to the `-n` command-line option.
+#[derive(Debug, PartialEq)]
+enum NumberTypeError {
+    /// The number of chunks was invalid.
+    ///
+    /// This can happen if the value of `N` in any of the following
+    /// command-line options is not a positive integer:
+    ///
+    /// ```ignore
+    /// -n N
+    /// -n l/N
+    /// -n l/K/N
+    /// -n r/N
+    /// -n r/K/N
+    /// ```
+    NumberOfChunks(String),
+
+    /// The chunk number was invalid.
+    ///
+    /// This can happen if the value of `K` in any of the following
+    /// command-line options is not a positive integer:
+    ///
+    /// ```ignore
+    /// -n l/K/N
+    /// -n r/K/N
+    /// ```
+    ChunkNumber(String),
+}
+
+impl NumberType {
+    /// Parse a `NumberType` from a string.
+    ///
+    /// The following strings are valid arguments:
+    ///
+    /// ```ignore
+    /// "N"
+    /// "l/N"
+    /// "l/K/N"
+    /// "r/N"
+    /// "r/K/N"
+    /// ```
+    ///
+    /// The `N` represents the number of chunks and the `K` represents
+    /// a chunk number.
+    ///
+    /// # Errors
+    ///
+    /// If the string is not one of the valid number types, if `K` is
+    /// not a nonnegative integer, or if `N` is not a positive
+    /// integer, then this function returns [`NumberTypeError`].
+    fn from(s: &str) -> Result<Self, NumberTypeError> {
+        let parts: Vec<&str> = s.split('/').collect();
+        match &parts[..] {
+            [n_str] => {
+                let num_chunks = n_str
+                    .parse()
+                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                Ok(Self::Bytes(num_chunks))
+            }
+            ["l", n_str] => {
+                let num_chunks = n_str
+                    .parse()
+                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                Ok(Self::Lines(num_chunks))
+            }
+            ["l", k_str, n_str] => {
+                let num_chunks = n_str
+                    .parse()
+                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                let chunk_number = k_str
+                    .parse()
+                    .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
+                Ok(Self::KthLines(chunk_number, num_chunks))
+            }
+            ["r", n_str] => {
+                let num_chunks = n_str
+                    .parse()
+                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                Ok(Self::RoundRobin(num_chunks))
+            }
+            ["r", k_str, n_str] => {
+                let num_chunks = n_str
+                    .parse()
+                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                let chunk_number = k_str
+                    .parse()
+                    .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
+                Ok(Self::KthRoundRobin(chunk_number, num_chunks))
+            }
+            _ => Err(NumberTypeError::NumberOfChunks(s.to_string())),
+        }
+    }
+}
+
 /// The strategy for breaking up the input file into chunks.
 enum Strategy {
     /// Each chunk has the specified number of lines.
@@ -187,7 +314,10 @@ enum Strategy {
     LineBytes(u64),
 
     /// Split the file into this many chunks.
-    Number(u64),
+    ///
+    /// There are several sub-strategies available, as defined by
+    /// [`NumberType`].
+    Number(NumberType),
 }
 
 /// An error when parsing a chunking strategy from command-line arguments.
@@ -198,8 +328,8 @@ enum StrategyError {
     /// Invalid number of bytes.
     Bytes(ParseSizeError),
 
-    /// Invalid number of chunks.
-    NumberOfChunks(ParseIntError),
+    /// Invalid number type.
+    NumberType(NumberTypeError),
 
     /// Multiple chunking strategies were specified (but only one should be).
     MultipleWays,
@@ -210,7 +340,12 @@ impl fmt::Display for StrategyError {
         match self {
             Self::Lines(e) => write!(f, "invalid number of lines: {}", e),
             Self::Bytes(e) => write!(f, "invalid number of bytes: {}", e),
-            Self::NumberOfChunks(e) => write!(f, "invalid number of chunks: {}", e),
+            Self::NumberType(NumberTypeError::NumberOfChunks(s)) => {
+                write!(f, "invalid number of chunks: {}", s)
+            }
+            Self::NumberType(NumberTypeError::ChunkNumber(s)) => {
+                write!(f, "invalid chunk number: {}", s)
+            }
             Self::MultipleWays => write!(f, "cannot split in more than one way"),
         }
     }
@@ -248,8 +383,8 @@ impl Strategy {
             }
             (0, 0, 0, 1) => {
                 let s = matches.value_of(OPT_NUMBER).unwrap();
-                let n = s.parse::<u64>().map_err(StrategyError::NumberOfChunks)?;
-                Ok(Self::Number(n))
+                let number_type = NumberType::from(s).map_err(StrategyError::NumberType)?;
+                Ok(Self::Number(number_type))
             }
             _ => Err(StrategyError::MultipleWays),
         }
@@ -356,7 +491,8 @@ impl Settings {
         let suffix_length: usize = suffix_length_str
             .parse()
             .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?;
-        if let Strategy::Number(chunks) = strategy {
+        if let Strategy::Number(ref number_type) = strategy {
+            let chunks = number_type.num_chunks();
             if suffix_length != 0 {
                 let required_suffix_length =
                     (chunks as f64).log(suffix_type.radix() as f64).ceil() as usize;
@@ -712,6 +848,73 @@ where
     .map_err_context(|| "I/O error".to_string())
 }
 
+/// Split a file into a specific number of chunks by line.
+///
+/// This function always creates one output file for each chunk, even
+/// if there is an error reading or writing one of the chunks or if
+/// the input file is truncated. However, if the `filter` option is
+/// being used, then no files are created.
+///
+/// # Errors
+///
+/// This function returns an error if there is a problem reading from
+/// `reader` or writing to one of the output files.
+fn split_into_n_chunks_by_line<R>(
+    settings: &Settings,
+    reader: &mut R,
+    num_chunks: u64,
+) -> UResult<()>
+where
+    R: BufRead,
+{
+    // Get the size of the input file in bytes and compute the number
+    // of bytes per chunk.
+    let metadata = metadata(&settings.input).unwrap();
+    let num_bytes = metadata.len();
+    let chunk_size = (num_bytes / (num_chunks as u64)) as usize;
+
+    // This object is responsible for creating the filename for each chunk.
+    let mut filename_iterator = FilenameIterator::new(
+        &settings.prefix,
+        &settings.additional_suffix,
+        settings.suffix_length,
+        settings.suffix_type,
+    );
+
+    // Create one writer for each chunk. This will create each
+    // of the underlying files (if not in `--filter` mode).
+    let mut writers = vec![];
+    for _ in 0..num_chunks {
+        let filename = filename_iterator
+            .next()
+            .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+        let writer = platform::instantiate_current_writer(&settings.filter, filename.as_str());
+        writers.push(writer);
+    }
+
+    let mut num_bytes_remaining_in_current_chunk = chunk_size;
+    let mut i = 0;
+    for line_result in reader.lines() {
+        let line = line_result.unwrap();
+        let maybe_writer = writers.get_mut(i);
+        let writer = maybe_writer.unwrap();
+        let bytes = line.as_bytes();
+        writer.write_all(bytes)?;
+        writer.write_all(b"\n")?;
+
+        // Add one byte for the newline character.
+        let num_bytes = bytes.len() + 1;
+        if num_bytes > num_bytes_remaining_in_current_chunk {
+            num_bytes_remaining_in_current_chunk = chunk_size;
+            i += 1;
+        } else {
+            num_bytes_remaining_in_current_chunk -= num_bytes;
+        }
+    }
+
+    Ok(())
+}
+
 fn split(settings: &Settings) -> UResult<()> {
     let mut reader = BufReader::new(if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
@@ -726,9 +929,13 @@ fn split(settings: &Settings) -> UResult<()> {
     });
 
     match settings.strategy {
-        Strategy::Number(num_chunks) => {
+        Strategy::Number(NumberType::Bytes(num_chunks)) => {
             split_into_n_chunks_by_byte(settings, &mut reader, num_chunks)
         }
+        Strategy::Number(NumberType::Lines(num_chunks)) => {
+            split_into_n_chunks_by_line(settings, &mut reader, num_chunks)
+        }
+        Strategy::Number(_) => Err(USimpleError::new(1, "-n mode not yet fully implemented")),
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)
                 .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
@@ -767,5 +974,89 @@ fn split(settings: &Settings) -> UResult<()> {
                 },
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::NumberType;
+    use crate::NumberTypeError;
+
+    #[test]
+    fn test_number_type_from() {
+        assert_eq!(NumberType::from("123").unwrap(), NumberType::Bytes(123));
+        assert_eq!(NumberType::from("l/123").unwrap(), NumberType::Lines(123));
+        assert_eq!(
+            NumberType::from("l/123/456").unwrap(),
+            NumberType::KthLines(123, 456)
+        );
+        assert_eq!(
+            NumberType::from("r/123").unwrap(),
+            NumberType::RoundRobin(123)
+        );
+        assert_eq!(
+            NumberType::from("r/123/456").unwrap(),
+            NumberType::KthRoundRobin(123, 456)
+        );
+    }
+
+    #[test]
+    fn test_number_type_from_error() {
+        assert_eq!(
+            NumberType::from("xyz").unwrap_err(),
+            NumberTypeError::NumberOfChunks("xyz".to_string())
+        );
+        assert_eq!(
+            NumberType::from("l/xyz").unwrap_err(),
+            NumberTypeError::NumberOfChunks("xyz".to_string())
+        );
+        assert_eq!(
+            NumberType::from("l/123/xyz").unwrap_err(),
+            NumberTypeError::NumberOfChunks("xyz".to_string())
+        );
+        assert_eq!(
+            NumberType::from("l/abc/456").unwrap_err(),
+            NumberTypeError::ChunkNumber("abc".to_string())
+        );
+        // In GNU split, the number of chunks get precedence:
+        //
+        //     $ split -n l/abc/xyz
+        //     split: invalid number of chunks: ‘xyz’
+        //
+        assert_eq!(
+            NumberType::from("l/abc/xyz").unwrap_err(),
+            NumberTypeError::NumberOfChunks("xyz".to_string())
+        );
+        assert_eq!(
+            NumberType::from("r/xyz").unwrap_err(),
+            NumberTypeError::NumberOfChunks("xyz".to_string())
+        );
+        assert_eq!(
+            NumberType::from("r/123/xyz").unwrap_err(),
+            NumberTypeError::NumberOfChunks("xyz".to_string())
+        );
+        assert_eq!(
+            NumberType::from("r/abc/456").unwrap_err(),
+            NumberTypeError::ChunkNumber("abc".to_string())
+        );
+        // In GNU split, the number of chunks get precedence:
+        //
+        //     $ split -n r/abc/xyz
+        //     split: invalid number of chunks: ‘xyz’
+        //
+        assert_eq!(
+            NumberType::from("r/abc/xyz").unwrap_err(),
+            NumberTypeError::NumberOfChunks("xyz".to_string())
+        );
+    }
+
+    #[test]
+    fn test_number_type_num_chunks() {
+        assert_eq!(NumberType::from("123").unwrap().num_chunks(), 123);
+        assert_eq!(NumberType::from("l/123").unwrap().num_chunks(), 123);
+        assert_eq!(NumberType::from("l/123/456").unwrap().num_chunks(), 456);
+        assert_eq!(NumberType::from("r/123").unwrap().num_chunks(), 123);
+        assert_eq!(NumberType::from("r/123/456").unwrap().num_chunks(), 456);
     }
 }
