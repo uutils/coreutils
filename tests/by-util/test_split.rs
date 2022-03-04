@@ -2,7 +2,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase fghij klmno pqrst uvwxyz fivelines twohundredfortyonebytes
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase fghij klmno pqrst uvwxyz fivelines twohundredfortyonebytes onehundredlines
 extern crate rand;
 extern crate regex;
 
