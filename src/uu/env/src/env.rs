@@ -25,8 +25,9 @@ use std::iter::Iterator;
 use std::process::Command;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::format_usage;
 
-const USAGE: &str = "env [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
+const USAGE: &str = "{} [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
 const AFTER_HELP: &str = "\
 A mere - implies -i. If no COMMAND, print the resulting environment.
 ";
@@ -104,6 +105,7 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
 }
 
 #[cfg(not(windows))]
+#[allow(clippy::ptr_arg)]
 fn build_command<'a, 'b>(args: &'a mut Vec<&'b str>) -> (Cow<'b, str>, &'a [&'b str]) {
     let progname = Cow::from(args[0]);
     (progname, &args[1..])
@@ -124,7 +126,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .author(crate_authors!())
         .about(crate_description!())
-        .override_usage(USAGE)
+        .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)
         .setting(AppSettings::AllowExternalSubcommands)
         .setting(AppSettings::InferLongArgs)

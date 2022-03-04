@@ -11,6 +11,7 @@
 use chrono::{Local, TimeZone, Utc};
 use clap::{crate_version, App, AppSettings, Arg};
 
+use uucore::format_usage;
 // import crate time from utmpx
 pub use uucore::libc;
 use uucore::libc::time_t;
@@ -20,6 +21,7 @@ use uucore::error::{UResult, USimpleError};
 static ABOUT: &str = "Display the current time, the length of time the system has been up,\n\
                       the number of users on the system, and the average number of jobs\n\
                       in the run queue over the last 1, 5 and 15 minutes.";
+const USAGE: &str = "{} [OPTION]...";
 pub mod options {
     pub static SINCE: &str = "since";
 }
@@ -32,14 +34,9 @@ extern "C" {
     fn GetTickCount() -> uucore::libc::uint32_t;
 }
 
-fn usage() -> String {
-    format!("{0} [OPTION]...", uucore::execution_phrase())
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let (boot_time, user_count) = process_utmpx();
     let uptime = get_uptime(boot_time);
@@ -66,6 +63,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::SINCE)

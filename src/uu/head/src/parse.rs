@@ -20,7 +20,7 @@ pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>
         let mut has_num = false;
         let mut last_char = 0 as char;
         for (n, c) in &mut chars {
-            if c.is_numeric() {
+            if c.is_digit(10) {
                 has_num = true;
                 num_end = n;
             } else {
@@ -97,7 +97,7 @@ pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>
 }
 /// Parses an -c or -n argument,
 /// the bool specifies whether to read from the end
-pub fn parse_num(src: &str) -> Result<(usize, bool), ParseSizeError> {
+pub fn parse_num(src: &str) -> Result<(u64, bool), ParseSizeError> {
     let mut size_string = src.trim();
     let mut all_but_last = false;
 

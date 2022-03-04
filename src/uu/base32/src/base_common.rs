@@ -12,7 +12,7 @@ use std::io::{stdout, Read, Write};
 use uucore::display::Quotable;
 use uucore::encoding::{wrap_print, Data, Format};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 use std::fs::File;
 use std::io::{BufReader, Stdin};
@@ -86,17 +86,18 @@ impl Config {
 }
 
 pub fn parse_base_cmd_args(args: impl uucore::Args, about: &str, usage: &str) -> UResult<Config> {
-    let app = base_app(about).override_usage(usage);
+    let app = base_app(about, usage);
     let arg_list = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
     Config::from(&app.get_matches_from(arg_list))
 }
 
-pub fn base_app(about: &str) -> App {
+pub fn base_app<'a>(about: &'a str, usage: &'a str) -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(about)
+        .override_usage(format_usage(usage))
         .setting(AppSettings::InferLongArgs)
         // Format arguments.
         .arg(

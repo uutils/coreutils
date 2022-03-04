@@ -11,11 +11,11 @@ use std::io::{self, Write};
 use std::iter::Peekable;
 use std::str::Chars;
 use uucore::error::{FromIo, UResult};
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 const NAME: &str = "echo";
 const SUMMARY: &str = "display a line of text";
-const USAGE: &str = "[OPTIONS]... [STRING]...";
+const USAGE: &str = "{} [OPTIONS]... [STRING]...";
 const AFTER_HELP: &str = r#"
  Echo the STRING(s) to standard output.
 
@@ -88,10 +88,7 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
                         start = 0;
                         next
                     }),
-                    '0' => parse_code(&mut iter, 8, 3, 3).unwrap_or_else(|| {
-                        start = 0;
-                        next
-                    }),
+                    '0' => parse_code(&mut iter, 8, 3, 3).unwrap_or('\0'),
                     _ => {
                         start = 0;
                         next
@@ -141,7 +138,7 @@ pub fn uu_app<'a>() -> App<'a> {
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(AFTER_HELP)
-        .override_usage(USAGE)
+        .override_usage(format_usage(USAGE))
         .arg(
             Arg::new(options::NO_NEWLINE)
                 .short('n')

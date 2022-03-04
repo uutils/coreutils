@@ -32,7 +32,7 @@ impl<'a> CommandLineOpts for ArgMatches {
 #[derive(PartialEq, Debug)]
 pub enum CommandLineInputs {
     FileNames(Vec<String>),
-    FileAndOffset((String, usize, Option<usize>)),
+    FileAndOffset((String, u64, Option<u64>)),
 }
 
 /// Interprets the command line inputs of od.
@@ -141,7 +141,7 @@ pub fn parse_inputs_traditional(input_strings: &[&str]) -> Result<CommandLineInp
 }
 
 /// parses format used by offset and label on the command line
-pub fn parse_offset_operand(s: &str) -> Result<usize, &'static str> {
+pub fn parse_offset_operand(s: &str) -> Result<u64, &'static str> {
     let mut start = 0;
     let mut len = s.len();
     let mut radix = 8;
@@ -164,7 +164,7 @@ pub fn parse_offset_operand(s: &str) -> Result<usize, &'static str> {
             radix = 10;
         }
     }
-    match usize::from_str_radix(&s[start..len], radix) {
+    match u64::from_str_radix(&s[start..len], radix) {
         Ok(i) => Ok(i * multiply),
         Err(_) => Err("parse failed"),
     }
@@ -332,7 +332,7 @@ mod tests {
         .unwrap_err();
     }
 
-    fn parse_offset_operand_str(s: &str) -> Result<usize, &'static str> {
+    fn parse_offset_operand_str(s: &str) -> Result<u64, &'static str> {
         parse_offset_operand(&String::from(s))
     }
 

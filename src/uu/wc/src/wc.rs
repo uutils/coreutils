@@ -15,17 +15,21 @@ use count_fast::{count_bytes_and_lines_fast, count_bytes_fast};
 use countable::WordCountable;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
+use uucore::format_usage;
 use word_count::{TitledWordCount, WordCount};
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
 use std::cmp::max;
+use std::error::Error;
+use std::ffi::OsStr;
+use std::fmt::Display;
 use std::fs::{self, File};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
 use uucore::display::{Quotable, Quoted};
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UError, UResult, USimpleError};
 
 /// The minimum character width for formatting counts when reading from stdin.
 const MINIMUM_WIDTH: usize = 7;
@@ -78,25 +82,20 @@ impl Settings {
 }
 
 static ABOUT: &str = "Display newline, word, and byte counts for each FILE, and a total line if
-more than one FILE is specified.";
+more than one FILE is specified. With no FILE, or when FILE is -, read standard input.";
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 pub mod options {
     pub static BYTES: &str = "bytes";
     pub static CHAR: &str = "chars";
+    pub static FILES0_FROM: &str = "files0-from";
     pub static LINES: &str = "lines";
     pub static MAX_LINE_LENGTH: &str = "max-line-length";
     pub static WORDS: &str = "words";
 }
 
 static ARG_FILES: &str = "files";
-
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... [FILE]...
- With no FILE, or when FILE is -, read standard input.",
-        uucore::execution_phrase()
-    )
-}
+static STDIN_REPR: &str = "-";
 
 enum StdinKind {
     /// Stdin specified on command-line with "-".
@@ -115,12 +114,22 @@ enum Input {
     Stdin(StdinKind),
 }
 
+impl From<&OsStr> for Input {
+    fn from(input: &OsStr) -> Self {
+        if input == STDIN_REPR {
+            Self::Stdin(StdinKind::Explicit)
+        } else {
+            Self::Path(input.into())
+        }
+    }
+}
+
 impl Input {
     /// Converts input to title that appears in stats.
     fn to_title(&self) -> Option<&Path> {
         match self {
             Input::Path(path) => Some(path),
-            Input::Stdin(StdinKind::Explicit) => Some("-".as_ref()),
+            Input::Stdin(StdinKind::Explicit) => Some(STDIN_REPR.as_ref()),
             Input::Stdin(StdinKind::Implicit) => None,
         }
     }
@@ -133,29 +142,41 @@ impl Input {
     }
 }
 
+#[derive(Debug)]
+enum WcError {
+    FilesDisabled(String),
+    StdinReprNotAllowed(String),
+}
+
+impl UError for WcError {
+    fn code(&self) -> i32 {
+        match self {
+            WcError::FilesDisabled(_) | WcError::StdinReprNotAllowed(_) => 1,
+        }
+    }
+
+    fn usage(&self) -> bool {
+        matches!(self, WcError::FilesDisabled(_))
+    }
+}
+
+impl Error for WcError {}
+
+impl Display for WcError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            WcError::FilesDisabled(message) | WcError::StdinReprNotAllowed(message) => {
+                write!(f, "{}", message)
+            }
+        }
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
+    let matches = uu_app().get_matches_from(args);
 
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
-
-    let mut inputs: Vec<Input> = matches
-        .values_of_os(ARG_FILES)
-        .map(|v| {
-            v.map(|i| {
-                if i == "-" {
-                    Input::Stdin(StdinKind::Explicit)
-                } else {
-                    Input::Path(i.into())
-                }
-            })
-            .collect()
-        })
-        .unwrap_or_default();
-
-    if inputs.is_empty() {
-        inputs.push(Input::Stdin(StdinKind::Implicit));
-    }
+    let inputs = inputs(&matches)?;
 
     let settings = Settings::new(&matches);
 
@@ -166,6 +187,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::BYTES)
@@ -178,6 +200,17 @@ pub fn uu_app<'a>() -> App<'a> {
                 .short('m')
                 .long(options::CHAR)
                 .help("print the character counts"),
+        )
+        .arg(
+            Arg::new(options::FILES0_FROM)
+                .long(options::FILES0_FROM)
+                .takes_value(true)
+                .value_name("F")
+                .help(
+                    "read input from the files specified by
+    NUL-terminated names in file F;
+    If F is - then read names from standard input",
+                ),
         )
         .arg(
             Arg::new(options::LINES)
@@ -203,6 +236,47 @@ pub fn uu_app<'a>() -> App<'a> {
                 .takes_value(true)
                 .allow_invalid_utf8(true),
         )
+}
+
+fn inputs(matches: &ArgMatches) -> UResult<Vec<Input>> {
+    match matches.values_of_os(ARG_FILES) {
+        Some(os_values) => {
+            if matches.is_present(options::FILES0_FROM) {
+                return Err(WcError::FilesDisabled(
+                    "file operands cannot be combined with --files0-from".into(),
+                )
+                .into());
+            }
+
+            Ok(os_values.map(Input::from).collect())
+        }
+        None => match matches.value_of(options::FILES0_FROM) {
+            Some(files_0_from) => create_paths_from_files0(files_0_from),
+            None => Ok(vec![Input::Stdin(StdinKind::Implicit)]),
+        },
+    }
+}
+
+fn create_paths_from_files0(files_0_from: &str) -> UResult<Vec<Input>> {
+    let mut paths = String::new();
+    let read_from_stdin = files_0_from == STDIN_REPR;
+
+    if read_from_stdin {
+        io::stdin().lock().read_to_string(&mut paths)?;
+    } else {
+        File::open(files_0_from)?.read_to_string(&mut paths)?;
+    }
+
+    let paths: Vec<&str> = paths.split_terminator('\0').collect();
+
+    if read_from_stdin && paths.contains(&STDIN_REPR) {
+        return Err(WcError::StdinReprNotAllowed(
+            "when reading file names from stdin, no file name of '-' allowed".into(),
+        )
+        .into());
+    }
+
+    Ok(paths.iter().map(OsStr::new).map(Input::from).collect())
 }
 
 fn word_count_from_reader<T: WordCountable>(
@@ -253,12 +327,7 @@ fn word_count_from_reader<T: WordCountable>(
                     }
                     if settings.show_max_line_length {
                         match ch {
-                            '\n' => {
-                                total.max_line_length = max(current_len, total.max_line_length);
-                                current_len = 0;
-                            }
-                            // '\x0c' = '\f'
-                            '\r' | '\x0c' => {
+                            '\n' | '\r' | '\x0c' => {
                                 total.max_line_length = max(current_len, total.max_line_length);
                                 current_len = 0;
                             }

@@ -349,6 +349,10 @@ $ make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
 
 ### Comparing with GNU
 
+Below is the evolution of how many GNU tests uutils passes. A more detailed
+breakdown of the GNU test results of the main branch can be found
+[in the user manual](https://uutils.github.io/coreutils-docs/user/test_coverage.html).
+
 ![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
 
 To run locally:
@@ -376,18 +380,18 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | basename  | df        |        |
 | basenc    | expr      |        |
 | cat       | install   |        |
-| chcon     | join      |        |
-| chgrp     | ls        |        |
-| chmod     | more      |        |
-| chown     | numfmt    |        |
-| chroot    | od (`--strings` and 128-bit data types missing) | |
-| cksum     | pr        |        |
-| comm      | printf    |        |
-| csplit    | sort      |        |
-| cut       | split     |        |
-| dircolors | tac       |        |
-| dirname   | tail      |        |
-| du        | test      |        |
+| chcon     | ls        |        |
+| chgrp     | more      |        |
+| chmod     | numfmt    |        |
+| chown     | od (`--strings` and 128-bit data types missing) | |
+| chroot    | pr        |        |
+| cksum     | printf    |        |
+| comm      | sort      |        |
+| csplit    | split     |        |
+| cut       | tac       |        |
+| dircolors | tail      |        |
+| dirname   | test      |        |
+| du        |           |        |
 | echo      |           |        |
 | env       |           |        |
 | expand    |           |        |
@@ -401,6 +405,7 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | hostid    |           |        |
 | hostname  |           |        |
 | id        |           |        |
+| join      |           |        |
 | kill      |           |        |
 | link      |           |        |
 | ln        |           |        |

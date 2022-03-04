@@ -19,12 +19,12 @@ use uucore::{
 
 use std::io::{stdin, Read};
 
-static ABOUT: &str = "
- With no FILE, or when FILE is -, read standard input.
+static ABOUT: &str = "\
+With no FILE, or when FILE is -, read standard input.
 
- When decoding, the input may contain newlines in addition to the bytes of
- the formal alphabet. Use --ignore-garbage to attempt to recover
- from any other non-alphabet bytes in the encoded stream.
+When decoding, the input may contain newlines in addition to the bytes of
+the formal alphabet. Use --ignore-garbage to attempt to recover
+from any other non-alphabet bytes in the encoded stream.
 ";
 
 const ENCODINGS: &[(&str, Format)] = &[
@@ -38,12 +38,10 @@ const ENCODINGS: &[(&str, Format)] = &[
     ("z85", Format::Z85),
 ];
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]", uucore::execution_phrase())
-}
+const USAGE: &str = "{} [OPTION]... [FILE]";
 
 pub fn uu_app<'a>() -> App<'a> {
-    let mut app = base_common::base_app(ABOUT);
+    let mut app = base_common::base_app(ABOUT, USAGE);
     for encoding in ENCODINGS {
         app = app.arg(Arg::new(encoding.0).long(encoding.0));
     }
@@ -51,8 +49,7 @@ pub fn uu_app<'a>() -> App<'a> {
 }
 
 fn parse_cmd_args(args: impl uucore::Args) -> UResult<(Config, Format)> {
-    let usage = usage();
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(
+    let matches = uu_app().get_matches_from(
         args.collect_str(InvalidEncodingHandling::ConvertLossy)
             .accept_any(),
     );

@@ -1,4 +1,4 @@
-// spell-checker:ignore aabbaa aabbcc aabc abbb abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase Gzabcdefg PQRST upcase wxyzz xdigit xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz
+// spell-checker:ignore aabbaa aabbcc aabc abbb abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase Gzabcdefg PQRST upcase wxyzz xdigit xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn
 use crate::common::util::*;
 
 #[test]
@@ -867,6 +867,26 @@ fn check_against_gnu_tr_tests_o_rep_2() {
         .pipe_in("bcd")
         .succeeds()
         .stdout_is("BCx");
+}
+
+#[test]
+fn octal_repeat_count_test() {
+    //below will result in 8'x' and 4'y' as octal 010 = decimal 8
+    new_ucmd!()
+        .args(&["ABCdefghijkl", "[x*010]Y"])
+        .pipe_in("ABCdefghijklmn12")
+        .succeeds()
+        .stdout_is("xxxxxxxxYYYYmn12");
+}
+
+#[test]
+fn non_octal_repeat_count_test() {
+    //below will result in 10'x' and 2'y' as the 10 does not have 0 prefix
+    new_ucmd!()
+        .args(&["ABCdefghijkl", "[x*10]Y"])
+        .pipe_in("ABCdefghijklmn12")
+        .succeeds()
+        .stdout_is("xxxxxxxxxxYYmn12");
 }
 
 #[test]

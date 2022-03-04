@@ -8,13 +8,13 @@
 #[macro_use]
 extern crate uucore;
 use uucore::display::Quotable;
-use uucore::entries;
 use uucore::error::{UResult, USimpleError};
 use uucore::fs::display_permissions;
 use uucore::fsext::{
     pretty_filetype, pretty_fstype, pretty_time, read_fs_list, statfs, BirthTime, FsMeta,
 };
 use uucore::libc::mode_t;
+use uucore::{entries, format_usage};
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::borrow::Cow;
@@ -87,6 +87,7 @@ macro_rules! print_adjusted {
 }
 
 static ABOUT: &str = "Display file or file system status.";
+const USAGE: &str = "{} [OPTION]... FILE...";
 
 pub mod options {
     pub static DEREFERENCE: &str = "dereference";
@@ -193,11 +194,19 @@ impl ScanUtil for str {
 }
 
 pub fn group_num(s: &str) -> Cow<str> {
-    assert!(s.chars().all(char::is_numeric));
+    let is_negative = s.starts_with('-');
+    assert!(is_negative || s.chars().take(1).all(|c| c.is_digit(10)));
+    assert!(s.chars().skip(1).all(|c| c.is_digit(10)));
     if s.len() < 4 {
         return s.into();
     }
     let mut res = String::with_capacity((s.len() - 1) / 3);
+    let s = if is_negative {
+        res.push('-');
+        &s[1..]
+    } else {
+        s
+    };
     let mut alone = (s.len() - 1) % 3 + 1;
     res.push_str(&s[..alone]);
     while alone != s.len() {
@@ -885,10 +894,6 @@ impl Stater {
     }
 }
 
-fn usage() -> String {
-    format!("{0} [OPTION]... FILE...", uucore::execution_phrase())
-}
-
 fn get_long_usage() -> String {
     String::from(
         "
@@ -949,13 +954,9 @@ for details about the options it supports.
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let long_usage = get_long_usage();
 
-    let matches = uu_app()
-        .override_usage(&usage[..])
-        .after_help(&long_usage[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&long_usage[..]).get_matches_from(args);
 
     let stater = Stater::new(&matches)?;
     let exit_status = stater.exec();
@@ -970,6 +971,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::DEREFERENCE)

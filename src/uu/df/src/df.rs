@@ -5,32 +5,27 @@
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
+// spell-checker:ignore itotal iused iavail ipcent pcent
+mod table;
 
-use uucore::error::UError;
-use uucore::error::UResult;
 #[cfg(unix)]
-use uucore::fsext::statfs_fn;
+use uucore::fsext::statfs;
 use uucore::fsext::{read_fs_list, FsUsage, MountInfo};
+use uucore::{error::UResult, format_usage};
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
-use number_prefix::NumberPrefix;
-use std::cell::Cell;
-use std::collections::HashMap;
 use std::collections::HashSet;
-
-use std::error::Error;
-#[cfg(unix)]
-use std::ffi::CString;
-use std::fmt::Display;
-#[cfg(unix)]
-use std::mem;
+use std::iter::FromIterator;
 
 #[cfg(windows)]
 use std::path::Path;
 
+use crate::table::{DisplayRow, Header, Row};
+
 static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
                       or all file systems by default.";
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 static OPT_ALL: &str = "all";
 static OPT_BLOCKSIZE: &str = "blocksize";
@@ -49,6 +44,10 @@ static OPT_SYNC: &str = "sync";
 static OPT_TYPE: &str = "type";
 static OPT_PRINT_TYPE: &str = "print-type";
 static OPT_EXCLUDE_TYPE: &str = "exclude-type";
+static OUTPUT_FIELD_LIST: [&str; 12] = [
+    "source", "fstype", "itotal", "iused", "iavail", "ipcent", "size", "used", "avail", "pcent",
+    "file", "target",
+];
 
 /// Store names of file systems as a selector.
 /// Note: `exclude` takes priority over `include`.
@@ -58,15 +57,79 @@ struct FsSelector {
     exclude: HashSet<String>,
 }
 
+/// A block size to use in condensing the display of a large number of bytes.
+///
+/// The [`BlockSize::Bytes`] variant represents a static block
+/// size. The [`BlockSize::HumanReadableDecimal`] and
+/// [`BlockSize::HumanReadableBinary`] variants represent dynamic
+/// block sizes: as the number of bytes increases, the divisor
+/// increases as well (for example, from 1 to 1,000 to 1,000,000 and
+/// so on in the case of [`BlockSize::HumanReadableDecimal`]).
+///
+/// The default variant is `Bytes(1024)`.
+enum BlockSize {
+    /// A fixed number of bytes.
+    ///
+    /// The number must be positive.
+    Bytes(u64),
+
+    /// Use the largest divisor corresponding to a unit, like B, K, M, G, etc.
+    ///
+    /// This variant represents powers of 1,000. Contrast with
+    /// [`BlockSize::HumanReadableBinary`], which represents powers of
+    /// 1,024.
+    HumanReadableDecimal,
+
+    /// Use the largest divisor corresponding to a unit, like B, K, M, G, etc.
+    ///
+    /// This variant represents powers of 1,024. Contrast with
+    /// [`BlockSize::HumanReadableDecimal`], which represents powers
+    /// of 1,000.
+    HumanReadableBinary,
+}
+
+impl Default for BlockSize {
+    fn default() -> Self {
+        Self::Bytes(1024)
+    }
+}
+
+impl From<&ArgMatches> for BlockSize {
+    fn from(matches: &ArgMatches) -> Self {
+        if matches.is_present(OPT_HUMAN_READABLE) {
+            Self::HumanReadableBinary
+        } else if matches.is_present(OPT_HUMAN_READABLE_2) {
+            Self::HumanReadableDecimal
+        } else {
+            Self::default()
+        }
+    }
+}
+
+#[derive(Default)]
 struct Options {
     show_local_fs: bool,
     show_all_fs: bool,
     show_listed_fs: bool,
     show_fs_type: bool,
     show_inode_instead: bool,
-    // block_size: usize,
-    human_readable_base: i64,
+    block_size: BlockSize,
     fs_selector: FsSelector,
+}
+
+impl Options {
+    /// Convert command-line arguments into [`Options`].
+    fn from(matches: &ArgMatches) -> Self {
+        Self {
+            show_local_fs: matches.is_present(OPT_LOCAL),
+            show_all_fs: matches.is_present(OPT_ALL),
+            show_listed_fs: false,
+            show_fs_type: matches.is_present(OPT_PRINT_TYPE),
+            show_inode_instead: matches.is_present(OPT_INODES),
+            block_size: BlockSize::from(matches),
+            fs_selector: FsSelector::from(matches),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -75,23 +138,20 @@ struct Filesystem {
     usage: FsUsage,
 }
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
-}
-
 impl FsSelector {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    #[inline(always)]
-    fn include(&mut self, fs_type: String) {
-        self.include.insert(fs_type);
-    }
-
-    #[inline(always)]
-    fn exclude(&mut self, fs_type: String) {
-        self.exclude.insert(fs_type);
+    /// Convert command-line arguments into a [`FsSelector`].
+    ///
+    /// This function reads the include and exclude sets from
+    /// [`ArgMatches`] and returns the corresponding [`FsSelector`]
+    /// instance.
+    fn from(matches: &ArgMatches) -> Self {
+        let include = HashSet::from_iter(matches.values_of_lossy(OPT_TYPE).unwrap_or_default());
+        let exclude = HashSet::from_iter(
+            matches
+                .values_of_lossy(OPT_EXCLUDE_TYPE)
+                .unwrap_or_default(),
+        );
+        Self { include, exclude }
     }
 
     fn should_select(&self, fs_type: &str) -> bool {
@@ -99,24 +159,6 @@ impl FsSelector {
             return false;
         }
         self.include.is_empty() || self.include.contains(fs_type)
-    }
-}
-
-impl Options {
-    fn new() -> Self {
-        Self {
-            show_local_fs: false,
-            show_all_fs: false,
-            show_listed_fs: false,
-            show_fs_type: false,
-            show_inode_instead: false,
-            // block_size: match env::var("BLOCKSIZE") {
-            //     Ok(size) => size.parse().unwrap(),
-            //     Err(_) => 512,
-            // },
-            human_readable_base: -1,
-            fs_selector: FsSelector::new(),
-        }
     }
 }
 
@@ -137,148 +179,111 @@ impl Filesystem {
             }
         };
         #[cfg(unix)]
-        unsafe {
-            let path = CString::new(_stat_path).unwrap();
-            let mut statvfs = mem::zeroed();
-            if statfs_fn(path.as_ptr(), &mut statvfs) < 0 {
-                None
-            } else {
-                Some(Self {
-                    mount_info,
-                    usage: FsUsage::new(statvfs),
-                })
-            }
-        }
+        let usage = FsUsage::new(statfs(_stat_path).ok()?);
         #[cfg(windows)]
-        Some(Self {
-            mount_info,
-            usage: FsUsage::new(Path::new(&_stat_path)),
-        })
+        let usage = FsUsage::new(Path::new(&_stat_path));
+        Some(Self { mount_info, usage })
     }
 }
 
+/// Whether to display the mount info given the inclusion settings.
+fn is_included(mi: &MountInfo, paths: &[String], opt: &Options) -> bool {
+    // Don't show remote filesystems if `--local` has been given.
+    if mi.remote && opt.show_local_fs {
+        return false;
+    }
+
+    // Don't show pseudo filesystems unless `--all` has been given.
+    if mi.dummy && !opt.show_all_fs && !opt.show_listed_fs {
+        return false;
+    }
+
+    // Don't show filesystems if they have been explicitly excluded.
+    if !opt.fs_selector.should_select(&mi.fs_type) {
+        return false;
+    }
+
+    // Don't show filesystems other than the ones specified on the
+    // command line, if any.
+    if !paths.is_empty() && !paths.contains(&mi.mount_dir) {
+        return false;
+    }
+
+    true
+}
+
+/// Whether the mount info in `m2` should be prioritized over `m1`.
+///
+/// The "lt" in the function name is in analogy to the
+/// [`std::cmp::PartialOrd::lt`].
+fn mount_info_lt(m1: &MountInfo, m2: &MountInfo) -> bool {
+    // let "real" devices with '/' in the name win.
+    if m1.dev_name.starts_with('/') && !m2.dev_name.starts_with('/') {
+        return false;
+    }
+
+    let m1_nearer_root = m1.mount_dir.len() < m2.mount_dir.len();
+    // With bind mounts, prefer items nearer the root of the source
+    let m2_below_root = !m1.mount_root.is_empty()
+        && !m2.mount_root.is_empty()
+        && m1.mount_root.len() > m2.mount_root.len();
+    // let points towards the root of the device win.
+    if m1_nearer_root && !m2_below_root {
+        return false;
+    }
+
+    // let an entry over-mounted on a new device win, but only when
+    // matching an existing mnt point, to avoid problematic
+    // replacement when given inaccurate mount lists, seen with some
+    // chroot environments for example.
+    if m1.dev_name != m2.dev_name && m1.mount_dir == m2.mount_dir {
+        return false;
+    }
+
+    true
+}
+
+/// Whether to prioritize given mount info over all others on the same device.
+///
+/// This function decides whether the mount info `mi` is better than
+/// all others in `previous` that mount the same device as `mi`.
+fn is_best(previous: &[MountInfo], mi: &MountInfo) -> bool {
+    for seen in previous {
+        if seen.dev_id == mi.dev_id && mount_info_lt(mi, seen) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Keep only the specified subset of [`MountInfo`] instances.
+///
+/// If `paths` is non-empty, this function excludes any [`MountInfo`]
+/// that is not mounted at the specified path.
+///
+/// The `opt` argument specifies a variety of ways of excluding
+/// [`MountInfo`] instances; see [`Options`] for more information.
+///
+/// Finally, if there are duplicate entries, the one with the shorter
+/// path is kept.
 fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Vec<MountInfo> {
-    vmi.into_iter()
-        .filter_map(|mi| {
-            if (mi.remote && opt.show_local_fs)
-                || (mi.dummy && !opt.show_all_fs && !opt.show_listed_fs)
-                || !opt.fs_selector.should_select(&mi.fs_type)
-            {
-                None
-            } else {
-                if paths.is_empty() {
-                    // No path specified
-                    return Some((mi.dev_id.clone(), mi));
-                }
-                if paths.contains(&mi.mount_dir) {
-                    // One or more paths have been provided
-                    Some((mi.dev_id.clone(), mi))
-                } else {
-                    // Not a path we want to see
-                    None
-                }
-            }
-        })
-        .fold(
-            HashMap::<String, Cell<MountInfo>>::new(),
-            |mut acc, (id, mi)| {
-                #[allow(clippy::map_entry)]
-                {
-                    if acc.contains_key(&id) {
-                        let seen = acc[&id].replace(mi.clone());
-                        let target_nearer_root = seen.mount_dir.len() > mi.mount_dir.len();
-                        // With bind mounts, prefer items nearer the root of the source
-                        let source_below_root = !seen.mount_root.is_empty()
-                            && !mi.mount_root.is_empty()
-                            && seen.mount_root.len() < mi.mount_root.len();
-                        // let "real" devices with '/' in the name win.
-                        if (!mi.dev_name.starts_with('/') || seen.dev_name.starts_with('/'))
-                            // let points towards the root of the device win.
-                            && (!target_nearer_root || source_below_root)
-                            // let an entry over-mounted on a new device win...
-                            && (seen.dev_name == mi.dev_name
-                            /* ... but only when matching an existing mnt point,
-                            to avoid problematic replacement when given
-                            inaccurate mount lists, seen with some chroot
-                            environments for example.  */
-                            || seen.mount_dir != mi.mount_dir)
-                        {
-                            acc[&id].replace(seen);
-                        }
-                    } else {
-                        acc.insert(id, Cell::new(mi));
-                    }
-                    acc
-                }
-            },
-        )
-        .into_iter()
-        .map(|ent| ent.1.into_inner())
-        .collect::<Vec<_>>()
-}
-
-/// Convert `value` to a human readable string based on `base`.
-/// e.g. It returns 1G when value is 1 * 1024 * 1024 * 1024 and base is 1024.
-/// Note: It returns `value` if `base` isn't positive.
-fn human_readable(value: u64, base: i64) -> UResult<String> {
-    let base_str = match base {
-        d if d < 0 => value.to_string(),
-
-        // ref: [Binary prefix](https://en.wikipedia.org/wiki/Binary_prefix) @@ <https://archive.is/cnwmF>
-        // ref: [SI/metric prefix](https://en.wikipedia.org/wiki/Metric_prefix) @@ <https://archive.is/QIuLj>
-        1000 => match NumberPrefix::decimal(value as f64) {
-            NumberPrefix::Standalone(bytes) => bytes.to_string(),
-            NumberPrefix::Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix.symbol()),
-        },
-
-        1024 => match NumberPrefix::binary(value as f64) {
-            NumberPrefix::Standalone(bytes) => bytes.to_string(),
-            NumberPrefix::Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix.symbol()),
-        },
-
-        _ => return Err(DfError::InvalidBaseValue(base.to_string()).into()),
-    };
-
-    Ok(base_str)
-}
-
-fn use_size(free_size: u64, total_size: u64) -> String {
-    if total_size == 0 {
-        return String::from("-");
-    }
-    return format!(
-        "{:.0}%",
-        100f64 - 100f64 * (free_size as f64 / total_size as f64)
-    );
-}
-
-#[derive(Debug)]
-enum DfError {
-    InvalidBaseValue(String),
-}
-
-impl Display for DfError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DfError::InvalidBaseValue(s) => write!(f, "Internal error: Unknown base value {}", s),
+    let mut result = vec![];
+    for mi in vmi {
+        // TODO The running time of the `is_best()` function is linear
+        // in the length of `result`. That makes the running time of
+        // this loop quadratic in the length of `vmi`. This could be
+        // improved by a more efficient implementation of `is_best()`,
+        // but `vmi` is probably not very long in practice.
+        if is_included(&mi, paths, opt) && is_best(&result, &mi) {
+            result.push(mi);
         }
     }
-}
-
-impl Error for DfError {}
-
-impl UError for DfError {
-    fn code(&self) -> i32 {
-        match self {
-            DfError::InvalidBaseValue(_) => 1,
-        }
-    }
+    result
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let paths: Vec<String> = matches
         .values_of(OPT_PATHS)
@@ -293,127 +298,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let mut opt = Options::new();
-    if matches.is_present(OPT_LOCAL) {
-        opt.show_local_fs = true;
-    }
-    if matches.is_present(OPT_ALL) {
-        opt.show_all_fs = true;
-    }
-    if matches.is_present(OPT_INODES) {
-        opt.show_inode_instead = true;
-    }
-    if matches.is_present(OPT_PRINT_TYPE) {
-        opt.show_fs_type = true;
-    }
-    if matches.is_present(OPT_HUMAN_READABLE) {
-        opt.human_readable_base = 1024;
-    }
-    if matches.is_present(OPT_HUMAN_READABLE_2) {
-        opt.human_readable_base = 1000;
-    }
-    for fs_type in matches.values_of_lossy(OPT_TYPE).unwrap_or_default() {
-        opt.fs_selector.include(fs_type.to_owned());
-    }
-    for fs_type in matches
-        .values_of_lossy(OPT_EXCLUDE_TYPE)
-        .unwrap_or_default()
-    {
-        opt.fs_selector.exclude(fs_type.to_owned());
-    }
+    let opt = Options::from(&matches);
 
-    let fs_list = filter_mount_list(read_fs_list(), &paths, &opt)
+    let mounts = read_fs_list();
+    let data: Vec<Row> = filter_mount_list(mounts, &paths, &opt)
         .into_iter()
         .filter_map(Filesystem::new)
         .filter(|fs| fs.usage.blocks != 0 || opt.show_all_fs || opt.show_listed_fs)
-        .collect::<Vec<_>>();
-
-    // set headers
-    let mut header = vec!["Filesystem"];
-    if opt.show_fs_type {
-        header.push("Type");
-    }
-    header.extend_from_slice(&if opt.show_inode_instead {
-        // spell-checker:disable-next-line
-        ["Inodes", "Iused", "IFree", "IUses%"]
-    } else {
-        [
-            if opt.human_readable_base == -1 {
-                "1k-blocks"
-            } else {
-                "Size"
-            },
-            "Used",
-            "Available",
-            "Use%",
-        ]
-    });
-    if cfg!(target_os = "macos") && !opt.show_inode_instead {
-        header.insert(header.len() - 1, "Capacity");
-    }
-    header.push("Mounted on");
-
-    for (idx, title) in header.iter().enumerate() {
-        if idx == 0 || idx == header.len() - 1 {
-            print!("{0: <16} ", title);
-        } else if opt.show_fs_type && idx == 1 {
-            print!("{0: <5} ", title);
-        } else if idx == header.len() - 2 {
-            print!("{0: >5} ", title);
-        } else {
-            print!("{0: >12} ", title);
-        }
-    }
-    println!();
-    for fs in &fs_list {
-        print!("{0: <16} ", fs.mount_info.dev_name);
-        if opt.show_fs_type {
-            print!("{0: <5} ", fs.mount_info.fs_type);
-        }
-        if opt.show_inode_instead {
-            print!(
-                "{0: >12} ",
-                human_readable(fs.usage.files, opt.human_readable_base)?
-            );
-            print!(
-                "{0: >12} ",
-                human_readable(fs.usage.files - fs.usage.ffree, opt.human_readable_base)?
-            );
-            print!(
-                "{0: >12} ",
-                human_readable(fs.usage.ffree, opt.human_readable_base)?
-            );
-            print!(
-                "{0: >5} ",
-                format!(
-                    "{0:.1}%",
-                    100f64 - 100f64 * (fs.usage.ffree as f64 / fs.usage.files as f64)
-                )
-            );
-        } else {
-            let total_size = fs.usage.blocksize * fs.usage.blocks;
-            let free_size = fs.usage.blocksize * fs.usage.bfree;
-            print!(
-                "{0: >12} ",
-                human_readable(total_size, opt.human_readable_base)?
-            );
-            print!(
-                "{0: >12} ",
-                human_readable(total_size - free_size, opt.human_readable_base)?
-            );
-            print!(
-                "{0: >12} ",
-                human_readable(free_size, opt.human_readable_base)?
-            );
-            if cfg!(target_os = "macos") {
-                let used = fs.usage.blocks - fs.usage.bfree;
-                let blocks = used + fs.usage.bavail;
-                print!("{0: >12} ", use_size(used, blocks));
-            }
-            print!("{0: >5} ", use_size(free_size, total_size));
-        }
-        print!("{0: <16}", fs.mount_info.mount_dir);
-        println!();
+        .map(Into::into)
+        .collect();
+    println!("{}", Header::new(&opt));
+    for row in data {
+        println!("{}", DisplayRow::new(row, &opt));
     }
 
     Ok(())
@@ -423,6 +319,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_ALL)
@@ -488,6 +385,10 @@ pub fn uu_app<'a>() -> App<'a> {
                 .long("output")
                 .takes_value(true)
                 .use_delimiter(true)
+                .possible_values(OUTPUT_FIELD_LIST)
+                .default_missing_values(&OUTPUT_FIELD_LIST)
+                .default_values(&["source", "size", "used", "avail", "pcent", "target"])
+                .conflicts_with_all(&[OPT_INODES, OPT_PORTABILITY, OPT_PRINT_TYPE])
                 .help(
                     "use the output format defined by FIELD_LIST,\
                      or print all fields if FIELD_LIST is omitted.",
@@ -511,7 +412,7 @@ pub fn uu_app<'a>() -> App<'a> {
                 .long("type")
                 .allow_invalid_utf8(true)
                 .takes_value(true)
-                .use_delimiter(true)
+                .multiple_occurrences(true)
                 .help("limit listing to file systems of type TYPE"),
         )
         .arg(

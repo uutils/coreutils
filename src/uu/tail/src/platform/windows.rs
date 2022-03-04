@@ -24,11 +24,11 @@ pub struct ProcessChecker {
 }
 
 impl ProcessChecker {
-    pub fn new(process_id: self::Pid) -> ProcessChecker {
+    pub fn new(process_id: self::Pid) -> Self {
         #[allow(non_snake_case)]
         let FALSE = 0i32;
         let h = unsafe { OpenProcess(SYNCHRONIZE, FALSE, process_id as DWORD) };
-        ProcessChecker {
+        Self {
             dead: h.is_null(),
             handle: h,
         }

@@ -12,26 +12,23 @@ use uucore::{encoding::Format, error::UResult};
 
 pub mod base_common;
 
-static ABOUT: &str = "
- With no FILE, or when FILE is -, read standard input.
+static ABOUT: &str = "\
+With no FILE, or when FILE is -, read standard input.
 
- The data are encoded as described for the base32 alphabet in RFC
- 4648. When decoding, the input may contain newlines in addition
- to the bytes of the formal base32 alphabet. Use --ignore-garbage
- to attempt to recover from any other non-alphabet bytes in the
- encoded stream.
+The data are encoded as described for the base32 alphabet in RFC
+4648. When decoding, the input may contain newlines in addition
+to the bytes of the formal base32 alphabet. Use --ignore-garbage
+to attempt to recover from any other non-alphabet bytes in the
+encoded stream.
 ";
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]", uucore::execution_phrase())
-}
+const USAGE: &str = "{} [OPTION]... [FILE]";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let format = Format::Base32;
-    let usage = usage();
 
-    let config: base_common::Config = base_common::parse_base_cmd_args(args, ABOUT, &usage)?;
+    let config: base_common::Config = base_common::parse_base_cmd_args(args, ABOUT, USAGE)?;
 
     // Create a reference to stdin so we can return a locked stdin from
     // parse_base_cmd_args
@@ -48,5 +45,5 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app<'a>() -> App<'a> {
-    base_common::base_app(ABOUT)
+    base_common::base_app(ABOUT, USAGE)
 }

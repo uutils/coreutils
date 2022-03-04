@@ -38,6 +38,8 @@ pub use crate::features::encoding;
 pub use crate::features::fs;
 #[cfg(feature = "fsext")]
 pub use crate::features::fsext;
+#[cfg(feature = "lines")]
+pub use crate::features::lines;
 #[cfg(feature = "memo")]
 pub use crate::features::memo;
 #[cfg(feature = "ringbuffer")]
@@ -90,6 +92,15 @@ macro_rules! bin {
             std::process::exit(code);
         }
     };
+}
+
+/// Generate the usage string for clap.
+///
+/// This function replaces all occurrences of `{}` with the execution phrase
+/// and leaks the result to return a `&'static str`. It does **not** support
+/// more advanced formatting features such as `{0}`.
+pub fn format_usage(s: &str) -> &'static str {
+    &*Box::leak(s.replace("{}", crate::execution_phrase()).into_boxed_str())
 }
 
 pub fn get_utility_is_second_arg() -> bool {
@@ -151,8 +162,7 @@ pub enum ConversionResult {
 impl ConversionResult {
     pub fn accept_any(self) -> Vec<String> {
         match self {
-            Self::Complete(result) => result,
-            Self::Lossy(result) => result,
+            Self::Complete(result) | Self::Lossy(result) => result,
         }
     }
 

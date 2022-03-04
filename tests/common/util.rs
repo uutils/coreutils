@@ -265,6 +265,28 @@ impl CmdResult {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stdout_is(String::from_utf8(contents).unwrap())
     }
+
+    /// Assert that the bytes of stdout exactly match those of the given file.
+    ///
+    /// Contrast this with [`CmdResult::stdout_is_fixture`], which
+    /// decodes the contents of the file as a UTF-8 [`String`] before
+    /// comparison with stdout.
+    ///
+    /// # Examples
+    ///
+    /// Use this method in a unit test like this:
+    ///
+    /// ```rust,ignore
+    /// #[test]
+    /// fn test_something() {
+    ///     new_ucmd!().succeeds().stdout_is_fixture_bytes("expected.bin");
+    /// }
+    /// ```
+    pub fn stdout_is_fixture_bytes<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
+        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        self.stdout_is_bytes(contents)
+    }
+
     /// like stdout_is_fixture(...), but replaces the data in fixture file based on values provided in template_vars
     /// command output
     pub fn stdout_is_templated_fixture<T: AsRef<OsStr>>(
@@ -356,7 +378,7 @@ impl CmdResult {
     ///     of the passed value
     /// 2.  the command resulted in an empty stdout stream
     pub fn stderr_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
-        self.no_stderr().stderr_is_bytes(msg)
+        self.no_stdout().stderr_is_bytes(msg)
     }
 
     pub fn fails_silently(&self) -> &Self {
@@ -677,6 +699,11 @@ impl AtPath {
             ),
         );
         symlink_file(&self.plus(original), &self.plus(link)).unwrap();
+    }
+
+    pub fn relative_symlink_file(&self, original: &str, link: &str) {
+        log_info("symlink", &format!("{},{}", original, link));
+        symlink_file(original, link).unwrap();
     }
 
     pub fn symlink_dir(&self, original: &str, link: &str) {

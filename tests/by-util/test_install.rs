@@ -816,6 +816,31 @@ fn test_install_backup_short_custom_suffix() {
 }
 
 #[test]
+fn test_install_backup_short_custom_suffix_hyphen_value() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_backup_custom_suffix_file_a";
+    let file_b = "test_install_backup_custom_suffix_file_b";
+    let suffix = "-v";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    scene
+        .ucmd()
+        .arg("-b")
+        .arg(format!("--suffix={}", suffix))
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}{}", file_b, suffix)));
+}
+
+#[test]
 fn test_install_backup_custom_suffix_via_env() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1074,4 +1099,28 @@ fn test_install_backup_off() {
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
     assert!(!at.file_exists(&format!("{}~", file_b)));
+}
+
+#[test]
+fn test_install_missing_arguments() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .fails()
+        .stderr_contains("install: missing file operand");
+}
+
+#[test]
+fn test_install_missing_destination() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_1 = "source_file1";
+
+    at.touch(file_1);
+    scene.ucmd().arg(file_1).fails().stderr_contains(format!(
+        "install: missing destination file operand after '{}'",
+        file_1
+    ));
 }

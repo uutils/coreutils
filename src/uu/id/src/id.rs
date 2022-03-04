@@ -45,6 +45,7 @@ use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::UResult;
 use uucore::error::{set_exit_code, USimpleError};
+use uucore::format_usage;
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
 use uucore::process::{getegid, geteuid, getgid, getuid};
@@ -57,6 +58,7 @@ macro_rules! cstr2cow {
 
 static ABOUT: &str = "Print user and group information for each specified USER,
 or (when USER omitted) for the current user.";
+const USAGE: &str = "{} [OPTION]... [USER]...";
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print only the security context of the process (not enabled)";
@@ -75,10 +77,6 @@ mod options {
     pub const OPT_REAL_ID: &str = "real";
     pub const OPT_ZERO: &str = "zero"; // BSD's id does not have this
     pub const ARG_USERS: &str = "USER";
-}
-
-fn usage() -> String {
-    format!("{0} [OPTION]... [USER]...", uucore::execution_phrase())
 }
 
 fn get_description() -> String {
@@ -128,13 +126,9 @@ struct State {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let after_help = get_description();
 
-    let matches = uu_app()
-        .override_usage(&usage[..])
-        .after_help(&after_help[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
     let users: Vec<String> = matches
         .values_of(options::ARG_USERS)
@@ -351,6 +345,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::OPT_AUDIT)

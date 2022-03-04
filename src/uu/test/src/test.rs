@@ -10,17 +10,19 @@
 
 mod parser;
 
-use clap::{crate_version, App, AppSettings};
+use clap::{crate_version, App};
 use parser::{parse, Operator, Symbol, UnaryOperator};
 use std::ffi::{OsStr, OsString};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 
-const USAGE: &str = "test EXPRESSION
-or:  test
-or:  [ EXPRESSION ]
-or:  [ ]
-or:  [ OPTION";
+const USAGE: &str = "\
+    {} EXPRESSION
+    {}
+    [ EXPRESSION ]
+    [ ]
+    [ OPTION";
 
 // We use after_help so that this comes after the usage string (it would come before if we used about)
 const AFTER_HELP: &str = "
@@ -86,10 +88,14 @@ NOTE: your shell may have its own version of test and/or [, which usually supers
 the version described here.  Please refer to your shell's documentation
 for details about the options it supports.";
 
+const ABOUT: &str = "Check file types and compare values.";
+
 pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
-        .setting(AppSettings::DisableHelpFlag)
-        .setting(AppSettings::DisableVersionFlag)
+        .version(crate_version!())
+        .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .after_help(AFTER_HELP)
 }
 
 #[uucore::main]
@@ -104,7 +110,8 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
             // Let clap pretty-print help and version
             App::new(binary_name)
                 .version(crate_version!())
-                .override_usage(USAGE)
+                .about(ABOUT)
+                .override_usage(format_usage(USAGE))
                 .after_help(AFTER_HELP)
                 // Disable printing of -h and -v as valid alternatives for --help and --version,
                 // since we don't recognize -h and -v as help/version flags.
@@ -211,14 +218,13 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
             })
         }
         Some(Symbol::Literal(s)) => Ok(!s.is_empty()),
-        Some(Symbol::None) => Ok(false),
+        Some(Symbol::None) | None => Ok(false),
         Some(Symbol::BoolOp(op)) => {
             let b = eval(stack)?;
             let a = eval(stack)?;
 
             Ok(if op == "-a" { a && b } else { a || b })
         }
-        None => Ok(false),
         _ => Err("expected value".to_string()),
     }
 }

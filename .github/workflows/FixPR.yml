@@ -1,5 +1,7 @@
 name: FixPR
 
+# spell-checker:ignore Swatinem
+
 # Trigger automated fixes for PRs being merged (with associated commits)
 
 # ToDO: [2021-06; rivy] change from `cargo-tree` to `cargo tree` once MSRV is >= 1.45
@@ -27,6 +29,7 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v2
+    - uses: Swatinem/rust-cache@v1
     - name: Initialize job variables
       id: vars
       shell: bash
@@ -98,6 +101,7 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v2
+    - uses: Swatinem/rust-cache@v1
     - name: Initialize job variables
       id: vars
       shell: bash

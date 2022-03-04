@@ -32,6 +32,8 @@ type IOError = std::io::Error;
 
 const NAME: &str = "pr";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+const ABOUT: &str =
+    "Write content of given file or standard input to standard output with pagination filter";
 const TAB: char = '\t';
 const LINES_PER_PAGE: usize = 66;
 const LINES_PER_PAGE_FOR_FORM_FEED: usize = 63;
@@ -172,7 +174,10 @@ quick_error! {
 }
 
 pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name()).setting(AppSettings::InferLongArgs)
+    App::new(uucore::util_name())
+        .version(VERSION)
+        .about(ABOUT)
+        .setting(AppSettings::InferLongArgs)
 }
 
 #[uucore::main]

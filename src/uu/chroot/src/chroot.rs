@@ -17,10 +17,10 @@ use std::path::Path;
 use std::process::Command;
 use uucore::error::{set_exit_code, UResult};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
-use uucore::{entries, InvalidEncodingHandling};
+use uucore::{entries, format_usage, InvalidEncodingHandling};
 
 static ABOUT: &str = "Run COMMAND with root directory set to NEWROOT.";
-static SYNTAX: &str = "[OPTION]... NEWROOT [COMMAND [ARG]...]";
+static USAGE: &str = "{} [OPTION]... NEWROOT [COMMAND [ARG]...]";
 
 mod options {
     pub const NEWROOT: &str = "newroot";
@@ -95,7 +95,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .override_usage(SYNTAX)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::NEWROOT)
@@ -201,12 +201,12 @@ fn set_main_group(group: &str) -> UResult<()> {
 }
 
 #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
-fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
+fn set_groups(groups: &[libc::gid_t]) -> libc::c_int {
     unsafe { setgroups(groups.len() as libc::c_int, groups.as_ptr()) }
 }
 
 #[cfg(target_os = "linux")]
-fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
+fn set_groups(groups: &[libc::gid_t]) -> libc::c_int {
     unsafe { setgroups(groups.len() as libc::size_t, groups.as_ptr()) }
 }
 
@@ -220,7 +220,7 @@ fn set_groups_from_str(groups: &str) -> UResult<()> {
             };
             groups_vec.push(gid);
         }
-        let err = set_groups(groups_vec);
+        let err = set_groups(&groups_vec);
         if err != 0 {
             return Err(ChrootError::SetGroupsFailed(Error::last_os_error()).into());
         }
