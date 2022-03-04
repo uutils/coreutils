@@ -1,4 +1,4 @@
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg
 
 use crate::common::util::*;
 
@@ -1115,4 +1115,27 @@ fn test_truncated_record() {
 #[test]
 fn test_outfile_dev_null() {
     new_ucmd!().arg("of=/dev/null").succeeds().no_stdout();
+}
+
+#[test]
+fn test_block_sync() {
+    new_ucmd!()
+        .args(&["ibs=5", "cbs=5", "conv=block,sync", "status=noxfer"])
+        .pipe_in("012\nabcde\n")
+        .succeeds()
+        // blocks:    1    2
+        .stdout_is("012  abcde")
+        .stderr_is("2+0 records in\n0+1 records out\n");
+
+    // It seems that a partial record in is represented as an
+    // all-spaces block at the end of the output. The "1 truncated
+    // record" line is present in the status report due to the line
+    // "abcdefg\n" being truncated to "abcde".
+    new_ucmd!()
+        .args(&["ibs=5", "cbs=5", "conv=block,sync", "status=noxfer"])
+        .pipe_in("012\nabcdefg\n")
+        .succeeds()
+        // blocks:    1    2    3
+        .stdout_is("012  abcde     ")
+        .stderr_is("2+1 records in\n0+1 records out\n1 truncated record\n");
 }

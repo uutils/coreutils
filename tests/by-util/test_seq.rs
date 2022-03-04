@@ -20,14 +20,14 @@ fn test_hex_rejects_sign_after_identifier() {
         .args(&["-0x-123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid floating point argument: '-0x-123ABC'")
-        .stderr_contains("for more information.");
+        .stderr_contains("which wasn't expected, or isn't valid in this context")
+        .stderr_contains("For more information try --help");
     new_ucmd!()
         .args(&["-0x+123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid floating point argument: '-0x+123ABC'")
-        .stderr_contains("for more information.");
+        .stderr_contains("which wasn't expected, or isn't valid in this context")
+        .stderr_contains("For more information try --help");
 }
 
 #[test]
@@ -79,6 +79,33 @@ fn test_rejects_non_floats() {
         .arg("foo")
         .fails()
         .usage_error("invalid floating point argument: 'foo'");
+}
+
+#[test]
+fn test_accepts_option_argument_directly() {
+    new_ucmd!()
+        .arg("-s,")
+        .arg("2")
+        .succeeds()
+        .stdout_is("1,2\n");
+}
+
+#[test]
+fn test_option_with_detected_negative_argument() {
+    new_ucmd!()
+        .arg("-s,")
+        .args(&["-1", "2"])
+        .succeeds()
+        .stdout_is("-1,0,1,2\n");
+}
+
+#[test]
+fn test_negative_number_as_separator() {
+    new_ucmd!()
+        .arg("-s")
+        .args(&["-1", "2"])
+        .succeeds()
+        .stdout_is("1-12\n");
 }
 
 #[test]
