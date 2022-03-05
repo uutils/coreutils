@@ -18,10 +18,10 @@ use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static NAME: &str = "unexpand";
-static USAGE: &str = "unexpand [OPTION]... [FILE]...";
+static USAGE: &str = "{} [OPTION]... [FILE]...";
 static SUMMARY: &str = "Convert blanks in each FILE to tabs, writing to standard output.\n\
                         With no FILE, or when FILE is -, read standard input.";
 
@@ -106,7 +106,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .override_usage(USAGE)
+        .override_usage(format_usage(USAGE))
         .about(SUMMARY)
         .setting(AppSettings::InferLongArgs)
         .arg(Arg::new(options::FILE).hide(true).multiple_occurrences(true))

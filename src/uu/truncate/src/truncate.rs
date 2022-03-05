@@ -7,7 +7,6 @@
 
 // spell-checker:ignore (ToDO) RFILE refsize rfilename fsize tsize
 use clap::{crate_version, App, AppSettings, Arg};
-use std::convert::TryFrom;
 use std::fs::{metadata, OpenOptions};
 use std::io::ErrorKind;
 #[cfg(unix)]
@@ -15,17 +14,18 @@ use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::format_usage;
 use uucore::parse_size::{parse_size, ParseSizeError};
 
 #[derive(Debug, Eq, PartialEq)]
 enum TruncateMode {
-    Absolute(usize),
-    Extend(usize),
-    Reduce(usize),
-    AtMost(usize),
-    AtLeast(usize),
-    RoundDown(usize),
-    RoundUp(usize),
+    Absolute(u64),
+    Extend(u64),
+    Reduce(u64),
+    AtMost(u64),
+    AtLeast(u64),
+    RoundDown(u64),
+    RoundUp(u64),
 }
 
 impl TruncateMode {
@@ -54,7 +54,7 @@ impl TruncateMode {
     /// let fsize = 3;
     /// assert_eq!(mode.to_size(fsize), 0);
     /// ```
-    fn to_size(&self, fsize: usize) -> usize {
+    fn to_size(&self, fsize: u64) -> u64 {
         match self {
             TruncateMode::Absolute(size) => *size,
             TruncateMode::Extend(size) => fsize + size,
@@ -74,6 +74,7 @@ impl TruncateMode {
 }
 
 static ABOUT: &str = "Shrink or extend the size of each file to the specified size.";
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 pub mod options {
     pub static IO_BLOCKS: &str = "io-blocks";
@@ -81,10 +82,6 @@ pub mod options {
     pub static REFERENCE: &str = "reference";
     pub static SIZE: &str = "size";
     pub static ARG_FILES: &str = "files";
-}
-
-fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 fn get_long_usage() -> String {
@@ -111,11 +108,9 @@ fn get_long_usage() -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let long_usage = get_long_usage();
 
     let matches = uu_app()
-        .override_usage(&usage[..])
         .after_help(&long_usage[..])
         .try_get_matches_from(args)
         .map_err(|e| {
@@ -146,6 +141,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::IO_BLOCKS)
@@ -195,10 +191,10 @@ pub fn uu_app<'a>() -> App<'a> {
 ///
 /// If the file could not be opened, or there was a problem setting the
 /// size of the file.
-fn file_truncate(filename: &str, create: bool, size: usize) -> std::io::Result<()> {
+fn file_truncate(filename: &str, create: bool, size: u64) -> std::io::Result<()> {
     let path = Path::new(filename);
     let f = OpenOptions::new().write(true).create(create).open(path)?;
-    f.set_len(u64::try_from(size).unwrap())
+    f.set_len(size)
 }
 
 /// Truncate files to a size relative to a given file.
@@ -247,7 +243,7 @@ fn truncate_reference_and_size(
         ),
         _ => e.map_err_context(String::new),
     })?;
-    let fsize = metadata.len() as usize;
+    let fsize = metadata.len();
     let tsize = mode.to_size(fsize);
     for filename in filenames {
         #[cfg(unix)]
@@ -295,7 +291,7 @@ fn truncate_reference_file_only(
         ),
         _ => e.map_err_context(String::new),
     })?;
-    let tsize = metadata.len() as usize;
+    let tsize = metadata.len();
     for filename in filenames {
         #[cfg(unix)]
         if std::fs::metadata(filename)?.file_type().is_fifo() {
@@ -353,7 +349,7 @@ fn truncate_size_only(size_string: &str, filenames: &[String], create: bool) -> 
             }
             Err(_) => 0,
         };
-        let tsize = mode.to_size(fsize as usize);
+        let tsize = mode.to_size(fsize);
         match file_truncate(filename, create, tsize) {
             Ok(_) => continue,
             Err(e) if e.kind() == ErrorKind::NotFound && !create => continue,

@@ -12,10 +12,11 @@ use clap::{crate_version, App, AppSettings, Arg};
 use libc::mkfifo;
 use std::ffi::CString;
 use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 use uucore::{display::Quotable, InvalidEncodingHandling};
 
 static NAME: &str = "mkfifo";
-static USAGE: &str = "mkfifo [OPTION]... NAME...";
+static USAGE: &str = "{} [OPTION]... NAME...";
 static SUMMARY: &str = "Create a FIFO with the given name.";
 
 mod options {
@@ -73,7 +74,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .override_usage(USAGE)
+        .override_usage(format_usage(USAGE))
         .about(SUMMARY)
         .setting(AppSettings::InferLongArgs)
         .arg(

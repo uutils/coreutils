@@ -2,7 +2,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes asciilowercase fghij klmno pqrst uvwxyz fivelines twohundredfortyonebytes
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase fghij klmno pqrst uvwxyz fivelines twohundredfortyonebytes
 extern crate rand;
 extern crate regex;
 
@@ -337,16 +337,34 @@ fn test_split_invalid_bytes_size() {
     {
         let sizes = ["1000G", "10T"];
         for size in &sizes {
-            new_ucmd!()
-                .args(&["-b", size])
-                .fails()
-                .code_is(1)
-                .stderr_only(format!(
-                    "split: invalid number of bytes: '{}': Value too large for defined data type",
-                    size
-                ));
+            new_ucmd!().args(&["-b", size]).succeeds();
         }
     }
+}
+
+#[test]
+fn test_split_chunks_num_chunks_oversized_32() {
+    #[cfg(target_pointer_width = "32")]
+    {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.touch("file");
+        scene
+            .ucmd()
+            .args(&["--number", "5000000000", "file"])
+            .fails()
+            .code_is(1)
+            .stderr_only("split: Number of chunks too big");
+    }
+}
+
+#[test]
+fn test_split_stdin_num_chunks() {
+    new_ucmd!()
+        .args(&["--number=1"])
+        .fails()
+        .code_is(1)
+        .stderr_only("split: -: cannot determine file size");
 }
 
 fn file_read(at: &AtPath, filename: &str) -> String {
@@ -525,4 +543,47 @@ fn test_include_newlines() {
     let mut s = String::new();
     at.open("xac").read_to_string(&mut s).unwrap();
     assert_eq!(s, "5\n");
+}
+
+#[test]
+fn test_allow_empty_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n", "4", "threebytes.txt"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("xaa"), "a");
+    assert_eq!(at.read("xab"), "b");
+    assert_eq!(at.read("xac"), "c");
+    assert_eq!(at.read("xad"), "");
+}
+
+#[test]
+fn test_elide_empty_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-e", "-n", "4", "threebytes.txt"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("xaa"), "a");
+    assert_eq!(at.read("xab"), "b");
+    assert_eq!(at.read("xac"), "c");
+    assert!(!at.plus("xad").exists());
+}
+
+#[test]
+fn test_lines() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file_read = |f| {
+        let mut s = String::new();
+        at.open(f).read_to_string(&mut s).unwrap();
+        s
+    };
+
+    // Split into two files without splitting up lines.
+    ucmd.args(&["-n", "l/2", "fivelines.txt"]).succeeds();
+
+    assert_eq!(file_read("xaa"), "1\n2\n3\n");
+    assert_eq!(file_read("xab"), "4\n5\n");
 }

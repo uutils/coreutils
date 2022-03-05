@@ -17,10 +17,10 @@ use std::path::Path;
 use std::process::Command;
 use uucore::error::{set_exit_code, UResult};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
-use uucore::{entries, InvalidEncodingHandling};
+use uucore::{entries, format_usage, InvalidEncodingHandling};
 
 static ABOUT: &str = "Run COMMAND with root directory set to NEWROOT.";
-static SYNTAX: &str = "[OPTION]... NEWROOT [COMMAND [ARG]...]";
+static USAGE: &str = "{} [OPTION]... NEWROOT [COMMAND [ARG]...]";
 
 mod options {
     pub const NEWROOT: &str = "newroot";
@@ -95,7 +95,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .override_usage(SYNTAX)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::NEWROOT)

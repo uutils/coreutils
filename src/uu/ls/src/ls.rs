@@ -48,16 +48,14 @@ use uucore::{
 use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
-use uucore::{fs::display_permissions, version_cmp::version_cmp};
+use uucore::{format_usage, fs::display_permissions, version_cmp::version_cmp};
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
 #[cfg(feature = "selinux")]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file";
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
-}
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 pub mod options {
 
@@ -707,9 +705,7 @@ impl Config {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let app = uu_app().override_usage(&usage[..]);
+    let app = uu_app();
 
     let matches = app.get_matches_from(args);
 
@@ -726,6 +722,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
+        .override_usage(format_usage(USAGE))
         .about(
             "By default, ls will list the files and contents of any directories on \
             the command line, expect that it will ignore files and directories \

@@ -19,8 +19,10 @@ use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::format_usage;
 
 static ABOUT: &str = "Update the access and modification times of each FILE to the current time.";
+const USAGE: &str = "{} [OPTION]... [USER]";
 pub mod options {
     // Both SOURCES and sources are needed as we need to be able to refer to the ArgGroup.
     pub static SOURCES: &str = "sources";
@@ -48,15 +50,9 @@ fn local_tm_to_filetime(tm: time::Tm) -> FileTime {
     FileTime::from_unix_time(ts.sec as i64, ts.nsec as u32)
 }
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [USER]", uucore::execution_phrase())
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let files = matches.values_of_os(ARG_FILES).ok_or_else(|| {
         USimpleError::new(
@@ -157,6 +153,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::ACCESS)

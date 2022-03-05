@@ -3,6 +3,7 @@
 #![allow(clippy::upper_case_acronyms)]
 
 use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::format_usage;
 use uucore::{display::Quotable, show_error, show_warning};
 
 use clap::{App, AppSettings, Arg};
@@ -22,6 +23,10 @@ use errors::*;
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Change the SELinux security context of each FILE to CONTEXT. \n\
                       With --reference, change the security context of each FILE to that of RFILE.";
+const USAGE: &str = "\
+    {} [OPTION]... CONTEXT FILE... \n    \
+    {} [OPTION]... [-u USER] [-r ROLE] [-l RANGE] [-t TYPE] FILE... \n    \
+    {} [OPTION]... --reference=RFILE FILE...";
 
 pub mod options {
     pub static VERBOSE: &str = "verbose";
@@ -52,20 +57,9 @@ pub mod options {
     }
 }
 
-fn get_usage() -> String {
-    format!(
-        "{0} [OPTION]... CONTEXT FILE... \n    \
-         {0} [OPTION]... [-u USER] [-r ROLE] [-l RANGE] [-t TYPE] FILE... \n    \
-         {0} [OPTION]... --reference=RFILE FILE...",
-        uucore::execution_phrase()
-    )
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = get_usage();
-
-    let config = uu_app().override_usage(usage.as_ref());
+    let config = uu_app();
 
     let options = match parse_command_line(config, args) {
         Ok(r) => r,
@@ -164,6 +158,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(options::dereference::DEREFERENCE)

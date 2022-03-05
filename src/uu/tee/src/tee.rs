@@ -15,11 +15,13 @@ use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::UResult;
+use uucore::format_usage;
 
 #[cfg(unix)]
 use uucore::libc;
 
 static ABOUT: &str = "Copy standard input to each FILE, and also to standard output.";
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 mod options {
     pub const APPEND: &str = "append";
@@ -34,15 +36,9 @@ struct Options {
     files: Vec<String>,
 }
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let options = Options {
         append: matches.is_present(options::APPEND),
@@ -63,6 +59,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .after_help("If a FILE is -, it refers to a file named - .")
         .setting(AppSettings::InferLongArgs)
         .arg(

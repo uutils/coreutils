@@ -13,6 +13,7 @@ extern crate uucore;
 use clap::{crate_version, App, AppSettings, Arg};
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
+use uucore::format_usage;
 
 use std::borrow::Cow;
 use std::error::Error;
@@ -90,16 +91,6 @@ impl UError for LnError {
     }
 }
 
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... [-T] TARGET LINK_NAME   (1st form)
-       {0} [OPTION]... TARGET                  (2nd form)
-       {0} [OPTION]... TARGET... DIRECTORY     (3rd form)
-       {0} [OPTION]... -t DIRECTORY TARGET...  (4th form)",
-        uucore::execution_phrase()
-    )
-}
-
 fn long_usage() -> String {
     String::from(
         " In the 1st form, create a link to TARGET with the name LINK_NAME.
@@ -115,6 +106,11 @@ fn long_usage() -> String {
 }
 
 static ABOUT: &str = "change file owner and group";
+const USAGE: &str = "\
+    {} [OPTION]... [-T] TARGET LINK_NAME
+    {} [OPTION]... TARGET
+    {} [OPTION]... TARGET... DIRECTORY
+    {} [OPTION]... -t DIRECTORY TARGET...";
 
 mod options {
     pub const FORCE: &str = "force";
@@ -131,11 +127,9 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let long_usage = long_usage();
 
     let matches = uu_app()
-        .override_usage(&usage[..])
         .after_help(&*format!(
             "{}\n{}",
             long_usage,
@@ -183,6 +177,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())

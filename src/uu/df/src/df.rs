@@ -5,21 +5,18 @@
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
+// spell-checker:ignore itotal iused iavail ipcent pcent
 mod table;
 
-use uucore::error::UResult;
 #[cfg(unix)]
-use uucore::fsext::statfs_fn;
+use uucore::fsext::statfs;
 use uucore::fsext::{read_fs_list, FsUsage, MountInfo};
+use uucore::{error::UResult, format_usage};
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
 use std::collections::HashSet;
-#[cfg(unix)]
-use std::ffi::CString;
 use std::iter::FromIterator;
-#[cfg(unix)]
-use std::mem;
 
 #[cfg(windows)]
 use std::path::Path;
@@ -28,6 +25,7 @@ use crate::table::{DisplayRow, Header, Row};
 
 static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
                       or all file systems by default.";
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 static OPT_ALL: &str = "all";
 static OPT_BLOCKSIZE: &str = "blocksize";
@@ -46,6 +44,10 @@ static OPT_SYNC: &str = "sync";
 static OPT_TYPE: &str = "type";
 static OPT_PRINT_TYPE: &str = "print-type";
 static OPT_EXCLUDE_TYPE: &str = "exclude-type";
+static OUTPUT_FIELD_LIST: [&str; 12] = [
+    "source", "fstype", "itotal", "iused", "iavail", "ipcent", "size", "used", "avail", "pcent",
+    "file", "target",
+];
 
 /// Store names of file systems as a selector.
 /// Note: `exclude` takes priority over `include`.
@@ -55,6 +57,55 @@ struct FsSelector {
     exclude: HashSet<String>,
 }
 
+/// A block size to use in condensing the display of a large number of bytes.
+///
+/// The [`BlockSize::Bytes`] variant represents a static block
+/// size. The [`BlockSize::HumanReadableDecimal`] and
+/// [`BlockSize::HumanReadableBinary`] variants represent dynamic
+/// block sizes: as the number of bytes increases, the divisor
+/// increases as well (for example, from 1 to 1,000 to 1,000,000 and
+/// so on in the case of [`BlockSize::HumanReadableDecimal`]).
+///
+/// The default variant is `Bytes(1024)`.
+enum BlockSize {
+    /// A fixed number of bytes.
+    ///
+    /// The number must be positive.
+    Bytes(u64),
+
+    /// Use the largest divisor corresponding to a unit, like B, K, M, G, etc.
+    ///
+    /// This variant represents powers of 1,000. Contrast with
+    /// [`BlockSize::HumanReadableBinary`], which represents powers of
+    /// 1,024.
+    HumanReadableDecimal,
+
+    /// Use the largest divisor corresponding to a unit, like B, K, M, G, etc.
+    ///
+    /// This variant represents powers of 1,024. Contrast with
+    /// [`BlockSize::HumanReadableDecimal`], which represents powers
+    /// of 1,000.
+    HumanReadableBinary,
+}
+
+impl Default for BlockSize {
+    fn default() -> Self {
+        Self::Bytes(1024)
+    }
+}
+
+impl From<&ArgMatches> for BlockSize {
+    fn from(matches: &ArgMatches) -> Self {
+        if matches.is_present(OPT_HUMAN_READABLE) {
+            Self::HumanReadableBinary
+        } else if matches.is_present(OPT_HUMAN_READABLE_2) {
+            Self::HumanReadableDecimal
+        } else {
+            Self::default()
+        }
+    }
+}
+
 #[derive(Default)]
 struct Options {
     show_local_fs: bool,
@@ -62,8 +113,7 @@ struct Options {
     show_listed_fs: bool,
     show_fs_type: bool,
     show_inode_instead: bool,
-    // block_size: usize,
-    human_readable_base: i64,
+    block_size: BlockSize,
     fs_selector: FsSelector,
 }
 
@@ -76,13 +126,7 @@ impl Options {
             show_listed_fs: false,
             show_fs_type: matches.is_present(OPT_PRINT_TYPE),
             show_inode_instead: matches.is_present(OPT_INODES),
-            human_readable_base: if matches.is_present(OPT_HUMAN_READABLE) {
-                1024
-            } else if matches.is_present(OPT_HUMAN_READABLE_2) {
-                1000
-            } else {
-                -1
-            },
+            block_size: BlockSize::from(matches),
             fs_selector: FsSelector::from(matches),
         }
     }
@@ -92,10 +136,6 @@ impl Options {
 struct Filesystem {
     mount_info: MountInfo,
     usage: FsUsage,
-}
-
-fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 impl FsSelector {
@@ -139,23 +179,10 @@ impl Filesystem {
             }
         };
         #[cfg(unix)]
-        unsafe {
-            let path = CString::new(_stat_path).unwrap();
-            let mut statvfs = mem::zeroed();
-            if statfs_fn(path.as_ptr(), &mut statvfs) < 0 {
-                None
-            } else {
-                Some(Self {
-                    mount_info,
-                    usage: FsUsage::new(statvfs),
-                })
-            }
-        }
+        let usage = FsUsage::new(statfs(_stat_path).ok()?);
         #[cfg(windows)]
-        Some(Self {
-            mount_info,
-            usage: FsUsage::new(Path::new(&_stat_path)),
-        })
+        let usage = FsUsage::new(Path::new(&_stat_path));
+        Some(Self { mount_info, usage })
     }
 }
 
@@ -256,8 +283,7 @@ fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Ve
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-    let matches = uu_app().override_usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let paths: Vec<String> = matches
         .values_of(OPT_PATHS)
@@ -293,6 +319,7 @@ pub fn uu_app<'a>() -> App<'a> {
     App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .setting(AppSettings::InferLongArgs)
         .arg(
             Arg::new(OPT_ALL)
@@ -358,6 +385,10 @@ pub fn uu_app<'a>() -> App<'a> {
                 .long("output")
                 .takes_value(true)
                 .use_delimiter(true)
+                .possible_values(OUTPUT_FIELD_LIST)
+                .default_missing_values(&OUTPUT_FIELD_LIST)
+                .default_values(&["source", "size", "used", "avail", "pcent", "target"])
+                .conflicts_with_all(&[OPT_INODES, OPT_PORTABILITY, OPT_PRINT_TYPE])
                 .help(
                     "use the output format defined by FIELD_LIST,\
                      or print all fields if FIELD_LIST is omitted.",
@@ -381,7 +412,7 @@ pub fn uu_app<'a>() -> App<'a> {
                 .long("type")
                 .allow_invalid_utf8(true)
                 .takes_value(true)
-                .use_delimiter(true)
+                .multiple_occurrences(true)
                 .help("limit listing to file systems of type TYPE"),
         )
         .arg(
