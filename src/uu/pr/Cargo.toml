@@ -17,7 +17,6 @@ path = "src/pr.rs"
 [dependencies]
 clap = { version = "3.0", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.7", package="uucore", path="../../uucore", features=["entries"] }
-getopts = "0.2.21"
 chrono = "0.4.19"
 quick-error = "2.0.1"
 itertools = "0.10.0"
