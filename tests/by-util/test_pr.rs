@@ -448,3 +448,16 @@ fn test_with_join_lines_option() {
             &valid_last_modified_template_vars(start),
         );
 }
+
+#[test]
+fn test_value_for_number_lines() {
+    // *5 is of the form [SEP[NUMBER]] so is accepted and succeeds
+    new_ucmd!().args(&["-n", "*5", "test.log"]).succeeds();
+
+    // a is of the form [SEP[NUMBER]] so is accepted and succeeds
+    new_ucmd!().args(&["-n", "a", "test.log"]).succeeds();
+
+    // foo5.txt is of not the form [SEP[NUMBER]] so is not used as value.
+    // Therefore, pr tries to access the file, which does not exist.
+    new_ucmd!().args(&["-n", "foo5.txt", "test.log"]).fails();
+}

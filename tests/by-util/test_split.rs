@@ -2,7 +2,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase fghij klmno pqrst uvwxyz fivelines twohundredfortyonebytes
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase fghij klmno pqrst uvwxyz fivelines twohundredfortyonebytes onehundredlines
 extern crate rand;
 extern crate regex;
 
@@ -586,4 +586,12 @@ fn test_lines() {
 
     assert_eq!(file_read("xaa"), "1\n2\n3\n");
     assert_eq!(file_read("xab"), "4\n5\n");
+}
+
+#[test]
+fn test_lines_kth() {
+    new_ucmd!()
+        .args(&["-n", "l/3/10", "onehundredlines.txt"])
+        .succeeds()
+        .stdout_only("20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n");
 }
