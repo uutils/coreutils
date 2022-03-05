@@ -201,7 +201,6 @@ jobs:
   gnu_coverage:
     name: Run GNU tests with coverage
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
     - name: Checkout code uutil
       uses: actions/checkout@v2
