@@ -381,3 +381,18 @@ fn pathbuf_from_stdout() -> UResult<PathBuf> {
             .into())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[cfg(windows)]
+    #[test]
+    fn test_get_pathbuf_from_stdout_fails_if_stdout_is_not_a_file() {
+        // We can trigger an error by not setting stdout to anything (will
+        // fail with code 1)
+        assert!(super::pathbuf_from_stdout()
+            .err()
+            .expect("pathbuf_from_stdout should have failed")
+            .to_string()
+            .contains("GetFinalPathNameByHandleW failed with code 1"));
+    }
+}
