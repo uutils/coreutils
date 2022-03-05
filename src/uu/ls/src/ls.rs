@@ -21,14 +21,14 @@ use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
-use std::ffi::OsStr;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
     cmp::Reverse,
     error::Error,
+    ffi::{OsStr, OsString},
     fmt::Display,
-    fs::{self, DirEntry, FileType, Metadata},
+    fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{stdout, BufWriter, ErrorKind, Stdout, Write},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
@@ -39,18 +39,18 @@ use std::{
     os::unix::fs::{FileTypeExt, MetadataExt},
     time::Duration,
 };
-use std::{ffi::OsString, fs::ReadDir};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
-use uucore::parse_size::parse_size;
-use uucore::{
-    display::Quotable,
-    error::{set_exit_code, UError, UResult},
-};
-
 use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
-use uucore::{format_usage, fs::display_permissions, version_cmp::version_cmp};
+use uucore::{
+    display::Quotable,
+    error::{set_exit_code, UError, UResult},
+    format_usage,
+    fs::display_permissions,
+    parse_size::parse_size,
+    version_cmp::version_cmp,
+};
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
@@ -141,9 +141,9 @@ pub mod options {
 }
 
 const DEFAULT_TERM_WIDTH: u16 = 80;
+const POSIXLY_CORRECT_BLOCK_SIZE: u64 = 512;
 #[cfg(unix)]
 const DEFAULT_BLOCK_SIZE: u64 = 1024;
-const POSIXLY_CORRECT_BLOCK_SIZE: u64 = 512;
 
 #[derive(Debug)]
 enum LsError {
@@ -1817,7 +1817,7 @@ fn display_additional_leading_info(
             result.push_str(&format!("{} ", pad_left(&i, padding.inode)));
         }
     }
-    #[allow(unused_variables)]
+
     if config.alloc_size {
         let s = if let Some(md) = item.md(out) {
             display_size(get_block_size(md, config), config)
