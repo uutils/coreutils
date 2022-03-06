@@ -22,8 +22,6 @@ use clap::{crate_version, App, AppSettings, Arg};
 use std::path::PathBuf;
 use uucore::{format_usage, InvalidEncodingHandling};
 
-const BUFSIZE: usize = 1024;
-
 static ABOUT: &str = "pinky - lightweight finger";
 const USAGE: &str = "{} [OPTION]... [USER]...";
 
@@ -366,12 +364,8 @@ impl Pinky {
 
 fn read_to_console<F: Read>(f: F) {
     let mut reader = BufReader::new(f);
-    let mut iobuf = [0_u8; BUFSIZE];
-    while let Ok(n) = reader.read(&mut iobuf) {
-        if n == 0 {
-            break;
-        }
-        let s = String::from_utf8_lossy(&iobuf);
-        print!("{}", s);
+    let mut iobuf = Vec::new();
+    if reader.read_to_end(&mut iobuf).is_ok() {
+        print!("{}", String::from_utf8_lossy(&iobuf));
     }
 }
