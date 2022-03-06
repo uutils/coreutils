@@ -9,6 +9,8 @@ static TEST_DIR4: &str = "mkdir_test4/mkdir_test4_1";
 static TEST_DIR5: &str = "mkdir_test5/mkdir_test5_1";
 static TEST_DIR6: &str = "mkdir_test6";
 static TEST_FILE7: &str = "mkdir_test7";
+static TEST_DIR8: &str = "mkdir_test8/mkdir_test8_1/mkdir_test8_2";
+static TEST_DIR9: &str = "mkdir_test9/../mkdir_test9_1/../mkdir_test9_2";
 
 #[test]
 fn test_mkdir_mkdir() {
@@ -99,4 +101,25 @@ fn test_multi_symbolic() {
         .succeeds();
     let perms = at.metadata(TEST_DIR1).permissions().mode();
     assert_eq!(perms, 0o40750);
+}
+
+#[test]
+fn test_recursive_reporting() {
+    new_ucmd!()
+        .arg("-p")
+        .arg("-v")
+        .arg(TEST_DIR8)
+        .succeeds()
+        .stdout_contains("created directory 'mkdir_test8'")
+        .stdout_contains("created directory 'mkdir_test8/mkdir_test8_1'")
+        .stdout_contains("created directory 'mkdir_test8/mkdir_test8_1/mkdir_test8_2'");
+    new_ucmd!().arg("-v").arg(TEST_DIR8).fails().no_stdout();
+    new_ucmd!()
+        .arg("-p")
+        .arg("-v")
+        .arg(TEST_DIR9)
+        .succeeds()
+        .stdout_contains("created directory 'mkdir_test9'")
+        .stdout_contains("created directory 'mkdir_test9/../mkdir_test9_1'")
+        .stdout_contains("created directory 'mkdir_test9/../mkdir_test9_1/../mkdir_test9_2'");
 }
