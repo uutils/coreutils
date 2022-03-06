@@ -173,7 +173,10 @@ fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
 
 fn create_dir(path: &Path, recursive: bool, verbose: bool) -> UResult<()> {
     if path.exists() && !recursive {
-        return Err(USimpleError::new(1, "Folder exists"));
+        return Err(USimpleError::new(
+            1,
+            format!("{}: File exists", path.display()),
+        ));
     }
     if path == Path::new("") {
         return Ok(());
@@ -183,7 +186,7 @@ fn create_dir(path: &Path, recursive: bool, verbose: bool) -> UResult<()> {
         match path.parent() {
             Some(p) => create_dir(p, recursive, verbose)?,
             None => {
-                return Err(USimpleError::new(1, "failed to create whole tree"));
+                USimpleError::new(1, "failed to create whole tree");
             }
         }
     }
