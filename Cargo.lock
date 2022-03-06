@@ -3171,6 +3171,7 @@ dependencies = [
  "filetime",
  "time",
  "uucore",
+ "winapi 0.3.9",
 ]
 
 [[package]]
