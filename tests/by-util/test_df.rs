@@ -1,3 +1,4 @@
+// spell-checker:ignore udev
 use crate::common::util::*;
 
 #[test]
@@ -87,6 +88,49 @@ fn test_output_option() {
 #[test]
 fn test_type_option() {
     new_ucmd!().args(&["-t", "ext4", "-t", "ext3"]).succeeds();
+}
+
+#[test]
+fn test_total() {
+    // Example output:
+    //
+    //     Filesystem            1K-blocks     Used Available Use% Mounted on
+    //     udev                    3858016        0   3858016   0% /dev
+    //     ...
+    //     /dev/loop14               63488    63488         0 100% /snap/core20/1361
+    //     total                 258775268 98099712 148220200  40% -
+    let output = new_ucmd!().arg("--total").succeeds().stdout_move_str();
+
+    // Skip the header line.
+    let lines: Vec<&str> = output.lines().skip(1).collect();
+
+    // Parse the values from the last row.
+    let last_line = lines.last().unwrap();
+    let mut iter = last_line.split_whitespace();
+    assert_eq!(iter.next().unwrap(), "total");
+    let reported_total_size = iter.next().unwrap().parse().unwrap();
+    let reported_total_used = iter.next().unwrap().parse().unwrap();
+    let reported_total_avail = iter.next().unwrap().parse().unwrap();
+
+    // Loop over each row except the last, computing the sum of each column.
+    let mut computed_total_size = 0;
+    let mut computed_total_used = 0;
+    let mut computed_total_avail = 0;
+    let n = lines.len();
+    for line in &lines[..n - 1] {
+        let mut iter = line.split_whitespace();
+        iter.next().unwrap();
+        computed_total_size += iter.next().unwrap().parse::<u64>().unwrap();
+        computed_total_used += iter.next().unwrap().parse::<u64>().unwrap();
+        computed_total_avail += iter.next().unwrap().parse::<u64>().unwrap();
+    }
+
+    // Check that the sum of each column matches the reported value in
+    // the last row.
+    assert_eq!(computed_total_size, reported_total_size);
+    assert_eq!(computed_total_used, reported_total_used);
+    assert_eq!(computed_total_avail, reported_total_avail);
+    // TODO We could also check here that the use percentage matches.
 }
 
 // ToDO: more tests...
