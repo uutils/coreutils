@@ -1314,7 +1314,9 @@ struct PathData {
     sodi: OnceCell<SizeOrDeviceId>,
     uname: OnceCell<String>,
     group: OnceCell<String>,
+    #[cfg(unix)]
     inode: OnceCell<String>,
+    #[cfg(unix)]
     symlink_count: OnceCell<String>,
     de: Option<DirEntry>,
     // Name of the file - will be empty for . or ..
@@ -1392,9 +1394,11 @@ impl PathData {
             md: OnceCell::new(),
             ft,
             sodi: OnceCell::new(),
+            #[cfg(unix)]
             symlink_count: OnceCell::new(),
             uname: OnceCell::new(),
             group: OnceCell::new(),
+            #[cfg(unix)]
             inode: OnceCell::new(),
             de,
             display_name,
@@ -1475,7 +1479,7 @@ impl PathData {
         })
     }
 
-    fn display_symlink_count_given_md(&self, metadata: &Metadata) -> &String {
+    fn display_symlink_count_given_md(&self, metadata: &Metadata) -> &str {
         #[cfg(unix)]
         {
             self.symlink_count
@@ -1484,9 +1488,10 @@ impl PathData {
 
         #[cfg(not(unix))]
         {
+            let _ = metadata;
             // Currently not sure of how to get this on Windows, so I'm punting.
             // Git Bash looks like it may do the same thing.
-            String::from("1")
+            "1"
         }
     }
 
@@ -1504,6 +1509,8 @@ impl PathData {
 
         #[cfg(not(unix))]
         {
+            let _ = config;
+            let _ = metadata;
             self.uname.get_or_init(|| "somebody".to_string())
         }
     }
@@ -1528,24 +1535,27 @@ impl PathData {
 
         #[cfg(not(unix))]
         {
+            let _ = metadata;
+            let _ = config;
             self.group.get_or_init(|| "somegroup".to_string())
         }
     }
 
-    #[allow(unused_variables)]
-    fn display_inode(&self, out: &mut BufWriter<Stdout>) -> Option<&String> {
+    #[cfg(unix)]
+    fn display_inode(&self, out: &mut BufWriter<Stdout>) -> Option<&str> {
         let metadata = self.md(out)?;
         Some(self.display_inode_given_md(metadata))
     }
 
-    fn display_inode_given_md(&self, metadata: &Metadata) -> &String {
+    fn display_inode_given_md(&self, metadata: &Metadata) -> &str {
         #[cfg(unix)]
         {
             self.inode.get_or_init(|| get_inode(metadata))
         }
         #[cfg(not(unix))]
         {
-            "".to_string()
+            let _ = metadata;
+            ""
         }
     }
 }
@@ -2064,7 +2074,7 @@ fn display_item_long(
 
         match item.display_size_or_rdev_given_md(config.size_format, md) {
             SizeOrDeviceId::Size(size) => {
-                write!(out, " {}", pad_left(&size, padding.size))?;
+                write!(out, " {}", pad_left(size, padding.size))?;
             }
             SizeOrDeviceId::Device(major, minor) => {
                 write!(
@@ -2371,7 +2381,7 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
 ///
 /// Note that non-unicode sequences in symlink targets are dealt with using
 /// [`std::path::Path::to_string_lossy`].
-#[allow(unused_variables)]
+
 fn display_file_name(
     path: &PathData,
     config: &Config,
@@ -2390,6 +2400,11 @@ fn display_file_name(
         if let Ok(metadata) = path.p_buf.symlink_metadata() {
             name = color_name(ls_colors, &path.p_buf, name, &metadata);
         }
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = longest_inode_len;
     }
 
     #[cfg(unix)]
@@ -2519,7 +2534,7 @@ fn color_name(ls_colors: &LsColors, path: &Path, name: String, md: &Metadata) ->
 
 // This returns the SELinux security context as UTF8 `String`.
 // In the long term this should be changed to `OsStr`, see discussions at #2621/#2656
-#[allow(unused_variables)]
+
 fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -> String {
     let substitute_string = "?".to_string();
     if config.selinux_supported {
@@ -2549,6 +2564,8 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
         }
         #[cfg(not(feature = "selinux"))]
         {
+            let _ = p_buf;
+            let _ = must_dereference;
             substitute_string
         }
     } else {
