@@ -45,3 +45,11 @@ fn test_zero_timeout() {
         .no_stderr()
         .no_stdout();
 }
+
+#[test]
+fn test_command_empty_args() {
+    new_ucmd!()
+        .args(&["", ""])
+        .fails()
+        .stderr_contains("timeout: empty string");
+}
