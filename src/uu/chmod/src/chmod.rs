@@ -234,9 +234,12 @@ impl Chmoder {
 
     fn walk_dir(&self, file_path: &Path) -> UResult<()> {
         let mut r = self.chmod_file(file_path);
-        if file_path.is_dir() {
-            for dir_entry in fs::read_dir(file_path)? {
-                r = self.walk_dir(dir_entry?.path().as_path());
+        if !is_symlink(file_path) && file_path.is_dir() {
+            for dir_entry in file_path.read_dir()? {
+                let path = dir_entry?.path();
+                if !is_symlink(&path) {
+                    r = self.walk_dir(path.as_path());
+                }
             }
         }
         r

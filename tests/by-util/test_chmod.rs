@@ -473,8 +473,8 @@ fn test_chmod_symlink_non_existing_file_recursive() {
 
     let expected_stdout = &format!(
         // spell-checker:disable-next-line
-        "mode of '{}' retained as 0755 (rwxr-xr-x)\nneither symbolic link '{}/{}' nor referent has been changed",
-        test_directory, test_directory, test_symlink
+        "mode of '{}' retained as 0755 (rwxr-xr-x)",
+        test_directory
     );
 
     // '-v': this should succeed without stderr
