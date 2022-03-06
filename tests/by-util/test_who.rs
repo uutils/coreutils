@@ -9,6 +9,7 @@ use crate::common::util::*;
 
 #[cfg(unix)]
 #[test]
+#[ignore = "issue #3219"]
 fn test_count() {
     let ts = TestScenario::new(util_name!());
     for opt in &["-q", "--count", "--c"] {
@@ -29,6 +30,7 @@ fn test_boot() {
 
 #[cfg(unix)]
 #[test]
+#[ignore = "issue #3219"]
 fn test_heading() {
     let ts = TestScenario::new(util_name!());
     for opt in &["-H", "--heading", "--head"] {
@@ -47,6 +49,7 @@ fn test_heading() {
 
 #[cfg(unix)]
 #[test]
+#[ignore = "issue #3219"]
 fn test_short() {
     let ts = TestScenario::new(util_name!());
     for opt in &["-s", "--short", "--s"] {
@@ -110,6 +113,7 @@ fn test_time() {
 
 #[cfg(unix)]
 #[test]
+#[ignore = "issue #3219"]
 fn test_mesg() {
     // -T, -w, --mesg
     //     add user's message status as +, - or ?
@@ -152,6 +156,7 @@ fn test_too_many_args() {
 
 #[cfg(unix)]
 #[test]
+#[ignore = "issue #3219"]
 fn test_users() {
     let ts = TestScenario::new(util_name!());
     for opt in &["-u", "--users", "--us"] {
@@ -177,6 +182,7 @@ fn test_users() {
 
 #[cfg(unix)]
 #[test]
+#[ignore = "issue #3219"]
 fn test_lookup() {
     let opt = "--lookup";
     let ts = TestScenario::new(util_name!());
@@ -196,6 +202,7 @@ fn test_dead() {
 
 #[cfg(unix)]
 #[test]
+#[ignore = "issue #3219"]
 fn test_all_separately() {
     if cfg!(target_os = "macos") {
         // TODO: fix `-u`, see: test_users
@@ -213,6 +220,7 @@ fn test_all_separately() {
 
 #[cfg(unix)]
 #[test]
+#[ignore = "issue #3219"]
 fn test_all() {
     if cfg!(target_os = "macos") {
         // TODO: fix `-u`, see: test_users
