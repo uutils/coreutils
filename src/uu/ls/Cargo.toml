@@ -6,7 +6,7 @@ license = "MIT"
 description = "ls ~ (uutils) display directory contents"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/ls"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/ls"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

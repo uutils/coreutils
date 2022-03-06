@@ -6,7 +6,7 @@ license = "MIT"
 description = "relpath ~ (uutils) display relative path of PATHNAME_TO from PATHNAME_FROM"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/relpath"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/relpath"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

@@ -6,7 +6,7 @@ license = "MIT"
 description = "link ~ (uutils) create a hard (file system) link to FILE"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/link"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/link"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

@@ -6,7 +6,7 @@ license = "MIT"
 description = "sum ~ (uutils) display checksum and block counts for input"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/sum"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/sum"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

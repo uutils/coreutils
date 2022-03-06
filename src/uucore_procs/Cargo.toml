@@ -6,7 +6,7 @@ license = "MIT"
 description = "uutils ~ 'uucore' proc-macros"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uucore_procs"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uucore_procs"
 # readme = "README.md"
 keywords = ["cross-platform", "proc-macros", "uucore", "uutils"]
 # categories = ["os"]

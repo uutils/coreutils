@@ -6,7 +6,7 @@ license = "MIT"
 description = "tr ~ (uutils) translate characters within input and display"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/tr"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tr"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

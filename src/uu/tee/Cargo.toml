@@ -6,7 +6,7 @@ license = "MIT"
 description = "tee ~ (uutils) display input and copy to FILE"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/tee"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tee"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

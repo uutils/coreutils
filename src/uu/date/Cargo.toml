@@ -6,7 +6,7 @@ license = "MIT"
 description = "date ~ (uutils) display or set the current time"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/date"
+repository = "https://github.com/uutils/coreutils/tree/main/src/date"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
