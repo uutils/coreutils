@@ -1987,11 +1987,11 @@ fn display_grid(
 /// It writes the following keys, in order:
 /// * `inode` ([`get_inode`], config-optional)
 /// * `permissions` ([`display_permissions`])
-/// * `symlink_count` ([`display_symlink_count`])
-/// * `owner` ([`display_uname`], config-optional)
-/// * `group` ([`display_group`], config-optional)
-/// * `author` ([`display_uname`], config-optional)
-/// * `size / rdev` ([`display_size_or_rdev`])
+/// * `symlink_count`
+/// * `owner` (config-optional)
+/// * `group` (config-optional)
+/// * `author` (config-optional)
+/// * `size / rdev`
 /// * `system_time` ([`get_system_time`])
 /// * `file_name` ([`display_file_name`])
 ///
