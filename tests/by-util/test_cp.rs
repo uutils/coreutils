@@ -1478,6 +1478,7 @@ fn test_copy_symlink_with_no_dereference_and_attributes_only() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_cp_fifo() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("fifo");
