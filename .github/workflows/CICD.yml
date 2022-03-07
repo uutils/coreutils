@@ -631,10 +631,6 @@ jobs:
         esac
     - name: rust toolchain ~ install
       uses: actions-rs/toolchain@v1
-      # env:
-      #   # Override auto-detection of RAM for Rustc install.
-      #   # https://github.com/rust-lang/rustup/issues/2229#issuecomment-585855925
-      #   RUSTUP_UNPACK_RAM: "21474836480"
       with:
         toolchain: ${{ env.RUST_MIN_SRV }}
         target: ${{ matrix.job.target }}
