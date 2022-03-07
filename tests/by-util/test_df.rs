@@ -140,8 +140,13 @@ fn test_use_percentage() {
         iter.next();
         let reported_size = iter.next().unwrap().parse::<f64>().unwrap();
         let reported_used = iter.next().unwrap().parse::<f64>().unwrap();
+        // Skip "Available" column
         iter.next();
-        let reported_percentage = iter.next().unwrap(); //.parse::<u8>().unwrap();
+        if cfg!(target_os = "macos") {
+            // Skip "Capacity" column
+            iter.next();
+        }
+        let reported_percentage = iter.next().unwrap();
         let reported_percentage = reported_percentage[..reported_percentage.len() - 1]
             .parse::<u8>()
             .unwrap();
