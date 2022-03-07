@@ -14,6 +14,23 @@ use crate::conversion_tables::*;
 
 type Cbs = usize;
 
+/// How to apply conversion, blocking, and/or unblocking.
+///
+/// Certain settings of the `conv` parameter to `dd` require a
+/// combination of conversion, blocking, or unblocking, applied in a
+/// certain order. The variants of this enumeration give the different
+/// ways of combining those three operations.
+#[derive(Debug, PartialEq)]
+pub(crate) enum ConversionMode<'a> {
+    ConvertOnly(&'a ConversionTable),
+    BlockOnly(Cbs, bool),
+    UnblockOnly(Cbs),
+    BlockThenConvert(&'a ConversionTable, Cbs, bool),
+    ConvertThenBlock(&'a ConversionTable, Cbs, bool),
+    UnblockThenConvert(&'a ConversionTable, Cbs),
+    ConvertThenUnblock(&'a ConversionTable, Cbs),
+}
+
 /// Stores all Conv Flags that apply to the input
 #[derive(Debug, Default, PartialEq)]
 pub struct IConvFlags {
@@ -91,19 +108,11 @@ pub enum CountType {
 pub enum InternalError {
     WrongInputType,
     WrongOutputType,
-    InvalidConvBlockUnblockCase,
 }
 
 impl std::fmt::Display for InternalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::WrongInputType | Self::WrongOutputType => {
-                write!(f, "Internal dd error: Wrong Input/Output data type")
-            }
-            Self::InvalidConvBlockUnblockCase => {
-                write!(f, "Invalid Conversion, Block, or Unblock data")
-            }
-        }
+        write!(f, "Internal dd error: Wrong Input/Output data type")
     }
 }
 

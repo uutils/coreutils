@@ -640,7 +640,7 @@ fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> std::io::Result<(Read
         perform_swab(&mut buf);
     }
     if is_conv(i) || is_block(i) || is_unblock(i) {
-        let buf = conv_block_unblock_helper(buf, i, &mut rstat).unwrap();
+        let buf = conv_block_unblock_helper(buf, i, &mut rstat);
         Ok((rstat, buf))
     } else {
         Ok((rstat, buf))

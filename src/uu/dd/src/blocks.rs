@@ -6,7 +6,7 @@
 // spell-checker:ignore datastructures rstat rposition cflags ctable
 
 use crate::conversion_tables::ConversionTable;
-use crate::datastructures::InternalError;
+use crate::datastructures::ConversionMode;
 use crate::progress::ReadStat;
 use crate::Input;
 use std::io::Read;
@@ -65,6 +65,47 @@ fn unblock(buf: &[u8], cbs: usize) -> Vec<u8> {
     })
 }
 
+/// Given the various command-line parameters, determine the conversion mode.
+///
+/// The `conv` command-line option can take many different values,
+/// each of which may combine with others. For example, `conv=ascii`,
+/// `conv=lcase`, `conv=sync`, and so on. The arguments to this
+/// function represent the settings of those various command-line
+/// parameters. This function translates those settings to a
+/// [`ConversionMode`].
+fn conversion_mode(
+    ctable: Option<&ConversionTable>,
+    block: Option<usize>,
+    unblock: Option<usize>,
+    non_ascii: bool,
+    is_sync: bool,
+) -> Option<ConversionMode> {
+    match (ctable, block, unblock) {
+        (Some(ct), None, None) => Some(ConversionMode::ConvertOnly(ct)),
+        (Some(ct), Some(cbs), None) => {
+            if non_ascii {
+                Some(ConversionMode::ConvertThenBlock(ct, cbs, is_sync))
+            } else {
+                Some(ConversionMode::BlockThenConvert(ct, cbs, is_sync))
+            }
+        }
+        (Some(ct), None, Some(cbs)) => {
+            if non_ascii {
+                Some(ConversionMode::ConvertThenUnblock(ct, cbs))
+            } else {
+                Some(ConversionMode::UnblockThenConvert(ct, cbs))
+            }
+        }
+        (None, Some(cbs), None) => Some(ConversionMode::BlockOnly(cbs, is_sync)),
+        (None, None, Some(cbs)) => Some(ConversionMode::UnblockOnly(cbs)),
+        (None, None, None) => None,
+        // The remaining variants should never happen because the
+        // argument parsing above should result in an error before
+        // getting to this line of code.
+        _ => unreachable!(),
+    }
+}
+
 /// A helper for teasing out which options must be applied and in which order.
 /// Some user options, such as the presence of conversion tables, will determine whether the input is assumed to be ascii. The parser sets the Input::non_ascii flag accordingly.
 /// Examples:
@@ -76,94 +117,58 @@ pub(crate) fn conv_block_unblock_helper<R: Read>(
     mut buf: Vec<u8>,
     i: &mut Input<R>,
     rstat: &mut ReadStat,
-) -> Result<Vec<u8>, InternalError> {
-    // Local Predicate Fns -------------------------------------------------
-    fn should_block_then_conv<R: Read>(i: &Input<R>) -> bool {
-        !i.non_ascii && i.cflags.block.is_some()
-    }
-    fn should_conv_then_block<R: Read>(i: &Input<R>) -> bool {
-        i.non_ascii && i.cflags.block.is_some()
-    }
-    fn should_unblock_then_conv<R: Read>(i: &Input<R>) -> bool {
-        !i.non_ascii && i.cflags.unblock.is_some()
-    }
-    fn should_conv_then_unblock<R: Read>(i: &Input<R>) -> bool {
-        i.non_ascii && i.cflags.unblock.is_some()
-    }
-    fn conv_only<R: Read>(i: &Input<R>) -> bool {
-        i.cflags.ctable.is_some() && i.cflags.block.is_none() && i.cflags.unblock.is_none()
-    }
-    // Local Helper Fns ----------------------------------------------------
+) -> Vec<u8> {
+    // TODO This function has a mutable input `buf` but also returns a
+    // completely new `Vec`; that seems fishy. Could we either make
+    // the input immutable or make the function not return anything?
+
     fn apply_conversion(buf: &mut [u8], ct: &ConversionTable) {
         for idx in 0..buf.len() {
             buf[idx] = ct[buf[idx] as usize];
         }
     }
-    // --------------------------------------------------------------------
-    if conv_only(i) {
-        // no block/unblock
-        let ct = i.cflags.ctable.unwrap();
-        apply_conversion(&mut buf, ct);
 
-        Ok(buf)
-    } else if should_block_then_conv(i) {
-        // ascii input so perform the block first
-        let cbs = i.cflags.block.unwrap();
-
-        let mut blocks = block(&buf, cbs, i.cflags.sync.is_some(), rstat);
-
-        if let Some(ct) = i.cflags.ctable {
+    let mode = conversion_mode(
+        i.cflags.ctable,
+        i.cflags.block,
+        i.cflags.unblock,
+        i.non_ascii,
+        i.cflags.sync.is_some(),
+    )
+    .unwrap();
+    match &mode {
+        ConversionMode::ConvertOnly(ct) => {
+            apply_conversion(&mut buf, ct);
+            buf
+        }
+        ConversionMode::BlockThenConvert(ct, cbs, sync) => {
+            let mut blocks = block(&buf, *cbs, *sync, rstat);
             for buf in &mut blocks {
                 apply_conversion(buf, ct);
             }
+            blocks.into_iter().flatten().collect()
         }
-
-        let blocks = blocks.into_iter().flatten().collect();
-
-        Ok(blocks)
-    } else if should_conv_then_block(i) {
-        // Non-ascii so perform the conversion first
-        let cbs = i.cflags.block.unwrap();
-
-        if let Some(ct) = i.cflags.ctable {
+        ConversionMode::ConvertThenBlock(ct, cbs, sync) => {
             apply_conversion(&mut buf, ct);
+            block(&buf, *cbs, *sync, rstat)
+                .into_iter()
+                .flatten()
+                .collect()
         }
-
-        let blocks = block(&buf, cbs, i.cflags.sync.is_some(), rstat)
+        ConversionMode::BlockOnly(cbs, sync) => block(&buf, *cbs, *sync, rstat)
             .into_iter()
             .flatten()
-            .collect();
-
-        Ok(blocks)
-    } else if should_unblock_then_conv(i) {
-        // ascii input so perform the unblock first
-        let cbs = i.cflags.unblock.unwrap();
-
-        let mut buf = unblock(&buf, cbs);
-
-        if let Some(ct) = i.cflags.ctable {
+            .collect(),
+        ConversionMode::UnblockThenConvert(ct, cbs) => {
+            let mut buf = unblock(&buf, *cbs);
             apply_conversion(&mut buf, ct);
+            buf
         }
-
-        Ok(buf)
-    } else if should_conv_then_unblock(i) {
-        // Non-ascii input so perform the conversion first
-        let cbs = i.cflags.unblock.unwrap();
-
-        if let Some(ct) = i.cflags.ctable {
+        ConversionMode::ConvertThenUnblock(ct, cbs) => {
             apply_conversion(&mut buf, ct);
+            unblock(&buf, *cbs)
         }
-
-        let buf = unblock(&buf, cbs);
-
-        Ok(buf)
-    } else {
-        // The following error should not happen, as it results from
-        // insufficient command line data. This case should be caught
-        // by the parser before making it this far.
-        // Producing this error is an alternative to risking an unwrap call
-        // on 'cbs' if the required data is not provided.
-        Err(InternalError::InvalidConvBlockUnblockCase)
+        ConversionMode::UnblockOnly(cbs) => unblock(&buf, *cbs),
     }
 }
 
