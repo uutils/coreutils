@@ -28,6 +28,8 @@ fn test_df_compatible_si() {
 
 #[test]
 fn test_df_output() {
+    // TODO These should fail because `-total` should have two dashes,
+    // not just one. But they don't fail.
     if cfg!(target_os = "macos") {
         new_ucmd!().arg("-H").arg("-total").succeeds().
         stdout_only("Filesystem               Size         Used    Available     Capacity  Use% Mounted on       \n");
@@ -147,6 +149,33 @@ fn test_use_percentage() {
 
         assert_eq!(computed_percentage, reported_percentage);
     }
+}
+
+#[test]
+fn test_block_size_1024() {
+    fn get_header(block_size: u64) -> String {
+        // TODO When #3057 is resolved, we should just use
+        //
+        //     new_ucmd!().arg("--output=size").succeeds().stdout_move_str();
+        //
+        // instead of parsing the entire `df` table as a string.
+        let output = new_ucmd!()
+            .args(&["-B", &format!("{}", block_size)])
+            .succeeds()
+            .stdout_move_str();
+        let first_line = output.lines().next().unwrap();
+        let mut column_labels = first_line.split_whitespace();
+        let size_column_label = column_labels.nth(1).unwrap();
+        size_column_label.into()
+    }
+
+    assert_eq!(get_header(1024), "1K-blocks");
+    assert_eq!(get_header(2048), "2K-blocks");
+    assert_eq!(get_header(4096), "4K-blocks");
+    assert_eq!(get_header(1024 * 1024), "1M-blocks");
+    assert_eq!(get_header(2 * 1024 * 1024), "2M-blocks");
+    assert_eq!(get_header(1024 * 1024 * 1024), "1G-blocks");
+    assert_eq!(get_header(34 * 1024 * 1024 * 1024), "34G-blocks");
 }
 
 // ToDO: more tests...

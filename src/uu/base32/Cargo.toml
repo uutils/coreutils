@@ -6,7 +6,7 @@ license = "MIT"
 description = "base32 ~ (uutils) decode/encode input (base32-encoding)"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/base32"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/base32"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

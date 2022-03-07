@@ -1,6 +1,6 @@
 # Contributing to coreutils
 
-Contributions are very welcome, and should target Rust's master branch until the
+Contributions are very welcome, and should target Rust's main branch until the
 standard libraries are stabilized. You may *claim* an item on the to-do list by
 following these steps:
 

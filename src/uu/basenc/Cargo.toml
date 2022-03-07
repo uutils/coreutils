@@ -6,7 +6,7 @@ license = "MIT"
 description = "basenc ~ (uutils) decode/encode input"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/basenc"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/basenc"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

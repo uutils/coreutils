@@ -11,10 +11,11 @@
 extern crate uucore;
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, OsValues};
-use std::fs;
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+#[cfg(not(windows))]
+use uucore::error::FromIo;
+use uucore::error::{UResult, USimpleError};
 #[cfg(not(windows))]
 use uucore::mode;
 use uucore::{format_usage, InvalidEncodingHandling};
@@ -149,22 +150,7 @@ fn exec(dirs: OsValues, recursive: bool, mode: u32, verbose: bool) -> UResult<()
 }
 
 fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
-    let create_dir = if recursive {
-        fs::create_dir_all
-    } else {
-        fs::create_dir
-    };
-
-    create_dir(path).map_err_context(|| format!("cannot create directory {}", path.quote()))?;
-
-    if verbose {
-        println!(
-            "{}: created directory {}",
-            uucore::util_name(),
-            path.quote()
-        );
-    }
-
+    create_dir(path, recursive, verbose)?;
     chmod(path, mode)
 }
 
@@ -183,4 +169,40 @@ fn chmod(path: &Path, mode: u32) -> UResult<()> {
 fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
     // chmod on Windows only sets the readonly flag, which isn't even honored on directories
     Ok(())
+}
+
+fn create_dir(path: &Path, recursive: bool, verbose: bool) -> UResult<()> {
+    if path.exists() && !recursive {
+        return Err(USimpleError::new(
+            1,
+            format!("{}: File exists", path.display()),
+        ));
+    }
+    if path == Path::new("") {
+        return Ok(());
+    }
+
+    if recursive {
+        match path.parent() {
+            Some(p) => create_dir(p, recursive, verbose)?,
+            None => {
+                USimpleError::new(1, "failed to create whole tree");
+            }
+        }
+    }
+
+    match std::fs::create_dir(path) {
+        Ok(()) => {
+            if verbose {
+                println!(
+                    "{}: created directory {}",
+                    uucore::util_name(),
+                    path.quote()
+                );
+            }
+            Ok(())
+        }
+        Err(_) if path.is_dir() => Ok(()),
+        Err(e) => Err(e.into()),
+    }
 }

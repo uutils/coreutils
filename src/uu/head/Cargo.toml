@@ -6,7 +6,7 @@ license = "MIT"
 description = "head ~ (uutils) display the first lines of input"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/head"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/head"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
