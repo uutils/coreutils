@@ -636,7 +636,7 @@ jobs:
       #   # https://github.com/rust-lang/rustup/issues/2229#issuecomment-585855925
       #   RUSTUP_UNPACK_RAM: "21474836480"
       with:
-        toolchain: ${{ steps.vars.outputs.TOOLCHAIN }}
+        toolchain: ${{ env.RUST_MIN_SRV }}
         target: ${{ matrix.job.target }}
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
@@ -688,18 +688,21 @@ jobs:
         use-cross: ${{ steps.vars.outputs.CARGO_USE_CROSS }}
         command: build
         args: --release --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+        toolchain: ${{ env.RUST_MIN_SRV }}
     - name: Test
       uses: actions-rs/cargo@v1
       with:
         use-cross: ${{ steps.vars.outputs.CARGO_USE_CROSS }}
         command: test
         args: --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+        toolchain: ${{ env.RUST_MIN_SRV }}
     - name: Test individual utilities
       uses: actions-rs/cargo@v1
       with:
         use-cross: ${{ steps.vars.outputs.CARGO_USE_CROSS }}
         command: test
         args: --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
+        toolchain: ${{ env.RUST_MIN_SRV }}
     - name: Archive executable artifacts
       uses: actions/upload-artifact@v2
       with:
