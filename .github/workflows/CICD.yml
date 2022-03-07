@@ -433,6 +433,32 @@ jobs:
         make test
 
 
+  build_rust_stable:
+    name: Build/stable
+    needs: [ min_version, deps ]
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest  , features: feat_os_unix }
+          - { os: macos-latest   , features: feat_os_macos }
+          - { os: windows-latest , features: feat_os_windows }
+    steps:
+    - uses: actions/checkout@v2
+    - uses: Swatinem/rust-cache@v1
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+    - name: Test
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+
   compute_size:
     name: Binary sizes
     needs: [ min_version, deps ]
