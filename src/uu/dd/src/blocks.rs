@@ -8,8 +8,6 @@
 use crate::conversion_tables::ConversionTable;
 use crate::datastructures::ConversionMode;
 use crate::progress::ReadStat;
-use crate::Input;
-use std::io::Read;
 
 const NEWLINE: u8 = b'\n';
 const SPACE: u8 = b' ';
@@ -65,57 +63,23 @@ fn unblock(buf: &[u8], cbs: usize) -> Vec<u8> {
     })
 }
 
-/// Given the various command-line parameters, determine the conversion mode.
+/// Apply the specified conversion, blocking, and/or unblocking in the right order.
 ///
-/// The `conv` command-line option can take many different values,
-/// each of which may combine with others. For example, `conv=ascii`,
-/// `conv=lcase`, `conv=sync`, and so on. The arguments to this
-/// function represent the settings of those various command-line
-/// parameters. This function translates those settings to a
-/// [`ConversionMode`].
-fn conversion_mode(
-    ctable: Option<&ConversionTable>,
-    block: Option<usize>,
-    unblock: Option<usize>,
-    non_ascii: bool,
-    is_sync: bool,
-) -> Option<ConversionMode> {
-    match (ctable, block, unblock) {
-        (Some(ct), None, None) => Some(ConversionMode::ConvertOnly(ct)),
-        (Some(ct), Some(cbs), None) => {
-            if non_ascii {
-                Some(ConversionMode::ConvertThenBlock(ct, cbs, is_sync))
-            } else {
-                Some(ConversionMode::BlockThenConvert(ct, cbs, is_sync))
-            }
-        }
-        (Some(ct), None, Some(cbs)) => {
-            if non_ascii {
-                Some(ConversionMode::ConvertThenUnblock(ct, cbs))
-            } else {
-                Some(ConversionMode::UnblockThenConvert(ct, cbs))
-            }
-        }
-        (None, Some(cbs), None) => Some(ConversionMode::BlockOnly(cbs, is_sync)),
-        (None, None, Some(cbs)) => Some(ConversionMode::UnblockOnly(cbs)),
-        (None, None, None) => None,
-        // The remaining variants should never happen because the
-        // argument parsing above should result in an error before
-        // getting to this line of code.
-        _ => unreachable!(),
-    }
-}
-
-/// A helper for teasing out which options must be applied and in which order.
-/// Some user options, such as the presence of conversion tables, will determine whether the input is assumed to be ascii. The parser sets the Input::non_ascii flag accordingly.
-/// Examples:
-///     - If conv=ebcdic or conv=ibm is specified then block, unblock or swab must be performed before the conversion happens since the source will start in ascii.
-///     - If conv=ascii is specified then block, unblock or swab must be performed after the conversion since the source starts in ebcdic.
-///     - If no conversion is specified then the source is assumed to be in ascii.
-/// For more info see `info dd`
-pub(crate) fn conv_block_unblock_helper<R: Read>(
+/// The `mode` specifies the combination of conversion, blocking, and
+/// unblocking to apply and the order in which to apply it. This
+/// function is responsible only for applying the operations.
+///
+/// `buf` is the buffer of input bytes to transform. This function
+/// mutates this input and also returns a new buffer of bytes
+/// representing the result of the transformation.
+///
+/// `rstat` maintains a running total of the number of partial and
+/// complete blocks read before calling this function. In certain
+/// settings of `mode`, this function will update the number of
+/// records truncated; that's why `rstat` is borrowed mutably.
+pub(crate) fn conv_block_unblock_helper(
     mut buf: Vec<u8>,
-    i: &mut Input<R>,
+    mode: &ConversionMode,
     rstat: &mut ReadStat,
 ) -> Vec<u8> {
     // TODO This function has a mutable input `buf` but also returns a
@@ -128,15 +92,7 @@ pub(crate) fn conv_block_unblock_helper<R: Read>(
         }
     }
 
-    let mode = conversion_mode(
-        i.cflags.ctable,
-        i.cflags.block,
-        i.cflags.unblock,
-        i.non_ascii,
-        i.cflags.sync.is_some(),
-    )
-    .unwrap();
-    match &mode {
+    match mode {
         ConversionMode::ConvertOnly(ct) => {
             apply_conversion(&mut buf, ct);
             buf

@@ -605,18 +605,49 @@ impl Write for Output<io::Stdout> {
     }
 }
 
+/// Given the various command-line parameters, determine the conversion mode.
+///
+/// The `conv` command-line option can take many different values,
+/// each of which may combine with others. For example, `conv=ascii`,
+/// `conv=lcase`, `conv=sync`, and so on. The arguments to this
+/// function represent the settings of those various command-line
+/// parameters. This function translates those settings to a
+/// [`ConversionMode`].
+fn conversion_mode(
+    ctable: Option<&ConversionTable>,
+    block: Option<usize>,
+    unblock: Option<usize>,
+    non_ascii: bool,
+    is_sync: bool,
+) -> Option<ConversionMode> {
+    match (ctable, block, unblock) {
+        (Some(ct), None, None) => Some(ConversionMode::ConvertOnly(ct)),
+        (Some(ct), Some(cbs), None) => {
+            if non_ascii {
+                Some(ConversionMode::ConvertThenBlock(ct, cbs, is_sync))
+            } else {
+                Some(ConversionMode::BlockThenConvert(ct, cbs, is_sync))
+            }
+        }
+        (Some(ct), None, Some(cbs)) => {
+            if non_ascii {
+                Some(ConversionMode::ConvertThenUnblock(ct, cbs))
+            } else {
+                Some(ConversionMode::UnblockThenConvert(ct, cbs))
+            }
+        }
+        (None, Some(cbs), None) => Some(ConversionMode::BlockOnly(cbs, is_sync)),
+        (None, None, Some(cbs)) => Some(ConversionMode::UnblockOnly(cbs)),
+        (None, None, None) => None,
+        // The remaining variants should never happen because the
+        // argument parsing above should result in an error before
+        // getting to this line of code.
+        _ => unreachable!(),
+    }
+}
+
 /// Read helper performs read operations common to all dd reads, and dispatches the buffer to relevant helper functions as dictated by the operations requested by the user.
 fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> std::io::Result<(ReadStat, Vec<u8>)> {
-    // Local Predicate Fns -----------------------------------------------
-    fn is_conv<R: Read>(i: &Input<R>) -> bool {
-        i.cflags.ctable.is_some()
-    }
-    fn is_block<R: Read>(i: &Input<R>) -> bool {
-        i.cflags.block.is_some()
-    }
-    fn is_unblock<R: Read>(i: &Input<R>) -> bool {
-        i.cflags.unblock.is_some()
-    }
     // Local Helper Fns -------------------------------------------------
     fn perform_swab(buf: &mut [u8]) {
         for base in (1..buf.len()).step_by(2) {
@@ -639,11 +670,20 @@ fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> std::io::Result<(Read
     if i.cflags.swab {
         perform_swab(&mut buf);
     }
-    if is_conv(i) || is_block(i) || is_unblock(i) {
-        let buf = conv_block_unblock_helper(buf, i, &mut rstat);
-        Ok((rstat, buf))
-    } else {
-        Ok((rstat, buf))
+
+    let mode = conversion_mode(
+        i.cflags.ctable,
+        i.cflags.block,
+        i.cflags.unblock,
+        i.non_ascii,
+        i.cflags.sync.is_some(),
+    );
+    match mode {
+        Some(ref mode) => {
+            let buf = conv_block_unblock_helper(buf, mode, &mut rstat);
+            Ok((rstat, buf))
+        }
+        None => Ok((rstat, buf)),
     }
 }
 
