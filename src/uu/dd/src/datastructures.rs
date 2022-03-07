@@ -33,10 +33,8 @@ pub(crate) enum ConversionMode<'a> {
 
 /// Stores all Conv Flags that apply to the input
 #[derive(Debug, Default, PartialEq)]
-pub struct IConvFlags {
-    pub ctable: Option<&'static ConversionTable>,
-    pub block: Option<Cbs>,
-    pub unblock: Option<Cbs>,
+pub(crate) struct IConvFlags {
+    pub mode: Option<ConversionMode<'static>>,
     pub swab: bool,
     pub sync: Option<u8>,
     pub noerror: bool,
