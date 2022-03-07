@@ -245,7 +245,7 @@ test = [ "uu_test" ]
 [workspace]
 
 [dependencies]
-clap = { version = "3.0", features = ["wrap_help", "cargo"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 clap_complete = "3.0"
 phf = "0.10.1"
 lazy_static = { version="1.3" }
