@@ -1464,6 +1464,20 @@ fn test_cp_archive_on_nonexistent_file() {
 }
 
 #[test]
+fn test_cp_link_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file2");
+    ucmd.arg("-l")
+        .arg("-b")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("file2")
+        .succeeds();
+
+    assert!(at.file_exists("file2~"));
+    assert_eq!(at.read("file2"), "Hello, World!\n");
+}
+
+#[test]
 #[cfg(unix)]
 fn test_cp_fifo() {
     let (at, mut ucmd) = at_and_ucmd!();
