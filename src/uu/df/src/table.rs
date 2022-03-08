@@ -222,7 +222,7 @@ impl<'a> DisplayRow<'a> {
     fn percentage(fraction: Option<f64>) -> String {
         match fraction {
             None => "-".to_string(),
-            Some(x) => format!("{:.0}%", 100.0 * x),
+            Some(x) => format!("{:.0}%", (100.0 * x).ceil()),
         }
     }
 
@@ -549,6 +549,36 @@ mod tests {
         assert_eq!(
             DisplayRow::new(&row, &options).to_string(),
             "my_device        my_type        4.0Ki        1.0Ki        3.0Ki   25% my_mount        "
+        );
+    }
+
+    #[test]
+    fn test_row_display_round_up_usage() {
+        let options = Options {
+            block_size: BlockSize::Bytes(1),
+            ..Default::default()
+        };
+        let row = Row {
+            fs_device: "my_device".to_string(),
+            fs_type: "my_type".to_string(),
+            fs_mount: "my_mount".to_string(),
+
+            bytes: 100,
+            bytes_used: 25,
+            bytes_free: 75,
+            bytes_usage: Some(0.251),
+
+            #[cfg(target_os = "macos")]
+            bytes_capacity: Some(0.5),
+
+            inodes: 10,
+            inodes_used: 2,
+            inodes_free: 8,
+            inodes_usage: Some(0.2),
+        };
+        assert_eq!(
+            DisplayRow::new(row, &options).to_string(),
+            "my_device                 100           25           75   26% my_mount        "
         );
     }
 }
