@@ -6,7 +6,7 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv
+// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv PWSTR lpszfilepath hresult
 
 pub extern crate filetime;
 
@@ -16,7 +16,7 @@ extern crate uucore;
 use clap::{crate_version, App, AppSettings, Arg, ArgGroup};
 use filetime::*;
 use std::fs::{self, File};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::format_usage;
@@ -77,7 +77,15 @@ Try 'touch --help' for more information."##,
         };
 
     for filename in files {
-        let path = Path::new(filename);
+        // FIXME: find a way to avoid having to clone the path
+        let pathbuf = if filename == "-" {
+            pathbuf_from_stdout()?
+        } else {
+            PathBuf::from(filename)
+        };
+
+        let path = pathbuf.as_path();
+
         if !path.exists() {
             if matches.is_present(options::NO_CREATE) {
                 continue;
@@ -298,4 +306,90 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
     }
 
     Ok(ft)
+}
+
+// TODO: this may be a good candidate to put in fsext.rs
+/// Returns a PathBuf to stdout.
+///
+/// On Windows, uses GetFinalPathNameByHandleW to attempt to get the path
+/// from the stdout handle.
+fn pathbuf_from_stdout() -> UResult<PathBuf> {
+    #[cfg(unix)]
+    {
+        Ok(PathBuf::from("/dev/stdout"))
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::prelude::AsRawHandle;
+        use winapi::shared::minwindef::{DWORD, MAX_PATH};
+        use winapi::shared::winerror::{
+            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND,
+        };
+        use winapi::um::errhandlingapi::GetLastError;
+        use winapi::um::fileapi::GetFinalPathNameByHandleW;
+        use winapi::um::winnt::WCHAR;
+
+        let handle = std::io::stdout().lock().as_raw_handle();
+        let mut file_path_buffer: [WCHAR; MAX_PATH as usize] = [0; MAX_PATH as usize];
+
+        // Couldn't find this in winapi
+        const FILE_NAME_OPENED: DWORD = 0x8;
+
+        // https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlea#examples
+        // SAFETY: We transmute the handle to be able to cast *mut c_void into a
+        // HANDLE (i32) so rustc will let us call GetFinalPathNameByHandleW. The
+        // reference example code for GetFinalPathNameByHandleW implies that
+        // it is safe for us to leave lpszfilepath uninitialized, so long as
+        // the buffer size is correct. We know the buffer size (MAX_PATH) at
+        // compile time. MAX_PATH is a small number (260) so we can cast it
+        // to a u32.
+        let ret = unsafe {
+            GetFinalPathNameByHandleW(
+                std::mem::transmute(handle),
+                file_path_buffer.as_mut_ptr(),
+                file_path_buffer.len() as u32,
+                FILE_NAME_OPENED,
+            )
+        };
+
+        let buffer_size = match ret {
+            ERROR_PATH_NOT_FOUND | ERROR_NOT_ENOUGH_MEMORY | ERROR_INVALID_PARAMETER => {
+                return Err(USimpleError::new(
+                    1,
+                    format!("GetFinalPathNameByHandleW failed with code {}", ret),
+                ))
+            }
+            e if e == 0 => {
+                return Err(USimpleError::new(
+                    1,
+                    format!(
+                        "GetFinalPathNameByHandleW failed with code {}",
+                        // SAFETY: GetLastError is thread-safe and has no documented memory unsafety.
+                        unsafe { GetLastError() }
+                    ),
+                ));
+            }
+            e => e as usize,
+        };
+
+        // Don't include the null terminator
+        Ok(String::from_utf16(&file_path_buffer[0..buffer_size])
+            .map_err(|e| USimpleError::new(1, e.to_string()))?
+            .into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(windows)]
+    #[test]
+    fn test_get_pathbuf_from_stdout_fails_if_stdout_is_not_a_file() {
+        // We can trigger an error by not setting stdout to anything (will
+        // fail with code 1)
+        assert!(super::pathbuf_from_stdout()
+            .err()
+            .expect("pathbuf_from_stdout should have failed")
+            .to_string()
+            .contains("GetFinalPathNameByHandleW failed with code 1"));
+    }
 }

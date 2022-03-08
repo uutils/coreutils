@@ -8,7 +8,7 @@ license = "MIT"
 description = "tac ~ (uutils) concatenate and display input lines in reverse order"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/tac"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tac"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

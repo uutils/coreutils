@@ -6,7 +6,7 @@ license = "MIT"
 description = "fold ~ (uutils) wrap each line of input"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/fold"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/fold"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

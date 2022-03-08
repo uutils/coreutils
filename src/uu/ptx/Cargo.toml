@@ -6,7 +6,7 @@ license = "MIT"
 description = "ptx ~ (uutils) display a permuted index of input"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/ptx"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/ptx"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

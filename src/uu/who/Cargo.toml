@@ -6,7 +6,7 @@ license = "MIT"
 description = "who ~ (uutils) display information about currently logged-in users"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/who"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/who"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

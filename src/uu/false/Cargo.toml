@@ -6,7 +6,7 @@ license = "MIT"
 description = "false ~ (uutils) do nothing and fail"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/false"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/false"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
