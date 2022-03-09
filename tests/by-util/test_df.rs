@@ -28,6 +28,8 @@ fn test_df_compatible_si() {
 
 #[test]
 fn test_df_output() {
+    // TODO These should fail because `-total` should have two dashes,
+    // not just one. But they don't fail.
     if cfg!(target_os = "macos") {
         new_ucmd!().arg("-H").arg("-total").succeeds().
         stdout_only("Filesystem               Size         Used    Available     Capacity  Use% Mounted on       \n");
@@ -130,7 +132,67 @@ fn test_total() {
     assert_eq!(computed_total_size, reported_total_size);
     assert_eq!(computed_total_used, reported_total_used);
     assert_eq!(computed_total_avail, reported_total_avail);
-    // TODO We could also check here that the use percentage matches.
+}
+
+#[test]
+fn test_use_percentage() {
+    // Example output:
+    //
+    //     Filesystem            1K-blocks     Used Available Use% Mounted on
+    //     udev                    3858016        0   3858016   0% /dev
+    //     ...
+    //     /dev/loop14               63488    63488         0 100% /snap/core20/1361
+    let output = new_ucmd!().succeeds().stdout_move_str();
+
+    // Skip the header line.
+    let lines: Vec<&str> = output.lines().skip(1).collect();
+
+    for line in lines {
+        let mut iter = line.split_whitespace();
+        iter.next();
+        let reported_size = iter.next().unwrap().parse::<f64>().unwrap();
+        let reported_used = iter.next().unwrap().parse::<f64>().unwrap();
+        // Skip "Available" column
+        iter.next();
+        if cfg!(target_os = "macos") {
+            // Skip "Capacity" column
+            iter.next();
+        }
+        let reported_percentage = iter.next().unwrap();
+        let reported_percentage = reported_percentage[..reported_percentage.len() - 1]
+            .parse::<u8>()
+            .unwrap();
+        let computed_percentage = (100.0 * (reported_used / reported_size)).ceil() as u8;
+
+        assert_eq!(computed_percentage, reported_percentage);
+    }
+}
+
+#[test]
+fn test_block_size_1024() {
+    fn get_header(block_size: u64) -> String {
+        // TODO When #3057 is resolved, we should just use
+        //
+        //     new_ucmd!().arg("--output=size").succeeds().stdout_move_str();
+        //
+        // instead of parsing the entire `df` table as a string.
+        let output = new_ucmd!()
+            .args(&["-B", &format!("{}", block_size)])
+            .succeeds()
+            .stdout_move_str();
+        let first_line = output.lines().next().unwrap();
+        let mut column_labels = first_line.split_whitespace();
+        let size_column_label = column_labels.nth(1).unwrap();
+        size_column_label.into()
+    }
+
+    assert_eq!(get_header(1024), "1K-blocks");
+    assert_eq!(get_header(2048), "2K-blocks");
+    assert_eq!(get_header(4096), "4K-blocks");
+    assert_eq!(get_header(1024 * 1024), "1M-blocks");
+    assert_eq!(get_header(2 * 1024 * 1024), "2M-blocks");
+    assert_eq!(get_header(1024 * 1024 * 1024), "1G-blocks");
+    assert_eq!(get_header(34 * 1024 * 1024 * 1024), "34G-blocks");
 }
 
 // ToDO: more tests...

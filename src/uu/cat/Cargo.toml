@@ -6,7 +6,7 @@ license = "MIT"
 description = "cat ~ (uutils) concatenate and display input"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/cat"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/cat"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

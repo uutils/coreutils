@@ -1144,9 +1144,9 @@ checksum = "308cc39be01b73d0d18f82a0e7b2a3df85245f84af96fdddc5d202d27e47b86a"
 
 [[package]]
 name = "memmap2"
-version = "0.5.2"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe3179b85e1fd8b14447cbebadb75e45a1002f541b925f0bfec366d56a81c56d"
+checksum = "057a3db23999c867821a7a59feb06a578fcb03685e983dff90daf9e7d24ac08f"
 dependencies = [
  "libc",
 ]
@@ -1319,9 +1319,9 @@ checksum = "b8f8bdf33df195859076e54ab11ee78a1b208382d3a26ec40d142ffc1ecc49ef"
 
 [[package]]
 name = "once_cell"
-version = "1.9.0"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da32515d9f6e6e489d7bc9d84c71b060db7247dc035bbe44eac88cf87486d8d5"
+checksum = "87f3e037eac156d1775da914196f0f37741a274155e34a0b7e427c35d2a2ecb9"
 
 [[package]]
 name = "onig"
@@ -1375,9 +1375,9 @@ dependencies = [
 
 [[package]]
 name = "ouroboros"
-version = "0.10.1"
+version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84236d64f1718c387232287cf036eb6632a5ecff226f4ff9dccb8c2b79ba0bde"
+checksum = "71643f290d126e18ac2598876d01e1d57aed164afc78fdb6e2a0c6589a1f6662"
 dependencies = [
  "aliasable",
  "ouroboros_macro",
@@ -1386,9 +1386,9 @@ dependencies = [
 
 [[package]]
 name = "ouroboros_macro"
-version = "0.10.1"
+version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f463857a6eb96c0136b1d56e56c718350cef30412ec065b48294799a088bca68"
+checksum = "ed9a247206016d424fe8497bc611e510887af5c261fbbf977877c4bb55ca4d82"
 dependencies = [
  "Inflector",
  "proc-macro-error",
@@ -2385,7 +2385,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "uucore",
- "walkdir",
 ]
 
 [[package]]
@@ -3171,6 +3170,7 @@ dependencies = [
  "filetime",
  "time",
  "uucore",
+ "winapi 0.3.9",
 ]
 
 [[package]]

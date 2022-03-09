@@ -6,7 +6,7 @@ license = "MIT"
 description = "expr ~ (uutils) display the value of EXPRESSION"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/expr"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/expr"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

@@ -6,7 +6,7 @@ license = "MIT"
 description = "uniq ~ (uutils) filter identical adjacent lines from input"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/uniq"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/uniq"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

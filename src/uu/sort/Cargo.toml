@@ -6,7 +6,7 @@ license = "MIT"
 description = "sort ~ (uutils) sort input lines"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/sort"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/sort"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -22,7 +22,7 @@ ctrlc = { version = "3.0", features = ["termination"] }
 fnv = "1.0.7"
 itertools = "0.10.0"
 memchr = "2.4.0"
-ouroboros = "0.10.1"
+ouroboros = "0.14.2"
 rand = "0.8"
 rayon = "1.5"
 tempfile = "3"

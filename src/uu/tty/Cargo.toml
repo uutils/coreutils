@@ -6,7 +6,7 @@ license = "MIT"
 description = "tty ~ (uutils) display the name of the terminal connected to standard input"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/tty"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tty"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

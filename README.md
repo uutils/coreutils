@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/coreutils.svg)](https://crates.io/crates/coreutils)
 [![Discord](https://img.shields.io/badge/discord-join-7289DA.svg?logo=discord&longCache=true&style=flat)](https://discord.gg/wQVJbvJ)
-[![License](http://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/uutils/coreutils/blob/master/LICENSE)
+[![License](http://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/uutils/coreutils/blob/main/LICENSE)
 [![LOC](https://tokei.rs/b1/github/uutils/coreutils?category=code)](https://github.com/Aaronepower/tokei)
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
@@ -410,12 +410,12 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | link      |           |        |
 | ln        |           |        |
 | logname   |           |        |
-| ~~md5sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
-| ~~sha1sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
-| ~~sha224sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
-| ~~sha256sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
-| ~~sha384sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
-| ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~md5sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha1sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha224sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha256sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha384sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | | |
 | mkdir     |           |        |
 | mkfifo    |           |        |
 | mknod     |           |        |
