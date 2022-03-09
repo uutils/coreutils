@@ -205,7 +205,7 @@ fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
     };
     config.auto_ref = matches.is_present(options::AUTO_REFERENCE);
     config.input_ref = matches.is_present(options::REFERENCES);
-    config.right_ref &= matches.is_present(options::RIGHT_SIDE_REFS);
+    config.right_ref = matches.is_present(options::RIGHT_SIDE_REFS);
     config.ignore_case = matches.is_present(options::IGNORE_CASE);
     if matches.is_present(options::MACRO_NAME) {
         config.macro_name = matches
@@ -332,7 +332,6 @@ fn skip_input_reference_loc(chars_line: &Vec<char>) -> (usize, usize) {
 /// Go through every lines in the input files and record each match occurrence as a `WordRef`.
 fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> BTreeSet<WordRef> {
     let reg = Regex::new(&filter.word_regex).unwrap();
-    let ref_reg = Regex::new(&config.context_regex).unwrap();
     let mut word_set: BTreeSet<WordRef> = BTreeSet::new();
     for (file, lines) in file_map.iter() {
         let mut count: usize = 0;
@@ -343,7 +342,6 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
             let chars_line = &lines.chars_lines[line_ix];
 
             let (input_ref_end, input_ref_length) = skip_input_reference_loc(chars_line);
-            let mut input_ref = String::new();
 
             // match words with given regex
             for mat in reg.find_iter(line) {
@@ -360,7 +358,6 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
                 }
 
                 if config.input_ref && input_ref_end > beg {
-                    input_ref = line[beg..input_ref_length].to_string();
                     continue;
                 }
 
@@ -371,7 +368,7 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
                     local_line_nr: count,
                     position: beg,
                     position_end: end,
-                    input_reference: input_ref.clone(),
+                    input_reference: line[..input_ref_length].to_string(),
                 });
             }
             count += 1;
@@ -380,7 +377,7 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
     word_set
 }
 
-fn get_reference(config: &Config, word_ref: &WordRef, line: &str, context_reg: &Regex) -> String {
+fn get_reference(config: &Config, word_ref: &WordRef) -> String {
     if config.auto_ref {
         format!(
             "{}:{}",
@@ -388,11 +385,7 @@ fn get_reference(config: &Config, word_ref: &WordRef, line: &str, context_reg: &
             word_ref.local_line_nr + 1
         )
     } else if config.input_ref {
-        let (beg, end) = match context_reg.find(line) {
-            Some(x) => (x.start(), x.end()),
-            None => (0, 0),
-        };
-        line[beg..end].to_string()
+        word_ref.input_reference.clone()
     } else {
         String::new()
     }
@@ -580,7 +573,11 @@ fn format_tex_line(
     let mut output = String::new();
     output.push_str(&format!("\\{} ", config.macro_name));
     let all_before = if config.input_ref {
-        &chars_line[word_ref.input_reference.len()..word_ref.position]
+        let before = &line[0..word_ref.position];
+        let before_start_trim_offset =
+            word_ref.position - before.trim_start_matches(reference).trim_start().len();
+        let before_end_index = before.len();
+        &chars_line[before_start_trim_offset..cmp::max(before_end_index, before_start_trim_offset)]
     } else {
         let before_chars_trim_idx = (0, word_ref.position);
         &chars_line[before_chars_trim_idx.0..before_chars_trim_idx.1]
@@ -619,7 +616,11 @@ fn format_roff_line(
     let mut output = String::new();
     output.push_str(&format!(".{}", config.macro_name));
     let all_before = if config.input_ref {
-        &chars_line[word_ref.input_reference.len()..]
+        let before = &line[0..word_ref.position];
+        let before_start_trim_offset =
+            word_ref.position - before.trim_start_matches(reference).trim_start().len();
+        let before_end_index = before.len();
+        &chars_line[before_start_trim_offset..cmp::max(before_end_index, before_start_trim_offset)]
     } else {
         let before_chars_trim_idx = (0, word_ref.position);
         &chars_line[before_chars_trim_idx.0..before_chars_trim_idx.1]
@@ -655,8 +656,6 @@ fn write_traditional_output(
         Box::new(file)
     });
 
-    let context_reg = Regex::new(&config.context_regex).unwrap();
-
     for word_ref in words.iter() {
         let file_map_value: &FileContent = file_map
             .get(&(word_ref.filename))
@@ -666,12 +665,7 @@ fn write_traditional_output(
             ref chars_lines,
             offset: _,
         } = *(file_map_value);
-        let reference = get_reference(
-            config,
-            word_ref,
-            &lines[word_ref.local_line_nr],
-            &context_reg,
-        );
+        let reference = get_reference(config, word_ref);
         let output_line: String = match config.format {
             OutFormat::Tex => format_tex_line(
                 config,
