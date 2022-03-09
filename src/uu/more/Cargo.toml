@@ -20,7 +20,7 @@ uucore = { version = ">=0.0.7", package = "uucore", path = "../../uucore" }
 crossterm = ">=0.19"
 atty = "0.2"
 unicode-width = "0.1.7"
-unicode-segmentation = "1.7.1"
+unicode-segmentation = "1.9.0"
 
 [target.'cfg(target_os = "redox")'.dependencies]
 redox_termios = "0.1"
