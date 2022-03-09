@@ -1,4 +1,4 @@
-# spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest distclean manpages pkgs ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MANDIR MULTICALL
+# spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest distclean manpages pkgs ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL
 
 # Config options
 PROFILE         ?= debug
@@ -23,7 +23,6 @@ CARGOFLAGS ?=
 PREFIX ?= /usr/local
 DESTDIR ?=
 BINDIR ?= /bin
-MANDIR ?= /man/man1
 
 INSTALLDIR_BIN=$(DESTDIR)$(PREFIX)$(BINDIR)
 
