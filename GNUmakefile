@@ -22,9 +22,9 @@ CARGOFLAGS ?=
 # Install directories
 PREFIX ?= /usr/local
 DESTDIR ?=
-BINDIR ?= /bin
+BINDIR ?= $(PREFIX)/bin
 
-INSTALLDIR_BIN=$(DESTDIR)$(PREFIX)$(BINDIR)
+INSTALLDIR_BIN=$(DESTDIR)$(BINDIR)
 
 #prefix to apply to coreutils binary and all tool binaries
 PROG_PREFIX ?=
