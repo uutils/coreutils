@@ -85,7 +85,7 @@ if test ${UU_MAKE_PROFILE} != "debug"; then
     for i in ${seq}; do
         make "tests/factor/t${i}.sh"
     done
-    sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*sh
+    sed -i -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*sh
     first=21
 fi
 # strip all (debug) or just the longer (release) factor tests from Makefile
