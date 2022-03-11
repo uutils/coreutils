@@ -69,10 +69,8 @@ fn test_login() {
 #[test]
 fn test_m() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-m"] {
-        let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
-        ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
-    }
+    let expected_stdout = unwrap_or_return!(expected_result(&ts, &["-m"])).stdout_move_str();
+    ts.ucmd().arg("-m").succeeds().stdout_is(expected_stdout);
 }
 
 #[cfg(unix)]

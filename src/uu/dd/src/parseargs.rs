@@ -807,15 +807,16 @@ mod tests {
     #[test]
     fn test_parse_bytes_with_opt_multiplier() {
         assert_eq!(parse_bytes_with_opt_multiplier("123").unwrap(), 123);
-        assert_eq!(parse_bytes_with_opt_multiplier("123c").unwrap(), 123 * 1);
+        assert_eq!(parse_bytes_with_opt_multiplier("123c").unwrap(), 123); // 123 * 1
         assert_eq!(parse_bytes_with_opt_multiplier("123w").unwrap(), 123 * 2);
         assert_eq!(parse_bytes_with_opt_multiplier("123b").unwrap(), 123 * 512);
         assert_eq!(parse_bytes_with_opt_multiplier("123x3").unwrap(), 123 * 3);
         assert_eq!(parse_bytes_with_opt_multiplier("123k").unwrap(), 123 * 1024);
-        assert_eq!(parse_bytes_with_opt_multiplier("1x2x3").unwrap(), 1 * 2 * 3);
+        assert_eq!(parse_bytes_with_opt_multiplier("1x2x3").unwrap(), 6); // 1 * 2 * 3
+
         assert_eq!(
             parse_bytes_with_opt_multiplier("1wx2cx3w").unwrap(),
-            (1 * 2) * (2 * 1) * (3 * 2)
+            2 * 2 * (3 * 2) // (1 * 2) * (2 * 1) * (3 * 2)
         );
         assert!(parse_bytes_with_opt_multiplier("123asdf").is_err());
     }

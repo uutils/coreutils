@@ -577,7 +577,7 @@ mod tests {
             inodes_usage: Some(0.2),
         };
         assert_eq!(
-            DisplayRow::new(row, &options).to_string(),
+            DisplayRow::new(&row, &options).to_string(),
             "my_device                 100           25           75   26% my_mount        "
         );
     }
