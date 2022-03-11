@@ -5,7 +5,7 @@
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
-// spell-checker:ignore itotal iused iavail ipcent pcent tmpfs squashfs
+// spell-checker:ignore itotal iused iavail ipcent pcent tmpfs squashfs lofs
 mod blocks;
 mod columns;
 mod table;
@@ -22,7 +22,6 @@ use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
 
-#[cfg(windows)]
 use std::path::Path;
 
 use crate::blocks::{block_size_from_matches, BlockSize};
@@ -188,7 +187,7 @@ impl Filesystem {
 }
 
 /// Whether to display the mount info given the inclusion settings.
-fn is_included(mi: &MountInfo, paths: &[String], opt: &Options) -> bool {
+fn is_included(mi: &MountInfo, opt: &Options) -> bool {
     // Don't show remote filesystems if `--local` has been given.
     if mi.remote && opt.show_local_fs {
         return false;
@@ -201,12 +200,6 @@ fn is_included(mi: &MountInfo, paths: &[String], opt: &Options) -> bool {
 
     // Don't show filesystems if they have been explicitly excluded.
     if !opt.fs_selector.should_select(&mi.fs_type) {
-        return false;
-    }
-
-    // Don't show filesystems other than the ones specified on the
-    // command line, if any.
-    if !paths.is_empty() && !paths.contains(&mi.mount_dir) {
         return false;
     }
 
@@ -259,15 +252,13 @@ fn is_best(previous: &[MountInfo], mi: &MountInfo) -> bool {
 
 /// Keep only the specified subset of [`MountInfo`] instances.
 ///
-/// If `paths` is non-empty, this function excludes any [`MountInfo`]
-/// that is not mounted at the specified path.
-///
 /// The `opt` argument specifies a variety of ways of excluding
 /// [`MountInfo`] instances; see [`Options`] for more information.
 ///
 /// Finally, if there are duplicate entries, the one with the shorter
 /// path is kept.
-fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Vec<MountInfo> {
+
+fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
     let mut result = vec![];
     for mi in vmi {
         // TODO The running time of the `is_best()` function is linear
@@ -275,21 +266,45 @@ fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Ve
         // this loop quadratic in the length of `vmi`. This could be
         // improved by a more efficient implementation of `is_best()`,
         // but `vmi` is probably not very long in practice.
-        if is_included(&mi, paths, opt) && is_best(&result, &mi) {
+        if is_included(&mi, opt) && is_best(&result, &mi) {
             result.push(mi);
         }
     }
     result
 }
 
+/// Assign 1 `MountInfo` entry to each path
+/// `lofs` entries are skipped and dummy mount points are skipped
+/// Only the longest matching prefix for that path is considered
+/// `lofs` is for Solaris style loopback filesystem and is present in Solaris and FreeBSD.
+/// It works similar to symlinks
+fn get_point_list(vmi: &[MountInfo], paths: &[String]) -> Vec<MountInfo> {
+    paths
+        .iter()
+        .map(|p| {
+            vmi.iter()
+                .filter(|mi| mi.fs_type.ne("lofs"))
+                .filter(|mi| !mi.dummy)
+                .filter(|mi| p.starts_with(&mi.mount_dir))
+                .max_by_key(|mi| mi.mount_dir.len())
+                .unwrap()
+                .clone()
+        })
+        .collect::<Vec<MountInfo>>()
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
-    let paths: Vec<String> = matches
+    // Canonicalize the input_paths and then convert to string
+    let paths = matches
         .values_of(OPT_PATHS)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .map(Path::new)
+        .filter_map(|v| v.canonicalize().ok())
+        .filter_map(|v| v.into_os_string().into_string().ok())
+        .collect::<Vec<_>>();
 
     #[cfg(windows)]
     {
@@ -302,7 +317,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let opt = Options::from(&matches).map_err(|e| USimpleError::new(1, format!("{}", e)))?;
 
     let mounts = read_fs_list();
-    let data: Vec<Row> = filter_mount_list(mounts, &paths, &opt)
+
+    let op_mount_points: Vec<MountInfo> = if paths.is_empty() {
+        // Get all entries
+        filter_mount_list(mounts, &opt)
+    } else {
+        // Get Point for each input_path
+        get_point_list(&mounts, &paths)
+    };
+    let data: Vec<Row> = op_mount_points
         .into_iter()
         .filter_map(Filesystem::new)
         .filter(|fs| fs.usage.blocks != 0 || opt.show_all_fs || opt.show_listed_fs)

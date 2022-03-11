@@ -54,6 +54,18 @@ fn test_order_same() {
     assert_eq!(output1, output2);
 }
 
+/// Test of mount point begin repeated
+#[cfg(unix)]
+#[test]
+fn test_output_mp_repeat() {
+    let output1 = new_ucmd!().arg("/").arg("/").succeeds().stdout_move_str();
+    let output1: Vec<String> = output1
+        .lines()
+        .map(|l| String::from(l.split_once(' ').unwrap().0))
+        .collect();
+    assert_eq!(3, output1.len());
+    assert_eq!(output1[1], output1[2]);
+}
 #[test]
 fn test_output_conflict_options() {
     for option in ["-i", "-T", "-P"] {
