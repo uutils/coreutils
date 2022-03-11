@@ -14,7 +14,7 @@ extern crate clap;
 
 use clap::{crate_version, App, AppSettings, Arg};
 use std::io::ErrorKind;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
@@ -177,6 +177,60 @@ fn unblock_sigchld() {
     }
 }
 
+/// Report that a signal is being sent if the verbose flag is set.
+fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
+    if verbose {
+        let s = signal_name_by_value(signal).unwrap();
+        show_error!("sending signal {} to command {}", s, cmd.quote());
+    }
+}
+
+/// Wait for a child process and send a kill signal if it does not terminate.
+///
+/// This function waits for the child `process` for the time period
+/// given by `duration`. If the child process does not terminate
+/// within that time, we send the `SIGKILL` signal to it. If `verbose`
+/// is `true`, then a message is printed to `stderr` when that
+/// happens.
+///
+/// If the child process terminates within the given time period and
+/// `preserve_status` is `true`, then the status code of the child
+/// process is returned. If the child process terminates within the
+/// given time period and `preserve_status` is `false`, then 124 is
+/// returned. If the child does not terminate within the time period,
+/// then 137 is returned. Finally, if there is an error while waiting
+/// for the child process to terminate, then 124 is returned.
+///
+/// # Errors
+///
+/// If there is a problem sending the `SIGKILL` signal or waiting for
+/// the process after that signal is sent.
+fn wait_or_kill_process(
+    mut process: Child,
+    cmd: &str,
+    duration: Duration,
+    preserve_status: bool,
+    verbose: bool,
+) -> std::io::Result<i32> {
+    match process.wait_or_timeout(duration) {
+        Ok(Some(status)) => {
+            if preserve_status {
+                Ok(status.code().unwrap_or_else(|| status.signal().unwrap()))
+            } else {
+                Ok(124)
+            }
+        }
+        Ok(None) => {
+            let signal = signal_by_name_or_value("KILL").unwrap();
+            report_if_verbose(signal, cmd, verbose);
+            process.send_signal(signal)?;
+            process.wait()?;
+            Ok(137)
+        }
+        Err(_) => Ok(124),
+    }
+}
+
 /// TODO: Improve exit codes, and make them consistent with the GNU Coreutils exit codes.
 
 fn timeout(
@@ -208,57 +262,39 @@ fn timeout(
             USimpleError::new(status_code, format!("failed to execute process: {}", err))
         })?;
     unblock_sigchld();
+    // Wait for the child process for the specified time period.
+    //
+    // If the process exits within the specified time period (the
+    // `Ok(Some(_))` arm), then return the appropriate status code.
+    //
+    // If the process does not exit within that time (the `Ok(None)`
+    // arm) and `kill_after` is specified, then try sending `SIGKILL`.
+    //
+    // TODO The structure of this block is extremely similar to the
+    // structure of `wait_or_kill_process()`. They can probably be
+    // refactored into some common function.
     match process.wait_or_timeout(duration) {
-        Ok(Some(status)) => {
-            let status_code = status.code().unwrap_or_else(|| status.signal().unwrap());
-            if status_code == 0 {
-                Ok(())
-            } else {
-                Err(status_code.into())
-            }
-        }
+        Ok(Some(status)) => Err(status
+            .code()
+            .unwrap_or_else(|| status.signal().unwrap())
+            .into()),
         Ok(None) => {
-            if verbose {
-                show_error!(
-                    "sending signal {} to command {}",
-                    signal_name_by_value(signal).unwrap(),
-                    cmd[0].quote()
-                );
-            }
-            process
-                .send_signal(signal)
-                .map_err(|e| USimpleError::new(ERR_EXIT_STATUS, format!("{}", e)))?;
-            if let Some(kill_after) = kill_after {
-                match process.wait_or_timeout(kill_after) {
-                    Ok(Some(status)) => {
-                        if preserve_status {
-                            let status_code =
-                                status.code().unwrap_or_else(|| status.signal().unwrap());
-                            if status_code == 0 {
-                                Ok(())
-                            } else {
-                                Err(status_code.into())
-                            }
-                        } else {
-                            Err(124.into())
-                        }
+            report_if_verbose(signal, &cmd[0], verbose);
+            process.send_signal(signal)?;
+            match kill_after {
+                None => Err(124.into()),
+                Some(kill_after) => {
+                    match wait_or_kill_process(
+                        process,
+                        &cmd[0],
+                        kill_after,
+                        preserve_status,
+                        verbose,
+                    ) {
+                        Ok(status) => Err(status.into()),
+                        Err(e) => Err(USimpleError::new(ERR_EXIT_STATUS, format!("{}", e))),
                     }
-                    Ok(None) => {
-                        if verbose {
-                            show_error!("sending signal KILL to command {}", cmd[0].quote());
-                        }
-                        process
-                            .send_signal(uucore::signals::signal_by_name_or_value("KILL").unwrap())
-                            .map_err(|e| USimpleError::new(ERR_EXIT_STATUS, format!("{}", e)))?;
-                        process
-                            .wait()
-                            .map_err(|e| USimpleError::new(ERR_EXIT_STATUS, format!("{}", e)))?;
-                        Err(137.into())
-                    }
-                    Err(_) => Err(124.into()),
                 }
-            } else {
-                Err(124.into())
             }
         }
         Err(_) => {
