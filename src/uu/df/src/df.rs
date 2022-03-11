@@ -7,6 +7,7 @@
 // that was distributed with this source code.
 // spell-checker:ignore itotal iused iavail ipcent pcent tmpfs squashfs
 mod blocks;
+mod columns;
 mod table;
 
 use uucore::error::{UResult, USimpleError};
@@ -25,6 +26,7 @@ use std::iter::FromIterator;
 use std::path::Path;
 
 use crate::blocks::{block_size_from_matches, BlockSize};
+use crate::columns::Column;
 use crate::table::{DisplayRow, Header, Row};
 
 static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
@@ -66,18 +68,37 @@ struct FsSelector {
 /// Most of these parameters control which rows and which columns are
 /// displayed. The `block_size` determines the units to use when
 /// displaying numbers of bytes or inodes.
-#[derive(Default)]
 struct Options {
     show_local_fs: bool,
     show_all_fs: bool,
     show_listed_fs: bool,
-    show_fs_type: bool,
-    show_inode_instead: bool,
     block_size: BlockSize,
     fs_selector: FsSelector,
-
     /// Whether to show a final row comprising the totals for each column.
     show_total: bool,
+    /// Sequence of columns to display in the output table.
+    columns: Vec<Column>,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            show_local_fs: Default::default(),
+            show_all_fs: Default::default(),
+            show_listed_fs: Default::default(),
+            block_size: Default::default(),
+            fs_selector: Default::default(),
+            show_total: Default::default(),
+            columns: vec![
+                Column::Source,
+                Column::Size,
+                Column::Used,
+                Column::Avail,
+                Column::Pcent,
+                Column::Target,
+            ],
+        }
+    }
 }
 
 enum OptionsError {
@@ -103,12 +124,11 @@ impl Options {
             show_local_fs: matches.is_present(OPT_LOCAL),
             show_all_fs: matches.is_present(OPT_ALL),
             show_listed_fs: false,
-            show_fs_type: matches.is_present(OPT_PRINT_TYPE),
-            show_inode_instead: matches.is_present(OPT_INODES),
             block_size: block_size_from_matches(matches)
                 .map_err(|_| OptionsError::InvalidBlockSize)?,
             fs_selector: FsSelector::from(matches),
             show_total: matches.is_present(OPT_TOTAL),
+            columns: Column::from_matches(matches),
         })
     }
 }
