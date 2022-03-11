@@ -338,24 +338,20 @@ fn test_dictionary_order() {
 
 #[test]
 fn test_dictionary_order2() {
-    for non_dictionary_order2_param in &["-d"] {
-        new_ucmd!()
-            .pipe_in("a👦🏻aa\tb\naaaa\tb") // spell-checker:disable-line
-            .arg(non_dictionary_order2_param) // spell-checker:disable-line
-            .succeeds()
-            .stdout_only("a👦🏻aa\tb\naaaa\tb\n"); // spell-checker:disable-line
-    }
+    new_ucmd!()
+        .pipe_in("a👦🏻aa\tb\naaaa\tb") // spell-checker:disable-line
+        .arg("-d")
+        .succeeds()
+        .stdout_only("a👦🏻aa\tb\naaaa\tb\n"); // spell-checker:disable-line
 }
 
 #[test]
 fn test_non_printing_chars() {
-    for non_printing_chars_param in &["-i"] {
-        new_ucmd!()
-            .pipe_in("a👦🏻aa\naaaa") // spell-checker:disable-line
-            .arg(non_printing_chars_param) // spell-checker:disable-line
-            .succeeds()
-            .stdout_only("a👦🏻aa\naaaa\n"); // spell-checker:disable-line
-    }
+    new_ucmd!()
+        .pipe_in("a👦🏻aa\naaaa") // spell-checker:disable-line
+        .arg("-i")
+        .succeeds()
+        .stdout_only("a👦🏻aa\naaaa\n"); // spell-checker:disable-line
 }
 
 #[test]
@@ -486,14 +482,12 @@ fn test_default_unsorted_ints2() {
 
 #[test]
 fn test_numeric_unique_ints2() {
-    for numeric_unique_sort_param in &["-nu"] {
-        let input = "9\n9\n8\n1\n";
-        new_ucmd!()
-            .arg(numeric_unique_sort_param)
-            .pipe_in(input)
-            .succeeds()
-            .stdout_only("1\n8\n9\n");
-    }
+    let input = "9\n9\n8\n1\n";
+    new_ucmd!()
+        .arg("-nu")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("1\n8\n9\n");
 }
 
 #[test]

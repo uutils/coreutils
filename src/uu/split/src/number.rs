@@ -479,7 +479,7 @@ mod tests {
         fn num(n: usize) -> Number {
             let mut number = Number::DynamicWidth(DynamicWidthNumber::new(16));
             for _ in 0..n {
-                number.increment().unwrap()
+                number.increment().unwrap();
             }
             number
         }
