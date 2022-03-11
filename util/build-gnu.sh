@@ -70,33 +70,17 @@ sed -i 's|^"\$@|/usr/bin/timeout 600 "\$@|' build-aux/test-driver
 sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
 sed -i 's| tr | /usr/bin/tr |' tests/init.sh
 make -j "$(nproc)"
-first=00
 if test ${UU_MAKE_PROFILE} != "debug"; then
     # Generate the factor tests, so they can be fixed
     # * reduced to 20 to decrease log size (down from 36 expected by GNU)
     # * only for 'release', skipped for 'debug' as redundant and too time consuming (causing timeout errors)
-    seq=$(
-        i=${first}
-        while test "$i" -le 20; do
-            printf '%02d ' $i
-            i=$(($i + 1))
-        done
-    )
-    for i in ${seq}; do
+    for i in $(seq -w 0 20); do
         make "tests/factor/t${i}.sh"
     done
     sed -i -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*sh
-    first=21
 fi
 # strip all (debug) or just the longer (release) factor tests from Makefile
-seq=$(
-    i=${first}
-    while test "$i" -le 36; do
-        printf '%02d ' $i
-        i=$(($i + 1))
-    done
-)
-for i in ${seq}; do
+for i in $(seq 20 36); do
     echo "strip t${i}.sh from Makefile"
     sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
 done
