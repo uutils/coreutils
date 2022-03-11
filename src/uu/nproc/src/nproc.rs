@@ -33,7 +33,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let mut ignore = match matches.value_of(OPT_IGNORE) {
-        Some(numstr) => match numstr.parse() {
+        Some(numstr) => match numstr.trim().parse() {
             Ok(num) => num,
             Err(e) => {
                 return Err(USimpleError::new(

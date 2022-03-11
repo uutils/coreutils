@@ -33,15 +33,22 @@ fn test_nproc_all_omp() {
 #[test]
 fn test_nproc_ignore() {
     let result = new_ucmd!().succeeds();
-    let nproc: u8 = result.stdout_str().trim().parse().unwrap();
-    if nproc > 1 {
+    let nproc_total: u8 = result.stdout_str().trim().parse().unwrap();
+    if nproc_total > 1 {
         // Ignore all CPU but one
         let result = TestScenario::new(util_name!())
             .ucmd_keepenv()
             .arg("--ignore")
-            .arg((nproc - 1).to_string())
+            .arg((nproc_total - 1).to_string())
             .succeeds();
         let nproc: u8 = result.stdout_str().trim().parse().unwrap();
         assert!(nproc == 1);
+        // Ignore all CPU but one with a string
+        let result = TestScenario::new(util_name!())
+            .ucmd_keepenv()
+            .arg("--ignore= 1")
+            .succeeds();
+        let nproc: u8 = result.stdout_str().trim().parse().unwrap();
+        assert!(nproc_total - 1 == nproc);
     }
 }
