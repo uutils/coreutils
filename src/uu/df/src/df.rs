@@ -583,9 +583,8 @@ mod tests {
         #[test]
         fn test_remote_included() {
             let opt = Default::default();
-            let paths = [];
             let m = mount_info("ext4", "/mnt/foo", true, false);
-            assert!(is_included(&m, &paths, &opt));
+            assert!(is_included(&m, &opt));
         }
 
         #[test]
@@ -594,9 +593,8 @@ mod tests {
                 show_local_fs: true,
                 ..Default::default()
             };
-            let paths = [];
             let m = mount_info("ext4", "/mnt/foo", true, false);
-            assert!(!is_included(&m, &paths, &opt));
+            assert!(!is_included(&m, &opt));
         }
 
         #[test]
@@ -606,17 +604,15 @@ mod tests {
                 show_listed_fs: true,
                 ..Default::default()
             };
-            let paths = [];
             let m = mount_info("ext4", "/mnt/foo", false, true);
-            assert!(is_included(&m, &paths, &opt));
+            assert!(is_included(&m, &opt));
         }
 
         #[test]
         fn test_dummy_excluded() {
             let opt = Default::default();
-            let paths = [];
             let m = mount_info("ext4", "/mnt/foo", false, true);
-            assert!(!is_included(&m, &paths, &opt));
+            assert!(!is_included(&m, &opt));
         }
 
         #[test]
@@ -630,9 +626,8 @@ mod tests {
                 fs_selector,
                 ..Default::default()
             };
-            let paths = [];
             let m = mount_info("ext4", "/mnt/foo", false, false);
-            assert!(!is_included(&m, &paths, &opt));
+            assert!(!is_included(&m, &opt));
         }
 
         #[test]
@@ -646,9 +641,8 @@ mod tests {
                 fs_selector,
                 ..Default::default()
             };
-            let paths = [];
             let m = mount_info("ext4", "/mnt/foo", false, false);
-            assert!(is_included(&m, &paths, &opt));
+            assert!(is_included(&m, &opt));
         }
 
         #[test]
@@ -662,9 +656,8 @@ mod tests {
                 fs_selector,
                 ..Default::default()
             };
-            let paths = [];
             let m = mount_info("ext4", "/mnt/foo", false, false);
-            assert!(is_included(&m, &paths, &opt));
+            assert!(is_included(&m, &opt));
         }
 
         #[test]
@@ -678,9 +671,8 @@ mod tests {
                 fs_selector,
                 ..Default::default()
             };
-            let paths = [];
             let m = mount_info("ext4", "/mnt/foo", false, false);
-            assert!(!is_included(&m, &paths, &opt));
+            assert!(!is_included(&m, &opt));
         }
 
         #[test]
@@ -692,9 +684,8 @@ mod tests {
                 fs_selector,
                 ..Default::default()
             };
-            let paths = [];
             let m = mount_info("ext4", "/mnt/foo", false, false);
-            assert!(!is_included(&m, &paths, &opt));
+            assert!(!is_included(&m, &opt));
         }
 
         #[test]
@@ -706,9 +697,8 @@ mod tests {
                 fs_selector,
                 ..Default::default()
             };
-            let paths = [];
             let m = mount_info("ext4", "/mnt/foo", false, false);
-            assert!(!is_included(&m, &paths, &opt));
+            assert!(!is_included(&m, &opt));
         }
 
         #[test]
@@ -720,9 +710,8 @@ mod tests {
                 fs_selector,
                 ..Default::default()
             };
-            let paths = [];
             let m = mount_info("ext4", "/mnt/foo", false, false);
-            assert!(is_included(&m, &paths, &opt));
+            assert!(is_included(&m, &opt));
         }
 
         #[test]
@@ -737,33 +726,8 @@ mod tests {
                 fs_selector,
                 ..Default::default()
             };
-            let paths = [];
             let m = mount_info("ext4", "/mnt/foo", false, false);
-            assert!(!is_included(&m, &paths, &opt));
-        }
-
-        #[test]
-        fn test_paths_empty() {
-            let opt = Default::default();
-            let paths = [];
-            let m = mount_info("ext4", "/mnt/foo", false, false);
-            assert!(is_included(&m, &paths, &opt));
-        }
-
-        #[test]
-        fn test_not_in_paths() {
-            let opt = Default::default();
-            let paths = [String::from("/mnt/foo")];
-            let m = mount_info("ext4", "/mnt/bar", false, false);
-            assert!(!is_included(&m, &paths, &opt));
-        }
-
-        #[test]
-        fn test_in_paths() {
-            let opt = Default::default();
-            let paths = [String::from("/mnt/foo")];
-            let m = mount_info("ext4", "/mnt/foo", false, false);
-            assert!(is_included(&m, &paths, &opt));
+            assert!(!is_included(&m, &opt));
         }
     }
 
@@ -774,9 +738,8 @@ mod tests {
         #[test]
         fn test_empty() {
             let opt = Default::default();
-            let paths = [];
             let mount_infos = vec![];
-            assert!(filter_mount_list(mount_infos, &paths, &opt).is_empty());
+            assert!(filter_mount_list(mount_infos, &opt).is_empty());
         }
     }
 }
