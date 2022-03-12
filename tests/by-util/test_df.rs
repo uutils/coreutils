@@ -43,24 +43,29 @@ fn test_df_output() {
 /// Test that the order of rows in the table does not change across executions.
 #[test]
 fn test_order_same() {
-    // TODO When #3057 is resolved, we should just use
-    //
-    //     new_ucmd!().arg("--output=source").succeeds().stdout_move_str();
-    //
-    // instead of parsing the entire `df` table as a string.
-    let output1 = new_ucmd!().succeeds().stdout_move_str();
-    let output2 = new_ucmd!().succeeds().stdout_move_str();
+    let output1 = new_ucmd!()
+        .arg("--output=source")
+        .succeeds()
+        .stdout_move_str();
+    let output2 = new_ucmd!()
+        .arg("--output=source")
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(output1, output2);
+}
+
+/// Test of mount point begin repeated
+#[cfg(unix)]
+#[test]
+fn test_output_mp_repeat() {
+    let output1 = new_ucmd!().arg("/").arg("/").succeeds().stdout_move_str();
     let output1: Vec<String> = output1
         .lines()
         .map(|l| String::from(l.split_once(' ').unwrap().0))
         .collect();
-    let output2: Vec<String> = output2
-        .lines()
-        .map(|l| String::from(l.split_once(' ').unwrap().0))
-        .collect();
-    assert_eq!(output1, output2);
+    assert_eq!(3, output1.len());
+    assert_eq!(output1[1], output1[2]);
 }
-
 #[test]
 fn test_output_conflict_options() {
     for option in ["-i", "-T", "-P"] {
@@ -181,6 +186,35 @@ fn test_block_size_1024() {
     assert_eq!(get_header(2 * 1024 * 1024), "2M-blocks");
     assert_eq!(get_header(1024 * 1024 * 1024), "1G-blocks");
     assert_eq!(get_header(34 * 1024 * 1024 * 1024), "34G-blocks");
+}
+
+// TODO The spacing does not match GNU df. Also we need to remove
+// trailing spaces from the heading row.
+#[test]
+fn test_output_selects_columns() {
+    let output = new_ucmd!()
+        .args(&["--output=source"])
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(output.lines().next().unwrap(), "Filesystem       ");
+
+    let output = new_ucmd!()
+        .args(&["--output=source,target"])
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(
+        output.lines().next().unwrap(),
+        "Filesystem       Mounted on       "
+    );
+
+    let output = new_ucmd!()
+        .args(&["--output=source,target,used"])
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(
+        output.lines().next().unwrap(),
+        "Filesystem       Mounted on               Used "
+    );
 }
 
 // ToDO: more tests...
