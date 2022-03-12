@@ -55,7 +55,7 @@ pub fn parse_size(size: &str) -> Result<u64, ParseSizeError> {
     // empty string, in which case, the factor is 1.
     let unit = &size[numeric_string.len()..];
     let (base, exponent): (u128, u32) = match unit {
-        "" => (1, 0),
+        "B" | "" => (1, 0),
         "b" => (512, 1), // (`od`, `head` and `tail` use "b")
         "KiB" | "kiB" | "K" | "k" => (1024, 1),
         "MiB" | "miB" | "M" | "m" => (1024, 2),
@@ -271,6 +271,14 @@ mod tests {
         assert_eq!(Ok(0), parse_size("0"));
         assert_eq!(Ok(5), parse_size("5"));
         assert_eq!(Ok(999), parse_size("999"));
+    }
+
+    #[test]
+    fn bytes_suffix() {
+        assert_eq!(Ok(1234), parse_size("1234B"));
+        assert_eq!(Ok(0), parse_size("0B"));
+        assert_eq!(Ok(5), parse_size("5B"));
+        assert_eq!(Ok(999), parse_size("999B"));
     }
 
     #[test]
