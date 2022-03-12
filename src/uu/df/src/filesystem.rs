@@ -2,6 +2,11 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
+//! Provides a summary representation of a filesystem.
+//!
+//! A [`Filesystem`] struct represents a device containing a
+//! filesystem mounted at a particular directory. It also includes
+//! information on amount of space available and amount of space used.
 #[cfg(windows)]
 use std::path::Path;
 
@@ -9,9 +14,19 @@ use std::path::Path;
 use uucore::fsext::statfs;
 use uucore::fsext::{FsUsage, MountInfo};
 
+/// Summary representation of a filesystem.
+///
+/// A [`Filesystem`] struct represents a device containing a
+/// filesystem mounted at a particular directory. The
+/// [`Filesystem::mount_info`] field exposes that information. The
+/// [`Filesystem::usage`] field provides information on the amount of
+/// space available on the filesystem and the amount of space used.
 #[derive(Debug, Clone)]
 pub(crate) struct Filesystem {
+    /// Information about the mounted device, mount directory, and related options.
     pub mount_info: MountInfo,
+
+    /// Information about the amount of space used on the filesystem.
     pub usage: FsUsage,
 }
 
