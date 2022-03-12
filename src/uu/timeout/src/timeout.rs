@@ -282,7 +282,13 @@ fn timeout(
             report_if_verbose(signal, &cmd[0], verbose);
             process.send_signal(signal)?;
             match kill_after {
-                None => Err(ExitStatus::CommandTimedOut.into()),
+                None => {
+                    if preserve_status {
+                        Err(ExitStatus::SignalSent(signal).into())
+                    } else {
+                        Err(ExitStatus::CommandTimedOut.into())
+                    }
+                }
                 Some(kill_after) => {
                     match wait_or_kill_process(
                         process,
