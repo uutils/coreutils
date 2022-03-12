@@ -6,12 +6,14 @@
 //  * file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld
+mod status;
 
 #[macro_use]
 extern crate uucore;
 
 extern crate clap;
 
+use crate::status::ExitStatus;
 use clap::{crate_version, App, AppSettings, Arg};
 use std::io::ErrorKind;
 use std::process::{Child, Command, Stdio};
@@ -24,8 +26,6 @@ use uucore::{format_usage, InvalidEncodingHandling};
 
 static ABOUT: &str = "Start COMMAND, and kill it if still running after DURATION.";
 const USAGE: &str = "{} [OPTION] DURATION COMMAND...";
-
-const ERR_EXIT_STATUS: i32 = 125;
 
 pub mod options {
     pub static FOREGROUND: &str = "foreground";
@@ -217,7 +217,7 @@ fn wait_or_kill_process(
             if preserve_status {
                 Ok(status.code().unwrap_or_else(|| status.signal().unwrap()))
             } else {
-                Ok(124)
+                Ok(ExitStatus::TimeoutFailed.into())
             }
         }
         Ok(None) => {
@@ -225,9 +225,9 @@ fn wait_or_kill_process(
             report_if_verbose(signal, cmd, verbose);
             process.send_signal(signal)?;
             process.wait()?;
-            Ok(137)
+            Ok(ExitStatus::SignalSent(signal).into())
         }
-        Err(_) => Ok(124),
+        Err(_) => Ok(ExitStatus::WaitingFailed.into()),
     }
 }
 
@@ -282,7 +282,7 @@ fn timeout(
             report_if_verbose(signal, &cmd[0], verbose);
             process.send_signal(signal)?;
             match kill_after {
-                None => Err(124.into()),
+                None => Err(ExitStatus::CommandTimedOut.into()),
                 Some(kill_after) => {
                     match wait_or_kill_process(
                         process,
@@ -292,7 +292,10 @@ fn timeout(
                         verbose,
                     ) {
                         Ok(status) => Err(status.into()),
-                        Err(e) => Err(USimpleError::new(ERR_EXIT_STATUS, format!("{}", e))),
+                        Err(e) => Err(USimpleError::new(
+                            ExitStatus::TimeoutFailed.into(),
+                            format!("{}", e),
+                        )),
                     }
                 }
             }
@@ -301,10 +304,10 @@ fn timeout(
             // We're going to return ERR_EXIT_STATUS regardless of
             // whether `send_signal()` succeeds or fails, so just
             // ignore the return value.
-            process
-                .send_signal(signal)
-                .map_err(|e| USimpleError::new(ERR_EXIT_STATUS, format!("{}", e)))?;
-            Err(ERR_EXIT_STATUS.into())
+            process.send_signal(signal).map_err(|e| {
+                USimpleError::new(ExitStatus::TimeoutFailed.into(), format!("{}", e))
+            })?;
+            Err(ExitStatus::TimeoutFailed.into())
         }
     }
 }
