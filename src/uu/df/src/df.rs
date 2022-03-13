@@ -319,6 +319,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(Into::into)
         .collect();
 
+    if data.is_empty() {
+        return Err(USimpleError::new(1, "no file systems processed"));
+    }
+
     println!("{}", Header::new(&opt));
     let mut total = Row::new("total");
     for row in data {
