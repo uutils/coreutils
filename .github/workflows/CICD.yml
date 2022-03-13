@@ -5,7 +5,7 @@ name: CICD
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain
 # spell-checker:ignore (names) CodeCOV MacOS MinGW Peltoche rivy
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rsync rustc rustfmt rustup shopt xargs
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend pell runtest tempfile testsuite uutils DESTDIR sizemulti Swatinem
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend pell runtest tempfile testsuite uutils DESTDIR multisize Swatinem
 
 # ToDO: [2021-06; rivy] change from `cargo-tree` to `cargo tree` once MSRV is >= 1.45
 
@@ -525,8 +525,8 @@ jobs:
               --arg date "$(date --rfc-email)" \
               --arg sha "$GITHUB_SHA" \
               --arg size "$SIZE" \
-              --arg sizemulti "$SIZEMULTI" \
-              '{($date): { sha: $sha, size: $size, sizemulti: $sizemulti, }}' > size-result.json
+              --arg multisize "$SIZEMULTI" \
+              '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
     - uses: actions/upload-artifact@v2
       with:
         name: size-result
