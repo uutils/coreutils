@@ -282,18 +282,29 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Get Point for each input_path
         get_point_list(&mounts, &paths)
     };
-    let data: Vec<Row> = op_mount_points
+
+    // Get the list of filesystems to display in the output table.
+    let filesystems: Vec<Filesystem> = op_mount_points
         .into_iter()
         .filter_map(Filesystem::new)
-        .filter(|fs| fs.usage.blocks != 0 || opt.show_all_fs || opt.show_listed_fs)
-        .map(Into::into)
         .collect();
 
-    println!("{}", Header::new(&opt));
+    // The running total of filesystem sizes and usage.
+    //
+    // This accumulator is computed in case we need to display the
+    // total counts in the last row of the table.
     let mut total = Row::new("total");
-    for row in data {
-        println!("{}", DisplayRow::new(&row, &opt));
-        total += row;
+
+    println!("{}", Header::new(&opt));
+    for filesystem in filesystems {
+        // If the filesystem is not empty, or if the options require
+        // showing all filesystems, then print the data as a row in
+        // the output table.
+        if opt.show_all_fs || opt.show_listed_fs || filesystem.usage.blocks > 0 {
+            let row = Row::from(filesystem);
+            println!("{}", DisplayRow::new(&row, &opt));
+            total += row;
+        }
     }
     if opt.show_total {
         println!("{}", DisplayRow::new(&total, &opt));
