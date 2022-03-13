@@ -18,10 +18,7 @@ use uucore::fsext::{read_fs_list, FsUsage, MountInfo};
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
-use std::collections::HashSet;
 use std::fmt;
-use std::iter::FromIterator;
-
 use std::path::Path;
 
 use crate::blocks::{block_size_from_matches, BlockSize};
@@ -54,14 +51,6 @@ static OUTPUT_FIELD_LIST: [&str; 12] = [
     "file", "target",
 ];
 
-/// Store names of file systems as a selector.
-/// Note: `exclude` takes priority over `include`.
-#[derive(Default)]
-struct FsSelector {
-    include: HashSet<String>,
-    exclude: HashSet<String>,
-}
-
 /// Parameters that control the behavior of `df`.
 ///
 /// Most of these parameters control which rows and which columns are
@@ -72,9 +61,22 @@ struct Options {
     show_all_fs: bool,
     show_listed_fs: bool,
     block_size: BlockSize,
-    fs_selector: FsSelector,
+
+    /// Optional list of filesystem types to include in the output table.
+    ///
+    /// If this is not `None`, only filesystems that match one of
+    /// these types will be listed.
+    include: Option<Vec<String>>,
+
+    /// Optional list of filesystem types to exclude from the output table.
+    ///
+    /// If this is not `None`, filesystems that match one of these
+    /// types will *not* be listed.
+    exclude: Option<Vec<String>>,
+
     /// Whether to show a final row comprising the totals for each column.
     show_total: bool,
+
     /// Sequence of columns to display in the output table.
     columns: Vec<Column>,
 }
@@ -86,7 +88,8 @@ impl Default for Options {
             show_all_fs: Default::default(),
             show_listed_fs: Default::default(),
             block_size: Default::default(),
-            fs_selector: Default::default(),
+            include: Default::default(),
+            exclude: Default::default(),
             show_total: Default::default(),
             columns: vec![
                 Column::Source,
@@ -125,7 +128,8 @@ impl Options {
             show_listed_fs: false,
             block_size: block_size_from_matches(matches)
                 .map_err(|_| OptionsError::InvalidBlockSize)?,
-            fs_selector: FsSelector::from(matches),
+            include: matches.values_of_lossy(OPT_TYPE),
+            exclude: matches.values_of_lossy(OPT_EXCLUDE_TYPE),
             show_total: matches.is_present(OPT_TOTAL),
             columns: Column::from_matches(matches),
         })
@@ -136,30 +140,6 @@ impl Options {
 struct Filesystem {
     mount_info: MountInfo,
     usage: FsUsage,
-}
-
-impl FsSelector {
-    /// Convert command-line arguments into a [`FsSelector`].
-    ///
-    /// This function reads the include and exclude sets from
-    /// [`ArgMatches`] and returns the corresponding [`FsSelector`]
-    /// instance.
-    fn from(matches: &ArgMatches) -> Self {
-        let include = HashSet::from_iter(matches.values_of_lossy(OPT_TYPE).unwrap_or_default());
-        let exclude = HashSet::from_iter(
-            matches
-                .values_of_lossy(OPT_EXCLUDE_TYPE)
-                .unwrap_or_default(),
-        );
-        Self { include, exclude }
-    }
-
-    fn should_select(&self, fs_type: &str) -> bool {
-        if self.exclude.contains(fs_type) {
-            return false;
-        }
-        self.include.is_empty() || self.include.contains(fs_type)
-    }
 }
 
 impl Filesystem {
@@ -199,8 +179,15 @@ fn is_included(mi: &MountInfo, opt: &Options) -> bool {
     }
 
     // Don't show filesystems if they have been explicitly excluded.
-    if !opt.fs_selector.should_select(&mi.fs_type) {
-        return false;
+    if let Some(ref excludes) = opt.exclude {
+        if excludes.contains(&mi.fs_type) {
+            return false;
+        }
+    }
+    if let Some(ref includes) = opt.include {
+        if !includes.contains(&mi.fs_type) {
+            return false;
+        }
     }
 
     true
@@ -562,8 +549,7 @@ mod tests {
 
     mod is_included {
 
-        use crate::{is_included, FsSelector, Options};
-        use std::collections::HashSet;
+        use crate::{is_included, Options};
         use uucore::fsext::MountInfo;
 
         /// Instantiate a [`MountInfo`] with the given fields.
@@ -617,13 +603,9 @@ mod tests {
 
         #[test]
         fn test_exclude_match() {
-            let exclude = HashSet::from([String::from("ext4")]);
-            let fs_selector = FsSelector {
-                exclude,
-                ..Default::default()
-            };
+            let exclude = Some(vec![String::from("ext4")]);
             let opt = Options {
-                fs_selector,
+                exclude,
                 ..Default::default()
             };
             let m = mount_info("ext4", "/mnt/foo", false, false);
@@ -632,13 +614,9 @@ mod tests {
 
         #[test]
         fn test_exclude_no_match() {
-            let exclude = HashSet::from([String::from("tmpfs")]);
-            let fs_selector = FsSelector {
-                exclude,
-                ..Default::default()
-            };
+            let exclude = Some(vec![String::from("tmpfs")]);
             let opt = Options {
-                fs_selector,
+                exclude,
                 ..Default::default()
             };
             let m = mount_info("ext4", "/mnt/foo", false, false);
@@ -647,13 +625,9 @@ mod tests {
 
         #[test]
         fn test_include_match() {
-            let include = HashSet::from([String::from("ext4")]);
-            let fs_selector = FsSelector {
-                include,
-                ..Default::default()
-            };
+            let include = Some(vec![String::from("ext4")]);
             let opt = Options {
-                fs_selector,
+                include,
                 ..Default::default()
             };
             let m = mount_info("ext4", "/mnt/foo", false, false);
@@ -662,13 +636,9 @@ mod tests {
 
         #[test]
         fn test_include_no_match() {
-            let include = HashSet::from([String::from("tmpfs")]);
-            let fs_selector = FsSelector {
-                include,
-                ..Default::default()
-            };
+            let include = Some(vec![String::from("tmpfs")]);
             let opt = Options {
-                fs_selector,
+                include,
                 ..Default::default()
             };
             let m = mount_info("ext4", "/mnt/foo", false, false);
@@ -677,11 +647,11 @@ mod tests {
 
         #[test]
         fn test_include_and_exclude_match_neither() {
-            let include = HashSet::from([String::from("tmpfs")]);
-            let exclude = HashSet::from([String::from("squashfs")]);
-            let fs_selector = FsSelector { include, exclude };
+            let include = Some(vec![String::from("tmpfs")]);
+            let exclude = Some(vec![String::from("squashfs")]);
             let opt = Options {
-                fs_selector,
+                include,
+                exclude,
                 ..Default::default()
             };
             let m = mount_info("ext4", "/mnt/foo", false, false);
@@ -690,11 +660,11 @@ mod tests {
 
         #[test]
         fn test_include_and_exclude_match_exclude() {
-            let include = HashSet::from([String::from("tmpfs")]);
-            let exclude = HashSet::from([String::from("ext4")]);
-            let fs_selector = FsSelector { include, exclude };
+            let include = Some(vec![String::from("tmpfs")]);
+            let exclude = Some(vec![String::from("ext4")]);
             let opt = Options {
-                fs_selector,
+                include,
+                exclude,
                 ..Default::default()
             };
             let m = mount_info("ext4", "/mnt/foo", false, false);
@@ -703,11 +673,11 @@ mod tests {
 
         #[test]
         fn test_include_and_exclude_match_include() {
-            let include = HashSet::from([String::from("ext4")]);
-            let exclude = HashSet::from([String::from("squashfs")]);
-            let fs_selector = FsSelector { include, exclude };
+            let include = Some(vec![String::from("ext4")]);
+            let exclude = Some(vec![String::from("squashfs")]);
             let opt = Options {
-                fs_selector,
+                include,
+                exclude,
                 ..Default::default()
             };
             let m = mount_info("ext4", "/mnt/foo", false, false);
@@ -719,11 +689,11 @@ mod tests {
             // TODO The same filesystem type in both `include` and
             // `exclude` should cause an error, but currently does
             // not.
-            let include = HashSet::from([String::from("ext4")]);
-            let exclude = HashSet::from([String::from("ext4")]);
-            let fs_selector = FsSelector { include, exclude };
+            let include = Some(vec![String::from("ext4")]);
+            let exclude = Some(vec![String::from("ext4")]);
             let opt = Options {
-                fs_selector,
+                include,
+                exclude,
                 ..Default::default()
             };
             let m = mount_info("ext4", "/mnt/foo", false, false);
