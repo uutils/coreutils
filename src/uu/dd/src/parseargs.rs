@@ -4,7 +4,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore ctty, ctable, iconvflags, oconvflags parseargs
+// spell-checker:ignore ctty, ctable, iseek, oseek, iconvflags, oconvflags parseargs
 
 #[cfg(test)]
 mod unit_tests;
@@ -765,6 +765,42 @@ pub fn parse_seek_amt(
     matches: &Matches,
 ) -> Result<Option<u64>, ParseError> {
     if let Some(amt) = matches.value_of(options::SEEK) {
+        let n = parse_bytes_with_opt_multiplier(amt)?;
+        if oflags.seek_bytes {
+            Ok(Some(n))
+        } else {
+            Ok(Some(*obs as u64 * n))
+        }
+    } else {
+        Ok(None)
+    }
+}
+
+/// Parse the amount of the input file to seek.
+pub fn parse_iseek_amt(
+    ibs: &usize,
+    iflags: &IFlags,
+    matches: &Matches,
+) -> Result<Option<u64>, ParseError> {
+    if let Some(amt) = matches.value_of(options::ISEEK) {
+        let n = parse_bytes_with_opt_multiplier(amt)?;
+        if iflags.skip_bytes {
+            Ok(Some(n))
+        } else {
+            Ok(Some(*ibs as u64 * n))
+        }
+    } else {
+        Ok(None)
+    }
+}
+
+/// Parse the amount of the input file to seek.
+pub fn parse_oseek_amt(
+    obs: &usize,
+    oflags: &OFlags,
+    matches: &Matches,
+) -> Result<Option<u64>, ParseError> {
+    if let Some(amt) = matches.value_of(options::OSEEK) {
         let n = parse_bytes_with_opt_multiplier(amt)?;
         if oflags.seek_bytes {
             Ok(Some(n))

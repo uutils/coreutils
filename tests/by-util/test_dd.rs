@@ -1,4 +1,4 @@
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg
 
 use crate::common::util::*;
 
@@ -1138,4 +1138,49 @@ fn test_block_sync() {
         // blocks:    1    2    3
         .stdout_is("012  abcde     ")
         .stderr_is("2+1 records in\n0+1 records out\n1 truncated record\n");
+}
+
+#[test]
+fn test_bytes_count_bytes_iflag() {
+    new_ucmd!()
+        .args(&["conv=swab", "count=14", "iflag=count_bytes"])
+        .pipe_in("0123456789abcdefghijklm")
+        .succeeds()
+        .stdout_is("1032547698badc");
+}
+
+#[test]
+fn test_bytes_skip_bytes_iflag() {
+    new_ucmd!()
+        .args(&["skip=10", "iflag=skip_bytes"])
+        .pipe_in("0123456789abcdefghijklm")
+        .succeeds()
+        .stdout_is("abcdefghijklm");
+}
+
+#[test]
+fn test_bytes_skip_bytes_pipe_iflag() {
+    new_ucmd!()
+        .args(&["skip=10", "iflag=skip_bytes", "bs=2"])
+        .pipe_in("0123456789abcdefghijklm")
+        .succeeds()
+        .stdout_is("abcdefghijklm");
+}
+
+#[test]
+fn test_bytes_oseek_bytes_oflag() {
+    new_ucmd!()
+        .args(&["seek=8", "oflag=seek_bytes", "bs=2"])
+        .pipe_in("abcdefghijklm")
+        .succeeds()
+        .stdout_is_fixture_bytes("dd-bytes-alphabet-null.spec");
+}
+
+#[test]
+fn test_bytes_oseek_bytes_trunc_oflag() {
+    new_ucmd!()
+        .args(&["seek=8", "oflag=seek_bytes", "bs=2", "count=0"])
+        .pipe_in("abcdefghijklm")
+        .succeeds()
+        .stdout_is_fixture_bytes("dd-bytes-null-trunc.spec");
 }
