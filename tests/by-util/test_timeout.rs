@@ -45,3 +45,22 @@ fn test_zero_timeout() {
         .no_stderr()
         .no_stdout();
 }
+
+#[test]
+fn test_command_empty_args() {
+    new_ucmd!()
+        .args(&["", ""])
+        .fails()
+        .stderr_contains("timeout: empty string");
+}
+
+#[test]
+fn test_preserve_status() {
+    new_ucmd!()
+        .args(&["--preserve-status", ".1", "sleep", "10"])
+        .fails()
+        // 128 + SIGTERM = 128 + 15
+        .code_is(128 + 15)
+        .no_stderr()
+        .no_stdout();
+}
