@@ -442,8 +442,10 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(OPT_EXCLUDE_TYPE)
                 .short('x')
                 .long("exclude-type")
+                .allow_invalid_utf8(true)
                 .takes_value(true)
                 .use_delimiter(true)
+                .multiple_occurrences(true)
                 .help("limit listing to file systems not of type TYPE"),
         )
         .arg(Arg::new(OPT_PATHS).multiple_occurrences(true))
