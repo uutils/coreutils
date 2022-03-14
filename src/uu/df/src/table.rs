@@ -12,7 +12,8 @@
 use number_prefix::NumberPrefix;
 
 use crate::columns::Column;
-use crate::{BlockSize, Filesystem, Options};
+use crate::filesystem::Filesystem;
+use crate::{BlockSize, Options};
 use uucore::fsext::{FsUsage, MountInfo};
 
 use std::fmt;

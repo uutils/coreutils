@@ -8,13 +8,12 @@
 // spell-checker:ignore itotal iused iavail ipcent pcent tmpfs squashfs lofs
 mod blocks;
 mod columns;
+mod filesystem;
 mod table;
 
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
-#[cfg(unix)]
-use uucore::fsext::statfs;
-use uucore::fsext::{read_fs_list, FsUsage, MountInfo};
+use uucore::fsext::{read_fs_list, MountInfo};
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
@@ -23,6 +22,7 @@ use std::path::Path;
 
 use crate::blocks::{block_size_from_matches, BlockSize};
 use crate::columns::Column;
+use crate::filesystem::Filesystem;
 use crate::table::{DisplayRow, Header, Row};
 
 static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
@@ -133,36 +133,6 @@ impl Options {
             show_total: matches.is_present(OPT_TOTAL),
             columns: Column::from_matches(matches),
         })
-    }
-}
-
-#[derive(Debug, Clone)]
-struct Filesystem {
-    mount_info: MountInfo,
-    usage: FsUsage,
-}
-
-impl Filesystem {
-    // TODO: resolve uuid in `mount_info.dev_name` if exists
-    fn new(mount_info: MountInfo) -> Option<Self> {
-        let _stat_path = if !mount_info.mount_dir.is_empty() {
-            mount_info.mount_dir.clone()
-        } else {
-            #[cfg(unix)]
-            {
-                mount_info.dev_name.clone()
-            }
-            #[cfg(windows)]
-            {
-                // On windows, we expect the volume id
-                mount_info.dev_id.clone()
-            }
-        };
-        #[cfg(unix)]
-        let usage = FsUsage::new(statfs(_stat_path).ok()?);
-        #[cfg(windows)]
-        let usage = FsUsage::new(Path::new(&_stat_path));
-        Some(Self { mount_info, usage })
     }
 }
 
