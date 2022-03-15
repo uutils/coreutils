@@ -11,7 +11,9 @@ static TEST_DIR4: &str = "mkdir_test4/mkdir_test4_1";
 static TEST_DIR5: &str = "mkdir_test5/mkdir_test5_1";
 static TEST_DIR6: &str = "mkdir_test6";
 static TEST_FILE7: &str = "mkdir_test7";
-static TEST_DIR8: &str = "mkdir_test8";
+static TEST_DIR8: &str = "mkdir_test8/mkdir_test8_1/mkdir_test8_2";
+static TEST_DIR9: &str = "mkdir_test9/../mkdir_test9_1/../mkdir_test9_2";
+static TEST_DIR10: &str = "mkdir_test10";
 
 #[test]
 fn test_mkdir_mkdir() {
@@ -105,6 +107,27 @@ fn test_multi_symbolic() {
 }
 
 #[test]
+fn test_recursive_reporting() {
+    new_ucmd!()
+        .arg("-p")
+        .arg("-v")
+        .arg(TEST_DIR8)
+        .succeeds()
+        .stdout_contains("created directory 'mkdir_test8'")
+        .stdout_contains("created directory 'mkdir_test8/mkdir_test8_1'")
+        .stdout_contains("created directory 'mkdir_test8/mkdir_test8_1/mkdir_test8_2'");
+    new_ucmd!().arg("-v").arg(TEST_DIR8).fails().no_stdout();
+    new_ucmd!()
+        .arg("-p")
+        .arg("-v")
+        .arg(TEST_DIR9)
+        .succeeds()
+        .stdout_contains("created directory 'mkdir_test9'")
+        .stdout_contains("created directory 'mkdir_test9/../mkdir_test9_1'")
+        .stdout_contains("created directory 'mkdir_test9/../mkdir_test9_1/../mkdir_test9_2'");
+}
+
+#[test]
 #[cfg(not(windows))]
 fn test_umask_compliance() {
     fn test_single_case(umask_set: mode_t) {
@@ -112,8 +135,8 @@ fn test_umask_compliance() {
 
         let original_umask = unsafe { umask(umask_set) };
 
-        ucmd.arg(TEST_DIR8).succeeds();
-        let perms = at.metadata(TEST_DIR8).permissions().mode() as mode_t;
+        ucmd.arg(TEST_DIR10).succeeds();
+        let perms = at.metadata(TEST_DIR10).permissions().mode() as mode_t;
 
         assert_eq!(perms, (!umask_set & 0o0777) + 0o40000); // before compare, add the setguid, uid bits
         unsafe { umask(original_umask); } // set umask back to original
@@ -122,5 +145,4 @@ fn test_umask_compliance() {
     for i in 0o0..0o777 { // tests all permission combinations
         test_single_case(i);
     }
-
 }

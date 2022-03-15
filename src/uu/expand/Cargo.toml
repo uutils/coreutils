@@ -6,7 +6,7 @@ license = "MIT"
 description = "expand ~ (uutils) convert input tabs to spaces"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/expand"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/expand"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

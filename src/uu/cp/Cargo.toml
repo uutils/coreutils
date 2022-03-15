@@ -10,7 +10,7 @@ license = "MIT"
 description = "cp ~ (uutils) copy SOURCE to DESTINATION"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/cp"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/cp"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

@@ -6,7 +6,7 @@ license = "MIT"
 description = "more ~ (uutils) input perusal filter"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/more"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/more"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -20,7 +20,7 @@ uucore = { version = ">=0.0.7", package = "uucore", path = "../../uucore" }
 crossterm = ">=0.19"
 atty = "0.2"
 unicode-width = "0.1.7"
-unicode-segmentation = "1.7.1"
+unicode-segmentation = "1.9.0"
 
 [target.'cfg(target_os = "redox")'.dependencies]
 redox_termios = "0.1"

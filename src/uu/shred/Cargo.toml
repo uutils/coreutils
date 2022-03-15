@@ -6,7 +6,7 @@ license = "MIT"
 description = "shred ~ (uutils) hide former FILE contents with repeated overwrites"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/shred"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/shred"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

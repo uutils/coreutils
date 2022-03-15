@@ -29,6 +29,7 @@ static TEST_EXISTING_FILE: &str = "existing_file.txt";
 static TEST_HELLO_WORLD_SOURCE: &str = "hello_world.txt";
 static TEST_HELLO_WORLD_SOURCE_SYMLINK: &str = "hello_world.txt.link";
 static TEST_HELLO_WORLD_DEST: &str = "copy_of_hello_world.txt";
+static TEST_HELLO_WORLD_DEST_SYMLINK: &str = "copy_of_hello_world.txt.link";
 static TEST_HOW_ARE_YOU_SOURCE: &str = "how_are_you.txt";
 static TEST_HOW_ARE_YOU_DEST: &str = "hello_dir/how_are_you.txt";
 static TEST_COPY_TO_FOLDER: &str = "hello_dir/";
@@ -686,6 +687,51 @@ fn test_cp_no_deref() {
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
     let path_to_check = path_to_new_symlink.to_str().unwrap();
     assert_eq!(at.read(path_to_check), "Hello, World!\n");
+}
+
+#[test]
+fn test_cp_no_deref_link_onto_link() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.copy(TEST_HELLO_WORLD_SOURCE, TEST_HELLO_WORLD_DEST);
+
+    #[cfg(not(windows))]
+    let _r = fs::symlink(
+        TEST_HELLO_WORLD_SOURCE,
+        at.subdir.join(TEST_HELLO_WORLD_SOURCE_SYMLINK),
+    );
+    #[cfg(windows)]
+    let _r = symlink_file(
+        TEST_HELLO_WORLD_SOURCE,
+        at.subdir.join(TEST_HELLO_WORLD_SOURCE_SYMLINK),
+    );
+
+    #[cfg(not(windows))]
+    let _r = fs::symlink(
+        TEST_HELLO_WORLD_DEST,
+        at.subdir.join(TEST_HELLO_WORLD_DEST_SYMLINK),
+    );
+    #[cfg(windows)]
+    let _r = symlink_file(
+        TEST_HELLO_WORLD_DEST,
+        at.subdir.join(TEST_HELLO_WORLD_DEST_SYMLINK),
+    );
+
+    ucmd.arg("-P")
+        .arg(TEST_HELLO_WORLD_SOURCE_SYMLINK)
+        .arg(TEST_HELLO_WORLD_DEST_SYMLINK)
+        .succeeds();
+
+    // Ensure that the target of the destination was not modified.
+    assert!(!at
+        .symlink_metadata(TEST_HELLO_WORLD_DEST)
+        .file_type()
+        .is_symlink());
+    assert!(at
+        .symlink_metadata(TEST_HELLO_WORLD_DEST_SYMLINK)
+        .file_type()
+        .is_symlink());
+    assert_eq!(at.read(TEST_HELLO_WORLD_DEST_SYMLINK), "Hello, World!\n");
 }
 
 #[test]
@@ -1461,6 +1507,20 @@ fn test_cp_archive_on_nonexistent_file() {
         .stderr_only(
             "cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)",
         );
+}
+
+#[test]
+fn test_cp_link_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file2");
+    ucmd.arg("-l")
+        .arg("-b")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("file2")
+        .succeeds();
+
+    assert!(at.file_exists("file2~"));
+    assert_eq!(at.read("file2"), "Hello, World!\n");
 }
 
 #[test]

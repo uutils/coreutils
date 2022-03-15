@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) PREFIXaa
+// spell-checker:ignore (ToDO) PREFIXaa nbbbb ncccc
 
 mod filenames;
 mod number;
@@ -760,6 +760,187 @@ impl<'a> Write for LineChunkWriter<'a> {
     }
 }
 
+/// Write lines to each sequential output files, limited by bytes.
+///
+/// This struct maintains an underlying writer representing the
+/// current chunk of the output. On each call to [`write`], it writes
+/// as many lines as possible to the current chunk without exceeding
+/// the specified byte limit. If a single line has more bytes than the
+/// limit, then fill an entire single chunk with those bytes and
+/// handle the remainder of the line as if it were its own distinct
+/// line. As many new underlying writers are created as needed to
+/// write all the data in the input buffer.
+struct LineBytesChunkWriter<'a> {
+    /// Parameters for creating the underlying writer for each new chunk.
+    settings: &'a Settings,
+
+    /// The maximum number of bytes allowed for a single chunk of output.
+    chunk_size: u64,
+
+    /// Running total of number of chunks that have been completed.
+    num_chunks_written: usize,
+
+    /// Remaining capacity in number of bytes in the current chunk.
+    ///
+    /// This number starts at `chunk_size` and decreases as lines are
+    /// written. Once it reaches zero, a writer for a new chunk is
+    /// initialized and this number gets reset to `chunk_size`.
+    num_bytes_remaining_in_current_chunk: usize,
+
+    /// The underlying writer for the current chunk.
+    ///
+    /// Once the number of bytes written to this writer exceeds
+    /// `chunk_size`, a new writer is initialized and assigned to this
+    /// field.
+    inner: BufWriter<Box<dyn Write>>,
+
+    /// Iterator that yields filenames for each chunk.
+    filename_iterator: FilenameIterator<'a>,
+}
+
+impl<'a> LineBytesChunkWriter<'a> {
+    fn new(chunk_size: u64, settings: &'a Settings) -> Option<LineBytesChunkWriter<'a>> {
+        let mut filename_iterator = FilenameIterator::new(
+            &settings.prefix,
+            &settings.additional_suffix,
+            settings.suffix_length,
+            settings.suffix_type,
+        );
+        let filename = filename_iterator.next()?;
+        if settings.verbose {
+            println!("creating file {}", filename.quote());
+        }
+        let inner = platform::instantiate_current_writer(&settings.filter, &filename);
+        Some(LineBytesChunkWriter {
+            settings,
+            chunk_size,
+            num_bytes_remaining_in_current_chunk: chunk_size.try_into().unwrap(),
+            num_chunks_written: 0,
+            inner,
+            filename_iterator,
+        })
+    }
+}
+
+impl<'a> Write for LineBytesChunkWriter<'a> {
+    /// Write as many lines to a chunk as possible without
+    /// exceeding the byte limit. If a single line has more bytes
+    /// than the limit, then fill an entire single chunk with those
+    /// bytes and handle the remainder of the line as if it were
+    /// its own distinct line.
+    ///
+    /// For example: if the `chunk_size` is 8 and the input is:
+    ///
+    /// ```text
+    /// aaaaaaaaa\nbbbb\ncccc\ndd\nee\n
+    /// ```
+    ///
+    /// then the output gets broken into chunks like this:
+    ///
+    /// ```text
+    /// chunk 0    chunk 1    chunk 2    chunk 3
+    ///
+    /// 0            1             2
+    /// 01234567  89 01234   56789 012   345 6
+    /// |------|  |-------|  |--------|  |---|
+    /// aaaaaaaa  a\nbbbb\n  cccc\ndd\n  ee\n
+    /// ```
+    fn write(&mut self, mut buf: &[u8]) -> std::io::Result<usize> {
+        // The total number of bytes written during the loop below.
+        //
+        // It is necessary to keep this running total because we may
+        // be making multiple calls to `write()` on multiple different
+        // underlying writers and we want the final reported number of
+        // bytes written to reflect the total number of bytes written
+        // to all of the underlying writers.
+        let mut total_bytes_written = 0;
+
+        // Loop until we have written all bytes in the input buffer
+        // (or an IO error occurs).
+        loop {
+            // If we have filled the current chunk with bytes, then
+            // start a new chunk and initialize its corresponding
+            // writer.
+            if self.num_bytes_remaining_in_current_chunk == 0 {
+                self.num_chunks_written += 1;
+                let filename = self.filename_iterator.next().ok_or_else(|| {
+                    std::io::Error::new(ErrorKind::Other, "output file suffixes exhausted")
+                })?;
+                if self.settings.verbose {
+                    println!("creating file {}", filename.quote());
+                }
+                self.inner = platform::instantiate_current_writer(&self.settings.filter, &filename);
+                self.num_bytes_remaining_in_current_chunk = self.chunk_size.try_into().unwrap();
+            }
+
+            // Find the first newline character in the buffer.
+            match memchr::memchr(b'\n', buf) {
+                // If there is no newline character and the buffer is
+                // empty, then we are done writing.
+                None if buf.is_empty() => {
+                    return Ok(total_bytes_written);
+                }
+
+                // If there is no newline character and the buffer is
+                // not empty, then write as many bytes as we can and
+                // then move on to the next chunk if necessary.
+                None => {
+                    let end = self.num_bytes_remaining_in_current_chunk;
+                    let num_bytes_written = self.inner.write(&buf[..end])?;
+                    self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
+                    total_bytes_written += num_bytes_written;
+                    buf = &buf[num_bytes_written..];
+                }
+
+                // If there is a newline character and the line
+                // (including the newline character) will fit in the
+                // current chunk, then write the entire line and
+                // continue to the next iteration. (See chunk 1 in the
+                // example comment above.)
+                Some(i) if i < self.num_bytes_remaining_in_current_chunk => {
+                    let num_bytes_written = self.inner.write(&buf[..i + 1])?;
+                    self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
+                    total_bytes_written += num_bytes_written;
+                    buf = &buf[num_bytes_written..];
+                }
+
+                // If there is a newline character, the line
+                // (including the newline character) will not fit in
+                // the current chunk, *and* no other lines have been
+                // written to the current chunk, then write as many
+                // bytes as we can and continue to the next
+                // iteration. (See chunk 0 in the example comment
+                // above.)
+                Some(_)
+                    if self.num_bytes_remaining_in_current_chunk
+                        == self.chunk_size.try_into().unwrap() =>
+                {
+                    let end = self.num_bytes_remaining_in_current_chunk;
+                    let num_bytes_written = self.inner.write(&buf[..end])?;
+                    self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
+                    total_bytes_written += num_bytes_written;
+                    buf = &buf[num_bytes_written..];
+                }
+
+                // If there is a newline character, the line
+                // (including the newline character) will not fit in
+                // the current chunk, and at least one other line has
+                // been written to the current chunk, then signal to
+                // the next iteration that a new chunk needs to be
+                // created and continue to the next iteration of the
+                // loop to try writing the line there.
+                Some(_) => {
+                    self.num_bytes_remaining_in_current_chunk = 0;
+                }
+            }
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
 /// Split a file into a specific number of chunks by byte.
 ///
 /// This function always creates one output file for each chunk, even
@@ -859,6 +1040,11 @@ where
 ///
 /// This function returns an error if there is a problem reading from
 /// `reader` or writing to one of the output files.
+///
+/// # See also
+///
+/// * [`kth_chunk_by_line`], which splits its input in the same way,
+///   but writes only one specified chunk to stdout.
 fn split_into_n_chunks_by_line<R>(
     settings: &Settings,
     reader: &mut R,
@@ -915,6 +1101,67 @@ where
     Ok(())
 }
 
+/// Print the k-th chunk of a file, splitting by line.
+///
+/// This function is like [`split_into_n_chunks_by_line`], but instead
+/// of writing each chunk to its own file, it only writes to stdout
+/// the contents of the chunk identified by `chunk_number`.
+///
+/// # Errors
+///
+/// This function returns an error if there is a problem reading from
+/// `reader` or writing to one of the output files.
+///
+/// # See also
+///
+/// * [`split_into_n_chunks_by_line`], which splits its input in the
+///   same way, but writes each chunk to its own file.
+fn kth_chunk_by_line<R>(
+    settings: &Settings,
+    reader: &mut R,
+    chunk_number: u64,
+    num_chunks: u64,
+) -> UResult<()>
+where
+    R: BufRead,
+{
+    // Get the size of the input file in bytes and compute the number
+    // of bytes per chunk.
+    let metadata = metadata(&settings.input).unwrap();
+    let num_bytes = metadata.len();
+    let chunk_size = (num_bytes / (num_chunks as u64)) as usize;
+
+    // Write to stdout instead of to a file.
+    let stdout = std::io::stdout();
+    let mut writer = stdout.lock();
+
+    let mut num_bytes_remaining_in_current_chunk = chunk_size;
+    let mut i = 0;
+    for line_result in reader.lines() {
+        let line = line_result?;
+        let bytes = line.as_bytes();
+        if i == chunk_number {
+            writer.write_all(bytes)?;
+            writer.write_all(b"\n")?;
+        }
+
+        // Add one byte for the newline character.
+        let num_bytes = bytes.len() + 1;
+        if num_bytes >= num_bytes_remaining_in_current_chunk {
+            num_bytes_remaining_in_current_chunk = chunk_size;
+            i += 1;
+        } else {
+            num_bytes_remaining_in_current_chunk -= num_bytes;
+        }
+
+        if i > chunk_number {
+            break;
+        }
+    }
+
+    Ok(())
+}
+
 fn split(settings: &Settings) -> UResult<()> {
     let mut reader = BufReader::new(if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
@@ -934,6 +1181,12 @@ fn split(settings: &Settings) -> UResult<()> {
         }
         Strategy::Number(NumberType::Lines(num_chunks)) => {
             split_into_n_chunks_by_line(settings, &mut reader, num_chunks)
+        }
+        Strategy::Number(NumberType::KthLines(chunk_number, num_chunks)) => {
+            // The chunk number is given as a 1-indexed number, but it
+            // is a little easier to deal with a 0-indexed number.
+            let chunk_number = chunk_number - 1;
+            kth_chunk_by_line(settings, &mut reader, chunk_number, num_chunks)
         }
         Strategy::Number(_) => Err(USimpleError::new(1, "-n mode not yet fully implemented")),
         Strategy::Lines(chunk_size) => {
@@ -955,8 +1208,27 @@ fn split(settings: &Settings) -> UResult<()> {
                 },
             }
         }
-        Strategy::Bytes(chunk_size) | Strategy::LineBytes(chunk_size) => {
+        Strategy::Bytes(chunk_size) => {
             let mut writer = ByteChunkWriter::new(chunk_size, settings)
+                .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+            match std::io::copy(&mut reader, &mut writer) {
+                Ok(_) => Ok(()),
+                Err(e) => match e.kind() {
+                    // TODO Since the writer object controls the creation of
+                    // new files, we need to rely on the `std::io::Result`
+                    // returned by its `write()` method to communicate any
+                    // errors to this calling scope. If a new file cannot be
+                    // created because we have exceeded the number of
+                    // allowable filenames, we use `ErrorKind::Other` to
+                    // indicate that. A special error message needs to be
+                    // printed in that case.
+                    ErrorKind::Other => Err(USimpleError::new(1, "output file suffixes exhausted")),
+                    _ => Err(uio_error!(e, "input/output error")),
+                },
+            }
+        }
+        Strategy::LineBytes(chunk_size) => {
+            let mut writer = LineBytesChunkWriter::new(chunk_size, settings)
                 .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
             match std::io::copy(&mut reader, &mut writer) {
                 Ok(_) => Ok(()),

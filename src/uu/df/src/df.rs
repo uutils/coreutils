@@ -5,22 +5,24 @@
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
-// spell-checker:ignore itotal iused iavail ipcent pcent
+// spell-checker:ignore itotal iused iavail ipcent pcent tmpfs squashfs lofs
+mod blocks;
+mod columns;
+mod filesystem;
 mod table;
 
-#[cfg(unix)]
-use uucore::fsext::statfs;
-use uucore::fsext::{read_fs_list, FsUsage, MountInfo};
-use uucore::{error::UResult, format_usage};
+use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
+use uucore::fsext::{read_fs_list, MountInfo};
 
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 
-use std::collections::HashSet;
-use std::iter::FromIterator;
-
-#[cfg(windows)]
+use std::fmt;
 use std::path::Path;
 
+use crate::blocks::{block_size_from_matches, BlockSize};
+use crate::columns::Column;
+use crate::filesystem::Filesystem;
 use crate::table::{DisplayRow, Header, Row};
 
 static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
@@ -49,145 +51,93 @@ static OUTPUT_FIELD_LIST: [&str; 12] = [
     "file", "target",
 ];
 
-/// Store names of file systems as a selector.
-/// Note: `exclude` takes priority over `include`.
-#[derive(Default)]
-struct FsSelector {
-    include: HashSet<String>,
-    exclude: HashSet<String>,
-}
-
-/// A block size to use in condensing the display of a large number of bytes.
+/// Parameters that control the behavior of `df`.
 ///
-/// The [`BlockSize::Bytes`] variant represents a static block
-/// size. The [`BlockSize::HumanReadableDecimal`] and
-/// [`BlockSize::HumanReadableBinary`] variants represent dynamic
-/// block sizes: as the number of bytes increases, the divisor
-/// increases as well (for example, from 1 to 1,000 to 1,000,000 and
-/// so on in the case of [`BlockSize::HumanReadableDecimal`]).
-///
-/// The default variant is `Bytes(1024)`.
-enum BlockSize {
-    /// A fixed number of bytes.
-    ///
-    /// The number must be positive.
-    Bytes(u64),
-
-    /// Use the largest divisor corresponding to a unit, like B, K, M, G, etc.
-    ///
-    /// This variant represents powers of 1,000. Contrast with
-    /// [`BlockSize::HumanReadableBinary`], which represents powers of
-    /// 1,024.
-    HumanReadableDecimal,
-
-    /// Use the largest divisor corresponding to a unit, like B, K, M, G, etc.
-    ///
-    /// This variant represents powers of 1,024. Contrast with
-    /// [`BlockSize::HumanReadableDecimal`], which represents powers
-    /// of 1,000.
-    HumanReadableBinary,
-}
-
-impl Default for BlockSize {
-    fn default() -> Self {
-        Self::Bytes(1024)
-    }
-}
-
-impl From<&ArgMatches> for BlockSize {
-    fn from(matches: &ArgMatches) -> Self {
-        if matches.is_present(OPT_HUMAN_READABLE) {
-            Self::HumanReadableBinary
-        } else if matches.is_present(OPT_HUMAN_READABLE_2) {
-            Self::HumanReadableDecimal
-        } else {
-            Self::default()
-        }
-    }
-}
-
-#[derive(Default)]
+/// Most of these parameters control which rows and which columns are
+/// displayed. The `block_size` determines the units to use when
+/// displaying numbers of bytes or inodes.
 struct Options {
     show_local_fs: bool,
     show_all_fs: bool,
     show_listed_fs: bool,
-    show_fs_type: bool,
-    show_inode_instead: bool,
     block_size: BlockSize,
-    fs_selector: FsSelector,
+
+    /// Optional list of filesystem types to include in the output table.
+    ///
+    /// If this is not `None`, only filesystems that match one of
+    /// these types will be listed.
+    include: Option<Vec<String>>,
+
+    /// Optional list of filesystem types to exclude from the output table.
+    ///
+    /// If this is not `None`, filesystems that match one of these
+    /// types will *not* be listed.
+    exclude: Option<Vec<String>>,
+
+    /// Whether to show a final row comprising the totals for each column.
+    show_total: bool,
+
+    /// Sequence of columns to display in the output table.
+    columns: Vec<Column>,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            show_local_fs: Default::default(),
+            show_all_fs: Default::default(),
+            show_listed_fs: Default::default(),
+            block_size: Default::default(),
+            include: Default::default(),
+            exclude: Default::default(),
+            show_total: Default::default(),
+            columns: vec![
+                Column::Source,
+                Column::Size,
+                Column::Used,
+                Column::Avail,
+                Column::Pcent,
+                Column::Target,
+            ],
+        }
+    }
+}
+
+enum OptionsError {
+    InvalidBlockSize,
+}
+
+impl fmt::Display for OptionsError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            // TODO This should include the raw string provided as the argument.
+            //
+            // TODO This needs to vary based on whether `--block-size`
+            // or `-B` were provided.
+            Self::InvalidBlockSize => write!(f, "invalid --block-size argument"),
+        }
+    }
 }
 
 impl Options {
     /// Convert command-line arguments into [`Options`].
-    fn from(matches: &ArgMatches) -> Self {
-        Self {
+    fn from(matches: &ArgMatches) -> Result<Self, OptionsError> {
+        Ok(Self {
             show_local_fs: matches.is_present(OPT_LOCAL),
             show_all_fs: matches.is_present(OPT_ALL),
             show_listed_fs: false,
-            show_fs_type: matches.is_present(OPT_PRINT_TYPE),
-            show_inode_instead: matches.is_present(OPT_INODES),
-            block_size: BlockSize::from(matches),
-            fs_selector: FsSelector::from(matches),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct Filesystem {
-    mount_info: MountInfo,
-    usage: FsUsage,
-}
-
-impl FsSelector {
-    /// Convert command-line arguments into a [`FsSelector`].
-    ///
-    /// This function reads the include and exclude sets from
-    /// [`ArgMatches`] and returns the corresponding [`FsSelector`]
-    /// instance.
-    fn from(matches: &ArgMatches) -> Self {
-        let include = HashSet::from_iter(matches.values_of_lossy(OPT_TYPE).unwrap_or_default());
-        let exclude = HashSet::from_iter(
-            matches
-                .values_of_lossy(OPT_EXCLUDE_TYPE)
-                .unwrap_or_default(),
-        );
-        Self { include, exclude }
-    }
-
-    fn should_select(&self, fs_type: &str) -> bool {
-        if self.exclude.contains(fs_type) {
-            return false;
-        }
-        self.include.is_empty() || self.include.contains(fs_type)
-    }
-}
-
-impl Filesystem {
-    // TODO: resolve uuid in `mount_info.dev_name` if exists
-    fn new(mount_info: MountInfo) -> Option<Self> {
-        let _stat_path = if !mount_info.mount_dir.is_empty() {
-            mount_info.mount_dir.clone()
-        } else {
-            #[cfg(unix)]
-            {
-                mount_info.dev_name.clone()
-            }
-            #[cfg(windows)]
-            {
-                // On windows, we expect the volume id
-                mount_info.dev_id.clone()
-            }
-        };
-        #[cfg(unix)]
-        let usage = FsUsage::new(statfs(_stat_path).ok()?);
-        #[cfg(windows)]
-        let usage = FsUsage::new(Path::new(&_stat_path));
-        Some(Self { mount_info, usage })
+            block_size: block_size_from_matches(matches)
+                .map_err(|_| OptionsError::InvalidBlockSize)?,
+            include: matches.values_of_lossy(OPT_TYPE),
+            exclude: matches.values_of_lossy(OPT_EXCLUDE_TYPE),
+            show_total: matches.is_present(OPT_TOTAL),
+            columns: Column::from_matches(matches),
+        })
     }
 }
 
 /// Whether to display the mount info given the inclusion settings.
-fn is_included(mi: &MountInfo, paths: &[String], opt: &Options) -> bool {
+fn is_included(mi: &MountInfo, opt: &Options) -> bool {
     // Don't show remote filesystems if `--local` has been given.
     if mi.remote && opt.show_local_fs {
         return false;
@@ -199,14 +149,15 @@ fn is_included(mi: &MountInfo, paths: &[String], opt: &Options) -> bool {
     }
 
     // Don't show filesystems if they have been explicitly excluded.
-    if !opt.fs_selector.should_select(&mi.fs_type) {
-        return false;
+    if let Some(ref excludes) = opt.exclude {
+        if excludes.contains(&mi.fs_type) {
+            return false;
+        }
     }
-
-    // Don't show filesystems other than the ones specified on the
-    // command line, if any.
-    if !paths.is_empty() && !paths.contains(&mi.mount_dir) {
-        return false;
+    if let Some(ref includes) = opt.include {
+        if !includes.contains(&mi.fs_type) {
+            return false;
+        }
     }
 
     true
@@ -258,15 +209,13 @@ fn is_best(previous: &[MountInfo], mi: &MountInfo) -> bool {
 
 /// Keep only the specified subset of [`MountInfo`] instances.
 ///
-/// If `paths` is non-empty, this function excludes any [`MountInfo`]
-/// that is not mounted at the specified path.
-///
 /// The `opt` argument specifies a variety of ways of excluding
 /// [`MountInfo`] instances; see [`Options`] for more information.
 ///
 /// Finally, if there are duplicate entries, the one with the shorter
 /// path is kept.
-fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Vec<MountInfo> {
+
+fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
     let mut result = vec![];
     for mi in vmi {
         // TODO The running time of the `is_best()` function is linear
@@ -274,21 +223,45 @@ fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Ve
         // this loop quadratic in the length of `vmi`. This could be
         // improved by a more efficient implementation of `is_best()`,
         // but `vmi` is probably not very long in practice.
-        if is_included(&mi, paths, opt) && is_best(&result, &mi) {
+        if is_included(&mi, opt) && is_best(&result, &mi) {
             result.push(mi);
         }
     }
     result
 }
 
+/// Assign 1 `MountInfo` entry to each path
+/// `lofs` entries are skipped and dummy mount points are skipped
+/// Only the longest matching prefix for that path is considered
+/// `lofs` is for Solaris style loopback filesystem and is present in Solaris and FreeBSD.
+/// It works similar to symlinks
+fn get_point_list(vmi: &[MountInfo], paths: &[String]) -> Vec<MountInfo> {
+    paths
+        .iter()
+        .map(|p| {
+            vmi.iter()
+                .filter(|mi| mi.fs_type.ne("lofs"))
+                .filter(|mi| !mi.dummy)
+                .filter(|mi| p.starts_with(&mi.mount_dir))
+                .max_by_key(|mi| mi.mount_dir.len())
+                .unwrap()
+                .clone()
+        })
+        .collect::<Vec<MountInfo>>()
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
-    let paths: Vec<String> = matches
+    // Canonicalize the input_paths and then convert to string
+    let paths = matches
         .values_of(OPT_PATHS)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .map(Path::new)
+        .filter_map(|v| v.canonicalize().ok())
+        .filter_map(|v| v.into_os_string().into_string().ok())
+        .collect::<Vec<_>>();
 
     #[cfg(windows)]
     {
@@ -298,18 +271,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let opt = Options::from(&matches);
+    let opt = Options::from(&matches).map_err(|e| USimpleError::new(1, format!("{}", e)))?;
 
     let mounts = read_fs_list();
-    let data: Vec<Row> = filter_mount_list(mounts, &paths, &opt)
+
+    let op_mount_points: Vec<MountInfo> = if paths.is_empty() {
+        // Get all entries
+        filter_mount_list(mounts, &opt)
+    } else {
+        // Get Point for each input_path
+        get_point_list(&mounts, &paths)
+    };
+    let data: Vec<Row> = op_mount_points
         .into_iter()
         .filter_map(Filesystem::new)
         .filter(|fs| fs.usage.blocks != 0 || opt.show_all_fs || opt.show_listed_fs)
         .map(Into::into)
         .collect();
+
     println!("{}", Header::new(&opt));
+    let mut total = Row::new("total");
     for row in data {
-        println!("{}", DisplayRow::new(row, &opt));
+        println!("{}", DisplayRow::new(&row, &opt));
+        total += row;
+    }
+    if opt.show_total {
+        println!("{}", DisplayRow::new(&total, &opt));
     }
 
     Ok(())
@@ -430,4 +417,269 @@ pub fn uu_app<'a>() -> App<'a> {
                 .help("limit listing to file systems not of type TYPE"),
         )
         .arg(Arg::new(OPT_PATHS).multiple_occurrences(true))
+}
+
+#[cfg(test)]
+mod tests {
+
+    mod mount_info_lt {
+
+        use crate::mount_info_lt;
+        use uucore::fsext::MountInfo;
+
+        /// Instantiate a [`MountInfo`] with the given fields.
+        fn mount_info(dev_name: &str, mount_root: &str, mount_dir: &str) -> MountInfo {
+            MountInfo {
+                dev_id: String::new(),
+                dev_name: String::from(dev_name),
+                fs_type: String::new(),
+                mount_dir: String::from(mount_dir),
+                mount_option: String::new(),
+                mount_root: String::from(mount_root),
+                remote: false,
+                dummy: false,
+            }
+        }
+
+        #[test]
+        fn test_absolute() {
+            // Prefer device name "/dev/foo" over "dev_foo".
+            let m1 = mount_info("/dev/foo", "/", "/mnt/bar");
+            let m2 = mount_info("dev_foo", "/", "/mnt/bar");
+            assert!(!mount_info_lt(&m1, &m2));
+        }
+
+        #[test]
+        fn test_shorter() {
+            // Prefer mount directory "/mnt/bar" over "/mnt/bar/baz"...
+            let m1 = mount_info("/dev/foo", "/", "/mnt/bar");
+            let m2 = mount_info("/dev/foo", "/", "/mnt/bar/baz");
+            assert!(!mount_info_lt(&m1, &m2));
+
+            // ..but prefer mount root "/root" over "/".
+            let m1 = mount_info("/dev/foo", "/root", "/mnt/bar");
+            let m2 = mount_info("/dev/foo", "/", "/mnt/bar/baz");
+            assert!(mount_info_lt(&m1, &m2));
+        }
+
+        #[test]
+        fn test_over_mounted() {
+            // Prefer the earlier entry if the devices are different but
+            // the mount directory is the same.
+            let m1 = mount_info("/dev/foo", "/", "/mnt/baz");
+            let m2 = mount_info("/dev/bar", "/", "/mnt/baz");
+            assert!(!mount_info_lt(&m1, &m2));
+        }
+    }
+
+    mod is_best {
+
+        use crate::is_best;
+        use uucore::fsext::MountInfo;
+
+        /// Instantiate a [`MountInfo`] with the given fields.
+        fn mount_info(dev_id: &str, mount_dir: &str) -> MountInfo {
+            MountInfo {
+                dev_id: String::from(dev_id),
+                dev_name: String::new(),
+                fs_type: String::new(),
+                mount_dir: String::from(mount_dir),
+                mount_option: String::new(),
+                mount_root: String::new(),
+                remote: false,
+                dummy: false,
+            }
+        }
+
+        #[test]
+        fn test_empty() {
+            let m = mount_info("0", "/mnt/bar");
+            assert!(is_best(&[], &m));
+        }
+
+        #[test]
+        fn test_different_dev_id() {
+            let m1 = mount_info("0", "/mnt/bar");
+            let m2 = mount_info("1", "/mnt/bar");
+            assert!(is_best(&[m1.clone()], &m2));
+            assert!(is_best(&[m2], &m1));
+        }
+
+        #[test]
+        fn test_same_dev_id() {
+            // There are several conditions under which a `MountInfo` is
+            // considered "better" than the others, we're just checking
+            // one condition in this test.
+            let m1 = mount_info("0", "/mnt/bar");
+            let m2 = mount_info("0", "/mnt/bar/baz");
+            assert!(!is_best(&[m1.clone()], &m2));
+            assert!(is_best(&[m2], &m1));
+        }
+    }
+
+    mod is_included {
+
+        use crate::{is_included, Options};
+        use uucore::fsext::MountInfo;
+
+        /// Instantiate a [`MountInfo`] with the given fields.
+        fn mount_info(fs_type: &str, mount_dir: &str, remote: bool, dummy: bool) -> MountInfo {
+            MountInfo {
+                dev_id: String::new(),
+                dev_name: String::new(),
+                fs_type: String::from(fs_type),
+                mount_dir: String::from(mount_dir),
+                mount_option: String::new(),
+                mount_root: String::new(),
+                remote,
+                dummy,
+            }
+        }
+
+        #[test]
+        fn test_remote_included() {
+            let opt = Default::default();
+            let m = mount_info("ext4", "/mnt/foo", true, false);
+            assert!(is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_remote_excluded() {
+            let opt = Options {
+                show_local_fs: true,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", true, false);
+            assert!(!is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_dummy_included() {
+            let opt = Options {
+                show_all_fs: true,
+                show_listed_fs: true,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", false, true);
+            assert!(is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_dummy_excluded() {
+            let opt = Default::default();
+            let m = mount_info("ext4", "/mnt/foo", false, true);
+            assert!(!is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_exclude_match() {
+            let exclude = Some(vec![String::from("ext4")]);
+            let opt = Options {
+                exclude,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(!is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_exclude_no_match() {
+            let exclude = Some(vec![String::from("tmpfs")]);
+            let opt = Options {
+                exclude,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_include_match() {
+            let include = Some(vec![String::from("ext4")]);
+            let opt = Options {
+                include,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_include_no_match() {
+            let include = Some(vec![String::from("tmpfs")]);
+            let opt = Options {
+                include,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(!is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_include_and_exclude_match_neither() {
+            let include = Some(vec![String::from("tmpfs")]);
+            let exclude = Some(vec![String::from("squashfs")]);
+            let opt = Options {
+                include,
+                exclude,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(!is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_include_and_exclude_match_exclude() {
+            let include = Some(vec![String::from("tmpfs")]);
+            let exclude = Some(vec![String::from("ext4")]);
+            let opt = Options {
+                include,
+                exclude,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(!is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_include_and_exclude_match_include() {
+            let include = Some(vec![String::from("ext4")]);
+            let exclude = Some(vec![String::from("squashfs")]);
+            let opt = Options {
+                include,
+                exclude,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(is_included(&m, &opt));
+        }
+
+        #[test]
+        fn test_include_and_exclude_match_both() {
+            // TODO The same filesystem type in both `include` and
+            // `exclude` should cause an error, but currently does
+            // not.
+            let include = Some(vec![String::from("ext4")]);
+            let exclude = Some(vec![String::from("ext4")]);
+            let opt = Options {
+                include,
+                exclude,
+                ..Default::default()
+            };
+            let m = mount_info("ext4", "/mnt/foo", false, false);
+            assert!(!is_included(&m, &opt));
+        }
+    }
+
+    mod filter_mount_list {
+
+        use crate::filter_mount_list;
+
+        #[test]
+        fn test_empty() {
+            let opt = Default::default();
+            let mount_infos = vec![];
+            assert!(filter_mount_list(mount_infos, &opt).is_empty());
+        }
+    }
 }

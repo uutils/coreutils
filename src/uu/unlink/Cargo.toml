@@ -6,7 +6,7 @@ license = "MIT"
 description = "unlink ~ (uutils) remove a (file system) link to FILE"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/unlink"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/unlink"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

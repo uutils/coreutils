@@ -6,7 +6,7 @@ license = "MIT"
 description = "chroot ~ (uutils) run COMMAND under a new root directory"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/chroot"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/chroot"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

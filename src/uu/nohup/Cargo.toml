@@ -6,7 +6,7 @@ license = "MIT"
 description = "nohup ~ (uutils) run COMMAND, ignoring hangup signals"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/nohup"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/nohup"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
