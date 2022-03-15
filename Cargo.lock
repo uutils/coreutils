@@ -2408,7 +2408,6 @@ name = "uu_cksum"
 version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
- "libc",
  "uucore",
 ]
 
@@ -2417,7 +2416,6 @@ name = "uu_comm"
 version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
- "libc",
  "uucore",
 ]
 
@@ -2533,7 +2531,6 @@ name = "uu_env"
 version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
- "libc",
  "rust-ini",
  "uucore",
 ]
@@ -2552,7 +2549,6 @@ name = "uu_expr"
 version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
- "libc",
  "num-bigint",
  "num-traits",
  "onig",
@@ -2586,7 +2582,6 @@ name = "uu_fmt"
 version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
- "libc",
  "unicode-width",
  "uucore",
 ]
@@ -2616,11 +2611,9 @@ dependencies = [
  "clap 3.0.10",
  "digest",
  "hex",
- "libc",
  "md-5",
  "memchr 2.4.1",
  "regex",
- "regex-syntax",
  "sha1",
  "sha2",
  "sha3",
@@ -2651,7 +2644,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
  "hostname",
- "libc",
  "uucore",
  "winapi 0.3.9",
 ]
@@ -2700,7 +2692,6 @@ name = "uu_link"
 version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
- "libc",
  "uucore",
 ]
 
@@ -2709,7 +2700,6 @@ name = "uu_ln"
 version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
- "libc",
  "uucore",
 ]
 
@@ -2746,7 +2736,6 @@ name = "uu_mkdir"
 version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
- "libc",
  "uucore",
 ]
 
@@ -2816,12 +2805,8 @@ dependencies = [
 name = "uu_nl"
 version = "0.0.12"
 dependencies = [
- "aho-corasick",
  "clap 3.0.10",
- "libc",
- "memchr 2.4.1",
  "regex",
- "regex-syntax",
  "uucore",
 ]
 
@@ -2860,7 +2845,6 @@ dependencies = [
  "byteorder",
  "clap 3.0.10",
  "half",
- "libc",
  "uucore",
 ]
 
@@ -2914,7 +2898,6 @@ name = "uu_printf"
 version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
- "itertools",
  "uucore",
 ]
 
@@ -2922,12 +2905,8 @@ dependencies = [
 name = "uu_ptx"
 version = "0.0.12"
 dependencies = [
- "aho-corasick",
  "clap 3.0.10",
- "libc",
- "memchr 2.4.1",
  "regex",
- "regex-syntax",
  "uucore",
 ]
 
@@ -2944,7 +2923,6 @@ name = "uu_readlink"
 version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
- "libc",
  "uucore",
 ]
 
@@ -2989,7 +2967,6 @@ name = "uu_runcon"
 version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
- "fts-sys",
  "libc",
  "selinux",
  "thiserror",
@@ -3012,7 +2989,6 @@ name = "uu_shred"
 version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
- "libc",
  "rand",
  "uucore",
 ]
