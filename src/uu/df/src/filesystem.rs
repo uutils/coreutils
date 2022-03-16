@@ -7,6 +7,7 @@
 //! A [`Filesystem`] struct represents a device containing a
 //! filesystem mounted at a particular directory. It also includes
 //! information on amount of space available and amount of space used.
+// spell-checker:ignore canonicalized
 use std::path::Path;
 
 #[cfg(unix)]
