@@ -2355,7 +2355,6 @@ dependencies = [
  "thiserror",
  "unix_socket",
  "uucore",
- "winapi-util",
 ]
 
 [[package]]
@@ -2477,7 +2476,6 @@ dependencies = [
  "gcd",
  "libc",
  "signal-hook",
- "tempfile",
  "uucore",
 ]
 
@@ -2504,7 +2502,6 @@ name = "uu_dirname"
 version = "0.0.12"
 dependencies = [
  "clap 3.0.10",
- "libc",
  "uucore",
 ]
 
@@ -2665,7 +2662,6 @@ dependencies = [
  "file_diff",
  "filetime",
  "libc",
- "time",
  "uucore",
 ]
 
@@ -2775,8 +2771,6 @@ dependencies = [
  "clap 3.0.10",
  "crossterm",
  "nix 0.23.1",
- "redox_syscall",
- "redox_termios",
  "unicode-segmentation",
  "unicode-width",
  "uucore",
@@ -3103,7 +3097,6 @@ dependencies = [
  "clap 3.0.10",
  "libc",
  "nix 0.23.1",
- "redox_syscall",
  "uucore",
  "winapi 0.3.9",
 ]
@@ -3300,7 +3293,6 @@ dependencies = [
  "nix 0.23.1",
  "once_cell",
  "os_display",
- "termion",
  "thiserror",
  "time",
  "uucore_procs",
