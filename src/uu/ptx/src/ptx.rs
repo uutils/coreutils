@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDOs) corasick memchr Roff trunc oset iset
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use regex::Regex;
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -702,13 +702,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     write_traditional_output(&config, &file_map, &word_set, &output_file)
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .name(NAME)
         .about(ABOUT)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)

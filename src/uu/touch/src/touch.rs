@@ -13,7 +13,7 @@ pub extern crate filetime;
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, AppSettings, Arg, ArgGroup};
+use clap::{crate_version, Arg, ArgGroup, Command};
 use filetime::*;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -149,12 +149,12 @@ Try 'touch --help' for more information."##,
     Ok(())
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::ACCESS)
                 .short('a')

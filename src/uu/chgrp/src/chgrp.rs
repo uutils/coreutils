@@ -13,7 +13,7 @@ use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::perms::{chown_base, options, IfFrom};
 
-use clap::{App, AppSettings, Arg, ArgMatches};
+use clap::{Arg, ArgMatches, Command};
 
 use std::fs;
 use std::os::unix::fs::MetadataExt;
@@ -54,12 +54,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     chown_base(uu_app(), args, options::ARG_GROUP, parse_gid_and_uid, true)
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::verbosity::CHANGES)
                 .short('c')

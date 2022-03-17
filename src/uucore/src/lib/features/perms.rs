@@ -12,9 +12,9 @@ use crate::error::USimpleError;
 pub use crate::features::entries;
 use crate::fs::resolve_relative_path;
 use crate::show_error;
-use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
+use clap::Command;
 use libc::{self, gid_t, uid_t};
 use walkdir::WalkDir;
 
@@ -414,13 +414,13 @@ type GidUidFilterParser = fn(&ArgMatches) -> UResult<(Option<u32>, Option<u32>, 
 
 /// Base implementation for `chgrp` and `chown`.
 ///
-/// An argument called `add_arg_if_not_reference` will be added to `app` if
+/// An argument called `add_arg_if_not_reference` will be added to `command` if
 /// `args` does not contain the `--reference` option.
 /// `parse_gid_uid_and_filter` will be called to obtain the target gid and uid, and the filter,
 /// from `ArgMatches`.
 /// `groups_only` determines whether verbose output will only mention the group.
 pub fn chown_base<'a>(
-    mut app: App<'a>,
+    mut command: Command<'a>,
     args: impl crate::Args,
     add_arg_if_not_reference: &'a str,
     parse_gid_uid_and_filter: GidUidFilterParser,
@@ -444,7 +444,7 @@ pub fn chown_base<'a>(
     if help || !reference {
         // add both positional arguments
         // arg_group is only required if
-        app = app.arg(
+        command = command.arg(
             Arg::new(add_arg_if_not_reference)
                 .value_name(add_arg_if_not_reference)
                 .required(true)
@@ -452,7 +452,7 @@ pub fn chown_base<'a>(
                 .multiple_occurrences(false),
         );
     }
-    app = app.arg(
+    command = command.arg(
         Arg::new(options::ARG_FILES)
             .value_name(options::ARG_FILES)
             .multiple_occurrences(true)
@@ -460,7 +460,7 @@ pub fn chown_base<'a>(
             .required(true)
             .min_values(1),
     );
-    let matches = app.get_matches_from(args);
+    let matches = command.get_matches_from(args);
 
     let files: Vec<String> = matches
         .values_of(options::ARG_FILES)

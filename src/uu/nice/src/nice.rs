@@ -15,7 +15,7 @@ use std::ffi::CString;
 use std::io::Error;
 use std::ptr;
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use uucore::{
     error::{set_exit_code, UResult, USimpleError, UUsageError},
     format_usage,
@@ -102,12 +102,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::TrailingVarArg)
-        .setting(AppSettings::InferLongArgs)
+        .trailing_var_arg(true)
+        .infer_long_args(true)
         .version(crate_version!())
         .arg(
             Arg::new(options::ADJUSTMENT)

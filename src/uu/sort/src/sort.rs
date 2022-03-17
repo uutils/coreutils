@@ -25,7 +25,7 @@ mod numeric_str_cmp;
 mod tmp_dir;
 
 use chunks::LineData;
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
@@ -1268,12 +1268,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     exec(&mut files, &settings, output, &mut tmp_dir)
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::modes::SORT)
                 .long(options::modes::SORT)

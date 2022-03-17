@@ -14,9 +14,9 @@ extern crate uucore;
 extern crate clap;
 
 use crate::status::ExitStatus;
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use std::io::ErrorKind;
-use std::process::{Child, Command, Stdio};
+use std::process::{self, Child, Stdio};
 use std::time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
@@ -103,9 +103,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let app = uu_app();
+    let command = uu_app();
 
-    let matches = app.get_matches_from(args);
+    let matches = command.get_matches_from(args);
 
     let config = Config::from(&matches)?;
     timeout(
@@ -119,8 +119,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     )
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new("timeout")
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new("timeout")
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
@@ -162,8 +162,8 @@ pub fn uu_app<'a>() -> App<'a> {
                 .required(true)
                 .multiple_occurrences(true)
         )
-        .setting(AppSettings::TrailingVarArg)
-        .setting(AppSettings::InferLongArgs)
+        .trailing_var_arg(true)
+        .infer_long_args(true)
 }
 
 /// Remove pre-existing SIGCHLD handlers that would make waiting for the child's exit code fail.
@@ -245,7 +245,7 @@ fn timeout(
     if !foreground {
         unsafe { libc::setpgid(0, 0) };
     }
-    let mut process = Command::new(&cmd[0])
+    let mut process = process::Command::new(&cmd[0])
         .args(&cmd[1..])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())

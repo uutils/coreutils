@@ -13,7 +13,7 @@ use std::io::{self, Write};
 #[macro_use]
 extern crate clap;
 
-use clap::{App, AppSettings, Arg};
+use clap::{Arg, Command};
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 
@@ -49,11 +49,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    app_from_crate!()
+pub fn uu_app<'a>() -> Command<'a> {
+    command!()
         .override_usage(format_usage(USAGE))
         .arg(Arg::new("STRING").index(1).multiple_occurrences(true))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
 }
 
 fn prepare_buffer<'a>(input: &'a str, buffer: &'a mut [u8; BUF_SIZE]) -> &'a [u8] {

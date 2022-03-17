@@ -20,7 +20,7 @@ mod parse;
 mod platform;
 use chunks::ReverseChunks;
 
-use clap::{App, AppSettings, Arg};
+use clap::{Arg, Command};
 use std::collections::VecDeque;
 use std::convert::TryInto;
 use std::ffi::OsString;
@@ -275,12 +275,12 @@ fn arg_iterate<'a>(
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::BYTES)
                 .short('c')

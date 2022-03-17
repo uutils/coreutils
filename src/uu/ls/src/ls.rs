@@ -15,7 +15,7 @@ extern crate lazy_static;
 
 mod quoting_style;
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use glob::Pattern;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
@@ -782,9 +782,9 @@ impl Config {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let app = uu_app();
+    let command = uu_app();
 
-    let matches = app.get_matches_from(args);
+    let matches = command.get_matches_from(args);
 
     let config = Config::from(&matches)?;
 
@@ -796,8 +796,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     list(locs, &config)
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(
@@ -805,7 +805,7 @@ pub fn uu_app<'a>() -> App<'a> {
             the command line, expect that it will ignore files and directories \
             whose names start with '.'.",
         )
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         // Format arguments
         .arg(
             Arg::new(options::FORMAT)

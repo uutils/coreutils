@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) delim
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
 use std::path::Path;
@@ -47,11 +47,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     paste(files, serial, delimiters)
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::SERIAL)
                 .long(options::SERIAL)
