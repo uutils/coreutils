@@ -16,7 +16,7 @@ path = "src/od.rs"
 
 [dependencies]
 byteorder = "1.3.2"
-clap = { version = "3.0", features = ["wrap_help", "cargo"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 half = "1.6"
 libc = "0.2.42"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
