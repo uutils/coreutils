@@ -22,9 +22,6 @@ uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=[
 [target.'cfg(windows)'.dependencies]
 winapi = { version="0.3", features=["fileapi", "handleapi", "processthreadsapi", "synchapi", "winbase"] }
 
-[target.'cfg(target_os = "redox")'.dependencies]
-redox_syscall = "0.2"
-
 [target.'cfg(unix)'.dependencies]
 nix = "0.23.1"
 
