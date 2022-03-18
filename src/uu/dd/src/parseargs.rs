@@ -740,72 +740,18 @@ pub fn parse_oflags(matches: &Matches) -> Result<OFlags, ParseError> {
     Ok(oflags)
 }
 
-/// Parse the amount of the input file to skip.
-pub fn parse_skip_amt(
+pub fn parse_seek_skip_amt(
     ibs: &usize,
-    iflags: &IFlags,
+    bytes: bool,
     matches: &Matches,
+    option: &str,
 ) -> Result<Option<u64>, ParseError> {
-    if let Some(amt) = matches.value_of(options::SKIP) {
+    if let Some(amt) = matches.value_of(option) {
         let n = parse_bytes_with_opt_multiplier(amt)?;
-        if iflags.skip_bytes {
+        if bytes {
             Ok(Some(n))
         } else {
             Ok(Some(*ibs as u64 * n))
-        }
-    } else {
-        Ok(None)
-    }
-}
-
-/// Parse the amount of the output file to seek.
-pub fn parse_seek_amt(
-    obs: &usize,
-    oflags: &OFlags,
-    matches: &Matches,
-) -> Result<Option<u64>, ParseError> {
-    if let Some(amt) = matches.value_of(options::SEEK) {
-        let n = parse_bytes_with_opt_multiplier(amt)?;
-        if oflags.seek_bytes {
-            Ok(Some(n))
-        } else {
-            Ok(Some(*obs as u64 * n))
-        }
-    } else {
-        Ok(None)
-    }
-}
-
-/// Parse the amount of the input file to seek.
-pub fn parse_iseek_amt(
-    ibs: &usize,
-    iflags: &IFlags,
-    matches: &Matches,
-) -> Result<Option<u64>, ParseError> {
-    if let Some(amt) = matches.value_of(options::ISEEK) {
-        let n = parse_bytes_with_opt_multiplier(amt)?;
-        if iflags.skip_bytes {
-            Ok(Some(n))
-        } else {
-            Ok(Some(*ibs as u64 * n))
-        }
-    } else {
-        Ok(None)
-    }
-}
-
-/// Parse the amount of the input file to seek.
-pub fn parse_oseek_amt(
-    obs: &usize,
-    oflags: &OFlags,
-    matches: &Matches,
-) -> Result<Option<u64>, ParseError> {
-    if let Some(amt) = matches.value_of(options::OSEEK) {
-        let n = parse_bytes_with_opt_multiplier(amt)?;
-        if oflags.seek_bytes {
-            Ok(Some(n))
-        } else {
-            Ok(Some(*obs as u64 * n))
         }
     } else {
         Ok(None)

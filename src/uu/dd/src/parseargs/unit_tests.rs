@@ -142,25 +142,25 @@ fn test_all_top_level_args_no_leading_dashes() {
     );
     assert_eq!(
         200,
-        parse_skip_amt(&100, &IFlags::default(), &matches)
+        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::SKIP)
             .unwrap()
             .unwrap()
     );
     assert_eq!(
         200,
-        parse_seek_amt(&100, &OFlags::default(), &matches)
+        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::SEEK)
             .unwrap()
             .unwrap()
     );
     assert_eq!(
         200,
-        parse_iseek_amt(&100, &IFlags::default(), &matches)
+        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::ISEEK)
             .unwrap()
             .unwrap()
     );
     assert_eq!(
         200,
-        parse_oseek_amt(&100, &OFlags::default(), &matches)
+        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::OSEEK)
             .unwrap()
             .unwrap()
     );
@@ -241,25 +241,25 @@ fn test_all_top_level_args_with_leading_dashes() {
     );
     assert_eq!(
         200,
-        parse_skip_amt(&100, &IFlags::default(), &matches)
+        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::SKIP)
             .unwrap()
             .unwrap()
     );
     assert_eq!(
         200,
-        parse_seek_amt(&100, &OFlags::default(), &matches)
+        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::SEEK)
             .unwrap()
             .unwrap()
     );
     assert_eq!(
         200,
-        parse_iseek_amt(&100, &IFlags::default(), &matches)
+        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::ISEEK)
             .unwrap()
             .unwrap()
     );
     assert_eq!(
         200,
-        parse_oseek_amt(&100, &OFlags::default(), &matches)
+        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::OSEEK)
             .unwrap()
             .unwrap()
     );
@@ -413,7 +413,7 @@ fn test_override_multiple_options() {
     // skip
     assert_eq!(
         200,
-        parse_skip_amt(&100, &IFlags::default(), &matches)
+        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::SKIP)
             .unwrap()
             .unwrap()
     );
@@ -421,7 +421,7 @@ fn test_override_multiple_options() {
     // seek
     assert_eq!(
         200,
-        parse_seek_amt(&100, &OFlags::default(), &matches)
+        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::SEEK)
             .unwrap()
             .unwrap()
     );
@@ -429,7 +429,7 @@ fn test_override_multiple_options() {
     // iseek
     assert_eq!(
         200,
-        parse_iseek_amt(&100, &IFlags::default(), &matches)
+        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::ISEEK)
             .unwrap()
             .unwrap()
     );
@@ -437,7 +437,7 @@ fn test_override_multiple_options() {
     // oseek
     assert_eq!(
         200,
-        parse_oseek_amt(&100, &OFlags::default(), &matches)
+        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::OSEEK)
             .unwrap()
             .unwrap()
     );

@@ -60,8 +60,9 @@ impl Input<io::Stdin> {
         let print_level = parseargs::parse_status_level(matches)?;
         let cflags = parseargs::parse_conv_flag_input(matches)?;
         let iflags = parseargs::parse_iflags(matches)?;
-        let skip = parseargs::parse_skip_amt(&ibs, &iflags, matches)?;
-        let iseek = parseargs::parse_iseek_amt(&ibs, &iflags, matches)?;
+        let skip = parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::SKIP)?;
+        let iseek =
+            parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::ISEEK)?;
         let count = parseargs::parse_count(&iflags, matches)?;
 
         let mut i = Self {
@@ -134,8 +135,9 @@ impl Input<File> {
         let print_level = parseargs::parse_status_level(matches)?;
         let cflags = parseargs::parse_conv_flag_input(matches)?;
         let iflags = parseargs::parse_iflags(matches)?;
-        let skip = parseargs::parse_skip_amt(&ibs, &iflags, matches)?;
-        let iseek = parseargs::parse_iseek_amt(&ibs, &iflags, matches)?;
+        let skip = parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::SKIP)?;
+        let iseek =
+            parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::ISEEK)?;
         let count = parseargs::parse_count(&iflags, matches)?;
 
         if let Some(fname) = matches.value_of(options::INFILE) {
@@ -298,8 +300,9 @@ impl OutputTrait for Output<io::Stdout> {
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
         let oflags = parseargs::parse_oflags(matches)?;
-        let seek = parseargs::parse_seek_amt(&obs, &oflags, matches)?;
-        let oseek = parseargs::parse_oseek_amt(&obs, &oflags, matches)?;
+        let seek = parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::SEEK)?;
+        let oseek =
+            parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::OSEEK)?;
 
         let mut dst = io::stdout();
 
@@ -517,8 +520,9 @@ impl OutputTrait for Output<File> {
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
         let oflags = parseargs::parse_oflags(matches)?;
-        let seek = parseargs::parse_seek_amt(&obs, &oflags, matches)?;
-        let oseek = parseargs::parse_oseek_amt(&obs, &oflags, matches)?;
+        let seek = parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::SEEK)?;
+        let oseek =
+            parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::OSEEK)?;
 
         if let Some(fname) = matches.value_of(options::OUTFILE) {
             let mut dst = open_dst(Path::new(&fname), &cflags, &oflags)
