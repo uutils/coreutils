@@ -1,3 +1,5 @@
+# spell-checker:ignore SSLeay RUSTSEC
+
 # This section is considered when running `cargo deny check advisories`
 # More documentation for the advisories section can be found here:
 # https://embarkstudios.github.io/cargo-deny/checks/advisories/cfg.html
@@ -54,30 +56,34 @@ license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 multiple-versions = "deny"
 wildcards = "allow"
 highlight = "all"
+
+# For each duplicate dependency, indicate the name of the dependency which
+# introduces it.
+# spell-checker: disable
 skip = [
-    # blake2d_simd uses an old version
+    # blake2d_simd
     { name = "arrayvec", version = "=0.7.2" },
-    # flimit/unix_socket use old versions
+    # flimit/unix_socket
     { name = "cfg-if", version = "=0.1.10" },
-    # ordered-multimap uses an old version
+    # ordered-multimap
     { name = "hashbrown", version = "=0.9.1" },
-    # kernel32-sys uses an old version
+    # kernel32-sys
     { name = "winapi", version = "=0.2.8" },
-    # bindgen 0.59.2 uses an old version of clap, which in turn uses other old dependencies
+    # bindgen 0.59.2
     { name = "clap", version = "=2.34.0" },
     { name = "strsim", version = "=0.8.0" },
     { name = "textwrap", version = "=0.11.0" },
-    # cpp_common uses an old version
     { name = "cpp_common", version = "=0.4.0" },
-    # quickcheck uses an old version
+    # quickcheck
     { name = "env_logger", version = "=0.8.4" },
-    # cpp_ crates uses old stuff
+    # cpp_*
     { name = "memchr", version = "=1.0.2" },
     { name = "quote", version = "=0.3.15" },
     { name = "unicode-xid", version = "=0.0.4" },
-    # exacl uses an old version
+    # exacl
     { name = "nix", version = "=0.21.0" },
 ]
+# spell-checker: enable
 
 # This section is considered when running `cargo deny check sources`.
 # More documentation about the 'sources' section can be found here:
