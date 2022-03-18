@@ -22,10 +22,12 @@ allow = [
     "Apache-2.0",
     "ISC",
     "BSD-2-Clause",
+    "BSD-2-Clause-FreeBSD",
     "BSD-3-Clause",
     "CC0-1.0",
+    "MPL-2.0", # XXX considered copyleft?
 ]
-copyleft = "allow"
+copyleft = "deny"
 allow-osi-fsf-free = "neither"
 default = "deny"
 confidence-threshold = 0.8
@@ -52,16 +54,29 @@ license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 multiple-versions = "deny"
 wildcards = "allow"
 highlight = "all"
-# Certain crates/versions that will be skipped when doing duplicate detection.
 skip = [
-    # duplicated in blake2d_simd / blake3
+    # blake2d_simd uses an old version
     { name = "arrayvec", version = "=0.7.2" },
-    # duplicated in flimit/unix_socket (many others use 1.0.0)
+    # flimit/unix_socket use old versions
     { name = "cfg-if", version = "=0.1.10" },
-    # duplicated in ordered-multimap (many others use 0.11.2)
+    # ordered-multimap uses an old version
     { name = "hashbrown", version = "=0.9.1" },
-    # duplicated in kernel32-sys (many others use 0.3.9)
+    # kernel32-sys uses an old version
     { name = "winapi", version = "=0.2.8" },
+    # bindgen 0.59.2 uses an old version of clap, which in turn uses other old dependencies
+    { name = "clap", version = "=2.34.0" },
+    { name = "strsim", version = "=0.8.0" },
+    { name = "textwrap", version = "=0.11.0" },
+    # cpp_common uses an old version
+    { name = "cpp_common", version = "=0.4.0" },
+    # quickcheck uses an old version
+    { name = "env_logger", version = "=0.8.4" },
+    # cpp_ crates uses old stuff
+    { name = "memchr", version = "=1.0.2" },
+    { name = "quote", version = "=0.3.15" },
+    { name = "unicode-xid", version = "=0.0.4" },
+    # exacl uses an old version
+    { name = "nix", version = "=0.21.0" },
 ]
 
 # This section is considered when running `cargo deny check sources`.
