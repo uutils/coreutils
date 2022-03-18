@@ -20,6 +20,13 @@ env:
 on: [push, pull_request]
 
 jobs:
+  cargo-deny:
+    name: Style/cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: EmbarkStudios/cargo-deny-action@v1
+
   style_deps:
     ## ToDO: [2021-11-10; rivy] 'Style/deps' needs more informative output and better integration of results into the GHA dashboard
     name: Style/deps
