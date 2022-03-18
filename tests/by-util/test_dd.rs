@@ -1141,27 +1141,18 @@ fn test_block_sync() {
 }
 
 #[test]
-fn test_bytes_count_bytes_iflag() {
+fn test_bytes_iseek_bytes_iflag() {
     new_ucmd!()
-        .args(&["conv=swab", "count=14", "iflag=count_bytes"])
-        .pipe_in("0123456789abcdefghijklm")
-        .succeeds()
-        .stdout_is("1032547698badc");
-}
-
-#[test]
-fn test_bytes_skip_bytes_iflag() {
-    new_ucmd!()
-        .args(&["skip=10", "iflag=skip_bytes"])
+        .args(&["iseek=10", "iflag=skip_bytes", "bs=2"])
         .pipe_in("0123456789abcdefghijklm")
         .succeeds()
         .stdout_is("abcdefghijklm");
 }
 
 #[test]
-fn test_bytes_skip_bytes_pipe_iflag() {
+fn test_bytes_iseek_skip_additive() {
     new_ucmd!()
-        .args(&["skip=10", "iflag=skip_bytes", "bs=2"])
+        .args(&["iseek=5", "skip=5", "iflag=skip_bytes", "bs=2"])
         .pipe_in("0123456789abcdefghijklm")
         .succeeds()
         .stdout_is("abcdefghijklm");
@@ -1170,7 +1161,7 @@ fn test_bytes_skip_bytes_pipe_iflag() {
 #[test]
 fn test_bytes_oseek_bytes_oflag() {
     new_ucmd!()
-        .args(&["seek=8", "oflag=seek_bytes", "bs=2"])
+        .args(&["oseek=8", "oflag=seek_bytes", "bs=2"])
         .pipe_in("abcdefghijklm")
         .succeeds()
         .stdout_is_fixture_bytes("dd-bytes-alphabet-null.spec");
@@ -1179,8 +1170,17 @@ fn test_bytes_oseek_bytes_oflag() {
 #[test]
 fn test_bytes_oseek_bytes_trunc_oflag() {
     new_ucmd!()
-        .args(&["seek=8", "oflag=seek_bytes", "bs=2", "count=0"])
+        .args(&["oseek=8", "oflag=seek_bytes", "bs=2", "count=0"])
         .pipe_in("abcdefghijklm")
         .succeeds()
         .stdout_is_fixture_bytes("dd-bytes-null-trunc.spec");
+}
+
+#[test]
+fn test_bytes_oseek_seek_additive() {
+    new_ucmd!()
+        .args(&["oseek=4", "seek=4", "oflag=seek_bytes", "bs=2"])
+        .pipe_in("abcdefghijklm")
+        .succeeds()
+        .stdout_is_fixture_bytes("dd-bytes-alphabet-null.spec");
 }
