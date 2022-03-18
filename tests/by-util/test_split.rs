@@ -605,19 +605,3 @@ fn test_line_bytes() {
     assert_eq!(at.read("xac"), "cccc\ndd\n");
     assert_eq!(at.read("xad"), "ee\n");
 }
-
-#[test]
-fn test_round_robin() {
-    let (at, mut ucmd) = at_and_ucmd!();
-
-    let file_read = |f| {
-        let mut s = String::new();
-        at.open(f).read_to_string(&mut s).unwrap();
-        s
-    };
-
-    ucmd.args(&["-n", "r/2", "fivelines.txt"]).succeeds();
-
-    assert_eq!(file_read("xaa"), "1\n3\n5\n");
-    assert_eq!(file_read("xab"), "2\n4\n");
-}
