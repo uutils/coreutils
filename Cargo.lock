@@ -2364,7 +2364,6 @@ dependencies = [
  "thiserror",
  "unix_socket",
  "uucore",
- "winapi-util",
 ]
 
 [[package]]
@@ -2417,7 +2416,6 @@ name = "uu_cksum"
 version = "0.0.12"
 dependencies = [
  "clap 3.1.6",
- "libc",
  "uucore",
 ]
 
@@ -2426,7 +2424,6 @@ name = "uu_comm"
 version = "0.0.12"
 dependencies = [
  "clap 3.1.6",
- "libc",
  "uucore",
 ]
 
@@ -2488,7 +2485,6 @@ dependencies = [
  "gcd",
  "libc",
  "signal-hook",
- "tempfile",
  "uucore",
 ]
 
@@ -2515,7 +2511,6 @@ name = "uu_dirname"
 version = "0.0.12"
 dependencies = [
  "clap 3.1.6",
- "libc",
  "uucore",
 ]
 
@@ -2542,7 +2537,6 @@ name = "uu_env"
 version = "0.0.12"
 dependencies = [
  "clap 3.1.6",
- "libc",
  "rust-ini",
  "uucore",
 ]
@@ -2561,7 +2555,6 @@ name = "uu_expr"
 version = "0.0.12"
 dependencies = [
  "clap 3.1.6",
- "libc",
  "num-bigint",
  "num-traits",
  "onig",
@@ -2595,7 +2588,6 @@ name = "uu_fmt"
 version = "0.0.12"
 dependencies = [
  "clap 3.1.6",
- "libc",
  "unicode-width",
  "uucore",
 ]
@@ -2625,11 +2617,9 @@ dependencies = [
  "clap 3.1.6",
  "digest",
  "hex",
- "libc",
  "md-5",
  "memchr 2.4.1",
  "regex",
- "regex-syntax",
  "sha1",
  "sha2",
  "sha3",
@@ -2660,7 +2650,6 @@ version = "0.0.12"
 dependencies = [
  "clap 3.1.6",
  "hostname",
- "libc",
  "uucore",
  "winapi 0.3.9",
 ]
@@ -2682,7 +2671,6 @@ dependencies = [
  "file_diff",
  "filetime",
  "libc",
- "time",
  "uucore",
 ]
 
@@ -2709,7 +2697,6 @@ name = "uu_link"
 version = "0.0.12"
 dependencies = [
  "clap 3.1.6",
- "libc",
  "uucore",
 ]
 
@@ -2718,7 +2705,6 @@ name = "uu_ln"
 version = "0.0.12"
 dependencies = [
  "clap 3.1.6",
- "libc",
  "uucore",
 ]
 
@@ -2755,7 +2741,6 @@ name = "uu_mkdir"
 version = "0.0.12"
 dependencies = [
  "clap 3.1.6",
- "libc",
  "uucore",
 ]
 
@@ -2795,8 +2780,6 @@ dependencies = [
  "clap 3.1.6",
  "crossterm",
  "nix 0.23.1",
- "redox_syscall",
- "redox_termios",
  "unicode-segmentation",
  "unicode-width",
  "uucore",
@@ -2825,12 +2808,8 @@ dependencies = [
 name = "uu_nl"
 version = "0.0.12"
 dependencies = [
- "aho-corasick",
  "clap 3.1.6",
- "libc",
- "memchr 2.4.1",
  "regex",
- "regex-syntax",
  "uucore",
 ]
 
@@ -2869,7 +2848,6 @@ dependencies = [
  "byteorder",
  "clap 3.1.6",
  "half",
- "libc",
  "uucore",
 ]
 
@@ -2923,7 +2901,6 @@ name = "uu_printf"
 version = "0.0.12"
 dependencies = [
  "clap 3.1.6",
- "itertools",
  "uucore",
 ]
 
@@ -2931,12 +2908,8 @@ dependencies = [
 name = "uu_ptx"
 version = "0.0.12"
 dependencies = [
- "aho-corasick",
  "clap 3.1.6",
- "libc",
- "memchr 2.4.1",
  "regex",
- "regex-syntax",
  "uucore",
 ]
 
@@ -2953,7 +2926,6 @@ name = "uu_readlink"
 version = "0.0.12"
 dependencies = [
  "clap 3.1.6",
- "libc",
  "uucore",
 ]
 
@@ -2998,7 +2970,6 @@ name = "uu_runcon"
 version = "0.0.12"
 dependencies = [
  "clap 3.1.6",
- "fts-sys",
  "libc",
  "selinux",
  "thiserror",
@@ -3021,7 +2992,6 @@ name = "uu_shred"
 version = "0.0.12"
 dependencies = [
  "clap 3.1.6",
- "libc",
  "rand",
  "uucore",
 ]
@@ -3136,7 +3106,6 @@ dependencies = [
  "clap 3.1.6",
  "libc",
  "nix 0.23.1",
- "redox_syscall",
  "uucore",
  "winapi 0.3.9",
 ]
@@ -3333,7 +3302,6 @@ dependencies = [
  "nix 0.23.1",
  "once_cell",
  "os_display",
- "termion",
  "thiserror",
  "time",
  "uucore_procs",

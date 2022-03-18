@@ -24,9 +24,6 @@ uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=[
 unix_socket = "0.5.0"
 nix = "0.23.1"
 
-[target.'cfg(windows)'.dependencies]
-winapi-util = "0.1.5"
-
 [[bin]]
 name = "cat"
 path = "src/main.rs"
