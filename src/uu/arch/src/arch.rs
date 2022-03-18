@@ -30,3 +30,11 @@ pub fn uu_app<'a>() -> App<'a> {
         .after_help(SUMMARY)
         .setting(AppSettings::InferLongArgs)
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn fail() {
+        assert!(false);
+    }
+}
