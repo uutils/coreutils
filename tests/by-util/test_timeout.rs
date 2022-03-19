@@ -1,3 +1,4 @@
+// spell-checker:ignore dont
 use crate::common::util::*;
 
 // FIXME: this depends on the system having true and false in PATH
@@ -61,6 +62,22 @@ fn test_preserve_status() {
         .fails()
         // 128 + SIGTERM = 128 + 15
         .code_is(128 + 15)
+        .no_stderr()
+        .no_stdout();
+}
+
+#[test]
+fn test_dont_overflow() {
+    new_ucmd!()
+        .args(&["9223372036854775808d", "sleep", "0"])
+        .succeeds()
+        .code_is(0)
+        .no_stderr()
+        .no_stdout();
+    new_ucmd!()
+        .args(&["-k", "9223372036854775808d", "10", "sleep", "0"])
+        .succeeds()
+        .code_is(0)
         .no_stderr()
         .no_stdout();
 }

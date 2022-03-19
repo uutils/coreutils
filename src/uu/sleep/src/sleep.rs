@@ -63,7 +63,7 @@ fn sleep(args: &[&str]) -> UResult<()> {
         args.iter().try_fold(
             Duration::new(0, 0),
             |result, arg| match uucore::parse_time::from_str(&arg[..]) {
-                Ok(m) => Ok(m + result),
+                Ok(m) => Ok(m.saturating_add(result)),
                 Err(f) => Err(USimpleError::new(1, f)),
             },
         )?;
