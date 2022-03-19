@@ -23,7 +23,7 @@ smallvec = "1.7"  # TODO(nicoo): Use `union` feature, requires Rust 1.49 or late
 uucore = { version = ">=0.0.8", package = "uucore", path = "../../uucore" }
 
 [dev-dependencies]
-paste = "0.1.18"
+paste = "1.0.6"
 quickcheck = "1.0.3"
 
 [[bin]]

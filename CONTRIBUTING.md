@@ -94,6 +94,16 @@ uutils: add new utility
 gitignore: add temporary files
 ```
 
+## cargo-deny
+
+This project uses [cargo-deny](https://github.com/EmbarkStudios/cargo-deny/) to
+detect duplicate dependencies, checks licenses, etc. To run it locally, first
+install it and then run with:
+
+```
+cargo deny --all-features check all
+```
+
 ## Licensing
 
 uutils is distributed under the terms of the MIT License; see the `LICENSE` file
