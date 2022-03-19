@@ -274,7 +274,7 @@ mod tests {
         use crate::digest::DigestWriter;
 
         // Writing "\r" in one call to `write()`, and then "\n" in another.
-        let mut digest = Box::new(md5::Context::new()) as Box<dyn Digest>;
+        let mut digest = Box::new(md5::Md5::new()) as Box<dyn Digest>;
         let mut writer_crlf = DigestWriter::new(&mut digest, false);
         writer_crlf.write_all(&[b'\r']).unwrap();
         writer_crlf.write_all(&[b'\n']).unwrap();
@@ -282,7 +282,7 @@ mod tests {
         let result_crlf = digest.result_str();
 
         // We expect "\r\n" to be replaced with "\n" in text mode on Windows.
-        let mut digest = Box::new(md5::Context::new()) as Box<dyn Digest>;
+        let mut digest = Box::new(md5::Md5::new()) as Box<dyn Digest>;
         let mut writer_lf = DigestWriter::new(&mut digest, false);
         writer_lf.write_all(&[b'\n']).unwrap();
         writer_lf.finalize();

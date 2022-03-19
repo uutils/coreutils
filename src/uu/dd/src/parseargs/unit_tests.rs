@@ -303,10 +303,10 @@ fn test_status_level_noxfer() {
 fn test_multiple_flags_options() {
     let args = vec![
         String::from("dd"),
-        String::from("--iflag=fullblock,directory"),
+        String::from("--iflag=fullblock,count_bytes"),
         String::from("--iflag=skip_bytes"),
-        String::from("--oflag=direct"),
-        String::from("--oflag=dsync"),
+        String::from("--oflag=append"),
+        String::from("--oflag=seek_bytes"),
         String::from("--conv=ascii,ucase"),
         String::from("--conv=unblock"),
     ];
@@ -315,13 +315,13 @@ fn test_multiple_flags_options() {
     // iflag
     let iflags = parse_flag_list::<Flag>(options::IFLAG, &matches).unwrap();
     assert_eq!(
-        vec![Flag::FullBlock, Flag::Directory, Flag::SkipBytes],
+        vec![Flag::FullBlock, Flag::CountBytes, Flag::SkipBytes],
         iflags
     );
 
     // oflag
     let oflags = parse_flag_list::<Flag>(options::OFLAG, &matches).unwrap();
-    assert_eq!(vec![Flag::Direct, Flag::Dsync], oflags);
+    assert_eq!(vec![Flag::Append, Flag::SeekBytes], oflags);
 
     // conv
     let conv = parse_flag_list::<ConvFlag>(options::CONV, &matches).unwrap();
@@ -685,7 +685,7 @@ mod test_64bit_arch {
 #[test]
 #[should_panic]
 fn test_overflow_panic() {
-    let bs_str = format!("{}KiB", usize::MAX);
+    let bs_str = format!("{}KiB", u64::MAX);
 
     parse_bytes_with_opt_multiplier(&bs_str).unwrap();
 }
