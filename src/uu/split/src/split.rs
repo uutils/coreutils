@@ -1007,8 +1007,9 @@ where
         writers.push(writer);
     }
 
-    // This block evaluates to an object of type `std::io::Result<()>`.
-    {
+    // Capture the result of the `std::io::copy()` calls to check for
+    // `BrokenPipe`.
+    let result: std::io::Result<()> = {
         // Write `chunk_size` bytes from the reader into each writer
         // except the last.
         //
@@ -1025,8 +1026,12 @@ where
         io::copy(&mut reader.by_ref().take(last_chunk_size), &mut writers[i])?;
 
         Ok(())
+    };
+    match result {
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == ErrorKind::BrokenPipe => Ok(()),
+        Err(e) => Err(uio_error!(e, "input/output error")),
     }
-    .map_err_context(|| "I/O error".to_string())
 }
 
 /// Split a file into a specific number of chunks by line.
@@ -1204,6 +1209,7 @@ fn split(settings: &Settings) -> UResult<()> {
                     // indicate that. A special error message needs to be
                     // printed in that case.
                     ErrorKind::Other => Err(USimpleError::new(1, "output file suffixes exhausted")),
+                    ErrorKind::BrokenPipe => Ok(()),
                     _ => Err(uio_error!(e, "input/output error")),
                 },
             }
@@ -1223,6 +1229,7 @@ fn split(settings: &Settings) -> UResult<()> {
                     // indicate that. A special error message needs to be
                     // printed in that case.
                     ErrorKind::Other => Err(USimpleError::new(1, "output file suffixes exhausted")),
+                    ErrorKind::BrokenPipe => Ok(()),
                     _ => Err(uio_error!(e, "input/output error")),
                 },
             }
@@ -1242,6 +1249,7 @@ fn split(settings: &Settings) -> UResult<()> {
                     // indicate that. A special error message needs to be
                     // printed in that case.
                     ErrorKind::Other => Err(USimpleError::new(1, "output file suffixes exhausted")),
+                    ErrorKind::BrokenPipe => Ok(()),
                     _ => Err(uio_error!(e, "input/output error")),
                 },
             }
