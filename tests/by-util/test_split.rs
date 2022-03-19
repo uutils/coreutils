@@ -572,6 +572,19 @@ fn test_elide_empty_files() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_elide_dev_null() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-e", "-n", "3", "/dev/null"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(!at.plus("xaa").exists());
+    assert!(!at.plus("xab").exists());
+    assert!(!at.plus("xac").exists());
+}
+
+#[test]
 fn test_lines() {
     let (at, mut ucmd) = at_and_ucmd!();
 

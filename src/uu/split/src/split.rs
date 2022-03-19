@@ -984,6 +984,13 @@ where
         (num_chunks, chunk_size)
     };
 
+    // If we would have written zero chunks of output, then terminate
+    // immediately. This happens on `split -e -n 3 /dev/null`, for
+    // example.
+    if num_chunks == 0 {
+        return Ok(());
+    }
+
     let num_chunks: usize = num_chunks
         .try_into()
         .map_err(|_| USimpleError::new(1, "Number of chunks too big"))?;
