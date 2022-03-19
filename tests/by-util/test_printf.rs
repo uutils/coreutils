@@ -514,3 +514,11 @@ fn sub_general_round_float_to_integer() {
         .succeeds()
         .stdout_only("123457");
 }
+
+#[test]
+fn sub_general_round_float_leading_zeroes() {
+    new_ucmd!()
+        .args(&["%g", "1.000009"])
+        .succeeds()
+        .stdout_only("1.00001");
+}
