@@ -153,7 +153,9 @@ fn de_hex(src: &str, before_decimal: bool) -> String {
 // bumps the last digit up one,
 // and if the digit was nine
 // propagate to the next, etc.
-fn _round_str_from(in_str: &str, position: usize) -> (String, bool) {
+// If before the decimal and the most
+// significant digit is a 9, it becomes a 1
+fn _round_str_from(in_str: &str, position: usize, before_dec: bool) -> (String, bool) {
     let mut it = in_str[0..position].chars();
     let mut rev = String::new();
     let mut i = position;
@@ -162,7 +164,14 @@ fn _round_str_from(in_str: &str, position: usize) -> (String, bool) {
         i -= 1;
         match c {
             '9' => {
-                rev.push('0');
+                // If we're before the decimal
+                // and on the most significant digit,
+                // round 9 to 1, else to 0.
+                if before_dec && i == 0 {
+                    rev.push('1');
+                } else {
+                    rev.push('0');
+                }
             }
             e => {
                 rev.push(((e as u8) + 1) as char);
@@ -182,24 +191,32 @@ fn round_terminal_digit(
     before_dec: String,
     after_dec: String,
     position: usize,
-) -> (String, String) {
+) -> (String, String, bool) {
     if position < after_dec.len() {
         let digit_at_pos: char;
         {
             digit_at_pos = after_dec[position..=position].chars().next().expect("");
         }
         if let '5'..='9' = digit_at_pos {
-            let (new_after_dec, finished_in_dec) = _round_str_from(&after_dec, position);
+            let (new_after_dec, finished_in_dec) = _round_str_from(&after_dec, position, false);
             if finished_in_dec {
-                return (before_dec, new_after_dec);
+                return (before_dec, new_after_dec, false);
             } else {
-                let (new_before_dec, _) = _round_str_from(&before_dec, before_dec.len());
-                return (new_before_dec, new_after_dec);
+                let (new_before_dec, _) = _round_str_from(&before_dec, before_dec.len(), true);
+                let mut dec_place_chg = false;
+                let mut before_dec_chars = new_before_dec.chars();
+                if before_dec_chars.next() == Some('1') && before_dec_chars.all(|c| c == '0') {
+                    // If the first digit is a one and remaining are zeros, we have
+                    // rounded to a new decimal place, so the decimal place must be updated.
+                    // Only update decimal place if the before decimal != 0
+                    dec_place_chg = before_dec != "0";
+                }
+                return (new_before_dec, new_after_dec, dec_place_chg);
             }
             // TODO
         }
     }
-    (before_dec, after_dec)
+    (before_dec, after_dec, false)
 }
 
 pub fn get_primitive_dec(
@@ -237,7 +254,7 @@ pub fn get_primitive_dec(
             String::from(second_segment_raw),
         ),
     };
-    let (pre_dec_unrounded, post_dec_unrounded, mantissa) = if sci_mode.is_some() {
+    let (pre_dec_unrounded, post_dec_unrounded, mut mantissa) = if sci_mode.is_some() {
         if first_segment.len() > 1 {
             let mut post_dec = String::from(&first_segment[1..]);
             post_dec.push_str(&second_segment);
@@ -277,13 +294,15 @@ pub fn get_primitive_dec(
         (first_segment, second_segment, 0)
     };
 
-    let (pre_dec_draft, post_dec_draft) =
+    let (pre_dec_draft, post_dec_draft, dec_place_chg) =
         round_terminal_digit(pre_dec_unrounded, post_dec_unrounded, last_dec_place - 1);
-
-    f.pre_decimal = Some(pre_dec_draft);
     f.post_decimal = Some(post_dec_draft);
     if let Some(capitalized) = sci_mode {
         let si_ind = if capitalized { 'E' } else { 'e' };
+        // Increase the mantissa if we're adding a decimal place
+        if dec_place_chg {
+            mantissa += 1;
+        }
         f.suffix = Some(if mantissa >= 0 {
             format!("{}+{:02}", si_ind, mantissa)
         } else {
@@ -291,6 +310,12 @@ pub fn get_primitive_dec(
             // leading zeroes
             format!("{}{:03}", si_ind, mantissa)
         });
+        f.pre_decimal = Some(pre_dec_draft);
+    } else if dec_place_chg {
+        // We've rounded up to a new decimal place so append 0
+        f.pre_decimal = Some(pre_dec_draft + "0");
+    } else {
+        f.pre_decimal = Some(pre_dec_draft);
     }
 
     f

@@ -6,7 +6,7 @@ license = "MIT"
 description = "pathchk ~ (uutils) diagnose invalid or non-portable PATHNAME"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/pathchk"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/pathchk"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

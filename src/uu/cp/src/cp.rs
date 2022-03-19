@@ -1245,7 +1245,8 @@ fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyRe
 }
 
 /// Copy the a file from `source` to `dest`. `source` will be dereferenced if
-/// `options.dereference` is set to true. `dest` will always be dereferenced.
+/// `options.dereference` is set to true. `dest` will be dereferenced only if
+/// the source was not a symlink.
 ///
 /// Behavior when copying to existing files is contingent on the
 /// `options.overwrite` mode. If a file is skipped, the return type
@@ -1295,11 +1296,30 @@ fn copy_file(
     let context = context.as_str();
 
     // canonicalize dest and source so that later steps can work with the paths directly
-    let dest = canonicalize(dest, MissingHandling::Missing, ResolveMode::Physical).unwrap();
     let source = if options.dereference {
         canonicalize(source, MissingHandling::Missing, ResolveMode::Physical).unwrap()
     } else {
         source.to_owned()
+    };
+
+    let source_file_type = fs::symlink_metadata(&source).context(context)?.file_type();
+    let source_is_symlink = source_file_type.is_symlink();
+
+    #[cfg(unix)]
+    let source_is_fifo = source_file_type.is_fifo();
+    #[cfg(not(unix))]
+    let source_is_fifo = false;
+
+    let dest_already_exists_as_symlink = fs::symlink_metadata(&dest)
+        .map(|meta| meta.file_type().is_symlink())
+        .unwrap_or(false);
+
+    let dest = if !(source_is_symlink && dest_already_exists_as_symlink) {
+        canonicalize(dest, MissingHandling::Missing, ResolveMode::Physical).unwrap()
+    } else {
+        // Don't canonicalize a symlink copied over another symlink, because
+        // then we'll end up overwriting the destination's target.
+        dest.to_path_buf()
     };
 
     let dest_permissions = if dest.exists() {
@@ -1327,10 +1347,27 @@ fn copy_file(
 
     match options.copy_mode {
         CopyMode::Link => {
+            if dest.exists() {
+                let backup_path =
+                    backup_control::get_backup_path(options.backup, &dest, &options.backup_suffix);
+                if let Some(backup_path) = backup_path {
+                    backup_dest(&dest, &backup_path)?;
+                    fs::remove_file(&dest)?;
+                }
+            }
+
             fs::hard_link(&source, &dest).context(context)?;
         }
         CopyMode::Copy => {
-            copy_helper(&source, &dest, options, context, symlinked_files)?;
+            copy_helper(
+                &source,
+                &dest,
+                options,
+                context,
+                source_is_symlink,
+                source_is_fifo,
+                symlinked_files,
+            )?;
         }
         CopyMode::SymLink => {
             symlink_file(&source, &dest, context, symlinked_files)?;
@@ -1346,10 +1383,26 @@ fn copy_file(
                 if src_time <= dest_time {
                     return Ok(());
                 } else {
-                    copy_helper(&source, &dest, options, context, symlinked_files)?;
+                    copy_helper(
+                        &source,
+                        &dest,
+                        options,
+                        context,
+                        source_is_symlink,
+                        source_is_fifo,
+                        symlinked_files,
+                    )?;
                 }
             } else {
-                copy_helper(&source, &dest, options, context, symlinked_files)?;
+                copy_helper(
+                    &source,
+                    &dest,
+                    options,
+                    context,
+                    source_is_symlink,
+                    source_is_fifo,
+                    symlinked_files,
+                )?;
             }
         }
         CopyMode::AttrOnly => {
@@ -1393,6 +1446,8 @@ fn copy_helper(
     dest: &Path,
     options: &Options,
     context: &str,
+    source_is_symlink: bool,
+    source_is_fifo: bool,
     symlinked_files: &mut HashSet<FileInformation>,
 ) -> CopyResult<()> {
     if options.parents {
@@ -1400,23 +1455,15 @@ fn copy_helper(
         fs::create_dir_all(parent)?;
     }
 
-    let file_type = fs::symlink_metadata(&source)?.file_type();
-    let is_symlink = file_type.is_symlink();
-
-    #[cfg(unix)]
-    let is_fifo = file_type.is_fifo();
-    #[cfg(not(unix))]
-    let is_fifo = false;
-
     if source.as_os_str() == "/dev/null" {
         /* workaround a limitation of fs::copy
          * https://github.com/rust-lang/rust/issues/79390
          */
         File::create(dest).context(dest.display().to_string())?;
-    } else if is_fifo && options.recursive {
+    } else if source_is_fifo && options.recursive {
         #[cfg(unix)]
         copy_fifo(dest, options.overwrite)?;
-    } else if is_symlink {
+    } else if source_is_symlink {
         copy_link(source, dest, symlinked_files)?;
     } else if options.reflink_mode != ReflinkMode::Never {
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]

@@ -6,7 +6,7 @@ license = "MIT"
 description = "mkdir ~ (uutils) create DIRECTORY"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/mkdir"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/mkdir"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -16,7 +16,6 @@ path = "src/mkdir.rs"
 
 [dependencies]
 clap = { version = "3.0", features = ["wrap_help", "cargo"] }
-libc = "0.2.42"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["fs", "mode"] }
 
 [[bin]]

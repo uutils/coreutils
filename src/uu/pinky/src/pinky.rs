@@ -22,8 +22,6 @@ use clap::{crate_version, App, AppSettings, Arg};
 use std::path::PathBuf;
 use uucore::{format_usage, InvalidEncodingHandling};
 
-const BUFSIZE: usize = 1024;
-
 static ABOUT: &str = "pinky - lightweight finger";
 const USAGE: &str = "{} [OPTION]... [USER]...";
 
@@ -239,6 +237,14 @@ fn time_string(ut: &Utmpx) -> String {
     time::strftime("%b %e %H:%M", &ut.login_time()).unwrap() // LC_ALL=C
 }
 
+fn gecos_to_fullname(pw: &Passwd) -> String {
+    let mut gecos = pw.user_info.clone();
+    if let Some(n) = gecos.find(',') {
+        gecos.truncate(n);
+    }
+    gecos.replace('&', &pw.name.capitalize())
+}
+
 impl Pinky {
     fn print_entry(&self, ut: &Utmpx) -> std::io::Result<()> {
         let mut pts_path = PathBuf::from("/dev");
@@ -265,11 +271,7 @@ impl Pinky {
 
         if self.include_fullname {
             if let Ok(pw) = Passwd::locate(ut.user().as_ref()) {
-                let mut gecos = pw.user_info;
-                if let Some(n) = gecos.find(',') {
-                    gecos.truncate(n + 1);
-                }
-                print!(" {:<19.19}", gecos.replace('&', &pw.name.capitalize()));
+                print!(" {:<19.19}", gecos_to_fullname(&pw));
             } else {
                 print!(" {:19}", "        ???");
             }
@@ -331,7 +333,7 @@ impl Pinky {
         for u in &self.names {
             print!("Login name: {:<28}In real life: ", u);
             if let Ok(pw) = Passwd::locate(u.as_str()) {
-                println!(" {}", pw.user_info.replace('&', &pw.name.capitalize()));
+                println!(" {}", gecos_to_fullname(&pw));
                 if self.include_home_and_shell {
                     print!("Directory: {:<29}", pw.user_dir);
                     println!("Shell:  {}", pw.user_shell);
@@ -362,12 +364,8 @@ impl Pinky {
 
 fn read_to_console<F: Read>(f: F) {
     let mut reader = BufReader::new(f);
-    let mut iobuf = [0_u8; BUFSIZE];
-    while let Ok(n) = reader.read(&mut iobuf) {
-        if n == 0 {
-            break;
-        }
-        let s = String::from_utf8_lossy(&iobuf);
-        print!("{}", s);
+    let mut iobuf = Vec::new();
+    if reader.read_to_end(&mut iobuf).is_ok() {
+        print!("{}", String::from_utf8_lossy(&iobuf));
     }
 }

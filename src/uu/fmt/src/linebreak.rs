@@ -412,7 +412,7 @@ fn compute_demerits(delta_len: isize, stretch: isize, wlen: isize, prev_rat: f32
     let bad_linelen = if ratio.abs() > 1.0f32 {
         BAD_INFTY
     } else {
-        (BAD_MULT * ratio.powf(3f32).abs()) as i64
+        (BAD_MULT * ratio.powi(3).abs()) as i64
     };
 
     // we penalize lines ending in really short words
@@ -421,12 +421,12 @@ fn compute_demerits(delta_len: isize, stretch: isize, wlen: isize, prev_rat: f32
     } else {
         (DL_MULT
             * ((stretch - wlen) as f32 / (stretch - 1) as f32)
-                .powf(3f32)
+                .powi(3)
                 .abs()) as i64
     };
 
     // we penalize lines that have very different ratios from previous lines
-    let bad_delta_r = (DR_MULT * (((ratio - prev_rat) / 2.0).powf(3f32)).abs()) as i64;
+    let bad_delta_r = (DR_MULT * (((ratio - prev_rat) / 2.0).powi(3)).abs()) as i64;
 
     let demerits = i64::pow(1 + bad_linelen + bad_wordlen + bad_delta_r, 2);
 

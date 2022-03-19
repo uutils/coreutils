@@ -6,7 +6,7 @@ license = "MIT"
 description = "expr ~ (uutils) display the value of EXPRESSION"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/expr"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/expr"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -16,7 +16,6 @@ path = "src/expr.rs"
 
 [dependencies]
 clap = { version = "3.0", features = ["wrap_help", "cargo"] }
-libc = "0.2.42"
 num-bigint = "0.4.0"
 num-traits = "0.2.14"
 onig = { version = "~6.3", default-features = false }

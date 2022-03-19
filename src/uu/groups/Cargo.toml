@@ -6,7 +6,7 @@ license = "MIT"
 description = "groups ~ (uutils) display group memberships for USERNAME"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/groups"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/groups"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

@@ -6,7 +6,7 @@ license = "MIT"
 description = "fmt ~ (uutils) reformat each paragraph of input"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/fmt"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/fmt"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -16,7 +16,6 @@ path = "src/fmt.rs"
 
 [dependencies]
 clap = { version = "3.0", features = ["wrap_help", "cargo"] }
-libc = "0.2.42"
 unicode-width = "0.1.5"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
 

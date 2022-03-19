@@ -6,7 +6,7 @@ license = "MIT"
 description = "users ~ (uutils) display names of currently logged-in users"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/users"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/users"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"

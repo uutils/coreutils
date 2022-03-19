@@ -5,7 +5,7 @@ name: CICD
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain
 # spell-checker:ignore (names) CodeCOV MacOS MinGW Peltoche rivy
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rsync rustc rustfmt rustup shopt xargs
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend pell runtest tempfile testsuite uutils DESTDIR sizemulti Swatinem
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend pell runtest tempfile testsuite uutils DESTDIR multisize Swatinem
 
 # ToDO: [2021-06; rivy] change from `cargo-tree` to `cargo tree` once MSRV is >= 1.45
 
@@ -20,6 +20,13 @@ env:
 on: [push, pull_request]
 
 jobs:
+  cargo-deny:
+    name: Style/cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: EmbarkStudios/cargo-deny-action@v1
+
   style_deps:
     ## ToDO: [2021-11-10; rivy] 'Style/deps' needs more informative output and better integration of results into the GHA dashboard
     name: Style/deps
@@ -433,6 +440,58 @@ jobs:
         make test
 
 
+  build_rust_stable:
+    name: Build/stable
+    needs: [ min_version, deps ]
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest  , features: feat_os_unix }
+          - { os: macos-latest   , features: feat_os_macos }
+          - { os: windows-latest , features: feat_os_windows }
+    steps:
+    - uses: actions/checkout@v2
+    - uses: Swatinem/rust-cache@v1
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+    - name: Test
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+
+  build_rust_nightly:
+    name: Build/nightly
+    needs: [ min_version, deps ]
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest  , features: feat_os_unix }
+          - { os: macos-latest   , features: feat_os_macos }
+          - { os: windows-latest , features: feat_os_windows }
+    steps:
+    - uses: actions/checkout@v2
+    - uses: Swatinem/rust-cache@v1
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+    - name: Test
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+
   compute_size:
     name: Binary sizes
     needs: [ min_version, deps ]
@@ -473,8 +532,8 @@ jobs:
               --arg date "$(date --rfc-email)" \
               --arg sha "$GITHUB_SHA" \
               --arg size "$SIZE" \
-              --arg sizemulti "$SIZEMULTI" \
-              '{($date): { sha: $sha, size: $size, sizemulti: $sizemulti, }}' > size-result.json
+              --arg multisize "$SIZEMULTI" \
+              '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
     - uses: actions/upload-artifact@v2
       with:
         name: size-result
@@ -505,7 +564,6 @@ jobs:
           #- { os: ubuntu-18.04   , target: x86_64-unknown-linux-gnu    , features: feat_os_unix           , use-cross: use-cross }
           #- { os: ubuntu-18.04   , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl      , use-cross: use-cross }
           - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_macos }
-          - { os: windows-latest , target: i686-pc-windows-gnu         , features: feat_os_windows }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
           - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows } ## note: requires rust >= 1.43.0 to link correctly
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
@@ -580,7 +638,7 @@ jobs:
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='' ;
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ; fi
         outputs CARGO_FEATURES_OPTION
         # * CARGO_USE_CROSS (truthy)
         CARGO_USE_CROSS='true' ; case '${{ matrix.job.use-cross }}' in ''|0|f|false|n|no) unset CARGO_USE_CROSS ;; esac;
@@ -600,17 +658,6 @@ jobs:
           *-pc-windows-msvc) STRIP="" ;;
         esac;
         outputs STRIP
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        ## Install/setup prerequisites
-        case '${{ matrix.job.target }}' in
-          arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
-          aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
-        esac
-        case '${{ matrix.job.os }}' in
-          macos-latest) brew install coreutils ;; # needed for testing
-        esac
     - name: Create all needed build/work directories
       shell: bash
       run: |
@@ -629,14 +676,25 @@ jobs:
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for testing
         esac
+        case '${{ matrix.job.os }}' in
+          ubuntu-*)
+            # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
+            # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands. The account also has empty gecos fields.
+            # To work around this for pinky tests, we create a fake login entry for the GH runner account...
+            FAKE_UTMP='[7] [999999] [tty2] [runner] [tty2] [] [0.0.0.0] [2022-02-22T22:22:22,222222+00:00]'
+            # ... by dumping the login records, adding our fake line, then reverse dumping ...
+            (utmpdump /var/run/utmp ; echo $FAKE_UTMP) | sudo utmpdump -r -o /var/run/utmp
+            # ... and add a full name to each account with a gecos field but no full name.
+            sudo sed -i 's/:,/:runner name,/' /etc/passwd
+            # We also create a couple optional files pinky looks for
+            touch /home/runner/.project
+            echo "foo" > /home/runner/.plan
+            ;;
+        esac
     - name: rust toolchain ~ install
       uses: actions-rs/toolchain@v1
-      # env:
-      #   # Override auto-detection of RAM for Rustc install.
-      #   # https://github.com/rust-lang/rustup/issues/2229#issuecomment-585855925
-      #   RUSTUP_UNPACK_RAM: "21474836480"
       with:
-        toolchain: ${{ steps.vars.outputs.TOOLCHAIN }}
+        toolchain: ${{ env.RUST_MIN_SRV }}
         target: ${{ matrix.job.target }}
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
@@ -647,7 +705,7 @@ jobs:
         ## Dependent VARs setup
         outputs() { step_id="dep_vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # * determine sub-crate utility list
-        UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
+        UTILITY_LIST="$(./util/show-utils.sh ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }})"
         echo UTILITY_LIST=${UTILITY_LIST}
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
         outputs CARGO_UTILITY_LIST_OPTIONS
@@ -688,18 +746,21 @@ jobs:
         use-cross: ${{ steps.vars.outputs.CARGO_USE_CROSS }}
         command: build
         args: --release --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+        toolchain: ${{ env.RUST_MIN_SRV }}
     - name: Test
       uses: actions-rs/cargo@v1
       with:
         use-cross: ${{ steps.vars.outputs.CARGO_USE_CROSS }}
         command: test
         args: --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+        toolchain: ${{ env.RUST_MIN_SRV }}
     - name: Test individual utilities
       uses: actions-rs/cargo@v1
       with:
         use-cross: ${{ steps.vars.outputs.CARGO_USE_CROSS }}
         command: test
         args: --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
+        toolchain: ${{ env.RUST_MIN_SRV }}
     - name: Archive executable artifacts
       uses: actions/upload-artifact@v2
       with:
@@ -899,6 +960,21 @@ jobs:
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for testing
         esac
+        case '${{ matrix.job.os }}' in
+          ubuntu-latest)
+            # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
+            # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands. The account also has empty gecos fields.
+            # To work around this for pinky tests, we create a fake login entry for the GH runner account...
+            FAKE_UTMP='[7] [999999] [tty2] [runner] [tty2] [] [0.0.0.0] [2022-02-22T22:22:22,222222+00:00]'
+            # ... by dumping the login records, adding our fake line, then reverse dumping ...
+            (utmpdump /var/run/utmp ; echo $FAKE_UTMP) | sudo utmpdump -r -o /var/run/utmp
+            # ... and add a full name to each account with a gecos field but no full name.
+            sudo sed -i 's/:,/:runner name,/' /etc/passwd
+            # We also create a couple optional files pinky looks for
+            touch /home/runner/.project
+            echo "foo" > /home/runner/.plan
+            ;;
+        esac
     - name: rust toolchain ~ install
       uses: actions-rs/toolchain@v1
       with:
@@ -912,7 +988,7 @@ jobs:
         ## Dependent VARs setup
         outputs() { step_id="dep_vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # * determine sub-crate utility list
-        UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
+        UTILITY_LIST="$(./util/show-utils.sh ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }})"
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
         outputs CARGO_UTILITY_LIST_OPTIONS
     - name: Test uucore

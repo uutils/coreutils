@@ -2,7 +2,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-// spell-checker:ignore tmpfs
+// spell-checker:ignore tmpfs Pcent Itotal Iused Iavail Ipcent
 //! The filesystem usage data table.
 //!
 //! A table comprises a header row ([`Header`]) and a collection of
@@ -11,10 +11,13 @@
 //! [`DisplayRow`] implements [`std::fmt::Display`].
 use number_prefix::NumberPrefix;
 
-use crate::{BlockSize, Filesystem, Options};
+use crate::columns::Column;
+use crate::filesystem::Filesystem;
+use crate::{BlockSize, Options};
 use uucore::fsext::{FsUsage, MountInfo};
 
 use std::fmt;
+use std::ops::AddAssign;
 
 /// A row in the filesystem usage data table.
 ///
@@ -65,6 +68,63 @@ pub(crate) struct Row {
     ///
     /// If the filesystem has zero bytes, then this is `None`.
     inodes_usage: Option<f64>,
+}
+
+impl Row {
+    pub(crate) fn new(source: &str) -> Self {
+        Self {
+            fs_device: source.into(),
+            fs_type: "-".into(),
+            fs_mount: "-".into(),
+            bytes: 0,
+            bytes_used: 0,
+            bytes_free: 0,
+            bytes_usage: None,
+            #[cfg(target_os = "macos")]
+            bytes_capacity: None,
+            inodes: 0,
+            inodes_used: 0,
+            inodes_free: 0,
+            inodes_usage: None,
+        }
+    }
+}
+
+impl AddAssign for Row {
+    /// Sum the numeric values of two rows.
+    ///
+    /// The `Row::fs_device` field is set to `"total"` and the
+    /// remaining `String` fields are set to `"-"`.
+    fn add_assign(&mut self, rhs: Self) {
+        let bytes = self.bytes + rhs.bytes;
+        let bytes_used = self.bytes_used + rhs.bytes_used;
+        let inodes = self.inodes + rhs.inodes;
+        let inodes_used = self.inodes_used + rhs.inodes_used;
+        *self = Self {
+            fs_device: "total".into(),
+            fs_type: "-".into(),
+            fs_mount: "-".into(),
+            bytes,
+            bytes_used,
+            bytes_free: self.bytes_free + rhs.bytes_free,
+            bytes_usage: if bytes == 0 {
+                None
+            } else {
+                Some(bytes_used as f64 / bytes as f64)
+            },
+            // TODO Figure out how to compute this.
+            #[cfg(target_os = "macos")]
+            bytes_capacity: None,
+            inodes,
+            inodes_used,
+            inodes_free: self.inodes_free + rhs.inodes_free,
+            inodes_usage: if inodes == 0 {
+                None
+            } else {
+                Some(inodes_used as f64 / inodes as f64)
+            },
+        }
+    }
 }
 
 impl From<Filesystem> for Row {
@@ -120,7 +180,7 @@ impl From<Filesystem> for Row {
 /// The `options` control how the information in the row gets displayed.
 pub(crate) struct DisplayRow<'a> {
     /// The data in this row.
-    row: Row,
+    row: &'a Row,
 
     /// Options that control how to display the data.
     options: &'a Options,
@@ -135,7 +195,7 @@ pub(crate) struct DisplayRow<'a> {
 
 impl<'a> DisplayRow<'a> {
     /// Instantiate this struct.
-    pub(crate) fn new(row: Row, options: &'a Options) -> Self {
+    pub(crate) fn new(row: &'a Row, options: &'a Options) -> Self {
         Self { row, options }
     }
 
@@ -164,59 +224,40 @@ impl<'a> DisplayRow<'a> {
     fn percentage(fraction: Option<f64>) -> String {
         match fraction {
             None => "-".to_string(),
-            Some(x) => format!("{:.0}%", 100.0 * x),
+            Some(x) => format!("{:.0}%", (100.0 * x).ceil()),
         }
-    }
-
-    /// Write the bytes data for this row.
-    ///
-    /// # Errors
-    ///
-    /// If there is a problem writing to `f`.
-    ///
-    /// If the scaling factor is not 1000, 1024, or a negative number.
-    fn fmt_bytes(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{0: >12} ", self.scaled(self.row.bytes)?)?;
-        write!(f, "{0: >12} ", self.scaled(self.row.bytes_used)?)?;
-        write!(f, "{0: >12} ", self.scaled(self.row.bytes_free)?)?;
-        #[cfg(target_os = "macos")]
-        write!(
-            f,
-            "{0: >12} ",
-            DisplayRow::percentage(self.row.bytes_capacity)
-        )?;
-        write!(f, "{0: >5} ", DisplayRow::percentage(self.row.bytes_usage))?;
-        Ok(())
-    }
-
-    /// Write the inodes data for this row.
-    ///
-    /// # Errors
-    ///
-    /// If there is a problem writing to `f`.
-    ///
-    /// If the scaling factor is not 1000, 1024, or a negative number.
-    fn fmt_inodes(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{0: >12} ", self.scaled(self.row.inodes)?)?;
-        write!(f, "{0: >12} ", self.scaled(self.row.inodes_used)?)?;
-        write!(f, "{0: >12} ", self.scaled(self.row.inodes_free)?)?;
-        write!(f, "{0: >5} ", DisplayRow::percentage(self.row.inodes_usage))?;
-        Ok(())
     }
 }
 
 impl fmt::Display for DisplayRow<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{0: <16} ", self.row.fs_device)?;
-        if self.options.show_fs_type {
-            write!(f, "{0: <5} ", self.row.fs_type)?;
+        for column in &self.options.columns {
+            match column {
+                Column::Source => write!(f, "{0: <16} ", self.row.fs_device)?,
+                Column::Size => write!(f, "{0: >12} ", self.scaled(self.row.bytes)?)?,
+                Column::Used => write!(f, "{0: >12} ", self.scaled(self.row.bytes_used)?)?,
+                Column::Avail => write!(f, "{0: >12} ", self.scaled(self.row.bytes_free)?)?,
+                Column::Pcent => {
+                    write!(f, "{0: >5} ", DisplayRow::percentage(self.row.bytes_usage))?;
+                }
+                Column::Target => write!(f, "{0: <16}", self.row.fs_mount)?,
+                Column::Itotal => write!(f, "{0: >12} ", self.scaled(self.row.inodes)?)?,
+                Column::Iused => write!(f, "{0: >12} ", self.scaled(self.row.inodes_used)?)?,
+                Column::Iavail => write!(f, "{0: >12} ", self.scaled(self.row.inodes_free)?)?,
+                Column::Ipcent => {
+                    write!(f, "{0: >5} ", DisplayRow::percentage(self.row.inodes_usage))?;
+                }
+                // TODO Implement this.
+                Column::File => {}
+                Column::Fstype => write!(f, "{0: <5} ", self.row.fs_type)?,
+                #[cfg(target_os = "macos")]
+                Column::Capacity => write!(
+                    f,
+                    "{0: >12} ",
+                    DisplayRow::percentage(self.row.bytes_capacity)
+                )?,
+            }
         }
-        if self.options.show_inode_instead {
-            self.fmt_inodes(f)?;
-        } else {
-            self.fmt_bytes(f)?;
-        }
-        write!(f, "{0: <16}", self.row.fs_mount)?;
         Ok(())
     }
 }
@@ -238,30 +279,29 @@ impl<'a> Header<'a> {
 
 impl fmt::Display for Header<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{0: <16} ", "Filesystem")?;
-        if self.options.show_fs_type {
-            write!(f, "{0: <5} ", "Type")?;
+        for column in &self.options.columns {
+            match column {
+                Column::Source => write!(f, "{0: <16} ", "Filesystem")?,
+                // `Display` is implemented for `BlockSize`, but
+                // `Display` only works when formatting an object into
+                // an empty format, `{}`. So we use `format!()` first
+                // to create the string, then use `write!()` to align
+                // the string and pad with spaces.
+                Column::Size => write!(f, "{0: >12} ", format!("{}", self.options.block_size))?,
+                Column::Used => write!(f, "{0: >12} ", "Used")?,
+                Column::Avail => write!(f, "{0: >12} ", "Available")?,
+                Column::Pcent => write!(f, "{0: >5} ", "Use%")?,
+                Column::Target => write!(f, "{0: <16} ", "Mounted on")?,
+                Column::Itotal => write!(f, "{0: >12} ", "Inodes")?,
+                Column::Iused => write!(f, "{0: >12} ", "IUsed")?,
+                Column::Iavail => write!(f, "{0: >12} ", "IFree")?,
+                Column::Ipcent => write!(f, "{0: >5} ", "IUse%")?,
+                Column::File => write!(f, "{0: <16}", "File")?,
+                Column::Fstype => write!(f, "{0: <5} ", "Type")?,
+                #[cfg(target_os = "macos")]
+                Column::Capacity => write!(f, "{0: >12} ", "Capacity")?,
+            }
         }
-        if self.options.show_inode_instead {
-            write!(f, "{0: >12} ", "Inodes")?;
-            write!(f, "{0: >12} ", "IUsed")?;
-            write!(f, "{0: >12} ", "IFree")?;
-            write!(f, "{0: >5} ", "IUse%")?;
-        } else {
-            // TODO Support arbitrary positive scaling factors (from
-            // the `--block-size` command-line argument).
-            if let BlockSize::Bytes(_) = self.options.block_size {
-                write!(f, "{0: >12} ", "1k-blocks")?;
-            } else {
-                write!(f, "{0: >12} ", "Size")?;
-            };
-            write!(f, "{0: >12} ", "Used")?;
-            write!(f, "{0: >12} ", "Available")?;
-            #[cfg(target_os = "macos")]
-            write!(f, "{0: >12} ", "Capacity")?;
-            write!(f, "{0: >5} ", "Use%")?;
-        }
-        write!(f, "{0: <16} ", "Mounted on")?;
         Ok(())
     }
 }
@@ -269,39 +309,70 @@ impl fmt::Display for Header<'_> {
 #[cfg(test)]
 mod tests {
 
+    use crate::columns::Column;
     use crate::table::{DisplayRow, Header, Row};
     use crate::{BlockSize, Options};
+
+    const COLUMNS_WITH_FS_TYPE: [Column; 7] = [
+        Column::Source,
+        Column::Fstype,
+        Column::Size,
+        Column::Used,
+        Column::Avail,
+        Column::Pcent,
+        Column::Target,
+    ];
+    const COLUMNS_WITH_INODES: [Column; 6] = [
+        Column::Source,
+        Column::Itotal,
+        Column::Iused,
+        Column::Iavail,
+        Column::Ipcent,
+        Column::Target,
+    ];
 
     #[test]
     fn test_header_display() {
         let options = Default::default();
         assert_eq!(
             Header::new(&options).to_string(),
-            "Filesystem          1k-blocks         Used    Available  Use% Mounted on       "
+            "Filesystem          1K-blocks         Used    Available  Use% Mounted on       "
         );
     }
 
     #[test]
     fn test_header_display_fs_type() {
         let options = Options {
-            show_fs_type: true,
+            columns: COLUMNS_WITH_FS_TYPE.to_vec(),
             ..Default::default()
         };
         assert_eq!(
             Header::new(&options).to_string(),
-            "Filesystem       Type     1k-blocks         Used    Available  Use% Mounted on       "
+            "Filesystem       Type     1K-blocks         Used    Available  Use% Mounted on       "
         );
     }
 
     #[test]
     fn test_header_display_inode() {
         let options = Options {
-            show_inode_instead: true,
+            columns: COLUMNS_WITH_INODES.to_vec(),
             ..Default::default()
         };
         assert_eq!(
             Header::new(&options).to_string(),
             "Filesystem             Inodes        IUsed        IFree IUse% Mounted on       "
+        );
+    }
+
+    #[test]
+    fn test_header_display_block_size_1024() {
+        let options = Options {
+            block_size: BlockSize::Bytes(3 * 1024),
+            ..Default::default()
+        };
+        assert_eq!(
+            Header::new(&options).to_string(),
+            "Filesystem          3K-blocks         Used    Available  Use% Mounted on       "
         );
     }
 
@@ -354,7 +425,7 @@ mod tests {
             inodes_usage: Some(0.2),
         };
         assert_eq!(
-            DisplayRow::new(row, &options).to_string(),
+            DisplayRow::new(&row, &options).to_string(),
             "my_device                 100           25           75   25% my_mount        "
         );
     }
@@ -362,8 +433,8 @@ mod tests {
     #[test]
     fn test_row_display_fs_type() {
         let options = Options {
+            columns: COLUMNS_WITH_FS_TYPE.to_vec(),
             block_size: BlockSize::Bytes(1),
-            show_fs_type: true,
             ..Default::default()
         };
         let row = Row {
@@ -385,7 +456,7 @@ mod tests {
             inodes_usage: Some(0.2),
         };
         assert_eq!(
-            DisplayRow::new(row, &options).to_string(),
+            DisplayRow::new(&row, &options).to_string(),
             "my_device        my_type          100           25           75   25% my_mount        "
         );
     }
@@ -393,8 +464,8 @@ mod tests {
     #[test]
     fn test_row_display_inodes() {
         let options = Options {
+            columns: COLUMNS_WITH_INODES.to_vec(),
             block_size: BlockSize::Bytes(1),
-            show_inode_instead: true,
             ..Default::default()
         };
         let row = Row {
@@ -416,7 +487,7 @@ mod tests {
             inodes_usage: Some(0.2),
         };
         assert_eq!(
-            DisplayRow::new(row, &options).to_string(),
+            DisplayRow::new(&row, &options).to_string(),
             "my_device                  10            2            8   20% my_mount        "
         );
     }
@@ -425,7 +496,7 @@ mod tests {
     fn test_row_display_human_readable_si() {
         let options = Options {
             block_size: BlockSize::HumanReadableDecimal,
-            show_fs_type: true,
+            columns: COLUMNS_WITH_FS_TYPE.to_vec(),
             ..Default::default()
         };
         let row = Row {
@@ -447,7 +518,7 @@ mod tests {
             inodes_usage: Some(0.2),
         };
         assert_eq!(
-            DisplayRow::new(row, &options).to_string(),
+            DisplayRow::new(&row, &options).to_string(),
             "my_device        my_type         4.0k         1.0k         3.0k   25% my_mount        "
         );
     }
@@ -456,7 +527,7 @@ mod tests {
     fn test_row_display_human_readable_binary() {
         let options = Options {
             block_size: BlockSize::HumanReadableBinary,
-            show_fs_type: true,
+            columns: COLUMNS_WITH_FS_TYPE.to_vec(),
             ..Default::default()
         };
         let row = Row {
@@ -478,8 +549,38 @@ mod tests {
             inodes_usage: Some(0.2),
         };
         assert_eq!(
-            DisplayRow::new(row, &options).to_string(),
+            DisplayRow::new(&row, &options).to_string(),
             "my_device        my_type        4.0Ki        1.0Ki        3.0Ki   25% my_mount        "
+        );
+    }
+
+    #[test]
+    fn test_row_display_round_up_usage() {
+        let options = Options {
+            block_size: BlockSize::Bytes(1),
+            ..Default::default()
+        };
+        let row = Row {
+            fs_device: "my_device".to_string(),
+            fs_type: "my_type".to_string(),
+            fs_mount: "my_mount".to_string(),
+
+            bytes: 100,
+            bytes_used: 25,
+            bytes_free: 75,
+            bytes_usage: Some(0.251),
+
+            #[cfg(target_os = "macos")]
+            bytes_capacity: Some(0.5),
+
+            inodes: 10,
+            inodes_used: 2,
+            inodes_free: 8,
+            inodes_usage: Some(0.2),
+        };
+        assert_eq!(
+            DisplayRow::new(&row, &options).to_string(),
+            "my_device                 100           25           75   26% my_mount        "
         );
     }
 }

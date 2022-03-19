@@ -137,6 +137,8 @@ jobs:
             echo "::error ::Failed to find summary of test results (missing '${SUITE_LOG_FILE}'); failing early"
             exit 1
           fi
+          # Compress logs before upload (fails otherwise)
+          gzip ${{ steps.vars.outputs.TEST_LOGS_GLOB }}
     - name: Reserve SHA1/ID of 'test-summary'
       uses: actions/upload-artifact@v2
       with:
@@ -201,7 +203,6 @@ jobs:
   gnu_coverage:
     name: Run GNU tests with coverage
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
     - name: Checkout code uutil
       uses: actions/checkout@v2

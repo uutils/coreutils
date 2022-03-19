@@ -70,33 +70,17 @@ sed -i 's|^"\$@|/usr/bin/timeout 600 "\$@|' build-aux/test-driver
 sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
 sed -i 's| tr | /usr/bin/tr |' tests/init.sh
 make -j "$(nproc)"
-first=00
 if test ${UU_MAKE_PROFILE} != "debug"; then
     # Generate the factor tests, so they can be fixed
     # * reduced to 20 to decrease log size (down from 36 expected by GNU)
     # * only for 'release', skipped for 'debug' as redundant and too time consuming (causing timeout errors)
-    seq=$(
-        i=${first}
-        while test "$i" -le 20; do
-            printf '%02d ' $i
-            i=$(($i + 1))
-        done
-    )
-    for i in ${seq}; do
+    for i in $(seq -w 0 20); do
         make "tests/factor/t${i}.sh"
     done
-    sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*sh
-    first=21
+    sed -i -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*sh
 fi
 # strip all (debug) or just the longer (release) factor tests from Makefile
-seq=$(
-    i=${first}
-    while test "$i" -le 36; do
-        printf '%02d ' $i
-        i=$(($i + 1))
-    done
-)
-for i in ${seq}; do
+for i in $(seq 20 36); do
     echo "strip t${i}.sh from Makefile"
     sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
 done
@@ -118,22 +102,17 @@ sed -i -e '/tests\/misc\/seq-precision.sh/ D' \
 sed -i '/INT_OFLOW/ D' tests/misc/printf.sh
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
-sed -i 's|stat|/usr/bin/stat|' tests/chgrp/basic.sh tests/cp/existing-perm-dir.sh tests/touch/60-seconds.sh tests/misc/sort-compress-proc.sh
-sed -i 's|ls -|/usr/bin/ls -|' tests/chgrp/posix-H.sh tests/chown/deref.sh tests/cp/same-file.sh tests/misc/mknod.sh tests/mv/part-symlink.sh tests/du/8gb.sh
-sed -i 's|mkdir |/usr/bin/mkdir |' tests/cp/existing-perm-dir.sh tests/rm/empty-inacc.sh
+sed -i 's|stat|/usr/bin/stat|' tests/touch/60-seconds.sh tests/misc/sort-compress-proc.sh
+sed -i 's|ls -|/usr/bin/ls -|' tests/cp/same-file.sh tests/misc/mknod.sh tests/mv/part-symlink.sh
 sed -i 's|timeout \([[:digit:]]\)| /usr/bin/timeout \1|' tests/tail-2/inotify-rotate.sh tests/tail-2/inotify-dir-recreate.sh tests/tail-2/inotify-rotate-resources.sh tests/cp/parent-perm-race.sh tests/ls/infloop.sh tests/misc/sort-exit-early.sh tests/misc/sort-NaN-infloop.sh tests/misc/uniq-perf.sh tests/tail-2/inotify-only-regular.sh tests/tail-2/pipe-f2.sh tests/tail-2/retry.sh tests/tail-2/symlink.sh tests/tail-2/wait.sh tests/tail-2/pid.sh tests/dd/stats.sh tests/tail-2/follow-name.sh tests/misc/shuf.sh # Don't break the function called 'grep_timeout'
-sed -i 's|chmod |/usr/bin/chmod |' tests/du/inacc-dir.sh tests/mkdir/p-3.sh tests/tail-2/tail-n0f.sh tests/cp/fail-perm.sh tests/du/inaccessible-cwd.sh tests/mv/i-2.sh tests/chgrp/basic.sh tests/misc/shuf.sh
+sed -i 's|chmod |/usr/bin/chmod |' tests/du/inacc-dir.sh tests/tail-2/tail-n0f.sh tests/cp/fail-perm.sh tests/mv/i-2.sh tests/misc/shuf.sh
 sed -i 's|sort |/usr/bin/sort |' tests/ls/hyperlink.sh tests/misc/test-N.sh
 sed -i 's|split |/usr/bin/split |' tests/misc/factor-parallel.sh
-sed -i 's|truncate |/usr/bin/truncate |' tests/split/fail.sh
-sed -i 's|dd |/usr/bin/dd |' tests/du/8gb.sh tests/tail-2/big-4gb.sh init.cfg
 sed -i 's|id -|/usr/bin/id -|' tests/misc/runcon-no-reorder.sh
-sed -i 's|touch |/usr/bin/touch |' tests/cp/preserve-link.sh tests/cp/reflink-perm.sh tests/ls/block-size.sh tests/ls/abmon-align.sh tests/ls/rt-1.sh tests/mv/update.sh tests/misc/ls-time.sh tests/misc/stat-nanoseconds.sh tests/misc/time-style.sh tests/misc/test-N.sh
+sed -i 's|touch |/usr/bin/touch |' tests/cp/preserve-link.sh tests/cp/reflink-perm.sh tests/ls/block-size.sh tests/mv/update.sh tests/misc/ls-time.sh tests/misc/stat-nanoseconds.sh tests/misc/time-style.sh tests/misc/test-N.sh
 sed -i 's|ln -|/usr/bin/ln -|' tests/cp/link-deref.sh
-sed -i 's|printf |/usr/bin/printf |g' tests/dd/ascii.sh
 sed -i 's|cp |/usr/bin/cp |' tests/mv/hard-2.sh
 sed -i 's|paste |/usr/bin/paste |' tests/misc/od-endian.sh
-sed -i 's|seq |/usr/bin/seq |' tests/misc/sort-discrim.sh
 
 # Add specific timeout to tests that currently hang to limit time spent waiting
 sed -i 's|\(^\s*\)seq \$|\1/usr/bin/timeout 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh

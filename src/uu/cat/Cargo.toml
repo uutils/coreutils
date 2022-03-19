@@ -6,7 +6,7 @@ license = "MIT"
 description = "cat ~ (uutils) concatenate and display input"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/cat"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/cat"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -23,9 +23,6 @@ uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=[
 [target.'cfg(unix)'.dependencies]
 unix_socket = "0.5.0"
 nix = "0.23.1"
-
-[target.'cfg(windows)'.dependencies]
-winapi-util = "0.1.5"
 
 [[bin]]
 name = "cat"

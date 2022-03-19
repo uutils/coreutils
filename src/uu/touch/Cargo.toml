@@ -6,7 +6,7 @@ license = "MIT"
 description = "touch ~ (uutils) change FILE timestamps"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/touch"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/touch"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -19,6 +19,9 @@ filetime = "0.2.1"
 clap = { version = "3.0", features = ["wrap_help", "cargo"] }
 time = "0.1.40"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["libc"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winapi = { version = "0.3" }
 
 [[bin]]
 name = "touch"

@@ -334,19 +334,20 @@ fn test_chmod_recursive() {
     make_file(&at.plus_as_string("a/b/c/c"), 0o100444);
     make_file(&at.plus_as_string("z/y"), 0o100444);
 
+    // only the permissions of folder `a` and `z` are changed
+    // folder can't be read after read permission is removed
     ucmd.arg("-R")
         .arg("--verbose")
         .arg("-r,a+w")
         .arg("a")
         .arg("z")
-        .succeeds()
-        .stdout_contains(&"to 0333 (-wx-wx-wx)")
-        .stdout_contains(&"to 0222 (-w--w--w-)");
+        .fails()
+        .stderr_is("chmod: Permission denied");
 
-    assert_eq!(at.metadata("z/y").permissions().mode(), 0o100222);
-    assert_eq!(at.metadata("a/a").permissions().mode(), 0o100222);
-    assert_eq!(at.metadata("a/b/b").permissions().mode(), 0o100222);
-    assert_eq!(at.metadata("a/b/c/c").permissions().mode(), 0o100222);
+    assert_eq!(at.metadata("z/y").permissions().mode(), 0o100444);
+    assert_eq!(at.metadata("a/a").permissions().mode(), 0o100444);
+    assert_eq!(at.metadata("a/b/b").permissions().mode(), 0o100444);
+    assert_eq!(at.metadata("a/b/c/c").permissions().mode(), 0o100444);
     println!("mode {:o}", at.metadata("a").permissions().mode());
     assert_eq!(at.metadata("a").permissions().mode(), 0o40333);
     assert_eq!(at.metadata("z").permissions().mode(), 0o40333);
@@ -354,6 +355,23 @@ fn test_chmod_recursive() {
     unsafe {
         umask(original_umask);
     }
+}
+
+#[test]
+#[allow(clippy::unreadable_literal)]
+fn test_chmod_recursive_read_permission() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("a/b");
+    let mut perms = at.metadata("a/b").permissions();
+    perms.set_mode(0o311);
+    set_permissions(at.plus_as_string("a/b"), perms.clone()).unwrap();
+    set_permissions(at.plus_as_string("a"), perms).unwrap();
+
+    ucmd.arg("-R").arg("u+r").arg("a").succeeds();
+
+    assert_eq!(at.metadata("a").permissions().mode(), 0o40711);
+    assert_eq!(at.metadata("a/b").permissions().mode(), 0o40711);
 }
 
 #[test]
@@ -455,8 +473,8 @@ fn test_chmod_symlink_non_existing_file_recursive() {
 
     let expected_stdout = &format!(
         // spell-checker:disable-next-line
-        "mode of '{}' retained as 0755 (rwxr-xr-x)\nneither symbolic link '{}/{}' nor referent has been changed",
-        test_directory, test_directory, test_symlink
+        "mode of '{}' retained as 0755 (rwxr-xr-x)",
+        test_directory
     );
 
     // '-v': this should succeed without stderr

@@ -32,8 +32,8 @@ const USAGE: &str = "{} [OPTIONS]...";
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
-    let mut ignore = match matches.value_of(OPT_IGNORE) {
-        Some(numstr) => match numstr.parse() {
+    let ignore = match matches.value_of(OPT_IGNORE) {
+        Some(numstr) => match numstr.trim().parse() {
             Ok(num) => num,
             Err(e) => {
                 return Err(USimpleError::new(
@@ -45,18 +45,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => 0,
     };
 
-    if !matches.is_present(OPT_ALL) {
-        // OMP_NUM_THREADS doesn't have an impact on --all
-        ignore += match env::var("OMP_NUM_THREADS") {
-            Ok(threadstr) => threadstr.parse().unwrap_or(0),
-            Err(_) => 0,
-        };
-    }
-
     let mut cores = if matches.is_present(OPT_ALL) {
         num_cpus_all()
     } else {
-        num_cpus::get()
+        // OMP_NUM_THREADS doesn't have an impact on --all
+        match env::var("OMP_NUM_THREADS") {
+            // Uses the OpenMP variable to force the number of threads
+            // If the parsing fails, returns the number of CPU
+            Ok(threadstr) => threadstr.parse().unwrap_or_else(|_| num_cpus::get()),
+            // the variable 'OMP_NUM_THREADS' doesn't exit
+            // fallback to the regular CPU detection
+            Err(_) => num_cpus::get(),
+        }
     };
 
     if cores <= ignore {
