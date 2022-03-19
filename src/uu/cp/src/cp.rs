@@ -1406,9 +1406,17 @@ fn copy_file(
             }
         }
         CopyMode::AttrOnly => {
-            let is_symlink = fs::symlink_metadata(&source)?.file_type().is_symlink();
-            if is_symlink && !options.dereference {
-                copy_helper(&source, &dest, options, context, symlinked_files)?;
+            let file_type = fs::symlink_metadata(&source)?.file_type();
+            if file_type.is_symlink() && !options.dereference {
+                copy_helper(
+                    &source,
+                    &dest,
+                    options,
+                    context,
+                    true,
+                    file_type.is_fifo(),
+                    symlinked_files,
+                )?;
             } else {
                 OpenOptions::new()
                     .write(true)
