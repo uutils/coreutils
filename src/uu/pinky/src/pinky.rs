@@ -36,6 +36,7 @@ mod options {
     pub const OMIT_NAME_HOST: &str = "omit_name_host";
     pub const OMIT_NAME_HOST_TIME: &str = "omit_name_host_time";
     pub const USER: &str = "user";
+    pub const HELP: &str = "help";
 }
 
 fn get_long_usage() -> String {
@@ -179,6 +180,13 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::USER)
                 .takes_value(true)
                 .multiple_occurrences(true),
+        )
+        .arg(
+            // Redefine the help argument to not include the short flag
+            // since that conflicts with omit_project_file.
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information"),
         )
 }
 
