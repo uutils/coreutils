@@ -131,3 +131,13 @@ fn test_dont_overflow() {
         .no_stderr()
         .no_stdout();
 }
+
+// #[test]
+#[allow(dead_code)]
+fn test_sum_overflow() {
+    new_ucmd!()
+        .args(&["100000000000000d", "100000000000000d", "100000000000000d"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+}
