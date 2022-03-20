@@ -618,3 +618,19 @@ fn test_line_bytes() {
     assert_eq!(at.read("xac"), "cccc\ndd\n");
     assert_eq!(at.read("xad"), "ee\n");
 }
+
+#[test]
+fn test_line_bytes_no_final_newline() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-C", "2"])
+        .pipe_in("1\n2222\n3\n4")
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("xaa"), "1\n");
+    assert_eq!(at.read("xab"), "22");
+    assert_eq!(at.read("xac"), "22");
+    assert_eq!(at.read("xad"), "\n");
+    assert_eq!(at.read("xae"), "3\n");
+    assert_eq!(at.read("xaf"), "4");
+}

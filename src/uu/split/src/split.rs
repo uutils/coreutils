@@ -886,7 +886,7 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
                 // then move on to the next chunk if necessary.
                 None => {
                     let end = self.num_bytes_remaining_in_current_chunk;
-                    let num_bytes_written = self.inner.write(&buf[..end])?;
+                    let num_bytes_written = self.inner.write(&buf[..end.min(buf.len())])?;
                     self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
                     total_bytes_written += num_bytes_written;
                     buf = &buf[num_bytes_written..];
