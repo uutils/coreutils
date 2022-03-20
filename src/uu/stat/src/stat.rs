@@ -471,11 +471,18 @@ impl Stater {
     }
 
     fn new(matches: &ArgMatches) -> UResult<Self> {
-        let files: Vec<String> = matches
+        let mut files: Vec<String> = matches
             .values_of(ARG_FILES)
             .map(|v| v.map(ToString::to_string).collect())
             .unwrap_or_default();
-
+        #[cfg(unix)]
+        if files.contains(&String::from("-")) {
+            files = Vec::from([Path::new("/dev/stdin")
+                .canonicalize()?
+                .into_os_string()
+                .into_string()
+                .unwrap()]);
+        }
         let format_str = if matches.is_present(options::PRINTF) {
             matches
                 .value_of(options::PRINTF)
