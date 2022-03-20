@@ -70,6 +70,11 @@ pub fn uu_app<'a>() -> Command<'a> {
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information."),
+        )
+        .arg(
             Arg::new(options::verbosity::CHANGES)
                 .short('c')
                 .long(options::verbosity::CHANGES)

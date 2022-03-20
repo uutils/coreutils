@@ -98,6 +98,7 @@ If an error occurred, a diagnostic message will be printed to stderr, and the
 exitcode will be non-zero."#;
 
 pub(crate) mod options {
+    pub const HELP: &str = "help";
     pub const ADDRESS_RADIX: &str = "address-radix";
     pub const SKIP_BYTES: &str = "skip-bytes";
     pub const READ_BYTES: &str = "read-bytes";
@@ -299,6 +300,11 @@ pub fn uu_app<'a>() -> Command<'a> {
         .dont_delimit_trailing_values(true)
         .infer_long_args(true)
         .setting(AppSettings::DeriveDisplayOrder)
+        .arg(
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information.")
+        )
         .arg(
             Arg::new(options::ADDRESS_RADIX)
                 .short('A')

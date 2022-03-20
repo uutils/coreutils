@@ -98,6 +98,7 @@ mod options {
         pub const DIAGNOSE_FIRST: &str = "diagnose-first";
     }
 
+    pub const HELP: &str = "help";
     pub const DICTIONARY_ORDER: &str = "dictionary-order";
     pub const MERGE: &str = "merge";
     pub const DEBUG: &str = "debug";
@@ -1274,6 +1275,11 @@ pub fn uu_app<'a>() -> Command<'a> {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .arg(
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information."),
+        )
         .arg(
             Arg::new(options::modes::SORT)
                 .long(options::modes::SORT)

@@ -29,6 +29,7 @@ static ABOUT: &str = "Show information about the file system on which each FILE 
                       or all file systems by default.";
 const USAGE: &str = "{} [OPTION]... [FILE]...";
 
+static OPT_HELP: &str = "help";
 static OPT_ALL: &str = "all";
 static OPT_BLOCKSIZE: &str = "blocksize";
 static OPT_DIRECT: &str = "direct";
@@ -322,6 +323,11 @@ pub fn uu_app<'a>() -> Command<'a> {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .arg(
+            Arg::new(OPT_HELP)
+                .long(OPT_HELP)
+                .help("Print help information."),
+        )
         .arg(
             Arg::new(OPT_ALL)
                 .short('a')

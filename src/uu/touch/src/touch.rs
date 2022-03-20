@@ -31,6 +31,7 @@ pub mod options {
         pub static REFERENCE: &str = "reference";
         pub static CURRENT: &str = "current";
     }
+    pub static HELP: &str = "help";
     pub static ACCESS: &str = "access";
     pub static MODIFICATION: &str = "modification";
     pub static NO_CREATE: &str = "no-create";
@@ -155,6 +156,11 @@ pub fn uu_app<'a>() -> Command<'a> {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .arg(
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information."),
+        )
         .arg(
             Arg::new(options::ACCESS)
                 .short('a')

@@ -66,6 +66,7 @@ enum NumberFormat {
 }
 
 pub mod options {
+    pub const HELP: &str = "help";
     pub const FILE: &str = "file";
     pub const BODY_NUMBERING: &str = "body-numbering";
     pub const SECTION_DELIMITER: &str = "section-delimiter";
@@ -145,6 +146,11 @@ pub fn uu_app<'a>() -> Command<'a> {
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .arg(
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information."),
+        )
         .arg(
             Arg::new(options::FILE)
                 .hide(true)

@@ -116,6 +116,7 @@ pub mod options {
         pub static DIR_ARGS: &str = "dereference-command-line-symlink-to-dir";
     }
 
+    pub static HELP: &str = "help";
     pub static QUOTING_STYLE: &str = "quoting-style";
     pub static HIDE_CONTROL_CHARS: &str = "hide-control-chars";
     pub static SHOW_CONTROL_CHARS: &str = "show-control-chars";
@@ -806,6 +807,11 @@ pub fn uu_app<'a>() -> Command<'a> {
             whose names start with '.'.",
         )
         .infer_long_args(true)
+        .arg(
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information.")
+        )
         // Format arguments
         .arg(
             Arg::new(options::FORMAT)

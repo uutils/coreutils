@@ -383,6 +383,7 @@ impl ChownExecutor {
 }
 
 pub mod options {
+    pub const HELP: &str = "help";
     pub mod verbosity {
         pub const CHANGES: &str = "changes";
         pub const QUIET: &str = "quiet";
