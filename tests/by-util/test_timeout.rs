@@ -12,6 +12,14 @@ fn test_subcommand_return_code() {
 }
 
 #[test]
+fn test_invalid_time_interval() {
+    new_ucmd!()
+        .args(&["xyz", "sleep", "0"])
+        .fails()
+        .usage_error("invalid time interval 'xyz'");
+}
+
+#[test]
 fn test_command_with_args() {
     new_ucmd!()
         .args(&["1700", "echo", "-n", "abcd"])

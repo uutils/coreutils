@@ -19,7 +19,7 @@ use std::io::ErrorKind;
 use std::process::{self, Child, Stdio};
 use std::time::Duration;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::process::ChildExt;
 use uucore::signals::{signal_by_name_or_value, signal_name_by_value};
 use uucore::{format_usage, InvalidEncodingHandling};
@@ -72,7 +72,7 @@ impl Config {
         let duration =
             match uucore::parse_time::from_str(options.value_of(options::DURATION).unwrap()) {
                 Ok(duration) => duration,
-                Err(err) => return Err(USimpleError::new(1, err)),
+                Err(err) => return Err(UUsageError::new(1, err)),
             };
 
         let preserve_status: bool = options.is_present(options::PRESERVE_STATUS);
