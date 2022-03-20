@@ -1414,7 +1414,7 @@ fn copy_file(
                     options,
                     context,
                     true,
-                    file_type.is_fifo(),
+                    source_is_fifo,
                     symlinked_files,
                 )?;
             } else {
