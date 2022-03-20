@@ -12,7 +12,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, AppSettings};
+use clap::{crate_version, Command};
 use std::ffi::CStr;
 use uucore::error::UResult;
 use uucore::InvalidEncodingHandling;
@@ -51,10 +51,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .override_usage(uucore::execution_phrase())
         .about(SUMMARY)
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
 }

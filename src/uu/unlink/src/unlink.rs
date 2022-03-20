@@ -10,7 +10,7 @@
 use std::fs::remove_file;
 use std::path::Path;
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
@@ -27,11 +27,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     remove_file(path).map_err_context(|| format!("cannot unlink {}", path.quote()))
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(OPT_PATH)
                 .required(true)

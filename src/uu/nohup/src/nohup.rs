@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use libc::{c_char, dup2, execvp, signal};
 use libc::{SIGHUP, SIG_IGN};
 use std::env;
@@ -116,8 +116,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
@@ -128,8 +128,8 @@ pub fn uu_app<'a>() -> App<'a> {
                 .required(true)
                 .multiple_occurrences(true),
         )
-        .setting(AppSettings::TrailingVarArg)
-        .setting(AppSettings::InferLongArgs)
+        .trailing_var_arg(true)
+        .infer_long_args(true)
 }
 
 fn replace_fds() -> UResult<()> {

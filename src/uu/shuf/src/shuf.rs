@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) cmdline evec seps rvec fdata
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use rand::prelude::SliceRandom;
 use rand::RngCore;
 use std::fs::File;
@@ -119,13 +119,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .name(NAME)
         .about(ABOUT)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::ECHO)
                 .short('e')
@@ -134,7 +134,7 @@ pub fn uu_app<'a>() -> App<'a> {
                 .value_name("ARG")
                 .help("treat each ARG as an input line")
                 .multiple_occurrences(true)
-                .use_delimiter(false)
+                .use_value_delimiter(false)
                 .min_values(0)
                 .conflicts_with(options::INPUT_RANGE),
         )

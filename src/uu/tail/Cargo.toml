@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/tail.rs"
 
 [dependencies]
-clap = { version = "3.0", features = ["wrap_help", "cargo"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 libc = "0.2.42"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["ringbuffer", "lines"] }
 

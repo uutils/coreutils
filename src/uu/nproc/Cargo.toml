@@ -17,7 +17,7 @@ path = "src/nproc.rs"
 [dependencies]
 libc = "0.2.42"
 num_cpus = "1.10"
-clap = { version = "3.0", features = ["wrap_help", "cargo"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["fs"] }
 
 [[bin]]

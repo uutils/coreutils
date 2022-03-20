@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore tldr
 
-use clap::App;
+use clap::Command;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::Cursor;
@@ -46,13 +46,13 @@ fn main() -> io::Result<()> {
 
     let mut utils = utils.entries().collect::<Vec<_>>();
     utils.sort();
-    for (&name, (_, app)) in utils {
+    for (&name, (_, command)) in utils {
         if name == "[" {
             continue;
         }
         let p = format!("docs/src/utils/{}.md", name);
         if let Ok(f) = File::create(&p) {
-            write_markdown(f, &mut app(), name, &mut tldr_zip)?;
+            write_markdown(f, &mut command(), name, &mut tldr_zip)?;
             println!("Wrote to '{}'", p);
         } else {
             println!("Error writing to {}", p);
@@ -64,29 +64,29 @@ fn main() -> io::Result<()> {
 
 fn write_markdown(
     mut w: impl Write,
-    app: &mut App,
+    command: &mut Command,
     name: &str,
     tldr_zip: &mut zip::ZipArchive<impl Read + Seek>,
 ) -> io::Result<()> {
     write!(w, "# {}\n\n", name)?;
-    write_version(&mut w, app)?;
-    write_usage(&mut w, app, name)?;
-    write_description(&mut w, app)?;
-    write_options(&mut w, app)?;
+    write_version(&mut w, command)?;
+    write_usage(&mut w, command, name)?;
+    write_description(&mut w, command)?;
+    write_options(&mut w, command)?;
     write_examples(&mut w, name, tldr_zip)
 }
 
-fn write_version(w: &mut impl Write, app: &App) -> io::Result<()> {
+fn write_version(w: &mut impl Write, command: &Command) -> io::Result<()> {
     writeln!(
         w,
         "<div class=\"version\">version: {}</div>",
-        app.render_version().split_once(' ').unwrap().1
+        command.render_version().split_once(' ').unwrap().1
     )
 }
 
-fn write_usage(w: &mut impl Write, app: &mut App, name: &str) -> io::Result<()> {
+fn write_usage(w: &mut impl Write, command: &mut Command, name: &str) -> io::Result<()> {
     writeln!(w, "\n```")?;
-    let mut usage: String = app
+    let mut usage: String = command
         .render_usage()
         .lines()
         .skip(1)
@@ -99,8 +99,8 @@ fn write_usage(w: &mut impl Write, app: &mut App, name: &str) -> io::Result<()> 
     writeln!(w, "```")
 }
 
-fn write_description(w: &mut impl Write, app: &App) -> io::Result<()> {
-    if let Some(about) = app.get_long_about().or_else(|| app.get_about()) {
+fn write_description(w: &mut impl Write, command: &Command) -> io::Result<()> {
+    if let Some(about) = command.get_long_about().or_else(|| command.get_about()) {
         writeln!(w, "{}", about)
     } else {
         Ok(())
@@ -152,10 +152,10 @@ fn get_zip_content(archive: &mut ZipArchive<impl Read + Seek>, name: &str) -> Op
     Some(s)
 }
 
-fn write_options(w: &mut impl Write, app: &App) -> io::Result<()> {
+fn write_options(w: &mut impl Write, command: &Command) -> io::Result<()> {
     writeln!(w, "<h2>Options</h2>")?;
     write!(w, "<dl>")?;
-    for arg in app.get_arguments() {
+    for arg in command.get_arguments() {
         write!(w, "<dt>")?;
         let mut first = true;
         for l in arg.get_long_and_visible_aliases().unwrap_or_default() {

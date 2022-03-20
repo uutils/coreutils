@@ -20,7 +20,7 @@ mod digest;
 use self::digest::Digest;
 use self::digest::DigestWriter;
 
-use clap::{App, AppSettings, Arg, ArgMatches};
+use clap::{Arg, ArgMatches, Command};
 use hex::encode;
 use md5::Md5;
 use regex::Regex;
@@ -297,13 +297,13 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     // Default binary in Windows, text mode otherwise
     let binary_flag_default = cfg!(windows);
 
-    let app = uu_app(&binary_name);
+    let command = uu_app(&binary_name);
 
     // FIXME: this should use try_get_matches_from() and crash!(), but at the moment that just
     //        causes "error: " to be printed twice (once from crash!() and once from clap).  With
     //        the current setup, the name of the utility is not printed, but I think this is at
     //        least somewhat better from a user's perspective.
-    let matches = app.get_matches_from(args);
+    let matches = command.get_matches_from(args);
 
     let (name, algo, bits) = detect_algo(&binary_name, &matches);
 
@@ -340,7 +340,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app_common<'a>() -> App<'a> {
+pub fn uu_app_common<'a>() -> Command<'a> {
     #[cfg(windows)]
     const BINARY_HELP: &str = "read in binary mode (default)";
     #[cfg(not(windows))]
@@ -349,10 +349,10 @@ pub fn uu_app_common<'a>() -> App<'a> {
     const TEXT_HELP: &str = "read in text mode";
     #[cfg(not(windows))]
     const TEXT_HELP: &str = "read in text mode (default)";
-    App::new(uucore::util_name())
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about("Compute and check message digests.")
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new("binary")
                 .short('b')
@@ -419,8 +419,8 @@ pub fn uu_app_common<'a>() -> App<'a> {
         )
 }
 
-pub fn uu_app_custom<'a>() -> App<'a> {
-    let mut app = uu_app_common();
+pub fn uu_app_custom<'a>() -> Command<'a> {
+    let mut command = uu_app_common();
     let algorithms = &[
         ("md5", "work with MD5"),
         ("sha1", "work with SHA1"),
@@ -446,14 +446,14 @@ pub fn uu_app_custom<'a>() -> App<'a> {
     ];
 
     for (name, desc) in algorithms {
-        app = app.arg(Arg::new(*name).long(name).help(*desc));
+        command = command.arg(Arg::new(*name).long(name).help(*desc));
     }
-    app
+    command
 }
 
 // hashsum is handled differently in build.rs, therefore this is not the same
 // as in other utilities.
-fn uu_app<'a>(binary_name: &str) -> App<'a> {
+fn uu_app<'a>(binary_name: &str) -> Command<'a> {
     if !is_custom_binary(binary_name) {
         uu_app_custom()
     } else {

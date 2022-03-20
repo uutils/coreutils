@@ -19,7 +19,7 @@ edition = "2018"
 path = "src/cp.rs"
 
 [dependencies]
-clap = { version = "3.0", features = ["wrap_help", "cargo"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 filetime = "0.2"
 libc = "0.2.85"
 quick-error = "2.0.1"

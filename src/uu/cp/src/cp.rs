@@ -28,7 +28,7 @@ use winapi::um::fileapi::GetFileInformationByHandle;
 
 use std::borrow::Cow;
 
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
+use clap::{crate_version, Arg, ArgMatches, Command};
 use filetime::FileTime;
 #[cfg(unix)]
 use libc::mkfifo;
@@ -296,7 +296,7 @@ static DEFAULT_ATTRIBUTES: &[Attribute] = &[
     Attribute::Timestamps,
 ];
 
-pub fn uu_app<'a>() -> App<'a> {
+pub fn uu_app<'a>() -> Command<'a> {
     const MODE_ARGS: &[&str] = &[
         options::LINK,
         options::REFLINK,
@@ -304,11 +304,11 @@ pub fn uu_app<'a>() -> App<'a> {
         options::ATTRIBUTES_ONLY,
         options::COPY_CONTENTS,
     ];
-    App::new(uucore::util_name())
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(Arg::new(options::TARGET_DIRECTORY)
              .short('t')
              .conflicts_with(options::NO_TARGET_DIRECTORY)
@@ -389,7 +389,7 @@ pub fn uu_app<'a>() -> App<'a> {
              .long(options::PRESERVE)
              .takes_value(true)
              .multiple_occurrences(true)
-             .use_delimiter(true)
+             .use_value_delimiter(true)
              .possible_values(PRESERVABLE_ATTRIBUTES)
              .min_values(0)
              .value_name("ATTR_LIST")

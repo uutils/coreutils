@@ -34,7 +34,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time;
 
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
+use clap::{crate_version, Arg, ArgMatches, Command};
 use gcd::Gcd;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
@@ -730,11 +730,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::INFILE)
                 .long(options::INFILE)
@@ -846,8 +846,8 @@ Printing performance stats is also triggered by the INFO signal (where supported
                 .long(options::CONV)
                 .takes_value(true)
                 .multiple_occurrences(true)
-                .use_delimiter(true)
-                .require_delimiter(true)
+                .use_value_delimiter(true)
+                .require_value_delimiter(true)
                 .multiple_values(true)
                 .require_equals(true)
                 .value_name("CONV")
@@ -887,8 +887,8 @@ Conversion Flags:
                 .long(options::IFLAG)
                 .takes_value(true)
                 .multiple_occurrences(true)
-                .use_delimiter(true)
-                .require_delimiter(true)
+                .use_value_delimiter(true)
+                .require_value_delimiter(true)
                 .multiple_values(true)
                 .require_equals(true)
                 .value_name("FLAG")
@@ -917,8 +917,8 @@ General-Flags
                 .long(options::OFLAG)
                 .takes_value(true)
                 .multiple_occurrences(true)
-                .use_delimiter(true)
-                .require_delimiter(true)
+                .use_value_delimiter(true)
+                .require_value_delimiter(true)
                 .multiple_values(true)
                 .require_equals(true)
                 .value_name("FLAG")
