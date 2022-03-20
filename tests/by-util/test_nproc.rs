@@ -72,3 +72,37 @@ fn test_nproc_ignore_all_omp() {
     let nproc: u8 = result.stdout_str().trim().parse().unwrap();
     assert!(nproc == 2);
 }
+
+#[test]
+fn test_nproc_omp_limit() {
+    let result = TestScenario::new(util_name!())
+        .ucmd_keepenv()
+        .env("OMP_NUM_THREADS", "42")
+        .env("OMP_THREAD_LIMIT", "0")
+        .succeeds();
+    let nproc: u8 = result.stdout_str().trim().parse().unwrap();
+    assert!(nproc == 1);
+
+    let result = TestScenario::new(util_name!())
+        .ucmd_keepenv()
+        .env("OMP_NUM_THREADS", "42")
+        .env("OMP_THREAD_LIMIT", "2")
+        .succeeds();
+    let nproc: u8 = result.stdout_str().trim().parse().unwrap();
+    assert!(nproc == 2);
+
+    let result = TestScenario::new(util_name!())
+        .ucmd_keepenv()
+        .env("OMP_NUM_THREADS", "42")
+        .env("OMP_THREAD_LIMIT", "2bad")
+        .succeeds();
+    let nproc: u8 = result.stdout_str().trim().parse().unwrap();
+    assert!(nproc == 42);
+
+    let result = TestScenario::new(util_name!())
+        .ucmd_keepenv()
+        .env("OMP_THREAD_LIMIT", "1")
+        .succeeds();
+    let nproc: u8 = result.stdout_str().trim().parse().unwrap();
+    assert!(nproc == 1);
+}
