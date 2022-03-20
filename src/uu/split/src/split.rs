@@ -858,6 +858,11 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
         // Loop until we have written all bytes in the input buffer
         // (or an IO error occurs).
         loop {
+            // If the buffer is empty, then we are done writing.
+            if buf.is_empty() {
+                return Ok(total_bytes_written);
+            }
+
             // If we have filled the current chunk with bytes, then
             // start a new chunk and initialize its corresponding
             // writer.
@@ -875,12 +880,6 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
 
             // Find the first newline character in the buffer.
             match memchr::memchr(b'\n', buf) {
-                // If there is no newline character and the buffer is
-                // empty, then we are done writing.
-                None if buf.is_empty() => {
-                    return Ok(total_bytes_written);
-                }
-
                 // If there is no newline character and the buffer is
                 // not empty, then write as many bytes as we can and
                 // then move on to the next chunk if necessary.
