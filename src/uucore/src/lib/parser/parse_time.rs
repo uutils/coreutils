@@ -63,6 +63,10 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
         .parse::<f64>()
         .map_err(|e| format!("invalid time interval {}: {}", string.quote(), e))?;
 
+    if num < 0. {
+        return Err(format!("invalid time interval {}", string.quote()));
+    }
+
     const NANOS_PER_SEC: u32 = 1_000_000_000;
     let whole_secs = num.trunc();
     let nanos = (num.fract() * (NANOS_PER_SEC as f64)).trunc();
@@ -104,5 +108,10 @@ mod tests {
     #[test]
     fn test_error_invalid_magnitude() {
         assert!(from_str("12abc3s").is_err());
+    }
+
+    #[test]
+    fn test_negative() {
+        assert!(from_str("-1").is_err());
     }
 }
