@@ -696,6 +696,8 @@ pub fn statfs<P: AsRef<Path>>(path: P) -> Result<StatFs, String>
 where
     Vec<u8>: From<P>,
 {
+    use std::ffi::CStr;
+
     match CString::new(path) {
         Ok(p) => {
             let mut buffer: StatFs = unsafe { mem::zeroed() };
@@ -704,9 +706,11 @@ where
                     0 => Ok(buffer),
                     _ => {
                         let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
-                        Err(CString::from_raw(strerror(errno))
-                            .into_string()
-                            .unwrap_or_else(|_| "Unknown Error".to_owned()))
+                        let errmsg = CStr::from_ptr(strerror(errno))
+                            .to_str()
+                            .map_err(|_| "Error message contains invalid UTF-8".to_owned())?
+                            .to_owned();
+                        Err(errmsg)
                     }
                 }
             }
