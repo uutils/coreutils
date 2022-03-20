@@ -31,7 +31,6 @@ const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 static OPT_ALL: &str = "all";
 static OPT_BLOCKSIZE: &str = "blocksize";
-static OPT_DIRECT: &str = "direct";
 static OPT_TOTAL: &str = "total";
 static OPT_HUMAN_READABLE: &str = "human-readable";
 static OPT_HUMAN_READABLE_2: &str = "human-readable-2";
@@ -337,11 +336,6 @@ pub fn uu_app<'a>() -> App<'a> {
                     "scale sizes by SIZE before printing them; e.g.\
                      '-BM' prints sizes in units of 1,048,576 bytes",
                 ),
-        )
-        .arg(
-            Arg::new(OPT_DIRECT)
-                .long("direct")
-                .help("show statistics for a file instead of mount point"),
         )
         .arg(
             Arg::new(OPT_TOTAL)

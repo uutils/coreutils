@@ -886,7 +886,7 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
                 // then move on to the next chunk if necessary.
                 None => {
                     let end = self.num_bytes_remaining_in_current_chunk;
-                    let num_bytes_written = self.inner.write(&buf[..end])?;
+                    let num_bytes_written = self.inner.write(&buf[..end.min(buf.len())])?;
                     self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
                     total_bytes_written += num_bytes_written;
                     buf = &buf[num_bytes_written..];
@@ -984,6 +984,13 @@ where
         (num_chunks, chunk_size)
     };
 
+    // If we would have written zero chunks of output, then terminate
+    // immediately. This happens on `split -e -n 3 /dev/null`, for
+    // example.
+    if num_chunks == 0 {
+        return Ok(());
+    }
+
     let num_chunks: usize = num_chunks
         .try_into()
         .map_err(|_| USimpleError::new(1, "Number of chunks too big"))?;
@@ -1007,8 +1014,9 @@ where
         writers.push(writer);
     }
 
-    // This block evaluates to an object of type `std::io::Result<()>`.
-    {
+    // Capture the result of the `std::io::copy()` calls to check for
+    // `BrokenPipe`.
+    let result: std::io::Result<()> = {
         // Write `chunk_size` bytes from the reader into each writer
         // except the last.
         //
@@ -1025,8 +1033,12 @@ where
         io::copy(&mut reader.by_ref().take(last_chunk_size), &mut writers[i])?;
 
         Ok(())
+    };
+    match result {
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == ErrorKind::BrokenPipe => Ok(()),
+        Err(e) => Err(uio_error!(e, "input/output error")),
     }
-    .map_err_context(|| "I/O error".to_string())
 }
 
 /// Split a file into a specific number of chunks by line.
@@ -1204,6 +1216,7 @@ fn split(settings: &Settings) -> UResult<()> {
                     // indicate that. A special error message needs to be
                     // printed in that case.
                     ErrorKind::Other => Err(USimpleError::new(1, "output file suffixes exhausted")),
+                    ErrorKind::BrokenPipe => Ok(()),
                     _ => Err(uio_error!(e, "input/output error")),
                 },
             }
@@ -1223,6 +1236,7 @@ fn split(settings: &Settings) -> UResult<()> {
                     // indicate that. A special error message needs to be
                     // printed in that case.
                     ErrorKind::Other => Err(USimpleError::new(1, "output file suffixes exhausted")),
+                    ErrorKind::BrokenPipe => Ok(()),
                     _ => Err(uio_error!(e, "input/output error")),
                 },
             }
@@ -1242,6 +1256,7 @@ fn split(settings: &Settings) -> UResult<()> {
                     // indicate that. A special error message needs to be
                     // printed in that case.
                     ErrorKind::Other => Err(USimpleError::new(1, "output file suffixes exhausted")),
+                    ErrorKind::BrokenPipe => Ok(()),
                     _ => Err(uio_error!(e, "input/output error")),
                 },
             }
