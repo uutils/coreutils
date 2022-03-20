@@ -2869,3 +2869,25 @@ fn test_ls_context_format() {
             );
     }
 }
+
+#[test]
+#[allow(non_snake_case)]
+fn test_ls_a_A() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("-A")
+        .arg("-a")
+        .succeeds()
+        .stdout_contains(".")
+        .stdout_contains("..");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("-A")
+        .succeeds()
+        .stdout_does_not_contain(".")
+        .stdout_does_not_contain("..");
+}
