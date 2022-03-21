@@ -40,6 +40,8 @@ TARGETS = [
     "x86_64-linux-android",
     # Solaris
     "x86_64-sun-solaris",
+    # Illumos
+    "x86_64-unknown-illumos",
     # WASM
     "wasm32-wasi",
     # Redox
