@@ -78,6 +78,7 @@ use std::convert::{AsRef, From};
     target_os = "linux"
 ))]
 use std::ffi::CStr;
+#[cfg(not(windows))]
 use std::ffi::CString;
 use std::io::Error as IOError;
 #[cfg(unix)]
