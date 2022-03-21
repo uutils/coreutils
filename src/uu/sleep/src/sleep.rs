@@ -9,7 +9,7 @@ use std::thread;
 use std::time::Duration;
 
 use uucore::{
-    error::{UResult, USimpleError},
+    error::{UResult, UUsageError},
     format_usage,
 };
 
@@ -64,7 +64,7 @@ fn sleep(args: &[&str]) -> UResult<()> {
             Duration::new(0, 0),
             |result, arg| match uucore::parse_time::from_str(&arg[..]) {
                 Ok(m) => Ok(m.saturating_add(result)),
-                Err(f) => Err(USimpleError::new(1, f)),
+                Err(f) => Err(UUsageError::new(1, f)),
             },
         )?;
     thread::sleep(sleep_dur);
