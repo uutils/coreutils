@@ -71,7 +71,7 @@ use libc::{
 use std::borrow::Cow;
 use std::convert::{AsRef, From};
 #[cfg(unix)]
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::io::Error as IOError;
 #[cfg(unix)]
 use std::mem;
@@ -696,8 +696,6 @@ pub fn statfs<P: AsRef<Path>>(path: P) -> Result<StatFs, String>
 where
     Vec<u8>: From<P>,
 {
-    use std::ffi::CStr;
-
     match CString::new(path) {
         Ok(p) => {
             let mut buffer: StatFs = unsafe { mem::zeroed() };
@@ -706,11 +704,10 @@ where
                     0 => Ok(buffer),
                     _ => {
                         let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
-                        let errmsg = CStr::from_ptr(strerror(errno))
+                        Err(CStr::from_ptr(strerror(errno))
                             .to_str()
                             .map_err(|_| "Error message contains invalid UTF-8".to_owned())?
-                            .to_owned();
-                        Err(errmsg)
+                            .to_owned())
                     }
                 }
             }
