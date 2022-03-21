@@ -55,7 +55,7 @@ use uucore::{format_usage, InvalidEncodingHandling};
 use crate::tmp_dir::TmpDirWrapper;
 
 const ABOUT: &str = "\
-    Display sorted concatenation of all FILE(s).\
+    Display sorted concatenation of all FILE(s). \
     With no FILE, or when FILE is -, read standard input.";
 const USAGE: &str = "{} [OPTION]... [FILE]...";
 
@@ -1363,7 +1363,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::check::CHECK_SILENT)
                 .conflicts_with(options::OUTPUT)
                 .help(
-                    "exit successfully if the given file is already sorted,\
+                    "exit successfully if the given file is already sorted, \
                 and exit with status 1 otherwise.",
                 ),
         )
