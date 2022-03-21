@@ -24,7 +24,7 @@ wild = "2.0"
 # * optional
 itertools = { version="0.10.0", optional=true }
 thiserror = { version="1.0", optional=true }
-time = { version="<= 0.1.43", optional=true }
+time = { version="<= 0.3.8", optional=true }
 # * "problem" dependencies (pinned)
 data-encoding = { version="2.1", optional=true }
 data-encoding-macro = { version="0.1.12", optional=true }
