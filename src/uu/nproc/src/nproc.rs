@@ -25,7 +25,9 @@ pub const _SC_NPROCESSORS_CONF: libc::c_int = 1001;
 static OPT_ALL: &str = "all";
 static OPT_IGNORE: &str = "ignore";
 
-static ABOUT: &str = "Print the number of cores available to the current process.";
+static ABOUT: &str = r#"Print the number of cores available to the current process.
+If the OMP_NUM_THREADS or OMP_THREAD_LIMIT environment variables are set, then
+they will determine the minimum and maximum returned value respectively."#;
 const USAGE: &str = "{} [OPTIONS]...";
 
 #[uucore::main]
@@ -45,6 +47,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => 0,
     };
 
+    let limit = match env::var("OMP_THREAD_LIMIT") {
+        // Uses the OpenMP variable to limit the number of threads
+        // If the parsing fails, returns the max size (so, no impact)
+        Ok(threadstr) => threadstr.parse().unwrap_or(usize::MAX),
+        // the variable 'OMP_THREAD_LIMIT' doesn't exist
+        // fallback to the max
+        Err(_) => usize::MAX,
+    };
+
     let mut cores = if matches.is_present(OPT_ALL) {
         num_cpus_all()
     } else {
@@ -53,12 +64,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // Uses the OpenMP variable to force the number of threads
             // If the parsing fails, returns the number of CPU
             Ok(threadstr) => threadstr.parse().unwrap_or_else(|_| num_cpus::get()),
-            // the variable 'OMP_NUM_THREADS' doesn't exit
+            // the variable 'OMP_NUM_THREADS' doesn't exist
             // fallback to the regular CPU detection
             Err(_) => num_cpus::get(),
         }
     };
-
+    cores = std::cmp::min(limit, cores);
     if cores <= ignore {
         cores = 1;
     } else {
