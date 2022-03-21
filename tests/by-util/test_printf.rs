@@ -289,7 +289,7 @@ fn sub_num_dec_trunc() {
     new_ucmd!()
         .args(&["pi is ~ %g", "3.1415926535"])
         .succeeds()
-        .stdout_only("pi is ~ 3.141593");
+        .stdout_only("pi is ~ 3.14159");
 }
 
 #[cfg_attr(not(feature = "test_unimplemented"), ignore)]
@@ -468,4 +468,57 @@ fn sub_float_leading_zeroes() {
         .args(&["%010f", "1"])
         .succeeds()
         .stdout_only("001.000000");
+}
+
+#[test]
+fn sub_general_float() {
+    new_ucmd!()
+        .args(&["%g", "1.1"])
+        .succeeds()
+        .stdout_only("1.1");
+}
+
+#[test]
+fn sub_general_truncate_to_integer() {
+    new_ucmd!().args(&["%g", "1.0"]).succeeds().stdout_only("1");
+}
+
+#[test]
+fn sub_general_scientific_notation() {
+    new_ucmd!()
+        .args(&["%g", "1000010"])
+        .succeeds()
+        .stdout_only("1.00001e+06");
+}
+
+#[test]
+fn sub_general_round_scientific_notation() {
+    new_ucmd!()
+        .args(&["%g", "123456789"])
+        .succeeds()
+        .stdout_only("1.23457e+08");
+}
+
+#[test]
+fn sub_general_round_float() {
+    new_ucmd!()
+        .args(&["%g", "12345.6789"])
+        .succeeds()
+        .stdout_only("12345.7");
+}
+
+#[test]
+fn sub_general_round_float_to_integer() {
+    new_ucmd!()
+        .args(&["%g", "123456.7"])
+        .succeeds()
+        .stdout_only("123457");
+}
+
+#[test]
+fn sub_general_round_float_leading_zeroes() {
+    new_ucmd!()
+        .args(&["%g", "1.000009"])
+        .succeeds()
+        .stdout_only("1.00001");
 }
