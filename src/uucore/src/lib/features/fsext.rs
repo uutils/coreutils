@@ -70,8 +70,15 @@ use libc::{
 };
 use std::borrow::Cow;
 use std::convert::{AsRef, From};
-#[cfg(unix)]
-use std::ffi::{CStr, CString};
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "linux"
+))]
+use std::ffi::CStr;
+use std::ffi::CString;
 use std::io::Error as IOError;
 #[cfg(unix)]
 use std::mem;
@@ -308,13 +315,6 @@ impl MountInfo {
     }
 }
 
-#[cfg(any(
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd"
-))]
-use std::ffi::CStr;
 #[cfg(any(
     target_os = "freebsd",
     target_vendor = "apple",
