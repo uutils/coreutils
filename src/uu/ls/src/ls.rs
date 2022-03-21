@@ -1204,6 +1204,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::files::ALL)
                 // Overrides -A (as the order matters)
                 .overrides_with(options::files::ALMOST_ALL)
+                .multiple_occurrences(true)
                 .help("Do not ignore hidden files (files with names that start with '.')."),
         )
         .arg(
@@ -1212,6 +1213,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::files::ALMOST_ALL)
                 // Overrides -a (as the order matters)
                 .overrides_with(options::files::ALL)
+                .multiple_occurrences(true)
                 .help(
                     "In a directory, do not ignore all file names that start with '.', \
 only ignore '.' and '..'.",

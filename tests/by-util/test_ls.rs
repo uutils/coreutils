@@ -2891,3 +2891,25 @@ fn test_ls_a_A() {
         .stdout_does_not_contain(".")
         .stdout_does_not_contain("..");
 }
+
+#[test]
+#[allow(non_snake_case)]
+fn test_ls_multiple_a_A() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("-a")
+        .succeeds()
+        .stdout_contains(".")
+        .stdout_contains("..");
+
+    scene
+        .ucmd()
+        .arg("-A")
+        .arg("-A")
+        .succeeds()
+        .stdout_does_not_contain(".")
+        .stdout_does_not_contain("..");
+}
