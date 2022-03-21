@@ -81,7 +81,7 @@ fn test_nproc_omp_limit() {
         .env("OMP_THREAD_LIMIT", "0")
         .succeeds();
     let nproc: u8 = result.stdout_str().trim().parse().unwrap();
-    assert_eq!(nproc, 1);
+    assert_eq!(nproc, 42);
 
     let result = TestScenario::new(util_name!())
         .ucmd_keepenv()
@@ -99,10 +99,62 @@ fn test_nproc_omp_limit() {
     let nproc: u8 = result.stdout_str().trim().parse().unwrap();
     assert_eq!(nproc, 42);
 
+    let result = new_ucmd!().arg("--all").succeeds();
+    let nproc_system: u8 = result.stdout_str().trim().parse().unwrap();
+    assert!(nproc_system > 0);
+
     let result = TestScenario::new(util_name!())
         .ucmd_keepenv()
         .env("OMP_THREAD_LIMIT", "1")
         .succeeds();
     let nproc: u8 = result.stdout_str().trim().parse().unwrap();
     assert_eq!(nproc, 1);
+
+    let result = TestScenario::new(util_name!())
+        .ucmd_keepenv()
+        .env("OMP_NUM_THREADS", "0")
+        .env("OMP_THREAD_LIMIT", "")
+        .succeeds();
+    let nproc: u8 = result.stdout_str().trim().parse().unwrap();
+    assert_eq!(nproc, nproc_system);
+
+    let result = TestScenario::new(util_name!())
+        .ucmd_keepenv()
+        .env("OMP_NUM_THREADS", "2,2,1")
+        .env("OMP_THREAD_LIMIT", "")
+        .succeeds();
+    let nproc: u8 = result.stdout_str().trim().parse().unwrap();
+    assert_eq!(2, nproc);
+
+    let result = TestScenario::new(util_name!())
+        .ucmd_keepenv()
+        .env("OMP_NUM_THREADS", "2,ignored")
+        .env("OMP_THREAD_LIMIT", "")
+        .succeeds();
+    let nproc: u8 = result.stdout_str().trim().parse().unwrap();
+    assert_eq!(2, nproc);
+
+    let result = TestScenario::new(util_name!())
+        .ucmd_keepenv()
+        .env("OMP_NUM_THREADS", "2,2,1")
+        .env("OMP_THREAD_LIMIT", "0")
+        .succeeds();
+    let nproc: u8 = result.stdout_str().trim().parse().unwrap();
+    assert_eq!(2, nproc);
+
+    let result = TestScenario::new(util_name!())
+        .ucmd_keepenv()
+        .env("OMP_NUM_THREADS", "2,2,1")
+        .env("OMP_THREAD_LIMIT", "1bad")
+        .succeeds();
+    let nproc: u8 = result.stdout_str().trim().parse().unwrap();
+    assert_eq!(2, nproc);
+
+    let result = TestScenario::new(util_name!())
+        .ucmd_keepenv()
+        .env("OMP_NUM_THREADS", "29,2,1")
+        .env("OMP_THREAD_LIMIT", "1bad")
+        .succeeds();
+    let nproc: u8 = result.stdout_str().trim().parse().unwrap();
+    assert_eq!(29, nproc);
 }
