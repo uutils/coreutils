@@ -20,7 +20,7 @@ fn test_nproc_all_omp() {
         .succeeds();
 
     let nproc_omp: u8 = result.stdout_str().trim().parse().unwrap();
-    assert!(nproc_omp == 60);
+    assert_eq!(nproc_omp, 60);
 
     let result = TestScenario::new(util_name!())
         .ucmd_keepenv()
@@ -28,7 +28,7 @@ fn test_nproc_all_omp() {
         .arg("--all")
         .succeeds();
     let nproc_omp: u8 = result.stdout_str().trim().parse().unwrap();
-    assert!(nproc == nproc_omp);
+    assert_eq!(nproc, nproc_omp);
 
     // If the parsing fails, returns the number of CPU
     let result = TestScenario::new(util_name!())
@@ -36,7 +36,7 @@ fn test_nproc_all_omp() {
         .env("OMP_NUM_THREADS", "incorrectnumber") // returns the number CPU
         .succeeds();
     let nproc_omp: u8 = result.stdout_str().trim().parse().unwrap();
-    assert!(nproc == nproc_omp);
+    assert_eq!(nproc, nproc_omp);
 }
 
 #[test]
@@ -51,14 +51,14 @@ fn test_nproc_ignore() {
             .arg((nproc_total - 1).to_string())
             .succeeds();
         let nproc: u8 = result.stdout_str().trim().parse().unwrap();
-        assert!(nproc == 1);
+        assert_eq!(nproc, 1);
         // Ignore all CPU but one with a string
         let result = TestScenario::new(util_name!())
             .ucmd_keepenv()
             .arg("--ignore= 1")
             .succeeds();
         let nproc: u8 = result.stdout_str().trim().parse().unwrap();
-        assert!(nproc_total - 1 == nproc);
+        assert_eq!(nproc_total - 1, nproc);
     }
 }
 
@@ -70,7 +70,7 @@ fn test_nproc_ignore_all_omp() {
         .arg("--ignore=40")
         .succeeds();
     let nproc: u8 = result.stdout_str().trim().parse().unwrap();
-    assert!(nproc == 2);
+    assert_eq!(nproc, 2);
 }
 
 #[test]
@@ -81,7 +81,7 @@ fn test_nproc_omp_limit() {
         .env("OMP_THREAD_LIMIT", "0")
         .succeeds();
     let nproc: u8 = result.stdout_str().trim().parse().unwrap();
-    assert!(nproc == 1);
+    assert_eq!(nproc, 1);
 
     let result = TestScenario::new(util_name!())
         .ucmd_keepenv()
@@ -89,7 +89,7 @@ fn test_nproc_omp_limit() {
         .env("OMP_THREAD_LIMIT", "2")
         .succeeds();
     let nproc: u8 = result.stdout_str().trim().parse().unwrap();
-    assert!(nproc == 2);
+    assert_eq!(nproc, 2);
 
     let result = TestScenario::new(util_name!())
         .ucmd_keepenv()
@@ -97,12 +97,12 @@ fn test_nproc_omp_limit() {
         .env("OMP_THREAD_LIMIT", "2bad")
         .succeeds();
     let nproc: u8 = result.stdout_str().trim().parse().unwrap();
-    assert!(nproc == 42);
+    assert_eq!(nproc, 42);
 
     let result = TestScenario::new(util_name!())
         .ucmd_keepenv()
         .env("OMP_THREAD_LIMIT", "1")
         .succeeds();
     let nproc: u8 = result.stdout_str().trim().parse().unwrap();
-    assert!(nproc == 1);
+    assert_eq!(nproc, 1);
 }
