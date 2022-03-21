@@ -42,6 +42,13 @@ fn test_df_output() {
     assert_eq!(actual, expected);
 }
 
+#[test]
+fn test_total_option_with_single_dash() {
+    // These should fail because `-total` should have two dashes,
+    // not just one.
+    new_ucmd!().arg("-total").fails();
+}
+
 /// Test that the order of rows in the table does not change across executions.
 #[test]
 fn test_order_same() {
@@ -89,7 +96,17 @@ fn test_output_option_without_equals_sign() {
 
 #[test]
 fn test_type_option() {
-    new_ucmd!().args(&["-t", "ext4", "-t", "ext3"]).succeeds();
+    let fs_types = new_ucmd!()
+        .arg("--output=fstype")
+        .succeeds()
+        .stdout_move_str();
+    let fs_type = fs_types.lines().nth(1).unwrap().trim();
+
+    new_ucmd!().args(&["-t", fs_type]).succeeds();
+    new_ucmd!()
+        .args(&["-t", fs_type, "-t", "nonexisting"])
+        .succeeds();
+    new_ucmd!().args(&["-t", "nonexisting"]).fails();
 }
 
 #[test]

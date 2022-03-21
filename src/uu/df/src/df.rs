@@ -358,21 +358,30 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let opt = Options::from(&matches).map_err(DfError::OptionsError)?;
-
     // Get the list of filesystems to display in the output table.
     let filesystems: Vec<Filesystem> = match matches.values_of(OPT_PATHS) {
-        None => get_all_filesystems(&opt),
+        None => {
+            let filesystems = get_all_filesystems(&opt);
+
+            if filesystems.is_empty() {
+                return Err(USimpleError::new(1, "No file systems processed"));
+            }
+
+            filesystems
+        }
         Some(paths) => {
             let paths: Vec<&str> = paths.collect();
-            get_named_filesystems(&paths)
+            let filesystems = get_named_filesystems(&paths);
+
+            // This can happen if paths are given as command-line arguments
+            // but none of the paths exist.
+            if filesystems.is_empty() {
+                return Ok(());
+            }
+
+            filesystems
         }
     };
-
-    // This can happen if paths are given as command-line arguments
-    // but none of the paths exist.
-    if filesystems.is_empty() {
-        return Ok(());
-    }
 
     // The running total of filesystem sizes and usage.
     //
