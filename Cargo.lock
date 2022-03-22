@@ -1375,9 +1375,9 @@ dependencies = [
 
 [[package]]
 name = "ouroboros"
-version = "0.14.2"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71643f290d126e18ac2598876d01e1d57aed164afc78fdb6e2a0c6589a1f6662"
+checksum = "9f31a3b678685b150cba82b702dcdc5e155893f63610cf388d30cd988d4ca2bf"
 dependencies = [
  "aliasable",
  "ouroboros_macro",
@@ -1386,9 +1386,9 @@ dependencies = [
 
 [[package]]
 name = "ouroboros_macro"
-version = "0.14.2"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed9a247206016d424fe8497bc611e510887af5c261fbbf977877c4bb55ca4d82"
+checksum = "084fd65d5dd8b3772edccb5ffd1e4b7eba43897ecd0f9401e330e8c542959408"
 dependencies = [
  "Inflector",
  "proc-macro-error",
@@ -1663,9 +1663,9 @@ dependencies = [
 
 [[package]]
 name = "redox_syscall"
-version = "0.2.10"
+version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8383f39639269cde97d255a32bdb68c047337295414940c68bdd30c2e13203ff"
+checksum = "8380fe0152551244f0747b1bf41737e0f8a74f97a14ccefd1148187271634f3c"
 dependencies = [
  "bitflags",
 ]
