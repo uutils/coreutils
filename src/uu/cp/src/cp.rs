@@ -315,6 +315,12 @@ pub fn uu_app<'a>() -> Command<'a> {
              .long(options::TARGET_DIRECTORY)
              .value_name(options::TARGET_DIRECTORY)
              .takes_value(true)
+             .validator(|s| {
+                 if Path::new(s).is_dir() {
+                     return Ok(());
+                 }
+                 Err(format!("'{}' is not a directory", s))
+             })
              .help("copy all SOURCE arguments into target-directory"))
         .arg(Arg::new(options::NO_TARGET_DIRECTORY)
              .short('T')
@@ -469,7 +475,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             LONG_HELP,
             backup_control::BACKUP_CONTROL_LONG_HELP
         ))
-        .get_matches_from(args);
+        .try_get_matches_from(args)?;
 
     let options = Options::from_matches(&matches)?;
 
