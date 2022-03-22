@@ -48,6 +48,7 @@ EditorConfig
 FreeBSD
 Gmail
 GNU
+Illumos
 Irix
 MS-DOS
 MSDOS
