@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable
 
 mod datastructures;
 use datastructures::*;
@@ -60,7 +60,9 @@ impl Input<io::Stdin> {
         let print_level = parseargs::parse_status_level(matches)?;
         let cflags = parseargs::parse_conv_flag_input(matches)?;
         let iflags = parseargs::parse_iflags(matches)?;
-        let skip = parseargs::parse_skip_amt(&ibs, &iflags, matches)?;
+        let skip = parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::SKIP)?;
+        let iseek =
+            parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::ISEEK)?;
         let count = parseargs::parse_count(&iflags, matches)?;
 
         let mut i = Self {
@@ -73,7 +75,9 @@ impl Input<io::Stdin> {
             iflags,
         };
 
-        if let Some(amt) = skip {
+        // The --skip and --iseek flags are additive. On a stream, they discard bytes.
+        let amt = skip.unwrap_or(0) + iseek.unwrap_or(0);
+        if amt > 0 {
             if let Err(e) = i.read_skip(amt) {
                 if let io::ErrorKind::UnexpectedEof = e.kind() {
                     show_error!("'standard input': cannot skip to specified offset");
@@ -131,7 +135,9 @@ impl Input<File> {
         let print_level = parseargs::parse_status_level(matches)?;
         let cflags = parseargs::parse_conv_flag_input(matches)?;
         let iflags = parseargs::parse_iflags(matches)?;
-        let skip = parseargs::parse_skip_amt(&ibs, &iflags, matches)?;
+        let skip = parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::SKIP)?;
+        let iseek =
+            parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::ISEEK)?;
         let count = parseargs::parse_count(&iflags, matches)?;
 
         if let Some(fname) = matches.value_of(options::INFILE) {
@@ -148,7 +154,9 @@ impl Input<File> {
                     .map_err_context(|| "failed to open input file".to_string())?
             };
 
-            if let Some(amt) = skip {
+            // The --skip and --iseek flags are additive. On a file, they seek.
+            let amt = skip.unwrap_or(0) + iseek.unwrap_or(0);
+            if amt > 0 {
                 src.seek(io::SeekFrom::Start(amt))
                     .map_err_context(|| "failed to seek in input file".to_string())?;
             }
@@ -292,12 +300,16 @@ impl OutputTrait for Output<io::Stdout> {
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
         let oflags = parseargs::parse_oflags(matches)?;
-        let seek = parseargs::parse_seek_amt(&obs, &oflags, matches)?;
+        let seek = parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::SEEK)?;
+        let oseek =
+            parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::OSEEK)?;
 
         let mut dst = io::stdout();
 
+        // The --seek and --oseek flags are additive.
+        let amt = seek.unwrap_or(0) + oseek.unwrap_or(0);
         // stdout is not seekable, so we just write null bytes.
-        if let Some(amt) = seek {
+        if amt > 0 {
             io::copy(&mut io::repeat(0u8).take(amt as u64), &mut dst)
                 .map_err_context(|| String::from("write error"))?;
         }
@@ -508,7 +520,9 @@ impl OutputTrait for Output<File> {
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
         let oflags = parseargs::parse_oflags(matches)?;
-        let seek = parseargs::parse_seek_amt(&obs, &oflags, matches)?;
+        let seek = parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::SEEK)?;
+        let oseek =
+            parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::OSEEK)?;
 
         if let Some(fname) = matches.value_of(options::OUTFILE) {
             let mut dst = open_dst(Path::new(&fname), &cflags, &oflags)
@@ -522,7 +536,9 @@ impl OutputTrait for Output<File> {
             // Instead, we suppress the error by calling
             // `Result::ok()`. This matches the behavior of GNU `dd`
             // when given the command-line argument `of=/dev/null`.
-            let i = seek.unwrap_or(0);
+
+            // The --seek and --oseek flags are additive.
+            let i = seek.unwrap_or(0) + oseek.unwrap_or(0);
             if !cflags.notrunc {
                 dst.set_len(i).ok();
             }
@@ -806,6 +822,24 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .require_equals(true)
                 .value_name("N")
                 .help("(alternatively seek=N) seeks N obs-sized records into output before beginning copy/convert operations. See oflag=seek_bytes if seeking N bytes is preferred. Multiplier strings permitted.")
+        )
+        .arg(
+            Arg::new(options::ISEEK)
+                .long(options::ISEEK)
+                .overrides_with(options::ISEEK)
+                .takes_value(true)
+                .require_equals(true)
+                .value_name("N")
+                .help("(alternatively iseek=N) seeks N obs-sized records into input before beginning copy/convert operations. See iflag=seek_bytes if seeking N bytes is preferred. Multiplier strings permitted.")
+        )
+        .arg(
+            Arg::new(options::OSEEK)
+                .long(options::OSEEK)
+                .overrides_with(options::OSEEK)
+                .takes_value(true)
+                .require_equals(true)
+                .value_name("N")
+                .help("(alternatively oseek=N) seeks N obs-sized records into output before beginning copy/convert operations. See oflag=seek_bytes if seeking N bytes is preferred. Multiplier strings permitted.")
         )
         .arg(
             Arg::new(options::COUNT)

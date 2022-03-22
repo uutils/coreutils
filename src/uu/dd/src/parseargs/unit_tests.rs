@@ -1,4 +1,4 @@
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat
 
 use super::*;
 
@@ -112,6 +112,8 @@ fn test_all_top_level_args_no_leading_dashes() {
         String::from("count=2"),
         String::from("skip=2"),
         String::from("seek=2"),
+        String::from("iseek=2"),
+        String::from("oseek=2"),
         String::from("status=progress"),
         String::from("conv=ascii,ucase"),
         String::from("iflag=count_bytes,skip_bytes"),
@@ -140,13 +142,25 @@ fn test_all_top_level_args_no_leading_dashes() {
     );
     assert_eq!(
         200,
-        parse_skip_amt(&100, &IFlags::default(), &matches)
+        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::SKIP)
             .unwrap()
             .unwrap()
     );
     assert_eq!(
         200,
-        parse_seek_amt(&100, &OFlags::default(), &matches)
+        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::SEEK)
+            .unwrap()
+            .unwrap()
+    );
+    assert_eq!(
+        200,
+        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::ISEEK)
+            .unwrap()
+            .unwrap()
+    );
+    assert_eq!(
+        200,
+        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::OSEEK)
             .unwrap()
             .unwrap()
     );
@@ -197,6 +211,8 @@ fn test_all_top_level_args_with_leading_dashes() {
         String::from("--count=2"),
         String::from("--skip=2"),
         String::from("--seek=2"),
+        String::from("--iseek=2"),
+        String::from("--oseek=2"),
         String::from("--status=progress"),
         String::from("--conv=ascii,ucase"),
         String::from("--iflag=count_bytes,skip_bytes"),
@@ -225,13 +241,25 @@ fn test_all_top_level_args_with_leading_dashes() {
     );
     assert_eq!(
         200,
-        parse_skip_amt(&100, &IFlags::default(), &matches)
+        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::SKIP)
             .unwrap()
             .unwrap()
     );
     assert_eq!(
         200,
-        parse_seek_amt(&100, &OFlags::default(), &matches)
+        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::SEEK)
+            .unwrap()
+            .unwrap()
+    );
+    assert_eq!(
+        200,
+        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::ISEEK)
+            .unwrap()
+            .unwrap()
+    );
+    assert_eq!(
+        200,
+        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::OSEEK)
             .unwrap()
             .unwrap()
     );
@@ -349,6 +377,10 @@ fn test_override_multiple_options() {
         String::from("--skip=2"),
         String::from("--seek=0"),
         String::from("--seek=2"),
+        String::from("--iseek=0"),
+        String::from("--iseek=2"),
+        String::from("--oseek=0"),
+        String::from("--oseek=2"),
         String::from("--status=none"),
         String::from("--status=noxfer"),
         String::from("--count=512"),
@@ -381,7 +413,7 @@ fn test_override_multiple_options() {
     // skip
     assert_eq!(
         200,
-        parse_skip_amt(&100, &IFlags::default(), &matches)
+        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::SKIP)
             .unwrap()
             .unwrap()
     );
@@ -389,7 +421,23 @@ fn test_override_multiple_options() {
     // seek
     assert_eq!(
         200,
-        parse_seek_amt(&100, &OFlags::default(), &matches)
+        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::SEEK)
+            .unwrap()
+            .unwrap()
+    );
+
+    // iseek
+    assert_eq!(
+        200,
+        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::ISEEK)
+            .unwrap()
+            .unwrap()
+    );
+
+    // oseek
+    assert_eq!(
+        200,
+        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::OSEEK)
             .unwrap()
             .unwrap()
     );
