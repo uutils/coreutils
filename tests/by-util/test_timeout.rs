@@ -89,3 +89,11 @@ fn test_dont_overflow() {
         .no_stderr()
         .no_stdout();
 }
+
+#[test]
+fn test_negative_interval() {
+    new_ucmd!()
+        .args(&["--", "-1", "sleep", "0"])
+        .fails()
+        .usage_error("invalid time interval '-1'");
+}
