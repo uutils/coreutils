@@ -54,7 +54,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Ok(threadstr) => match threadstr.parse() {
             Ok(0) | Err(_) => usize::MAX,
             Ok(n) => n,
-        }
+        },
         // the variable 'OMP_THREAD_LIMIT' doesn't exist
         // fallback to the max
         Err(_) => usize::MAX,
@@ -77,7 +77,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     [s, ..] => match s.parse() {
                         Ok(0) | Err(_) => num_cpus::get(),
                         Ok(n) => n,
-                    }
+                    },
                 }
             }
             // the variable 'OMP_NUM_THREADS' doesn't exist

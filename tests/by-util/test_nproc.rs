@@ -120,6 +120,14 @@ fn test_nproc_omp_limit() {
 
     let result = TestScenario::new(util_name!())
         .ucmd_keepenv()
+        .env("OMP_NUM_THREADS", "")
+        .env("OMP_THREAD_LIMIT", "")
+        .succeeds();
+    let nproc: u8 = result.stdout_str().trim().parse().unwrap();
+    assert_eq!(nproc, nproc_system);
+
+    let result = TestScenario::new(util_name!())
+        .ucmd_keepenv()
         .env("OMP_NUM_THREADS", "2,2,1")
         .env("OMP_THREAD_LIMIT", "")
         .succeeds();
