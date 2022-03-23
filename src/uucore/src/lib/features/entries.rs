@@ -183,7 +183,13 @@ impl Passwd {
             name: cstr2string(raw.pw_name).expect("passwd without name"),
             uid: raw.pw_uid,
             gid: raw.pw_gid,
+            #[cfg(not(all(
+                target_os = "android",
+                any(target_arch = "x86", target_arch = "arm")
+            )))]
             user_info: cstr2string(raw.pw_gecos),
+            #[cfg(all(target_os = "android", any(target_arch = "x86", target_arch = "arm")))]
+            user_info: None,
             user_shell: cstr2string(raw.pw_shell),
             user_dir: cstr2string(raw.pw_dir),
             user_passwd: cstr2string(raw.pw_passwd),

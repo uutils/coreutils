@@ -670,7 +670,7 @@ impl AtPath {
             let name = CString::new(self.plus_as_string(fifo)).unwrap();
             let mut stat: libc::stat = std::mem::zeroed();
             if libc::stat(name.as_ptr(), &mut stat) >= 0 {
-                libc::S_IFIFO & stat.st_mode != 0
+                libc::S_IFIFO & stat.st_mode as libc::mode_t != 0
             } else {
                 false
             }
