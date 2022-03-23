@@ -97,3 +97,11 @@ fn test_negative_interval() {
         .fails()
         .usage_error("invalid time interval '-1'");
 }
+
+#[test]
+fn test_invalid_signal() {
+    new_ucmd!()
+        .args(&["-s", "invalid", "1", "sleep", "0"])
+        .fails()
+        .usage_error("'invalid': invalid signal");
+}
