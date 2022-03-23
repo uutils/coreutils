@@ -70,16 +70,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Ok(threadstr) => {
                 // In some cases, OMP_NUM_THREADS can be "x,y,z"
                 // In this case, only take the first one (like GNU)
+                // If OMP_NUM_THREADS=0, rejects the value
                 let thread: Vec<&str> = threadstr.split_terminator(',').collect();
-                if thread.is_empty() {
-                    num_cpus::get()
-                } else {
-                    let n = thread[0].parse().unwrap_or_else(|_| num_cpus::get());
-                    // If OMP_NUM_THREADS=0, rejects the value
-                    if n == 0 {
-                        num_cpus::get()
-                    } else {
-                        n
+                match &thread[..] {
+                    [] => num_cpus::get(),
+                    [s, ..] => match s.parse() {
+                        Ok(0) | Err(_) => num_cpus::get(),
+                        Ok(n) => n,
                     }
                 }
             }
