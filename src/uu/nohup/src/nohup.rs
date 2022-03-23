@@ -58,7 +58,7 @@ impl std::error::Error for NohupError {}
 impl UError for NohupError {
     fn code(&self) -> i32 {
         match self {
-            NohupError::OpenFailed(code, _) | NohupError::OpenFailed2(code, _, _, _) => *code,
+            Self::OpenFailed(code, _) | Self::OpenFailed2(code, _, _, _) => *code,
             _ => 2,
         }
     }
@@ -67,9 +67,9 @@ impl UError for NohupError {
 impl Display for NohupError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            NohupError::CannotDetach => write!(f, "Cannot detach from console"),
-            NohupError::CannotReplace(s, e) => write!(f, "Cannot replace {}: {}", s, e),
-            NohupError::OpenFailed(_, e) => {
+            Self::CannotDetach => write!(f, "Cannot detach from console"),
+            Self::CannotReplace(s, e) => write!(f, "Cannot replace {}: {}", s, e),
+            Self::OpenFailed(_, e) => {
                 write!(f, "failed to open {}: {}", NOHUP_OUT.quote(), e)
             }
             NohupError::OpenFailed2(_, e1, s, e2) => write!(

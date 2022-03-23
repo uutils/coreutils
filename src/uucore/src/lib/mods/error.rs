@@ -620,7 +620,7 @@ impl From<i32> for Box<dyn UError> {
 /// Implementations for clap::Error
 impl UError for clap::Error {
     fn code(&self) -> i32 {
-        match self.kind {
+        match self.kind() {
             clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion => 0,
             _ => 1,
         }

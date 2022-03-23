@@ -174,11 +174,11 @@ impl UError for PtxError {}
 impl Display for PtxError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            PtxError::DumbFormat => {
+            Self::DumbFormat => {
                 write!(f, "There is no dumb format with GNU extensions disabled")
             }
-            PtxError::NotImplemented(s) => write!(f, "{} not implemented yet", s),
-            PtxError::ParseError(e) => e.fmt(f),
+            Self::NotImplemented(s) => write!(f, "{} not implemented yet", s),
+            Self::ParseError(e) => e.fmt(f),
         }
     }
 }

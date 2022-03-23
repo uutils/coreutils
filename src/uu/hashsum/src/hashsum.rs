@@ -473,8 +473,8 @@ impl UError for HashsumError {}
 impl std::fmt::Display for HashsumError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            HashsumError::InvalidRegex => write!(f, "invalid regular expression"),
-            HashsumError::InvalidFormat => Ok(()),
+            Self::InvalidRegex => write!(f, "invalid regular expression"),
+            Self::InvalidFormat => Ok(()),
         }
     }
 }

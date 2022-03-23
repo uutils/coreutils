@@ -65,7 +65,7 @@ impl Token {
         }
     }
     fn is_a_close_paren(&self) -> bool {
-        matches!(*self, Token::ParClose)
+        matches!(*self, Self::ParClose)
     }
 }
 
