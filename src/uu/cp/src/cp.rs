@@ -28,7 +28,7 @@ use winapi::um::fileapi::GetFileInformationByHandle;
 
 use std::borrow::Cow;
 
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
+use clap::{crate_version, Arg, ArgMatches, Command};
 use filetime::FileTime;
 #[cfg(unix)]
 use libc::mkfifo;
@@ -296,7 +296,7 @@ static DEFAULT_ATTRIBUTES: &[Attribute] = &[
     Attribute::Timestamps,
 ];
 
-pub fn uu_app<'a>() -> App<'a> {
+pub fn uu_app<'a>() -> Command<'a> {
     const MODE_ARGS: &[&str] = &[
         options::LINK,
         options::REFLINK,
@@ -304,17 +304,23 @@ pub fn uu_app<'a>() -> App<'a> {
         options::ATTRIBUTES_ONLY,
         options::COPY_CONTENTS,
     ];
-    App::new(uucore::util_name())
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(Arg::new(options::TARGET_DIRECTORY)
              .short('t')
              .conflicts_with(options::NO_TARGET_DIRECTORY)
              .long(options::TARGET_DIRECTORY)
              .value_name(options::TARGET_DIRECTORY)
              .takes_value(true)
+             .validator(|s| {
+                 if Path::new(s).is_dir() {
+                     return Ok(());
+                 }
+                 Err(format!("'{}' is not a directory", s))
+             })
              .help("copy all SOURCE arguments into target-directory"))
         .arg(Arg::new(options::NO_TARGET_DIRECTORY)
              .short('T')
@@ -389,7 +395,7 @@ pub fn uu_app<'a>() -> App<'a> {
              .long(options::PRESERVE)
              .takes_value(true)
              .multiple_occurrences(true)
-             .use_delimiter(true)
+             .use_value_delimiter(true)
              .possible_values(PRESERVABLE_ATTRIBUTES)
              .min_values(0)
              .value_name("ATTR_LIST")
@@ -469,7 +475,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             LONG_HELP,
             backup_control::BACKUP_CONTROL_LONG_HELP
         ))
-        .get_matches_from(args);
+        .try_get_matches_from(args)?;
 
     let options = Options::from_matches(&matches)?;
 
@@ -1087,8 +1093,8 @@ fn copy_directory(
 impl OverwriteMode {
     fn verify(&self, path: &Path) -> CopyResult<()> {
         match *self {
-            OverwriteMode::NoClobber => Err(Error::NotAllFilesCopied),
-            OverwriteMode::Interactive(_) => {
+            Self::NoClobber => Err(Error::NotAllFilesCopied),
+            Self::Interactive(_) => {
                 if prompt_yes!("{}: overwrite {}? ", uucore::util_name(), path.quote()) {
                     Ok(())
                 } else {
@@ -1098,7 +1104,7 @@ impl OverwriteMode {
                     )))
                 }
             }
-            OverwriteMode::Clobber(_) => Ok(()),
+            Self::Clobber(_) => Ok(()),
         }
     }
 }

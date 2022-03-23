@@ -15,7 +15,7 @@ extern crate lazy_static;
 
 mod quoting_style;
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use glob::Pattern;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
@@ -116,6 +116,7 @@ pub mod options {
         pub static DIR_ARGS: &str = "dereference-command-line-symlink-to-dir";
     }
 
+    pub static HELP: &str = "help";
     pub static QUOTING_STYLE: &str = "quoting-style";
     pub static HIDE_CONTROL_CHARS: &str = "hide-control-chars";
     pub static SHOW_CONTROL_CHARS: &str = "show-control-chars";
@@ -782,9 +783,9 @@ impl Config {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let app = uu_app();
+    let command = uu_app();
 
-    let matches = app.get_matches_from(args);
+    let matches = command.get_matches_from(args);
 
     let config = Config::from(&matches)?;
 
@@ -796,8 +797,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     list(locs, &config)
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(
@@ -805,7 +806,12 @@ pub fn uu_app<'a>() -> App<'a> {
             the command line, expect that it will ignore files and directories \
             whose names start with '.'.",
         )
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
+        .arg(
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information.")
+        )
         // Format arguments
         .arg(
             Arg::new(options::FORMAT)
@@ -1196,12 +1202,18 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(options::files::ALL)
                 .short('a')
                 .long(options::files::ALL)
+                // Overrides -A (as the order matters)
+                .overrides_with(options::files::ALMOST_ALL)
+                .multiple_occurrences(true)
                 .help("Do not ignore hidden files (files with names that start with '.')."),
         )
         .arg(
             Arg::new(options::files::ALMOST_ALL)
                 .short('A')
                 .long(options::files::ALMOST_ALL)
+                // Overrides -a (as the order matters)
+                .overrides_with(options::files::ALL)
+                .multiple_occurrences(true)
                 .help(
                     "In a directory, do not ignore all file names that start with '.', \
 only ignore '.' and '..'.",

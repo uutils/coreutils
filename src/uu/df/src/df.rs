@@ -15,7 +15,7 @@ use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::fsext::{read_fs_list, MountInfo};
 
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
+use clap::{crate_version, Arg, ArgMatches, Command};
 
 use std::fmt;
 use std::path::Path;
@@ -29,9 +29,9 @@ static ABOUT: &str = "Show information about the file system on which each FILE 
                       or all file systems by default.";
 const USAGE: &str = "{} [OPTION]... [FILE]...";
 
+static OPT_HELP: &str = "help";
 static OPT_ALL: &str = "all";
 static OPT_BLOCKSIZE: &str = "blocksize";
-static OPT_DIRECT: &str = "direct";
 static OPT_TOTAL: &str = "total";
 static OPT_HUMAN_READABLE: &str = "human-readable";
 static OPT_HUMAN_READABLE_2: &str = "human-readable-2";
@@ -316,12 +316,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
+        .arg(
+            Arg::new(OPT_HELP)
+                .long(OPT_HELP)
+                .help("Print help information."),
+        )
         .arg(
             Arg::new(OPT_ALL)
                 .short('a')
@@ -337,11 +342,6 @@ pub fn uu_app<'a>() -> App<'a> {
                     "scale sizes by SIZE before printing them; e.g.\
                      '-BM' prints sizes in units of 1,048,576 bytes",
                 ),
-        )
-        .arg(
-            Arg::new(OPT_DIRECT)
-                .long("direct")
-                .help("show statistics for a file instead of mount point"),
         )
         .arg(
             Arg::new(OPT_TOTAL)
@@ -385,7 +385,7 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(OPT_OUTPUT)
                 .long("output")
                 .takes_value(true)
-                .use_delimiter(true)
+                .use_value_delimiter(true)
                 .possible_values(OUTPUT_FIELD_LIST)
                 .default_missing_values(&OUTPUT_FIELD_LIST)
                 .default_values(&["source", "size", "used", "avail", "pcent", "target"])
@@ -428,7 +428,7 @@ pub fn uu_app<'a>() -> App<'a> {
                 .long("exclude-type")
                 .allow_invalid_utf8(true)
                 .takes_value(true)
-                .use_delimiter(true)
+                .use_value_delimiter(true)
                 .multiple_occurrences(true)
                 .help("limit listing to file systems not of type TYPE"),
         )

@@ -11,7 +11,7 @@ mod convert;
 mod operation;
 mod unicode_table;
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use nom::AsBytes;
 use operation::{translate_input, Sequence, SqueezeOperation, TranslateOperation};
 use std::io::{stdin, stdout, BufReader, BufWriter};
@@ -137,13 +137,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::COMPLEMENT)
                 .visible_short_alias('C')

@@ -8,7 +8,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use retain_mut::RetainMut;
 use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
@@ -55,13 +55,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help("If a FILE is -, it refers to a file named - .")
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::APPEND)
                 .long(options::APPEND)

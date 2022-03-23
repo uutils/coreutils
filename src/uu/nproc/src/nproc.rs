@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) NPROCESSORS nprocs numstr threadstr sysconf
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use std::env;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
@@ -25,7 +25,9 @@ pub const _SC_NPROCESSORS_CONF: libc::c_int = 1001;
 static OPT_ALL: &str = "all";
 static OPT_IGNORE: &str = "ignore";
 
-static ABOUT: &str = "Print the number of cores available to the current process.";
+static ABOUT: &str = r#"Print the number of cores available to the current process.
+If the OMP_NUM_THREADS or OMP_THREAD_LIMIT environment variables are set, then
+they will determine the minimum and maximum returned value respectively."#;
 const USAGE: &str = "{} [OPTIONS]...";
 
 #[uucore::main]
@@ -45,6 +47,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => 0,
     };
 
+    let limit = match env::var("OMP_THREAD_LIMIT") {
+        // Uses the OpenMP variable to limit the number of threads
+        // If the parsing fails, returns the max size (so, no impact)
+        // If OMP_THREAD_LIMIT=0, rejects the value
+        Ok(threadstr) => match threadstr.parse() {
+            Ok(0) | Err(_) => usize::MAX,
+            Ok(n) => n,
+        },
+        // the variable 'OMP_THREAD_LIMIT' doesn't exist
+        // fallback to the max
+        Err(_) => usize::MAX,
+    };
+
     let mut cores = if matches.is_present(OPT_ALL) {
         num_cpus_all()
     } else {
@@ -52,13 +67,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         match env::var("OMP_NUM_THREADS") {
             // Uses the OpenMP variable to force the number of threads
             // If the parsing fails, returns the number of CPU
-            Ok(threadstr) => threadstr.parse().unwrap_or_else(|_| num_cpus::get()),
-            // the variable 'OMP_NUM_THREADS' doesn't exit
+            Ok(threadstr) => {
+                // In some cases, OMP_NUM_THREADS can be "x,y,z"
+                // In this case, only take the first one (like GNU)
+                // If OMP_NUM_THREADS=0, rejects the value
+                let thread: Vec<&str> = threadstr.split_terminator(',').collect();
+                match &thread[..] {
+                    [] => num_cpus::get(),
+                    [s, ..] => match s.parse() {
+                        Ok(0) | Err(_) => num_cpus::get(),
+                        Ok(n) => n,
+                    },
+                }
+            }
+            // the variable 'OMP_NUM_THREADS' doesn't exist
             // fallback to the regular CPU detection
             Err(_) => num_cpus::get(),
         }
     };
 
+    cores = std::cmp::min(limit, cores);
     if cores <= ignore {
         cores = 1;
     } else {
@@ -68,12 +96,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(OPT_ALL)
                 .long(OPT_ALL)

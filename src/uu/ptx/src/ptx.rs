@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDOs) corasick memchr Roff trunc oset iset
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use regex::Regex;
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -174,11 +174,11 @@ impl UError for PtxError {}
 impl Display for PtxError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            PtxError::DumbFormat => {
+            Self::DumbFormat => {
                 write!(f, "There is no dumb format with GNU extensions disabled")
             }
-            PtxError::NotImplemented(s) => write!(f, "{} not implemented yet", s),
-            PtxError::ParseError(e) => e.fmt(f),
+            Self::NotImplemented(s) => write!(f, "{} not implemented yet", s),
+            Self::ParseError(e) => e.fmt(f),
         }
     }
 }
@@ -702,13 +702,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     write_traditional_output(&config, &file_map, &word_set, &output_file)
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .name(NAME)
         .about(ABOUT)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)

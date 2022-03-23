@@ -11,7 +11,7 @@
 use chrono::{DateTime, FixedOffset, Local, Offset, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
@@ -254,12 +254,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(OPT_DATE)
                 .short('d')

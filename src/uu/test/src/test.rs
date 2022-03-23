@@ -10,7 +10,7 @@
 
 mod parser;
 
-use clap::{crate_version, App};
+use clap::{crate_version, Command};
 use parser::{parse, Operator, Symbol, UnaryOperator};
 use std::ffi::{OsStr, OsString};
 use uucore::display::Quotable;
@@ -90,8 +90,8 @@ for details about the options it supports.";
 
 const ABOUT: &str = "Check file types and compare values.";
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
@@ -108,7 +108,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         // If invoked as [ we should recognize --help and --version (but not -h or -v)
         if args.len() == 1 && (args[0] == "--help" || args[0] == "--version") {
             // Let clap pretty-print help and version
-            App::new(binary_name)
+            Command::new(binary_name)
                 .version(crate_version!())
                 .about(ABOUT)
                 .override_usage(format_usage(USAGE))

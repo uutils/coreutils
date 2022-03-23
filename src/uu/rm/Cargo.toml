@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/rm.rs"
 
 [dependencies]
-clap = { version = "3.0", features = ["wrap_help", "cargo"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 walkdir = "2.2"
 remove_dir_all = "0.5.1"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["fs"] }

@@ -18,7 +18,7 @@ use std::io::BufReader;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use std::path::PathBuf;
 use uucore::{format_usage, InvalidEncodingHandling};
 
@@ -36,6 +36,7 @@ mod options {
     pub const OMIT_NAME_HOST: &str = "omit_name_host";
     pub const OMIT_NAME_HOST_TIME: &str = "omit_name_host_time";
     pub const USER: &str = "user";
+    pub const HELP: &str = "help";
 }
 
 fn get_long_usage() -> String {
@@ -123,12 +124,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::LONG_FORMAT)
                 .short('l')
@@ -179,6 +180,13 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(options::USER)
                 .takes_value(true)
                 .multiple_occurrences(true),
+        )
+        .arg(
+            // Redefine the help argument to not include the short flag
+            // since that conflicts with omit_project_file.
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information"),
         )
 }
 

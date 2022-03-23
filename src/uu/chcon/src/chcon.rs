@@ -6,7 +6,7 @@ use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::{display::Quotable, show_error, show_warning};
 
-use clap::{App, AppSettings, Arg};
+use clap::{Arg, Command};
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
 use std::borrow::Cow;
@@ -29,6 +29,7 @@ const USAGE: &str = "\
     {} [OPTION]... --reference=RFILE FILE...";
 
 pub mod options {
+    pub static HELP: &str = "help";
     pub static VERBOSE: &str = "verbose";
 
     pub static REFERENCE: &str = "reference";
@@ -65,7 +66,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Ok(r) => r,
         Err(r) => {
             if let Error::CommandLine(r) = &r {
-                match r.kind {
+                match r.kind() {
                     clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion => {
                         println!("{}", r);
                         return Ok(());
@@ -154,12 +155,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Err(libc::EXIT_FAILURE.into())
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
+        .arg(
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information."),
+        )
         .arg(
             Arg::new(options::dereference::DEREFERENCE)
                 .long(options::dereference::DEREFERENCE)
@@ -303,7 +309,7 @@ struct Options {
     files: Vec<PathBuf>,
 }
 
-fn parse_command_line(config: clap::App, args: impl uucore::Args) -> Result<Options> {
+fn parse_command_line(config: clap::Command, args: impl uucore::Args) -> Result<Options> {
     let matches = config.try_get_matches_from(args)?;
 
     let verbose = matches.is_present(options::VERBOSE);
@@ -402,23 +408,21 @@ enum RecursiveMode {
 impl RecursiveMode {
     fn is_recursive(self) -> bool {
         match self {
-            RecursiveMode::NotRecursive => false,
+            Self::NotRecursive => false,
 
-            RecursiveMode::RecursiveButDoNotFollowSymLinks
-            | RecursiveMode::RecursiveAndFollowAllDirSymLinks
-            | RecursiveMode::RecursiveAndFollowArgDirSymLinks => true,
+            Self::RecursiveButDoNotFollowSymLinks
+            | Self::RecursiveAndFollowAllDirSymLinks
+            | Self::RecursiveAndFollowArgDirSymLinks => true,
         }
     }
 
     fn fts_open_options(self) -> c_int {
         match self {
-            RecursiveMode::NotRecursive | RecursiveMode::RecursiveButDoNotFollowSymLinks => {
-                fts_sys::FTS_PHYSICAL
-            }
+            Self::NotRecursive | Self::RecursiveButDoNotFollowSymLinks => fts_sys::FTS_PHYSICAL,
 
-            RecursiveMode::RecursiveAndFollowAllDirSymLinks => fts_sys::FTS_LOGICAL,
+            Self::RecursiveAndFollowAllDirSymLinks => fts_sys::FTS_LOGICAL,
 
-            RecursiveMode::RecursiveAndFollowArgDirSymLinks => {
+            Self::RecursiveAndFollowArgDirSymLinks => {
                 fts_sys::FTS_PHYSICAL | fts_sys::FTS_COMFOLLOW
             }
         }

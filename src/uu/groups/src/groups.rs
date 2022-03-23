@@ -26,7 +26,7 @@ use uucore::{
     format_usage,
 };
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 
 mod options {
     pub const USERS: &str = "USERNAME";
@@ -50,9 +50,9 @@ impl UError for GroupsError {}
 impl Display for GroupsError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            GroupsError::GetGroupsFailed => write!(f, "failed to fetch groups"),
-            GroupsError::GroupNotFound(gid) => write!(f, "cannot find name for group ID {}", gid),
-            GroupsError::UserNotFound(user) => write!(f, "{}: no such user", user.quote()),
+            Self::GetGroupsFailed => write!(f, "failed to fetch groups"),
+            Self::GroupNotFound(gid) => write!(f, "cannot find name for group ID {}", gid),
+            Self::UserNotFound(user) => write!(f, "{}: no such user", user.quote()),
         }
     }
 }
@@ -102,12 +102,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::USERS)
                 .multiple_occurrences(true)

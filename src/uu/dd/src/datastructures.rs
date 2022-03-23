@@ -4,7 +4,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore ctable, outfile
+// spell-checker:ignore ctable, outfile, iseek, oseek
 
 use std::error::Error;
 
@@ -120,6 +120,8 @@ pub mod options {
     pub const COUNT: &str = "count";
     pub const SKIP: &str = "skip";
     pub const SEEK: &str = "seek";
+    pub const ISEEK: &str = "iseek";
+    pub const OSEEK: &str = "oseek";
     pub const STATUS: &str = "status";
     pub const CONV: &str = "conv";
     pub const IFLAG: &str = "iflag";
