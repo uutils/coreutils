@@ -50,7 +50,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let limit = match env::var("OMP_THREAD_LIMIT") {
         // Uses the OpenMP variable to limit the number of threads
         // If the parsing fails, returns the max size (so, no impact)
-        Ok(threadstr) => threadstr.parse().unwrap_or(usize::MAX),
+        // If OMP_THREAD_LIMIT=0, rejects the value
+        Ok(threadstr) => match threadstr.parse() {
+            Ok(0) | Err(_) => usize::MAX,
+            Ok(n) => n,
+        },
         // the variable 'OMP_THREAD_LIMIT' doesn't exist
         // fallback to the max
         Err(_) => usize::MAX,
@@ -63,12 +67,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         match env::var("OMP_NUM_THREADS") {
             // Uses the OpenMP variable to force the number of threads
             // If the parsing fails, returns the number of CPU
-            Ok(threadstr) => threadstr.parse().unwrap_or_else(|_| num_cpus::get()),
+            Ok(threadstr) => {
+                // In some cases, OMP_NUM_THREADS can be "x,y,z"
+                // In this case, only take the first one (like GNU)
+                // If OMP_NUM_THREADS=0, rejects the value
+                let thread: Vec<&str> = threadstr.split_terminator(',').collect();
+                match &thread[..] {
+                    [] => num_cpus::get(),
+                    [s, ..] => match s.parse() {
+                        Ok(0) | Err(_) => num_cpus::get(),
+                        Ok(n) => n,
+                    },
+                }
+            }
             // the variable 'OMP_NUM_THREADS' doesn't exist
             // fallback to the regular CPU detection
             Err(_) => num_cpus::get(),
         }
     };
+
     cores = std::cmp::min(limit, cores);
     if cores <= ignore {
         cores = 1;
