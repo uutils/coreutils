@@ -408,23 +408,21 @@ enum RecursiveMode {
 impl RecursiveMode {
     fn is_recursive(self) -> bool {
         match self {
-            RecursiveMode::NotRecursive => false,
+            Self::NotRecursive => false,
 
-            RecursiveMode::RecursiveButDoNotFollowSymLinks
-            | RecursiveMode::RecursiveAndFollowAllDirSymLinks
-            | RecursiveMode::RecursiveAndFollowArgDirSymLinks => true,
+            Self::RecursiveButDoNotFollowSymLinks
+            | Self::RecursiveAndFollowAllDirSymLinks
+            | Self::RecursiveAndFollowArgDirSymLinks => true,
         }
     }
 
     fn fts_open_options(self) -> c_int {
         match self {
-            RecursiveMode::NotRecursive | RecursiveMode::RecursiveButDoNotFollowSymLinks => {
-                fts_sys::FTS_PHYSICAL
-            }
+            Self::NotRecursive | Self::RecursiveButDoNotFollowSymLinks => fts_sys::FTS_PHYSICAL,
 
-            RecursiveMode::RecursiveAndFollowAllDirSymLinks => fts_sys::FTS_LOGICAL,
+            Self::RecursiveAndFollowAllDirSymLinks => fts_sys::FTS_LOGICAL,
 
-            RecursiveMode::RecursiveAndFollowArgDirSymLinks => {
+            Self::RecursiveAndFollowArgDirSymLinks => {
                 fts_sys::FTS_PHYSICAL | fts_sys::FTS_COMFOLLOW
             }
         }

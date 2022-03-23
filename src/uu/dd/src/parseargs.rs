@@ -100,16 +100,16 @@ impl std::fmt::Display for ParseError {
             Self::StatusLevelNotRecognized(arg) => {
                 write!(f, "status=LEVEL not recognized -> {}", arg)
             }
-            ParseError::BsOutOfRange => {
+            Self::BsOutOfRange => {
                 write!(f, "bs=N cannot fit into memory")
             }
-            ParseError::IbsOutOfRange => {
+            Self::IbsOutOfRange => {
                 write!(f, "ibs=N cannot fit into memory")
             }
-            ParseError::ObsOutOfRange => {
+            Self::ObsOutOfRange => {
                 write!(f, "obs=N cannot fit into memory")
             }
-            ParseError::CbsOutOfRange => {
+            Self::CbsOutOfRange => {
                 write!(f, "cbs=N cannot fit into memory")
             }
             Self::Unimplemented(arg) => {

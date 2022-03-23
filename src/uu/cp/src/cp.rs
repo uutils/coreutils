@@ -1093,8 +1093,8 @@ fn copy_directory(
 impl OverwriteMode {
     fn verify(&self, path: &Path) -> CopyResult<()> {
         match *self {
-            OverwriteMode::NoClobber => Err(Error::NotAllFilesCopied),
-            OverwriteMode::Interactive(_) => {
+            Self::NoClobber => Err(Error::NotAllFilesCopied),
+            Self::Interactive(_) => {
                 if prompt_yes!("{}: overwrite {}? ", uucore::util_name(), path.quote()) {
                     Ok(())
                 } else {
@@ -1104,7 +1104,7 @@ impl OverwriteMode {
                     )))
                 }
             }
-            OverwriteMode::Clobber(_) => Ok(()),
+            Self::Clobber(_) => Ok(()),
         }
     }
 }

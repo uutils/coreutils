@@ -37,20 +37,20 @@ pub enum BadSequence {
 impl Display for BadSequence {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BadSequence::MissingCharClassName => writeln!(f, "missing character class name '[::]'"),
-            BadSequence::MissingEquivalentClassChar => {
+            Self::MissingCharClassName => writeln!(f, "missing character class name '[::]'"),
+            Self::MissingEquivalentClassChar => {
                 writeln!(f, "missing equivalence class character '[==]'")
             }
-            BadSequence::MultipleCharRepeatInSet2 => {
+            Self::MultipleCharRepeatInSet2 => {
                 writeln!(f, "only one [c*] repeat construct may appear in string2")
             }
-            BadSequence::CharRepeatInSet1 => {
+            Self::CharRepeatInSet1 => {
                 writeln!(f, "the [c*] repeat construct may not appear in string1")
             }
-            BadSequence::InvalidRepeatCount(count) => {
+            Self::InvalidRepeatCount(count) => {
                 writeln!(f, "invalid repeat count '{}' in [c*n] construct", count)
             }
-            BadSequence::EmptySet2WhenNotTruncatingSet1 => {
+            Self::EmptySet2WhenNotTruncatingSet1 => {
                 writeln!(f, "when not truncating set1, string2 must be non-empty")
             }
         }
@@ -83,20 +83,20 @@ pub enum Sequence {
 impl Sequence {
     pub fn flatten(&self) -> Box<dyn Iterator<Item = char>> {
         match self {
-            Sequence::Char(c) => Box::new(std::iter::once(*c)),
-            Sequence::CharRange(l, r) => Box::new((*l..=*r).flat_map(std::char::from_u32)),
-            Sequence::CharStar(c) => Box::new(std::iter::repeat(*c)),
-            Sequence::CharRepeat(c, n) => Box::new(std::iter::repeat(*c).take(*n)),
-            Sequence::Alnum => Box::new(('0'..='9').chain('A'..='Z').chain('a'..='z')),
-            Sequence::Alpha => Box::new(('A'..='Z').chain('a'..='z')),
-            Sequence::Blank => Box::new(unicode_table::BLANK.iter().cloned()),
-            Sequence::Control => Box::new(
+            Self::Char(c) => Box::new(std::iter::once(*c)),
+            Self::CharRange(l, r) => Box::new((*l..=*r).flat_map(std::char::from_u32)),
+            Self::CharStar(c) => Box::new(std::iter::repeat(*c)),
+            Self::CharRepeat(c, n) => Box::new(std::iter::repeat(*c).take(*n)),
+            Self::Alnum => Box::new(('0'..='9').chain('A'..='Z').chain('a'..='z')),
+            Self::Alpha => Box::new(('A'..='Z').chain('a'..='z')),
+            Self::Blank => Box::new(unicode_table::BLANK.iter().cloned()),
+            Self::Control => Box::new(
                 (0..=31)
                     .chain(std::iter::once(127))
                     .flat_map(std::char::from_u32),
             ),
-            Sequence::Digit => Box::new('0'..='9'),
-            Sequence::Graph => Box::new(
+            Self::Digit => Box::new('0'..='9'),
+            Self::Graph => Box::new(
                 (48..=57) // digit
                     .chain(65..=90) // uppercase
                     .chain(97..=122) // lowercase
@@ -108,8 +108,8 @@ impl Sequence {
                     .chain(std::iter::once(32)) // space
                     .flat_map(std::char::from_u32),
             ),
-            Sequence::Lower => Box::new('a'..='z'),
-            Sequence::Print => Box::new(
+            Self::Lower => Box::new('a'..='z'),
+            Self::Print => Box::new(
                 (48..=57) // digit
                     .chain(65..=90) // uppercase
                     .chain(97..=122) // lowercase
@@ -120,16 +120,16 @@ impl Sequence {
                     .chain(123..=126)
                     .flat_map(std::char::from_u32),
             ),
-            Sequence::Punct => Box::new(
+            Self::Punct => Box::new(
                 (33..=47)
                     .chain(58..=64)
                     .chain(91..=96)
                     .chain(123..=126)
                     .flat_map(std::char::from_u32),
             ),
-            Sequence::Space => Box::new(unicode_table::SPACES.iter().cloned()),
-            Sequence::Upper => Box::new('A'..='Z'),
-            Sequence::Xdigit => Box::new(('0'..='9').chain('A'..='F').chain('a'..='f')),
+            Self::Space => Box::new(unicode_table::SPACES.iter().cloned()),
+            Self::Upper => Box::new('A'..='Z'),
+            Self::Xdigit => Box::new(('0'..='9').chain('A'..='F').chain('a'..='f')),
         }
     }
 
