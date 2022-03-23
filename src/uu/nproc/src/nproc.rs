@@ -50,14 +50,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let limit = match env::var("OMP_THREAD_LIMIT") {
         // Uses the OpenMP variable to limit the number of threads
         // If the parsing fails, returns the max size (so, no impact)
-        Ok(threadstr) => {
-            let n = threadstr.parse().unwrap_or(usize::MAX);
-            // If OMP_THREAD_LIMIT=0, rejects the value
-            if n == 0 {
-                usize::MAX
-            } else {
-                n
-            }
+        // If OMP_THREAD_LIMIT=0, rejects the value
+        Ok(threadstr) => match threadstr.parse() {
+            Ok(0) | Err(_) => usize::MAX,
+            Ok(n) => n,
         }
         // the variable 'OMP_THREAD_LIMIT' doesn't exist
         // fallback to the max
