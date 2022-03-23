@@ -477,11 +477,17 @@ impl Stater {
             .unwrap_or_default();
         #[cfg(unix)]
         if files.contains(&String::from("-")) {
-            files = Vec::from([Path::new("/dev/stdin")
-                .canonicalize()?
+            let redirected_path = Path::new("/dev/stdin")
+                .canonicalize()
+                .expect("unable to canonicalize /dev/stdin")
                 .into_os_string()
                 .into_string()
-                .unwrap()]);
+                .unwrap();
+            for file in &mut files {
+                if file == "-" {
+                    *file = redirected_path.clone();
+                }
+            }
         }
         let format_str = if matches.is_present(options::PRINTF) {
             matches
