@@ -57,7 +57,10 @@ impl Config {
                 let signal_result = signal_by_name_or_value(signal_);
                 match signal_result {
                     None => {
-                        unreachable!("invalid signal {}", signal_.quote());
+                        return Err(UUsageError::new(
+                            ExitStatus::TimeoutFailed.into(),
+                            format!("{}: invalid signal", signal_.quote()),
+                        ))
                     }
                     Some(signal_value) => signal_value,
                 }
