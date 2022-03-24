@@ -427,7 +427,7 @@ fn test_touch_mtime_dst_succeeds() {
 
     let target_time = str_to_filetime("%Y%m%d%H%M", "202103140300");
     let (_, mtime) = get_file_times(&at, file);
-    assert!(target_time == mtime);
+    assert_eq!(target_time, mtime);
 }
 
 // is_dst_switch_hour returns true if timespec ts is just before the switch
