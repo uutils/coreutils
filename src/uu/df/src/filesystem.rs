@@ -7,7 +7,7 @@
 //! A [`Filesystem`] struct represents a device containing a
 //! filesystem mounted at a particular directory. It also includes
 //! information on amount of space available and amount of space used.
-#[cfg(windows)]
+// spell-checker:ignore canonicalized
 use std::path::Path;
 
 #[cfg(unix)]
@@ -28,6 +28,40 @@ pub(crate) struct Filesystem {
 
     /// Information about the amount of space used on the filesystem.
     pub usage: FsUsage,
+}
+
+/// Find the mount info that best matches a given filesystem path.
+///
+/// This function returns the element of `mounts` on which `path` is
+/// mounted. If there are no matches, this function returns
+/// [`None`]. If there are two or more matches, then the single
+/// [`MountInfo`] with the longest mount directory is returned.
+///
+/// If `canonicalize` is `true`, then the `path` is canonicalized
+/// before checking whether it matches any mount directories.
+///
+/// # See also
+///
+/// * [`Path::canonicalize`]
+/// * [`MountInfo::mount_dir`]
+fn mount_info_from_path<P>(
+    mounts: &[MountInfo],
+    path: P,
+    // This is really only used for testing purposes.
+    canonicalize: bool,
+) -> Option<&MountInfo>
+where
+    P: AsRef<Path>,
+{
+    // TODO Refactor this function with `Stater::find_mount_point()`
+    // in the `stat` crate.
+    let path = if canonicalize {
+        path.as_ref().canonicalize().ok()?
+    } else {
+        path.as_ref().to_path_buf()
+    };
+    let matches = mounts.iter().filter(|mi| path.starts_with(&mi.mount_dir));
+    matches.max_by_key(|mi| mi.mount_dir.len())
 }
 
 impl Filesystem {
@@ -51,5 +85,107 @@ impl Filesystem {
         #[cfg(windows)]
         let usage = FsUsage::new(Path::new(&_stat_path));
         Some(Self { mount_info, usage })
+    }
+
+    /// Find and create the filesystem that best matches a given path.
+    ///
+    /// This function returns a new `Filesystem` derived from the
+    /// element of `mounts` on which `path` is mounted. If there are
+    /// no matches, this function returns [`None`]. If there are two
+    /// or more matches, then the single [`Filesystem`] with the
+    /// longest mount directory is returned.
+    ///
+    /// The `path` is canonicalized before checking whether it matches
+    /// any mount directories.
+    ///
+    /// # See also
+    ///
+    /// * [`Path::canonicalize`]
+    /// * [`MountInfo::mount_dir`]
+    ///
+    pub(crate) fn from_path<P>(mounts: &[MountInfo], path: P) -> Option<Self>
+    where
+        P: AsRef<Path>,
+    {
+        let canonicalize = true;
+        let mount_info = mount_info_from_path(mounts, path, canonicalize)?;
+        // TODO Make it so that we do not need to clone the `mount_info`.
+        let mount_info = (*mount_info).clone();
+        Self::new(mount_info)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    mod mount_info_from_path {
+
+        use uucore::fsext::MountInfo;
+
+        use crate::filesystem::mount_info_from_path;
+
+        // Create a fake `MountInfo` with the given directory name.
+        fn mount_info(mount_dir: &str) -> MountInfo {
+            MountInfo {
+                dev_id: Default::default(),
+                dev_name: Default::default(),
+                fs_type: Default::default(),
+                mount_dir: String::from(mount_dir),
+                mount_option: Default::default(),
+                mount_root: Default::default(),
+                remote: Default::default(),
+                dummy: Default::default(),
+            }
+        }
+
+        // Check whether two `MountInfo` instances are equal.
+        fn mount_info_eq(m1: &MountInfo, m2: &MountInfo) -> bool {
+            m1.dev_id == m2.dev_id
+                && m1.dev_name == m2.dev_name
+                && m1.fs_type == m2.fs_type
+                && m1.mount_dir == m2.mount_dir
+                && m1.mount_option == m2.mount_option
+                && m1.mount_root == m2.mount_root
+                && m1.remote == m2.remote
+                && m1.dummy == m2.dummy
+        }
+
+        #[test]
+        fn test_empty_mounts() {
+            assert!(mount_info_from_path(&[], "/", false).is_none());
+        }
+
+        #[test]
+        fn test_exact_match() {
+            let mounts = [mount_info("/foo")];
+            let actual = mount_info_from_path(&mounts, "/foo", false).unwrap();
+            assert!(mount_info_eq(actual, &mounts[0]));
+        }
+
+        #[test]
+        fn test_prefix_match() {
+            let mounts = [mount_info("/foo")];
+            let actual = mount_info_from_path(&mounts, "/foo/bar", false).unwrap();
+            assert!(mount_info_eq(actual, &mounts[0]));
+        }
+
+        #[test]
+        fn test_multiple_matches() {
+            let mounts = [mount_info("/foo"), mount_info("/foo/bar")];
+            let actual = mount_info_from_path(&mounts, "/foo/bar", false).unwrap();
+            assert!(mount_info_eq(actual, &mounts[1]));
+        }
+
+        #[test]
+        fn test_no_match() {
+            let mounts = [mount_info("/foo")];
+            assert!(mount_info_from_path(&mounts, "/bar", false).is_none());
+        }
+
+        #[test]
+        fn test_partial_match() {
+            let mounts = [mount_info("/foo/bar")];
+            assert!(mount_info_from_path(&mounts, "/foo/baz", false).is_none());
+        }
     }
 }

@@ -20,6 +20,13 @@ env:
 on: [push, pull_request]
 
 jobs:
+  cargo-deny:
+    name: Style/cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: EmbarkStudios/cargo-deny-action@v1
+
   style_deps:
     ## ToDO: [2021-11-10; rivy] 'Style/deps' needs more informative output and better integration of results into the GHA dashboard
     name: Style/deps
@@ -631,7 +638,7 @@ jobs:
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='' ;
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ; fi
         outputs CARGO_FEATURES_OPTION
         # * CARGO_USE_CROSS (truthy)
         CARGO_USE_CROSS='true' ; case '${{ matrix.job.use-cross }}' in ''|0|f|false|n|no) unset CARGO_USE_CROSS ;; esac;
@@ -651,17 +658,6 @@ jobs:
           *-pc-windows-msvc) STRIP="" ;;
         esac;
         outputs STRIP
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        ## Install/setup prerequisites
-        case '${{ matrix.job.target }}' in
-          arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
-          aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
-        esac
-        case '${{ matrix.job.os }}' in
-          macos-latest) brew install coreutils ;; # needed for testing
-        esac
     - name: Create all needed build/work directories
       shell: bash
       run: |
@@ -680,6 +676,21 @@ jobs:
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for testing
         esac
+        case '${{ matrix.job.os }}' in
+          ubuntu-*)
+            # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
+            # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands. The account also has empty gecos fields.
+            # To work around this for pinky tests, we create a fake login entry for the GH runner account...
+            FAKE_UTMP='[7] [999999] [tty2] [runner] [tty2] [] [0.0.0.0] [2022-02-22T22:22:22,222222+00:00]'
+            # ... by dumping the login records, adding our fake line, then reverse dumping ...
+            (utmpdump /var/run/utmp ; echo $FAKE_UTMP) | sudo utmpdump -r -o /var/run/utmp
+            # ... and add a full name to each account with a gecos field but no full name.
+            sudo sed -i 's/:,/:runner name,/' /etc/passwd
+            # We also create a couple optional files pinky looks for
+            touch /home/runner/.project
+            echo "foo" > /home/runner/.plan
+            ;;
+        esac
     - name: rust toolchain ~ install
       uses: actions-rs/toolchain@v1
       with:
@@ -694,7 +705,7 @@ jobs:
         ## Dependent VARs setup
         outputs() { step_id="dep_vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # * determine sub-crate utility list
-        UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
+        UTILITY_LIST="$(./util/show-utils.sh ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }})"
         echo UTILITY_LIST=${UTILITY_LIST}
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
         outputs CARGO_UTILITY_LIST_OPTIONS
@@ -937,7 +948,7 @@ jobs:
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='--all-features' ;  ## default to '--all-features' for code coverage
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ; fi
         outputs CARGO_FEATURES_OPTION
         # * CODECOV_FLAGS
         CODECOV_FLAGS=$( echo "${{ matrix.job.os }}" | sed 's/[^[:alnum:]]/_/g' )
@@ -948,6 +959,21 @@ jobs:
         ## Install/setup prerequisites
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for testing
+        esac
+        case '${{ matrix.job.os }}' in
+          ubuntu-latest)
+            # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
+            # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands. The account also has empty gecos fields.
+            # To work around this for pinky tests, we create a fake login entry for the GH runner account...
+            FAKE_UTMP='[7] [999999] [tty2] [runner] [tty2] [] [0.0.0.0] [2022-02-22T22:22:22,222222+00:00]'
+            # ... by dumping the login records, adding our fake line, then reverse dumping ...
+            (utmpdump /var/run/utmp ; echo $FAKE_UTMP) | sudo utmpdump -r -o /var/run/utmp
+            # ... and add a full name to each account with a gecos field but no full name.
+            sudo sed -i 's/:,/:runner name,/' /etc/passwd
+            # We also create a couple optional files pinky looks for
+            touch /home/runner/.project
+            echo "foo" > /home/runner/.plan
+            ;;
         esac
     - name: rust toolchain ~ install
       uses: actions-rs/toolchain@v1
@@ -962,7 +988,7 @@ jobs:
         ## Dependent VARs setup
         outputs() { step_id="dep_vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # * determine sub-crate utility list
-        UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
+        UTILITY_LIST="$(./util/show-utils.sh ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }})"
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
         outputs CARGO_UTILITY_LIST_OPTIONS
     - name: Test uucore

@@ -11,7 +11,7 @@ use std::collections::hash_set::HashSet;
 use std::net::ToSocketAddrs;
 use std::str;
 
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
+use clap::{crate_version, Arg, ArgMatches, Command};
 
 use uucore::{
     error::{FromIo, UResult},
@@ -71,12 +71,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(OPT_DOMAIN)
                 .short('d')

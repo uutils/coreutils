@@ -86,6 +86,11 @@ fn test_type_option() {
 }
 
 #[test]
+fn test_exclude_type_option() {
+    new_ucmd!().args(&["-x", "ext4", "-x", "ext3"]).succeeds();
+}
+
+#[test]
 fn test_total() {
     // Example output:
     //

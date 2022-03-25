@@ -34,16 +34,16 @@
 //! #[macro_use]
 //! extern crate uucore;
 //!
-//! use clap::{App, Arg, ArgMatches};
+//! use clap::{Command, Arg, ArgMatches};
 //! use std::path::{Path, PathBuf};
 //! use uucore::backup_control::{self, BackupMode};
 //! use uucore::error::{UError, UResult};
 //!
 //! fn main() {
-//!     let usage = String::from("app [OPTION]... ARG");
+//!     let usage = String::from("command [OPTION]... ARG");
 //!     let long_usage = String::from("And here's a detailed explanation");
 //!
-//!     let matches = App::new("app")
+//!     let matches = Command::new("command")
 //!         .arg(backup_control::arguments::backup())
 //!         .arg(backup_control::arguments::backup_no_args())
 //!         .arg(backup_control::arguments::suffix())
@@ -54,7 +54,7 @@
 //!             backup_control::BACKUP_CONTROL_LONG_HELP
 //!         ))
 //!         .get_matches_from(vec![
-//!             "app", "--backup=t", "--suffix=bak~"
+//!             "command", "--backup=t", "--suffix=bak~"
 //!         ]);
 //!
 //!     let backup_mode = match backup_control::determine_backup_mode(&matches) {
@@ -290,14 +290,14 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 /// #[macro_use]
 /// extern crate uucore;
 /// use uucore::backup_control::{self, BackupMode};
-/// use clap::{App, Arg, ArgMatches};
+/// use clap::{Command, Arg, ArgMatches};
 ///
 /// fn main() {
-///     let matches = App::new("app")
+///     let matches = Command::new("command")
 ///         .arg(backup_control::arguments::backup())
 ///         .arg(backup_control::arguments::backup_no_args())
 ///         .get_matches_from(vec![
-///             "app", "-b", "--backup=t"
+///             "command", "-b", "--backup=t"
 ///         ]);
 ///
 ///     let backup_mode = backup_control::determine_backup_mode(&matches).unwrap();
@@ -313,14 +313,14 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 /// #[macro_use]
 /// extern crate uucore;
 /// use uucore::backup_control::{self, BackupMode, BackupError};
-/// use clap::{App, Arg, ArgMatches};
+/// use clap::{Command, Arg, ArgMatches};
 ///
 /// fn main() {
-///     let matches = App::new("app")
+///     let matches = Command::new("command")
 ///         .arg(backup_control::arguments::backup())
 ///         .arg(backup_control::arguments::backup_no_args())
 ///         .get_matches_from(vec![
-///             "app", "-b", "--backup=n"
+///             "command", "-b", "--backup=n"
 ///         ]);
 ///
 ///     let backup_mode = backup_control::determine_backup_mode(&matches);
@@ -446,7 +446,7 @@ mod tests {
     use super::*;
     use std::env;
     // Required to instantiate mutex in shared context
-    use clap::App;
+    use clap::Command;
     use lazy_static::lazy_static;
     use std::sync::Mutex;
 
@@ -463,8 +463,8 @@ mod tests {
     // Environment variable for "VERSION_CONTROL"
     static ENV_VERSION_CONTROL: &str = "VERSION_CONTROL";
 
-    fn make_app() -> clap::App<'static> {
-        App::new("app")
+    fn make_app() -> clap::Command<'static> {
+        Command::new("command")
             .arg(arguments::backup())
             .arg(arguments::backup_no_args())
             .arg(arguments::suffix())
@@ -474,7 +474,7 @@ mod tests {
     #[test]
     fn test_backup_mode_short_only() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        let matches = make_app().get_matches_from(vec!["app", "-b"]);
+        let matches = make_app().get_matches_from(vec!["command", "-b"]);
 
         let result = determine_backup_mode(&matches).unwrap();
 
@@ -485,7 +485,7 @@ mod tests {
     #[test]
     fn test_backup_mode_long_preferred_over_short() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        let matches = make_app().get_matches_from(vec!["app", "-b", "--backup=none"]);
+        let matches = make_app().get_matches_from(vec!["command", "-b", "--backup=none"]);
 
         let result = determine_backup_mode(&matches).unwrap();
 
@@ -496,7 +496,7 @@ mod tests {
     #[test]
     fn test_backup_mode_long_without_args_no_env() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        let matches = make_app().get_matches_from(vec!["app", "--backup"]);
+        let matches = make_app().get_matches_from(vec!["command", "--backup"]);
 
         let result = determine_backup_mode(&matches).unwrap();
 
@@ -507,7 +507,7 @@ mod tests {
     #[test]
     fn test_backup_mode_long_with_args() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        let matches = make_app().get_matches_from(vec!["app", "--backup=simple"]);
+        let matches = make_app().get_matches_from(vec!["command", "--backup=simple"]);
 
         let result = determine_backup_mode(&matches).unwrap();
 
@@ -518,7 +518,7 @@ mod tests {
     #[test]
     fn test_backup_mode_long_with_args_invalid() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        let matches = make_app().get_matches_from(vec!["app", "--backup=foobar"]);
+        let matches = make_app().get_matches_from(vec!["command", "--backup=foobar"]);
 
         let result = determine_backup_mode(&matches);
 
@@ -531,7 +531,7 @@ mod tests {
     #[test]
     fn test_backup_mode_long_with_args_ambiguous() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        let matches = make_app().get_matches_from(vec!["app", "--backup=n"]);
+        let matches = make_app().get_matches_from(vec!["command", "--backup=n"]);
 
         let result = determine_backup_mode(&matches);
 
@@ -544,7 +544,7 @@ mod tests {
     #[test]
     fn test_backup_mode_long_with_arg_shortened() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        let matches = make_app().get_matches_from(vec!["app", "--backup=si"]);
+        let matches = make_app().get_matches_from(vec!["command", "--backup=si"]);
 
         let result = determine_backup_mode(&matches).unwrap();
 
@@ -556,7 +556,7 @@ mod tests {
     fn test_backup_mode_short_only_ignore_env() {
         let _dummy = TEST_MUTEX.lock().unwrap();
         env::set_var(ENV_VERSION_CONTROL, "none");
-        let matches = make_app().get_matches_from(vec!["app", "-b"]);
+        let matches = make_app().get_matches_from(vec!["command", "-b"]);
 
         let result = determine_backup_mode(&matches).unwrap();
 
@@ -569,7 +569,7 @@ mod tests {
     fn test_backup_mode_long_without_args_with_env() {
         let _dummy = TEST_MUTEX.lock().unwrap();
         env::set_var(ENV_VERSION_CONTROL, "none");
-        let matches = make_app().get_matches_from(vec!["app", "--backup"]);
+        let matches = make_app().get_matches_from(vec!["command", "--backup"]);
 
         let result = determine_backup_mode(&matches).unwrap();
 
@@ -582,7 +582,7 @@ mod tests {
     fn test_backup_mode_long_with_env_var_invalid() {
         let _dummy = TEST_MUTEX.lock().unwrap();
         env::set_var(ENV_VERSION_CONTROL, "foobar");
-        let matches = make_app().get_matches_from(vec!["app", "--backup"]);
+        let matches = make_app().get_matches_from(vec!["command", "--backup"]);
 
         let result = determine_backup_mode(&matches);
 
@@ -597,7 +597,7 @@ mod tests {
     fn test_backup_mode_long_with_env_var_ambiguous() {
         let _dummy = TEST_MUTEX.lock().unwrap();
         env::set_var(ENV_VERSION_CONTROL, "n");
-        let matches = make_app().get_matches_from(vec!["app", "--backup"]);
+        let matches = make_app().get_matches_from(vec!["command", "--backup"]);
 
         let result = determine_backup_mode(&matches);
 
@@ -612,7 +612,7 @@ mod tests {
     fn test_backup_mode_long_with_env_var_shortened() {
         let _dummy = TEST_MUTEX.lock().unwrap();
         env::set_var(ENV_VERSION_CONTROL, "si");
-        let matches = make_app().get_matches_from(vec!["app", "--backup"]);
+        let matches = make_app().get_matches_from(vec!["command", "--backup"]);
 
         let result = determine_backup_mode(&matches).unwrap();
 
@@ -623,7 +623,7 @@ mod tests {
     #[test]
     fn test_suffix_takes_hyphen_value() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        let matches = make_app().get_matches_from(vec!["app", "-b", "--suffix", "-v"]);
+        let matches = make_app().get_matches_from(vec!["command", "-b", "--suffix", "-v"]);
 
         let result = determine_backup_suffix(&matches);
         assert_eq!(result, "-v");

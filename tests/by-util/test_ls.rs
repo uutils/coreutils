@@ -79,7 +79,224 @@ fn test_ls_ordering() {
         .stdout_matches(&Regex::new("some-dir1:\\ntotal 0").unwrap());
 }
 
-//#[cfg(all(feature = "mknod"))]
+#[cfg(all(feature = "truncate", feature = "dd"))]
+#[test]
+fn test_ls_allocation_size() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("some-dir1");
+    at.touch("some-dir1/empty-file");
+
+    #[cfg(unix)]
+    {
+        scene
+            .ccmd("truncate")
+            .arg("-s")
+            .arg("4M")
+            .arg("some-dir1/file-with-holes")
+            .succeeds();
+
+        // fill empty file with zeros
+        scene
+            .ccmd("dd")
+            .arg("--if=/dev/zero")
+            .arg("--of=some-dir1/zero-file")
+            .arg("bs=1024")
+            .arg("count=4096")
+            .succeeds();
+
+        scene
+            .ccmd("dd")
+            .arg("--if=/dev/zero")
+            .arg("--of=irregular-file")
+            .arg("bs=1")
+            .arg("count=777")
+            .succeeds();
+
+        scene
+            .ucmd()
+            .arg("-l")
+            .arg("--block-size=512")
+            .arg("irregular-file")
+            .succeeds()
+            .stdout_matches(&Regex::new("[^ ] 2 [^ ]").unwrap());
+
+        scene
+            .ucmd()
+            .arg("-s1")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_is("total 4096\n   0 empty-file\n   0 file-with-holes\n4096 zero-file\n");
+
+        scene
+            .ucmd()
+            .arg("-sl")
+            .arg("some-dir1")
+            .succeeds()
+            // block size is 0 whereas size/len is 4194304
+            .stdout_contains("4194304");
+
+        scene
+            .ucmd()
+            .arg("-s1")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("0 empty-file")
+            .stdout_contains("4096 zero-file");
+
+        // Test alignment of different block sized files
+        let res = scene.ucmd().arg("-si1").arg("some-dir1").succeeds();
+
+        let empty_file_len = String::from_utf8(res.stdout().to_owned())
+            .ok()
+            .unwrap()
+            .lines()
+            .nth(1)
+            .unwrap()
+            .strip_suffix("empty-file")
+            .unwrap()
+            .len();
+
+        let file_with_holes_len = String::from_utf8(res.stdout().to_owned())
+            .ok()
+            .unwrap()
+            .lines()
+            .nth(2)
+            .unwrap()
+            .strip_suffix("file-with-holes")
+            .unwrap()
+            .len();
+
+        assert_eq!(empty_file_len, file_with_holes_len);
+
+        scene
+            .ucmd()
+            .env("LS_BLOCK_SIZE", "8K")
+            .env("BLOCK_SIZE", "4K")
+            .arg("-s1")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 512")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("512 zero-file");
+
+        scene
+            .ucmd()
+            .env("BLOCK_SIZE", "4K")
+            .arg("-s1")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 1024")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("1024 zero-file");
+
+        scene
+            .ucmd()
+            .env("BLOCK_SIZE", "4K")
+            .arg("-s1")
+            .arg("--si")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 4.2M")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("4.2M zero-file");
+
+        scene
+            .ucmd()
+            .env("BLOCK_SIZE", "4096")
+            .arg("-s1")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 1024")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("1024 zero-file");
+
+        scene
+            .ucmd()
+            .env("POSIXLY_CORRECT", "true")
+            .arg("-s1")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 8192")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("8192 zero-file");
+
+        // -k should make 'ls' ignore the env var
+        scene
+            .ucmd()
+            .env("BLOCK_SIZE", "4K")
+            .arg("-s1k")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 4096")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("4096 zero-file");
+
+        // but manually specified blocksize overrides -k
+        scene
+            .ucmd()
+            .arg("-s1k")
+            .arg("--block-size=4K")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 1024")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("1024 zero-file");
+
+        scene
+            .ucmd()
+            .arg("-s1")
+            .arg("--block-size=4K")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 1024")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("1024 zero-file");
+
+        // si option should always trump the human-readable option
+        scene
+            .ucmd()
+            .arg("-s1h")
+            .arg("--si")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 4.2M")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("4.2M zero-file");
+
+        scene
+            .ucmd()
+            .arg("-s1")
+            .arg("--block-size=human-readable")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 4.0M")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("4.0M zero-file");
+
+        scene
+            .ucmd()
+            .arg("-s1")
+            .arg("--block-size=si")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains("total 4.2M")
+            .stdout_contains("0 empty-file")
+            .stdout_contains("0 file-with-holes")
+            .stdout_contains("4.2M zero-file");
+    }
+}
+
 #[test]
 fn test_ls_devices() {
     let scene = TestScenario::new(util_name!());
@@ -107,7 +324,7 @@ fn test_ls_devices() {
             .stdout_matches(&Regex::new("[^ ] 1, 3 [^ ]").unwrap());
     }
 
-    // Regex tests alignment against a file (stdout is a link to a tty)
+    // Tests display alignment against a file (stdout is a link to a tty)
     #[cfg(unix)]
     {
         let res = scene
@@ -2542,22 +2759,14 @@ fn test_ls_dangling_symlinks() {
         .succeeds()
         .stdout_contains("dangle");
 
-    #[cfg(not(windows))]
     scene
         .ucmd()
         .arg("-Li")
         .arg("temp_dir")
         .fails()
         .stderr_contains("cannot access")
-        .stdout_contains("? dangle");
-
-    #[cfg(windows)]
-    scene
-        .ucmd()
-        .arg("-Li")
-        .arg("temp_dir")
-        .succeeds()
-        .stdout_contains("dangle");
+        .stderr_contains("No such file or directory")
+        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
 
     scene
         .ucmd()
@@ -2659,4 +2868,48 @@ fn test_ls_context_format() {
                 unwrap_or_return!(expected_result(&ts, &["-Z", format.as_str(), "/"])).stdout_str(),
             );
     }
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn test_ls_a_A() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("-A")
+        .arg("-a")
+        .succeeds()
+        .stdout_contains(".")
+        .stdout_contains("..");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("-A")
+        .succeeds()
+        .stdout_does_not_contain(".")
+        .stdout_does_not_contain("..");
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn test_ls_multiple_a_A() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("-a")
+        .succeeds()
+        .stdout_contains(".")
+        .stdout_contains("..");
+
+    scene
+        .ucmd()
+        .arg("-A")
+        .arg("-A")
+        .succeeds()
+        .stdout_does_not_contain(".")
+        .stdout_does_not_contain("..");
 }

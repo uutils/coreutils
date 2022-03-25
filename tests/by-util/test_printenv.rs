@@ -26,5 +26,5 @@ fn test_get_var() {
         .succeeds();
 
     assert!(!result.stdout_str().is_empty());
-    assert!(result.stdout_str().trim() == "VALUE");
+    assert_eq!(result.stdout_str().trim(), "VALUE");
 }

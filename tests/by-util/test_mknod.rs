@@ -86,14 +86,14 @@ fn test_mknod_character_device_requires_major_and_minor() {
         .arg("1")
         .arg("c")
         .fails()
-        .stderr_contains(&"Invalid value for '<MINOR>'");
+        .stderr_contains(&"Invalid value \"c\" for '<MINOR>'");
     new_ucmd!()
         .arg("test_file")
         .arg("c")
         .arg("c")
         .arg("1")
         .fails()
-        .stderr_contains(&"Invalid value for '<MAJOR>'");
+        .stderr_contains(&"Invalid value \"c\" for '<MAJOR>'");
 }
 
 #[test]

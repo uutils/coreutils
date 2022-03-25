@@ -4,7 +4,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore ctty, ctable, iconvflags, oconvflags parseargs
+// spell-checker:ignore ctty, ctable, iseek, oseek, iconvflags, oconvflags parseargs
 
 #[cfg(test)]
 mod unit_tests;
@@ -100,16 +100,16 @@ impl std::fmt::Display for ParseError {
             Self::StatusLevelNotRecognized(arg) => {
                 write!(f, "status=LEVEL not recognized -> {}", arg)
             }
-            ParseError::BsOutOfRange => {
+            Self::BsOutOfRange => {
                 write!(f, "bs=N cannot fit into memory")
             }
-            ParseError::IbsOutOfRange => {
+            Self::IbsOutOfRange => {
                 write!(f, "ibs=N cannot fit into memory")
             }
-            ParseError::ObsOutOfRange => {
+            Self::ObsOutOfRange => {
                 write!(f, "obs=N cannot fit into memory")
             }
-            ParseError::CbsOutOfRange => {
+            Self::CbsOutOfRange => {
                 write!(f, "cbs=N cannot fit into memory")
             }
             Self::Unimplemented(arg) => {
@@ -740,36 +740,18 @@ pub fn parse_oflags(matches: &Matches) -> Result<OFlags, ParseError> {
     Ok(oflags)
 }
 
-/// Parse the amount of the input file to skip.
-pub fn parse_skip_amt(
+pub fn parse_seek_skip_amt(
     ibs: &usize,
-    iflags: &IFlags,
+    bytes: bool,
     matches: &Matches,
+    option: &str,
 ) -> Result<Option<u64>, ParseError> {
-    if let Some(amt) = matches.value_of(options::SKIP) {
+    if let Some(amt) = matches.value_of(option) {
         let n = parse_bytes_with_opt_multiplier(amt)?;
-        if iflags.skip_bytes {
+        if bytes {
             Ok(Some(n))
         } else {
             Ok(Some(*ibs as u64 * n))
-        }
-    } else {
-        Ok(None)
-    }
-}
-
-/// Parse the amount of the output file to seek.
-pub fn parse_seek_amt(
-    obs: &usize,
-    oflags: &OFlags,
-    matches: &Matches,
-) -> Result<Option<u64>, ParseError> {
-    if let Some(amt) = matches.value_of(options::SEEK) {
-        let n = parse_bytes_with_opt_multiplier(amt)?;
-        if oflags.seek_bytes {
-            Ok(Some(n))
-        } else {
-            Ok(Some(*obs as u64 * n))
         }
     } else {
         Ok(None)

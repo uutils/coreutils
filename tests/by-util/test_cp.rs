@@ -184,6 +184,16 @@ fn test_cp_arg_no_target_directory() {
 }
 
 #[test]
+fn test_cp_target_directory_is_file() {
+    new_ucmd!()
+        .arg("-t")
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .fails()
+        .stderr_contains(format!("'{}' is not a directory", TEST_HOW_ARE_YOU_SOURCE));
+}
+
+#[test]
 fn test_cp_arg_interactive() {
     new_ucmd!()
         .arg(TEST_HELLO_WORLD_SOURCE)

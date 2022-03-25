@@ -15,15 +15,12 @@ edition = "2018"
 path = "src/tail.rs"
 
 [dependencies]
-clap = { version = "3.0", features = ["wrap_help", "cargo"] }
-libc = "0.2.42"
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
+libc = "0.2.121"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["ringbuffer", "lines"] }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version="0.3", features=["fileapi", "handleapi", "processthreadsapi", "synchapi", "winbase"] }
-
-[target.'cfg(target_os = "redox")'.dependencies]
-redox_syscall = "0.2"
 
 [target.'cfg(unix)'.dependencies]
 nix = "0.23.1"

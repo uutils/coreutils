@@ -1,0 +1,95 @@
+# spell-checker:ignore SSLeay RUSTSEC
+
+# This section is considered when running `cargo deny check advisories`
+# More documentation for the advisories section can be found here:
+# https://embarkstudios.github.io/cargo-deny/checks/advisories/cfg.html
+[advisories]
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+vulnerability = "warn"
+unmaintained = "warn"
+yanked = "warn"
+notice = "warn"
+ignore = [
+    #"RUSTSEC-0000-0000",
+]
+
+# This section is considered when running `cargo deny check licenses`
+# More documentation for the licenses section can be found here:
+# https://embarkstudios.github.io/cargo-deny/checks/licenses/cfg.html
+[licenses]
+unlicensed = "deny"
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "ISC",
+    "BSD-2-Clause",
+    "BSD-2-Clause-FreeBSD",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "MPL-2.0", # XXX considered copyleft?
+]
+copyleft = "deny"
+allow-osi-fsf-free = "neither"
+default = "deny"
+confidence-threshold = 0.8
+exceptions = [
+    { allow = ["OpenSSL"], name = "ring" },
+]
+
+[[licenses.clarify]]
+name = "ring"
+# SPDX considers OpenSSL to encompass both the OpenSSL and SSLeay licenses
+# https://spdx.org/licenses/OpenSSL.html
+# ISC - Both BoringSSL and ring use this for their new files
+# MIT - "Files in third_party/ have their own licenses, as described therein. The MIT
+# license, for third_party/fiat, which, unlike other third_party directories, is
+# compiled into non-test libraries, is included below."
+# OpenSSL - Obviously
+expression = "ISC AND MIT AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+# This section is considered when running `cargo deny check bans`.
+# More documentation about the 'bans' section can be found here:
+# https://embarkstudios.github.io/cargo-deny/checks/bans/cfg.html
+[bans]
+multiple-versions = "deny"
+wildcards = "allow"
+highlight = "all"
+
+# For each duplicate dependency, indicate the name of the dependency which
+# introduces it.
+# spell-checker: disable
+skip = [
+    # blake2d_simd
+    { name = "arrayvec", version = "=0.7.2" },
+    # flimit/unix_socket
+    { name = "cfg-if", version = "=0.1.10" },
+    # ordered-multimap
+    { name = "hashbrown", version = "=0.9.1" },
+    # kernel32-sys
+    { name = "winapi", version = "=0.2.8" },
+    # bindgen 0.59.2
+    { name = "clap", version = "=2.34.0" },
+    { name = "strsim", version = "=0.8.0" },
+    { name = "textwrap", version = "=0.11.0" },
+    { name = "cpp_common", version = "=0.4.0" },
+    # quickcheck
+    { name = "env_logger", version = "=0.8.4" },
+    # cpp_*
+    { name = "memchr", version = "=1.0.2" },
+    { name = "quote", version = "=0.3.15" },
+    { name = "unicode-xid", version = "=0.0.4" },
+    # exacl
+    { name = "nix", version = "=0.21.0" },
+]
+# spell-checker: enable
+
+# This section is considered when running `cargo deny check sources`.
+# More documentation about the 'sources' section can be found here:
+# https://embarkstudios.github.io/cargo-deny/checks/sources/cfg.html
+[sources]
+unknown-registry = "warn"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

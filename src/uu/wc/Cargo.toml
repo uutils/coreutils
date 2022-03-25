@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/wc.rs"
 
 [dependencies]
-clap = { version = "3.0", features = ["wrap_help", "cargo"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["pipes"] }
 bytecount = "0.6.2"
 utf-8 = "0.7.6"

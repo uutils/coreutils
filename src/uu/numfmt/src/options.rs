@@ -42,23 +42,23 @@ pub enum RoundMethod {
 impl RoundMethod {
     pub fn round(&self, f: f64) -> f64 {
         match self {
-            RoundMethod::Up => f.ceil(),
-            RoundMethod::Down => f.floor(),
-            RoundMethod::FromZero => {
+            Self::Up => f.ceil(),
+            Self::Down => f.floor(),
+            Self::FromZero => {
                 if f < 0.0 {
                     f.floor()
                 } else {
                     f.ceil()
                 }
             }
-            RoundMethod::TowardsZero => {
+            Self::TowardsZero => {
                 if f < 0.0 {
                     f.ceil()
                 } else {
                     f.floor()
                 }
             }
-            RoundMethod::Nearest => f.round(),
+            Self::Nearest => f.round(),
         }
     }
 }

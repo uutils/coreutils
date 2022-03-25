@@ -18,11 +18,9 @@ use std::io::BufReader;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use std::path::PathBuf;
 use uucore::{format_usage, InvalidEncodingHandling};
-
-const BUFSIZE: usize = 1024;
 
 static ABOUT: &str = "pinky - lightweight finger";
 const USAGE: &str = "{} [OPTION]... [USER]...";
@@ -38,6 +36,7 @@ mod options {
     pub const OMIT_NAME_HOST: &str = "omit_name_host";
     pub const OMIT_NAME_HOST_TIME: &str = "omit_name_host_time";
     pub const USER: &str = "user";
+    pub const HELP: &str = "help";
 }
 
 fn get_long_usage() -> String {
@@ -125,12 +124,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::LONG_FORMAT)
                 .short('l')
@@ -181,6 +180,13 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(options::USER)
                 .takes_value(true)
                 .multiple_occurrences(true),
+        )
+        .arg(
+            // Redefine the help argument to not include the short flag
+            // since that conflicts with omit_project_file.
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information"),
         )
 }
 
@@ -239,6 +245,14 @@ fn time_string(ut: &Utmpx) -> String {
     time::strftime("%b %e %H:%M", &ut.login_time()).unwrap() // LC_ALL=C
 }
 
+fn gecos_to_fullname(pw: &Passwd) -> String {
+    let mut gecos = pw.user_info.clone();
+    if let Some(n) = gecos.find(',') {
+        gecos.truncate(n);
+    }
+    gecos.replace('&', &pw.name.capitalize())
+}
+
 impl Pinky {
     fn print_entry(&self, ut: &Utmpx) -> std::io::Result<()> {
         let mut pts_path = PathBuf::from("/dev");
@@ -265,11 +279,7 @@ impl Pinky {
 
         if self.include_fullname {
             if let Ok(pw) = Passwd::locate(ut.user().as_ref()) {
-                let mut gecos = pw.user_info;
-                if let Some(n) = gecos.find(',') {
-                    gecos.truncate(n + 1);
-                }
-                print!(" {:<19.19}", gecos.replace('&', &pw.name.capitalize()));
+                print!(" {:<19.19}", gecos_to_fullname(&pw));
             } else {
                 print!(" {:19}", "        ???");
             }
@@ -331,7 +341,7 @@ impl Pinky {
         for u in &self.names {
             print!("Login name: {:<28}In real life: ", u);
             if let Ok(pw) = Passwd::locate(u.as_str()) {
-                println!(" {}", pw.user_info.replace('&', &pw.name.capitalize()));
+                println!(" {}", gecos_to_fullname(&pw));
                 if self.include_home_and_shell {
                     print!("Directory: {:<29}", pw.user_dir);
                     println!("Shell:  {}", pw.user_shell);
@@ -362,12 +372,8 @@ impl Pinky {
 
 fn read_to_console<F: Read>(f: F) {
     let mut reader = BufReader::new(f);
-    let mut iobuf = [0_u8; BUFSIZE];
-    while let Ok(n) = reader.read(&mut iobuf) {
-        if n == 0 {
-            break;
-        }
-        let s = String::from_utf8_lossy(&iobuf);
-        print!("{}", s);
+    let mut iobuf = Vec::new();
+    if reader.read_to_end(&mut iobuf).is_ok() {
+        print!("{}", String::from_utf8_lossy(&iobuf));
     }
 }

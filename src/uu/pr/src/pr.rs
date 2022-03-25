@@ -11,7 +11,7 @@ extern crate quick_error;
 
 use chrono::offset::Local;
 use chrono::DateTime;
-use clap::{App, AppSettings, Arg, ArgMatches};
+use clap::{AppSettings, Arg, ArgMatches, Command};
 use itertools::Itertools;
 use quick_error::ResultExt;
 use regex::Regex;
@@ -192,13 +192,13 @@ quick_error! {
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
         .after_help(AFTER_HELP)
-        .setting(AppSettings::InferLongArgs)
-        .setting(AppSettings::AllArgsOverrideSelf)
+        .infer_long_args(true)
+        .args_override_self(true)
         .setting(AppSettings::NoAutoHelp)
         .setting(AppSettings::NoAutoVersion)
         .arg(
@@ -383,8 +383,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let opt_args = recreate_arguments(&args);
 
-    let mut app = uu_app();
-    let matches = match app.try_get_matches_from_mut(opt_args) {
+    let mut command = uu_app();
+    let matches = match command.try_get_matches_from_mut(opt_args) {
         Ok(m) => m,
         Err(e) => {
             e.print()?;
@@ -394,12 +394,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     if matches.is_present(options::VERSION) {
-        println!("{}", app.render_long_version());
+        println!("{}", command.render_long_version());
         return Ok(());
     }
 
     if matches.is_present(options::HELP) {
-        app.print_long_help()?;
+        command.print_long_help()?;
         return Ok(());
     }
 

@@ -15,7 +15,7 @@ use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::fsext::{read_fs_list, MountInfo};
 
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
+use clap::{crate_version, Arg, ArgMatches, Command};
 
 use std::fmt;
 use std::path::Path;
@@ -29,9 +29,9 @@ static ABOUT: &str = "Show information about the file system on which each FILE 
                       or all file systems by default.";
 const USAGE: &str = "{} [OPTION]... [FILE]...";
 
+static OPT_HELP: &str = "help";
 static OPT_ALL: &str = "all";
 static OPT_BLOCKSIZE: &str = "blocksize";
-static OPT_DIRECT: &str = "direct";
 static OPT_TOTAL: &str = "total";
 static OPT_HUMAN_READABLE: &str = "human-readable";
 static OPT_HUMAN_READABLE_2: &str = "human-readable-2";
@@ -230,39 +230,49 @@ fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
     result
 }
 
-/// Assign 1 `MountInfo` entry to each path
-/// `lofs` entries are skipped and dummy mount points are skipped
-/// Only the longest matching prefix for that path is considered
-/// `lofs` is for Solaris style loopback filesystem and is present in Solaris and FreeBSD.
-/// It works similar to symlinks
-fn get_point_list(vmi: &[MountInfo], paths: &[String]) -> Vec<MountInfo> {
+/// Get all currently mounted filesystems.
+///
+/// `opt` excludes certain filesystems from consideration; see
+/// [`Options`] for more information.
+fn get_all_filesystems(opt: &Options) -> Vec<Filesystem> {
+    // The list of all mounted filesystems.
+    //
+    // Filesystems excluded by the command-line options are
+    // not considered.
+    let mounts: Vec<MountInfo> = filter_mount_list(read_fs_list(), opt);
+
+    // Convert each `MountInfo` into a `Filesystem`, which contains
+    // both the mount information and usage information.
+    mounts.into_iter().filter_map(Filesystem::new).collect()
+}
+
+/// For each path, get the filesystem that contains that path.
+fn get_named_filesystems<P>(paths: &[P]) -> Vec<Filesystem>
+where
+    P: AsRef<Path>,
+{
+    // The list of all mounted filesystems.
+    //
+    // Filesystems marked as `dummy` or of type "lofs" are not
+    // considered. The "lofs" filesystem is a loopback
+    // filesystem present on Solaris and FreeBSD systems. It
+    // is similar to a symbolic link.
+    let mounts: Vec<MountInfo> = read_fs_list()
+        .into_iter()
+        .filter(|mi| mi.fs_type != "lofs" && !mi.dummy)
+        .collect();
+
+    // Convert each path into a `Filesystem`, which contains
+    // both the mount information and usage information.
     paths
         .iter()
-        .map(|p| {
-            vmi.iter()
-                .filter(|mi| mi.fs_type.ne("lofs"))
-                .filter(|mi| !mi.dummy)
-                .filter(|mi| p.starts_with(&mi.mount_dir))
-                .max_by_key(|mi| mi.mount_dir.len())
-                .unwrap()
-                .clone()
-        })
-        .collect::<Vec<MountInfo>>()
+        .filter_map(|p| Filesystem::from_path(&mounts, p))
+        .collect()
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
-
-    // Canonicalize the input_paths and then convert to string
-    let paths = matches
-        .values_of(OPT_PATHS)
-        .unwrap_or_default()
-        .map(Path::new)
-        .filter_map(|v| v.canonicalize().ok())
-        .filter_map(|v| v.into_os_string().into_string().ok())
-        .collect::<Vec<_>>();
-
     #[cfg(windows)]
     {
         if matches.is_present(OPT_INODES) {
@@ -273,27 +283,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let opt = Options::from(&matches).map_err(|e| USimpleError::new(1, format!("{}", e)))?;
 
-    let mounts = read_fs_list();
-
-    let op_mount_points: Vec<MountInfo> = if paths.is_empty() {
-        // Get all entries
-        filter_mount_list(mounts, &opt)
-    } else {
-        // Get Point for each input_path
-        get_point_list(&mounts, &paths)
+    // Get the list of filesystems to display in the output table.
+    let filesystems: Vec<Filesystem> = match matches.values_of(OPT_PATHS) {
+        None => get_all_filesystems(&opt),
+        Some(paths) => {
+            let paths: Vec<&str> = paths.collect();
+            get_named_filesystems(&paths)
+        }
     };
-    let data: Vec<Row> = op_mount_points
-        .into_iter()
-        .filter_map(Filesystem::new)
-        .filter(|fs| fs.usage.blocks != 0 || opt.show_all_fs || opt.show_listed_fs)
-        .map(Into::into)
-        .collect();
+
+    // The running total of filesystem sizes and usage.
+    //
+    // This accumulator is computed in case we need to display the
+    // total counts in the last row of the table.
+    let mut total = Row::new("total");
 
     println!("{}", Header::new(&opt));
-    let mut total = Row::new("total");
-    for row in data {
-        println!("{}", DisplayRow::new(&row, &opt));
-        total += row;
+    for filesystem in filesystems {
+        // If the filesystem is not empty, or if the options require
+        // showing all filesystems, then print the data as a row in
+        // the output table.
+        if opt.show_all_fs || opt.show_listed_fs || filesystem.usage.blocks > 0 {
+            let row = Row::from(filesystem);
+            println!("{}", DisplayRow::new(&row, &opt));
+            total += row;
+        }
     }
     if opt.show_total {
         println!("{}", DisplayRow::new(&total, &opt));
@@ -302,12 +316,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
+        .arg(
+            Arg::new(OPT_HELP)
+                .long(OPT_HELP)
+                .help("Print help information."),
+        )
         .arg(
             Arg::new(OPT_ALL)
                 .short('a')
@@ -323,11 +342,6 @@ pub fn uu_app<'a>() -> App<'a> {
                     "scale sizes by SIZE before printing them; e.g.\
                      '-BM' prints sizes in units of 1,048,576 bytes",
                 ),
-        )
-        .arg(
-            Arg::new(OPT_DIRECT)
-                .long("direct")
-                .help("show statistics for a file instead of mount point"),
         )
         .arg(
             Arg::new(OPT_TOTAL)
@@ -371,7 +385,7 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(OPT_OUTPUT)
                 .long("output")
                 .takes_value(true)
-                .use_delimiter(true)
+                .use_value_delimiter(true)
                 .possible_values(OUTPUT_FIELD_LIST)
                 .default_missing_values(&OUTPUT_FIELD_LIST)
                 .default_values(&["source", "size", "used", "avail", "pcent", "target"])
@@ -412,8 +426,10 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(OPT_EXCLUDE_TYPE)
                 .short('x')
                 .long("exclude-type")
+                .allow_invalid_utf8(true)
                 .takes_value(true)
-                .use_delimiter(true)
+                .use_value_delimiter(true)
+                .multiple_occurrences(true)
                 .help("limit listing to file systems not of type TYPE"),
         )
         .arg(Arg::new(OPT_PATHS).multiple_occurrences(true))

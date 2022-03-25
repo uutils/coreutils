@@ -1,3 +1,4 @@
+// spell-checker:ignore dont
 use crate::common::util::*;
 
 // FIXME: this depends on the system having true and false in PATH
@@ -8,6 +9,14 @@ fn test_subcommand_return_code() {
     new_ucmd!().arg("1").arg("true").succeeds();
 
     new_ucmd!().arg("1").arg("false").run().status_code(1);
+}
+
+#[test]
+fn test_invalid_time_interval() {
+    new_ucmd!()
+        .args(&["xyz", "sleep", "0"])
+        .fails()
+        .usage_error("invalid time interval 'xyz'");
 }
 
 #[test]
@@ -63,4 +72,36 @@ fn test_preserve_status() {
         .code_is(128 + 15)
         .no_stderr()
         .no_stdout();
+}
+
+#[test]
+fn test_dont_overflow() {
+    new_ucmd!()
+        .args(&["9223372036854775808d", "sleep", "0"])
+        .succeeds()
+        .code_is(0)
+        .no_stderr()
+        .no_stdout();
+    new_ucmd!()
+        .args(&["-k", "9223372036854775808d", "10", "sleep", "0"])
+        .succeeds()
+        .code_is(0)
+        .no_stderr()
+        .no_stdout();
+}
+
+#[test]
+fn test_negative_interval() {
+    new_ucmd!()
+        .args(&["--", "-1", "sleep", "0"])
+        .fails()
+        .usage_error("invalid time interval '-1'");
+}
+
+#[test]
+fn test_invalid_signal() {
+    new_ucmd!()
+        .args(&["-s", "invalid", "1", "sleep", "0"])
+        .fails()
+        .usage_error("'invalid': invalid signal");
 }

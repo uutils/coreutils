@@ -8,7 +8,7 @@
 
 // spell-checker:ignore (paths) GPGHome
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use uucore::display::{println_verbatim, Quotable};
 use uucore::error::{FromIo, UError, UResult};
 use uucore::format_usage;
@@ -131,12 +131,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(OPT_DIRECTORY)
                 .short('d')

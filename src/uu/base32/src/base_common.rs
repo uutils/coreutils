@@ -18,7 +18,7 @@ use std::fs::File;
 use std::io::{BufReader, Stdin};
 use std::path::Path;
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 
 pub static BASE_CMD_PARSE_ERROR: i32 = 1;
 
@@ -86,19 +86,19 @@ impl Config {
 }
 
 pub fn parse_base_cmd_args(args: impl uucore::Args, about: &str, usage: &str) -> UResult<Config> {
-    let app = base_app(about, usage);
+    let command = base_app(about, usage);
     let arg_list = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
-    Config::from(&app.get_matches_from(arg_list))
+    Config::from(&command.get_matches_from(arg_list))
 }
 
-pub fn base_app<'a>(about: &'a str, usage: &'a str) -> App<'a> {
-    App::new(uucore::util_name())
+pub fn base_app<'a>(about: &'a str, usage: &'a str) -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(about)
         .override_usage(format_usage(usage))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         // Format arguments.
         .arg(
             Arg::new(options::DECODE)

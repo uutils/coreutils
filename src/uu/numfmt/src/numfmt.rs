@@ -11,7 +11,7 @@ use crate::errors::*;
 use crate::format::format_and_print;
 use crate::options::*;
 use crate::units::{Result, Unit};
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
+use clap::{crate_version, Arg, ArgMatches, Command};
 use std::io::{BufRead, Write};
 use uucore::display::Quotable;
 use uucore::error::UResult;
@@ -186,14 +186,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::AllowNegativeNumbers)
-        .setting(AppSettings::InferLongArgs)
+        .allow_negative_numbers(true)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::DELIMITER)
                 .short('d')
