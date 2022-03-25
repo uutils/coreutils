@@ -936,7 +936,7 @@ jobs:
         ## VARs setup
         outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # toolchain
-        TOOLCHAIN="nightly" ## default to "nightly" toolchain (required for certain required unstable compiler flags) ## !maint: refactor when stable channel has needed support
+        TOOLCHAIN="nightly-2022-03-21" ## default to "nightly" toolchain (required for certain required unstable compiler flags) ## !maint: refactor when stable channel has needed support
         # * specify gnu-type TOOLCHAIN for windows; `grcov` requires gnu-style code coverage data files
         case ${{ matrix.job.os }} in windows-*) TOOLCHAIN="$TOOLCHAIN-x86_64-pc-windows-gnu" ;; esac;
         # * use requested TOOLCHAIN if specified
