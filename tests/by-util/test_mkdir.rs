@@ -1,8 +1,10 @@
 use crate::common::util::*;
 #[cfg(not(windows))]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(not(windows))]
 extern crate libc;
-use self::libc::{umask, mode_t};
+#[cfg(not(windows))]
+use self::libc::{mode_t, umask};
 
 static TEST_DIR1: &str = "mkdir_test1";
 static TEST_DIR2: &str = "mkdir_test2";
@@ -17,7 +19,7 @@ static TEST_DIR10: &str = "mkdir_test10";
 
 #[test]
 fn test_mkdir_mkdir() {
-        new_ucmd!().arg(TEST_DIR1).succeeds();
+    new_ucmd!().arg(TEST_DIR1).succeeds();
 }
 
 #[test]
@@ -138,11 +140,14 @@ fn test_umask_compliance() {
         ucmd.arg(TEST_DIR10).succeeds();
         let perms = at.metadata(TEST_DIR10).permissions().mode() as mode_t;
 
-        assert_eq!(perms, (!umask_set & 0o0777) + 0o40000); // before compare, add the setguid, uid bits
-        unsafe { umask(original_umask); } // set umask back to original
+        assert_eq!(perms, (!umask_set & 0o0777) + 0o40000); // before compare, add the set GUID, UID bits
+        unsafe {
+            umask(original_umask);
+        } // set umask back to original
     }
 
-    for i in 0o0..0o777 { // tests all permission combinations
+    for i in 0o0..0o777 {
+        // tests all permission combinations
         test_single_case(i);
     }
 }
