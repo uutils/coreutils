@@ -1,4 +1,4 @@
-// spell-checker:ignore udev
+// spell-checker:ignore udev pcent
 use crate::common::util::*;
 
 #[test]
@@ -139,33 +139,24 @@ fn test_total() {
 
 #[test]
 fn test_use_percentage() {
-    // Example output:
-    //
-    //     Filesystem            1K-blocks     Used Available Use% Mounted on
-    //     udev                    3858016        0   3858016   0% /dev
-    //     ...
-    //     /dev/loop14               63488    63488         0 100% /snap/core20/1361
-    let output = new_ucmd!().succeeds().stdout_move_str();
+    let output = new_ucmd!()
+        .args(&["--output=used,avail,pcent"])
+        .succeeds()
+        .stdout_move_str();
 
     // Skip the header line.
     let lines: Vec<&str> = output.lines().skip(1).collect();
 
     for line in lines {
         let mut iter = line.split_whitespace();
-        iter.next();
-        let reported_size = iter.next().unwrap().parse::<f64>().unwrap();
         let reported_used = iter.next().unwrap().parse::<f64>().unwrap();
-        // Skip "Available" column
-        iter.next();
-        if cfg!(target_os = "macos") {
-            // Skip "Capacity" column
-            iter.next();
-        }
+        let reported_avail = iter.next().unwrap().parse::<f64>().unwrap();
         let reported_percentage = iter.next().unwrap();
         let reported_percentage = reported_percentage[..reported_percentage.len() - 1]
             .parse::<u8>()
             .unwrap();
-        let computed_percentage = (100.0 * (reported_used / reported_size)).ceil() as u8;
+        let computed_percentage =
+            (100.0 * (reported_used / (reported_used + reported_avail))).ceil() as u8;
 
         assert_eq!(computed_percentage, reported_percentage);
     }

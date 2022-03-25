@@ -149,24 +149,28 @@ impl From<Filesystem> for Row {
             ffree,
             ..
         } = fs.usage;
+        let bused = blocks - bfree;
         Self {
             file: fs.file,
             fs_device: dev_name,
             fs_type,
             fs_mount: mount_dir,
             bytes: blocksize * blocks,
-            bytes_used: blocksize * (blocks - bfree),
+            bytes_used: blocksize * bused,
             bytes_avail: blocksize * bavail,
             bytes_usage: if blocks == 0 {
                 None
             } else {
-                Some(((blocks - bfree) as f64) / blocks as f64)
+                // We use "(bused + bavail)" instead of "blocks" because on some filesystems (e.g.
+                // ext4) "blocks" also includes reserved blocks we ignore for the usage calculation.
+                // https://www.gnu.org/software/coreutils/faq/coreutils-faq.html#df-Size-and-Used-and-Available-do-not-add-up
+                Some((bused as f64) / (bused + bavail) as f64)
             },
             #[cfg(target_os = "macos")]
             bytes_capacity: if bavail == 0 {
                 None
             } else {
-                Some(bavail as f64 / ((blocks - bfree + bavail) as f64))
+                Some(bavail as f64 / ((bused + bavail) as f64))
             },
             inodes: files,
             inodes_used: files - ffree,
