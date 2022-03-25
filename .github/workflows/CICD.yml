@@ -919,7 +919,6 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        # job: [ { os: ubuntu-latest }, { os: macos-latest }, { os: windows-latest } ]
         job:
           - { os: ubuntu-latest  , features: unix }
           - { os: macos-latest   , features: macos }
