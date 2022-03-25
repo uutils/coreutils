@@ -844,6 +844,61 @@ jobs:
         n_fails=$(echo "$output" | grep "^FAIL:\s" | wc --lines)
         if [ $n_fails -gt 0 ] ; then echo "::warning ::${n_fails}+ test failures" ; fi
 
+  test_android:
+    name: Test Android builds
+    needs: [ min_version, deps ]
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [28]
+        target: [default]
+        arch: [x86] # , arm64-v8a
+    env:
+      TERMUX: v0.118.0
+    steps:
+    - uses: actions/checkout@v2
+    - name: AVD cache
+      uses: actions/cache@v2
+      id: avd-cache
+      with:
+        path: |
+          ~/.android/avd/*
+          ~/.android/avd/*/snapshots/*
+          ~/.android/adb*
+        key: avd-${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
+    - name: Create and cache emulator image
+      if: steps.avd-cache.outputs.cache-hit != 'true'
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: ${{ matrix.api-level }}
+        target: ${{ matrix.target }}
+        arch: ${{ matrix.arch }}
+        ram-size: 2048M
+        disk-size: 5120M
+        force-avd-creation: true
+        emulator-options: -no-snapshot-load -noaudio -no-boot-anim -camera-back none
+        script: |
+          wget https://github.com/termux/termux-app/releases/download/${{ env.TERMUX }}/termux-app_${{ env.TERMUX }}+github-debug_${{ matrix.arch }}.apk
+          util/android-commands.sh snapshot termux-app_${{ env.TERMUX }}+github-debug_${{ matrix.arch }}.apk
+          adb -s emulator-5554 emu avd snapshot save ${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
+          echo "Emulator image created."
+          pkill -9 qemu-system-x86_64
+    - name: Build and Test on Android
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: ${{ matrix.api-level }}
+        target: ${{ matrix.target }}
+        arch: ${{ matrix.arch }}
+        ram-size: 2048M
+        disk-size: 5120M
+        force-avd-creation: false
+        emulator-options: -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -snapshot ${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
+        script: |
+          util/android-commands.sh sync
+          util/android-commands.sh build
+          util/android-commands.sh tests
+
   test_freebsd:
     name: Tests/FreeBSD test suite
     needs: [ min_version, deps ]
