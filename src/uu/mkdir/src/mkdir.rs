@@ -11,7 +11,7 @@
 extern crate uucore;
 
 use clap::{crate_version, Arg, ArgMatches, Command, OsValues};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 #[cfg(not(windows))]
 use uucore::error::FromIo;
@@ -143,8 +143,17 @@ pub fn uu_app<'a>() -> Command<'a> {
  */
 fn exec(dirs: OsValues, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
     for dir in dirs {
-        let path = Path::new(dir);
-        show_if_err!(mkdir(path, recursive, mode, verbose));
+        // Special case to match GNU's behavior:
+        // mkdir -p foo/. should work and just create foo/
+        // std::fs::create_dir("foo/."); fails in pure Rust
+        let path = if recursive && dir.to_string_lossy().ends_with("/.") {
+            // Do a simple dance to strip the "/."
+            Path::new(dir).components().collect::<PathBuf>()
+        } else {
+            // Normal case
+            PathBuf::from(dir)
+        };
+        show_if_err!(mkdir(path.as_path(), recursive, mode, verbose));
     }
     Ok(())
 }
@@ -190,7 +199,6 @@ fn create_dir(path: &Path, recursive: bool, verbose: bool) -> UResult<()> {
             }
         }
     }
-
     match std::fs::create_dir(path) {
         Ok(()) => {
             if verbose {
