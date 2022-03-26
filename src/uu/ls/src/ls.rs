@@ -2478,7 +2478,7 @@ fn display_file_name(
 
     if let Some(ls_colors) = &config.color {
         if let Ok(metadata) = path.p_buf.symlink_metadata() {
-            name = color_name(ls_colors, &path.p_buf, name, &metadata);
+            name = color_name(ls_colors, &path.p_buf, &name, &metadata, config);
         }
     }
 
@@ -2562,14 +2562,15 @@ fn display_file_name(
                     name.push_str(&color_name(
                         ls_colors,
                         &target_data.p_buf,
-                        target.to_string_lossy().into_owned(),
+                        &target.to_string_lossy(),
                         &target_metadata,
+                        config,
                     ));
                 }
             } else {
                 // If no coloring is required, we just use target as is.
                 // Apply the right quoting
-                name.push_str(&escape_name(&target.as_os_str(), &config.quoting_style));
+                name.push_str(&escape_name(target.as_os_str(), &config.quoting_style));
             }
         }
     }
@@ -2594,10 +2595,19 @@ fn display_file_name(
     }
 }
 
-fn color_name(ls_colors: &LsColors, path: &Path, name: String, md: &Metadata) -> String {
+fn color_name(
+    ls_colors: &LsColors,
+    path: &Path,
+    name: &str,
+    md: &Metadata,
+    config: &Config,
+) -> String {
     match ls_colors.style_for_path_with_metadata(path, Some(md)) {
-        Some(style) => style.to_ansi_term_style().paint(name).to_string(),
-        None => name,
+        Some(style) => {
+            let p = escape_name(OsStr::new(&name), &config.quoting_style);
+            return style.to_ansi_term_style().paint(p).to_string();
+        }
+        None => escape_name(OsStr::new(&name), &config.quoting_style),
     }
 }
 

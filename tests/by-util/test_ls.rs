@@ -2933,9 +2933,8 @@ fn test_ls_quoting() {
         .stdout_contains("\'need quoting\'");
 }
 
-//#[test]
-// Enable when support with color is added
-fn test_ls_quoting_auto() {
+#[test]
+fn test_ls_quoting_color() {
     let scene = TestScenario::new(util_name!());
 
     scene
