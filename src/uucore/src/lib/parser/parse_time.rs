@@ -21,6 +21,13 @@ use crate::display::Quotable;
 /// one hundred twenty three seconds or "4.5d" meaning four and a half
 /// days. If no unit is specified, the unit is assumed to be seconds.
 ///
+/// The only allowed suffixes are
+///
+/// * "s" for seconds,
+/// * "m" for minutes,
+/// * "h" for hours,
+/// * "d" for days.
+///
 /// This function uses [`Duration::saturating_mul`] to compute the
 /// number of seconds, so it does not overflow. If overflow would have
 /// occurred, [`Duration::MAX`] is returned instead.
@@ -46,10 +53,10 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
     }
     let slice = &string[..len - 1];
     let (numstr, times) = match string.chars().next_back().unwrap() {
-        's' | 'S' => (slice, 1),
-        'm' | 'M' => (slice, 60),
-        'h' | 'H' => (slice, 60 * 60),
-        'd' | 'D' => (slice, 60 * 60 * 24),
+        's' => (slice, 1),
+        'm' => (slice, 60),
+        'h' => (slice, 60 * 60),
+        'd' => (slice, 60 * 60 * 24),
         val if !val.is_alphabetic() => (string, 1),
         _ => {
             if string == "inf" || string == "infinity" {
@@ -113,5 +120,14 @@ mod tests {
     #[test]
     fn test_negative() {
         assert!(from_str("-1").is_err());
+    }
+
+    /// Test that capital letters are not allowed in suffixes.
+    #[test]
+    fn test_no_capital_letters() {
+        assert!(from_str("1S").is_err());
+        assert!(from_str("1M").is_err());
+        assert!(from_str("1H").is_err());
+        assert!(from_str("1D").is_err());
     }
 }
