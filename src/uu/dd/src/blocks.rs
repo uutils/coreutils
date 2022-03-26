@@ -6,10 +6,8 @@
 // spell-checker:ignore datastructures rstat rposition cflags ctable
 
 use crate::conversion_tables::ConversionTable;
-use crate::datastructures::InternalError;
+use crate::datastructures::ConversionMode;
 use crate::progress::ReadStat;
-use crate::Input;
-use std::io::Read;
 
 const NEWLINE: u8 = b'\n';
 const SPACE: u8 = b' ';
@@ -65,105 +63,68 @@ fn unblock(buf: &[u8], cbs: usize) -> Vec<u8> {
     })
 }
 
-/// A helper for teasing out which options must be applied and in which order.
-/// Some user options, such as the presence of conversion tables, will determine whether the input is assumed to be ascii. The parser sets the Input::non_ascii flag accordingly.
-/// Examples:
-///     - If conv=ebcdic or conv=ibm is specified then block, unblock or swab must be performed before the conversion happens since the source will start in ascii.
-///     - If conv=ascii is specified then block, unblock or swab must be performed after the conversion since the source starts in ebcdic.
-///     - If no conversion is specified then the source is assumed to be in ascii.
-/// For more info see `info dd`
-pub(crate) fn conv_block_unblock_helper<R: Read>(
+/// Apply the specified conversion, blocking, and/or unblocking in the right order.
+///
+/// The `mode` specifies the combination of conversion, blocking, and
+/// unblocking to apply and the order in which to apply it. This
+/// function is responsible only for applying the operations.
+///
+/// `buf` is the buffer of input bytes to transform. This function
+/// mutates this input and also returns a new buffer of bytes
+/// representing the result of the transformation.
+///
+/// `rstat` maintains a running total of the number of partial and
+/// complete blocks read before calling this function. In certain
+/// settings of `mode`, this function will update the number of
+/// records truncated; that's why `rstat` is borrowed mutably.
+pub(crate) fn conv_block_unblock_helper(
     mut buf: Vec<u8>,
-    i: &mut Input<R>,
+    mode: &ConversionMode,
     rstat: &mut ReadStat,
-) -> Result<Vec<u8>, InternalError> {
-    // Local Predicate Fns -------------------------------------------------
-    fn should_block_then_conv<R: Read>(i: &Input<R>) -> bool {
-        !i.non_ascii && i.cflags.block.is_some()
-    }
-    fn should_conv_then_block<R: Read>(i: &Input<R>) -> bool {
-        i.non_ascii && i.cflags.block.is_some()
-    }
-    fn should_unblock_then_conv<R: Read>(i: &Input<R>) -> bool {
-        !i.non_ascii && i.cflags.unblock.is_some()
-    }
-    fn should_conv_then_unblock<R: Read>(i: &Input<R>) -> bool {
-        i.non_ascii && i.cflags.unblock.is_some()
-    }
-    fn conv_only<R: Read>(i: &Input<R>) -> bool {
-        i.cflags.ctable.is_some() && i.cflags.block.is_none() && i.cflags.unblock.is_none()
-    }
-    // Local Helper Fns ----------------------------------------------------
+) -> Vec<u8> {
+    // TODO This function has a mutable input `buf` but also returns a
+    // completely new `Vec`; that seems fishy. Could we either make
+    // the input immutable or make the function not return anything?
+
     fn apply_conversion(buf: &mut [u8], ct: &ConversionTable) {
         for idx in 0..buf.len() {
             buf[idx] = ct[buf[idx] as usize];
         }
     }
-    // --------------------------------------------------------------------
-    if conv_only(i) {
-        // no block/unblock
-        let ct = i.cflags.ctable.unwrap();
-        apply_conversion(&mut buf, ct);
 
-        Ok(buf)
-    } else if should_block_then_conv(i) {
-        // ascii input so perform the block first
-        let cbs = i.cflags.block.unwrap();
-
-        let mut blocks = block(&buf, cbs, i.cflags.sync.is_some(), rstat);
-
-        if let Some(ct) = i.cflags.ctable {
+    match mode {
+        ConversionMode::ConvertOnly(ct) => {
+            apply_conversion(&mut buf, ct);
+            buf
+        }
+        ConversionMode::BlockThenConvert(ct, cbs, sync) => {
+            let mut blocks = block(&buf, *cbs, *sync, rstat);
             for buf in &mut blocks {
                 apply_conversion(buf, ct);
             }
+            blocks.into_iter().flatten().collect()
         }
-
-        let blocks = blocks.into_iter().flatten().collect();
-
-        Ok(blocks)
-    } else if should_conv_then_block(i) {
-        // Non-ascii so perform the conversion first
-        let cbs = i.cflags.block.unwrap();
-
-        if let Some(ct) = i.cflags.ctable {
+        ConversionMode::ConvertThenBlock(ct, cbs, sync) => {
             apply_conversion(&mut buf, ct);
+            block(&buf, *cbs, *sync, rstat)
+                .into_iter()
+                .flatten()
+                .collect()
         }
-
-        let blocks = block(&buf, cbs, i.cflags.sync.is_some(), rstat)
+        ConversionMode::BlockOnly(cbs, sync) => block(&buf, *cbs, *sync, rstat)
             .into_iter()
             .flatten()
-            .collect();
-
-        Ok(blocks)
-    } else if should_unblock_then_conv(i) {
-        // ascii input so perform the unblock first
-        let cbs = i.cflags.unblock.unwrap();
-
-        let mut buf = unblock(&buf, cbs);
-
-        if let Some(ct) = i.cflags.ctable {
+            .collect(),
+        ConversionMode::UnblockThenConvert(ct, cbs) => {
+            let mut buf = unblock(&buf, *cbs);
             apply_conversion(&mut buf, ct);
+            buf
         }
-
-        Ok(buf)
-    } else if should_conv_then_unblock(i) {
-        // Non-ascii input so perform the conversion first
-        let cbs = i.cflags.unblock.unwrap();
-
-        if let Some(ct) = i.cflags.ctable {
+        ConversionMode::ConvertThenUnblock(ct, cbs) => {
             apply_conversion(&mut buf, ct);
+            unblock(&buf, *cbs)
         }
-
-        let buf = unblock(&buf, cbs);
-
-        Ok(buf)
-    } else {
-        // The following error should not happen, as it results from
-        // insufficient command line data. This case should be caught
-        // by the parser before making it this far.
-        // Producing this error is an alternative to risking an unwrap call
-        // on 'cbs' if the required data is not provided.
-        Err(InternalError::InvalidConvBlockUnblockCase)
+        ConversionMode::UnblockOnly(cbs) => unblock(&buf, *cbs),
     }
 }
 
