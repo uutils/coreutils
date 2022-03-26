@@ -134,7 +134,9 @@ pub fn uu_app<'a>() -> Command<'a> {
         )
         .arg(
             Arg::new(options::KILL_AFTER)
+                .long(options::KILL_AFTER)
                 .short('k')
+                .help("also send a KILL signal if COMMAND is still running this long after the initial signal was sent")
                 .takes_value(true))
         .arg(
             Arg::new(options::PRESERVE_STATUS)
