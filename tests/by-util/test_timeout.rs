@@ -16,6 +16,16 @@ fn test_invalid_time_interval() {
     new_ucmd!()
         .args(&["xyz", "sleep", "0"])
         .fails()
+        .code_is(125)
+        .usage_error("invalid time interval 'xyz'");
+}
+
+#[test]
+fn test_invalid_kill_after() {
+    new_ucmd!()
+        .args(&["-k", "xyz", "1", "sleep", "0"])
+        .fails()
+        .code_is(125)
         .usage_error("invalid time interval 'xyz'");
 }
 
