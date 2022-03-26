@@ -2913,3 +2913,43 @@ fn test_ls_multiple_a_A() {
         .stdout_does_not_contain(".")
         .stdout_does_not_contain("..");
 }
+
+#[test]
+fn test_ls_quoting() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ccmd("ln")
+        .arg("-s")
+        .arg("'need quoting'")
+        .arg("symlink")
+        .succeeds();
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--quoting-style=shell-escape")
+        .arg("symlink")
+        .succeeds()
+        .stdout_contains("\'need quoting\'");
+}
+
+//#[test]
+// Enable when support with color is added
+fn test_ls_quoting_auto() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ccmd("ln")
+        .arg("-s")
+        .arg("'need quoting'")
+        .arg("symlink")
+        .succeeds();
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--quoting-style=shell-escape")
+        .arg("--color=auto")
+        .arg("symlink")
+        .succeeds()
+        .stdout_contains("\'need quoting\'");
+}

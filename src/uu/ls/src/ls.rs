@@ -2568,7 +2568,8 @@ fn display_file_name(
                 }
             } else {
                 // If no coloring is required, we just use target as is.
-                name.push_str(&target.to_string_lossy());
+                // Apply the right quoting
+                name.push_str(&escape_name(&target.as_os_str(), &config.quoting_style));
             }
         }
     }
