@@ -68,14 +68,18 @@ impl Config {
             _ => uucore::signals::signal_by_name_or_value("TERM").unwrap(),
         };
 
-        let kill_after = options
-            .value_of(options::KILL_AFTER)
-            .map(|time| uucore::parse_time::from_str(time).unwrap());
+        let kill_after = match options.value_of(options::KILL_AFTER) {
+            None => None,
+            Some(kill_after) => match uucore::parse_time::from_str(kill_after) {
+                Ok(k) => Some(k),
+                Err(err) => return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err)),
+            },
+        };
 
         let duration =
             match uucore::parse_time::from_str(options.value_of(options::DURATION).unwrap()) {
                 Ok(duration) => duration,
-                Err(err) => return Err(UUsageError::new(1, err)),
+                Err(err) => return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err)),
             };
 
         let preserve_status: bool = options.is_present(options::PRESERVE_STATUS);
