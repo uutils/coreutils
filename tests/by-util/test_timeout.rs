@@ -105,3 +105,13 @@ fn test_invalid_signal() {
         .fails()
         .usage_error("'invalid': invalid signal");
 }
+
+/// Test that the long form of the `--kill-after` argument is recognized.
+#[test]
+fn test_kill_after_long() {
+    new_ucmd!()
+        .args(&["--kill-after=1", "1", "sleep", "0"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+}
