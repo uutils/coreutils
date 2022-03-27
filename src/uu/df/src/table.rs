@@ -24,6 +24,9 @@ use std::ops::AddAssign;
 /// A row comprises several pieces of information, including the
 /// filesystem device, the mountpoint, the number of bytes used, etc.
 pub(crate) struct Row {
+    /// The filename given on the command-line, if given.
+    file: Option<String>,
+
     /// Name of the device on which the filesystem lives.
     fs_device: String,
 
@@ -73,6 +76,7 @@ pub(crate) struct Row {
 impl Row {
     pub(crate) fn new(source: &str) -> Self {
         Self {
+            file: None,
             fs_device: source.into(),
             fs_type: "-".into(),
             fs_mount: "-".into(),
@@ -101,6 +105,7 @@ impl AddAssign for Row {
         let inodes = self.inodes + rhs.inodes;
         let inodes_used = self.inodes_used + rhs.inodes_used;
         *self = Self {
+            file: None,
             fs_device: "total".into(),
             fs_type: "-".into(),
             fs_mount: "-".into(),
@@ -145,6 +150,7 @@ impl From<Filesystem> for Row {
             ..
         } = fs.usage;
         Self {
+            file: fs.file,
             fs_device: dev_name,
             fs_type,
             fs_mount: mount_dir,
@@ -246,8 +252,9 @@ impl fmt::Display for DisplayRow<'_> {
                 Column::Ipcent => {
                     write!(f, "{0: >5} ", DisplayRow::percentage(self.row.inodes_usage))?;
                 }
-                // TODO Implement this.
-                Column::File => {}
+                Column::File => {
+                    write!(f, "{0: <16}", self.row.file.as_ref().unwrap_or(&"-".into()))?;
+                }
                 Column::Fstype => write!(f, "{0: <5} ", self.row.fs_type)?,
                 #[cfg(target_os = "macos")]
                 Column::Capacity => write!(
@@ -406,6 +413,7 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
+            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
@@ -437,6 +445,7 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
+            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
@@ -468,6 +477,7 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
+            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
@@ -499,6 +509,7 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
+            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
@@ -530,6 +541,7 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
+            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
@@ -560,6 +572,7 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
+            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),

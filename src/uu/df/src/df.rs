@@ -243,7 +243,10 @@ fn get_all_filesystems(opt: &Options) -> Vec<Filesystem> {
 
     // Convert each `MountInfo` into a `Filesystem`, which contains
     // both the mount information and usage information.
-    mounts.into_iter().filter_map(Filesystem::new).collect()
+    mounts
+        .into_iter()
+        .filter_map(|m| Filesystem::new(m, None))
+        .collect()
 }
 
 /// For each path, get the filesystem that contains that path.
