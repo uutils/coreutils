@@ -196,3 +196,17 @@ fn test_shuf_invalid_input_line_count() {
         .fails()
         .stderr_contains("invalid line count: 'a'");
 }
+
+#[test]
+fn test_shuf_multiple_input_line_count() {
+    let result = new_ucmd!()
+        .args(&["-i10-200", "-n", "10", "-n", "5"])
+        .succeeds();
+    result.no_stderr();    
+    let result_seq: Vec<&str> = result
+        .stdout_str()
+        .split('\n')
+        .filter(|x| !x.is_empty())
+        .collect();
+    assert_eq!(result_seq.len(), 5, "Output should have 5 items");
+}
