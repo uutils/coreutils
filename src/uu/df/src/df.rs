@@ -388,6 +388,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_OUTPUT)
                 .long("output")
                 .takes_value(true)
+                .min_values(0)
+                .require_equals(true)
                 .use_value_delimiter(true)
                 .multiple_occurrences(true)
                 .possible_values(OUTPUT_FIELD_LIST)

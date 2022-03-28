@@ -81,6 +81,11 @@ fn test_output_option() {
 }
 
 #[test]
+fn test_output_option_without_equals_sign() {
+    new_ucmd!().arg("--output").arg(".").succeeds();
+}
+
+#[test]
 fn test_type_option() {
     new_ucmd!().args(&["-t", "ext4", "-t", "ext3"]).succeeds();
 }
