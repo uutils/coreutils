@@ -222,6 +222,18 @@ fn test_output_selects_columns() {
     );
 }
 
+#[test]
+fn test_output_multiple_occurrences() {
+    let output = new_ucmd!()
+        .args(&["--output=source", "--output=target"])
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(
+        output.lines().next().unwrap(),
+        "Filesystem       Mounted on       "
+    );
+}
+
 // TODO Fix the spacing.
 #[test]
 fn test_output_file_all_filesystems() {

@@ -389,6 +389,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long("output")
                 .takes_value(true)
                 .use_value_delimiter(true)
+                .multiple_occurrences(true)
                 .possible_values(OUTPUT_FIELD_LIST)
                 .default_missing_values(&OUTPUT_FIELD_LIST)
                 .default_values(&["source", "size", "used", "avail", "pcent", "target"])
