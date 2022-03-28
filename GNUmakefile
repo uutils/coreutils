@@ -54,6 +54,7 @@ endif
 PROGS       := \
 	base32 \
 	base64 \
+	basenc \
 	basename \
 	cat \
 	cksum \
