@@ -243,7 +243,10 @@ fn get_all_filesystems(opt: &Options) -> Vec<Filesystem> {
 
     // Convert each `MountInfo` into a `Filesystem`, which contains
     // both the mount information and usage information.
-    mounts.into_iter().filter_map(Filesystem::new).collect()
+    mounts
+        .into_iter()
+        .filter_map(|m| Filesystem::new(m, None))
+        .collect()
 }
 
 /// For each path, get the filesystem that contains that path.
@@ -385,7 +388,10 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_OUTPUT)
                 .long("output")
                 .takes_value(true)
+                .min_values(0)
+                .require_equals(true)
                 .use_value_delimiter(true)
+                .multiple_occurrences(true)
                 .possible_values(OUTPUT_FIELD_LIST)
                 .default_missing_values(&OUTPUT_FIELD_LIST)
                 .default_values(&["source", "size", "used", "avail", "pcent", "target"])
