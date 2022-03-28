@@ -171,7 +171,36 @@ jobs:
       with:
         name: gnu-full-result.json
         path: ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
+    - name: "`grcov` ~ install"
+      uses: actions-rs/install@v0.1
+      with:
+        crate: grcov
+        version: latest
+        use-tool-cache: false
+    - name: Generate coverage data (via `grcov`)
+      id: coverage
+      shell: bash
+      run: |
+        ## Generate coverage data
+        cd uutils
+        COVERAGE_REPORT_DIR="target/debug"
+        COVERAGE_REPORT_FILE="${COVERAGE_REPORT_DIR}/lcov.info"
+        mkdir -p "${COVERAGE_REPORT_DIR}"
+        sudo chown -R "$(whoami)" "${COVERAGE_REPORT_DIR}"
+        # display coverage files
+        grcov . --output-type files --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
+        # generate coverage report
+        grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
+        echo ::set-output name=report::${COVERAGE_REPORT_FILE}
+    - name: Upload coverage results (to Codecov.io)
+      uses: codecov/codecov-action@v2
+      with:
+        file: ${{ steps.coverage.outputs.report }}
+        flags: gnutests
+        name: gnutests
+        working-directory: uutils
     - name: Compare test failures VS reference
+      if: success() || failure() # run regardless of prior step success/failure
       shell: bash
       run: |
         # Compare test failures VS reference
@@ -213,31 +242,3 @@ jobs:
         else
           echo "::warning ::Skipping test summary comparison; no prior reference summary is available."
         fi
-    - name: "`grcov` ~ install"
-      uses: actions-rs/install@v0.1
-      with:
-        crate: grcov
-        version: latest
-        use-tool-cache: false
-    - name: Generate coverage data (via `grcov`)
-      id: coverage
-      shell: bash
-      run: |
-        ## Generate coverage data
-        cd uutils
-        COVERAGE_REPORT_DIR="target/debug"
-        COVERAGE_REPORT_FILE="${COVERAGE_REPORT_DIR}/lcov.info"
-        mkdir -p "${COVERAGE_REPORT_DIR}"
-        sudo chown -R "$(whoami)" "${COVERAGE_REPORT_DIR}"
-        # display coverage files
-        grcov . --output-type files --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
-        # generate coverage report
-        grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
-        echo ::set-output name=report::${COVERAGE_REPORT_FILE}
-    - name: Upload coverage results (to Codecov.io)
-      uses: codecov/codecov-action@v2
-      with:
-        file: ${{ steps.coverage.outputs.report }}
-        flags: gnutests
-        name: gnutests
-        working-directory: uutils
