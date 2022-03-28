@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) cmdline evec seps rvec fdata
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, Command, Values};
 use rand::prelude::SliceRandom;
 use rand::RngCore;
 use std::fs::File;
@@ -76,11 +76,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let options = Options {
         head_count: {
-            let headcounts: Vec<&str> = matches
-                .values_of(options::HEAD_COUNT)
-                .unwrap_or_default()
-                .collect();
-            match parse_head_count(&headcounts) {
+            let mut headcounts: Values<'_> =
+                matches.values_of(options::HEAD_COUNT).unwrap_or_default();
+            match parse_head_count(&mut headcounts) {
                 Ok(val) => val,
                 Err(msg) => return Err(USimpleError::new(1, msg)),
             }
@@ -298,7 +296,7 @@ fn parse_range(input_range: &str) -> Result<(usize, usize), String> {
     }
 }
 
-fn parse_head_count(headcounts: &[&str]) -> Result<usize, String> {
+fn parse_head_count(headcounts: &mut Values<'_>) -> Result<usize, String> {
     let mut result = std::usize::MAX;
     for count in headcounts {
         match count.parse::<usize>() {
