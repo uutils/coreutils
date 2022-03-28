@@ -68,6 +68,12 @@ jobs:
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
         components: rustfmt
+    - name: "Install `grcov`"
+      uses: actions-rs/install@v0.1
+      with:
+        crate: grcov
+        version: latest
+        use-tool-cache: false
     - name: Install dependencies
       shell: bash
       run: |
@@ -171,12 +177,6 @@ jobs:
       with:
         name: gnu-full-result.json
         path: ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
-    - name: "`grcov` ~ install"
-      uses: actions-rs/install@v0.1
-      with:
-        crate: grcov
-        version: latest
-        use-tool-cache: false
     - name: Generate coverage data (via `grcov`)
       id: coverage
       shell: bash
