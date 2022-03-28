@@ -264,3 +264,11 @@ fn test_output_file_specific_files() {
         ]
     );
 }
+
+#[test]
+fn test_output_field_no_more_than_once() {
+    new_ucmd!()
+        .arg("--output=target,source,target")
+        .fails()
+        .usage_error("option --output: field 'target' used more than once");
+}
