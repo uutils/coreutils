@@ -205,6 +205,10 @@ fn test_shuf_multiple_input_line_count() {
 
     result.no_stderr();
 
-    let result_count = result.stdout_str().split('\n').filter(|x| !x.is_empty()).count();
+    let result_count = result
+        .stdout_str()
+        .split('\n')
+        .filter(|x| !x.is_empty())
+        .count();
     assert_eq!(result_count, 5, "Output should have 5 items");
 }
