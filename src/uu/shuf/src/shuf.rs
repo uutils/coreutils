@@ -76,7 +76,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let options = Options {
         head_count: {
-            let headcounts = matches
+            let headcounts: Vec<&str> = matches
                 .values_of(options::HEAD_COUNT)
                 .unwrap_or_default()
                 .collect();
@@ -298,7 +298,7 @@ fn parse_range(input_range: &str) -> Result<(usize, usize), String> {
     }
 }
 
-fn parse_head_count(headcounts: &Vec<&str>) -> Result<usize, String> {
+fn parse_head_count(headcounts: &[&str]) -> Result<usize, String> {
     let mut result = std::usize::MAX;
     for count in headcounts {
         match count.parse::<usize>() {
