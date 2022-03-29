@@ -155,4 +155,6 @@ sed -i "s|require_built_ |# require_built_ |g" init.cfg
 sed -i -e "s~  grep \" '\*/'\*\" err || framework_failure_~  grep \" '*-/'*\" err || framework_failure_~" tests/misc/usage_vs_getopt.sh
 sed -i -e "s~  sed -n \"1s/'\\\/'/'OPT'/p\" < err >> pat || framework_failure_~  sed -n \"1s/'-\\\/'/'OPT'/p\" < err >> pat || framework_failure_~" tests/misc/usage_vs_getopt.sh
 # Ignore some binaries (not built)
-sed -i -e "s/rcexp=1$/rcexp=1\n  case \"\$prg\" in chcon|dir|runcon|vdir) return;; esac/" tests/misc/usage_vs_getopt.sh
+# And change the default error code to 2
+# see issue #3331
+sed -i -e "s/rcexp=1$/rcexp=2\n  case \"\$prg\" in chcon|dir|runcon|vdir) return;; esac/" tests/misc/usage_vs_getopt.sh
