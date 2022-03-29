@@ -54,6 +54,7 @@ enum LnError {
     TargetIsDirectory(PathBuf),
     SomeLinksFailed,
     FailedToLink(String),
+    SameFile(PathBuf, PathBuf),
     MissingDestination(PathBuf),
     ExtraOperand(OsString),
 }
@@ -63,6 +64,12 @@ impl Display for LnError {
         match self {
             Self::TargetIsDirectory(s) => write!(f, "target {} is not a directory", s.quote()),
             Self::FailedToLink(e) => write!(f, "failed to link: {}", e),
+            Self::SameFile(e, e2) => write!(
+                f,
+                "'{}' and '{}' are the same file",
+                e2.display(),
+                e.display()
+            ),
             Self::SomeLinksFailed => write!(f, "some links failed to create"),
             Self::MissingDestination(s) => {
                 write!(f, "missing destination file operand after {}", s.quote())
@@ -85,6 +92,7 @@ impl UError for LnError {
             Self::TargetIsDirectory(_)
             | Self::SomeLinksFailed
             | Self::FailedToLink(_)
+            | Self::SameFile(_, _)
             | Self::MissingDestination(_)
             | Self::ExtraOperand(_) => 1,
         }
@@ -381,7 +389,7 @@ fn relative_path<'a>(src: &Path, dst: &Path) -> Result<Cow<'a, Path>> {
     Ok(result.into())
 }
 
-fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
+fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     let mut backup_path = None;
     let source: Cow<'_, Path> = if settings.relative {
         relative_path(src, dst)?
@@ -408,6 +416,18 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
             BackupMode::NumberedBackup => Some(numbered_backup_path(dst)),
             BackupMode::ExistingBackup => Some(existing_backup_path(dst, &settings.suffix)),
         };
+        if settings.backup == BackupMode::ExistingBackup && !settings.symbolic {
+            // when ln --backup f f, it should detect that it is the same file
+            let dst_abs = canonicalize(dst, MissingHandling::Normal, ResolveMode::Logical)?;
+            let source_abs = canonicalize(
+                source.clone(),
+                MissingHandling::Normal,
+                ResolveMode::Logical,
+            )?;
+            if dst_abs == source_abs {
+                return Err(LnError::SameFile(dst.to_path_buf(), source.to_path_buf()).into());
+            }
+        }
         if let Some(ref p) = backup_path {
             fs::rename(dst, p)?;
         }

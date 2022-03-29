@@ -158,3 +158,6 @@ sed -i -e "s~  sed -n \"1s/'\\\/'/'OPT'/p\" < err >> pat || framework_failure_~ 
 # And change the default error code to 2
 # see issue #3331
 sed -i -e "s/rcexp=1$/rcexp=2\n  case \"\$prg\" in chcon|dir|runcon|vdir) return;; esac/" tests/misc/usage_vs_getopt.sh
+
+# Update the GNU error message to match ours
+sed -i -e "s/ln: 'f' and 'f' are the same file/ln: failed to link: 'f' and 'f' are the same file/g" tests/ln/hard-backup.sh

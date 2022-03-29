@@ -615,3 +615,12 @@ fn test_relative_recursive() {
     ucmd.args(&["-sr", "dir", "dir/recursive"]).succeeds();
     assert_eq!(at.resolve_link("dir/recursive"), ".");
 }
+
+#[test]
+fn test_backup_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file1");
+    ucmd.args(&["--backup", "file1", "./file1"])
+        .fails()
+        .stderr_contains("'file1' and './file1' are the same file");
+}
