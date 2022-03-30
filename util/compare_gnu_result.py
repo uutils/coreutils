@@ -29,4 +29,7 @@ print(
 
 # If results are worse fail the job to draw attention
 if pass_d < 0:
+    print(
+        f"::error ::PASS count is reduced from main: PASS {pass_d:+d} "
+    )
     sys.exit(1)
