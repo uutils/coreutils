@@ -15,7 +15,7 @@ extern crate lazy_static;
 
 mod quoting_style;
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use glob::Pattern;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
@@ -116,6 +116,7 @@ pub mod options {
         pub static DIR_ARGS: &str = "dereference-command-line-symlink-to-dir";
     }
 
+    pub static HELP: &str = "help";
     pub static QUOTING_STYLE: &str = "quoting-style";
     pub static HIDE_CONTROL_CHARS: &str = "hide-control-chars";
     pub static SHOW_CONTROL_CHARS: &str = "show-control-chars";
@@ -782,9 +783,9 @@ impl Config {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let app = uu_app();
+    let command = uu_app();
 
-    let matches = app.get_matches_from(args);
+    let matches = command.get_matches_from(args);
 
     let config = Config::from(&matches)?;
 
@@ -796,8 +797,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     list(locs, &config)
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(
@@ -805,7 +806,12 @@ pub fn uu_app<'a>() -> App<'a> {
             the command line, expect that it will ignore files and directories \
             whose names start with '.'.",
         )
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
+        .arg(
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information.")
+        )
         // Format arguments
         .arg(
             Arg::new(options::FORMAT)
@@ -1196,12 +1202,18 @@ pub fn uu_app<'a>() -> App<'a> {
             Arg::new(options::files::ALL)
                 .short('a')
                 .long(options::files::ALL)
+                // Overrides -A (as the order matters)
+                .overrides_with(options::files::ALMOST_ALL)
+                .multiple_occurrences(true)
                 .help("Do not ignore hidden files (files with names that start with '.')."),
         )
         .arg(
             Arg::new(options::files::ALMOST_ALL)
                 .short('A')
                 .long(options::files::ALMOST_ALL)
+                // Overrides -a (as the order matters)
+                .overrides_with(options::files::ALL)
+                .multiple_occurrences(true)
                 .help(
                     "In a directory, do not ignore all file names that start with '.', \
 only ignore '.' and '..'.",
@@ -2466,7 +2478,7 @@ fn display_file_name(
 
     if let Some(ls_colors) = &config.color {
         if let Ok(metadata) = path.p_buf.symlink_metadata() {
-            name = color_name(ls_colors, &path.p_buf, name, &metadata);
+            name = color_name(ls_colors, &path.p_buf, &name, &metadata, config);
         }
     }
 
@@ -2550,13 +2562,15 @@ fn display_file_name(
                     name.push_str(&color_name(
                         ls_colors,
                         &target_data.p_buf,
-                        target.to_string_lossy().into_owned(),
+                        &target.to_string_lossy(),
                         &target_metadata,
+                        config,
                     ));
                 }
             } else {
                 // If no coloring is required, we just use target as is.
-                name.push_str(&target.to_string_lossy());
+                // Apply the right quoting
+                name.push_str(&escape_name(target.as_os_str(), &config.quoting_style));
             }
         }
     }
@@ -2581,10 +2595,19 @@ fn display_file_name(
     }
 }
 
-fn color_name(ls_colors: &LsColors, path: &Path, name: String, md: &Metadata) -> String {
+fn color_name(
+    ls_colors: &LsColors,
+    path: &Path,
+    name: &str,
+    md: &Metadata,
+    config: &Config,
+) -> String {
     match ls_colors.style_for_path_with_metadata(path, Some(md)) {
-        Some(style) => style.to_ansi_term_style().paint(name).to_string(),
-        None => name,
+        Some(style) => {
+            let p = escape_name(OsStr::new(&name), &config.quoting_style);
+            return style.to_ansi_term_style().paint(p).to_string();
+        }
+        None => escape_name(OsStr::new(&name), &config.quoting_style),
     }
 }
 

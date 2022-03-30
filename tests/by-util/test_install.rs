@@ -483,7 +483,7 @@ fn test_install_copy_then_compare_file() {
     file2_meta = at.metadata(file2);
     let after = FileTime::from_last_modification_time(&file2_meta);
 
-    assert!(before == after);
+    assert_eq!(before, after);
 }
 
 #[test]

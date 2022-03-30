@@ -17,7 +17,7 @@ path = "src/seq.rs"
 
 [dependencies]
 bigdecimal = "0.3"
-clap = { version = "3.0", features = ["wrap_help", "cargo"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 num-bigint = "0.4.0"
 num-traits = "0.2.14"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["memo"] }

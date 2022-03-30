@@ -55,25 +55,25 @@ impl UError for ChrootError {
 impl Display for ChrootError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            ChrootError::CannotEnter(s, e) => write!(f, "cannot chroot to {}: {}", s.quote(), e,),
-            ChrootError::CommandFailed(s, e) => {
+            Self::CannotEnter(s, e) => write!(f, "cannot chroot to {}: {}", s.quote(), e,),
+            Self::CommandFailed(s, e) => {
                 write!(f, "failed to run command {}: {}", s.to_string().quote(), e,)
             }
-            ChrootError::InvalidUserspec(s) => write!(f, "invalid userspec: {}", s.quote(),),
-            ChrootError::MissingNewRoot => write!(
+            Self::InvalidUserspec(s) => write!(f, "invalid userspec: {}", s.quote(),),
+            Self::MissingNewRoot => write!(
                 f,
                 "Missing operand: NEWROOT\nTry '{} --help' for more information.",
                 uucore::execution_phrase(),
             ),
-            ChrootError::NoSuchGroup(s) => write!(f, "no such group: {}", s.maybe_quote(),),
-            ChrootError::NoSuchDirectory(s) => write!(
+            Self::NoSuchGroup(s) => write!(f, "no such group: {}", s.maybe_quote(),),
+            Self::NoSuchDirectory(s) => write!(
                 f,
                 "cannot change root directory to {}: no such directory",
                 s.quote(),
             ),
-            ChrootError::SetGidFailed(s, e) => write!(f, "cannot set gid to {}: {}", s, e),
-            ChrootError::SetGroupsFailed(e) => write!(f, "cannot set groups: {}", e),
-            ChrootError::SetUserFailed(s, e) => {
+            Self::SetGidFailed(s, e) => write!(f, "cannot set gid to {}: {}", s, e),
+            Self::SetGroupsFailed(e) => write!(f, "cannot set groups: {}", e),
+            Self::SetUserFailed(s, e) => {
                 write!(f, "cannot set user to {}: {}", s.maybe_quote(), e)
             }
         }

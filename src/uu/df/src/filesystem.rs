@@ -23,6 +23,13 @@ use uucore::fsext::{FsUsage, MountInfo};
 /// space available on the filesystem and the amount of space used.
 #[derive(Debug, Clone)]
 pub(crate) struct Filesystem {
+    /// The file given on the command line if any.
+    ///
+    /// When invoking `df` with a positional argument, it displays
+    /// usage information for the filesystem that contains the given
+    /// file. If given, this field contains that filename.
+    pub file: Option<String>,
+
     /// Information about the mounted device, mount directory, and related options.
     pub mount_info: MountInfo,
 
@@ -66,7 +73,7 @@ where
 
 impl Filesystem {
     // TODO: resolve uuid in `mount_info.dev_name` if exists
-    pub(crate) fn new(mount_info: MountInfo) -> Option<Self> {
+    pub(crate) fn new(mount_info: MountInfo, file: Option<String>) -> Option<Self> {
         let _stat_path = if !mount_info.mount_dir.is_empty() {
             mount_info.mount_dir.clone()
         } else {
@@ -84,7 +91,11 @@ impl Filesystem {
         let usage = FsUsage::new(statfs(_stat_path).ok()?);
         #[cfg(windows)]
         let usage = FsUsage::new(Path::new(&_stat_path));
-        Some(Self { mount_info, usage })
+        Some(Self {
+            mount_info,
+            usage,
+            file,
+        })
     }
 
     /// Find and create the filesystem that best matches a given path.
@@ -107,11 +118,12 @@ impl Filesystem {
     where
         P: AsRef<Path>,
     {
+        let file = path.as_ref().display().to_string();
         let canonicalize = true;
         let mount_info = mount_info_from_path(mounts, path, canonicalize)?;
         // TODO Make it so that we do not need to clone the `mount_info`.
         let mount_info = (*mount_info).clone();
-        Self::new(mount_info)
+        Self::new(mount_info, Some(file))
     }
 }
 

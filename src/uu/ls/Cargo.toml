@@ -16,7 +16,7 @@ path = "src/ls.rs"
 
 [dependencies]
 chrono = "0.4.19"
-clap = { version = "3.0", features = ["wrap_help", "cargo", "env"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo", "env"] }
 unicode-width = "0.1.8"
 number_prefix = "0.4"
 term_grid = "0.1.5"

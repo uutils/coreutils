@@ -15,7 +15,7 @@ edition = "2018"
 num-traits = "0.2.13" # used in src/numerics.rs, which is included by build.rs
 
 [dependencies]
-clap = { version = "3.0", features = ["wrap_help", "cargo"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 coz = { version = "0.1.3", optional = true }
 num-traits = "0.2.13" # Needs at least version 0.2.13 for "OverflowingAdd"
 rand = { version = "0.8", features = ["small_rng"] }

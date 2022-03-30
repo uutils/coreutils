@@ -1,4 +1,4 @@
-// spell-checker:ignore udev
+// spell-checker:ignore udev pcent
 use crate::common::util::*;
 
 #[test]
@@ -81,6 +81,11 @@ fn test_output_option() {
 }
 
 #[test]
+fn test_output_option_without_equals_sign() {
+    new_ucmd!().arg("--output").arg(".").succeeds();
+}
+
+#[test]
 fn test_type_option() {
     new_ucmd!().args(&["-t", "ext4", "-t", "ext3"]).succeeds();
 }
@@ -134,33 +139,24 @@ fn test_total() {
 
 #[test]
 fn test_use_percentage() {
-    // Example output:
-    //
-    //     Filesystem            1K-blocks     Used Available Use% Mounted on
-    //     udev                    3858016        0   3858016   0% /dev
-    //     ...
-    //     /dev/loop14               63488    63488         0 100% /snap/core20/1361
-    let output = new_ucmd!().succeeds().stdout_move_str();
+    let output = new_ucmd!()
+        .args(&["--output=used,avail,pcent"])
+        .succeeds()
+        .stdout_move_str();
 
     // Skip the header line.
     let lines: Vec<&str> = output.lines().skip(1).collect();
 
     for line in lines {
         let mut iter = line.split_whitespace();
-        iter.next();
-        let reported_size = iter.next().unwrap().parse::<f64>().unwrap();
         let reported_used = iter.next().unwrap().parse::<f64>().unwrap();
-        // Skip "Available" column
-        iter.next();
-        if cfg!(target_os = "macos") {
-            // Skip "Capacity" column
-            iter.next();
-        }
+        let reported_avail = iter.next().unwrap().parse::<f64>().unwrap();
         let reported_percentage = iter.next().unwrap();
         let reported_percentage = reported_percentage[..reported_percentage.len() - 1]
             .parse::<u8>()
             .unwrap();
-        let computed_percentage = (100.0 * (reported_used / reported_size)).ceil() as u8;
+        let computed_percentage =
+            (100.0 * (reported_used / (reported_used + reported_avail))).ceil() as u8;
 
         assert_eq!(computed_percentage, reported_percentage);
     }
@@ -222,4 +218,65 @@ fn test_output_selects_columns() {
     );
 }
 
-// ToDO: more tests...
+#[test]
+fn test_output_multiple_occurrences() {
+    let output = new_ucmd!()
+        .args(&["--output=source", "--output=target"])
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(
+        output.lines().next().unwrap(),
+        "Filesystem       Mounted on       "
+    );
+}
+
+// TODO Fix the spacing.
+#[test]
+fn test_output_file_all_filesystems() {
+    // When run with no positional arguments, `df` lets "-" represent
+    // the "File" entry for each row.
+    let output = new_ucmd!()
+        .arg("--output=file")
+        .succeeds()
+        .stdout_move_str();
+    let mut lines = output.lines();
+    assert_eq!(lines.next().unwrap(), "File            ");
+    for line in lines {
+        assert_eq!(line, "-               ");
+    }
+}
+
+// TODO Fix the spacing.
+#[test]
+fn test_output_file_specific_files() {
+    // Create three files.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    at.touch("c");
+
+    // When run with positional arguments, the filesystems should
+    // appear in the "File" column.
+    let output = ucmd
+        .args(&["--output=file", "a", "b", "c"])
+        .succeeds()
+        .stdout_move_str();
+    let actual: Vec<&str> = output.lines().collect();
+    assert_eq!(
+        actual,
+        vec![
+            "File            ",
+            "a               ",
+            "b               ",
+            "c               "
+        ]
+    );
+}
+
+#[test]
+fn test_output_field_no_more_than_once() {
+    new_ucmd!()
+        .arg("--output=target,source,target")
+        .fails()
+        .usage_error("option --output: field 'target' used more than once");
+}

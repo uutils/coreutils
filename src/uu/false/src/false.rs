@@ -4,7 +4,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-use clap::{App, AppSettings, Arg};
+use clap::{Arg, Command};
 use std::io::Write;
 use uucore::error::{set_exit_code, UResult};
 
@@ -18,7 +18,7 @@ the program will also return `1`.
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut app = uu_app();
+    let mut command = uu_app();
 
     // Mirror GNU options, always return `1`. In particular even the 'successful' cases of no-op,
     // and the interrupted display of help and version should return `1`. Also, we return Ok in all
@@ -26,11 +26,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // and unwind through the standard library allocation handling machinery.
     set_exit_code(1);
 
-    if let Ok(matches) = app.try_get_matches_from_mut(args) {
+    if let Ok(matches) = command.try_get_matches_from_mut(args) {
         let error = if matches.index_of("help").is_some() {
-            app.print_long_help()
+            command.print_long_help()
         } else if matches.index_of("version").is_some() {
-            writeln!(std::io::stdout(), "{}", app.render_version())
+            writeln!(std::io::stdout(), "{}", command.render_version())
         } else {
             Ok(())
         };
@@ -45,12 +45,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(clap::crate_version!())
         .about(ABOUT)
         // We provide our own help and version options, to ensure maximum compatibility with GNU.
-        .setting(AppSettings::DisableHelpFlag | AppSettings::DisableVersionFlag)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .arg(
             Arg::new("help")
                 .long("help")

@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use memchr::{memchr3_iter, memchr_iter};
 use std::cmp::Ordering;
 use std::convert::From;
@@ -697,8 +697,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(NAME)
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(NAME)
         .version(crate_version!())
         .about(
             "For each pair of input lines with identical join fields, write a line to
@@ -706,7 +706,7 @@ standard output. The default join field is the first, delimited by blanks.
 
 When FILE1 or FILE2 (not both) is -, read standard input.",
         )
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new("a")
                 .short('a')

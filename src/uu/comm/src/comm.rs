@@ -15,7 +15,7 @@ use uucore::error::FromIo;
 use uucore::error::UResult;
 use uucore::{format_usage, InvalidEncodingHandling};
 
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
+use clap::{crate_version, Arg, ArgMatches, Command};
 
 static ABOUT: &str = "compare two sorted files line by line";
 static LONG_HELP: &str = "";
@@ -143,13 +143,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::COLUMN_1)
                 .short('1')

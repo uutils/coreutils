@@ -18,7 +18,7 @@ edition = "2018"
 path = "src/install.rs"
 
 [dependencies]
-clap = { version = "3.0", features = ["wrap_help", "cargo"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 filetime = "0.2"
 file_diff = "1.0.0"
 libc = ">= 0.2"

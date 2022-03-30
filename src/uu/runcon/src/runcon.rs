@@ -2,7 +2,7 @@
 
 use uucore::error::{UResult, UUsageError};
 
-use clap::{App, AppSettings, Arg};
+use clap::{Arg, Command};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
 use uucore::format_usage;
 
@@ -48,7 +48,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Ok(r) => r,
         Err(r) => {
             if let Error::CommandLine(ref r) = r {
-                match r.kind {
+                match r.kind() {
                     clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion => {
                         println!("{}", r);
                         return Ok(());
@@ -103,13 +103,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
         .after_help(DESCRIPTION)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::COMPUTE)
                 .short('c')
@@ -162,7 +162,7 @@ pub fn uu_app<'a>() -> App<'a> {
         //
         // This is not how POSIX does things, but this is how the GNU implementation
         // parses its command line.
-        .setting(clap::AppSettings::TrailingVarArg)
+        .trailing_var_arg(true)
 }
 
 #[derive(Debug)]
@@ -205,7 +205,7 @@ struct Options {
     arguments: Vec<OsString>,
 }
 
-fn parse_command_line(config: App, args: impl uucore::Args) -> Result<Options> {
+fn parse_command_line(config: Command, args: impl uucore::Args) -> Result<Options> {
     let matches = config.try_get_matches_from(args)?;
 
     let compute_transition_context = matches.is_present(options::COMPUTE);

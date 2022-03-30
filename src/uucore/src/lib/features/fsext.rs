@@ -98,6 +98,8 @@ pub use libc::statfs as StatFs;
     target_os = "netbsd",
     target_os = "bitrig",
     target_os = "dragonfly",
+    target_os = "illumos",
+    target_os = "solaris",
     target_os = "redox"
 ))]
 pub use libc::statvfs as StatFs;
@@ -108,13 +110,15 @@ pub use libc::statvfs as StatFs;
     target_os = "android",
     target_os = "freebsd",
     target_os = "openbsd",
+    target_os = "redox"
 ))]
 pub use libc::statfs as statfs_fn;
 #[cfg(any(
     target_os = "netbsd",
     target_os = "bitrig",
-    target_os = "dragonfly",
-    target_os = "redox"
+    target_os = "illumos",
+    target_os = "solaris",
+    target_os = "dragonfly"
 ))]
 pub use libc::statvfs as statfs_fn;
 
@@ -477,7 +481,7 @@ pub fn read_fs_list() -> Vec<MountInfo> {
         }
         mounts
     }
-    #[cfg(target_os = "redox")]
+    #[cfg(any(target_os = "redox", target_os = "illumos", target_os = "solaris"))]
     {
         // No method to read mounts, yet
         Vec::new()

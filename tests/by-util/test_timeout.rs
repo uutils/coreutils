@@ -12,6 +12,24 @@ fn test_subcommand_return_code() {
 }
 
 #[test]
+fn test_invalid_time_interval() {
+    new_ucmd!()
+        .args(&["xyz", "sleep", "0"])
+        .fails()
+        .code_is(125)
+        .usage_error("invalid time interval 'xyz'");
+}
+
+#[test]
+fn test_invalid_kill_after() {
+    new_ucmd!()
+        .args(&["-k", "xyz", "1", "sleep", "0"])
+        .fails()
+        .code_is(125)
+        .usage_error("invalid time interval 'xyz'");
+}
+
+#[test]
 fn test_command_with_args() {
     new_ucmd!()
         .args(&["1700", "echo", "-n", "abcd"])
@@ -80,4 +98,30 @@ fn test_dont_overflow() {
         .code_is(0)
         .no_stderr()
         .no_stdout();
+}
+
+#[test]
+fn test_negative_interval() {
+    new_ucmd!()
+        .args(&["--", "-1", "sleep", "0"])
+        .fails()
+        .usage_error("invalid time interval '-1'");
+}
+
+#[test]
+fn test_invalid_signal() {
+    new_ucmd!()
+        .args(&["-s", "invalid", "1", "sleep", "0"])
+        .fails()
+        .usage_error("'invalid': invalid signal");
+}
+
+/// Test that the long form of the `--kill-after` argument is recognized.
+#[test]
+fn test_kill_after_long() {
+    new_ucmd!()
+        .args(&["--kill-after=1", "1", "sleep", "0"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
 }

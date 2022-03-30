@@ -10,11 +10,11 @@
 mod error;
 
 use crate::error::ChrootError;
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use std::ffi::CString;
 use std::io::Error;
 use std::path::Path;
-use std::process::Command;
+use std::process;
 use uucore::error::{set_exit_code, UResult};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 use uucore::{entries, format_usage, InvalidEncodingHandling};
@@ -77,7 +77,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // NOTE: Tests can only trigger code beyond this point if they're invoked with root permissions
     set_context(newroot, &matches)?;
 
-    let pstatus = match Command::new(chroot_command).args(chroot_args).status() {
+    let pstatus = match process::Command::new(chroot_command)
+        .args(chroot_args)
+        .status()
+    {
         Ok(status) => status,
         Err(e) => return Err(ChrootError::CommandFailed(command[0].to_string(), e).into()),
     };
@@ -91,12 +94,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::NEWROOT)
                 .hide(true)

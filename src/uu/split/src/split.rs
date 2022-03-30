@@ -13,7 +13,7 @@ mod platform;
 
 use crate::filenames::FilenameIterator;
 use crate::filenames::SuffixType;
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
+use clap::{crate_version, Arg, ArgMatches, Command};
 use std::convert::TryInto;
 use std::env;
 use std::fmt;
@@ -62,13 +62,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about("Create output files containing consecutive or interleaved sections of input")
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         // strategy (mutually exclusive)
         .arg(
             Arg::new(OPT_BYTES)
@@ -858,6 +858,11 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
         // Loop until we have written all bytes in the input buffer
         // (or an IO error occurs).
         loop {
+            // If the buffer is empty, then we are done writing.
+            if buf.is_empty() {
+                return Ok(total_bytes_written);
+            }
+
             // If we have filled the current chunk with bytes, then
             // start a new chunk and initialize its corresponding
             // writer.
@@ -875,12 +880,6 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
 
             // Find the first newline character in the buffer.
             match memchr::memchr(b'\n', buf) {
-                // If there is no newline character and the buffer is
-                // empty, then we are done writing.
-                None if buf.is_empty() => {
-                    return Ok(total_bytes_written);
-                }
-
                 // If there is no newline character and the buffer is
                 // not empty, then write as many bytes as we can and
                 // then move on to the next chunk if necessary.

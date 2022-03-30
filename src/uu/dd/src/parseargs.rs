@@ -4,7 +4,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore ctty, ctable, iconvflags, oconvflags parseargs
+// spell-checker:ignore ctty, ctable, iseek, oseek, iconvflags, oconvflags parseargs
 
 #[cfg(test)]
 mod unit_tests;
@@ -100,16 +100,16 @@ impl std::fmt::Display for ParseError {
             Self::StatusLevelNotRecognized(arg) => {
                 write!(f, "status=LEVEL not recognized -> {}", arg)
             }
-            ParseError::BsOutOfRange => {
+            Self::BsOutOfRange => {
                 write!(f, "bs=N cannot fit into memory")
             }
-            ParseError::IbsOutOfRange => {
+            Self::IbsOutOfRange => {
                 write!(f, "ibs=N cannot fit into memory")
             }
-            ParseError::ObsOutOfRange => {
+            Self::ObsOutOfRange => {
                 write!(f, "obs=N cannot fit into memory")
             }
-            ParseError::CbsOutOfRange => {
+            Self::CbsOutOfRange => {
                 write!(f, "cbs=N cannot fit into memory")
             }
             Self::Unimplemented(arg) => {
@@ -535,9 +535,50 @@ fn parse_flag_list<T: std::str::FromStr<Err = ParseError>>(
         .collect()
 }
 
+/// Given the various command-line parameters, determine the conversion mode.
+///
+/// The `conv` command-line option can take many different values,
+/// each of which may combine with others. For example, `conv=ascii`,
+/// `conv=lcase`, `conv=sync`, and so on. The arguments to this
+/// function represent the settings of those various command-line
+/// parameters. This function translates those settings to a
+/// [`ConversionMode`].
+fn conversion_mode(
+    ctable: Option<&ConversionTable>,
+    block: Option<usize>,
+    unblock: Option<usize>,
+    non_ascii: bool,
+    is_sync: bool,
+) -> Option<ConversionMode> {
+    match (ctable, block, unblock) {
+        (Some(ct), None, None) => Some(ConversionMode::ConvertOnly(ct)),
+        (Some(ct), Some(cbs), None) => {
+            if non_ascii {
+                Some(ConversionMode::ConvertThenBlock(ct, cbs, is_sync))
+            } else {
+                Some(ConversionMode::BlockThenConvert(ct, cbs, is_sync))
+            }
+        }
+        (Some(ct), None, Some(cbs)) => {
+            if non_ascii {
+                Some(ConversionMode::ConvertThenUnblock(ct, cbs))
+            } else {
+                Some(ConversionMode::UnblockThenConvert(ct, cbs))
+            }
+        }
+        (None, Some(cbs), None) => Some(ConversionMode::BlockOnly(cbs, is_sync)),
+        (None, None, Some(cbs)) => Some(ConversionMode::UnblockOnly(cbs)),
+        (None, None, None) => None,
+        // The remaining variants should never happen because the
+        // argument parsing above should result in an error before
+        // getting to this line of code.
+        _ => unreachable!(),
+    }
+}
+
 /// Parse Conversion Options (Input Variety)
 /// Construct and validate a IConvFlags
-pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError> {
+pub(crate) fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError> {
     let mut iconvflags = IConvFlags::default();
     let mut fmt = None;
     let mut case = None;
@@ -545,6 +586,9 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
 
     let flags = parse_flag_list(options::CONV, matches)?;
     let cbs = parse_cbs(matches)?;
+
+    let mut block = None;
+    let mut unblock = None;
 
     for flag in flags {
         match flag {
@@ -565,7 +609,7 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
                     //
                     // -- https://www.gnu.org/software/coreutils/manual/html_node/dd-invocation.html
                     if cbs.is_some() {
-                        iconvflags.unblock = cbs;
+                        unblock = cbs;
                     }
                 }
             }
@@ -585,7 +629,7 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
                     //
                     // -- https://www.gnu.org/software/coreutils/manual/html_node/dd-invocation.html
                     if cbs.is_some() {
-                        iconvflags.block = cbs;
+                        block = cbs;
                     }
                 }
             }
@@ -603,13 +647,13 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
                     case = Some(flag);
                 }
             }
-            ConvFlag::Block => match (cbs, iconvflags.unblock) {
-                (Some(cbs), None) => iconvflags.block = Some(cbs),
+            ConvFlag::Block => match (cbs, unblock) {
+                (Some(cbs), None) => block = Some(cbs),
                 (None, _) => return Err(ParseError::BlockUnblockWithoutCBS),
                 (_, Some(_)) => return Err(ParseError::MultipleBlockUnblock),
             },
-            ConvFlag::Unblock => match (cbs, iconvflags.block) {
-                (Some(cbs), None) => iconvflags.unblock = Some(cbs),
+            ConvFlag::Unblock => match (cbs, block) {
+                (Some(cbs), None) => unblock = Some(cbs),
                 (None, _) => return Err(ParseError::BlockUnblockWithoutCBS),
                 (_, Some(_)) => return Err(ParseError::MultipleBlockUnblock),
             },
@@ -630,7 +674,7 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
     // block implies sync with ' '
     // unblock implies sync with 0
     // So the final value can't be set until all flags are parsed.
-    let sync = if is_sync && (iconvflags.block.is_some() || iconvflags.unblock.is_some()) {
+    let sync = if is_sync && (block.is_some() || unblock.is_some()) {
         Some(b' ')
     } else if is_sync {
         Some(0u8)
@@ -638,8 +682,27 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
         None
     };
 
+    // Some user options, such as the presence of conversion tables,
+    // will determine whether the input is assumed to be ascii. This
+    // parser sets the non_ascii flag accordingly.
+    //
+    // Examples:
+    //
+    // - If conv=ebcdic or conv=ibm is specified then block,
+    //   unblock or swab must be performed before the conversion
+    //   happens since the source will start in ascii.
+    // - If conv=ascii is specified then block, unblock or swab
+    //   must be performed after the conversion since the source
+    //   starts in ebcdic.
+    // - If no conversion is specified then the source is assumed
+    //   to be in ascii.
+    //
+    // For more info see `info dd`.
+    let non_ascii = parseargs::parse_input_non_ascii(matches)?;
+    let mode = conversion_mode(ctable, block, unblock, non_ascii, is_sync);
+
     Ok(IConvFlags {
-        ctable,
+        mode,
         sync,
         ..iconvflags
     })
@@ -740,36 +803,18 @@ pub fn parse_oflags(matches: &Matches) -> Result<OFlags, ParseError> {
     Ok(oflags)
 }
 
-/// Parse the amount of the input file to skip.
-pub fn parse_skip_amt(
+pub fn parse_seek_skip_amt(
     ibs: &usize,
-    iflags: &IFlags,
+    bytes: bool,
     matches: &Matches,
+    option: &str,
 ) -> Result<Option<u64>, ParseError> {
-    if let Some(amt) = matches.value_of(options::SKIP) {
+    if let Some(amt) = matches.value_of(option) {
         let n = parse_bytes_with_opt_multiplier(amt)?;
-        if iflags.skip_bytes {
+        if bytes {
             Ok(Some(n))
         } else {
             Ok(Some(*ibs as u64 * n))
-        }
-    } else {
-        Ok(None)
-    }
-}
-
-/// Parse the amount of the output file to seek.
-pub fn parse_seek_amt(
-    obs: &usize,
-    oflags: &OFlags,
-    matches: &Matches,
-) -> Result<Option<u64>, ParseError> {
-    if let Some(amt) = matches.value_of(options::SEEK) {
-        let n = parse_bytes_with_opt_multiplier(amt)?;
-        if oflags.seek_bytes {
-            Ok(Some(n))
-        } else {
-            Ok(Some(*obs as u64 * n))
         }
     } else {
         Ok(None)

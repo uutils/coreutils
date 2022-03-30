@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable
 
 mod datastructures;
 use datastructures::*;
@@ -34,7 +34,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time;
 
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
+use clap::{crate_version, Arg, ArgMatches, Command};
 use gcd::Gcd;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
@@ -45,7 +45,6 @@ const BUF_INIT_BYTE: u8 = 0xDD;
 
 struct Input<R: Read> {
     src: R,
-    non_ascii: bool,
     ibs: usize,
     print_level: Option<StatusLevel>,
     count: Option<CountType>,
@@ -56,16 +55,16 @@ struct Input<R: Read> {
 impl Input<io::Stdin> {
     fn new(matches: &Matches) -> UResult<Self> {
         let ibs = parseargs::parse_ibs(matches)?;
-        let non_ascii = parseargs::parse_input_non_ascii(matches)?;
         let print_level = parseargs::parse_status_level(matches)?;
         let cflags = parseargs::parse_conv_flag_input(matches)?;
         let iflags = parseargs::parse_iflags(matches)?;
-        let skip = parseargs::parse_skip_amt(&ibs, &iflags, matches)?;
+        let skip = parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::SKIP)?;
+        let iseek =
+            parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::ISEEK)?;
         let count = parseargs::parse_count(&iflags, matches)?;
 
         let mut i = Self {
             src: io::stdin(),
-            non_ascii,
             ibs,
             print_level,
             count,
@@ -73,7 +72,9 @@ impl Input<io::Stdin> {
             iflags,
         };
 
-        if let Some(amt) = skip {
+        // The --skip and --iseek flags are additive. On a stream, they discard bytes.
+        let amt = skip.unwrap_or(0) + iseek.unwrap_or(0);
+        if amt > 0 {
             if let Err(e) = i.read_skip(amt) {
                 if let io::ErrorKind::UnexpectedEof = e.kind() {
                     show_error!("'standard input': cannot skip to specified offset");
@@ -127,11 +128,12 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
 impl Input<File> {
     fn new(matches: &Matches) -> UResult<Self> {
         let ibs = parseargs::parse_ibs(matches)?;
-        let non_ascii = parseargs::parse_input_non_ascii(matches)?;
         let print_level = parseargs::parse_status_level(matches)?;
         let cflags = parseargs::parse_conv_flag_input(matches)?;
         let iflags = parseargs::parse_iflags(matches)?;
-        let skip = parseargs::parse_skip_amt(&ibs, &iflags, matches)?;
+        let skip = parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::SKIP)?;
+        let iseek =
+            parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::ISEEK)?;
         let count = parseargs::parse_count(&iflags, matches)?;
 
         if let Some(fname) = matches.value_of(options::INFILE) {
@@ -148,14 +150,15 @@ impl Input<File> {
                     .map_err_context(|| "failed to open input file".to_string())?
             };
 
-            if let Some(amt) = skip {
+            // The --skip and --iseek flags are additive. On a file, they seek.
+            let amt = skip.unwrap_or(0) + iseek.unwrap_or(0);
+            if amt > 0 {
                 src.seek(io::SeekFrom::Start(amt))
                     .map_err_context(|| "failed to seek in input file".to_string())?;
             }
 
             let i = Self {
                 src,
-                non_ascii,
                 ibs,
                 print_level,
                 count,
@@ -292,12 +295,16 @@ impl OutputTrait for Output<io::Stdout> {
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
         let oflags = parseargs::parse_oflags(matches)?;
-        let seek = parseargs::parse_seek_amt(&obs, &oflags, matches)?;
+        let seek = parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::SEEK)?;
+        let oseek =
+            parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::OSEEK)?;
 
         let mut dst = io::stdout();
 
+        // The --seek and --oseek flags are additive.
+        let amt = seek.unwrap_or(0) + oseek.unwrap_or(0);
         // stdout is not seekable, so we just write null bytes.
-        if let Some(amt) = seek {
+        if amt > 0 {
             io::copy(&mut io::repeat(0u8).take(amt as u64), &mut dst)
                 .map_err_context(|| String::from("write error"))?;
         }
@@ -508,7 +515,9 @@ impl OutputTrait for Output<File> {
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
         let oflags = parseargs::parse_oflags(matches)?;
-        let seek = parseargs::parse_seek_amt(&obs, &oflags, matches)?;
+        let seek = parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::SEEK)?;
+        let oseek =
+            parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::OSEEK)?;
 
         if let Some(fname) = matches.value_of(options::OUTFILE) {
             let mut dst = open_dst(Path::new(&fname), &cflags, &oflags)
@@ -522,7 +531,9 @@ impl OutputTrait for Output<File> {
             // Instead, we suppress the error by calling
             // `Result::ok()`. This matches the behavior of GNU `dd`
             // when given the command-line argument `of=/dev/null`.
-            let i = seek.unwrap_or(0);
+
+            // The --seek and --oseek flags are additive.
+            let i = seek.unwrap_or(0) + oseek.unwrap_or(0);
             if !cflags.notrunc {
                 dst.set_len(i).ok();
             }
@@ -591,16 +602,6 @@ impl Write for Output<io::Stdout> {
 
 /// Read helper performs read operations common to all dd reads, and dispatches the buffer to relevant helper functions as dictated by the operations requested by the user.
 fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> std::io::Result<(ReadStat, Vec<u8>)> {
-    // Local Predicate Fns -----------------------------------------------
-    fn is_conv<R: Read>(i: &Input<R>) -> bool {
-        i.cflags.ctable.is_some()
-    }
-    fn is_block<R: Read>(i: &Input<R>) -> bool {
-        i.cflags.block.is_some()
-    }
-    fn is_unblock<R: Read>(i: &Input<R>) -> bool {
-        i.cflags.unblock.is_some()
-    }
     // Local Helper Fns -------------------------------------------------
     fn perform_swab(buf: &mut [u8]) {
         for base in (1..buf.len()).step_by(2) {
@@ -623,11 +624,13 @@ fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> std::io::Result<(Read
     if i.cflags.swab {
         perform_swab(&mut buf);
     }
-    if is_conv(i) || is_block(i) || is_unblock(i) {
-        let buf = conv_block_unblock_helper(buf, i, &mut rstat).unwrap();
-        Ok((rstat, buf))
-    } else {
-        Ok((rstat, buf))
+
+    match i.cflags.mode {
+        Some(ref mode) => {
+            let buf = conv_block_unblock_helper(buf, mode, &mut rstat);
+            Ok((rstat, buf))
+        }
+        None => Ok((rstat, buf)),
     }
 }
 
@@ -730,11 +733,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::INFILE)
                 .long(options::INFILE)
@@ -808,6 +811,24 @@ pub fn uu_app<'a>() -> App<'a> {
                 .help("(alternatively seek=N) seeks N obs-sized records into output before beginning copy/convert operations. See oflag=seek_bytes if seeking N bytes is preferred. Multiplier strings permitted.")
         )
         .arg(
+            Arg::new(options::ISEEK)
+                .long(options::ISEEK)
+                .overrides_with(options::ISEEK)
+                .takes_value(true)
+                .require_equals(true)
+                .value_name("N")
+                .help("(alternatively iseek=N) seeks N obs-sized records into input before beginning copy/convert operations. See iflag=seek_bytes if seeking N bytes is preferred. Multiplier strings permitted.")
+        )
+        .arg(
+            Arg::new(options::OSEEK)
+                .long(options::OSEEK)
+                .overrides_with(options::OSEEK)
+                .takes_value(true)
+                .require_equals(true)
+                .value_name("N")
+                .help("(alternatively oseek=N) seeks N obs-sized records into output before beginning copy/convert operations. See oflag=seek_bytes if seeking N bytes is preferred. Multiplier strings permitted.")
+        )
+        .arg(
             Arg::new(options::COUNT)
                 .long(options::COUNT)
                 .overrides_with(options::COUNT)
@@ -846,8 +867,8 @@ Printing performance stats is also triggered by the INFO signal (where supported
                 .long(options::CONV)
                 .takes_value(true)
                 .multiple_occurrences(true)
-                .use_delimiter(true)
-                .require_delimiter(true)
+                .use_value_delimiter(true)
+                .require_value_delimiter(true)
                 .multiple_values(true)
                 .require_equals(true)
                 .value_name("CONV")
@@ -887,8 +908,8 @@ Conversion Flags:
                 .long(options::IFLAG)
                 .takes_value(true)
                 .multiple_occurrences(true)
-                .use_delimiter(true)
-                .require_delimiter(true)
+                .use_value_delimiter(true)
+                .require_value_delimiter(true)
                 .multiple_values(true)
                 .require_equals(true)
                 .value_name("FLAG")
@@ -917,8 +938,8 @@ General-Flags
                 .long(options::OFLAG)
                 .takes_value(true)
                 .multiple_occurrences(true)
-                .use_delimiter(true)
-                .require_delimiter(true)
+                .use_value_delimiter(true)
+                .require_value_delimiter(true)
                 .multiple_values(true)
                 .require_equals(true)
                 .value_name("FLAG")
@@ -1055,7 +1076,6 @@ mod tests {
             src: LazyReader {
                 src: File::open("./test-resources/deadbeef-16.test").unwrap(),
             },
-            non_ascii: false,
             ibs: 16,
             print_level: None,
             count: None,
@@ -1102,7 +1122,6 @@ mod tests {
                 src: File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test")
                     .unwrap(),
             },
-            non_ascii: false,
             ibs: 521,
             print_level: None,
             count: None,

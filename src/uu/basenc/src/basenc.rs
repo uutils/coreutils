@@ -8,7 +8,7 @@
 
 //spell-checker:ignore (args) lsbf msbf
 
-use clap::{App, Arg};
+use clap::{Arg, Command};
 use uu_base32::base_common::{self, Config, BASE_CMD_PARSE_ERROR};
 
 use uucore::{
@@ -40,12 +40,12 @@ const ENCODINGS: &[(&str, Format)] = &[
 
 const USAGE: &str = "{} [OPTION]... [FILE]";
 
-pub fn uu_app<'a>() -> App<'a> {
-    let mut app = base_common::base_app(ABOUT, USAGE);
+pub fn uu_app<'a>() -> Command<'a> {
+    let mut command = base_common::base_app(ABOUT, USAGE);
     for encoding in ENCODINGS {
-        app = app.arg(Arg::new(encoding.0).long(encoding.0));
+        command = command.arg(Arg::new(encoding.0).long(encoding.0));
     }
-    app
+    command
 }
 
 fn parse_cmd_args(args: impl uucore::Args) -> UResult<(Config, Format)> {

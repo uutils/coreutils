@@ -634,3 +634,24 @@ fn test_line_bytes_no_final_newline() {
     assert_eq!(at.read("xae"), "3\n");
     assert_eq!(at.read("xaf"), "4");
 }
+
+#[test]
+fn test_line_bytes_no_empty_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-C", "1"])
+        .pipe_in("1\n2222\n3\n4")
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("xaa"), "1");
+    assert_eq!(at.read("xab"), "\n");
+    assert_eq!(at.read("xac"), "2");
+    assert_eq!(at.read("xad"), "2");
+    assert_eq!(at.read("xae"), "2");
+    assert_eq!(at.read("xaf"), "2");
+    assert_eq!(at.read("xag"), "\n");
+    assert_eq!(at.read("xah"), "3");
+    assert_eq!(at.read("xai"), "\n");
+    assert_eq!(at.read("xaj"), "4");
+    assert!(!at.plus("xak").exists());
+}
