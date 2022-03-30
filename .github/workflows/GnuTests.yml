@@ -242,6 +242,7 @@ jobs:
       run: |
         # Compare test summary VS reference
         REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
+        REPO_DEFAULT_BRANCH='${{ steps.vars.outputs.repo_default_branch }}'
         if test -f "${REF_SUMMARY_FILE}"; then
           echo "Reference SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
           mv "${REF_SUMMARY_FILE}" main-gnu-result.json
