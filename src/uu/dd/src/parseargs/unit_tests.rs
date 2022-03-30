@@ -170,8 +170,11 @@ fn test_all_top_level_args_no_leading_dashes() {
     );
     assert_eq!(
         IConvFlags {
-            ctable: Some(&EBCDIC_TO_ASCII_LCASE_TO_UCASE),
-            unblock: Some(1), // because ascii implies unblock
+            // ascii implies unblock
+            mode: Some(ConversionMode::ConvertThenUnblock(
+                &EBCDIC_TO_ASCII_LCASE_TO_UCASE,
+                1
+            )),
             ..IConvFlags::default()
         },
         parse_conv_flag_input(&matches).unwrap()
@@ -269,8 +272,11 @@ fn test_all_top_level_args_with_leading_dashes() {
     );
     assert_eq!(
         IConvFlags {
-            ctable: Some(&EBCDIC_TO_ASCII_LCASE_TO_UCASE),
-            unblock: Some(1), // because ascii implies unblock
+            // ascii implies unblock
+            mode: Some(ConversionMode::ConvertThenUnblock(
+                &EBCDIC_TO_ASCII_LCASE_TO_UCASE,
+                1
+            )),
             ..IConvFlags::default()
         },
         parse_conv_flag_input(&matches).unwrap()

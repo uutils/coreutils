@@ -11,17 +11,19 @@ mod columns;
 mod filesystem;
 mod table;
 
-use uucore::error::{UResult, USimpleError};
+use uucore::display::Quotable;
+use uucore::error::{UError, UResult};
 use uucore::format_usage;
 use uucore::fsext::{read_fs_list, MountInfo};
 
 use clap::{crate_version, Arg, ArgMatches, Command};
 
+use std::error::Error;
 use std::fmt;
 use std::path::Path;
 
 use crate::blocks::{block_size_from_matches, BlockSize};
-use crate::columns::Column;
+use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
 use crate::table::{DisplayRow, Header, Row};
 
@@ -103,8 +105,12 @@ impl Default for Options {
     }
 }
 
+#[derive(Debug)]
 enum OptionsError {
     InvalidBlockSize,
+
+    /// An error getting the columns to display in the output table.
+    ColumnError(ColumnError),
 }
 
 impl fmt::Display for OptionsError {
@@ -115,6 +121,11 @@ impl fmt::Display for OptionsError {
             // TODO This needs to vary based on whether `--block-size`
             // or `-B` were provided.
             Self::InvalidBlockSize => write!(f, "invalid --block-size argument"),
+            Self::ColumnError(ColumnError::MultipleColumns(s)) => write!(
+                f,
+                "option --output: field {} used more than once",
+                s.quote()
+            ),
         }
     }
 }
@@ -131,7 +142,7 @@ impl Options {
             include: matches.values_of_lossy(OPT_TYPE),
             exclude: matches.values_of_lossy(OPT_EXCLUDE_TYPE),
             show_total: matches.is_present(OPT_TOTAL),
-            columns: Column::from_matches(matches),
+            columns: Column::from_matches(matches).map_err(OptionsError::ColumnError)?,
         })
     }
 }
@@ -243,7 +254,10 @@ fn get_all_filesystems(opt: &Options) -> Vec<Filesystem> {
 
     // Convert each `MountInfo` into a `Filesystem`, which contains
     // both the mount information and usage information.
-    mounts.into_iter().filter_map(Filesystem::new).collect()
+    mounts
+        .into_iter()
+        .filter_map(|m| Filesystem::new(m, None))
+        .collect()
 }
 
 /// For each path, get the filesystem that contains that path.
@@ -270,6 +284,28 @@ where
         .collect()
 }
 
+#[derive(Debug)]
+enum DfError {
+    /// A problem while parsing command-line options.
+    OptionsError(OptionsError),
+}
+
+impl Error for DfError {}
+
+impl UError for DfError {
+    fn usage(&self) -> bool {
+        matches!(self, Self::OptionsError(OptionsError::ColumnError(_)))
+    }
+}
+
+impl fmt::Display for DfError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::OptionsError(e) => e.fmt(f),
+        }
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
@@ -281,7 +317,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let opt = Options::from(&matches).map_err(|e| USimpleError::new(1, format!("{}", e)))?;
+    let opt = Options::from(&matches).map_err(DfError::OptionsError)?;
 
     // Get the list of filesystems to display in the output table.
     let filesystems: Vec<Filesystem> = match matches.values_of(OPT_PATHS) {
@@ -385,7 +421,10 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_OUTPUT)
                 .long("output")
                 .takes_value(true)
+                .min_values(0)
+                .require_equals(true)
                 .use_value_delimiter(true)
+                .multiple_occurrences(true)
                 .possible_values(OUTPUT_FIELD_LIST)
                 .default_missing_values(&OUTPUT_FIELD_LIST)
                 .default_values(&["source", "size", "used", "avail", "pcent", "target"])

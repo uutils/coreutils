@@ -55,19 +55,31 @@ pub(crate) enum Column {
     Capacity,
 }
 
+/// An error while defining which columns to display in the output table.
+#[derive(Debug)]
+pub(crate) enum ColumnError {
+    /// If a column appears more than once in the `--output` argument.
+    MultipleColumns(String),
+}
+
 impl Column {
     /// Convert from command-line arguments to sequence of columns.
     ///
     /// The set of columns that will appear in the output table can be
     /// specified by command-line arguments. This function converts
     /// those arguments to a [`Vec`] of [`Column`] variants.
-    pub(crate) fn from_matches(matches: &ArgMatches) -> Vec<Self> {
+    ///
+    /// # Errors
+    ///
+    /// This function returns an error if a column is specified more
+    /// than once in the command-line argument.
+    pub(crate) fn from_matches(matches: &ArgMatches) -> Result<Vec<Self>, ColumnError> {
         match (
             matches.is_present(OPT_PRINT_TYPE),
             matches.is_present(OPT_INODES),
             matches.occurrences_of(OPT_OUTPUT) > 0,
         ) {
-            (false, false, false) => vec![
+            (false, false, false) => Ok(vec![
                 Self::Source,
                 Self::Size,
                 Self::Used,
@@ -76,29 +88,37 @@ impl Column {
                 Self::Capacity,
                 Self::Pcent,
                 Self::Target,
-            ],
+            ]),
             (false, false, true) => {
-                matches
-                    .values_of(OPT_OUTPUT)
-                    .unwrap()
-                    .map(|s| {
-                        // Unwrapping here should not panic because the
-                        // command-line argument parsing library should be
-                        // responsible for ensuring each comma-separated
-                        // string is a valid column label.
-                        Self::parse(s).unwrap()
-                    })
-                    .collect()
+                // Unwrapping should not panic because in this arm of
+                // the `match` statement, we know that `OPT_OUTPUT`
+                // is non-empty.
+                let names = matches.values_of(OPT_OUTPUT).unwrap();
+                let mut seen: Vec<&str> = vec![];
+                let mut columns = vec![];
+                for name in names {
+                    if seen.contains(&name) {
+                        return Err(ColumnError::MultipleColumns(name.to_string()));
+                    }
+                    seen.push(name);
+                    // Unwrapping here should not panic because the
+                    // command-line argument parsing library should be
+                    // responsible for ensuring each comma-separated
+                    // string is a valid column label.
+                    let column = Self::parse(name).unwrap();
+                    columns.push(column);
+                }
+                Ok(columns)
             }
-            (false, true, false) => vec![
+            (false, true, false) => Ok(vec![
                 Self::Source,
                 Self::Itotal,
                 Self::Iused,
                 Self::Iavail,
                 Self::Ipcent,
                 Self::Target,
-            ],
-            (true, false, false) => vec![
+            ]),
+            (true, false, false) => Ok(vec![
                 Self::Source,
                 Self::Fstype,
                 Self::Size,
@@ -108,8 +128,8 @@ impl Column {
                 Self::Capacity,
                 Self::Pcent,
                 Self::Target,
-            ],
-            (true, true, false) => vec![
+            ]),
+            (true, true, false) => Ok(vec![
                 Self::Source,
                 Self::Fstype,
                 Self::Itotal,
@@ -117,7 +137,7 @@ impl Column {
                 Self::Iavail,
                 Self::Ipcent,
                 Self::Target,
-            ],
+            ]),
             // The command-line arguments -T and -i are each mutually
             // exclusive with --output, so the command-line argument
             // parser should reject those combinations before we get

@@ -45,7 +45,6 @@ const BUF_INIT_BYTE: u8 = 0xDD;
 
 struct Input<R: Read> {
     src: R,
-    non_ascii: bool,
     ibs: usize,
     print_level: Option<StatusLevel>,
     count: Option<CountType>,
@@ -56,7 +55,6 @@ struct Input<R: Read> {
 impl Input<io::Stdin> {
     fn new(matches: &Matches) -> UResult<Self> {
         let ibs = parseargs::parse_ibs(matches)?;
-        let non_ascii = parseargs::parse_input_non_ascii(matches)?;
         let print_level = parseargs::parse_status_level(matches)?;
         let cflags = parseargs::parse_conv_flag_input(matches)?;
         let iflags = parseargs::parse_iflags(matches)?;
@@ -67,7 +65,6 @@ impl Input<io::Stdin> {
 
         let mut i = Self {
             src: io::stdin(),
-            non_ascii,
             ibs,
             print_level,
             count,
@@ -131,7 +128,6 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
 impl Input<File> {
     fn new(matches: &Matches) -> UResult<Self> {
         let ibs = parseargs::parse_ibs(matches)?;
-        let non_ascii = parseargs::parse_input_non_ascii(matches)?;
         let print_level = parseargs::parse_status_level(matches)?;
         let cflags = parseargs::parse_conv_flag_input(matches)?;
         let iflags = parseargs::parse_iflags(matches)?;
@@ -163,7 +159,6 @@ impl Input<File> {
 
             let i = Self {
                 src,
-                non_ascii,
                 ibs,
                 print_level,
                 count,
@@ -607,16 +602,6 @@ impl Write for Output<io::Stdout> {
 
 /// Read helper performs read operations common to all dd reads, and dispatches the buffer to relevant helper functions as dictated by the operations requested by the user.
 fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> std::io::Result<(ReadStat, Vec<u8>)> {
-    // Local Predicate Fns -----------------------------------------------
-    fn is_conv<R: Read>(i: &Input<R>) -> bool {
-        i.cflags.ctable.is_some()
-    }
-    fn is_block<R: Read>(i: &Input<R>) -> bool {
-        i.cflags.block.is_some()
-    }
-    fn is_unblock<R: Read>(i: &Input<R>) -> bool {
-        i.cflags.unblock.is_some()
-    }
     // Local Helper Fns -------------------------------------------------
     fn perform_swab(buf: &mut [u8]) {
         for base in (1..buf.len()).step_by(2) {
@@ -639,11 +624,13 @@ fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> std::io::Result<(Read
     if i.cflags.swab {
         perform_swab(&mut buf);
     }
-    if is_conv(i) || is_block(i) || is_unblock(i) {
-        let buf = conv_block_unblock_helper(buf, i, &mut rstat).unwrap();
-        Ok((rstat, buf))
-    } else {
-        Ok((rstat, buf))
+
+    match i.cflags.mode {
+        Some(ref mode) => {
+            let buf = conv_block_unblock_helper(buf, mode, &mut rstat);
+            Ok((rstat, buf))
+        }
+        None => Ok((rstat, buf)),
     }
 }
 
@@ -1089,7 +1076,6 @@ mod tests {
             src: LazyReader {
                 src: File::open("./test-resources/deadbeef-16.test").unwrap(),
             },
-            non_ascii: false,
             ibs: 16,
             print_level: None,
             count: None,
@@ -1136,7 +1122,6 @@ mod tests {
                 src: File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test")
                     .unwrap(),
             },
-            non_ascii: false,
             ibs: 521,
             print_level: None,
             count: None,

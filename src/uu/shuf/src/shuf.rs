@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) cmdline evec seps rvec fdata
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, Command, Values};
 use rand::prelude::SliceRandom;
 use rand::RngCore;
 use std::fs::File;
@@ -75,17 +75,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let options = Options {
-        head_count: match matches.value_of(options::HEAD_COUNT) {
-            Some(count) => match count.parse::<usize>() {
+        head_count: {
+            let mut headcounts: Values<'_> =
+                matches.values_of(options::HEAD_COUNT).unwrap_or_default();
+            match parse_head_count(&mut headcounts) {
                 Ok(val) => val,
-                Err(_) => {
-                    return Err(USimpleError::new(
-                        1,
-                        format!("invalid line count: {}", count.quote()),
-                    ));
-                }
-            },
-            None => std::usize::MAX,
+                Err(msg) => return Err(USimpleError::new(1, msg)),
+            }
         },
         output: matches.value_of(options::OUTPUT).map(String::from),
         random_source: matches.value_of(options::RANDOM_SOURCE).map(String::from),
@@ -152,6 +148,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('n')
                 .long(options::HEAD_COUNT)
                 .takes_value(true)
+                .multiple_occurrences(true)
                 .value_name("COUNT")
                 .help("output at most COUNT lines"),
         )
@@ -297,6 +294,17 @@ fn parse_range(input_range: &str) -> Result<(usize, usize), String> {
     } else {
         Err(format!("invalid input range: {}", input_range.quote()))
     }
+}
+
+fn parse_head_count(headcounts: &mut Values<'_>) -> Result<usize, String> {
+    let mut result = std::usize::MAX;
+    for count in headcounts {
+        match count.parse::<usize>() {
+            Ok(pv) => result = std::cmp::min(result, pv),
+            Err(_) => return Err(format!("invalid line count: {}", count.quote())),
+        }
+    }
+    Ok(result)
 }
 
 enum WrappedRng {
