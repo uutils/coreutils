@@ -66,9 +66,9 @@ impl Display for LnError {
             Self::FailedToLink(s, d, e) => write!(f, "failed to link {} to {}: {}", s.quote(), d.quote(), e),
             Self::SameFile(e, e2) => write!(
                 f,
-                "'{}' and '{}' are the same file",
-                e2.display(),
-                e.display()
+                "{} and {} are the same file",
+                e2.quote(),
+                e.quote()
             ),
             Self::SomeLinksFailed => write!(f, "some links failed to create"),
             Self::MissingDestination(s) => {
