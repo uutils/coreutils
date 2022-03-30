@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 //! Types for representing and displaying block sizes.
-use crate::{OPT_BLOCKSIZE, OPT_HUMAN_READABLE, OPT_HUMAN_READABLE_2};
+use crate::{OPT_BLOCKSIZE, OPT_HUMAN_READABLE_BINARY, OPT_HUMAN_READABLE_DECIMAL};
 use clap::ArgMatches;
 use std::fmt;
 use std::num::ParseIntError;
@@ -108,9 +108,9 @@ impl Default for BlockSize {
 }
 
 pub(crate) fn block_size_from_matches(matches: &ArgMatches) -> Result<BlockSize, ParseIntError> {
-    if matches.is_present(OPT_HUMAN_READABLE) {
+    if matches.is_present(OPT_HUMAN_READABLE_BINARY) {
         Ok(BlockSize::HumanReadableBinary)
-    } else if matches.is_present(OPT_HUMAN_READABLE_2) {
+    } else if matches.is_present(OPT_HUMAN_READABLE_DECIMAL) {
         Ok(BlockSize::HumanReadableDecimal)
     } else if matches.is_present(OPT_BLOCKSIZE) {
         let s = matches.value_of(OPT_BLOCKSIZE).unwrap();
