@@ -70,7 +70,15 @@ use libc::{
 };
 use std::borrow::Cow;
 use std::convert::{AsRef, From};
-#[cfg(unix)]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "linux"
+))]
+use std::ffi::CStr;
+#[cfg(not(windows))]
 use std::ffi::CString;
 use std::io::Error as IOError;
 #[cfg(unix)]
@@ -308,13 +316,6 @@ impl MountInfo {
     }
 }
 
-#[cfg(any(
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd"
-))]
-use std::ffi::CStr;
 #[cfg(any(
     target_os = "freebsd",
     target_vendor = "apple",
@@ -704,9 +705,10 @@ where
                     0 => Ok(buffer),
                     _ => {
                         let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
-                        Err(CString::from_raw(strerror(errno))
-                            .into_string()
-                            .unwrap_or_else(|_| "Unknown Error".to_owned()))
+                        Err(CStr::from_ptr(strerror(errno))
+                            .to_str()
+                            .map_err(|_| "Error message contains invalid UTF-8".to_owned())?
+                            .to_owned())
                     }
                 }
             }
