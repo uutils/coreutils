@@ -28,7 +28,7 @@ uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=[
 walkdir = "2.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-ioctl-sys = "0.6"
+ioctl-sys = "0.8"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version="0.3", features=["fileapi"] }
