@@ -402,18 +402,6 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     };
 
     if is_symlink(dst) || dst.exists() {
-        match settings.overwrite {
-            OverwriteMode::NoClobber => {}
-            OverwriteMode::Interactive => {
-                print!("{}: overwrite {}? ", uucore::util_name(), dst.quote());
-                if !read_yes() {
-                    return Ok(());
-                }
-                fs::remove_file(dst)?;
-            }
-            OverwriteMode::Force => fs::remove_file(dst)?,
-        };
-
         backup_path = match settings.backup {
             BackupMode::NoBackup => None,
             BackupMode::SimpleBackup => Some(simple_backup_path(dst, &settings.suffix)),
@@ -435,6 +423,22 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         if let Some(ref p) = backup_path {
             fs::rename(dst, p)?;
         }
+        match settings.overwrite {
+            OverwriteMode::NoClobber => {}
+            OverwriteMode::Interactive => {
+                print!("{}: overwrite {}? ", uucore::util_name(), dst.quote());
+                if !read_yes() {
+                    return Ok(());
+                }
+
+                if fs::remove_file(dst).is_ok() {};
+                // In case of error, don't do anything
+            }
+            OverwriteMode::Force => {
+                if fs::remove_file(dst).is_ok() {};
+                // In case of error, don't do anything
+            }
+        };
     }
 
     if settings.symbolic {

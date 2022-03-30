@@ -624,3 +624,29 @@ fn test_backup_same_file() {
         .fails()
         .stderr_contains("'file1' and './file1' are the same file");
 }
+
+#[test]
+fn test_backup_force() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a", "a\n");
+    at.write("b", "b2\n");
+
+    scene.ucmd().args(&["-s", "b", "b~"]).succeeds().no_stderr();
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
+    assert!(at.file_exists("b~"));
+    scene
+        .ucmd()
+        .args(&["-f", "--b=simple", "a", "b"])
+        .succeeds()
+        .no_stderr();
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
+    assert!(at.file_exists("b~"));
+    assert_eq!(at.read("a"), "a\n");
+    assert_eq!(at.read("b"), "a\n");
+    // we should have the same content as b as we had time to do a backup
+    assert_eq!(at.read("b~"), "b2\n");
+}
