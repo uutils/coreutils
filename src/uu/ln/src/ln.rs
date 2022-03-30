@@ -53,7 +53,7 @@ pub enum OverwriteMode {
 enum LnError {
     TargetIsDirectory(PathBuf),
     SomeLinksFailed,
-    FailedToLink(String),
+    FailedToLink(PathBuf, PathBuf, String),
     SameFile(PathBuf, PathBuf),
     MissingDestination(PathBuf),
     ExtraOperand(OsString),
@@ -63,7 +63,7 @@ impl Display for LnError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::TargetIsDirectory(s) => write!(f, "target {} is not a directory", s.quote()),
-            Self::FailedToLink(e) => write!(f, "failed to link: {}", e),
+            Self::FailedToLink(s, d, e) => write!(f, "failed to link {} to {}: {}", s.quote(), d.quote(), e),
             Self::SameFile(e, e2) => write!(
                 f,
                 "'{}' and '{}' are the same file",
@@ -91,7 +91,7 @@ impl UError for LnError {
         match self {
             Self::TargetIsDirectory(_)
             | Self::SomeLinksFailed
-            | Self::FailedToLink(_)
+            | Self::FailedToLink(_, _, _)
             | Self::SameFile(_, _)
             | Self::MissingDestination(_)
             | Self::ExtraOperand(_) => 1,
@@ -293,7 +293,7 @@ fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
 
     match link(&files[0], &files[1], settings) {
         Ok(_) => Ok(()),
-        Err(e) => Err(LnError::FailedToLink(e.to_string()).into()),
+        Err(e) => Err(LnError::FailedToLink(files[0].to_owned(), files[1].to_owned(), e.to_string()).into()),
     }
 }
 
