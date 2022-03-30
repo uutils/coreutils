@@ -35,8 +35,8 @@ static OPT_HELP: &str = "help";
 static OPT_ALL: &str = "all";
 static OPT_BLOCKSIZE: &str = "blocksize";
 static OPT_TOTAL: &str = "total";
-static OPT_HUMAN_READABLE: &str = "human-readable";
-static OPT_HUMAN_READABLE_2: &str = "human-readable-2";
+static OPT_HUMAN_READABLE_BINARY: &str = "human-readable-binary";
+static OPT_HUMAN_READABLE_DECIMAL: &str = "human-readable-decimal";
 static OPT_INODES: &str = "inodes";
 static OPT_KILO: &str = "kilo";
 static OPT_LOCAL: &str = "local";
@@ -385,17 +385,17 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help("produce a grand total"),
         )
         .arg(
-            Arg::new(OPT_HUMAN_READABLE)
+            Arg::new(OPT_HUMAN_READABLE_BINARY)
                 .short('h')
                 .long("human-readable")
-                .conflicts_with(OPT_HUMAN_READABLE_2)
+                .conflicts_with(OPT_HUMAN_READABLE_DECIMAL)
                 .help("print sizes in human readable format (e.g., 1K 234M 2G)"),
         )
         .arg(
-            Arg::new(OPT_HUMAN_READABLE_2)
+            Arg::new(OPT_HUMAN_READABLE_DECIMAL)
                 .short('H')
                 .long("si")
-                .conflicts_with(OPT_HUMAN_READABLE)
+                .conflicts_with(OPT_HUMAN_READABLE_BINARY)
                 .help("likewise, but use powers of 1000 not 1024"),
         )
         .arg(
