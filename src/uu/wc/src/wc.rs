@@ -399,46 +399,6 @@ fn word_count_from_input(input: &Input, settings: &Settings) -> CountResult {
     }
 }
 
-/// Compute the number of digits needed to represent any count for this input.
-///
-/// If `input` is [`Input::Stdin`], then this function returns
-/// [`MINIMUM_WIDTH`]. Otherwise, if metadata could not be read from
-/// `input` then this function returns 1.
-///
-/// # Errors
-///
-/// This function will return an error if `input` is a [`Input::Path`]
-/// and there is a problem accessing the metadata of the given `input`.
-///
-/// # Examples
-///
-/// A [`Input::Stdin`] gets a default minimum width:
-///
-/// ```rust,ignore
-/// let input = Input::Stdin(StdinKind::Explicit);
-/// assert_eq!(7, digit_width(input));
-/// ```
-fn digit_width(input: &Input) -> io::Result<usize> {
-    match input {
-        Input::Stdin(_) => Ok(MINIMUM_WIDTH),
-        Input::Path(filename) => {
-            let path = Path::new(filename);
-            let metadata = fs::metadata(path)?;
-            if metadata.is_file() {
-                // TODO We are now computing the number of bytes in a file
-                // twice: once here and once in `WordCount::from_line()` (or
-                // in `count_bytes_fast()` if that function is called
-                // instead). See GitHub issue #2201.
-                let num_bytes = metadata.len();
-                let num_digits = num_bytes.to_string().len();
-                Ok(num_digits)
-            } else {
-                Ok(MINIMUM_WIDTH)
-            }
-        }
-    }
-}
-
 /// Compute the number of digits needed to represent all counts in all inputs.
 ///
 /// `inputs` may include zero or more [`Input::Stdin`] entries, each of
@@ -446,52 +406,45 @@ fn digit_width(input: &Input) -> io::Result<usize> {
 /// entry causes this function to return a width that is at least
 /// [`MINIMUM_WIDTH`].
 ///
-/// If `input` is empty, then this function returns 1. If file metadata
-/// could not be read from any of the [`Input::Path`] inputs and there
-/// are no [`Input::Stdin`] inputs, then this function returns 1.
+/// If `input` is empty, or if only one number needs to be printed (for just
+/// one file) then this function is optimized to return 1 without making any
+/// calls to get file metadata.
 ///
-/// If there is a problem accessing the metadata, this function will
-/// silently ignore the error and assume that the number of digits
-/// needed to display the counts for that file is 1.
+/// If file metadata could not be read from any of the [`Input::Path`] input,
+/// that input does not affect number width computation
 ///
-/// # Examples
-///
-/// An empty slice implies a width of 1:
-///
-/// ```rust,ignore
-/// assert_eq!(1, max_width(&vec![]));
-/// ```
-///
-/// The presence of [`Input::Stdin`] implies a minimum width:
-///
-/// ```rust,ignore
-/// let inputs = vec![Input::Stdin(StdinKind::Explicit)];
-/// assert_eq!(7, max_width(&inputs));
-/// ```
-fn max_width(inputs: &[Input]) -> usize {
-    let mut result = 1;
+/// Otherwise, the file sizes in the file metadata are summed and the number of
+/// digits in that total size is returned as the number width
+fn compute_number_width(inputs: &[Input], settings: &Settings) -> usize {
+    if inputs.is_empty() || (inputs.len() == 1 && settings.number_enabled() == 1) {
+        return 1;
+    }
+
+    let mut minimum_width = 1;
+    let mut total = 0;
+
     for input in inputs {
-        if let Ok(n) = digit_width(input) {
-            result = result.max(n);
+        match input {
+            Input::Stdin(_) => {
+                minimum_width = MINIMUM_WIDTH;
+            }
+            Input::Path(path) => {
+                if let Ok(meta) = fs::metadata(path) {
+                    if meta.is_file() {
+                        total += meta.len();
+                    } else {
+                        minimum_width = MINIMUM_WIDTH;
+                    }
+                }
+            }
         }
     }
-    result
+
+    max(minimum_width, total.to_string().len())
 }
 
 fn wc(inputs: &[Input], settings: &Settings) -> UResult<()> {
-    // Compute the width, in digits, to use when formatting counts.
-    //
-    // The width is the number of digits needed to print the number of
-    // bytes in the largest file. This is true regardless of whether
-    // the `settings` indicate that the bytes will be displayed.
-    //
-    // If we only need to display a single number, set this to 0 to
-    // prevent leading spaces.
-    let max_width = if settings.number_enabled() <= 1 {
-        0
-    } else {
-        max_width(inputs)
-    };
+    let number_width = compute_number_width(inputs, settings);
 
     let mut total_word_count = WordCount::default();
 
@@ -517,7 +470,7 @@ fn wc(inputs: &[Input], settings: &Settings) -> UResult<()> {
         };
         total_word_count += word_count;
         let result = word_count.with_title(input.to_title());
-        if let Err(err) = print_stats(settings, &result, max_width) {
+        if let Err(err) = print_stats(settings, &result, number_width) {
             show!(USimpleError::new(
                 1,
                 format!(
@@ -534,7 +487,7 @@ fn wc(inputs: &[Input], settings: &Settings) -> UResult<()> {
 
     if num_inputs > 1 {
         let total_result = total_word_count.with_title(Some("total".as_ref()));
-        if let Err(err) = print_stats(settings, &total_result, max_width) {
+        if let Err(err) = print_stats(settings, &total_result, number_width) {
             show!(USimpleError::new(
                 1,
                 format!("failed to print total: {}", err)
@@ -547,56 +500,32 @@ fn wc(inputs: &[Input], settings: &Settings) -> UResult<()> {
     Ok(())
 }
 
-fn print_stats(settings: &Settings, result: &TitledWordCount, min_width: usize) -> io::Result<()> {
-    let stdout = io::stdout();
-    let mut stdout_lock = stdout.lock();
-
-    let mut is_first: bool = true;
+fn print_stats(
+    settings: &Settings,
+    result: &TitledWordCount,
+    number_width: usize,
+) -> io::Result<()> {
+    let mut columns = Vec::new();
 
     if settings.show_lines {
-        if !is_first {
-            write!(stdout_lock, " ")?;
-        }
-        write!(stdout_lock, "{:1$}", result.count.lines, min_width)?;
-        is_first = false;
+        columns.push(format!("{:1$}", result.count.lines, number_width));
     }
     if settings.show_words {
-        if !is_first {
-            write!(stdout_lock, " ")?;
-        }
-        write!(stdout_lock, "{:1$}", result.count.words, min_width)?;
-        is_first = false;
+        columns.push(format!("{:1$}", result.count.words, number_width));
     }
     if settings.show_chars {
-        if !is_first {
-            write!(stdout_lock, " ")?;
-        }
-        write!(stdout_lock, "{:1$}", result.count.chars, min_width)?;
-        is_first = false;
+        columns.push(format!("{:1$}", result.count.chars, number_width));
     }
     if settings.show_bytes {
-        if !is_first {
-            write!(stdout_lock, " ")?;
-        }
-        write!(stdout_lock, "{:1$}", result.count.bytes, min_width)?;
-        is_first = false;
+        columns.push(format!("{:1$}", result.count.bytes, number_width));
     }
     if settings.show_max_line_length {
-        if !is_first {
-            write!(stdout_lock, " ")?;
-        }
-        write!(
-            stdout_lock,
-            "{:1$}",
-            result.count.max_line_length, min_width
-        )?;
+        columns.push(format!("{:1$}", result.count.max_line_length, number_width));
     }
 
     if let Some(title) = result.title {
-        writeln!(stdout_lock, " {}", title.maybe_quote())?;
-    } else {
-        writeln!(stdout_lock)?;
+        columns.push(title.maybe_quote().to_string());
     }
 
-    Ok(())
+    writeln!(io::stdout().lock(), "{}", columns.join(" "))
 }
