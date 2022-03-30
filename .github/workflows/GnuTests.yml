@@ -221,7 +221,7 @@ jobs:
           for LINE in ${REF_FAILING}
           do
             if ! grep -Fxq ${LINE}<<<"${NEW_FAILING}"; then
-              echo "::warning ::Congrats! The gnu test ${LINE} is now passing!"
+              echo "::warning ::Congrats! The gnu test ${LINE} is no longer failing!"
             fi
           done
           for LINE in ${NEW_FAILING}
