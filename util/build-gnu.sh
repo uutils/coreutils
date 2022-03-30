@@ -40,7 +40,7 @@ UU_BUILD_DIR="${path_UUTILS}/target/${UU_MAKE_PROFILE}"
 echo "UU_BUILD_DIR='${UU_BUILD_DIR}'"
 
 cd "${path_UUTILS}" && echo "[ pwd:'${PWD}' ]"
-make PROFILE="${UU_MAKE_PROFILE}"
+SELINUX_ENABLED=1 make PROFILE="${UU_MAKE_PROFILE}"
 cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 # Create *sum binaries
 for sum in b2sum b3sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum; do
