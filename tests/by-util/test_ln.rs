@@ -622,7 +622,7 @@ fn test_backup_same_file() {
     at.touch("file1");
     ucmd.args(&["--backup", "file1", "./file1"])
         .fails()
-        .stderr_contains("'file1' and './file1' are the same file");
+        .stderr_contains("n: failed to link 'file1' to './file1': Same file");
 }
 
 #[test]
