@@ -26,7 +26,7 @@ fn test_deleted_dir() {
     let output = Command::new("sh")
         .arg("-c")
         .arg(format!(
-            "cd '{}'; mkdir foo; cd foo; rmdir ../foo; exec {} {}",
+            "cd '{}'; mkdir foo; cd foo; rmdir ../foo; exec '{}' {}",
             at.root_dir_resolved(),
             ts.bin_path.to_str().unwrap(),
             ts.util_name,

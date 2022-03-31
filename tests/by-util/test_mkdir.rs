@@ -19,7 +19,6 @@ static TEST_DIR10: &str = "mkdir_test10/.";
 static TEST_DIR11: &str = "mkdir_test11/..";
 static TEST_DIR12: &str = "mkdir_test12";
 
-
 #[test]
 fn test_mkdir_mkdir() {
     new_ucmd!().arg(TEST_DIR1).succeeds();
@@ -175,8 +174,8 @@ fn test_umask_compliance() {
         } // set umask back to original
     }
 
-    for i in 0o0..0o777 {
+    for i in 0o0..0o027 {
         // tests all permission combinations
-        test_single_case(i);
+        test_single_case(i as mode_t);
     }
 }
