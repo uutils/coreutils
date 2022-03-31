@@ -35,6 +35,7 @@ mod options {
     pub const VERBOSE_NAME: &str = "VERBOSE";
     pub const ZERO_NAME: &str = "ZERO";
     pub const FILES_NAME: &str = "FILE";
+    pub const PRESUME_INPUT_PIPE: &str = "-PRESUME-INPUT-PIPE";
 }
 mod parse;
 mod take;
@@ -93,6 +94,12 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long("verbose")
                 .help("always print headers giving file names")
                 .overrides_with_all(&[options::QUIET_NAME, options::VERBOSE_NAME]),
+        )
+        .arg(
+            Arg::new(options::PRESUME_INPUT_PIPE)
+                .long("-presume-input-pipe")
+                .alias("-presume-input-pipe")
+                .hide(true),
         )
         .arg(
             Arg::new(options::ZERO_NAME)
@@ -173,6 +180,7 @@ struct HeadOptions {
     pub quiet: bool,
     pub verbose: bool,
     pub zeroed: bool,
+    pub presume_input_pipe: bool,
     pub mode: Mode,
     pub files: Vec<String>,
 }
@@ -187,6 +195,7 @@ impl HeadOptions {
         options.quiet = matches.is_present(options::QUIET_NAME);
         options.verbose = matches.is_present(options::VERBOSE_NAME);
         options.zeroed = matches.is_present(options::ZERO_NAME);
+        options.presume_input_pipe = matches.is_present(options::PRESUME_INPUT_PIPE);
 
         options.mode = Mode::from(&matches)?;
 
@@ -423,8 +432,8 @@ fn head_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Resul
 fn uu_head(options: &HeadOptions) -> UResult<()> {
     let mut first = true;
     for file in &options.files {
-        let res = match file.as_str() {
-            "-" => {
+        let res = match (file.as_str(), options.presume_input_pipe) {
+            (_, true) | ("-", false) => {
                 if (options.files.len() > 1 && !options.quiet) || options.verbose {
                     if !first {
                         println!();
@@ -460,7 +469,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     }
                 }
             }
-            name => {
+            (name, false) => {
                 let mut file = match std::fs::File::open(name) {
                     Ok(f) => f,
                     Err(err) => {
