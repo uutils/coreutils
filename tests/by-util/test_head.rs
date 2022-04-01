@@ -342,3 +342,21 @@ fn test_head_num_with_undocumented_sign_bytes() {
         .succeeds()
         .stdout_is("abcde");
 }
+
+#[test]
+fn test_presume_input_pipe_default() {
+    new_ucmd!()
+        .args(&["---presume-input-pipe"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("lorem_ipsum_default.expected");
+}
+
+#[test]
+fn test_presume_input_pipe_5_chars() {
+    new_ucmd!()
+        .args(&["-c", "5", "---presume-input-pipe"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("lorem_ipsum_5_chars.expected");
+}

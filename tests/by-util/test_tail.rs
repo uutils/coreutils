@@ -563,3 +563,12 @@ fn test_lines_zero_terminated() {
         .succeeds()
         .stdout_only("b\0c\0d\0e\0");
 }
+
+#[test]
+fn test_presume_input_pipe_default() {
+    new_ucmd!()
+        .arg("---presume-input-pipe")
+        .pipe_in_fixture(FOOBAR_TXT)
+        .run()
+        .stdout_is_fixture("foobar_stdin_default.expected");
+}
