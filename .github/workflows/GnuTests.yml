@@ -120,7 +120,7 @@ jobs:
               echo "::error ::Failed to parse test results from '${SUITE_LOG_FILE}'; failing early"
               exit 1
             fi
-            output="GNU tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / ERROR: $ERROR"
+            output="GNU tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / ERROR: $ERROR / SKIP: $SKIP"
             echo "${output}"
             if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
             jq -n \
