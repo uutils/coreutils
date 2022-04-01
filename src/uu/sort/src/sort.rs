@@ -33,7 +33,6 @@ use numeric_str_cmp::{human_numeric_str_cmp, numeric_str_cmp, NumInfo, NumInfoPa
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
 use std::cmp::Ordering;
-use std::convert::TryFrom;
 use std::env;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};

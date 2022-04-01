@@ -99,8 +99,6 @@ impl FileInformation {
     pub fn file_size(&self) -> u64 {
         #[cfg(unix)]
         {
-            use std::convert::TryInto;
-
             assert!(self.0.st_size >= 0, "File size is negative");
             self.0.st_size.try_into().unwrap()
         }

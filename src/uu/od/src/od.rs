@@ -29,7 +29,6 @@ mod prn_float;
 mod prn_int;
 
 use std::cmp;
-use std::convert::TryFrom;
 
 use crate::byteorder_io::*;
 use crate::formatteriteminfo::*;

@@ -11,7 +11,6 @@
 extern crate uucore;
 
 use clap::{crate_version, Arg, ArgMatches, Command};
-use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::{self, Write};
 use std::os::unix::process::ExitStatusExt;
