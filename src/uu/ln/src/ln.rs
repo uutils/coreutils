@@ -53,8 +53,8 @@ pub enum OverwriteMode {
 enum LnError {
     TargetIsDirectory(PathBuf),
     SomeLinksFailed,
-    FailedToLink(String),
-    SameFile(PathBuf, PathBuf),
+    FailedToLink(PathBuf, PathBuf, String),
+    SameFile(),
     MissingDestination(PathBuf),
     ExtraOperand(OsString),
 }
@@ -63,13 +63,12 @@ impl Display for LnError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::TargetIsDirectory(s) => write!(f, "target {} is not a directory", s.quote()),
-            Self::FailedToLink(e) => write!(f, "failed to link: {}", e),
-            Self::SameFile(e, e2) => write!(
-                f,
-                "'{}' and '{}' are the same file",
-                e2.display(),
-                e.display()
-            ),
+            Self::FailedToLink(s, d, e) => {
+                write!(f, "failed to link {} to {}: {}", s.quote(), d.quote(), e)
+            }
+            Self::SameFile() => {
+                write!(f, "Same file")
+            }
             Self::SomeLinksFailed => write!(f, "some links failed to create"),
             Self::MissingDestination(s) => {
                 write!(f, "missing destination file operand after {}", s.quote())
@@ -91,8 +90,8 @@ impl UError for LnError {
         match self {
             Self::TargetIsDirectory(_)
             | Self::SomeLinksFailed
-            | Self::FailedToLink(_)
-            | Self::SameFile(_, _)
+            | Self::FailedToLink(_, _, _)
+            | Self::SameFile()
             | Self::MissingDestination(_)
             | Self::ExtraOperand(_) => 1,
         }
@@ -293,7 +292,12 @@ fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
 
     match link(&files[0], &files[1], settings) {
         Ok(_) => Ok(()),
-        Err(e) => Err(LnError::FailedToLink(e.to_string()).into()),
+        Err(e) => {
+            Err(
+                LnError::FailedToLink(files[0].to_owned(), files[1].to_owned(), e.to_string())
+                    .into(),
+            )
+        }
     }
 }
 
@@ -398,18 +402,6 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     };
 
     if is_symlink(dst) || dst.exists() {
-        match settings.overwrite {
-            OverwriteMode::NoClobber => {}
-            OverwriteMode::Interactive => {
-                print!("{}: overwrite {}? ", uucore::util_name(), dst.quote());
-                if !read_yes() {
-                    return Ok(());
-                }
-                fs::remove_file(dst)?;
-            }
-            OverwriteMode::Force => fs::remove_file(dst)?,
-        };
-
         backup_path = match settings.backup {
             BackupMode::NoBackup => None,
             BackupMode::SimpleBackup => Some(simple_backup_path(dst, &settings.suffix)),
@@ -425,12 +417,28 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                 ResolveMode::Logical,
             )?;
             if dst_abs == source_abs {
-                return Err(LnError::SameFile(dst.to_path_buf(), source.to_path_buf()).into());
+                return Err(LnError::SameFile().into());
             }
         }
         if let Some(ref p) = backup_path {
             fs::rename(dst, p)?;
         }
+        match settings.overwrite {
+            OverwriteMode::NoClobber => {}
+            OverwriteMode::Interactive => {
+                print!("{}: overwrite {}? ", uucore::util_name(), dst.quote());
+                if !read_yes() {
+                    return Ok(());
+                }
+
+                if fs::remove_file(dst).is_ok() {};
+                // In case of error, don't do anything
+            }
+            OverwriteMode::Force => {
+                if fs::remove_file(dst).is_ok() {};
+                // In case of error, don't do anything
+            }
+        };
     }
 
     if settings.symbolic {
