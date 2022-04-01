@@ -140,7 +140,7 @@ fn test_total() {
 #[test]
 fn test_use_percentage() {
     let output = new_ucmd!()
-        .args(&["--output=used,avail,pcent"])
+        .args(&["--total", "--output=used,avail,pcent"])
         .succeeds()
         .stdout_move_str();
 
