@@ -1636,7 +1636,7 @@ fn get_leading_gen(input: &str) -> Range<usize> {
     let leading_whitespace_len = input.len() - trimmed.len();
 
     // check for inf, -inf and nan
-    for allowed_prefix in &["inf", "-inf", "nan"] {
+    for allowed_prefix in ["inf", "-inf", "nan"] {
         if trimmed.is_char_boundary(allowed_prefix.len())
             && trimmed[..allowed_prefix.len()].eq_ignore_ascii_case(allowed_prefix)
         {

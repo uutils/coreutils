@@ -253,7 +253,7 @@ fn read_block_size(s: Option<&str>) -> u64 {
         parse_size(s)
             .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::BLOCK_SIZE)))
     } else {
-        for env_var in &["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
+        for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
             if let Ok(env_size) = env::var(env_var) {
                 if let Ok(v) = parse_size(&env_size) {
                     return v;

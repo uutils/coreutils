@@ -484,7 +484,7 @@ fn test_delimiter_with_padding_and_fields() {
 
 #[test]
 fn test_round() {
-    for (method, exp) in &[
+    for (method, exp) in [
         ("from-zero", ["9.1K", "-9.1K", "9.1K", "-9.1K"]),
         ("towards-zero", ["9.0K", "-9.0K", "9.0K", "-9.0K"]),
         ("up", ["9.1K", "-9.0K", "9.1K", "-9.0K"]),
