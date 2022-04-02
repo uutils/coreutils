@@ -102,6 +102,7 @@ impl AddAssign for Row {
     fn add_assign(&mut self, rhs: Self) {
         let bytes = self.bytes + rhs.bytes;
         let bytes_used = self.bytes_used + rhs.bytes_used;
+        let bytes_avail = self.bytes_avail + rhs.bytes_avail;
         let inodes = self.inodes + rhs.inodes;
         let inodes_used = self.inodes_used + rhs.inodes_used;
         *self = Self {
@@ -111,11 +112,14 @@ impl AddAssign for Row {
             fs_mount: "-".into(),
             bytes,
             bytes_used,
-            bytes_avail: self.bytes_avail + rhs.bytes_avail,
+            bytes_avail,
             bytes_usage: if bytes == 0 {
                 None
             } else {
-                Some(bytes_used as f64 / bytes as f64)
+                // We use "(bytes_used + bytes_avail)" instead of "bytes" because on some filesystems (e.g.
+                // ext4) "bytes" also includes reserved blocks we ignore for the usage calculation.
+                // https://www.gnu.org/software/coreutils/faq/coreutils-faq.html#df-Size-and-Used-and-Available-do-not-add-up
+                Some(bytes_used as f64 / (bytes_used + bytes_avail) as f64)
             },
             // TODO Figure out how to compute this.
             #[cfg(target_os = "macos")]
@@ -164,7 +168,7 @@ impl From<Filesystem> for Row {
                 // We use "(bused + bavail)" instead of "blocks" because on some filesystems (e.g.
                 // ext4) "blocks" also includes reserved blocks we ignore for the usage calculation.
                 // https://www.gnu.org/software/coreutils/faq/coreutils-faq.html#df-Size-and-Used-and-Available-do-not-add-up
-                Some((bused as f64) / (bused + bavail) as f64)
+                Some(bused as f64 / (bused + bavail) as f64)
             },
             #[cfg(target_os = "macos")]
             bytes_capacity: if bavail == 0 {
