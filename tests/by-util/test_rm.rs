@@ -326,3 +326,24 @@ fn test_rm_silently_accepts_presume_input_tty2() {
 
     assert!(!at.file_exists(file_2));
 }
+
+#[test]
+fn test_rm_interactive_never() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_2 = "test_rm_interactive";
+
+    at.touch(file_2);
+    #[cfg(feature = "chmod")]
+    scene.ccmd("chmod").arg("0").arg(file_2).succeeds();
+
+    scene
+        .ucmd()
+        .arg("--interactive=never")
+        .arg(file_2)
+        .succeeds()
+        .stdout_is("");
+
+    assert!(!at.file_exists(file_2));
+}

@@ -24,7 +24,7 @@ use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
 enum InteractiveMode {
-    None,
+    Never,
     Once,
     Always,
 }
@@ -101,7 +101,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     InteractiveMode::Once
                 } else if matches.is_present(OPT_INTERACTIVE) {
                     match matches.value_of(OPT_INTERACTIVE).unwrap() {
-                        "none" => InteractiveMode::None,
+                        "never" => InteractiveMode::Never,
                         "once" => InteractiveMode::Once,
                         "always" => InteractiveMode::Always,
                         val => {
@@ -112,7 +112,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         }
                     }
                 } else {
-                    InteractiveMode::None
+                    InteractiveMode::Never
                 }
             },
             one_fs: matches.is_present(OPT_ONE_FILE_SYSTEM),
