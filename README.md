@@ -50,7 +50,7 @@ Both can also be generated locally, the instructions for that can be found in th
 ### Rust Version
 
 uutils follows Rust's release channels and is tested against stable, beta and nightly.
-The current oldest supported version of the Rust compiler is `1.54`.
+The current oldest supported version of the Rust compiler is `1.56`.
 
 On both Windows and Redox, only the nightly version is tested currently.
 
