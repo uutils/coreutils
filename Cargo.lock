@@ -333,7 +333,7 @@ dependencies = [
  "hex-literal",
  "lazy_static",
  "libc",
- "nix 0.23.1",
+ "nix",
  "phf",
  "phf_codegen",
  "pretty_assertions",
@@ -670,7 +670,7 @@ version = "3.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a19c6cedffdc8c03a3346d723eb20bd85a13362bb96dc2ac000842c6381ec7bf"
 dependencies = [
- "nix 0.23.1",
+ "nix",
  "winapi 0.3.9",
 ]
 
@@ -781,16 +781,13 @@ dependencies = [
 
 [[package]]
 name = "exacl"
-version = "0.6.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "769bbd173781e84865b957cf83449f0d2869f4c9d2f191cbbffffb3d9751ba2b"
+checksum = "9d5d9a2fa7d72579802c22bb97c37953cf1007f21f7ac2247d150c4c2d40c2ab"
 dependencies = [
  "bitflags",
  "log",
- "nix 0.21.0",
- "num_enum",
  "scopeguard",
- "serde",
  "uuid",
 ]
 
@@ -1194,19 +1191,6 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c3728fec49d363a50a8828a190b379a446cc5cf085c06259bbbeb34447e4ec7"
-dependencies = [
- "bitflags",
- "cc",
- "cfg-if 1.0.0",
- "libc",
- "memoffset",
-]
-
-[[package]]
-name = "nix"
 version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f866317acbd3a240710c63f065ffb1e4fd466259045ccb504130b7f668f35c6"
@@ -1276,27 +1260,6 @@ checksum = "19e64526ebdee182341572e50e9ad03965aa510cd94427a4549448f285e957a1"
 dependencies = [
  "hermit-abi",
  "libc",
-]
-
-[[package]]
-name = "num_enum"
-version = "0.5.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "720d3ea1055e4e4574c0c0b0f8c3fd4f24c4cdaf465948206dea090b57b526ad"
-dependencies = [
- "num_enum_derive",
-]
-
-[[package]]
-name = "num_enum_derive"
-version = "0.5.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d992b768490d7fe0d8586d9b5745f6c49f557da6d81dc982b1d167ad4edbb21"
-dependencies = [
- "proc-macro-crate",
- "proc-macro2",
- "quote 1.0.14",
- "syn",
 ]
 
 [[package]]
@@ -1513,16 +1476,6 @@ dependencies = [
  "ctor",
  "diff",
  "output_vt100",
-]
-
-[[package]]
-name = "proc-macro-crate"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ebace6889caf889b4d3f76becee12e90353f2b8c7d875534a71e5742f8f6f83"
-dependencies = [
- "thiserror",
- "toml",
 ]
 
 [[package]]
@@ -1828,26 +1781,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde"
-version = "1.0.134"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96b3c34c1690edf8174f5b289a336ab03f568a4460d8c6df75f2f3a692b3bc6a"
-dependencies = [
- "serde_derive",
-]
-
-[[package]]
-name = "serde_derive"
-version = "1.0.134"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "784ed1fbfa13fe191077537b0d70ec8ad1e903cfe04831da608aa36457cb653d"
-dependencies = [
- "proc-macro2",
- "quote 1.0.14",
- "syn",
-]
-
-[[package]]
 name = "sha1"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2137,15 +2070,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
-name = "toml"
-version = "0.5.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a31142970826733df8241ef35dc040ef98c679ab14d7c3e54d827099b3acecaa"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "typenum"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2320,7 +2244,7 @@ version = "0.0.13"
 dependencies = [
  "atty",
  "clap 3.1.6",
- "nix 0.23.1",
+ "nix",
  "thiserror",
  "unix_socket",
  "uucore",
@@ -2739,7 +2663,7 @@ dependencies = [
  "atty",
  "clap 3.1.6",
  "crossterm",
- "nix 0.23.1",
+ "nix",
  "unicode-segmentation",
  "unicode-width",
  "uucore",
@@ -2760,7 +2684,7 @@ version = "0.0.13"
 dependencies = [
  "clap 3.1.6",
  "libc",
- "nix 0.23.1",
+ "nix",
  "uucore",
 ]
 
@@ -3065,7 +2989,7 @@ version = "0.0.13"
 dependencies = [
  "clap 3.1.6",
  "libc",
- "nix 0.23.1",
+ "nix",
  "uucore",
  "winapi 0.3.9",
 ]
@@ -3096,7 +3020,7 @@ version = "0.0.13"
 dependencies = [
  "clap 3.1.6",
  "libc",
- "nix 0.23.1",
+ "nix",
  "uucore",
 ]
 
@@ -3214,7 +3138,7 @@ dependencies = [
  "bytecount",
  "clap 3.1.6",
  "libc",
- "nix 0.23.1",
+ "nix",
  "unicode-width",
  "utf-8",
  "uucore",
@@ -3243,7 +3167,7 @@ name = "uu_yes"
 version = "0.0.13"
 dependencies = [
  "clap 3.1.6",
- "nix 0.23.1",
+ "nix",
  "uucore",
 ]
 
@@ -3259,7 +3183,7 @@ dependencies = [
  "itertools",
  "lazy_static",
  "libc",
- "nix 0.23.1",
+ "nix",
  "once_cell",
  "os_display",
  "thiserror",
