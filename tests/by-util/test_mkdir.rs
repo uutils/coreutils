@@ -17,6 +17,7 @@ static TEST_DIR8: &str = "mkdir_test8/mkdir_test8_1/mkdir_test8_2";
 static TEST_DIR9: &str = "mkdir_test9/../mkdir_test9_1/../mkdir_test9_2";
 static TEST_DIR10: &str = "mkdir_test10/.";
 static TEST_DIR11: &str = "mkdir_test11/..";
+#[cfg(not(windows))]
 static TEST_DIR12: &str = "mkdir_test12";
 
 #[test]
