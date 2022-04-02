@@ -475,7 +475,7 @@ pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String
 // install -d foo/. should work and just create foo/
 // std::fs::create_dir("foo/."); fails in pure Rust
 // See also mkdir.rs for another occurrence of this
-pub fn dir_strip_dot_for_creation(path: PathBuf) -> PathBuf {
+pub fn dir_strip_dot_for_creation(path: &Path) -> PathBuf {
     if path.to_string_lossy().ends_with("/.") {
         // Do a simple dance to strip the "/."
         Path::new(&path).components().collect::<PathBuf>()

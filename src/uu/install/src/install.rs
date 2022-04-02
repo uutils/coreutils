@@ -400,7 +400,7 @@ fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
                 // install -d foo/. should work and just create foo/
                 // std::fs::create_dir("foo/."); fails in pure Rust
                 // See also mkdir.rs for another occurrence of this
-                let path_to_create = dir_strip_dot_for_creation(path.to_path_buf());
+                let path_to_create = dir_strip_dot_for_creation(path);
                 // Differently than the primary functionality
                 // (MainFunction::Standard), the directory functionality should
                 // create all ancestors (or components) of a directory
