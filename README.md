@@ -373,6 +373,25 @@ $ bash util/run-gnu-test.sh tests/touch/not-owner.sh # for example
 
 Note that it relies on individual utilities (not the multicall binary).
 
+### Improving the GNU compatibility
+
+The Python script `./util/remaining-gnu-error.py` shows the list of failing tests in the CI.
+
+To improve the GNU compatibility, the following process is recommended:
+
+1. Identify a test (the smaller, the better) on a program that you understand or easy to understand. You can use the `./util/remaining-gnu-error.py` script to help with this decision.
+1. Build both the GNU and Rust coreutils using: `bash util/build-gnu.sh`
+1. Run the test with `bash util/run-gnu-test.sh <your test>`
+1. Start to modify `<your test>` to understand what is wrong. Examples:
+    1. Add `set -v` to have the bash verbose mode
+    1. Add `echo $?` where needed
+    1. Bump the content of the output (ex: `cat err`)
+    1. ...
+1. Or, if the test is simple, extract the relevant information to create a new test case running both GNU & Rust implementation
+1. Start to modify the Rust implementation to match the expected behavior
+1. Add a test to make sure that we don't regress (our test suite is super quick)
+
+
 ## Contributing
 
 To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
