@@ -17,6 +17,13 @@
 uutils is an attempt at writing universal (as in cross-platform) CLI
 utilities in [Rust](http://www.rust-lang.org).
 
+To install it:
+
+```
+$ cargo install coreutils
+$ ~/.cargo/bin/coreutils
+```
+
 ## Why?
 
 uutils aims to work on as many platforms as possible, to be able to use the
