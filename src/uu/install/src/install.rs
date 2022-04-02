@@ -20,6 +20,7 @@ use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UIoError, UResult, UUsageError};
 use uucore::format_usage;
+use uucore::fs::dir_strip_dot_for_creation;
 use uucore::mode::get_umask;
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 
@@ -399,12 +400,7 @@ fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
                 // install -d foo/. should work and just create foo/
                 // std::fs::create_dir("foo/."); fails in pure Rust
                 // See also mkdir.rs for another occurrence of this
-                let path_to_create = if path.to_string_lossy().ends_with("/.") {
-                    // Do a simple dance to strip the "/."
-                    Path::new(path).components().collect::<PathBuf>()
-                } else {
-                    path.to_path_buf()
-                };
+                let path_to_create = dir_strip_dot_for_creation(path.to_path_buf());
                 // Differently than the primary functionality
                 // (MainFunction::Standard), the directory functionality should
                 // create all ancestors (or components) of a directory
