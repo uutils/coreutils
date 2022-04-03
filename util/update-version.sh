@@ -11,14 +11,14 @@
 # 6) Run util/publish.sh --do-it
 # 7) In some cases, you might have to fix dependencies and run import
 
-FROM="0.0.8"
-TO="0.0.9"
+FROM="0.0.12"
+TO="0.0.13"
 
-UUCORE_PROCS_FROM="0.0.7"
-UUCORE_PROCS_TO="0.0.8"
+UUCORE_PROCS_FROM="0.0.12"
+UUCORE_PROCS_TO="0.0.13"
 
-UUCORE_FROM="0.0.10"
-UUCORE_TO="0.0.11"
+UUCORE_FROM="0.0.12"
+UUCORE_TO="0.0.13"
 
 PROGS=$(ls -1d src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml Cargo.toml src/uu/base64/Cargo.toml)
 

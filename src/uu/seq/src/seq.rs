@@ -7,7 +7,7 @@
 use std::io::{stdout, ErrorKind, Write};
 use std::process::exit;
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use num_traits::Zero;
 
 use uucore::error::FromIo;
@@ -141,11 +141,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
-        .setting(AppSettings::TrailingVarArg)
-        .setting(AppSettings::AllowNegativeNumbers)
-        .setting(AppSettings::InferLongArgs)
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
+        .trailing_var_arg(true)
+        .allow_negative_numbers(true)
+        .infer_long_args(true)
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))

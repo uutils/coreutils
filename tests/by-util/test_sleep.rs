@@ -4,6 +4,14 @@ use crate::common::util::*;
 use std::time::{Duration, Instant};
 
 #[test]
+fn test_invalid_time_interval() {
+    new_ucmd!()
+        .arg("xyz")
+        .fails()
+        .usage_error("invalid time interval 'xyz'");
+}
+
+#[test]
 fn test_sleep_no_suffix() {
     let millis_100 = Duration::from_millis(100);
     let before_test = Instant::now();
@@ -140,4 +148,12 @@ fn test_sum_overflow() {
         .succeeds()
         .no_stderr()
         .no_stdout();
+}
+
+#[test]
+fn test_negative_interval() {
+    new_ucmd!()
+        .args(&["--", "-1"])
+        .fails()
+        .usage_error("invalid time interval '-1'");
 }

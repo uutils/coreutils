@@ -92,7 +92,7 @@ impl ExtendedBigDecimal {
     /// The smallest integer greater than or equal to this number.
     pub fn ceil(self) -> ExtendedBigInt {
         match self {
-            ExtendedBigDecimal::BigDecimal(x) => ExtendedBigInt::BigInt(ceil(x)),
+            Self::BigDecimal(x) => ExtendedBigInt::BigInt(ceil(x)),
             other => From::from(other),
         }
     }
@@ -100,7 +100,7 @@ impl ExtendedBigDecimal {
     /// The largest integer less than or equal to this number.
     pub fn floor(self) -> ExtendedBigInt {
         match self {
-            ExtendedBigDecimal::BigDecimal(x) => ExtendedBigInt::BigInt(floor(x)),
+            Self::BigDecimal(x) => ExtendedBigInt::BigInt(floor(x)),
             other => From::from(other),
         }
     }
@@ -121,17 +121,17 @@ impl From<ExtendedBigInt> for ExtendedBigDecimal {
 impl Display for ExtendedBigDecimal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExtendedBigDecimal::BigDecimal(x) => {
+            Self::BigDecimal(x) => {
                 let (n, p) = x.as_bigint_and_exponent();
                 match p {
                     0 => Self::BigDecimal(BigDecimal::new(n * 10, 1)).fmt(f),
                     _ => x.fmt(f),
                 }
             }
-            ExtendedBigDecimal::Infinity => f32::INFINITY.fmt(f),
-            ExtendedBigDecimal::MinusInfinity => f32::NEG_INFINITY.fmt(f),
-            ExtendedBigDecimal::MinusZero => (-0.0f32).fmt(f),
-            ExtendedBigDecimal::Nan => "nan".fmt(f),
+            Self::Infinity => f32::INFINITY.fmt(f),
+            Self::MinusInfinity => f32::NEG_INFINITY.fmt(f),
+            Self::MinusZero => (-0.0f32).fmt(f),
+            Self::Nan => "nan".fmt(f),
         }
     }
 }

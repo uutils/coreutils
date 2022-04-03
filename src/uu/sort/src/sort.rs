@@ -25,7 +25,7 @@ mod numeric_str_cmp;
 mod tmp_dir;
 
 use chunks::LineData;
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
@@ -55,7 +55,7 @@ use uucore::{format_usage, InvalidEncodingHandling};
 use crate::tmp_dir::TmpDirWrapper;
 
 const ABOUT: &str = "\
-    Display sorted concatenation of all FILE(s).\
+    Display sorted concatenation of all FILE(s). \
     With no FILE, or when FILE is -, read standard input.";
 const USAGE: &str = "{} [OPTION]... [FILE]...";
 
@@ -98,6 +98,7 @@ mod options {
         pub const DIAGNOSE_FIRST: &str = "diagnose-first";
     }
 
+    pub const HELP: &str = "help";
     pub const DICTIONARY_ORDER: &str = "dictionary-order";
     pub const MERGE: &str = "merge";
     pub const DEBUG: &str = "debug";
@@ -180,7 +181,7 @@ impl UError for SortError {
 impl Display for SortError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SortError::Disorder {
+            Self::Disorder {
                 file,
                 line_number,
                 line,
@@ -198,7 +199,7 @@ impl Display for SortError {
                     Ok(())
                 }
             }
-            SortError::OpenFailed { path, error } => {
+            Self::OpenFailed { path, error } => {
                 write!(
                     f,
                     "open failed: {}: {}",
@@ -206,10 +207,10 @@ impl Display for SortError {
                     strip_errno(error)
                 )
             }
-            SortError::ParseKeyError { key, msg } => {
+            Self::ParseKeyError { key, msg } => {
                 write!(f, "failed to parse key {}: {}", key.quote(), msg)
             }
-            SortError::ReadFailed { path, error } => {
+            Self::ReadFailed { path, error } => {
                 write!(
                     f,
                     "cannot read: {}: {}",
@@ -217,17 +218,17 @@ impl Display for SortError {
                     strip_errno(error)
                 )
             }
-            SortError::OpenTmpFileFailed { error } => {
+            Self::OpenTmpFileFailed { error } => {
                 write!(f, "failed to open temporary file: {}", strip_errno(error))
             }
-            SortError::CompressProgExecutionFailed { code } => {
+            Self::CompressProgExecutionFailed { code } => {
                 write!(f, "couldn't execute compress program: errno {}", code)
             }
-            SortError::CompressProgTerminatedAbnormally { prog } => {
+            Self::CompressProgTerminatedAbnormally { prog } => {
                 write!(f, "{} terminated abnormally", prog.quote())
             }
-            SortError::TmpDirCreationFailed => write!(f, "could not create temporary directory"),
-            SortError::Uft8Error { error } => write!(f, "{}", error),
+            Self::TmpDirCreationFailed => write!(f, "could not create temporary directory"),
+            Self::Uft8Error { error } => write!(f, "{}", error),
         }
     }
 }
@@ -246,13 +247,13 @@ enum SortMode {
 impl SortMode {
     fn get_short_name(&self) -> Option<char> {
         match self {
-            SortMode::Numeric => Some('n'),
-            SortMode::HumanNumeric => Some('h'),
-            SortMode::GeneralNumeric => Some('g'),
-            SortMode::Month => Some('M'),
-            SortMode::Version => Some('V'),
-            SortMode::Random => Some('R'),
-            SortMode::Default => None,
+            Self::Numeric => Some('n'),
+            Self::HumanNumeric => Some('h'),
+            Self::GeneralNumeric => Some('g'),
+            Self::Month => Some('M'),
+            Self::Version => Some('V'),
+            Self::Random => Some('R'),
+            Self::Default => None,
         }
     }
 }
@@ -1268,12 +1269,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     exec(&mut files, &settings, output, &mut tmp_dir)
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
+        .arg(
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information."),
+        )
         .arg(
             Arg::new(options::modes::SORT)
                 .long(options::modes::SORT)
@@ -1357,7 +1363,7 @@ pub fn uu_app<'a>() -> App<'a> {
                 .long(options::check::CHECK_SILENT)
                 .conflicts_with(options::OUTPUT)
                 .help(
-                    "exit successfully if the given file is already sorted,\
+                    "exit successfully if the given file is already sorted, \
                 and exit with status 1 otherwise.",
                 ),
         )

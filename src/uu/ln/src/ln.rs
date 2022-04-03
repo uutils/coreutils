@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
 use uucore::format_usage;
@@ -53,7 +53,8 @@ pub enum OverwriteMode {
 enum LnError {
     TargetIsDirectory(PathBuf),
     SomeLinksFailed,
-    FailedToLink(String),
+    FailedToLink(PathBuf, PathBuf, String),
+    SameFile(),
     MissingDestination(PathBuf),
     ExtraOperand(OsString),
 }
@@ -62,7 +63,12 @@ impl Display for LnError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::TargetIsDirectory(s) => write!(f, "target {} is not a directory", s.quote()),
-            Self::FailedToLink(e) => write!(f, "failed to link: {}", e),
+            Self::FailedToLink(s, d, e) => {
+                write!(f, "failed to link {} to {}: {}", s.quote(), d.quote(), e)
+            }
+            Self::SameFile() => {
+                write!(f, "Same file")
+            }
             Self::SomeLinksFailed => write!(f, "some links failed to create"),
             Self::MissingDestination(s) => {
                 write!(f, "missing destination file operand after {}", s.quote())
@@ -84,7 +90,8 @@ impl UError for LnError {
         match self {
             Self::TargetIsDirectory(_)
             | Self::SomeLinksFailed
-            | Self::FailedToLink(_)
+            | Self::FailedToLink(_, _, _)
+            | Self::SameFile()
             | Self::MissingDestination(_)
             | Self::ExtraOperand(_) => 1,
         }
@@ -173,12 +180,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     exec(&paths[..], &settings)
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
         // TODO: opts.arg(
@@ -285,7 +292,12 @@ fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
 
     match link(&files[0], &files[1], settings) {
         Ok(_) => Ok(()),
-        Err(e) => Err(LnError::FailedToLink(e.to_string()).into()),
+        Err(e) => {
+            Err(
+                LnError::FailedToLink(files[0].to_owned(), files[1].to_owned(), e.to_string())
+                    .into(),
+            )
+        }
     }
 }
 
@@ -381,7 +393,7 @@ fn relative_path<'a>(src: &Path, dst: &Path) -> Result<Cow<'a, Path>> {
     Ok(result.into())
 }
 
-fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
+fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     let mut backup_path = None;
     let source: Cow<'_, Path> = if settings.relative {
         relative_path(src, dst)?
@@ -390,6 +402,27 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
     };
 
     if is_symlink(dst) || dst.exists() {
+        backup_path = match settings.backup {
+            BackupMode::NoBackup => None,
+            BackupMode::SimpleBackup => Some(simple_backup_path(dst, &settings.suffix)),
+            BackupMode::NumberedBackup => Some(numbered_backup_path(dst)),
+            BackupMode::ExistingBackup => Some(existing_backup_path(dst, &settings.suffix)),
+        };
+        if settings.backup == BackupMode::ExistingBackup && !settings.symbolic {
+            // when ln --backup f f, it should detect that it is the same file
+            let dst_abs = canonicalize(dst, MissingHandling::Normal, ResolveMode::Logical)?;
+            let source_abs = canonicalize(
+                source.clone(),
+                MissingHandling::Normal,
+                ResolveMode::Logical,
+            )?;
+            if dst_abs == source_abs {
+                return Err(LnError::SameFile().into());
+            }
+        }
+        if let Some(ref p) = backup_path {
+            fs::rename(dst, p)?;
+        }
         match settings.overwrite {
             OverwriteMode::NoClobber => {}
             OverwriteMode::Interactive => {
@@ -397,20 +430,15 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
                 if !read_yes() {
                     return Ok(());
                 }
-                fs::remove_file(dst)?;
-            }
-            OverwriteMode::Force => fs::remove_file(dst)?,
-        };
 
-        backup_path = match settings.backup {
-            BackupMode::NoBackup => None,
-            BackupMode::SimpleBackup => Some(simple_backup_path(dst, &settings.suffix)),
-            BackupMode::NumberedBackup => Some(numbered_backup_path(dst)),
-            BackupMode::ExistingBackup => Some(existing_backup_path(dst, &settings.suffix)),
+                if fs::remove_file(dst).is_ok() {};
+                // In case of error, don't do anything
+            }
+            OverwriteMode::Force => {
+                if fs::remove_file(dst).is_ok() {};
+                // In case of error, don't do anything
+            }
         };
-        if let Some(ref p) = backup_path {
-            fs::rename(dst, p)?;
-        }
     }
 
     if settings.symbolic {

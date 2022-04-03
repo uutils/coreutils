@@ -45,7 +45,7 @@ fn test_link_one_argument() {
     let (_, mut ucmd) = at_and_ucmd!();
     let file = "test_link_argument";
     ucmd.args(&[file]).fails().stderr_contains(
-        "error: The argument '<FILES>...' requires at least 2 values, but only 1 was provide",
+        "error: The argument '<FILES>...' requires at least 2 values but only 1 was provided",
     );
 }
 

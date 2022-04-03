@@ -14,12 +14,12 @@ extern crate uucore;
 extern crate clap;
 
 use crate::status::ExitStatus;
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use std::io::ErrorKind;
-use std::process::{Child, Command, Stdio};
+use std::process::{self, Child, Stdio};
 use std::time::Duration;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::process::ChildExt;
 use uucore::signals::{signal_by_name_or_value, signal_name_by_value};
 use uucore::{format_usage, InvalidEncodingHandling};
@@ -57,7 +57,10 @@ impl Config {
                 let signal_result = signal_by_name_or_value(signal_);
                 match signal_result {
                     None => {
-                        unreachable!("invalid signal {}", signal_.quote());
+                        return Err(UUsageError::new(
+                            ExitStatus::TimeoutFailed.into(),
+                            format!("{}: invalid signal", signal_.quote()),
+                        ))
                     }
                     Some(signal_value) => signal_value,
                 }
@@ -65,14 +68,18 @@ impl Config {
             _ => uucore::signals::signal_by_name_or_value("TERM").unwrap(),
         };
 
-        let kill_after = options
-            .value_of(options::KILL_AFTER)
-            .map(|time| uucore::parse_time::from_str(time).unwrap());
+        let kill_after = match options.value_of(options::KILL_AFTER) {
+            None => None,
+            Some(kill_after) => match uucore::parse_time::from_str(kill_after) {
+                Ok(k) => Some(k),
+                Err(err) => return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err)),
+            },
+        };
 
         let duration =
             match uucore::parse_time::from_str(options.value_of(options::DURATION).unwrap()) {
                 Ok(duration) => duration,
-                Err(err) => return Err(USimpleError::new(1, err)),
+                Err(err) => return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err)),
             };
 
         let preserve_status: bool = options.is_present(options::PRESERVE_STATUS);
@@ -103,9 +110,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let app = uu_app();
+    let command = uu_app();
 
-    let matches = app.get_matches_from(args);
+    let matches = command.get_matches_from(args);
 
     let config = Config::from(&matches)?;
     timeout(
@@ -119,8 +126,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     )
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new("timeout")
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new("timeout")
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
@@ -131,7 +138,9 @@ pub fn uu_app<'a>() -> App<'a> {
         )
         .arg(
             Arg::new(options::KILL_AFTER)
+                .long(options::KILL_AFTER)
                 .short('k')
+                .help("also send a KILL signal if COMMAND is still running this long after the initial signal was sent")
                 .takes_value(true))
         .arg(
             Arg::new(options::PRESERVE_STATUS)
@@ -162,8 +171,8 @@ pub fn uu_app<'a>() -> App<'a> {
                 .required(true)
                 .multiple_occurrences(true)
         )
-        .setting(AppSettings::TrailingVarArg)
-        .setting(AppSettings::InferLongArgs)
+        .trailing_var_arg(true)
+        .infer_long_args(true)
 }
 
 /// Remove pre-existing SIGCHLD handlers that would make waiting for the child's exit code fail.
@@ -245,7 +254,7 @@ fn timeout(
     if !foreground {
         unsafe { libc::setpgid(0, 0) };
     }
-    let mut process = Command::new(&cmd[0])
+    let mut process = process::Command::new(&cmd[0])
         .args(&cmd[1..])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())

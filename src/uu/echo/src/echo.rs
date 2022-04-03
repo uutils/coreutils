@@ -6,7 +6,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use std::io::{self, Write};
 use std::iter::Peekable;
 use std::str::Chars;
@@ -126,15 +126,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map_err_context(|| "could not write to stdout".to_string())
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .name(NAME)
         // TrailingVarArg specifies the final positional argument is a VarArg
         // and it doesn't attempts the parse any further args.
         // Final argument must have multiple(true) or the usage string equivalent.
-        .setting(AppSettings::TrailingVarArg)
-        .setting(AppSettings::AllowHyphenValues)
-        .setting(AppSettings::InferLongArgs)
+        .trailing_var_arg(true)
+        .allow_hyphen_values(true)
+        .infer_long_args(true)
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(AFTER_HELP)

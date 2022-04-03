@@ -221,11 +221,7 @@ impl Utmpx {
     pub fn canon_host(&self) -> IOResult<String> {
         let host = self.host();
 
-        // TODO: change to use `split_once` when MSRV hits 1.52.0
-        // let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
-        let mut h = host.split(':');
-        let hostname = h.next().unwrap_or(&host);
-        let display = h.next().unwrap_or("");
+        let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
 
         if !hostname.is_empty() {
             extern crate dns_lookup;

@@ -10,8 +10,8 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches, OsValues};
-use std::path::Path;
+use clap::{crate_version, Arg, ArgMatches, Command, OsValues};
+use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 #[cfg(not(windows))]
 use uucore::error::FromIo;
@@ -104,12 +104,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::MODE)
                 .short('m')
@@ -143,8 +143,17 @@ pub fn uu_app<'a>() -> App<'a> {
  */
 fn exec(dirs: OsValues, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
     for dir in dirs {
-        let path = Path::new(dir);
-        show_if_err!(mkdir(path, recursive, mode, verbose));
+        // Special case to match GNU's behavior:
+        // mkdir -p foo/. should work and just create foo/
+        // std::fs::create_dir("foo/."); fails in pure Rust
+        let path = if recursive && dir.to_string_lossy().ends_with("/.") {
+            // Do a simple dance to strip the "/."
+            Path::new(dir).components().collect::<PathBuf>()
+        } else {
+            // Normal case
+            PathBuf::from(dir)
+        };
+        show_if_err!(mkdir(path.as_path(), recursive, mode, verbose));
     }
     Ok(())
 }
@@ -190,7 +199,6 @@ fn create_dir(path: &Path, recursive: bool, verbose: bool) -> UResult<()> {
             }
         }
     }
-
     match std::fs::create_dir(path) {
         Ok(()) => {
             if verbose {

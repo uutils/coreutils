@@ -7,7 +7,7 @@
 
 use std::io::{stdin, Read};
 
-use clap::App;
+use clap::Command;
 use uucore::{encoding::Format, error::UResult};
 
 pub mod base_common;
@@ -44,6 +44,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     )
 }
 
-pub fn uu_app<'a>() -> App<'a> {
+pub fn uu_app<'a>() -> Command<'a> {
     base_common::base_app(ABOUT, USAGE)
 }

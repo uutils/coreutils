@@ -3,7 +3,7 @@
 #
 # UU_MAKE_PROFILE == 'debug' | 'release' ## build profile for *uutils* build; may be supplied by caller, defaults to 'debug'
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules ; (vars/env) SRCDIR
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules ; (vars/env) SRCDIR vdir rcexp
 
 set -e
 
@@ -40,7 +40,7 @@ UU_BUILD_DIR="${path_UUTILS}/target/${UU_MAKE_PROFILE}"
 echo "UU_BUILD_DIR='${UU_BUILD_DIR}'"
 
 cd "${path_UUTILS}" && echo "[ pwd:'${PWD}' ]"
-make PROFILE="${UU_MAKE_PROFILE}"
+SELINUX_ENABLED=1 make PROFILE="${UU_MAKE_PROFILE}"
 cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 # Create *sum binaries
 for sum in b2sum b3sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum; do
@@ -70,17 +70,37 @@ sed -i 's|^"\$@|/usr/bin/timeout 600 "\$@|' build-aux/test-driver
 sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
 sed -i 's| tr | /usr/bin/tr |' tests/init.sh
 make -j "$(nproc)"
-if test ${UU_MAKE_PROFILE} != "debug"; then
-    # Generate the factor tests, so they can be fixed
-    # * reduced to 20 to decrease log size (down from 36 expected by GNU)
-    # * only for 'release', skipped for 'debug' as redundant and too time consuming (causing timeout errors)
-    for i in $(seq -w 0 20); do
-        make "tests/factor/t${i}.sh"
-    done
-    sed -i -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*sh
-fi
+# Handle generated factor tests
+t_first=00
+t_max=36
+# t_max_release=20
+# if test "${UU_MAKE_PROFILE}" != "debug"; then
+#     # Generate the factor tests, so they can be fixed
+#     # * reduced to 20 to decrease log size (down from 36 expected by GNU)
+#     # * only for 'release', skipped for 'debug' as redundant and too time consuming (causing timeout errors)
+#     seq=$(
+#         i=${t_first}
+#         while test "${i}" -le "${t_max_release}"; do
+#             printf '%02d ' $i
+#             i=$((i + 1))
+#         done
+#     )
+#     for i in ${seq}; do
+#         make "tests/factor/t${i}.sh"
+#     done
+#     cat
+#     sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*.sh
+#     t_first=$((t_max_release + 1))
+# fi
 # strip all (debug) or just the longer (release) factor tests from Makefile
-for i in $(seq 20 36); do
+seq=$(
+    i=${t_first}
+    while test "${i}" -le "${t_max}"; do
+        printf '%02d ' ${i}
+        i=$((i + 1))
+    done
+)
+for i in ${seq}; do
     echo "strip t${i}.sh from Makefile"
     sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
 done
@@ -104,7 +124,6 @@ sed -i '/INT_OFLOW/ D' tests/misc/printf.sh
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 sed -i 's|stat|/usr/bin/stat|' tests/touch/60-seconds.sh tests/misc/sort-compress-proc.sh
 sed -i 's|ls -|/usr/bin/ls -|' tests/cp/same-file.sh tests/misc/mknod.sh tests/mv/part-symlink.sh
-sed -i 's|timeout \([[:digit:]]\)| /usr/bin/timeout \1|' tests/tail-2/inotify-rotate.sh tests/tail-2/inotify-dir-recreate.sh tests/tail-2/inotify-rotate-resources.sh tests/cp/parent-perm-race.sh tests/ls/infloop.sh tests/misc/sort-exit-early.sh tests/misc/sort-NaN-infloop.sh tests/misc/uniq-perf.sh tests/tail-2/inotify-only-regular.sh tests/tail-2/pipe-f2.sh tests/tail-2/retry.sh tests/tail-2/symlink.sh tests/tail-2/wait.sh tests/tail-2/pid.sh tests/dd/stats.sh tests/tail-2/follow-name.sh tests/misc/shuf.sh # Don't break the function called 'grep_timeout'
 sed -i 's|chmod |/usr/bin/chmod |' tests/du/inacc-dir.sh tests/tail-2/tail-n0f.sh tests/cp/fail-perm.sh tests/mv/i-2.sh tests/misc/shuf.sh
 sed -i 's|sort |/usr/bin/sort |' tests/ls/hyperlink.sh tests/misc/test-N.sh
 sed -i 's|split |/usr/bin/split |' tests/misc/factor-parallel.sh
@@ -151,3 +170,14 @@ sed -i "s/  {ERR_SUBST=>\"s\/(unrecognized|unknown) option \[-' \]\*foobar\[' \]
 
 # Remove the check whether a util was built. Otherwise tests against utils like "arch" are not run.
 sed -i "s|require_built_ |# require_built_ |g" init.cfg
+
+# with the option -/ is used, clap is returning a better error than GNU's. Adjust the GNU test
+sed -i -e "s~  grep \" '\*/'\*\" err || framework_failure_~  grep \" '*-/'*\" err || framework_failure_~" tests/misc/usage_vs_getopt.sh
+sed -i -e "s~  sed -n \"1s/'\\\/'/'OPT'/p\" < err >> pat || framework_failure_~  sed -n \"1s/'-\\\/'/'OPT'/p\" < err >> pat || framework_failure_~" tests/misc/usage_vs_getopt.sh
+# Ignore some binaries (not built)
+# And change the default error code to 2
+# see issue #3331
+sed -i -e "s/rcexp=1$/rcexp=2\n  case \"\$prg\" in chcon|dir|runcon|vdir) return;; esac/" tests/misc/usage_vs_getopt.sh
+
+# Update the GNU error message to match ours
+sed -i -e "s/ln: 'f' and 'f' are the same file/ln: failed to link 'f' to 'f': Same file/g" tests/ln/hard-backup.sh

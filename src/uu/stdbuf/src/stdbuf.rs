@@ -10,13 +10,13 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
+use clap::{crate_version, Arg, ArgMatches, Command};
 use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::{self, Write};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process;
 use tempfile::tempdir;
 use tempfile::TempDir;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
@@ -131,7 +131,7 @@ fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramO
     }
 }
 
-fn set_command_env(command: &mut Command, buffer_name: &str, buffer_type: &BufferType) {
+fn set_command_env(command: &mut process::Command, buffer_name: &str, buffer_type: &BufferType) {
     match buffer_type {
         BufferType::Size(m) => {
             command.env(buffer_name, m.to_string());
@@ -164,7 +164,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options = ProgramOptions::try_from(&matches).map_err(|e| UUsageError::new(125, e.0))?;
 
     let mut command_values = matches.values_of::<&str>(options::COMMAND).unwrap();
-    let mut command = Command::new(command_values.next().unwrap());
+    let mut command = process::Command::new(command_values.next().unwrap());
     let command_params: Vec<&str> = command_values.collect();
 
     let mut tmp_dir = tempdir().unwrap();
@@ -194,14 +194,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::TrailingVarArg)
-        .setting(AppSettings::InferLongArgs)
+        .trailing_var_arg(true)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::INPUT)
                 .long(options::INPUT)

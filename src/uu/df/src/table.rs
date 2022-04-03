@@ -24,6 +24,9 @@ use std::ops::AddAssign;
 /// A row comprises several pieces of information, including the
 /// filesystem device, the mountpoint, the number of bytes used, etc.
 pub(crate) struct Row {
+    /// The filename given on the command-line, if given.
+    file: Option<String>,
+
     /// Name of the device on which the filesystem lives.
     fs_device: String,
 
@@ -39,8 +42,8 @@ pub(crate) struct Row {
     /// Number of used bytes.
     bytes_used: u64,
 
-    /// Number of free bytes.
-    bytes_free: u64,
+    /// Number of available bytes.
+    bytes_avail: u64,
 
     /// Percentage of bytes that are used, given as a float between 0 and 1.
     ///
@@ -73,12 +76,13 @@ pub(crate) struct Row {
 impl Row {
     pub(crate) fn new(source: &str) -> Self {
         Self {
+            file: None,
             fs_device: source.into(),
             fs_type: "-".into(),
             fs_mount: "-".into(),
             bytes: 0,
             bytes_used: 0,
-            bytes_free: 0,
+            bytes_avail: 0,
             bytes_usage: None,
             #[cfg(target_os = "macos")]
             bytes_capacity: None,
@@ -98,19 +102,24 @@ impl AddAssign for Row {
     fn add_assign(&mut self, rhs: Self) {
         let bytes = self.bytes + rhs.bytes;
         let bytes_used = self.bytes_used + rhs.bytes_used;
+        let bytes_avail = self.bytes_avail + rhs.bytes_avail;
         let inodes = self.inodes + rhs.inodes;
         let inodes_used = self.inodes_used + rhs.inodes_used;
         *self = Self {
+            file: None,
             fs_device: "total".into(),
             fs_type: "-".into(),
             fs_mount: "-".into(),
             bytes,
             bytes_used,
-            bytes_free: self.bytes_free + rhs.bytes_free,
+            bytes_avail,
             bytes_usage: if bytes == 0 {
                 None
             } else {
-                Some(bytes_used as f64 / bytes as f64)
+                // We use "(bytes_used + bytes_avail)" instead of "bytes" because on some filesystems (e.g.
+                // ext4) "bytes" also includes reserved blocks we ignore for the usage calculation.
+                // https://www.gnu.org/software/coreutils/faq/coreutils-faq.html#df-Size-and-Used-and-Available-do-not-add-up
+                Some(bytes_used as f64 / (bytes_used + bytes_avail) as f64)
             },
             // TODO Figure out how to compute this.
             #[cfg(target_os = "macos")]
@@ -139,29 +148,33 @@ impl From<Filesystem> for Row {
             blocksize,
             blocks,
             bfree,
-            #[cfg(target_os = "macos")]
             bavail,
             files,
             ffree,
             ..
         } = fs.usage;
+        let bused = blocks - bfree;
         Self {
+            file: fs.file,
             fs_device: dev_name,
             fs_type,
             fs_mount: mount_dir,
             bytes: blocksize * blocks,
-            bytes_used: blocksize * (blocks - bfree),
-            bytes_free: blocksize * bfree,
+            bytes_used: blocksize * bused,
+            bytes_avail: blocksize * bavail,
             bytes_usage: if blocks == 0 {
                 None
             } else {
-                Some(((blocks - bfree) as f64) / blocks as f64)
+                // We use "(bused + bavail)" instead of "blocks" because on some filesystems (e.g.
+                // ext4) "blocks" also includes reserved blocks we ignore for the usage calculation.
+                // https://www.gnu.org/software/coreutils/faq/coreutils-faq.html#df-Size-and-Used-and-Available-do-not-add-up
+                Some(bused as f64 / (bused + bavail) as f64)
             },
             #[cfg(target_os = "macos")]
             bytes_capacity: if bavail == 0 {
                 None
             } else {
-                Some(bavail as f64 / ((blocks - bfree + bavail) as f64))
+                Some(bavail as f64 / ((bused + bavail) as f64))
             },
             inodes: files,
             inodes_used: files - ffree,
@@ -236,7 +249,7 @@ impl fmt::Display for DisplayRow<'_> {
                 Column::Source => write!(f, "{0: <16} ", self.row.fs_device)?,
                 Column::Size => write!(f, "{0: >12} ", self.scaled(self.row.bytes)?)?,
                 Column::Used => write!(f, "{0: >12} ", self.scaled(self.row.bytes_used)?)?,
-                Column::Avail => write!(f, "{0: >12} ", self.scaled(self.row.bytes_free)?)?,
+                Column::Avail => write!(f, "{0: >12} ", self.scaled(self.row.bytes_avail)?)?,
                 Column::Pcent => {
                     write!(f, "{0: >5} ", DisplayRow::percentage(self.row.bytes_usage))?;
                 }
@@ -247,8 +260,9 @@ impl fmt::Display for DisplayRow<'_> {
                 Column::Ipcent => {
                     write!(f, "{0: >5} ", DisplayRow::percentage(self.row.inodes_usage))?;
                 }
-                // TODO Implement this.
-                Column::File => {}
+                Column::File => {
+                    write!(f, "{0: <16}", self.row.file.as_ref().unwrap_or(&"-".into()))?;
+                }
                 Column::Fstype => write!(f, "{0: <5} ", self.row.fs_type)?,
                 #[cfg(target_os = "macos")]
                 Column::Capacity => write!(
@@ -407,13 +421,14 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
+            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
 
             bytes: 100,
             bytes_used: 25,
-            bytes_free: 75,
+            bytes_avail: 75,
             bytes_usage: Some(0.25),
 
             #[cfg(target_os = "macos")]
@@ -438,13 +453,14 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
+            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
 
             bytes: 100,
             bytes_used: 25,
-            bytes_free: 75,
+            bytes_avail: 75,
             bytes_usage: Some(0.25),
 
             #[cfg(target_os = "macos")]
@@ -469,13 +485,14 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
+            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
 
             bytes: 100,
             bytes_used: 25,
-            bytes_free: 75,
+            bytes_avail: 75,
             bytes_usage: Some(0.25),
 
             #[cfg(target_os = "macos")]
@@ -500,13 +517,14 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
+            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
 
             bytes: 4000,
             bytes_used: 1000,
-            bytes_free: 3000,
+            bytes_avail: 3000,
             bytes_usage: Some(0.25),
 
             #[cfg(target_os = "macos")]
@@ -531,13 +549,14 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
+            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
 
             bytes: 4096,
             bytes_used: 1024,
-            bytes_free: 3072,
+            bytes_avail: 3072,
             bytes_usage: Some(0.25),
 
             #[cfg(target_os = "macos")]
@@ -561,13 +580,14 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
+            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
 
             bytes: 100,
             bytes_used: 25,
-            bytes_free: 75,
+            bytes_avail: 75,
             bytes_usage: Some(0.251),
 
             #[cfg(target_os = "macos")]

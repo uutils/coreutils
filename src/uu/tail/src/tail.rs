@@ -20,7 +20,7 @@ mod parse;
 mod platform;
 use chunks::ReverseChunks;
 
-use clap::{App, AppSettings, Arg};
+use clap::{Arg, Command};
 use std::collections::VecDeque;
 use std::convert::TryInto;
 use std::ffi::OsString;
@@ -63,6 +63,7 @@ pub mod options {
     pub static SLEEP_INT: &str = "sleep-interval";
     pub static ZERO_TERM: &str = "zero-terminated";
     pub static ARG_FILES: &str = "files";
+    pub static PRESUME_INPUT_PIPE: &str = "-presume-input-pipe";
 }
 
 #[derive(Debug)]
@@ -87,6 +88,7 @@ struct Settings {
     follow: bool,
     pid: platform::Pid,
     files: Vec<String>,
+    presume_input_pipe: bool,
 }
 
 impl Settings {
@@ -148,6 +150,7 @@ impl Settings {
 
         settings.verbose = matches.is_present(options::verbosity::VERBOSE);
         settings.quiet = matches.is_present(options::verbosity::QUIET);
+        settings.presume_input_pipe = matches.is_present(options::PRESUME_INPUT_PIPE);
 
         settings.files = match matches.values_of(options::ARG_FILES) {
             Some(v) => v.map(|s| s.to_owned()).collect(),
@@ -192,7 +195,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
         }
         first_header = false;
 
-        if use_stdin {
+        if use_stdin || settings.presume_input_pipe {
             let mut reader = BufReader::new(stdin());
             unbounded_tail(&mut reader, settings)?;
 
@@ -275,12 +278,12 @@ fn arg_iterate<'a>(
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new(options::BYTES)
                 .short('c')
@@ -338,6 +341,12 @@ pub fn uu_app<'a>() -> App<'a> {
                 .short('z')
                 .long(options::ZERO_TERM)
                 .help("Line delimiter is NUL, not newline"),
+        )
+        .arg(
+            Arg::new(options::PRESUME_INPUT_PIPE)
+                .long(options::PRESUME_INPUT_PIPE)
+                .alias(options::PRESUME_INPUT_PIPE)
+                .hide(true),
         )
         .arg(
             Arg::new(options::ARG_FILES)

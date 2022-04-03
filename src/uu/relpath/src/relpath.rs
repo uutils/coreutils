@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) subpath absto absfrom absbase
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use std::env;
 use std::path::{Path, PathBuf};
 use uucore::display::println_verbatim;
@@ -78,12 +78,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     println_verbatim(result).map_err_context(String::new)
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(Arg::new(options::DIR).short('d').takes_value(true).help(
             "If any of FROM and TO is not subpath of DIR, output absolute path instead of relative",
         ))

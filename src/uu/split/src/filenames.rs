@@ -46,9 +46,9 @@ impl SuffixType {
     /// The radix to use when representing the suffix string as digits.
     pub fn radix(&self) -> u8 {
         match self {
-            SuffixType::Alphabetic => 26,
-            SuffixType::Decimal => 10,
-            SuffixType::Hexadecimal => 16,
+            Self::Alphabetic => 26,
+            Self::Decimal => 10,
+            Self::Hexadecimal => 16,
         }
     }
 }

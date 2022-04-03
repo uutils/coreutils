@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate clap;
 
-use clap::{App, AppSettings};
+use clap::Command;
 
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
@@ -27,9 +27,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
 }

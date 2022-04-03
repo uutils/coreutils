@@ -16,13 +16,13 @@ extern crate clap;
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, AppSettings, Arg};
+use clap::{Arg, Command};
 use ini::Ini;
 use std::borrow::Cow;
 use std::env;
 use std::io::{self, Write};
 use std::iter::Iterator;
-use std::process::Command;
+use std::process;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::format_usage;
@@ -121,15 +121,15 @@ fn build_command<'a, 'b>(args: &'a mut Vec<&'b str>) -> (Cow<'b, str>, &'a [&'b 
     (progname, &args[..])
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(crate_name!())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(crate_name!())
         .version(crate_version!())
         .author(crate_authors!())
         .about(crate_description!())
         .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)
-        .setting(AppSettings::AllowExternalSubcommands)
-        .setting(AppSettings::InferLongArgs)
+        .allow_external_subcommands(true)
+        .infer_long_args(true)
         .arg(Arg::new("ignore-environment")
             .short('i')
             .long("ignore-environment")
@@ -307,7 +307,7 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
          * standard library contains many checks and fail-safes to ensure the process ends up being
          * created. This is much simpler than dealing with the hassles of calling execvp directly.
          */
-        match Command::new(&*prog).args(args).status() {
+        match process::Command::new(&*prog).args(args).status() {
             Ok(exit) if !exit.success() => return Err(exit.code().unwrap().into()),
             Err(ref err) if err.kind() == io::ErrorKind::NotFound => return Err(127.into()),
             Err(_) => return Err(126.into()),

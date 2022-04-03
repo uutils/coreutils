@@ -2,7 +2,7 @@
 // spell-checker:ignore (change!) each's
 // spell-checker:ignore (ToDO) LONGHELP FORMATSTRING templating parameterizing formatstr
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use uucore::error::{UResult, UUsageError};
 use uucore::InvalidEncodingHandling;
 use uucore::{format_usage, memo};
@@ -288,9 +288,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
-        .setting(AppSettings::AllowHyphenValues)
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
+        .allow_hyphen_values(true)
         .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)

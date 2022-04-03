@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (clap) DontDelimitTrailingValues
+// spell-checker:ignore (clap) dont
 // spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset mockstream nrofbytes partialreader odfunc multifile exitcode
 
 #[macro_use]
@@ -43,7 +43,7 @@ use crate::parse_nrofbytes::parse_number_of_bytes;
 use crate::partialreader::*;
 use crate::peekreader::*;
 use crate::prn_char::format_ascii_dump;
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
+use clap::{crate_version, AppSettings, Arg, ArgMatches, Command};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
@@ -98,6 +98,7 @@ If an error occurred, a diagnostic message will be printed to stderr, and the
 exitcode will be non-zero."#;
 
 pub(crate) mod options {
+    pub const HELP: &str = "help";
     pub const ADDRESS_RADIX: &str = "address-radix";
     pub const SKIP_BYTES: &str = "skip-bytes";
     pub const READ_BYTES: &str = "read-bytes";
@@ -289,17 +290,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     odfunc(&mut input_offset, &mut input_decoder, &output_info)
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(LONG_HELP)
-        .setting(
-            AppSettings::TrailingVarArg |
-            AppSettings::DontDelimitTrailingValues |
-            AppSettings::DeriveDisplayOrder |
-            AppSettings::InferLongArgs
+        .trailing_var_arg(true)
+        .dont_delimit_trailing_values(true)
+        .infer_long_args(true)
+        .setting(AppSettings::DeriveDisplayOrder)
+        .arg(
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information.")
         )
         .arg(
             Arg::new(options::ADDRESS_RADIX)

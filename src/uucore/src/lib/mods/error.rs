@@ -50,6 +50,7 @@
 
 // spell-checker:ignore uioerror
 
+use clap;
 use std::{
     error::Error,
     fmt::{Display, Formatter},
@@ -613,5 +614,15 @@ impl UError for ExitCode {
 impl From<i32> for Box<dyn UError> {
     fn from(i: i32) -> Self {
         ExitCode::new(i)
+    }
+}
+
+/// Implementations for clap::Error
+impl UError for clap::Error {
+    fn code(&self) -> i32 {
+        match self.kind() {
+            clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion => 0,
+            _ => 1,
+        }
     }
 }

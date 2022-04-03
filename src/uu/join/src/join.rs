@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
 use memchr::{memchr3_iter, memchr_iter};
 use std::cmp::Ordering;
 use std::convert::From;
@@ -18,6 +18,7 @@ use std::error::Error;
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Split, Stdin, Write};
+use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use uucore::display::Quotable;
@@ -697,8 +698,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> App<'a> {
-    App::new(NAME)
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(NAME)
         .version(crate_version!())
         .about(
             "For each pair of input lines with identical join fields, write a line to
@@ -706,7 +707,7 @@ standard output. The default join field is the first, delimited by blanks.
 
 When FILE1 or FILE2 (not both) is -, read standard input.",
         )
-        .setting(AppSettings::InferLongArgs)
+        .infer_long_args(true)
         .arg(
             Arg::new("a")
                 .short('a')
@@ -965,13 +966,9 @@ fn get_field_number(keys: Option<usize>, key: Option<usize>) -> UResult<usize> {
 /// Parse the specified field string as a natural number and return
 /// the zero-based field number.
 fn parse_field_number(value: &str) -> UResult<usize> {
-    // TODO: use ParseIntError.kind() once MSRV >= 1.55
-    // For now, store an overflow Err from parsing a value 10x 64 bit usize::MAX
-    // Adapted from https://github.com/rust-lang/rust/issues/22639
-    let overflow = "184467440737095516150".parse::<usize>().err().unwrap();
     match value.parse::<usize>() {
         Ok(result) if result > 0 => Ok(result - 1),
-        Err(ref e) if *e == overflow => Ok(usize::MAX),
+        Err(e) if e.kind() == &IntErrorKind::PosOverflow => Ok(usize::MAX),
         _ => Err(USimpleError::new(
             1,
             format!("invalid field number: {}", value.quote()),
