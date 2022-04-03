@@ -379,7 +379,7 @@ The Python script `./util/remaining-gnu-error.py` shows the list of failing test
 
 To improve the GNU compatibility, the following process is recommended:
 
-1. Identify a test (the smaller, the better) on a program that you understand or easy to understand. You can use the `./util/remaining-gnu-error.py` script to help with this decision.
+1. Identify a test (the smaller, the better) on a program that you understand or is easy to understand. You can use the `./util/remaining-gnu-error.py` script to help with this decision.
 1. Build both the GNU and Rust coreutils using: `bash util/build-gnu.sh`
 1. Run the test with `bash util/run-gnu-test.sh <your test>`
 1. Start to modify `<your test>` to understand what is wrong. Examples:
