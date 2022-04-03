@@ -30,7 +30,7 @@ for d in data:
     for e in data[d]:
         # Not all the tests are .sh files, rename them if not.
         script = e.replace(".log", ".sh")
-        a = "%s%s/%s" % (base, d, script)
+        a = f"{base}{d}{script}"
         if not os.path.exists(a):
             a = a.replace(".sh", ".pl")
             if not os.path.exists(a):
