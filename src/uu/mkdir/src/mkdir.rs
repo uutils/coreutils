@@ -12,12 +12,12 @@ extern crate uucore;
 
 use clap::{crate_version, Arg, ArgMatches, Command, OsValues};
 use std::path::{Path, PathBuf};
-use uucore::display::Quotable;
 #[cfg(not(windows))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 #[cfg(not(windows))]
 use uucore::mode;
+use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
 use uucore::{format_usage, InvalidEncodingHandling};
 
 static DEFAULT_PERM: u32 = 0o755;
@@ -146,9 +146,8 @@ fn exec(dirs: OsValues, recursive: bool, mode: u32, verbose: bool) -> UResult<()
         // Special case to match GNU's behavior:
         // mkdir -p foo/. should work and just create foo/
         // std::fs::create_dir("foo/."); fails in pure Rust
-        let path = if recursive && dir.to_string_lossy().ends_with("/.") {
-            // Do a simple dance to strip the "/."
-            Path::new(dir).components().collect::<PathBuf>()
+        let path = if recursive {
+            dir_strip_dot_for_creation(&PathBuf::from(dir))
         } else {
             // Normal case
             PathBuf::from(dir)

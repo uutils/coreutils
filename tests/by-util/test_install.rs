@@ -1124,3 +1124,43 @@ fn test_install_missing_destination() {
         file_1
     ));
 }
+
+#[test]
+fn test_install_dir_dot() {
+    // To match tests/install/d-slashdot.sh
+    let scene = TestScenario::new(util_name!());
+
+    scene.ucmd().arg("-d").arg("dir1/.").succeeds();
+    scene.ucmd().arg("-d").arg("dir2/..").succeeds();
+    // Tests that we don't have dir3/. in the output
+    // but only 'dir3'
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg("dir3/.")
+        .arg("-v")
+        .succeeds()
+        .stdout_contains("creating directory 'dir3'");
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg("dir4/./cal")
+        .arg("-v")
+        .succeeds()
+        .stdout_contains("creating directory 'dir4/./cal'");
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg("dir5/./cali/.")
+        .arg("-v")
+        .succeeds()
+        .stdout_contains("creating directory 'dir5/cali'");
+
+    let at = &scene.fixtures;
+
+    assert!(at.dir_exists("dir1"));
+    assert!(at.dir_exists("dir2"));
+    assert!(at.dir_exists("dir3"));
+    assert!(at.dir_exists("dir4/cal"));
+    assert!(at.dir_exists("dir5/cali"));
+}
