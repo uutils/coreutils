@@ -30,6 +30,16 @@ macro_rules! test_digest {
         }
 
         #[test]
+        fn test_nonames() {
+            let ts = TestScenario::new("hashsum");
+            // EXPECTED_FILE has no newline character at the end
+            assert_eq!(format!("{0}\n{0}\n", ts.fixtures.read(EXPECTED_FILE)),
+                       ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("--no-names").arg("input.txt").arg("-").pipe_in_fixture("input.txt")
+                       .succeeds().no_stderr().stdout_str()
+                       );
+        }
+
+        #[test]
         fn test_check() {
             let ts = TestScenario::new("hashsum");
             ts.ucmd()
