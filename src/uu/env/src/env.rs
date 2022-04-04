@@ -22,10 +22,14 @@ use std::borrow::Cow;
 use std::env;
 use std::io::{self, Write};
 use std::iter::Iterator;
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
 use std::process;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::format_usage;
+#[cfg(unix)]
+use uucore::signals::signal_name_by_value;
 
 const USAGE: &str = "{} [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
 const AFTER_HELP: &str = "\
@@ -308,7 +312,37 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
          * created. This is much simpler than dealing with the hassles of calling execvp directly.
          */
         match process::Command::new(&*prog).args(args).status() {
-            Ok(exit) if !exit.success() => return Err(exit.code().unwrap().into()),
+            Ok(exit) if !exit.success() => {
+                #[cfg(unix)]
+                if let Some(exit_code) = exit.code() {
+                    return Err(exit_code.into());
+                } else {
+                    // `exit.code()` returns `None` on Unix when the process is terminated by a signal.
+                    // See std::os::unix::process::ExitStatusExt for more information. This prints out
+                    // the interrupted process and the signal it received.
+                    let signal_code = exit.signal().unwrap();
+                    eprintln!(
+                        "\"{}\" terminated by signal {}",
+                        {
+                            let mut command = uucore::util_name().to_owned();
+                            command.push(' ');
+                            command.push_str(&opts.program.join(" "));
+                            command
+                        },
+                        signal_name_by_value(signal_code as usize).map_or_else(
+                            || String::from("UNKNOWN"),
+                            |signal| {
+                                let mut full_signal_name = String::from("SIG");
+                                full_signal_name.push_str(signal);
+                                full_signal_name
+                            }
+                        )
+                    );
+                    return Err((128 + signal_code).into());
+                }
+                #[cfg(not(unix))]
+                return Err(exit.code().unwrap().into());
+            }
             Err(ref err) if err.kind() == io::ErrorKind::NotFound => return Err(127.into()),
             Err(_) => return Err(126.into()),
             Ok(_) => (),
