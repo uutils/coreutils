@@ -1,4 +1,4 @@
-// spell-checker:ignore checkfile
+// spell-checker:ignore checkfile, nonames
 macro_rules! get_hash(
     ($str:expr) => (
         $str.split(' ').collect::<Vec<&str>>()[0]
