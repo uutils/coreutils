@@ -212,6 +212,27 @@ impl<'a> DisplayRow<'a> {
         Self { row, options }
     }
 
+    /// Get a human readable string giving the scaled version of the input number.
+    ///
+    /// The scaling factor is defined in the `options` field.
+    ///
+    /// This function is supposed to be used by scaled_bytes() and scaled_inodes() only.
+    ///
+    /// # Errors
+    ///
+    /// If the scaling factor is not 1000, 1024, or a negative number.
+    fn scaled_human_readable(&self, size: u64) -> Result<String, fmt::Error> {
+        let number_prefix = match self.options.block_size {
+            BlockSize::HumanReadableDecimal => NumberPrefix::decimal(size as f64),
+            BlockSize::HumanReadableBinary => NumberPrefix::binary(size as f64),
+            _ => unreachable!(),
+        };
+        match number_prefix {
+            NumberPrefix::Standalone(bytes) => Ok(bytes.to_string()),
+            NumberPrefix::Prefixed(prefix, bytes) => Ok(format!("{:.1}{}", bytes, prefix.symbol())),
+        }
+    }
+
     /// Get a string giving the scaled version of the input number.
     ///
     /// The scaling factor is defined in the `options` field.
@@ -219,15 +240,26 @@ impl<'a> DisplayRow<'a> {
     /// # Errors
     ///
     /// If the scaling factor is not 1000, 1024, or a negative number.
-    fn scaled(&self, size: u64) -> Result<String, fmt::Error> {
-        let number_prefix = match self.options.block_size {
-            BlockSize::HumanReadableDecimal => NumberPrefix::decimal(size as f64),
-            BlockSize::HumanReadableBinary => NumberPrefix::binary(size as f64),
-            BlockSize::Bytes(d) => return Ok((size / d).to_string()),
-        };
-        match number_prefix {
-            NumberPrefix::Standalone(bytes) => Ok(bytes.to_string()),
-            NumberPrefix::Prefixed(prefix, bytes) => Ok(format!("{:.1}{}", bytes, prefix.symbol())),
+    fn scaled_bytes(&self, size: u64) -> Result<String, fmt::Error> {
+        if let BlockSize::Bytes(d) = self.options.block_size {
+            Ok((size / d).to_string())
+        } else {
+            self.scaled_human_readable(size)
+        }
+    }
+
+    /// Get a string giving the scaled version of the input number.
+    ///
+    /// The scaling factor is defined in the `options` field.
+    ///
+    /// # Errors
+    ///
+    /// If the scaling factor is not 1000, 1024, or a negative number.
+    fn scaled_inodes(&self, size: u64) -> Result<String, fmt::Error> {
+        if let BlockSize::Bytes(_) = self.options.block_size {
+            Ok(size.to_string())
+        } else {
+            self.scaled_human_readable(size)
         }
     }
 
@@ -247,16 +279,18 @@ impl fmt::Display for DisplayRow<'_> {
         for column in &self.options.columns {
             match column {
                 Column::Source => write!(f, "{0: <16} ", self.row.fs_device)?,
-                Column::Size => write!(f, "{0: >12} ", self.scaled(self.row.bytes)?)?,
-                Column::Used => write!(f, "{0: >12} ", self.scaled(self.row.bytes_used)?)?,
-                Column::Avail => write!(f, "{0: >12} ", self.scaled(self.row.bytes_avail)?)?,
+                Column::Size => write!(f, "{0: >12} ", self.scaled_bytes(self.row.bytes)?)?,
+                Column::Used => write!(f, "{0: >12} ", self.scaled_bytes(self.row.bytes_used)?)?,
+                Column::Avail => write!(f, "{0: >12} ", self.scaled_bytes(self.row.bytes_avail)?)?,
                 Column::Pcent => {
                     write!(f, "{0: >5} ", DisplayRow::percentage(self.row.bytes_usage))?;
                 }
                 Column::Target => write!(f, "{0: <16}", self.row.fs_mount)?,
-                Column::Itotal => write!(f, "{0: >12} ", self.scaled(self.row.inodes)?)?,
-                Column::Iused => write!(f, "{0: >12} ", self.scaled(self.row.inodes_used)?)?,
-                Column::Iavail => write!(f, "{0: >12} ", self.scaled(self.row.inodes_free)?)?,
+                Column::Itotal => write!(f, "{0: >12} ", self.scaled_inodes(self.row.inodes)?)?,
+                Column::Iused => write!(f, "{0: >12} ", self.scaled_inodes(self.row.inodes_used)?)?,
+                Column::Iavail => {
+                    write!(f, "{0: >12} ", self.scaled_inodes(self.row.inodes_free)?)?;
+                }
                 Column::Ipcent => {
                     write!(f, "{0: >5} ", DisplayRow::percentage(self.row.inodes_usage))?;
                 }
@@ -506,6 +540,38 @@ mod tests {
         assert_eq!(
             DisplayRow::new(&row, &options).to_string(),
             "my_device                  10            2            8   20% my_mount        "
+        );
+    }
+
+    #[test]
+    fn test_row_display_bytes_and_inodes() {
+        let options = Options {
+            columns: vec![Column::Size, Column::Itotal],
+            block_size: BlockSize::Bytes(100),
+            ..Default::default()
+        };
+        let row = Row {
+            file: Some("/path/to/file".to_string()),
+            fs_device: "my_device".to_string(),
+            fs_type: "my_type".to_string(),
+            fs_mount: "my_mount".to_string(),
+
+            bytes: 100,
+            bytes_used: 25,
+            bytes_avail: 75,
+            bytes_usage: Some(0.25),
+
+            #[cfg(target_os = "macos")]
+            bytes_capacity: Some(0.5),
+
+            inodes: 10,
+            inodes_used: 2,
+            inodes_free: 8,
+            inodes_usage: Some(0.2),
+        };
+        assert_eq!(
+            DisplayRow::new(&row, &options).to_string(),
+            "           1           10 "
         );
     }
 
