@@ -154,6 +154,7 @@ impl From<Filesystem> for Row {
             ..
         } = fs.usage;
         let bused = blocks - bfree;
+        let fused = files - ffree;
         Self {
             file: fs.file,
             fs_device: dev_name,
@@ -177,12 +178,12 @@ impl From<Filesystem> for Row {
                 Some(bavail as f64 / ((bused + bavail) as f64))
             },
             inodes: files,
-            inodes_used: files - ffree,
+            inodes_used: fused,
             inodes_free: ffree,
             inodes_usage: if files == 0 {
                 None
             } else {
-                Some(ffree as f64 / files as f64)
+                Some(fused as f64 / files as f64)
             },
         }
     }
