@@ -17,7 +17,7 @@ path = "src/tail.rs"
 
 [dependencies]
 clap = { version = "2.33", features = ["wrap_help"] }
-notify = { version = "5.0.0-pre.13", features=["macos_kqueue"]}
+notify = { version = "5.0.0-pre.14", features=["macos_kqueue"]}
 libc = "0.2.42"
 uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["ringbuffer"] }
 uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }

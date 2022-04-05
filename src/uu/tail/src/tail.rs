@@ -27,7 +27,7 @@ mod platform;
 use chunks::ReverseChunks;
 
 use clap::{App, Arg};
-use notify::{RecursiveMode, Watcher};
+use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::fmt;
@@ -488,44 +488,29 @@ pub fn uu_app() -> App<'static, 'static> {
 fn follow(files: &mut FileHandling, settings: &Settings) {
     let mut process = platform::ProcessChecker::new(settings.pid);
 
-    use std::sync::{Arc, Mutex};
     let (tx, rx) = channel();
 
-    let mut watcher: Box<dyn Watcher>;
-    if settings.use_polling {
-        // Polling based Watcher implementation
-        watcher = Box::new(
-            // TODO: [2021-09; jhscheer] remove arc/mutex if upstream merges:
-            // https://github.com/notify-rs/notify/pull/360
-            notify::PollWatcher::with_delay(Arc::new(Mutex::new(tx)), settings.sleep_sec).unwrap(),
-        );
-    } else {
-        // Watcher is implemented per platform using the best implementation available on that
-        // platform. In addition to such event driven implementations, a polling implementation
-        // is also provided that should work on any platform.
-        // Linux / Android: inotify
-        // macOS: FSEvents / kqueue
-        // Windows: ReadDirectoryChangesWatcher
-        // FreeBSD / NetBSD / OpenBSD / DragonflyBSD: kqueue
-        // Fallback: polling (default delay is 30 seconds!)
+    // Watcher is implemented per platform using the best implementation available on that
+    // platform. In addition to such event driven implementations, a polling implementation
+    // is also provided that should work on any platform.
+    // Linux / Android: inotify
+    // macOS: FSEvents / kqueue
+    // Windows: ReadDirectoryChangesWatcher
+    // FreeBSD / NetBSD / OpenBSD / DragonflyBSD: kqueue
+    // Fallback: polling (default delay is 30 seconds!)
 
-        // NOTE: On macOS only `kqueue` is suitable for our use case since `FSEvents` waits until
-        // file close to delivers modify events. See:
-        // https://github.com/notify-rs/notify/issues/240
+    // NOTE:
+    // We force the use of kqueue with: features=["macos_kqueue"],
+    // because macOS only `kqueue` is suitable for our use case since `FSEvents` waits until
+    // file close util it delivers a modify event. See:
+    // https://github.com/notify-rs/notify/issues/240
 
-        // TODO: [2021-09; jhscheer] change to RecommendedWatcher if upstream merges:
-        // https://github.com/notify-rs/notify/pull/362
-        #[cfg(target_os = "macos")]
-        {
-            watcher = Box::new(notify::kqueue::KqueueWatcher::new(tx).unwrap());
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            watcher = Box::new(notify::RecommendedWatcher::new(tx).unwrap());
-        }
-        // TODO: [2021-09; jhscheer] adjust `delay` if upstream merges:
-        // https://github.com/notify-rs/notify/pull/364
-    };
+    let mut watcher: Box<dyn Watcher> =
+        if settings.use_polling || RecommendedWatcher::kind() == WatcherKind::PollWatcher {
+            Box::new(notify::PollWatcher::with_delay(tx, settings.sleep_sec).unwrap())
+        } else {
+            Box::new(notify::RecommendedWatcher::new(tx).unwrap())
+        };
 
     // Iterate user provided `paths`.
     // Add existing files to `Watcher` (InotifyWatcher).

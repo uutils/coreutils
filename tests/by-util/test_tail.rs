@@ -27,6 +27,7 @@ static FOOBAR_2_TXT: &str = "foobar2.txt";
 static FOOBAR_WITH_NULL_TXT: &str = "foobar_with_null.txt";
 static FOLLOW_NAME_TXT: &str = "follow_name.txt";
 static FOLLOW_NAME_SHORT_EXP: &str = "follow_name_short.expected";
+#[cfg(target_os = "linux")]
 static FOLLOW_NAME_EXP: &str = "follow_name.expected";
 
 #[test]
