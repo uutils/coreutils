@@ -96,6 +96,21 @@ fn test_exclude_type_option() {
 }
 
 #[test]
+fn test_include_exclude_same_type() {
+    new_ucmd!()
+        .args(&["-t", "ext4", "-x", "ext4"])
+        .fails()
+        .stderr_is("df: file system type 'ext4' both selected and excluded");
+    new_ucmd!()
+        .args(&["-t", "ext4", "-x", "ext4", "-t", "ext3", "-x", "ext3"])
+        .fails()
+        .stderr_is(
+            "df: file system type 'ext4' both selected and excluded\n\
+             df: file system type 'ext3' both selected and excluded",
+        );
+}
+
+#[test]
 fn test_total() {
     // Example output:
     //
