@@ -171,13 +171,20 @@ sed -i "s/  {ERR_SUBST=>\"s\/(unrecognized|unknown) option \[-' \]\*foobar\[' \]
 # Remove the check whether a util was built. Otherwise tests against utils like "arch" are not run.
 sed -i "s|require_built_ |# require_built_ |g" init.cfg
 
+# usage_vs_getopt.sh is heavily modified as it runs all the binaries
 # with the option -/ is used, clap is returning a better error than GNU's. Adjust the GNU test
 sed -i -e "s~  grep \" '\*/'\*\" err || framework_failure_~  grep \" '*-/'*\" err || framework_failure_~" tests/misc/usage_vs_getopt.sh
 sed -i -e "s~  sed -n \"1s/'\\\/'/'OPT'/p\" < err >> pat || framework_failure_~  sed -n \"1s/'-\\\/'/'OPT'/p\" < err >> pat || framework_failure_~" tests/misc/usage_vs_getopt.sh
 # Ignore some binaries (not built)
 # And change the default error code to 2
 # see issue #3331
-sed -i -e "s/rcexp=1$/rcexp=2\n  case \"\$prg\" in chcon|dir|runcon|vdir) return;; esac/" tests/misc/usage_vs_getopt.sh
+sed -i -e "s/rcexp=1$/rcexp=2\n  case \"\$prg\" in chcon|dir|runcon|vdir) return;; esac/" -e "s/rcexp=125 ;;/rcexp=2 ;;\ncp|pr|truncate ) rcexp=1;;\npr ) rcexp=130;;/" tests/misc/usage_vs_getopt.sh
+# GNU has option=[SUFFIX], clap is <SUFFIX>
+sed -i -e "s/cat opts/sed -i -e \"s| <.\*>$||g\" opts/" tests/misc/usage_vs_getopt.sh
+# Strip empty lines for the diff - see https://github.com/uutils/coreutils/issues/3370
+sed -i -e "s~out 2>err1~out  2>err1\nsed '/^$/d' out > out\nsed '/^$/d' help > help~" tests/misc/usage_vs_getopt.sh
+# for some reasons, some stuff are duplicated, strip that
+sed -i -e "s/provoked error./provoked error\ncat pat |sort -u > pat/" tests/misc/usage_vs_getopt.sh
 
 # Update the GNU error message to match ours
 sed -i -e "s/ln: 'f' and 'f' are the same file/ln: failed to link 'f' to 'f': Same file/g" tests/ln/hard-backup.sh
