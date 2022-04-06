@@ -37,6 +37,22 @@ pub fn main(_args: TokenStream, stream: TokenStream) -> TokenStream {
     TokenStream::from(new)
 }
 
+/// Reads a section from the help file of the util as a `str` literal.
+///
+/// It is read verbatim, without parsing or escaping. The name of the help file
+/// should match the name of the util. I.e. numfmt should have a file called
+/// `numfmt.md`. By convention, the file should start with a top-level section
+/// with the name of the util. The other sections must start with 2 `#`
+/// characters. Capitalization of the sections does not matter. Leading and
+/// trailing whitespace will be removed. Example:
+/// ```md
+/// # numfmt
+/// ## About
+/// Convert numbers from/to human-readable strings
+///
+/// ## Long help
+/// This text will be the long help
+/// ```
 #[proc_macro]
 pub fn help_section(input: TokenStream) -> TokenStream {
     let input: Vec<TokenTree> = input.into_iter().collect();
@@ -50,7 +66,17 @@ pub fn help_section(input: TokenStream) -> TokenStream {
     let mut content = String::new();
     let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
-    path.push("help.md");
+    // The package name will be something like uu_numfmt, hence we split once
+    // on '_' and take the second element. The help section should then be in a
+    // file called numfmt.md
+    path.push(format!(
+        "{}.md",
+        std::env::var("CARGO_PKG_NAME")
+            .unwrap()
+            .split_once('_')
+            .unwrap()
+            .1,
+    ));
 
     File::open(path)
         .unwrap()
