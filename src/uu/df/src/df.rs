@@ -111,6 +111,8 @@ enum OptionsError {
 
     /// An error getting the columns to display in the output table.
     ColumnError(ColumnError),
+
+    FilesystemTypeBothSelectedAndExcluded(Vec<String>),
 }
 
 impl fmt::Display for OptionsError {
@@ -126,6 +128,16 @@ impl fmt::Display for OptionsError {
                 "option --output: field {} used more than once",
                 s.quote()
             ),
+            Self::FilesystemTypeBothSelectedAndExcluded(types) => {
+                for t in types {
+                    eprintln!(
+                        "{}: file system type {} both selected and excluded",
+                        uucore::util_name(),
+                        t.quote()
+                    );
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -133,17 +145,38 @@ impl fmt::Display for OptionsError {
 impl Options {
     /// Convert command-line arguments into [`Options`].
     fn from(matches: &ArgMatches) -> Result<Self, OptionsError> {
+        let include = matches.values_of_lossy(OPT_TYPE);
+        let exclude = matches.values_of_lossy(OPT_EXCLUDE_TYPE);
+
+        if let (Some(include), Some(exclude)) = (&include, &exclude) {
+            if let Some(types) = Self::get_intersected_types(include, exclude) {
+                return Err(OptionsError::FilesystemTypeBothSelectedAndExcluded(types));
+            }
+        }
+
         Ok(Self {
             show_local_fs: matches.is_present(OPT_LOCAL),
             show_all_fs: matches.is_present(OPT_ALL),
             show_listed_fs: false,
             block_size: block_size_from_matches(matches)
                 .map_err(|_| OptionsError::InvalidBlockSize)?,
-            include: matches.values_of_lossy(OPT_TYPE),
-            exclude: matches.values_of_lossy(OPT_EXCLUDE_TYPE),
+            include,
+            exclude,
             show_total: matches.is_present(OPT_TOTAL),
             columns: Column::from_matches(matches).map_err(OptionsError::ColumnError)?,
         })
+    }
+
+    fn get_intersected_types(include: &[String], exclude: &[String]) -> Option<Vec<String>> {
+        let mut intersected_types = Vec::new();
+
+        for t in include {
+            if exclude.contains(t) {
+                intersected_types.push(t.clone());
+            }
+        }
+
+        (!intersected_types.is_empty()).then(|| intersected_types)
     }
 }
 
@@ -707,22 +740,6 @@ mod tests {
             };
             let m = mount_info("ext4", "/mnt/foo", false, false);
             assert!(is_included(&m, &opt));
-        }
-
-        #[test]
-        fn test_include_and_exclude_match_both() {
-            // TODO The same filesystem type in both `include` and
-            // `exclude` should cause an error, but currently does
-            // not.
-            let include = Some(vec![String::from("ext4")]);
-            let exclude = Some(vec![String::from("ext4")]);
-            let opt = Options {
-                include,
-                exclude,
-                ..Default::default()
-            };
-            let m = mount_info("ext4", "/mnt/foo", false, false);
-            assert!(!is_included(&m, &opt));
         }
     }
 
