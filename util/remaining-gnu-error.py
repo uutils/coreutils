@@ -15,11 +15,11 @@ urllib.request.urlretrieve(
     "result.json",
 )
 
-tests = glob.glob(base + "/*/*.sh")
-tests_pl = glob.glob(base + "/*/*.pl")
-tests_xpl = glob.glob(base + "/*/*.xpl")
-tests = tests + tests_pl + tests_xpl
+types = ("/*/*.sh", "/*/*.pl", "/*/*.xpl")
 
+tests = []
+for files in types:
+    tests.extend(glob.glob(base + files))
 # sort by size
 list_of_files = sorted(tests, key=lambda x: os.stat(x).st_size)
 
@@ -38,11 +38,7 @@ for d in data:
 
         # the tests pass, we don't care anymore
         if data[d][e] == "PASS":
-            try:
-                list_of_files.remove(a)
-            except ValueError:
-                # Ignore the error
-                pass
+            list_of_files.remove(a)
 
 # Remove the factor tests and reverse the list (bigger first)
 tests = list(filter(lambda k: "factor" not in k, list_of_files))
