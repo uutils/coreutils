@@ -8,12 +8,12 @@
 use std::io::{stdin, Read};
 
 use clap::Command;
-use uucore::{encoding::Format, error::UResult, help_section};
+use uucore::{encoding::Format, error::UResult, help_section, help_usage};
 
 pub mod base_common;
 
 const ABOUT: &str = help_section!("about");
-const USAGE: &str = help_section!("usage");
+const USAGE: &str = help_usage!();
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {

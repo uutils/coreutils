@@ -37,6 +37,69 @@ pub fn main(_args: TokenStream, stream: TokenStream) -> TokenStream {
     TokenStream::from(new)
 }
 
+fn parse_help(section: &str) -> String {
+    let section = section.to_lowercase();
+    let section = section.trim_matches('"');
+    let mut content = String::new();
+    let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+
+    // The package name will be something like uu_numfmt, hence we split once
+    // on '_' and take the second element. The help section should then be in a
+    // file called numfmt.md
+    path.push(format!(
+        "{}.md",
+        std::env::var("CARGO_PKG_NAME")
+            .unwrap()
+            .split_once('_')
+            .unwrap()
+            .1,
+    ));
+
+    File::open(path)
+        .unwrap()
+        .read_to_string(&mut content)
+        .unwrap();
+
+    content
+        .lines()
+        .skip_while(|&l| {
+            l.strip_prefix("##")
+                .map_or(true, |l| l.trim().to_lowercase() != section)
+        })
+        .skip(1)
+        .take_while(|l| !l.starts_with("##"))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
+}
+
+/// Get the usage from the "Usage" section in the help file.
+///
+/// The usage is assumed to be surrounded by markdown code fences. It may span
+/// multiple lines. The first word of each line is assumed to be the name of
+/// the util and is replaced by "{}" so that the output of this function can be
+/// used with `uucore::format_usage`.
+#[proc_macro]
+pub fn help_usage(_input: TokenStream) -> TokenStream {
+    let text: String = parse_help("usage")
+        .strip_suffix("```")
+        .unwrap()
+        .lines()
+        .skip(1) // Skip the "```" of markdown syntax
+        .map(|l| {
+            // Replace the util name (assumed to be the first word) with "{}"
+            // to be replaced with the runtime value later.
+            if let Some((_util, args)) = l.split_once(' ') {
+                format!("{{}} {}", args)
+            } else {
+                "{}".to_string()
+            }
+        })
+        .collect();
+    TokenTree::Literal(Literal::string(&text)).into()
+}
+
 /// Reads a section from the help file of the util as a `str` literal.
 ///
 /// It is read verbatim, without parsing or escaping. The name of the help file
@@ -61,41 +124,6 @@ pub fn help_section(input: TokenStream) -> TokenStream {
         _ => panic!("Input to help_section should be a string literal!"),
     };
     let input_str: String = value.parse().unwrap();
-    let input_str = input_str.to_lowercase().trim_matches('"').to_string();
-
-    let mut content = String::new();
-    let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-
-    // The package name will be something like uu_numfmt, hence we split once
-    // on '_' and take the second element. The help section should then be in a
-    // file called numfmt.md
-    path.push(format!(
-        "{}.md",
-        std::env::var("CARGO_PKG_NAME")
-            .unwrap()
-            .split_once('_')
-            .unwrap()
-            .1,
-    ));
-
-    File::open(path)
-        .unwrap()
-        .read_to_string(&mut content)
-        .unwrap();
-
-    let text = content
-        .lines()
-        .skip_while(|&l| {
-            l.strip_prefix("##")
-                .map_or(true, |l| l.trim().to_lowercase() != input_str)
-        })
-        .skip(1)
-        .take_while(|l| !l.starts_with("##"))
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim()
-        .to_string();
-
-    let str = TokenTree::Literal(Literal::string(&text));
-    str.into()
+    let text = parse_help(&input_str);
+    TokenTree::Literal(Literal::string(&text)).into()
 }

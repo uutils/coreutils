@@ -15,7 +15,7 @@ use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::ranges::Range;
-use uucore::{format_usage, help_section, InvalidEncodingHandling};
+use uucore::{format_usage, help_section, help_usage, InvalidEncodingHandling};
 
 pub mod errors;
 pub mod format;
@@ -24,7 +24,7 @@ mod units;
 
 const ABOUT: &str = help_section!("about");
 const LONG_HELP: &str = help_section!("long help");
-const USAGE: &str = "{} [OPTION]... [NUMBER]...";
+const USAGE: &str = help_usage!();
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions) -> UResult<()> {
     for l in args {

@@ -9,12 +9,12 @@
 use uu_base32::base_common;
 pub use uu_base32::uu_app;
 
-use uucore::{encoding::Format, error::UResult, help_section};
+use uucore::{encoding::Format, error::UResult, help_section, help_usage};
 
 use std::io::{stdin, Read};
 
 const ABOUT: &str = help_section!("about");
-const USAGE: &str = help_section!("usage");
+const USAGE: &str = help_usage!();
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {

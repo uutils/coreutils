@@ -1,7 +1,9 @@
 # base64
 
 ## Usage
-{} [OPTION]... [FILE]
+```
+base64 [OPTION]... [FILE]
+```
 
 ## About
 

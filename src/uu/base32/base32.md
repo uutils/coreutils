@@ -1,8 +1,9 @@
 # base32
 
 ## Usage
-
-{} [OPTION]... [FILE]
+```
+base32 [OPTION]... [FILE]
+```
 
 ## About
 
