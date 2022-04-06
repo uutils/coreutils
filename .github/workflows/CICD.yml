@@ -994,7 +994,7 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: test
-        args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-fail-fast -p uucore
+        args: --no-fail-fast -p uucore
       env:
         CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
@@ -1016,7 +1016,7 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: test
-        args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-fail-fast ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
+        args: --no-fail-fast ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
       env:
         CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
