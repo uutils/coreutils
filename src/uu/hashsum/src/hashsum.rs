@@ -7,7 +7,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) algo, algoname, regexes, nread
+// spell-checker:ignore (ToDO) algo, algoname, regexes, nread, nonames
 
 #[macro_use]
 extern crate clap;
@@ -46,6 +46,7 @@ struct Options {
     binary: bool,
     check: bool,
     tag: bool,
+    nonames: bool,
     status: bool,
     quiet: bool,
     strict: bool,
@@ -316,6 +317,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     };
     let check = matches.is_present("check");
     let tag = matches.is_present("tag");
+    let nonames = matches.is_present("no-names");
     let status = matches.is_present("status");
     let quiet = matches.is_present("quiet") || status;
     let strict = matches.is_present("strict");
@@ -328,6 +330,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         binary,
         check,
         tag,
+        nonames,
         status,
         quiet,
         strict,
@@ -369,6 +372,11 @@ pub fn uu_app_common<'a>() -> Command<'a> {
             Arg::new("tag")
                 .long("tag")
                 .help("create a BSD-style checksum"),
+        )
+        .arg(
+            Arg::new("no-names")
+                .long("no-names")
+                .help("Omits filenames in the output (option not present in GNU/Coreutils)"),
         )
         .arg(
             Arg::new("text")
@@ -602,6 +610,8 @@ where
             .map_err_context(|| "failed to read input".to_string())?;
             if options.tag {
                 println!("{} ({}) = {}", options.algoname, filename.display(), sum);
+            } else if options.nonames {
+                println!("{}", sum);
             } else {
                 println!("{} {}{}", sum, binary_marker, filename.display());
             }

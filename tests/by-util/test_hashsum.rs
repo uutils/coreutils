@@ -1,4 +1,4 @@
-// spell-checker:ignore checkfile
+// spell-checker:ignore checkfile, nonames
 macro_rules! get_hash(
     ($str:expr) => (
         $str.split(' ').collect::<Vec<&str>>()[0]
@@ -27,6 +27,16 @@ macro_rules! test_digest {
             let ts = TestScenario::new("hashsum");
             assert_eq!(ts.fixtures.read(EXPECTED_FILE),
                        get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).pipe_in_fixture("input.txt").succeeds().no_stderr().stdout_str()));
+        }
+
+        #[test]
+        fn test_nonames() {
+            let ts = TestScenario::new("hashsum");
+            // EXPECTED_FILE has no newline character at the end
+            assert_eq!(format!("{0}\n{0}\n", ts.fixtures.read(EXPECTED_FILE)),
+                       ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("--no-names").arg("input.txt").arg("-").pipe_in_fixture("input.txt")
+                       .succeeds().no_stderr().stdout_str()
+                       );
         }
 
         #[test]
