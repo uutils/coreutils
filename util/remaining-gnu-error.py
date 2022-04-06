@@ -37,7 +37,7 @@ for d in data:
                 a = a.replace(".pl", ".xpl")
 
         # the tests pass, we don't care anymore
-        if data[d][e] == "PASS":
+        if data[d][e] == "PASS" and a in list_of_files:
             list_of_files.remove(a)
 
 # Remove the factor tests and reverse the list (bigger first)
