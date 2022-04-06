@@ -177,8 +177,10 @@ sed -i -e "s~  grep \" '\*/'\*\" err || framework_failure_~  grep \" '*-/'*\" er
 sed -i -e "s~  sed -n \"1s/'\\\/'/'OPT'/p\" < err >> pat || framework_failure_~  sed -n \"1s/'-\\\/'/'OPT'/p\" < err >> pat || framework_failure_~" tests/misc/usage_vs_getopt.sh
 # Ignore some binaries (not built)
 # And change the default error code to 2
-# see issue #3331
-sed -i -e "s/rcexp=1$/rcexp=2\n  case \"\$prg\" in chcon|dir|runcon|vdir) return;; esac/" -e "s/rcexp=125 ;;/rcexp=2 ;;\ncp|pr|truncate ) rcexp=1;;\npr ) rcexp=130;;/" tests/misc/usage_vs_getopt.sh
+# see issue #3331 (clap limitation).
+# Upstream returns 1 for most of the program. We do for cp, truncate & pr
+# So, keep it as it
+sed -i -e "s/rcexp=1$/rcexp=2\n  case \"\$prg\" in chcon|dir|runcon|vdir) return;; esac/" -e "s/rcexp=125 ;;/rcexp=2 ;;\ncp|truncate|pr) rcexp=1;;/" tests/misc/usage_vs_getopt.sh
 # GNU has option=[SUFFIX], clap is <SUFFIX>
 sed -i -e "s/cat opts/sed -i -e \"s| <.\*>$||g\" opts/" tests/misc/usage_vs_getopt.sh
 # Strip empty lines for the diff - see https://github.com/uutils/coreutils/issues/3370
