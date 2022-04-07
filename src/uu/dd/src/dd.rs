@@ -23,7 +23,6 @@ mod blocks;
 use blocks::conv_block_unblock_helper;
 
 use std::cmp;
-use std::convert::TryInto;
 use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, Write};

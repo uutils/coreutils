@@ -22,11 +22,11 @@ fn help() {
 fn print() {
     new_ucmd!().succeeds();
 
-    for &flag in &["-c", "--compute"] {
+    for flag in ["-c", "--compute"] {
         new_ucmd!().arg(flag).succeeds();
     }
 
-    for &flag in &[
+    for flag in [
         "-t", "--type", "-u", "--user", "-r", "--role", "-l", "--range",
     ] {
         new_ucmd!().args(&[flag, "example"]).succeeds();
@@ -57,7 +57,7 @@ fn invalid() {
     // TODO: Enable this code once the issue is fixed in the clap version we're using.
     //new_ucmd!().arg("--compute=example").fails().code_is(1);
 
-    for &flag in &[
+    for flag in [
         "-t", "--type", "-u", "--user", "-r", "--role", "-l", "--range",
     ] {
         new_ucmd!().arg(flag).fails().code_is(1);
@@ -119,7 +119,7 @@ fn custom_context() {
     let args = &["--compute", "--range=s0", "/bin/true"];
     new_ucmd!().args(args).succeeds();
 
-    for &(ctx, u, r) in &[
+    for (ctx, u, r) in [
         ("unconfined_u:unconfined_r:unconfined_t:s0", u_ud, r_ud),
         ("system_u:unconfined_r:unconfined_t:s0", "system_u", r_ud),
         ("unconfined_u:system_r:unconfined_t:s0", u_ud, "system_r"),

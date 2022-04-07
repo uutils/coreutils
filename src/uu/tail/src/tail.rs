@@ -22,7 +22,6 @@ use chunks::ReverseChunks;
 
 use clap::{Arg, Command};
 use std::collections::VecDeque;
-use std::convert::TryInto;
 use std::ffi::OsString;
 use std::fmt;
 use std::fs::{File, Metadata};

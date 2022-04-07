@@ -6,7 +6,6 @@
 // spell-checker:ignore (vars) zlines BUFWRITER seekable
 
 use clap::{crate_version, Arg, ArgMatches, Command};
-use std::convert::{TryFrom, TryInto};
 use std::ffi::OsString;
 use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::display::Quotable;

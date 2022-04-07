@@ -7,7 +7,7 @@ use rust_users::*;
 
 #[test]
 fn test_date_email() {
-    for param in &["--rfc-email", "--rfc-e", "-R"] {
+    for param in ["--rfc-email", "--rfc-e", "-R"] {
         new_ucmd!().arg(param).succeeds();
     }
 }
@@ -23,7 +23,7 @@ fn test_date_rfc_3339() {
     let re = Regex::new(rfc_regexp).unwrap();
 
     // Check that the output matches the regexp
-    for param in &["--rfc-3339", "--rfc-3"] {
+    for param in ["--rfc-3339", "--rfc-3"] {
         scene
             .ucmd()
             .arg(format!("{}=ns", param))
@@ -40,21 +40,21 @@ fn test_date_rfc_3339() {
 
 #[test]
 fn test_date_rfc_8601() {
-    for param in &["--iso-8601", "--i"] {
+    for param in ["--iso-8601", "--i"] {
         new_ucmd!().arg(format!("{}=ns", param)).succeeds();
     }
 }
 
 #[test]
 fn test_date_rfc_8601_second() {
-    for param in &["--iso-8601", "--i"] {
+    for param in ["--iso-8601", "--i"] {
         new_ucmd!().arg(format!("{}=second", param)).succeeds();
     }
 }
 
 #[test]
 fn test_date_utc() {
-    for param in &["--universal", "--utc", "--uni", "--u"] {
+    for param in ["--universal", "--utc", "--uni", "--u"] {
         new_ucmd!().arg(param).succeeds();
     }
 }

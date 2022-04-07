@@ -41,7 +41,6 @@ use libc::{c_char, c_int, gid_t, uid_t};
 use libc::{getgrgid, getgrnam, getgroups};
 use libc::{getpwnam, getpwuid, group, passwd};
 
-use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 use std::io::Error as IOError;
 use std::io::ErrorKind;

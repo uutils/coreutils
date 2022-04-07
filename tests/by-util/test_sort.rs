@@ -220,7 +220,7 @@ fn test_random_shuffle_contains_all_lines() {
 
 #[test]
 fn test_random_shuffle_two_runs_not_the_same() {
-    for arg in &["-R", "-k1,1R"] {
+    for arg in ["-R", "-k1,1R"] {
         // check to verify that two random shuffles are not equal; this has the
         // potential to fail in the very unlikely event that the random order is the same
         // as the starting order, or if both random sorts end up having the same order.
@@ -407,7 +407,7 @@ fn test_mixed_floats_ints_chars_numeric_stable() {
 
 #[test]
 fn test_numeric_floats_and_ints2() {
-    for numeric_sort_param in &["-n", "--numeric-sort"] {
+    for numeric_sort_param in ["-n", "--numeric-sort"] {
         let input = "1.444\n8.013\n1\n-8\n1.04\n-1";
         new_ucmd!()
             .arg(numeric_sort_param)
@@ -419,7 +419,7 @@ fn test_numeric_floats_and_ints2() {
 
 #[test]
 fn test_numeric_floats2() {
-    for numeric_sort_param in &["-n", "--numeric-sort"] {
+    for numeric_sort_param in ["-n", "--numeric-sort"] {
         let input = "1.444\n8.013\n1.58590\n-8.90880\n1.040000000\n-.05";
         new_ucmd!()
             .arg(numeric_sort_param)
@@ -439,7 +439,7 @@ fn test_numeric_floats_with_nan2() {
 
 #[test]
 fn test_human_block_sizes2() {
-    for human_numeric_sort_param in &["-h", "--human-numeric-sort", "--sort=human-numeric"] {
+    for human_numeric_sort_param in ["-h", "--human-numeric-sort", "--sort=human-numeric"] {
         let input = "8981K\n909991M\n-8T\n21G\n0.8M";
         new_ucmd!()
             .arg(human_numeric_sort_param)
@@ -461,7 +461,7 @@ fn test_human_numeric_zero_stable() {
 
 #[test]
 fn test_month_default2() {
-    for month_sort_param in &["-M", "--month-sort", "--sort=month"] {
+    for month_sort_param in ["-M", "--month-sort", "--sort=month"] {
         let input = "JAn\nMAY\n000may\nJun\nFeb";
         new_ucmd!()
             .arg(month_sort_param)
@@ -555,7 +555,7 @@ fn test_keys_invalid_char_zero() {
 #[test]
 fn test_keys_with_options() {
     let input = "aa 3 cc\ndd 1 ff\ngg 2 cc\n";
-    for param in &[
+    for param in [
         &["-k", "2,2n"][..],
         &["-k", "2n,2"][..],
         &["-k", "2,2", "-n"][..],
@@ -571,7 +571,7 @@ fn test_keys_with_options() {
 #[test]
 fn test_keys_with_options_blanks_start() {
     let input = "aa   3 cc\ndd  1 ff\ngg         2 cc\n";
-    for param in &[&["-k", "2b,2"][..], &["-k", "2,2", "-b"][..]] {
+    for param in [&["-k", "2b,2"][..], &["-k", "2,2", "-b"][..]] {
         new_ucmd!()
             .args(param)
             .pipe_in(input)
@@ -761,7 +761,7 @@ fn test_pipe() {
 
 #[test]
 fn test_check() {
-    for diagnose_arg in &["-c", "--check", "--check=diagnose-first"] {
+    for diagnose_arg in ["-c", "--check", "--check=diagnose-first"] {
         new_ucmd!()
             .arg(diagnose_arg)
             .arg("check_fail.txt")
@@ -779,7 +779,7 @@ fn test_check() {
 
 #[test]
 fn test_check_silent() {
-    for silent_arg in &["-C", "--check=silent", "--check=quiet"] {
+    for silent_arg in ["-C", "--check=silent", "--check=quiet"] {
         new_ucmd!()
             .arg(silent_arg)
             .arg("check_fail.txt")
@@ -803,7 +803,7 @@ fn test_check_unique() {
 #[test]
 fn test_dictionary_and_nonprinting_conflicts() {
     let conflicting_args = ["n", "h", "g", "M"];
-    for restricted_arg in &["d", "i"] {
+    for restricted_arg in ["d", "i"] {
         for conflicting_arg in &conflicting_args {
             new_ucmd!()
                 .arg(&format!("-{}{}", restricted_arg, conflicting_arg))

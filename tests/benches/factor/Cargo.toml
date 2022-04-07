@@ -5,7 +5,7 @@ authors = ["nicoo <nicoo@debian.org>"]
 license = "MIT"
 description = "Benchmarks for the uu_factor integer factorization tool"
 homepage = "https://github.com/uutils/coreutils"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 uu_factor = { path = "../../../src/uu/factor" }

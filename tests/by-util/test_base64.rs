@@ -26,7 +26,7 @@ fn test_base64_encode_file() {
 
 #[test]
 fn test_decode() {
-    for decode_param in &["-d", "--decode", "--dec"] {
+    for decode_param in ["-d", "--decode", "--dec"] {
         let input = "aGVsbG8sIHdvcmxkIQ=="; // spell-checker:disable-line
         new_ucmd!()
             .arg(decode_param)
@@ -48,7 +48,7 @@ fn test_garbage() {
 
 #[test]
 fn test_ignore_garbage() {
-    for ignore_garbage_param in &["-i", "--ignore-garbage", "--ig"] {
+    for ignore_garbage_param in ["-i", "--ignore-garbage", "--ig"] {
         let input = "aGVsbG8sIHdvcmxkIQ==\0"; // spell-checker:disable-line
         new_ucmd!()
             .arg("-d")
@@ -61,7 +61,7 @@ fn test_ignore_garbage() {
 
 #[test]
 fn test_wrap() {
-    for wrap_param in &["-w", "--wrap", "--wr"] {
+    for wrap_param in ["-w", "--wrap", "--wr"] {
         let input = "The quick brown fox jumps over the lazy dog.";
         new_ucmd!()
             .arg(wrap_param)
@@ -75,7 +75,7 @@ fn test_wrap() {
 
 #[test]
 fn test_wrap_no_arg() {
-    for wrap_param in &["-w", "--wrap"] {
+    for wrap_param in ["-w", "--wrap"] {
         new_ucmd!().arg(wrap_param).fails().stderr_contains(
             &"The argument '--wrap <wrap>' requires a value but none was supplied",
         );
@@ -84,7 +84,7 @@ fn test_wrap_no_arg() {
 
 #[test]
 fn test_wrap_bad_arg() {
-    for wrap_param in &["-w", "--wrap"] {
+    for wrap_param in ["-w", "--wrap"] {
         new_ucmd!()
             .arg(wrap_param)
             .arg("b")

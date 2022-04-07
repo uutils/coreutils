@@ -9,7 +9,7 @@ homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2018"
+edition = "2021"
 
 [build-dependencies]
 num-traits = "0.2.13" # used in src/numerics.rs, which is included by build.rs

@@ -6,7 +6,7 @@ use std::ffi::OsStr;
 
 #[test]
 fn test_help() {
-    for help_flg in &["-h", "--help"] {
+    for help_flg in ["-h", "--help"] {
         new_ucmd!()
             .arg(&help_flg)
             .succeeds()
@@ -17,7 +17,7 @@ fn test_help() {
 
 #[test]
 fn test_version() {
-    for version_flg in &["-V", "--version"] {
+    for version_flg in ["-V", "--version"] {
         assert!(new_ucmd!()
             .arg(&version_flg)
             .succeeds()
@@ -61,7 +61,7 @@ fn test_do_not_remove_suffix() {
 
 #[test]
 fn test_multiple_param() {
-    for &multiple_param in &["-a", "--multiple", "--mul"] {
+    for multiple_param in ["-a", "--multiple", "--mul"] {
         let path = "/foo/bar/baz";
         new_ucmd!()
             .args(&[multiple_param, path, path])
@@ -72,7 +72,7 @@ fn test_multiple_param() {
 
 #[test]
 fn test_suffix_param() {
-    for &suffix_param in &["-s", "--suffix", "--suf"] {
+    for suffix_param in ["-s", "--suffix", "--suf"] {
         let path = "/foo/bar/baz.exe";
         new_ucmd!()
             .args(&[suffix_param, ".exe", path, path])
@@ -83,7 +83,7 @@ fn test_suffix_param() {
 
 #[test]
 fn test_zero_param() {
-    for &zero_param in &["-z", "--zero", "--ze"] {
+    for zero_param in ["-z", "--zero", "--ze"] {
         let path = "/foo/bar/baz";
         new_ucmd!()
             .args(&[zero_param, "-a", path, path])
