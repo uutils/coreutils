@@ -894,7 +894,7 @@ fn test_ls_long_symlink_color() {
         (Some([0, 0]), "ln-file1", None, "dir1/file1"),
         (Some([1, 1]), "ln-dir-invalid", Some([1, 1]), "dir1/dir2"),
         (Some([0, 0]), "ln-root", Some([0, 1]), "/"),
-        (Some([0, 0]), "ln-up2", Some([0, 1]), "../.."),
+        (Some([0, 0]), "ln-up2", None, "../.."),
     ];
 
     // We are only interested in lines or the ls output that are symlinks. These start with "lrwx".
@@ -912,6 +912,8 @@ fn test_ls_long_symlink_color() {
     while let Some((i, name, target)) = get_index_name_target(&mut result_lines) {
         // The unwraps within capture_colored_string will panic if the name/target's color
         // format is invalid.
+        dbg!(&name);
+        dbg!(&target);
         let (matched_name_color, matched_name) = capture_colored_string(&name);
         let (matched_target_color, matched_target) = capture_colored_string(&target);
 
@@ -934,6 +936,7 @@ fn test_ls_long_symlink_color() {
         // Keep in mind an expected color `Option<&str>` of None can mean either that we
         // don't expect any color here, as in `expected_output[2], or don't know what specific
         // color to expect yet, as in expected_output[0:1].
+        dbg!(&colors);
         assert_names_and_colors_are_equal(
             matched_name_color,
             expected_name_color,
