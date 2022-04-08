@@ -11,11 +11,15 @@ extern crate uucore;
 use chrono::prelude::DateTime;
 use chrono::Local;
 use clap::{crate_version, Arg, ArgMatches, Command};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use std::collections::HashSet;
 use std::env;
 use std::fs;
+use std::fs::File;
 #[cfg(not(windows))]
 use std::fs::Metadata;
+use std::io::BufRead;
+use std::io::BufReader;
 use std::io::{ErrorKind, Result};
 use std::iter;
 #[cfg(not(windows))]
@@ -24,7 +28,6 @@ use std::os::unix::fs::MetadataExt;
 use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
-#[cfg(windows)]
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -68,6 +71,9 @@ mod options {
     pub const ONE_FILE_SYSTEM: &str = "one-file-system";
     pub const DEREFERENCE: &str = "dereference";
     pub const INODES: &str = "inodes";
+    pub const EXCLUDE: &str = "exclude";
+    pub const EXCLUDE_FROM: &str = "exclude-from";
+    pub const VERBOSE: &str = "verbose";
     pub const FILE: &str = "FILE";
 }
 
@@ -80,6 +86,12 @@ Otherwise, units default to 1024 bytes (or 512 if POSIXLY_CORRECT is set).
 SIZE is an integer and optional unit (example: 10M is 10*1024*1024).
 Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB,... (powers
 of 1000).
+
+PATTERN is based on the globset crate:
+https://docs.rs/globset/latest/globset/#syntax
+? will match only one character
+* will match zero or more characters
+{a,b} will match a or b
 ";
 const USAGE: &str = "\
     {} [OPTION]... [FILE]...
@@ -97,6 +109,7 @@ struct Options {
     one_file_system: bool,
     dereference: bool,
     inodes: bool,
+    verbose: bool,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -287,6 +300,7 @@ fn du(
     options: &Options,
     depth: usize,
     inodes: &mut HashSet<FileInfo>,
+    glob_exclude: &GlobSet,
 ) -> Box<dyn DoubleEndedIterator<Item = Stat>> {
     let mut stats = vec![];
     let mut futures = vec![];
@@ -307,43 +321,64 @@ fn du(
 
         for f in read {
             match f {
-                Ok(entry) => match Stat::new(entry.path(), options) {
-                    Ok(this_stat) => {
-                        if let Some(inode) = this_stat.inode {
-                            if inodes.contains(&inode) {
+                Ok(entry) => {
+                    match Stat::new(entry.path(), options) {
+                        Ok(this_stat) => {
+                            let full_path = this_stat.path.clone().into_os_string();
+                            if !&glob_exclude.is_empty()
+                                && (glob_exclude.is_match(full_path)
+                                    || glob_exclude
+                                        .is_match(&entry.file_name().into_string().unwrap()))
+                            {
+                                // if the directory is ignored, leave early
+                                if options.verbose {
+                                    println!("{} ignored", &entry.file_name().quote());
+                                }
                                 continue;
                             }
-                            inodes.insert(inode);
-                        }
-                        if this_stat.is_dir {
-                            if options.one_file_system {
-                                if let (Some(this_inode), Some(my_inode)) =
-                                    (this_stat.inode, my_stat.inode)
-                                {
-                                    if this_inode.dev_id != my_inode.dev_id {
-                                        continue;
+
+                            if let Some(inode) = this_stat.inode {
+                                if inodes.contains(&inode) {
+                                    continue;
+                                }
+                                inodes.insert(inode);
+                            }
+                            if this_stat.is_dir {
+                                if options.one_file_system {
+                                    if let (Some(this_inode), Some(my_inode)) =
+                                        (this_stat.inode, my_stat.inode)
+                                    {
+                                        if this_inode.dev_id != my_inode.dev_id {
+                                            continue;
+                                        }
                                     }
                                 }
-                            }
-                            futures.push(du(this_stat, options, depth + 1, inodes));
-                        } else {
-                            my_stat.size += this_stat.size;
-                            my_stat.blocks += this_stat.blocks;
-                            my_stat.inodes += 1;
-                            if options.all {
-                                stats.push(this_stat);
+                                futures.push(du(
+                                    this_stat,
+                                    options,
+                                    depth + 1,
+                                    inodes,
+                                    glob_exclude,
+                                ));
+                            } else {
+                                my_stat.size += this_stat.size;
+                                my_stat.blocks += this_stat.blocks;
+                                my_stat.inodes += 1;
+                                if options.all {
+                                    stats.push(this_stat);
+                                }
                             }
                         }
+                        Err(error) => match error.kind() {
+                            ErrorKind::PermissionDenied => {
+                                let description = format!("cannot access {}", entry.path().quote());
+                                let error_message = "Permission denied";
+                                show_error_custom_description!(description, "{}", error_message);
+                            }
+                            _ => show_error!("cannot access {}: {}", entry.path().quote(), error),
+                        },
                     }
-                    Err(error) => match error.kind() {
-                        ErrorKind::PermissionDenied => {
-                            let description = format!("cannot access {}", entry.path().quote());
-                            let error_message = "Permission denied";
-                            show_error_custom_description!(description, "{}", error_message);
-                        }
-                        _ => show_error!("cannot access {}: {}", entry.path().quote(), error),
-                    },
-                },
+                }
                 Err(error) => show_error!("{}", error),
             }
         }
@@ -401,6 +436,7 @@ enum DuError {
     SummarizeDepthConflict(String),
     InvalidTimeStyleArg(String),
     InvalidTimeArg(String),
+    InvalidGlob(String),
 }
 
 impl Display for DuError {
@@ -431,6 +467,7 @@ Try '{} --help' for more information.",
 'birth' and 'creation' arguments are not supported on this platform.",
                 s.quote()
             ),
+            DuError::InvalidGlob(s) => write!(f, "Invalid exclude syntax: {}", s),
         }
     }
 }
@@ -443,8 +480,77 @@ impl UError for DuError {
             Self::InvalidMaxDepthArg(_)
             | Self::SummarizeDepthConflict(_)
             | Self::InvalidTimeStyleArg(_)
-            | Self::InvalidTimeArg(_) => 1,
+            | Self::InvalidTimeArg(_)
+            | Self::InvalidGlob(_) => 1,
         }
+    }
+}
+
+// Read a file and return each line in a vector of String
+fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
+    let file = File::open(filename).expect("no such file");
+    let buf = BufReader::new(file);
+
+    buf.lines()
+        .map(|l| l.expect("Could not parse line"))
+        .collect()
+}
+
+// Given the --exclude-from and/or --exclude arguments, returns the globset lists
+// to ignore the files
+fn get_globset_ignore(matches: &ArgMatches) -> UResult<GlobSet> {
+    let mut excludes_from = if matches.is_present(options::EXCLUDE_FROM) {
+        match matches.values_of(options::EXCLUDE_FROM) {
+            Some(all_files) => {
+                let mut exclusion = Vec::<String>::new();
+                // Read the exclude lists from all the files
+                // and add them into a vector of string
+                let files: Vec<String> = all_files.clone().map(|v| v.to_owned()).collect();
+                for f in files {
+                    exclusion.extend(file_as_vec(&f));
+                }
+                exclusion
+            }
+            None => Vec::<String>::new(),
+        }
+    } else {
+        Vec::<String>::new()
+    };
+
+    let mut excludes = if matches.is_present(options::EXCLUDE) {
+        match matches.values_of(options::EXCLUDE) {
+            Some(v) => {
+                // Read the various arguments
+                v.clone().map(|v| v.to_owned()).collect()
+            }
+            None => Vec::<String>::new(),
+        }
+    } else {
+        Vec::<String>::new()
+    };
+
+    // Merge the two lines
+    excludes.append(&mut excludes_from);
+    if !&excludes.is_empty() {
+        let mut builder = GlobSetBuilder::new();
+        // Create the globset of excludes
+        for f in excludes {
+            if matches.is_present(options::VERBOSE) {
+                println!("adding {:?} to the exclude list ", &f);
+            }
+            let g = match Glob::new(&f) {
+                Ok(glob) => glob,
+                Err(err) => return Err(DuError::InvalidGlob(err.to_string()).into()),
+            };
+            builder.add(g);
+        }
+        match builder.build() {
+            // Handle the error. Not sure when this happens
+            Ok(glob_set) => Ok(glob_set),
+            Err(err) => Err(DuError::InvalidGlob(err.to_string()).into()),
+        }
+    } else {
+        Ok(GlobSet::empty())
     }
 }
 
@@ -470,6 +576,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         one_file_system: matches.is_present(options::ONE_FILE_SYSTEM),
         dereference: matches.is_present(options::DEREFERENCE),
         inodes: matches.is_present(options::INODES),
+        verbose: matches.is_present(options::VERBOSE),
     };
 
     let files = match matches.value_of(options::FILE) {
@@ -524,8 +631,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         "\n"
     };
 
+    let exclude_glob = get_globset_ignore(&matches)?;
+
     let mut grand_total = 0;
     for path_string in files {
+        // Skip if we don't want to ignore anything
+        if !&exclude_glob.is_empty() && exclude_glob.is_match(path_string) {
+            // if the directory is ignored, leave early
+            if options.verbose {
+                println!("{} ignored", path_string.quote());
+            }
+            continue;
+        }
+
         let path = PathBuf::from(&path_string);
         match Stat::new(path, &options) {
             Ok(stat) => {
@@ -533,7 +651,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 if let Some(inode) = stat.inode {
                     inodes.insert(inode);
                 }
-                let iter = du(stat, &options, 0, &mut inodes);
+                let iter = du(stat, &options, 0, &mut inodes, &exclude_glob);
                 let (_, len) = iter.size_hint();
                 let len = len.unwrap();
                 for (index, stat) in iter.enumerate() {
@@ -758,19 +876,28 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help("exclude entries smaller than SIZE if positive, \
                           or entries greater than SIZE if negative")
         )
-        // .arg(
-        //     Arg::new("")
-        //         .short('x')
-        //         .long("exclude-from")
-        //         .value_name("FILE")
-        //         .help("exclude files that match any pattern in FILE")
-        // )
-        // .arg(
-        //     Arg::new("exclude")
-        //         .long("exclude")
-        //         .value_name("PATTERN")
-        //         .help("exclude files that match PATTERN")
-        // )
+        .arg(
+            Arg::new(options::VERBOSE)
+                .short('v')
+                .long("verbose")
+                .help("verbose mode (option not present in GNU/Coreutils)")
+        )
+        .arg(
+            Arg::new(options::EXCLUDE)
+                .long(options::EXCLUDE)
+                .value_name("PATTERN")
+                .help("exclude files that match PATTERN")
+                .multiple_occurrences(true)
+        )
+        .arg(
+            Arg::new(options::EXCLUDE_FROM)
+                .short('X')
+                .long("exclude-from")
+                .value_name("FILE")
+                .help("exclude files that match any pattern in FILE")
+                .multiple_occurrences(true)
+
+        )
         .arg(
             Arg::new(options::TIME)
                 .long(options::TIME)

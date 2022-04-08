@@ -3,7 +3,9 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (paths) sublink subwords
+// spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty
+
+use std::io::Write;
 
 use crate::common::util::*;
 
@@ -586,4 +588,164 @@ fn test_du_bytes() {
         not(target_os = "linux")
     ))]
     result.stdout_contains("21529\t./subdir\n");
+}
+
+#[test]
+fn test_du_exclude() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.symlink_dir(SUB_DEEPER_DIR, SUB_DIR_LINKS_DEEPER_SYM_DIR);
+    at.mkdir_all(SUB_DIR_LINKS);
+
+    ts.ucmd()
+        .arg("--exclude=subdir")
+        .arg(SUB_DEEPER_DIR)
+        .succeeds()
+        .stdout_contains("subdir/deeper/deeper_dir");
+    ts.ucmd()
+        .arg("--exclude=subdir")
+        .arg("subdir")
+        .succeeds()
+        .stdout_is("");
+    ts.ucmd()
+        .arg("--exclude=subdir")
+        .arg("--verbose")
+        .arg("subdir")
+        .succeeds()
+        .stdout_contains("'subdir' ignored");
+}
+
+#[test]
+fn test_du_exclude_2() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("azerty/xcwww/azeaze");
+
+    ts.ucmd()
+        .arg("azerty")
+        .succeeds()
+        .stdout_is("4\tazerty/xcwww/azeaze\n8\tazerty/xcwww\n12\tazerty\n");
+    // Exact match
+    ts.ucmd()
+        .arg("--exclude=azeaze")
+        .arg("azerty")
+        .succeeds()
+        .stdout_does_not_contain("azerty/xcwww/azeaze");
+    // Partial match and NOT a glob
+    ts.ucmd()
+        .arg("--exclude=azeaz")
+        .arg("azerty")
+        .succeeds()
+        .stdout_contains("azerty/xcwww/azeaze");
+    // Partial match and a various glob
+    ts.ucmd()
+        .arg("--exclude=azea?")
+        .arg("azerty")
+        .succeeds()
+        .stdout_contains("azerty/xcwww/azeaze");
+    ts.ucmd()
+        .arg("--exclude=azea{z,b}")
+        .arg("azerty")
+        .succeeds()
+        .stdout_contains("azerty/xcwww/azeaze");
+    ts.ucmd()
+        .arg("--exclude=azea*")
+        .arg("azerty")
+        .succeeds()
+        .stdout_does_not_contain("azerty/xcwww/azeaze");
+    ts.ucmd()
+        .arg("--exclude=azeaz?")
+        .arg("azerty")
+        .succeeds()
+        .stdout_does_not_contain("azerty/xcwww/azeaze");
+}
+
+#[test]
+fn test_du_exclude_mix() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let mut file1 = at.make_file("file-ignore1");
+    file1.write_all(b"azeaze").unwrap();
+    let mut file2 = at.make_file("file-ignore2");
+    file2.write_all(b"amaz?ng").unwrap();
+
+    at.mkdir_all("azerty/xcwww/azeaze");
+    at.mkdir_all("azerty/xcwww/qzerty");
+    at.mkdir_all("azerty/xcwww/amazing");
+
+    ts.ucmd()
+        .arg("azerty")
+        .succeeds()
+        .stdout_contains("azerty/xcwww/azeaze");
+    ts.ucmd()
+        .arg("--exclude=azeaze")
+        .arg("azerty")
+        .succeeds()
+        .stdout_does_not_contain("azerty/xcwww/azeaze");
+
+    // Just exclude one file name
+    let result = ts.ucmd().arg("--exclude=qzerty").arg("azerty").succeeds();
+    assert!(!result.stdout_str().contains("qzerty"));
+    assert!(result.stdout_str().contains("azerty"));
+    assert!(result.stdout_str().contains("xcwww"));
+
+    // Exclude from file
+    let result = ts
+        .ucmd()
+        .arg("--exclude-from=file-ignore1")
+        .arg("azerty")
+        .succeeds();
+    assert!(!result.stdout_str().contains("azeaze"));
+    assert!(result.stdout_str().contains("qzerty"));
+    assert!(result.stdout_str().contains("xcwww"));
+
+    // Mix two files and string
+    let result = ts
+        .ucmd()
+        .arg("--exclude=qzerty")
+        .arg("--exclude-from=file-ignore1")
+        .arg("--exclude-from=file-ignore2")
+        .arg("azerty")
+        .succeeds();
+    assert!(!result.stdout_str().contains("amazing"));
+    assert!(!result.stdout_str().contains("qzerty"));
+    assert!(!result.stdout_str().contains("azeaze"));
+    assert!(result.stdout_str().contains("xcwww"));
+}
+
+#[test]
+fn test_du_exclude_several_components() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("a/b/c");
+    at.mkdir_all("a/x/y");
+    at.mkdir_all("a/u/y");
+
+    // Exact match
+    let result = ts
+        .ucmd()
+        .arg("--exclude=a/u")
+        .arg("--exclude=a/b")
+        .arg("a")
+        .succeeds();
+    assert!(!result.stdout_str().contains("a/u"));
+    assert!(!result.stdout_str().contains("a/b"));
+}
+
+#[test]
+fn test_du_exclude_invalid_syntax() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("azerty/xcwww/azeaze");
+
+    ts.ucmd()
+        .arg("--exclude=a[ze")
+        .arg("azerty")
+        .fails()
+        .stderr_contains("du: Invalid exclude syntax");
 }
