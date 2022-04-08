@@ -183,4 +183,31 @@ impl Column {
             _ => Err(()),
         }
     }
+
+    /// Return the alignment of the specified column.
+    pub(crate) fn alignment(column: &Self) -> Alignment {
+        match column {
+            Self::Source | Self::Target | Self::File | Self::Fstype => Alignment::Left,
+            _ => Alignment::Right,
+        }
+    }
+
+    /// Return the minimum width of the specified column.
+    pub(crate) fn min_width(column: &Self) -> usize {
+        match column {
+            // 14 = length of "Filesystem" plus 4 spaces
+            Self::Source => 14,
+            // the shortest headers have a length of 4 chars so we use that as the minimum width
+            _ => 4,
+        }
+    }
+}
+
+/// A column's alignment.
+///
+/// We define our own `Alignment` enum instead of using `std::fmt::Alignment` because df doesn't
+/// have centered columns and hence a `Center` variant is not needed.
+pub(crate) enum Alignment {
+    Left,
+    Right,
 }

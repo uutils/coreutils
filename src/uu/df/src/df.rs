@@ -25,7 +25,7 @@ use std::path::Path;
 use crate::blocks::{block_size_from_matches, BlockSize};
 use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
-use crate::table::{DisplayRow, Header, Row};
+use crate::table::Table;
 
 static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
                       or all file systems by default.";
@@ -380,26 +380,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    // The running total of filesystem sizes and usage.
-    //
-    // This accumulator is computed in case we need to display the
-    // total counts in the last row of the table.
-    let mut total = Row::new("total");
+    // This can happen if paths are given as command-line arguments
+    // but none of the paths exist.
+    if filesystems.is_empty() {
+        return Ok(());
+    }
 
-    println!("{}", Header::new(&opt));
-    for filesystem in filesystems {
-        // If the filesystem is not empty, or if the options require
-        // showing all filesystems, then print the data as a row in
-        // the output table.
-        if opt.show_all_fs || filesystem.usage.blocks > 0 {
-            let row = Row::from(filesystem);
-            println!("{}", DisplayRow::new(&row, &opt));
-            total += row;
-        }
-    }
-    if opt.show_total {
-        println!("{}", DisplayRow::new(&total, &opt));
-    }
+    println!("{}", Table::new(&opt, filesystems));
 
     Ok(())
 }
