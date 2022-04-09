@@ -69,7 +69,7 @@ pub(crate) fn test<A: Arithmetic + Basis>(m: A) -> Result {
             continue;
         }
 
-        let a = m.from_u64(_a);
+        let a = m.to_mod(_a);
 
         // x = a^r mod n
         let mut x = m.pow(a, r);
