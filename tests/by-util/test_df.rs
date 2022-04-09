@@ -28,16 +28,18 @@ fn test_df_compatible_si() {
 
 #[test]
 fn test_df_output() {
-    // TODO These should fail because `-total` should have two dashes,
-    // not just one. But they don't fail.
-    if cfg!(target_os = "macos") {
-        new_ucmd!().arg("-H").arg("-total").succeeds().
-        stdout_only("Filesystem               Size         Used    Available     Capacity  Use% Mounted on       \n");
+    let expected = if cfg!(target_os = "macos") {
+        "Filesystem               Size         Used    Available     Capacity  Use% Mounted on       "
     } else {
-        new_ucmd!().arg("-H").arg("-total").succeeds().stdout_only(
-            "Filesystem               Size         Used    Available  Use% Mounted on       \n",
-        );
-    }
+        "Filesystem               Size         Used    Available  Use% Mounted on       "
+    };
+    let output = new_ucmd!()
+        .arg("-H")
+        .arg("--total")
+        .succeeds()
+        .stdout_move_str();
+    let actual = output.lines().take(1).collect::<Vec<&str>>()[0];
+    assert_eq!(actual, expected);
 }
 
 /// Test that the order of rows in the table does not change across executions.
