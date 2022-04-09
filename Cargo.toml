@@ -384,7 +384,7 @@ atty = "0.2"
 hex-literal = "0.3.1"
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
-rlimit = "0.4.0"
+rlimit = "0.8.3"
 
 [target.'cfg(unix)'.dev-dependencies]
 nix = "0.23.1"
