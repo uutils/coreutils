@@ -34,7 +34,7 @@ use std::str::FromStr;
 use std::time::{Duration, UNIX_EPOCH};
 use std::{error::Error, fmt::Display};
 use uucore::display::{print_verbatim, Quotable};
-use uucore::error::{UError, UResult};
+use uucore::error::{set_exit_code, UError, UResult};
 use uucore::format_usage;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::InvalidEncodingHandling;
@@ -315,6 +315,7 @@ fn du(
                     my_stat.path.quote(),
                     e
                 );
+                set_exit_code(1);
                 return Box::new(iter::once(my_stat));
             }
         };
@@ -374,6 +375,7 @@ fn du(
                                 let description = format!("cannot access {}", entry.path().quote());
                                 let error_message = "Permission denied";
                                 show_error_custom_description!(description, "{}", error_message);
+                                set_exit_code(1);
                             }
                             _ => show_error!("cannot access {}: {}", entry.path().quote(), error),
                         },
