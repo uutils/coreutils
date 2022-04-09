@@ -221,7 +221,7 @@ impl CmdResult {
         assert!(
             self.stdout.is_empty(),
             "Expected stdout to be empty, but it's:\n{}",
-            self.stderr_str()
+            self.stdout_str()
         );
         self
     }
