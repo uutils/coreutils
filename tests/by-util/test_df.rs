@@ -297,3 +297,16 @@ fn test_output_field_no_more_than_once() {
         .fails()
         .usage_error("option --output: field 'target' used more than once");
 }
+
+#[test]
+fn test_nonexistent_file() {
+    new_ucmd!()
+        .arg("does-not-exist")
+        .fails()
+        .stderr_only("df: does-not-exist: No such file or directory");
+    new_ucmd!()
+        .args(&["--output=file", "does-not-exist", "."])
+        .fails()
+        .stderr_is("df: does-not-exist: No such file or directory\n")
+        .stdout_is("File            \n.               \n");
+}
