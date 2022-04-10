@@ -9,14 +9,16 @@
 
 use clap::{crate_version, Arg, Command};
 use regex::Regex;
+use std::cell::RefCell;
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::default::Default;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
 use std::num::ParseIntError;
+use std::rc::Rc;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::{format_usage, InvalidEncodingHandling};
@@ -151,17 +153,38 @@ impl WordFilter {
     }
 }
 
-#[derive(Debug, PartialOrd, PartialEq, Eq, Ord)]
-struct WordRef {
+#[derive(Debug, PartialOrd, PartialEq, Eq)]
+struct WordRef<'a> {
+    //TODO: Remove unecessary fields
+    left_context: &'a str,
+    right_context: &'a str,
+
+    keyword: &'a str,
+    keyword_context: &'a str,
     word_begin: usize,
     word_end: usize,
-    sentence_start: usize,
+
+    before_keyword: &'a str,
+
+    sentence: &'a str,
+    sentence_begin: usize,
     sentence_end: usize,
-    global_line_nr: usize,
-    local_line_nr: usize,
-    filename: String,
+
+    input_reference: &'a str,
     input_ref_begin: usize,
     input_ref_end: usize,
+
+    global_line_nr: usize,
+
+    local_line_nr: usize,
+
+    filename: String,
+}
+
+impl<'a> Ord for WordRef<'a> {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.keyword.cmp(other.keyword)
+    }
 }
 
 #[derive(Debug)]
@@ -246,21 +269,9 @@ fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
 
 struct FileContent {
     content: String,
-    chars: Vec<char>,
 }
 
 type FileMap = HashMap<String, FileContent>;
-
-struct OutputChunk {
-    tail: String,
-    tail_truncation: bool,
-    before: String,
-    before_truncation: bool,
-    after: String,
-    after_truncation: bool,
-    head: String,
-    head_truncation: bool,
-}
 
 fn read_input(input_files: &[String], config: &Config) -> std::io::Result<FileMap> {
     let mut file_map: FileMap = HashMap::new();
@@ -274,7 +285,7 @@ fn read_input(input_files: &[String], config: &Config) -> std::io::Result<FileMa
     } else {
         files.push(&input_files[0]);
     }
-    let mut offset: usize = 0;
+
     for filename in files {
         let mut reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
             Box::new(stdin())
@@ -284,13 +295,9 @@ fn read_input(input_files: &[String], config: &Config) -> std::io::Result<FileMa
         });
 
         let mut content = String::new();
-        reader.read_to_string(&mut content);
+        reader.read_to_string(&mut content)?;
 
-        // Indexing UTF-8 string requires walking from the beginning, which can hurts performance badly when the line is long.
-        // Since we will be jumping around the line a lot, we dump the content into a Vec<char>, which can be indexed in constant time.
-        let chars: Vec<char> = content.chars().collect();
-
-        file_map.insert(filename.to_owned(), FileContent { content, chars });
+        file_map.insert(filename.to_owned(), FileContent { content });
     }
     Ok(file_map)
 }
@@ -318,24 +325,30 @@ fn skip_whitespace_pos(content: &str) -> usize {
 }
 
 /// Go through every lines in the input files and record each match occurrence as a `WordRef`.
-fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> BTreeSet<WordRef> {
+fn create_word_set<'a>(
+    word_set: &'a RefCell<BTreeSet<WordRef<'a>>>,
+    config: &'a Config,
+    filter: &'a WordFilter,
+    file_map: &'a FileMap,
+) {
+    let mut word_set = word_set.borrow_mut();
+
     let word_reg = Regex::new(&filter.word_regex).unwrap();
     let context_reg = Regex::new(&config.context_regex).unwrap();
-    let mut word_set: BTreeSet<WordRef> = BTreeSet::new();
-    let mut sentence_start = 0;
+    let mut sentence_begin = 0;
 
     for (file, file_content) in file_map.iter() {
         let content = file_content.content.as_str();
 
         for context_end_match in context_reg.find_iter(content) {
             let sentence_end = context_end_match.end();
-            sentence_start =
-                sentence_start + skip_whitespace_pos(&content[sentence_start..sentence_end]);
+            sentence_begin =
+                sentence_begin + skip_whitespace_pos(&content[sentence_begin..sentence_end]);
 
             let (input_ref_begin, input_ref_end) = if config.input_ref {
-                let ref_begin = sentence_start;
-                let ref_end = sentence_start
-                    + skip_non_whitespace_pos(&content[sentence_start..sentence_end]);
+                let ref_begin = sentence_begin;
+                let ref_end = sentence_begin
+                    + skip_non_whitespace_pos(&content[sentence_begin..sentence_end]);
                 (ref_begin, ref_end)
             } else {
                 (0, 0)
@@ -362,193 +375,38 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
                     continue;
                 }
 
+                let before_keyword = if config.input_ref {
+                    content[input_ref_end..word_begin].trim_start()
+                } else {
+                    &content[sentence_begin..word_begin]
+                };
+
                 word_set.insert(WordRef {
+                    keyword: word,
+                    keyword_context: &content[word_begin..sentence_end],
                     word_begin,
                     word_end,
-                    sentence_start,
+
+                    before_keyword,
+
+                    sentence: &content[sentence_begin..sentence_end],
+                    sentence_begin,
                     sentence_end,
+
+                    input_reference: &content[input_ref_begin..input_ref_end],
+                    input_ref_begin,
+                    input_ref_end,
+
+                    left_context: &content[sentence_begin..word_begin],
+                    right_context: &content[word_end..sentence_end],
+
                     filename: file.clone(),
                     global_line_nr: 0,
                     local_line_nr: 0,
-                    input_ref_begin,
-                    input_ref_end,
                 });
             }
-            sentence_start = sentence_end;
+            sentence_begin = sentence_end;
         }
-    }
-
-    word_set
-}
-
-fn get_reference(config: &Config, word_ref: &WordRef, content: &str) -> String {
-    if config.auto_ref {
-        format!(
-            "{}:{}",
-            word_ref.filename.maybe_quote(),
-            word_ref.local_line_nr + 1
-        )
-    } else if config.input_ref {
-        content[word_ref.input_ref_begin..word_ref.input_ref_end].to_owned()
-    } else {
-        String::new()
-    }
-}
-
-fn assert_str_integrity(s: &[char], beg: usize, end: usize) {
-    assert!(beg <= end);
-    assert!(end <= s.len());
-}
-
-fn trim_broken_word_left(s: &[char], beg: usize, end: usize) -> usize {
-    assert_str_integrity(s, beg, end);
-    if beg == end || beg == 0 || s[beg].is_whitespace() || s[beg - 1].is_whitespace() {
-        return beg;
-    }
-    let mut b = beg;
-    while b < end && !s[b].is_whitespace() {
-        b += 1;
-    }
-    b
-}
-
-fn trim_broken_word_right(s: &[char], beg: usize, end: usize) -> usize {
-    assert_str_integrity(s, beg, end);
-    if beg == end || end == s.len() || s[end - 1].is_whitespace() || s[end].is_whitespace() {
-        return end;
-    }
-    let mut e = end;
-    while beg < e && !s[e - 1].is_whitespace() {
-        e -= 1;
-    }
-    e
-}
-
-fn trim_idx(s: &[char], beg: usize, end: usize) -> (usize, usize) {
-    assert_str_integrity(s, beg, end);
-    let mut b = beg;
-    let mut e = end;
-    while b < e && s[b].is_whitespace() {
-        b += 1;
-    }
-    while b < e && s[e - 1].is_whitespace() {
-        e -= 1;
-    }
-    (b, e)
-}
-
-fn get_output_chunks(
-    all_before: &[char],
-    keyword: &str,
-    all_after: &[char],
-    config: &Config,
-) -> OutputChunk {
-    // Chunk size logics are mostly copied from the GNU ptx source.
-    // https://github.com/MaiZure/coreutils-8.3/blob/master/src/ptx.c#L1234
-    let half_line_size = (config.line_width / 2) as usize;
-    let max_before_size = cmp::max(half_line_size as isize - config.gap_size as isize, 0) as usize;
-    let max_after_size = cmp::max(
-        half_line_size as isize
-            - (2 * config.trunc_str.len()) as isize
-            - keyword.len() as isize
-            - 1,
-        0,
-    ) as usize;
-
-    // Allocate plenty space for all the chunks.
-    let mut head = String::with_capacity(half_line_size);
-    let mut before = String::with_capacity(half_line_size);
-    let mut after = String::with_capacity(half_line_size);
-    let mut tail = String::with_capacity(half_line_size);
-
-    // the before chunk
-
-    // trim whitespace away from all_before to get the index where the before chunk should end.
-    let (_, before_end) = trim_idx(all_before, 0, all_before.len());
-
-    // the minimum possible begin index of the before_chunk is the end index minus the length.
-    let before_beg = cmp::max(before_end as isize - max_before_size as isize, 0) as usize;
-    // in case that falls in the middle of a word, trim away the word.
-    let before_beg = trim_broken_word_left(all_before, before_beg, before_end);
-
-    // trim away white space.
-    let (before_beg, before_end) = trim_idx(all_before, before_beg, before_end);
-
-    // and get the string.
-    let before_str: String = all_before[before_beg..before_end].iter().collect();
-    before.push_str(&before_str);
-    assert!(max_before_size >= before.len());
-
-    // the after chunk
-
-    // must be no longer than the minimum between the max size and the total available string.
-    let after_end = cmp::min(max_after_size, all_after.len());
-    // in case that falls in the middle of a word, trim away the word.
-    let after_end = trim_broken_word_right(all_after, 0, after_end);
-
-    // trim away white space.
-    let (_, after_end) = trim_idx(all_after, 0, after_end);
-
-    // and get the string
-    let after_str: String = all_after[0..after_end].iter().collect();
-    after.push_str(&after_str);
-    assert!(max_after_size >= after.len());
-
-    // the tail chunk
-
-    // max size of the tail chunk = max size of left half - space taken by before chunk - gap size.
-    let max_tail_size = cmp::max(
-        max_before_size as isize - before.len() as isize - config.gap_size as isize,
-        0,
-    ) as usize;
-
-    // the tail chunk takes text starting from where the after chunk ends (with whitespace trimmed).
-    let (tail_beg, _) = trim_idx(all_after, after_end, all_after.len());
-
-    // end = begin + max length
-    let tail_end = cmp::min(all_after.len(), tail_beg + max_tail_size) as usize;
-    // in case that falls in the middle of a word, trim away the word.
-    let tail_end = trim_broken_word_right(all_after, tail_beg, tail_end);
-
-    // trim away whitespace again.
-    let (tail_beg, tail_end) = trim_idx(all_after, tail_beg, tail_end);
-
-    // and get the string
-    let tail_str: String = all_after[tail_beg..tail_end].iter().collect();
-    tail.push_str(&tail_str);
-
-    // the head chunk
-
-    // max size of the head chunk = max size of right half - space taken by after chunk - gap size.
-    let max_head_size = cmp::max(
-        max_after_size as isize - after.len() as isize - config.gap_size as isize,
-        0,
-    ) as usize;
-
-    // the head chunk takes text from before the before chunk
-    let (_, head_end) = trim_idx(all_before, 0, before_beg);
-
-    // begin = end - max length
-    let head_beg = cmp::max(head_end as isize - max_head_size as isize, 0) as usize;
-    // in case that falls in the middle of a word, trim away the word.
-    let head_beg = trim_broken_word_left(all_before, head_beg, head_end);
-
-    // trim away white space again.
-    let (head_beg, head_end) = trim_idx(all_before, head_beg, head_end);
-
-    // and get the string.
-    let head_str: String = all_before[head_beg..head_end].iter().collect();
-    head.push_str(&head_str);
-
-    OutputChunk {
-        tail,
-        tail_truncation: false,
-        before,
-        before_truncation: false,
-        after,
-        after_truncation: false,
-        head,
-        head_truncation: false,
     }
 }
 
@@ -567,108 +425,66 @@ fn format_tex_field(s: &str) -> String {
     mapped_chunks.join("")
 }
 
-fn format_tex_line(config: &Config, word_ref: &WordRef, content: &str, reference: &str) -> String {
-    let mut output = String::new();
-    output.push_str(&format!("\\{} ", config.macro_name));
-    let all_before = if config.input_ref {
-        let before = &content[word_ref.word_begin..word_ref.word_end];
-        let before_start_trim_offset =
-            word_ref.word_end - before.trim_start_matches(reference).trim_start().len();
-        let before_end_index = before.len();
-        &content[before_start_trim_offset..cmp::max(before_end_index, before_start_trim_offset)]
-    } else {
-        let before_chars_trim_idx = (0, word_ref.word_end);
-        &content[before_chars_trim_idx.0..before_chars_trim_idx.1]
-    };
-    //     let keyword = &line[word_ref.position..word_ref.position_end];
-    //     let after_chars_trim_idx = (word_ref.position_end, chars_line.len());
-    //     let all_after = &chars_line[after_chars_trim_idx.0..after_chars_trim_idx.1];
-    //     let output_chunk = get_output_chunks(all_before, keyword, all_after, config);
-    //     output.push_str(&format!(
-    //         "{5}{0}{6}{5}{1}{6}{5}{2}{6}{5}{3}{6}{5}{4}{6}",
-    //         format_tex_field(&output_chunk.tail),
-    //         format_tex_field(&output_chunk.before),
-    //         format_tex_field(keyword),
-    //         format_tex_field(&output_chunk.after),
-    //         format_tex_field(&output_chunk.head),
-    //         "{",
-    //         "}"
-    //     ));
-    //     if config.auto_ref || config.input_ref {
-    //         output.push_str(&format!("{}{}{}", "{", format_tex_field(reference), "}"));
-    //     }
-    output
-}
-
 fn format_roff_field(s: &str) -> String {
     s.replace('\"', "\"\"")
 }
 
-fn format_roff_line(config: &Config, word_ref: &WordRef, content: &str, reference: &str) -> String {
-    let mut output = String::new();
-    output.push_str(&format!("\\{} ", config.macro_name));
-    let all_before = if config.input_ref {
-        let before = content[word_ref.input_ref_end..word_ref.word_begin].trim_start();
-        // let before_start_trim_offset =
-        //     word_ref.word_begin - before.trim_start_matches(reference).trim_start().len();
-        // let before_end_index = before.len();
-        // &content[before_start_trim_offset..cmp::max(before_end_index, before_start_trim_offset)]
-        before
-    } else {
-        let before_chars_trim_idx = (0, word_ref.word_end);
-        &content[before_chars_trim_idx.0..before_chars_trim_idx.1]
-    };
-    let keyword = &content[word_ref.word_begin..word_ref.word_end];
-    let all_after = &content[word_ref.word_end..];
-    // let output_chunk = get_output_chunks(all_before, keyword, all_after, config);
-    // output.push_str(&format!(
-    //     " \"{}\" \"{}\" \"{}{}\" \"{}\"",
-    //     format_roff_field(&output_chunk.tail),
-    //     format_roff_field(&output_chunk.before),
-    //     format_roff_field(keyword),
-    //     format_roff_field(&output_chunk.after),
-    //     format_roff_field(&output_chunk.head)
-    // ));
-    // if config.auto_ref || config.input_ref {
-    //     output.push_str(&format!(" \"{}\"", format_roff_field(reference)));
-    // }
-    output
-}
-
-fn write_traditional_output(
+fn write_output(
     config: &Config,
     file_map: &FileMap,
-    words: &BTreeSet<WordRef>,
-    output_filename: &str,
+    word_set: &RefCell<BTreeSet<WordRef>>,
 ) -> UResult<()> {
-    let mut writer: BufWriter<Box<dyn Write>> = BufWriter::new(if output_filename == "-" {
-        Box::new(stdout())
-    } else {
-        let file = File::create(output_filename).map_err_context(String::new)?;
-        Box::new(file)
-    });
-
-    for word_ref in words.iter() {
+    let word_set = word_set.borrow();
+    for word_ref in word_set.iter() {
         let file_map_value: &FileContent = file_map
             .get(&(word_ref.filename))
             .expect("Missing file in file map");
-        let FileContent {
-            ref content,
-            ref chars,
-        } = *(file_map_value);
-        let content = content.as_str();
-        let reference = get_reference(config, word_ref, &content);
-        let output_line: String = match config.format {
-            OutFormat::Tex => format_tex_line(config, word_ref, content, &reference),
-            OutFormat::Roff => format_roff_line(config, word_ref, content, &reference),
-            OutFormat::Dumb => {
-                return Err(PtxError::DumbFormat.into());
-            }
-            _ => {
-                return Err(PtxError::DumbFormat.into());
-            }
-        };
-        writeln!(writer, "{}", output_line).map_err_context(String::new)?;
+
+        let mut output = String::new();
+        output.push_str(&format!("\\{} ", config.macro_name));
+
+        let WordRef {
+            keyword,
+            keyword_context,
+            before_keyword,
+            input_reference,
+            sentence,
+            left_context,
+            right_context,
+            ..
+        } = *word_ref;
+
+        let half_line_size = (config.line_width / 2) as usize;
+        let max_before_size =
+            cmp::max(half_line_size as isize - config.gap_size as isize, 0) as usize;
+        let max_after_size = cmp::max(
+            half_line_size as isize
+                - (2 * config.trunc_str.len()) as isize
+                - keyword.len() as isize
+                - 1,
+            0,
+        ) as usize;
+
+        let before: String = before_keyword.chars().take(max_before_size).collect();
+        let keyword_ctx: String = keyword_context.chars().take(max_after_size).collect();
+
+        //TODO: go back with output format methods, after all sizing and truncation magic.
+        //Maybe create a writer for each format, using the OutFormat as associated type.
+        output.push_str(&format!(
+            " \"{}\" \"{}\" \"{}{}\" \"{}\"",
+            format_roff_field(""),
+            format_roff_field(&before.trim()),
+            format_roff_field(&keyword_ctx.trim()),
+            format_roff_field(""),
+            format_roff_field("")
+        ));
+        if config.auto_ref || config.input_ref {
+            output.push_str(&format!(" \"{}\"", format_roff_field(input_reference)));
+        }
+
+        writeln!(stdout(), "{}", output)
+            .map_err_context(String::new)
+            .unwrap();
     }
     Ok(())
 }
@@ -699,7 +515,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    // let mut opts = Options::new();
     let matches = uu_app().get_matches_from(args);
 
     let mut input_files: Vec<String> = match &matches.values_of(options::FILE) {
@@ -710,13 +525,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let config = get_config(&matches)?;
     let word_filter = WordFilter::new(&matches, &config)?;
     let file_map = read_input(&input_files, &config).map_err_context(String::new)?;
-    let word_set = create_word_set(&config, &word_filter, &file_map);
+
+    let word_set = Rc::new(RefCell::new(BTreeSet::new()));
+
+    create_word_set(&word_set, &config, &word_filter, &file_map);
+
     let output_file = if !config.gnu_ext && input_files.len() == 2 {
         input_files.pop().unwrap()
     } else {
         "-".to_string()
     };
-    write_traditional_output(&config, &file_map, &word_set, &output_file)
+
+    write_output(&config, &file_map, &word_set)
 }
 
 pub fn uu_app<'a>() -> Command<'a> {
