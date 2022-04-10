@@ -3,7 +3,6 @@
 //!
 //! This module provides an implementation of [`FromStr`] for the
 //! [`PreciseNumber`] struct.
-use std::convert::TryInto;
 use std::str::FromStr;
 
 use bigdecimal::BigDecimal;

@@ -471,11 +471,24 @@ impl Stater {
     }
 
     fn new(matches: &ArgMatches) -> UResult<Self> {
-        let files: Vec<String> = matches
+        let mut files: Vec<String> = matches
             .values_of(ARG_FILES)
             .map(|v| v.map(ToString::to_string).collect())
             .unwrap_or_default();
-
+        #[cfg(unix)]
+        if files.contains(&String::from("-")) {
+            let redirected_path = Path::new("/dev/stdin")
+                .canonicalize()
+                .expect("unable to canonicalize /dev/stdin")
+                .into_os_string()
+                .into_string()
+                .unwrap();
+            for file in &mut files {
+                if file == "-" {
+                    *file = redirected_path.clone();
+                }
+            }
+        }
         let format_str = if matches.is_present(options::PRINTF) {
             matches
                 .value_of(options::PRINTF)

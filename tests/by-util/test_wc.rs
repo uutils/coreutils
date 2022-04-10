@@ -7,7 +7,7 @@ use crate::common::util::*;
 
 #[test]
 fn test_count_bytes_large_stdin() {
-    for &n in &[
+    for n in [
         0,
         1,
         42,

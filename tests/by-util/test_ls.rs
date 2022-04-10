@@ -604,7 +604,7 @@ fn test_ls_width() {
     at.touch(&at.plus_as_string("test-width-3"));
     at.touch(&at.plus_as_string("test-width-4"));
 
-    for option in &[
+    for option in [
         "-w 100",
         "-w=100",
         "--width=100",
@@ -619,7 +619,7 @@ fn test_ls_width() {
             .stdout_only("test-width-1  test-width-2  test-width-3  test-width-4\n");
     }
 
-    for option in &["-w 50", "-w=50", "--width=50", "--width 50", "--wid=50"] {
+    for option in ["-w 50", "-w=50", "--width=50", "--width 50", "--wid=50"] {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
@@ -628,7 +628,7 @@ fn test_ls_width() {
             .stdout_only("test-width-1  test-width-3\ntest-width-2  test-width-4\n");
     }
 
-    for option in &["-w 25", "-w=25", "--width=25", "--width 25", "--wid=25"] {
+    for option in ["-w 25", "-w=25", "--width=25", "--width 25", "--wid=25"] {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
@@ -637,7 +637,7 @@ fn test_ls_width() {
             .stdout_only("test-width-1\ntest-width-2\ntest-width-3\ntest-width-4\n");
     }
 
-    for option in &["-w 0", "-w=0", "--width=0", "--width 0", "--wid=0"] {
+    for option in ["-w 0", "-w=0", "--width=0", "--width 0", "--wid=0"] {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
@@ -653,7 +653,7 @@ fn test_ls_width() {
         .fails()
         .stderr_contains("invalid line width");
 
-    for option in &["-w 1a", "-w=1a", "--width=1a", "--width 1a", "--wid 1a"] {
+    for option in ["-w 1a", "-w=1a", "--width=1a", "--width 1a", "--wid 1a"] {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
@@ -894,7 +894,7 @@ fn test_ls_long_symlink_color() {
         (Some([0, 0]), "ln-file1", None, "dir1/file1"),
         (Some([1, 1]), "ln-dir-invalid", Some([1, 1]), "dir1/dir2"),
         (Some([0, 0]), "ln-root", Some([0, 1]), "/"),
-        (Some([0, 0]), "ln-up2", Some([0, 1]), "../.."),
+        (Some([0, 0]), "ln-up2", None, "../.."),
     ];
 
     // We are only interested in lines or the ls output that are symlinks. These start with "lrwx".
@@ -912,6 +912,8 @@ fn test_ls_long_symlink_color() {
     while let Some((i, name, target)) = get_index_name_target(&mut result_lines) {
         // The unwraps within capture_colored_string will panic if the name/target's color
         // format is invalid.
+        dbg!(&name);
+        dbg!(&target);
         let (matched_name_color, matched_name) = capture_colored_string(&name);
         let (matched_target_color, matched_target) = capture_colored_string(&target);
 
@@ -934,6 +936,7 @@ fn test_ls_long_symlink_color() {
         // Keep in mind an expected color `Option<&str>` of None can mean either that we
         // don't expect any color here, as in `expected_output[2], or don't know what specific
         // color to expect yet, as in expected_output[0:1].
+        dbg!(&colors);
         assert_names_and_colors_are_equal(
             matched_name_color,
             expected_name_color,
@@ -1088,9 +1091,9 @@ fn test_ls_long_total_size() {
         let result = scene.ucmd().arg(arg).succeeds();
         result.stdout_contains(expected_prints["long_vanilla"]);
 
-        for arg2 in &["-h", "--human-readable", "--si"] {
+        for arg2 in ["-h", "--human-readable", "--si"] {
             let result = scene.ucmd().arg(arg).arg(arg2).succeeds();
-            result.stdout_contains(if *arg2 == "--si" {
+            result.stdout_contains(if arg2 == "--si" {
                 expected_prints["long_si"]
             } else {
                 expected_prints["long_human_readable"]
@@ -1158,7 +1161,7 @@ fn test_ls_long_formats() {
             .stdout_matches(&re_three_num);
     }
 
-    for arg in &[
+    for arg in [
         "-l",                     // only group and owner
         "-g --author",            // only author and group
         "-o --author",            // only author and owner
@@ -1184,7 +1187,7 @@ fn test_ls_long_formats() {
         }
     }
 
-    for arg in &[
+    for arg in [
         "-g",            // only group
         "-gl",           // only group
         "-o",            // only owner
@@ -1213,7 +1216,7 @@ fn test_ls_long_formats() {
         }
     }
 
-    for arg in &[
+    for arg in [
         "-og",
         "-ogl",
         "-lgo",
@@ -1255,7 +1258,7 @@ fn test_ls_oneline() {
 
     // Bit of a weird situation: in the tests oneline and columns have the same output,
     // except on Windows.
-    for option in &["-1", "--format=single-column"] {
+    for option in ["-1", "--format=single-column"] {
         scene
             .ucmd()
             .arg(option)
@@ -1376,7 +1379,7 @@ fn test_ls_long_ctime() {
 
     at.touch("test-long-ctime-1");
 
-    for arg in &["-c", "--time=ctime", "--time=status"] {
+    for arg in ["-c", "--time=ctime", "--time=status"] {
         let result = scene.ucmd().arg("-l").arg(arg).succeeds();
 
         // Should show the time on Unix, but question marks on windows.
@@ -1537,7 +1540,7 @@ fn test_ls_order_time() {
 
     // 3 was accessed last in the read
     // So the order should be 2 3 4 1
-    for arg in &["-u", "--time=atime", "--time=access", "--time=use"] {
+    for arg in ["-u", "--time=atime", "--time=access", "--time=use"] {
         let result = scene.ucmd().arg("-t").arg(arg).succeeds();
         at.open("test-3").metadata().unwrap().accessed().unwrap();
         at.open("test-4").metadata().unwrap().accessed().unwrap();
@@ -1656,7 +1659,7 @@ fn test_ls_color() {
     assert!(!result.stdout_str().contains(z_with_colors));
 
     // Color should be enabled
-    for param in &["--color", "--col", "--color=always", "--col=always"] {
+    for param in ["--color", "--col", "--color=always", "--col=always"] {
         scene
             .ucmd()
             .arg(param)
@@ -2034,7 +2037,7 @@ fn test_ls_success_on_c_drv_root_windows() {
 fn test_ls_version_sort() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    for filename in &[
+    for filename in [
         "a2",
         "b1",
         "b20",
@@ -2130,7 +2133,7 @@ fn test_ls_quoting_style() {
             .succeeds()
             .stdout_only("'one'$'\\n''two'\n");
 
-        for (arg, correct) in &[
+        for (arg, correct) in [
             ("--quoting-style=literal", "one?two"),
             ("-N", "one?two"),
             ("--literal", "one?two"),
@@ -2154,7 +2157,7 @@ fn test_ls_quoting_style() {
                 .stdout_only(format!("{}\n", correct));
         }
 
-        for (arg, correct) in &[
+        for (arg, correct) in [
             ("--quoting-style=literal", "one\ntwo"),
             ("-N", "one\ntwo"),
             ("--literal", "one\ntwo"),
@@ -2170,7 +2173,7 @@ fn test_ls_quoting_style() {
                 .stdout_only(format!("{}\n", correct));
         }
 
-        for (arg, correct) in &[
+        for (arg, correct) in [
             ("--quoting-style=literal", "one\\two"),
             ("-N", "one\\two"),
             ("--quoting-style=c", "\"one\\\\two\""),
@@ -2195,7 +2198,7 @@ fn test_ls_quoting_style() {
         // Tests for a character that forces quotation in shell-style escaping
         // after a character in a dollar expression
         at.touch("one\n&two");
-        for (arg, correct) in &[
+        for (arg, correct) in [
             ("--quoting-style=shell-escape", "'one'$'\\n''&two'"),
             ("--quoting-style=shell-escape-always", "'one'$'\\n''&two'"),
         ] {
@@ -2215,7 +2218,7 @@ fn test_ls_quoting_style() {
         .succeeds()
         .stdout_only("'one two'\n");
 
-    for (arg, correct) in &[
+    for (arg, correct) in [
         ("--quoting-style=literal", "one two"),
         ("-N", "one two"),
         ("--literal", "one two"),
@@ -2241,7 +2244,7 @@ fn test_ls_quoting_style() {
 
     scene.ucmd().arg("one").succeeds().stdout_only("one\n");
 
-    for (arg, correct) in &[
+    for (arg, correct) in [
         ("--quoting-style=literal", "one"),
         ("-N", "one"),
         ("--quoting-style=c", "\"one\""),
@@ -2649,7 +2652,7 @@ fn test_ls_deref_command_line_dir() {
 fn test_ls_sort_extension() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    for filename in &[
+    for filename in [
         "file1",
         "file2",
         "anotherFile",
@@ -2831,7 +2834,7 @@ fn test_ls_context2() {
         return;
     }
     let ts = TestScenario::new(util_name!());
-    for c_flag in &["-Z", "--context"] {
+    for c_flag in ["-Z", "--context"] {
         ts.ucmd()
             .args(&[c_flag, &"/"])
             .succeeds()
@@ -2851,7 +2854,7 @@ fn test_ls_context_format() {
     // NOTE:
     // --format=long/verbose matches the output of GNU's ls for --context
     // except for the size count which may differ to the size count reported by GNU's ls.
-    for word in &[
+    for word in [
         "across",
         "commas",
         "horizontal",

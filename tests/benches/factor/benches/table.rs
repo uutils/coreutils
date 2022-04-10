@@ -1,6 +1,5 @@
 use array_init::array_init;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use std::convert::TryInto;
 use uu_factor::{table::*, Factors};
 
 fn table(c: &mut Criterion) {

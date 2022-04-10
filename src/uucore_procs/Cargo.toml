@@ -10,7 +10,7 @@ repository = "https://github.com/uutils/coreutils/tree/main/src/uucore_procs"
 # readme = "README.md"
 keywords = ["cross-platform", "proc-macros", "uucore", "uutils"]
 # categories = ["os"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 proc-macro = true

@@ -41,7 +41,7 @@ static COMPLEX_SEQUENCE: &TestedSequence = &TestedSequence {
 
 #[test]
 fn test_byte_sequence() {
-    for &param in &["-b", "--bytes", "--byt"] {
+    for param in ["-b", "--bytes", "--byt"] {
         for example_seq in EXAMPLE_SEQUENCES {
             new_ucmd!()
                 .args(&[param, example_seq.sequence, INPUT])
@@ -53,7 +53,7 @@ fn test_byte_sequence() {
 
 #[test]
 fn test_char_sequence() {
-    for &param in &["-c", "--characters", "--char"] {
+    for param in ["-c", "--characters", "--char"] {
         for example_seq in EXAMPLE_SEQUENCES {
             //as of coreutils 8.25 a char range is effectively the same as a byte range; there is no distinct treatment of utf8 chars.
             new_ucmd!()
@@ -66,7 +66,7 @@ fn test_char_sequence() {
 
 #[test]
 fn test_field_sequence() {
-    for &param in &["-f", "--fields", "--fie"] {
+    for param in ["-f", "--fields", "--fie"] {
         for example_seq in EXAMPLE_SEQUENCES {
             new_ucmd!()
                 .args(&[param, example_seq.sequence, INPUT])
@@ -78,7 +78,7 @@ fn test_field_sequence() {
 
 #[test]
 fn test_specify_delimiter() {
-    for &param in &["-d", "--delimiter", "--del"] {
+    for param in ["-d", "--delimiter", "--del"] {
         new_ucmd!()
             .args(&[param, ":", "-f", COMPLEX_SEQUENCE.sequence, INPUT])
             .succeeds()
@@ -115,7 +115,7 @@ fn test_output_delimiter() {
 
 #[test]
 fn test_complement() {
-    for param in &["--complement", "--com"] {
+    for param in ["--complement", "--com"] {
         new_ucmd!()
             .args(&["-d_", param, "-f", "2"])
             .pipe_in("9_1\n8_2\n7_3")
@@ -135,7 +135,7 @@ fn test_zero_terminated() {
 
 #[test]
 fn test_only_delimited() {
-    for param in &["-s", "--only-delimited", "--only-del"] {
+    for param in ["-s", "--only-delimited", "--only-del"] {
         new_ucmd!()
             .args(&["-d_", param, "-f", "1"])
             .pipe_in("91\n82\n7_3")

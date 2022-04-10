@@ -333,7 +333,7 @@ fn test_touch_reference() {
     at.touch(file_a);
     set_file_times(&at, file_a, start_of_year, start_of_year);
     assert!(at.file_exists(file_a));
-    for &opt in &["-r", "--ref", "--reference"] {
+    for opt in ["-r", "--ref", "--reference"] {
         scenario
             .ccmd("touch")
             .args(&[opt, file_a, file_b])

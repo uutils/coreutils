@@ -39,7 +39,7 @@ fn test_command_with_args() {
 
 #[test]
 fn test_verbose() {
-    for &verbose_flag in &["-v", "--verbose"] {
+    for verbose_flag in ["-v", "--verbose"] {
         new_ucmd!()
             .args(&[verbose_flag, ".1", "sleep", "10"])
             .fails()

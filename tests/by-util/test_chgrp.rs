@@ -60,7 +60,7 @@ fn test_1() {
 #[test]
 fn test_fail_silently() {
     if get_effective_gid() != 0 {
-        for opt in &["-f", "--silent", "--quiet", "--sil", "--qui"] {
+        for opt in ["-f", "--silent", "--quiet", "--sil", "--qui"] {
             new_ucmd!()
                 .arg(opt)
                 .arg("bin")
@@ -74,7 +74,7 @@ fn test_fail_silently() {
 #[test]
 fn test_preserve_root() {
     // It's weird that on OS X, `realpath /etc/..` returns '/private'
-    for d in &[
+    for d in [
         "/",
         "/////tmp///../../../../",
         "../../../../../../../../../../../../../../",
@@ -92,7 +92,7 @@ fn test_preserve_root() {
 #[test]
 fn test_preserve_root_symlink() {
     let file = "test_chgrp_symlink2root";
-    for d in &[
+    for d in [
         "/",
         "////tmp//../../../../",
         "..//../../..//../..//../../../../../../../../",
@@ -299,7 +299,7 @@ fn test_traverse_symlinks() {
     }
     let (first_group, second_group) = (groups[0], groups[1]);
 
-    for &(args, traverse_first, traverse_second) in &[
+    for (args, traverse_first, traverse_second) in [
         (&[][..] as &[&str], false, false),
         (&["-H"][..], true, false),
         (&["-P"][..], false, false),
