@@ -429,7 +429,7 @@ fn test_du_no_permission() {
 
     ts.ccmd("chmod").arg("-r").arg(SUB_DIR_LINKS).succeeds();
 
-    let result = ts.ucmd().arg(SUB_DIR_LINKS).run(); // TODO: replace with ".fails()" once `du` is fixed
+    let result = ts.ucmd().arg(SUB_DIR_LINKS).fails();
     result.stderr_contains(
         "du: cannot read directory 'subdir/links': Permission denied (os error 13)",
     );
@@ -447,6 +447,21 @@ fn test_du_no_permission() {
     }
 
     _du_no_permission(result.stdout_str());
+}
+
+#[cfg(not(target_os = "windows"))]
+#[cfg(feature = "chmod")]
+#[test]
+fn test_du_no_exec_permission() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("d/no-x/y");
+
+    ts.ccmd("chmod").arg("u=rw").arg("d/no-x").succeeds();
+
+    let result = ts.ucmd().arg("d/no-x").fails();
+    result.stderr_contains("du: cannot access 'd/no-x/y': Permission denied");
 }
 
 #[cfg(target_vendor = "apple")]
