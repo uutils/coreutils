@@ -377,12 +377,13 @@ fn du(
                                 show_error_custom_description!(description, "{}", error_message);
                                 set_exit_code(1);
                             }
-                        _ => {
-                            set_exit_code(1);
-                            show_error!("cannot access {}: {}", entry.path().quote(), error);
-                        }                        },
+                            _ => {
+                                set_exit_code(1);
+                                show_error!("cannot access {}: {}", entry.path().quote(), error);
+                            }
+                        },
                     }
-                },
+                }
                 Err(error) => show_error!("{}", error),
             }
         }
