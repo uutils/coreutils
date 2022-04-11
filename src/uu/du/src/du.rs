@@ -325,21 +325,20 @@ fn du(
                 Ok(entry) => {
                     match Stat::new(entry.path(), options) {
                         Ok(this_stat) => {
-                            if !&exclude.is_empty() {
-                                // We have an exclude list
-                                for pattern in exclude {
-                                    // Look at all patterns
-                                    if pattern.matches(&this_stat.path.to_string_lossy())
-                                        || pattern
-                                            .matches(&entry.file_name().into_string().unwrap())
-                                    {
-                                        // if the directory is ignored, leave early
-                                        if options.verbose {
-                                            println!("{} ignored", &entry.file_name().quote());
-                                        }
-                                        // Go to the next file
-                                        continue 'file_loop;
+                            // We have an exclude list
+                            for pattern in exclude {
+                                // Look at all patterns with both short and long paths
+                                // if we have 'du foo' but search to exclude 'foo/bar'
+                                // we need the full path
+                                if pattern.matches(&this_stat.path.to_string_lossy())
+                                    || pattern.matches(&entry.file_name().into_string().unwrap())
+                                {
+                                    // if the directory is ignored, leave early
+                                    if options.verbose {
+                                        println!("{} ignored", &this_stat.path.quote());
                                     }
+                                    // Go to the next file
+                                    continue 'file_loop;
                                 }
                             }
 
