@@ -537,7 +537,7 @@ fn get_glob_ignore(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     excludes.append(&mut excludes_from);
     if !&excludes.is_empty() {
         let mut builder = Vec::new();
-        // Create the globset of excludes
+        // Create the `Vec` of excludes
         for f in excludes {
             if matches.is_present(options::VERBOSE) {
                 println!("adding {:?} to the exclude list ", &f);
