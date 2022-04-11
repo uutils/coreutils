@@ -16,7 +16,7 @@ use std::default::Default;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::num::ParseIntError;
 use std::rc::Rc;
 use uucore::display::Quotable;
@@ -38,6 +38,34 @@ enum OutFormat {
     Dumb,
     Roff,
     Tex,
+}
+
+impl OutFormat {
+    fn formatter(&self) -> Box<dyn PtxOutputFormatter> {
+        match self {
+            Self::Roff => Box::new(RoffOutputFormatter),
+            Self::Tex => Box::new(TexOutputFormatter),
+            Self::Dumb => Box::new(DumbOutputFormatter),
+        }
+    }
+}
+
+struct RoffOutputFormatter;
+
+struct TexOutputFormatter;
+
+struct DumbOutputFormatter;
+
+trait PtxOutputFormatter {
+    fn format(&self, output_chunk: SanitizedOutputChunk, config: &Config) -> String;
+}
+
+struct SanitizedOutputChunk {
+    before: String,
+    keyword_context: String,
+    head: String,
+    tail: String,
+    input_reference: String,
 }
 
 #[derive(Debug)]
@@ -425,23 +453,67 @@ fn format_tex_field(s: &str) -> String {
     mapped_chunks.join("")
 }
 
-fn format_roff_field(s: &str) -> String {
-    s.replace('\"', "\"\"")
+impl RoffOutputFormatter {
+    fn format_field(&self, content: &str) -> String {
+        content.replace('\"', "\"\"")
+    }
+}
+
+impl PtxOutputFormatter for RoffOutputFormatter {
+    fn format(&self, output_chunk: SanitizedOutputChunk, config: &Config) -> String {
+        let mut output = String::new();
+        output.push_str(&format!("\\{} ", config.macro_name));
+        output.push_str(&format!(
+            " \"{}\" \"{}\" \"{}{}\" \"{}\"",
+            self.format_field(""),
+            self.format_field(output_chunk.before.trim()),
+            self.format_field(output_chunk.keyword_context.trim()),
+            self.format_field(""),
+            self.format_field("")
+        ));
+        if config.auto_ref || config.input_ref {
+            output.push_str(&format!(
+                " \"{}\"",
+                self.format_field(&output_chunk.input_reference)
+            ));
+        }
+        output
+    }
+}
+
+impl PtxOutputFormatter for TexOutputFormatter {
+    fn format(&self, output_chunk: SanitizedOutputChunk, config: &Config) -> String {
+        todo!()
+    }
+}
+
+impl PtxOutputFormatter for DumbOutputFormatter {
+    fn format(&self, output_chunk: SanitizedOutputChunk, config: &Config) -> String {
+        todo!()
+    }
 }
 
 fn write_output(
     config: &Config,
     file_map: &FileMap,
     word_set: &RefCell<BTreeSet<WordRef>>,
+    output_filename: &str,
 ) -> UResult<()> {
+    let mut writer: BufWriter<Box<dyn Write>> = BufWriter::new(if output_filename == "-" {
+        Box::new(stdout())
+    } else {
+        let file = File::create(output_filename).map_err_context(String::new)?;
+        Box::new(file)
+    });
+
+    let formatter = config.format.formatter();
+
     let word_set = word_set.borrow();
+
     for word_ref in word_set.iter() {
         let file_map_value: &FileContent = file_map
             .get(&(word_ref.filename))
             .expect("Missing file in file map");
-
-        let mut output = String::new();
-        output.push_str(&format!("\\{} ", config.macro_name));
 
         let WordRef {
             keyword,
@@ -468,23 +540,21 @@ fn write_output(
         let before: String = before_keyword.chars().take(max_before_size).collect();
         let keyword_ctx: String = keyword_context.chars().take(max_after_size).collect();
 
-        //TODO: go back with output format methods, after all sizing and truncation magic.
+        //TODO: finish output format methods, after all sizing and truncation magic.
         //Maybe create a writer for each format, using the OutFormat as associated type.
-        output.push_str(&format!(
-            " \"{}\" \"{}\" \"{}{}\" \"{}\"",
-            format_roff_field(""),
-            format_roff_field(&before.trim()),
-            format_roff_field(&keyword_ctx.trim()),
-            format_roff_field(""),
-            format_roff_field("")
-        ));
-        if config.auto_ref || config.input_ref {
-            output.push_str(&format!(" \"{}\"", format_roff_field(input_reference)));
-        }
 
-        writeln!(stdout(), "{}", output)
-            .map_err_context(String::new)
-            .unwrap();
+        let output_line = formatter.format(
+            SanitizedOutputChunk {
+                before: before.to_string(),
+                keyword_context: keyword_ctx.to_string(),
+                head: String::new(),
+                tail: String::new(),
+                input_reference: input_reference.to_string(),
+            },
+            &config,
+        );
+
+        writeln!(writer, "{}", output_line).map_err_context(String::new)?;
     }
     Ok(())
 }
@@ -536,7 +606,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         "-".to_string()
     };
 
-    write_output(&config, &file_map, &word_set)
+    write_output(&config, &file_map, &word_set, &output_file)
 }
 
 pub fn uu_app<'a>() -> Command<'a> {
