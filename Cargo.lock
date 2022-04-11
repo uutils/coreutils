@@ -2402,6 +2402,7 @@ version = "0.0.13"
 dependencies = [
  "chrono",
  "clap 3.1.6",
+ "glob",
  "uucore",
  "winapi 0.3.9",
 ]
