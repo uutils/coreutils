@@ -11,7 +11,7 @@ extern crate uucore;
 use chrono::prelude::DateTime;
 use chrono::Local;
 use clap::{crate_version, Arg, ArgMatches, Command};
-use globset::{Glob, GlobSet, GlobSetBuilder};
+use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -87,8 +87,8 @@ SIZE is an integer and optional unit (example: 10M is 10*1024*1024).
 Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB,... (powers
 of 1000).
 
-PATTERN is based on the globset crate:
-https://docs.rs/globset/latest/globset/#syntax
+PATTERN allows some advanced exclusions. For example, the following syntaxes
+are supported:
 ? will match only one character
 * will match zero or more characters
 {a,b} will match a or b
@@ -300,7 +300,7 @@ fn du(
     options: &Options,
     depth: usize,
     inodes: &mut HashSet<FileInfo>,
-    glob_exclude: &GlobSet,
+    exclude: &[Pattern],
 ) -> Box<dyn DoubleEndedIterator<Item = Stat>> {
     let mut stats = vec![];
     let mut futures = vec![];
@@ -320,22 +320,27 @@ fn du(
             }
         };
 
-        for f in read {
+        'file_loop: for f in read {
             match f {
                 Ok(entry) => {
                     match Stat::new(entry.path(), options) {
                         Ok(this_stat) => {
-                            let full_path = this_stat.path.clone().into_os_string();
-                            if !&glob_exclude.is_empty()
-                                && (glob_exclude.is_match(full_path)
-                                    || glob_exclude
-                                        .is_match(&entry.file_name().into_string().unwrap()))
-                            {
-                                // if the directory is ignored, leave early
-                                if options.verbose {
-                                    println!("{} ignored", &entry.file_name().quote());
+                            if !&exclude.is_empty() {
+                                // We have an exclude list
+                                for pattern in exclude {
+                                    // Look at all patterns
+                                    if pattern.matches(&this_stat.path.to_string_lossy())
+                                        || pattern
+                                            .matches(&entry.file_name().into_string().unwrap())
+                                    {
+                                        // if the directory is ignored, leave early
+                                        if options.verbose {
+                                            println!("{} ignored", &entry.file_name().quote());
+                                        }
+                                        // Go to the next file
+                                        continue 'file_loop;
+                                    }
                                 }
-                                continue;
                             }
 
                             if let Some(inode) = this_stat.inode {
@@ -354,13 +359,7 @@ fn du(
                                         }
                                     }
                                 }
-                                futures.push(du(
-                                    this_stat,
-                                    options,
-                                    depth + 1,
-                                    inodes,
-                                    glob_exclude,
-                                ));
+                                futures.push(du(this_stat, options, depth + 1, inodes, exclude));
                             } else {
                                 my_stat.size += this_stat.size;
                                 my_stat.blocks += this_stat.blocks;
@@ -503,7 +502,7 @@ fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
 
 // Given the --exclude-from and/or --exclude arguments, returns the globset lists
 // to ignore the files
-fn get_globset_ignore(matches: &ArgMatches) -> UResult<GlobSet> {
+fn get_glob_ignore(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     let mut excludes_from = if matches.is_present(options::EXCLUDE_FROM) {
         match matches.values_of(options::EXCLUDE_FROM) {
             Some(all_files) => {
@@ -537,25 +536,20 @@ fn get_globset_ignore(matches: &ArgMatches) -> UResult<GlobSet> {
     // Merge the two lines
     excludes.append(&mut excludes_from);
     if !&excludes.is_empty() {
-        let mut builder = GlobSetBuilder::new();
+        let mut builder = Vec::new();
         // Create the globset of excludes
         for f in excludes {
             if matches.is_present(options::VERBOSE) {
                 println!("adding {:?} to the exclude list ", &f);
             }
-            let g = match Glob::new(&f) {
-                Ok(glob) => glob,
+            match Pattern::new(&f) {
+                Ok(glob) => builder.push(glob),
                 Err(err) => return Err(DuError::InvalidGlob(err.to_string()).into()),
             };
-            builder.add(g);
         }
-        match builder.build() {
-            // Handle the error. Not sure when this happens
-            Ok(glob_set) => Ok(glob_set),
-            Err(err) => Err(DuError::InvalidGlob(err.to_string()).into()),
-        }
+        Ok(builder)
     } else {
-        Ok(GlobSet::empty())
+        Ok(Vec::new())
     }
 }
 
@@ -636,17 +630,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         "\n"
     };
 
-    let exclude_glob = get_globset_ignore(&matches)?;
+    let excludes = get_glob_ignore(&matches)?;
 
     let mut grand_total = 0;
-    for path_string in files {
+    'loop_file: for path_string in files {
         // Skip if we don't want to ignore anything
-        if !&exclude_glob.is_empty() && exclude_glob.is_match(path_string) {
-            // if the directory is ignored, leave early
-            if options.verbose {
-                println!("{} ignored", path_string.quote());
+        if !&excludes.is_empty() {
+            for pattern in &excludes {
+                {
+                    if pattern.matches(path_string) {
+                        // if the directory is ignored, leave early
+                        if options.verbose {
+                            println!("{} ignored", path_string.quote());
+                        }
+                        continue 'loop_file;
+                    }
+                }
             }
-            continue;
         }
 
         let path = PathBuf::from(&path_string);
@@ -656,7 +656,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 if let Some(inode) = stat.inode {
                     inodes.insert(inode);
                 }
-                let iter = du(stat, &options, 0, &mut inodes, &exclude_glob);
+                let iter = du(stat, &options, 0, &mut inodes, &excludes);
                 let (_, len) = iter.size_hint();
                 let len = len.unwrap();
                 for (index, stat) in iter.enumerate() {

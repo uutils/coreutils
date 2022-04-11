@@ -4,7 +4,9 @@
 //  * file that was distributed with this source code.
 
 // spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty
-
+#[cfg(not(windows))]
+use regex::Regex;
+#[cfg(not(windows))]
 use std::io::Write;
 
 use crate::common::util::*;
@@ -632,16 +634,21 @@ fn test_du_exclude() {
 }
 
 #[test]
+// Disable on Windows because we are looking for /
+// And the tests would be more complex if we have to support \ too
+#[cfg(not(target_os = "windows"))]
 fn test_du_exclude_2() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
     at.mkdir_all("azerty/xcwww/azeaze");
 
-    ts.ucmd()
-        .arg("azerty")
-        .succeeds()
-        .stdout_is("4\tazerty/xcwww/azeaze\n8\tazerty/xcwww\n12\tazerty\n");
+    let result = ts.ucmd().arg("azerty").succeeds();
+
+    let path_regexp = r"(.*)azerty/xcwww/azeaze(.*)azerty/xcwww(.*)azerty";
+    let re = Regex::new(path_regexp).unwrap();
+    assert!(re.is_match(result.stdout_str().replace('\n', "").trim()));
+
     // Exact match
     ts.ucmd()
         .arg("--exclude=azeaze")
@@ -678,6 +685,9 @@ fn test_du_exclude_2() {
 }
 
 #[test]
+// Disable on Windows because we are looking for /
+// And the tests would be more complex if we have to support \ too
+#[cfg(not(target_os = "windows"))]
 fn test_du_exclude_mix() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
