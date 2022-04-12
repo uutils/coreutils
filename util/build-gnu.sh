@@ -198,3 +198,8 @@ sed -i -e "s/provoked error./provoked error\ncat pat |sort -u > pat/" tests/misc
 
 # Update the GNU error message to match ours
 sed -i -e "s/ln: 'f' and 'f' are the same file/ln: failed to link 'f' to 'f': Same file/g" tests/ln/hard-backup.sh
+
+# Update the error code
+# And change the default error code to 2
+# see issue #3331 (clap limitation).
+sed -i -e "s/returns_ 125 nice ---/returns_ 2 nice ---/" tests/misc/nice-fail.sh
