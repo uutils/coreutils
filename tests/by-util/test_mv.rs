@@ -823,6 +823,24 @@ fn test_mv_interactive_error() {
         .is_empty());
 }
 
+#[test]
+fn test_mv_info_self() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir1 = "dir1";
+    let dir2 = "dir2";
+    at.mkdir(dir1);
+    at.mkdir(dir2);
+
+    scene
+        .ucmd()
+        .arg(dir1)
+        .arg(dir2)
+        .arg(dir2)
+        .fails()
+        .stderr_contains("mv: cannot move 'dir2' to a subdirectory of itself, 'dir2/dir2'");
+}
+
 // Todo:
 
 // $ at.touch a b
