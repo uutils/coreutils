@@ -12,9 +12,9 @@ mod filesystem;
 mod table;
 
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult};
-use uucore::format_usage;
+use uucore::error::{UError, UResult, USimpleError};
 use uucore::fsext::{read_fs_list, MountInfo};
+use uucore::{format_usage, show};
 
 use clap::{crate_version, Arg, ArgMatches, Command};
 
@@ -311,10 +311,17 @@ where
 
     // Convert each path into a `Filesystem`, which contains
     // both the mount information and usage information.
-    paths
-        .iter()
-        .filter_map(|p| Filesystem::from_path(&mounts, p))
-        .collect()
+    let mut result = vec![];
+    for path in paths {
+        match Filesystem::from_path(&mounts, path) {
+            Some(fs) => result.push(fs),
+            None => show!(USimpleError::new(
+                1,
+                format!("{}: No such file or directory", path.as_ref().display())
+            )),
+        }
+    }
+    result
 }
 
 #[derive(Debug)]
@@ -360,6 +367,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             get_named_filesystems(&paths)
         }
     };
+
+    // This can happen if paths are given as command-line arguments
+    // but none of the paths exist.
+    if filesystems.is_empty() {
+        return Ok(());
+    }
 
     // The running total of filesystem sizes and usage.
     //
