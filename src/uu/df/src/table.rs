@@ -216,33 +216,25 @@ impl<'a> DisplayRow<'a> {
     ///
     /// The scaling factor is defined in the `options` field.
     ///
-    /// This function is supposed to be used by scaled_bytes() and scaled_inodes() only.
-    ///
-    /// # Errors
-    ///
-    /// If the scaling factor is not 1000, 1024, or a negative number.
-    fn scaled_human_readable(&self, size: u64) -> Result<String, fmt::Error> {
+    /// This function is supposed to be used by `scaled_bytes()` and `scaled_inodes()` only.
+    fn scaled_human_readable(&self, size: u64) -> String {
         let number_prefix = match self.options.block_size {
             BlockSize::HumanReadableDecimal => NumberPrefix::decimal(size as f64),
             BlockSize::HumanReadableBinary => NumberPrefix::binary(size as f64),
             _ => unreachable!(),
         };
         match number_prefix {
-            NumberPrefix::Standalone(bytes) => Ok(bytes.to_string()),
-            NumberPrefix::Prefixed(prefix, bytes) => Ok(format!("{:.1}{}", bytes, prefix.symbol())),
+            NumberPrefix::Standalone(bytes) => bytes.to_string(),
+            NumberPrefix::Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix.symbol()),
         }
     }
 
     /// Get a string giving the scaled version of the input number.
     ///
     /// The scaling factor is defined in the `options` field.
-    ///
-    /// # Errors
-    ///
-    /// If the scaling factor is not 1000, 1024, or a negative number.
-    fn scaled_bytes(&self, size: u64) -> Result<String, fmt::Error> {
+    fn scaled_bytes(&self, size: u64) -> String {
         if let BlockSize::Bytes(d) = self.options.block_size {
-            Ok((size / d).to_string())
+            (size / d).to_string()
         } else {
             self.scaled_human_readable(size)
         }
@@ -251,13 +243,9 @@ impl<'a> DisplayRow<'a> {
     /// Get a string giving the scaled version of the input number.
     ///
     /// The scaling factor is defined in the `options` field.
-    ///
-    /// # Errors
-    ///
-    /// If the scaling factor is not 1000, 1024, or a negative number.
-    fn scaled_inodes(&self, size: u64) -> Result<String, fmt::Error> {
+    fn scaled_inodes(&self, size: u64) -> String {
         if let BlockSize::Bytes(_) = self.options.block_size {
-            Ok(size.to_string())
+            size.to_string()
         } else {
             self.scaled_human_readable(size)
         }
@@ -279,17 +267,17 @@ impl fmt::Display for DisplayRow<'_> {
         for column in &self.options.columns {
             match column {
                 Column::Source => write!(f, "{0: <16} ", self.row.fs_device)?,
-                Column::Size => write!(f, "{0: >12} ", self.scaled_bytes(self.row.bytes)?)?,
-                Column::Used => write!(f, "{0: >12} ", self.scaled_bytes(self.row.bytes_used)?)?,
-                Column::Avail => write!(f, "{0: >12} ", self.scaled_bytes(self.row.bytes_avail)?)?,
+                Column::Size => write!(f, "{0: >12} ", self.scaled_bytes(self.row.bytes))?,
+                Column::Used => write!(f, "{0: >12} ", self.scaled_bytes(self.row.bytes_used))?,
+                Column::Avail => write!(f, "{0: >12} ", self.scaled_bytes(self.row.bytes_avail))?,
                 Column::Pcent => {
                     write!(f, "{0: >5} ", DisplayRow::percentage(self.row.bytes_usage))?;
                 }
                 Column::Target => write!(f, "{0: <16}", self.row.fs_mount)?,
-                Column::Itotal => write!(f, "{0: >12} ", self.scaled_inodes(self.row.inodes)?)?,
-                Column::Iused => write!(f, "{0: >12} ", self.scaled_inodes(self.row.inodes_used)?)?,
+                Column::Itotal => write!(f, "{0: >12} ", self.scaled_inodes(self.row.inodes))?,
+                Column::Iused => write!(f, "{0: >12} ", self.scaled_inodes(self.row.inodes_used))?,
                 Column::Iavail => {
-                    write!(f, "{0: >12} ", self.scaled_inodes(self.row.inodes_free)?)?;
+                    write!(f, "{0: >12} ", self.scaled_inodes(self.row.inodes_free))?;
                 }
                 Column::Ipcent => {
                     write!(f, "{0: >5} ", DisplayRow::percentage(self.row.inodes_usage))?;
