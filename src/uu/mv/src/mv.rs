@@ -258,6 +258,16 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
                     move_files_into_dir(&[source.clone()], target, b)
                 }
             } else if target.exists() && source.is_dir() {
+                match b.overwrite {
+                    OverwriteMode::NoClobber => return Ok(()),
+                    OverwriteMode::Interactive => {
+                        println!("{}: overwrite {}? ", uucore::util_name(), target.quote());
+                        if !read_yes() {
+                            return Ok(());
+                        }
+                    }
+                    OverwriteMode::Force => {}
+                };
                 Err(MvError::NonDirectoryToDirectory(
                     source.quote().to_string(),
                     target.quote().to_string(),

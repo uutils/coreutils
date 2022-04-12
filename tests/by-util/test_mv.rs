@@ -748,6 +748,19 @@ fn test_mv_errors() {
         .fails()
         .stderr_str()
         .is_empty());
+
+    // $ at.mkdir dir && at.touch file
+    // $ mv -i dir file
+    // err == mv: cannot overwrite non-directory 'file' with directory 'dir'
+    assert!(!scene
+        .ucmd()
+        .arg("-i")
+        .arg(dir)
+        .arg(file_a)
+        .pipe_in("y")
+        .fails()
+        .stderr_str()
+        .is_empty());
 }
 
 #[test]
