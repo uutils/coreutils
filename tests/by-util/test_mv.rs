@@ -748,19 +748,6 @@ fn test_mv_errors() {
         .fails()
         .stderr_str()
         .is_empty());
-
-    // $ at.mkdir dir && at.touch file
-    // $ mv -i dir file
-    // err == mv: cannot overwrite non-directory 'file' with directory 'dir'
-    assert!(!scene
-        .ucmd()
-        .arg("-i")
-        .arg(dir)
-        .arg(file_a)
-        .pipe_in("y")
-        .fails()
-        .stderr_str()
-        .is_empty());
 }
 
 #[test]
@@ -811,6 +798,29 @@ fn test_mv_permission_error() {
         .arg(folder_to_move)
         .fails()
         .stderr_contains("Permission denied");
+}
+
+#[test]
+fn test_mv_interactive_error() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir = "test_mv_errors_dir";
+    let file_a = "test_mv_errors_file_a";
+    at.mkdir(dir);
+    at.touch(file_a);
+
+    // $ at.mkdir dir && at.touch file
+    // $ mv -i dir file
+    // err == mv: cannot overwrite non-directory 'file' with directory 'dir'
+    assert!(!scene
+        .ucmd()
+        .arg("-i")
+        .arg(dir)
+        .arg(file_a)
+        .pipe_in("y")
+        .fails()
+        .stderr_str()
+        .is_empty());
 }
 
 // Todo:
