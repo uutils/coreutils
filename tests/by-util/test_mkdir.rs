@@ -1,6 +1,10 @@
 use crate::common::util::*;
 #[cfg(not(windows))]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(not(windows))]
+extern crate libc;
+#[cfg(not(windows))]
+use self::libc::{mode_t, umask};
 
 static TEST_DIR1: &str = "mkdir_test1";
 static TEST_DIR2: &str = "mkdir_test2";
@@ -13,6 +17,8 @@ static TEST_DIR8: &str = "mkdir_test8/mkdir_test8_1/mkdir_test8_2";
 static TEST_DIR9: &str = "mkdir_test9/../mkdir_test9_1/../mkdir_test9_2";
 static TEST_DIR10: &str = "mkdir_test10/.";
 static TEST_DIR11: &str = "mkdir_test11/..";
+#[cfg(not(windows))]
+static TEST_DIR12: &str = "mkdir_test12";
 
 #[test]
 fn test_mkdir_mkdir() {
@@ -150,4 +156,27 @@ fn test_mkdir_trailing_dot() {
         .stdout_contains("created directory 'mkdir_test11'");
     let result = scene2.cmd("ls").arg("-al").run();
     println!("ls dest {}", result.stdout_str());
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_umask_compliance() {
+    fn test_single_case(umask_set: mode_t) {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let original_umask = unsafe { umask(umask_set) };
+
+        ucmd.arg(TEST_DIR12).succeeds();
+        let perms = at.metadata(TEST_DIR12).permissions().mode() as mode_t;
+
+        assert_eq!(perms, (!umask_set & 0o0777) + 0o40000); // before compare, add the set GUID, UID bits
+        unsafe {
+            umask(original_umask);
+        } // set umask back to original
+    }
+
+    for i in 0o0..0o027 {
+        // tests all permission combinations
+        test_single_case(i as mode_t);
+    }
 }

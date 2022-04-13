@@ -64,7 +64,10 @@ fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, St
             }
             Ok(new_mode)
         }
-        None => Ok(DEFAULT_PERM),
+        None => {
+            // If no mode argument is specified return the mode derived from umask
+            Ok(!mode::get_umask() & 0o0777)
+        }
     }
 }
 
@@ -115,7 +118,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('m')
                 .long(options::MODE)
                 .help("set file mode (not implemented on windows)")
-                .default_value("755"),
+                .takes_value(true),
         )
         .arg(
             Arg::new(options::PARENTS)
