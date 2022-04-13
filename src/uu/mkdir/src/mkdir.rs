@@ -69,7 +69,7 @@ fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, St
 }
 
 #[cfg(windows)]
-fn strip_minus_from_mode(_args: &mut Vec<String>) -> bool {
+fn strip_minus_from_mode(_args: &mut [String]) -> bool {
     false
 }
 
