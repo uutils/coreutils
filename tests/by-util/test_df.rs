@@ -1,4 +1,4 @@
-// spell-checker:ignore udev pcent
+// spell-checker:ignore udev pcent iuse itotal iused ipcent
 use crate::common::util::*;
 
 #[test]
@@ -176,6 +176,36 @@ fn test_use_percentage() {
             (100.0 * (reported_used / (reported_used + reported_avail))).ceil() as u8;
 
         assert_eq!(computed_percentage, reported_percentage);
+    }
+}
+
+#[test]
+fn test_iuse_percentage() {
+    let output = new_ucmd!()
+        .args(&["--total", "--output=itotal,iused,ipcent"])
+        .succeeds()
+        .stdout_move_str();
+
+    // Skip the header line.
+    let lines: Vec<&str> = output.lines().skip(1).collect();
+
+    for line in lines {
+        let mut iter = line.split_whitespace();
+        let reported_inodes = iter.next().unwrap().parse::<f64>().unwrap();
+        let reported_iused = iter.next().unwrap().parse::<f64>().unwrap();
+        let reported_percentage = iter.next().unwrap();
+
+        if reported_percentage == "-" {
+            assert_eq!(0.0, reported_inodes);
+            assert_eq!(0.0, reported_iused);
+        } else {
+            let reported_percentage = reported_percentage[..reported_percentage.len() - 1]
+                .parse::<u8>()
+                .unwrap();
+            let computed_percentage = (100.0 * (reported_iused / reported_inodes)).ceil() as u8;
+
+            assert_eq!(computed_percentage, reported_percentage);
+        }
     }
 }
 
