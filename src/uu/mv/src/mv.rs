@@ -285,7 +285,23 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
                 ));
             }
             let target_dir = paths.last().unwrap();
-            move_files_into_dir(&paths[..paths.len() - 1], target_dir, b)
+            let sources = &paths[..paths.len() - 1];
+
+            // Check if we have mv dir1 dir2 dir2
+            // And generate an error if this is the case
+            if sources.contains(target_dir) {
+                return Err(USimpleError::new(
+                    1,
+                    format!(
+                        "cannot move {} to a subdirectory of itself, '{}/{}'",
+                        target_dir.quote(),
+                        target_dir.display(),
+                        target_dir.display()
+                    ),
+                ));
+            }
+
+            move_files_into_dir(sources, target_dir, b)
         }
     }
 }
