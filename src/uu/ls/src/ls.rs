@@ -797,7 +797,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     list(locs, &config)
 }
 
-/// The entry point for the dir coreutil
+/// The entry point for the dir coreutils
 pub fn dir_main(args: impl uucore::Args) -> UResult<()> {
     let command = uu_app();
 
