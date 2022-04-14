@@ -101,6 +101,7 @@ feat_common_core = [
     "unexpand",
     "uniq",
     "unlink",
+    "vdir",
     "wc",
     "yes",
 ]
@@ -354,6 +355,7 @@ uniq     = { optional=true, version="0.0.13", package="uu_uniq", path="src/uu/un
 unlink   = { optional=true, version="0.0.13", package="uu_unlink", path="src/uu/unlink" }
 uptime   = { optional=true, version="0.0.13", package="uu_uptime", path="src/uu/uptime" }
 users    = { optional=true, version="0.0.13", package="uu_users", path="src/uu/users" }
+vdir      = { optional=true, version="0.0.13", package="uu_vdir", path="src/uu/vdir" }
 wc       = { optional=true, version="0.0.13", package="uu_wc", path="src/uu/wc" }
 who      = { optional=true, version="0.0.13", package="uu_who", path="src/uu/who" }
 whoami   = { optional=true, version="0.0.13", package="uu_whoami", path="src/uu/whoami" }

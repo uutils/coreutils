@@ -1,0 +1,40 @@
+[package]
+name = "uu_vdir"
+version = "0.0.13"
+authors = ["uutils developers"]
+license = "MIT"
+description = "shortcut to ls -l -b"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/ls"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2021"
+
+[lib]
+path = "src/vdir.rs"
+
+[dependencies]
+chrono = "0.4.19"
+clap = { version = "3.1", features = ["wrap_help", "cargo", "env"] }
+unicode-width = "0.1.8"
+number_prefix = "0.4"
+term_grid = "0.1.5"
+termsize = "0.1.6"
+glob = "0.3.0"
+lscolors = { version = "0.9.0", features = ["ansi_term"] }
+uucore = { version = ">=0.0.8", package = "uucore", path = "../../uucore", features = ["entries", "fs"] }
+once_cell = "1.10.0"
+atty = "0.2"
+selinux = { version="0.2", optional = true }
+uu_ls = {path="../ls"}
+
+[target.'cfg(unix)'.dependencies]
+lazy_static = "1.4.0"
+
+[[bin]]
+name = "dir"
+path = "src/main.rs"
+
+[features]
+feat_selinux = ["selinux"]

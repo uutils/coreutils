@@ -446,6 +446,7 @@ dependencies = [
  "uu_unlink",
  "uu_uptime",
  "uu_users",
+ "uu_vdir",
  "uu_wc",
  "uu_who",
  "uu_whoami",
@@ -3145,6 +3146,26 @@ name = "uu_users"
 version = "0.0.13"
 dependencies = [
  "clap 3.1.8",
+ "uucore",
+]
+
+[[package]]
+name = "uu_vdir"
+version = "0.0.13"
+dependencies = [
+ "atty",
+ "chrono",
+ "clap 3.1.8",
+ "glob",
+ "lazy_static",
+ "lscolors",
+ "number_prefix",
+ "once_cell",
+ "selinux",
+ "term_grid",
+ "termsize",
+ "unicode-width",
+ "uu_ls",
  "uucore",
 ]
 
