@@ -253,7 +253,7 @@ textwrap = { version="0.15", features=["terminal_size"] }
 uucore = { version=">=0.0.11", package="uucore", path="src/uucore" }
 selinux = { version="0.2", optional = true }
 ureq = "2.4.0"
-zip = { version = "0.5.13", default_features=false, features=["deflate"] }
+zip = { version = "0.6.0", default_features=false, features=["deflate"] }
 # * uutils
 uu_test  = { optional=true, version="0.0.13", package="uu_test", path="src/uu/test" }
 #

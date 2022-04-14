@@ -1752,9 +1752,9 @@ dependencies = [
 
 [[package]]
 name = "selinux"
-version = "0.2.5"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09715d6b4356e916047e61e4dce40a67ac93036851957b91713d3d9c282d1548"
+checksum = "0c4534fb886814d0015bcc290979263692213627bdf8ed4091746bb1c77acb0d"
 dependencies = [
  "bitflags",
  "libc",
@@ -3442,12 +3442,11 @@ checksum = "af896e93db81340b74b65f74276a99b210c086f3d34ed0abf433182a462af856"
 
 [[package]]
 name = "zip"
-version = "0.5.13"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93ab48844d61251bb3835145c521d88aa4031d7139e8485990f60ca911fa0815"
+checksum = "e6fa4aa90e99fb8d701bda16fb040d8ed2f9c7176fb44de750e880a74b580315"
 dependencies = [
  "byteorder",
  "crc32fast",
  "flate2",
- "thiserror",
 ]
