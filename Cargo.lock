@@ -368,6 +368,7 @@ dependencies = [
  "uu_date",
  "uu_dd",
  "uu_df",
+ "uu_dir",
  "uu_dircolors",
  "uu_dirname",
  "uu_du",
@@ -2373,6 +2374,26 @@ version = "0.0.13"
 dependencies = [
  "clap 3.1.8",
  "number_prefix",
+ "uucore",
+]
+
+[[package]]
+name = "uu_dir"
+version = "0.0.13"
+dependencies = [
+ "atty",
+ "chrono",
+ "clap 3.1.6",
+ "glob",
+ "lazy_static",
+ "lscolors",
+ "number_prefix",
+ "once_cell",
+ "selinux",
+ "term_grid",
+ "termsize",
+ "unicode-width",
+ "uu_ls",
  "uucore",
 ]
 

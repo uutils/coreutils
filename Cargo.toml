@@ -45,6 +45,7 @@ feat_common_core = [
     "cut",
     "date",
     "df",
+    "dir",
     "dircolors",
     "dirname",
     "dd",
@@ -276,6 +277,7 @@ cut      = { optional=true, version="0.0.13", package="uu_cut", path="src/uu/cut
 date     = { optional=true, version="0.0.13", package="uu_date", path="src/uu/date" }
 dd       = { optional=true, version="0.0.13", package="uu_dd", path="src/uu/dd" }
 df       = { optional=true, version="0.0.13", package="uu_df", path="src/uu/df" }
+dir      = { optional=true, version="0.0.13", package="uu_dir", path="src/uu/dir" }
 dircolors= { optional=true, version="0.0.13", package="uu_dircolors", path="src/uu/dircolors" }
 dirname  = { optional=true, version="0.0.13", package="uu_dirname", path="src/uu/dirname" }
 du       = { optional=true, version="0.0.13", package="uu_du", path="src/uu/du" }
