@@ -304,7 +304,7 @@ enum IndicatorStyle {
     Classify,
 }
 
-pub struct Config {
+struct Config {
     format: Format,
     files: Files,
     sort: Sort,
