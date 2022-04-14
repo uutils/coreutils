@@ -8,10 +8,6 @@ extern crate unix_socket;
 
 use self::regex::Regex;
 use crate::common::util::*;
-#[cfg(all(unix, feature = "chmod"))]
-use nix::unistd::{close, dup};
-#[cfg(all(unix, feature = "chmod"))]
-use std::os::unix::io::IntoRawFd;
 
 /*
  * As vdir use the same functions than ls, we don't have to retest them here.

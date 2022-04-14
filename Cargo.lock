@@ -2382,18 +2382,9 @@ dependencies = [
 name = "uu_dir"
 version = "0.0.13"
 dependencies = [
- "atty",
- "chrono",
  "clap 3.1.8",
- "glob",
  "lazy_static",
- "lscolors",
- "number_prefix",
- "once_cell",
  "selinux",
- "term_grid",
- "termsize",
- "unicode-width",
  "uu_ls",
  "uucore",
 ]
@@ -3153,18 +3144,9 @@ dependencies = [
 name = "uu_vdir"
 version = "0.0.13"
 dependencies = [
- "atty",
- "chrono",
  "clap 3.1.8",
- "glob",
  "lazy_static",
- "lscolors",
- "number_prefix",
- "once_cell",
  "selinux",
- "term_grid",
- "termsize",
- "unicode-width",
  "uu_ls",
  "uucore",
 ]
