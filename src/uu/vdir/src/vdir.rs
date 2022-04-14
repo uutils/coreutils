@@ -14,10 +14,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 // Coreutils won't compile if not every util have an uu_app function.
-// However, we can't  put it here since it needs to be in the same place as
+// However, we can't put it here since it needs to be in the same place as
 // the entry point for the vdir util, which is in ls/ls.rs. We could put the
-// entry point here, but we would need a lot of refactoring and to make a lot of
-// ls functions and structs public.
+// entry point here, but we would need a lot of refactoring.
 //
 // To make our life easier, we use this dummy function.
 pub fn uu_app<'a>() -> Command<'a> {

@@ -802,7 +802,9 @@ pub fn uu_app<'a>() -> Command<'a> {
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(
-            "dir is a shortcut for ls -C -b",
+            "By default, ls will list the files and contents of any directories on \
+            the command line, expect that it will ignore files and directories \
+            whose names start with '.'.",
         )
         .infer_long_args(true)
         .arg(
@@ -1463,9 +1465,7 @@ fn dir_uu_app<'a>() -> Command<'a> {
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(
-            "By default, ls will list the files and contents of any directories on \
-            the command line, expect that it will ignore files and directories \
-            whose names start with '.'.",
+            "dir is a shortcut for ls -C -b. All valid ls options are also valid dir options",
         )
         .infer_long_args(true)
         .arg(
@@ -2126,7 +2126,7 @@ fn vdir_uu_app<'a>() -> Command<'a> {
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(
-            "vdir is a shortcut to ls -l -b",
+            "dir is a shortcut for ls -l -b. All valid ls options are also valid dir options",
         )
         .infer_long_args(true)
         .arg(
