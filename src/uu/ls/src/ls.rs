@@ -15,7 +15,7 @@ extern crate lazy_static;
 
 mod quoting_style;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgMatches, Command};
 use glob::Pattern;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
@@ -30,6 +30,7 @@ use std::{
     fmt::Display,
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{stdout, BufWriter, ErrorKind, Stdout, Write},
+    option,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -802,9 +803,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(
-            "By default, ls will list the files and contents of any directories on \
-            the command line, expect that it will ignore files and directories \
-            whose names start with '.'.",
+            "dir is a shortcut for ls -C -b",
         )
         .infer_long_args(true)
         .arg(
@@ -1415,11 +1414,45 @@ only ignore '.' and '..'.",
 pub fn dir_main(args: impl uucore::Args) -> UResult<()> {
     let command = dir_uu_app();
     let matches = command.get_matches_from(args);
+
+    let mut default_quoting_style = false;
+    let mut default_format_style = false;
+
+    if !matches.is_present(options::QUOTING_STYLE)
+        && !matches.is_present(options::quoting::C)
+        && !matches.is_present(options::quoting::ESCAPE)
+        && !matches.is_present(options::quoting::LITERAL)
+    {
+        default_quoting_style = true;
+    }
+    if !matches.is_present(options::FORMAT)
+        && !matches.is_present(options::format::ACROSS)
+        && !matches.is_present(options::format::COLUMNS)
+        && !matches.is_present(options::format::COMMAS)
+        && !matches.is_present(options::format::LONG)
+        && !matches.is_present(options::format::LONG_NO_GROUP)
+        && !matches.is_present(options::format::LONG_NO_OWNER)
+        && !matches.is_present(options::format::LONG_NUMERIC_UID_GID)
+        && !matches.is_present(options::format::ONE_LINE)
+    {
+        default_format_style = true;
+    }
+
     let mut config = Config::from(&matches)?;
-    config.quoting_style = QuotingStyle::C {
-        quotes: Quotes::None,
-    };
-    config.format = Format::Columns;
+    // config.quoting_style = QuotingStyle::C {
+    //     quotes: Quotes::None,
+    // };
+    // config.format = Format::Columns;
+
+    if default_quoting_style {
+        config.quoting_style = QuotingStyle::C {
+            quotes: Quotes::None,
+        };
+    }
+    if default_format_style {
+        config.format = Format::Columns;
+    }
+
     let locs = matches
         .values_of_os(options::PATHS)
         .map(|v| v.map(Path::new).collect())
@@ -1427,12 +1460,14 @@ pub fn dir_main(args: impl uucore::Args) -> UResult<()> {
     list(locs, &config)
 }
 
-pub fn dir_uu_app<'a>() -> Command<'a> {
+fn dir_uu_app<'a>() -> Command<'a> {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(
-            "Shortcut to ls -C -b",
+            "By default, ls will list the files and contents of any directories on \
+            the command line, expect that it will ignore files and directories \
+            whose names start with '.'.",
         )
         .infer_long_args(true)
         .arg(
@@ -1450,6 +1485,7 @@ pub fn dir_uu_app<'a>() -> Command<'a> {
                     "long",
                     "verbose",
                     "single-column",
+                    "columns",
                     "vertical",
                     "across",
                     "horizontal",
@@ -1457,6 +1493,18 @@ pub fn dir_uu_app<'a>() -> Command<'a> {
                 ])
                 .hide_possible_values(true)
                 .require_equals(true)
+                .overrides_with_all(&[
+                    options::FORMAT,
+                    options::format::COLUMNS,
+                    options::format::LONG,
+                    options::format::ACROSS,
+                    options::format::COLUMNS,
+                ]),
+        )
+        .arg(
+            Arg::new(options::format::COLUMNS)
+                .short('C')
+                .help("Display the files in columns.")
                 .overrides_with_all(&[
                     options::FORMAT,
                     options::format::COLUMNS,
@@ -1548,6 +1596,8 @@ pub fn dir_uu_app<'a>() -> Command<'a> {
                     "shell-always",
                     "shell-escape",
                     "shell-escape-always",
+                    "c",
+                    "escape",
                 ])
                 .overrides_with_all(&[
                     options::QUOTING_STYLE,
@@ -1561,6 +1611,30 @@ pub fn dir_uu_app<'a>() -> Command<'a> {
                 .short('N')
                 .long(options::quoting::LITERAL)
                 .help("Use literal quoting style. Equivalent to `--quoting-style=literal`")
+                .overrides_with_all(&[
+                    options::QUOTING_STYLE,
+                    options::quoting::LITERAL,
+                    options::quoting::ESCAPE,
+                    options::quoting::C,
+                ]),
+        )
+        .arg(
+            Arg::new(options::quoting::ESCAPE)
+                .short('b')
+                .long(options::quoting::ESCAPE)
+                .help("Use escape quoting style. Equivalent to `--quoting-style=escape`")
+                .overrides_with_all(&[
+                    options::QUOTING_STYLE,
+                    options::quoting::LITERAL,
+                    options::quoting::ESCAPE,
+                    options::quoting::C,
+                ]),
+        )
+        .arg(
+            Arg::new(options::quoting::C)
+                .short('Q')
+                .long(options::quoting::C)
+                .help("Use C quoting style. Equivalent to `--quoting-style=c`")
                 .overrides_with_all(&[
                     options::QUOTING_STYLE,
                     options::quoting::LITERAL,
@@ -1999,7 +2073,6 @@ only ignore '.' and '..'.",
             Also the TIME_STYLE environment variable sets the default style to use.",
         )
 }
-
 /// Represents a Path along with it's associated data.
 /// Any data that will be reused several times makes sense to be added to this structure.
 /// Caching data here helps eliminate redundant syscalls to fetch same information.
