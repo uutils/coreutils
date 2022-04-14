@@ -2383,7 +2383,7 @@ version = "0.0.13"
 dependencies = [
  "atty",
  "chrono",
- "clap 3.1.6",
+ "clap 3.1.8",
  "glob",
  "lazy_static",
  "lscolors",
