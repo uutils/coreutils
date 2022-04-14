@@ -1552,8 +1552,8 @@ fn dir_uu_app<'a>() -> Command<'a> {
         // options, see the comment in Config::from for the reason.
         // Ideally, they would use Arg::override_with, with their own name
         // but that doesn't seem to work in all cases. Example:
-        // ls -1g1
-        // even though `ls -11` and `ls -1 -g -1` work.
+        // dir -1g1
+        // even though `dir -11` and `dir -1 -g -1` work.
         .arg(
             Arg::new(options::format::ONE_LINE)
                 .short('1')
@@ -2072,7 +2072,7 @@ only ignore '.' and '..'.",
         )
 }
 
-// The entry point for the vdir coreutil
+/// The entry point for the vdir coreutil
 pub fn vdir_main(args: impl uucore::Args) -> UResult<()> {
     let command = vdir_uu_app();
     let matches = command.get_matches_from(args);
@@ -2126,7 +2126,7 @@ fn vdir_uu_app<'a>() -> Command<'a> {
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(
-            "dir is a shortcut for ls -l -b. All valid ls options are also valid dir options",
+            "vdir is a shortcut for ls -l -b. All valid ls options are also valid vdir options",
         )
         .infer_long_args(true)
         .arg(
@@ -2213,8 +2213,8 @@ fn vdir_uu_app<'a>() -> Command<'a> {
         // options, see the comment in Config::from for the reason.
         // Ideally, they would use Arg::override_with, with their own name
         // but that doesn't seem to work in all cases. Example:
-        // ls -1g1
-        // even though `ls -11` and `ls -1 -g -1` work.
+        // vdir -1g1
+        // even though `vdir -11` and `vdir -1 -g -1` work.
         .arg(
             Arg::new(options::format::ONE_LINE)
                 .short('1')

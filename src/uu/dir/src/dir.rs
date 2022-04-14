@@ -17,7 +17,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 // However, we can't put it here since it needs to be in the same place as
 // the entry point for the dir util, which is in ls/ls.rs. We could put the
 // entry point here, but we would need a lot of refactoring.
-//
 // To make our life easier, we use this dummy function.
 pub fn uu_app<'a>() -> Command<'a> {
     Command::new(uucore::util_name())
