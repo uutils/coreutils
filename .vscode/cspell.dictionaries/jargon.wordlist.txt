@@ -17,6 +17,7 @@ colorize
 coprime
 consts
 conv
+coreutil
 cyclomatic
 dedup
 deduplication

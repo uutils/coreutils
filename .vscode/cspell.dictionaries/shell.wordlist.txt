@@ -93,6 +93,7 @@ rollup
 sed
 selinuxenabled
 sestatus
+vdir
 wslpath
 xargs
 
