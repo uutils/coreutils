@@ -1662,6 +1662,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "remove_dir_all"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "882f368737489ea543bc5c340e6f3d34a28c39980bd9a979e47322b26f60ac40"
+dependencies = [
+ "libc",
+ "log",
+ "num_cpus",
+ "rayon",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "retain_mut"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1942,7 +1955,7 @@ dependencies = [
  "fastrand",
  "libc",
  "redox_syscall",
- "remove_dir_all",
+ "remove_dir_all 0.5.3",
  "winapi 0.3.9",
 ]
 
@@ -2831,7 +2844,7 @@ name = "uu_rm"
 version = "0.0.13"
 dependencies = [
  "clap 3.1.8",
- "remove_dir_all",
+ "remove_dir_all 0.7.0",
  "uucore",
  "walkdir",
  "winapi 0.3.9",
