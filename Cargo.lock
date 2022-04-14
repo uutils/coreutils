@@ -2383,7 +2383,6 @@ name = "uu_dir"
 version = "0.0.13"
 dependencies = [
  "clap 3.1.8",
- "lazy_static",
  "selinux",
  "uu_ls",
  "uucore",
@@ -3145,7 +3144,6 @@ name = "uu_vdir"
 version = "0.0.13"
 dependencies = [
  "clap 3.1.8",
- "lazy_static",
  "selinux",
  "uu_ls",
  "uucore",

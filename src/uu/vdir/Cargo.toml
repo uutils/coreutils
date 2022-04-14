@@ -20,12 +20,6 @@ uucore = { version = ">=0.0.8", package = "uucore", path = "../../uucore", featu
 selinux = { version="0.2", optional = true }
 uu_ls = {path="../ls"}
 
-[target.'cfg(unix)'.dependencies]
-lazy_static = "1.4.0"
-
 [[bin]]
 name = "vdir"
 path = "src/main.rs"
-
-[features]
-feat_selinux = ["selinux"]
