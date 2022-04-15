@@ -13,14 +13,15 @@ extern crate uucore;
 #[macro_use]
 extern crate lazy_static;
 
-mod quoting_style;
+// dir and vdir also need access to the quoting_style module
+pub mod quoting_style;
 
 use clap::{crate_version, Arg, Command};
 use glob::Pattern;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
-use quoting_style::{escape_name, Quotes, QuotingStyle};
+use quoting_style::{escape_name, QuotingStyle};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -242,7 +243,7 @@ impl Display for LsError {
 }
 
 #[derive(PartialEq, Eq)]
-enum Format {
+pub enum Format {
     Columns,
     Long,
     OneLine,
@@ -304,8 +305,9 @@ enum IndicatorStyle {
     Classify,
 }
 
-struct Config {
-    format: Format,
+pub struct Config {
+    // Dir and vdir needs access to this field
+    pub format: Format,
     files: Files,
     sort: Sort,
     recursive: bool,
@@ -322,7 +324,8 @@ struct Config {
     alloc_size: bool,
     block_size: Option<u64>,
     width: u16,
-    quoting_style: QuotingStyle,
+    // Dir and vdir needs access to this field
+    pub quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
     time_style: TimeStyle,
     context: bool,
@@ -355,7 +358,7 @@ struct PaddingCollection {
 
 impl Config {
     #[allow(clippy::cognitive_complexity)]
-    fn from(options: &clap::ArgMatches) -> UResult<Self> {
+    pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let context = options.is_present(options::CONTEXT);
         let (mut format, opt) = if let Some(format_) = options.value_of(options::FORMAT) {
             (
@@ -794,105 +797,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(Path::new).collect())
         .unwrap_or_else(|| vec![Path::new(".")]);
 
-    list(locs, &config)
-}
-
-/// The entry point for the dir coreutils
-pub fn dir_main(args: impl uucore::Args) -> UResult<()> {
-    let command = uu_app();
-
-    let matches = command.get_matches_from(args);
-
-    let mut default_quoting_style = false;
-    let mut default_format_style = false;
-
-    // We check if any options on formatting or quoting style have been given.
-    // If not, we will use dir default formatting and quoting style options
-
-    if !matches.is_present(options::QUOTING_STYLE)
-        && !matches.is_present(options::quoting::C)
-        && !matches.is_present(options::quoting::ESCAPE)
-        && !matches.is_present(options::quoting::LITERAL)
-    {
-        default_quoting_style = true;
-    }
-    if !matches.is_present(options::FORMAT)
-        && !matches.is_present(options::format::ACROSS)
-        && !matches.is_present(options::format::COLUMNS)
-        && !matches.is_present(options::format::COMMAS)
-        && !matches.is_present(options::format::LONG)
-        && !matches.is_present(options::format::LONG_NO_GROUP)
-        && !matches.is_present(options::format::LONG_NO_OWNER)
-        && !matches.is_present(options::format::LONG_NUMERIC_UID_GID)
-        && !matches.is_present(options::format::ONE_LINE)
-    {
-        default_format_style = true;
-    }
-
-    let mut config = Config::from(&matches)?;
-
-    if default_quoting_style {
-        config.quoting_style = QuotingStyle::C {
-            quotes: Quotes::None,
-        };
-    }
-    if default_format_style {
-        config.format = Format::Columns;
-    }
-
-    let locs = matches
-        .values_of_os(options::PATHS)
-        .map(|v| v.map(Path::new).collect())
-        .unwrap_or_else(|| vec![Path::new(".")]);
-    list(locs, &config)
-}
-
-/// The entry point for the vdir coreutils
-pub fn vdir_main(args: impl uucore::Args) -> UResult<()> {
-    let command = uu_app();
-    let matches = command.get_matches_from(args);
-
-    let mut default_quoting_style = false;
-    let mut default_format_style = false;
-
-    // We check if any options on formatting or quoting style have been given.
-    // If not, we will use dir default formatting and quoting style options
-
-    if !matches.is_present(options::QUOTING_STYLE)
-        && !matches.is_present(options::quoting::C)
-        && !matches.is_present(options::quoting::ESCAPE)
-        && !matches.is_present(options::quoting::LITERAL)
-    {
-        default_quoting_style = true;
-    }
-    if !matches.is_present(options::FORMAT)
-        && !matches.is_present(options::format::ACROSS)
-        && !matches.is_present(options::format::COLUMNS)
-        && !matches.is_present(options::format::COMMAS)
-        && !matches.is_present(options::format::LONG)
-        && !matches.is_present(options::format::LONG_NO_GROUP)
-        && !matches.is_present(options::format::LONG_NO_OWNER)
-        && !matches.is_present(options::format::LONG_NUMERIC_UID_GID)
-        && !matches.is_present(options::format::ONE_LINE)
-    {
-        default_format_style = true;
-    }
-
-    let mut config = Config::from(&matches)?;
-
-    if default_quoting_style {
-        config.quoting_style = QuotingStyle::C {
-            quotes: Quotes::None,
-        };
-    }
-    if default_format_style {
-        config.format = Format::Long;
-    }
-
-    let locs = matches
-        .values_of_os(options::PATHS)
-        .map(|v| v.map(Path::new).collect())
-        .unwrap_or_else(|| vec![Path::new(".")]);
     list(locs, &config)
 }
 
@@ -1638,7 +1542,7 @@ impl PathData {
     }
 }
 
-fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
+pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
     let mut out = BufWriter::new(stdout());
