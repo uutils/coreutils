@@ -65,6 +65,7 @@ PROGS       := \
 	date \
 	dd \
 	df \
+	dir \
 	dircolors \
 	dirname \
 	echo \
@@ -118,6 +119,7 @@ PROGS       := \
 	tsort \
 	unexpand \
 	uniq \
+	vdir \
 	wc \
 	whoami \
 	yes

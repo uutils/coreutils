@@ -13,7 +13,8 @@ extern crate uucore;
 #[macro_use]
 extern crate lazy_static;
 
-mod quoting_style;
+// dir and vdir also need access to the quoting_style module
+pub mod quoting_style;
 
 use clap::{crate_version, Arg, Command};
 use glob::Pattern;
@@ -242,7 +243,7 @@ impl Display for LsError {
 }
 
 #[derive(PartialEq, Eq)]
-enum Format {
+pub enum Format {
     Columns,
     Long,
     OneLine,
@@ -304,8 +305,9 @@ enum IndicatorStyle {
     Classify,
 }
 
-struct Config {
-    format: Format,
+pub struct Config {
+    // Dir and vdir needs access to this field
+    pub format: Format,
     files: Files,
     sort: Sort,
     recursive: bool,
@@ -322,7 +324,8 @@ struct Config {
     alloc_size: bool,
     block_size: Option<u64>,
     width: u16,
-    quoting_style: QuotingStyle,
+    // Dir and vdir needs access to this field
+    pub quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
     time_style: TimeStyle,
     context: bool,
@@ -355,7 +358,7 @@ struct PaddingCollection {
 
 impl Config {
     #[allow(clippy::cognitive_complexity)]
-    fn from(options: &clap::ArgMatches) -> UResult<Self> {
+    pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let context = options.is_present(options::CONTEXT);
         let (mut format, opt) = if let Some(format_) = options.value_of(options::FORMAT) {
             (
@@ -800,615 +803,611 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app<'a>() -> Command<'a> {
     Command::new(uucore::util_name())
         .version(crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(
-            "By default, ls will list the files and contents of any directories on \
-            the command line, expect that it will ignore files and directories \
-            whose names start with '.'.",
-        )
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::HELP)
-                .long(options::HELP)
-                .help("Print help information.")
-        )
-        // Format arguments
-        .arg(
-            Arg::new(options::FORMAT)
-                .long(options::FORMAT)
-                .help("Set the display format.")
-                .takes_value(true)
-                .possible_values(&[
-                    "long",
-                    "verbose",
-                    "single-column",
-                    "columns",
-                    "vertical",
-                    "across",
-                    "horizontal",
-                    "commas",
-                ])
-                .hide_possible_values(true)
-                .require_equals(true)
-                .overrides_with_all(&[
-                    options::FORMAT,
-                    options::format::COLUMNS,
-                    options::format::LONG,
-                    options::format::ACROSS,
-                    options::format::COLUMNS,
-                ]),
-        )
-        .arg(
-            Arg::new(options::format::COLUMNS)
-                .short('C')
-                .help("Display the files in columns.")
-                .overrides_with_all(&[
-                    options::FORMAT,
-                    options::format::COLUMNS,
-                    options::format::LONG,
-                    options::format::ACROSS,
-                    options::format::COLUMNS,
-                ]),
-        )
-        .arg(
-            Arg::new(options::format::LONG)
-                .short('l')
-                .long(options::format::LONG)
-                .help("Display detailed information.")
-                .overrides_with_all(&[
-                    options::FORMAT,
-                    options::format::COLUMNS,
-                    options::format::LONG,
-                    options::format::ACROSS,
-                    options::format::COLUMNS,
-                ]),
-        )
-        .arg(
-            Arg::new(options::format::ACROSS)
-                .short('x')
-                .help("List entries in rows instead of in columns.")
-                .overrides_with_all(&[
-                    options::FORMAT,
-                    options::format::COLUMNS,
-                    options::format::LONG,
-                    options::format::ACROSS,
-                    options::format::COLUMNS,
-                ]),
-        )
-        .arg(
-            Arg::new(options::format::COMMAS)
-                .short('m')
-                .help("List entries separated by commas.")
-                .overrides_with_all(&[
-                    options::FORMAT,
-                    options::format::COLUMNS,
-                    options::format::LONG,
-                    options::format::ACROSS,
-                    options::format::COLUMNS,
-                ]),
-        )
-        // The next four arguments do not override with the other format
-        // options, see the comment in Config::from for the reason.
-        // Ideally, they would use Arg::override_with, with their own name
-        // but that doesn't seem to work in all cases. Example:
-        // ls -1g1
-        // even though `ls -11` and `ls -1 -g -1` work.
-        .arg(
-            Arg::new(options::format::ONE_LINE)
-                .short('1')
-                .help("List one file per line.")
-                .multiple_occurrences(true),
-        )
-        .arg(
-            Arg::new(options::format::LONG_NO_GROUP)
-                .short('o')
-                .help(
-                    "Long format without group information. \
-                    Identical to --format=long with --no-group.",
-                )
-                .multiple_occurrences(true),
-        )
-        .arg(
-            Arg::new(options::format::LONG_NO_OWNER)
-                .short('g')
-                .help("Long format without owner information.")
-                .multiple_occurrences(true),
-        )
-        .arg(
-            Arg::new(options::format::LONG_NUMERIC_UID_GID)
-                .short('n')
-                .long(options::format::LONG_NUMERIC_UID_GID)
-                .help("-l with numeric UIDs and GIDs.")
-                .multiple_occurrences(true),
-        )
-        // Quoting style
-        .arg(
-            Arg::new(options::QUOTING_STYLE)
-                .long(options::QUOTING_STYLE)
-                .takes_value(true)
-                .help("Set quoting style.")
-                .possible_values(&[
-                    "literal",
-                    "shell",
-                    "shell-always",
-                    "shell-escape",
-                    "shell-escape-always",
-                    "c",
-                    "escape",
-                ])
-                .overrides_with_all(&[
-                    options::QUOTING_STYLE,
-                    options::quoting::LITERAL,
-                    options::quoting::ESCAPE,
-                    options::quoting::C,
-                ]),
-        )
-        .arg(
-            Arg::new(options::quoting::LITERAL)
-                .short('N')
-                .long(options::quoting::LITERAL)
-                .help("Use literal quoting style. Equivalent to `--quoting-style=literal`")
-                .overrides_with_all(&[
-                    options::QUOTING_STYLE,
-                    options::quoting::LITERAL,
-                    options::quoting::ESCAPE,
-                    options::quoting::C,
-                ]),
-        )
-        .arg(
-            Arg::new(options::quoting::ESCAPE)
-                .short('b')
-                .long(options::quoting::ESCAPE)
-                .help("Use escape quoting style. Equivalent to `--quoting-style=escape`")
-                .overrides_with_all(&[
-                    options::QUOTING_STYLE,
-                    options::quoting::LITERAL,
-                    options::quoting::ESCAPE,
-                    options::quoting::C,
-                ]),
-        )
-        .arg(
-            Arg::new(options::quoting::C)
-                .short('Q')
-                .long(options::quoting::C)
-                .help("Use C quoting style. Equivalent to `--quoting-style=c`")
-                .overrides_with_all(&[
-                    options::QUOTING_STYLE,
-                    options::quoting::LITERAL,
-                    options::quoting::ESCAPE,
-                    options::quoting::C,
-                ]),
-        )
-        // Control characters
-        .arg(
-            Arg::new(options::HIDE_CONTROL_CHARS)
-                .short('q')
-                .long(options::HIDE_CONTROL_CHARS)
-                .help("Replace control characters with '?' if they are not escaped.")
-                .overrides_with_all(&[options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS]),
-        )
-        .arg(
-            Arg::new(options::SHOW_CONTROL_CHARS)
-                .long(options::SHOW_CONTROL_CHARS)
-                .help("Show control characters 'as is' if they are not escaped.")
-                .overrides_with_all(&[options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS]),
-        )
-        // Time arguments
-        .arg(
-            Arg::new(options::TIME)
-                .long(options::TIME)
-                .help(
-                    "Show time in <field>:\n\
-                    \taccess time (-u): atime, access, use;\n\
-                    \tchange time (-t): ctime, status.\n\
-                    \tbirth time: birth, creation;",
-                )
-                .value_name("field")
-                .takes_value(true)
-                .possible_values(&[
-                    "atime", "access", "use", "ctime", "status", "birth", "creation",
-                ])
-                .hide_possible_values(true)
-                .require_equals(true)
-                .overrides_with_all(&[options::TIME, options::time::ACCESS, options::time::CHANGE]),
-        )
-        .arg(
-            Arg::new(options::time::CHANGE)
-                .short('c')
-                .help(
-                    "If the long listing format (e.g., -l, -o) is being used, print the status \
-                change time (the 'ctime' in the inode) instead of the modification time. When \
-                explicitly sorting by time (--sort=time or -t) or when not using a long listing \
-                format, sort according to the status change time.",
-                )
-                .overrides_with_all(&[options::TIME, options::time::ACCESS, options::time::CHANGE]),
-        )
-        .arg(
-            Arg::new(options::time::ACCESS)
-                .short('u')
-                .help(
-                    "If the long listing format (e.g., -l, -o) is being used, print the status \
-                access time instead of the modification time. When explicitly sorting by time \
-                (--sort=time or -t) or when not using a long listing format, sort according to the \
-                access time.",
-                )
-                .overrides_with_all(&[options::TIME, options::time::ACCESS, options::time::CHANGE]),
-        )
-        // Hide and ignore
-        .arg(
-            Arg::new(options::HIDE)
-                .long(options::HIDE)
-                .takes_value(true)
-                .multiple_occurrences(true)
-                .value_name("PATTERN")
-                .help(
-                    "do not list implied entries matching shell PATTERN (overridden by -a or -A)",
-                ),
-        )
-        .arg(
-            Arg::new(options::IGNORE)
-                .short('I')
-                .long(options::IGNORE)
-                .takes_value(true)
-                .multiple_occurrences(true)
-                .value_name("PATTERN")
-                .help("do not list implied entries matching shell PATTERN"),
-        )
-        .arg(
-            Arg::new(options::IGNORE_BACKUPS)
-                .short('B')
-                .long(options::IGNORE_BACKUPS)
-                .help("Ignore entries which end with ~."),
-        )
-        // Sort arguments
-        .arg(
-            Arg::new(options::SORT)
-                .long(options::SORT)
-                .help("Sort by <field>: name, none (-U), time (-t), size (-S) or extension (-X)")
-                .value_name("field")
-                .takes_value(true)
-                .possible_values(&["name", "none", "time", "size", "version", "extension"])
-                .require_equals(true)
-                .overrides_with_all(&[
-                    options::SORT,
-                    options::sort::SIZE,
-                    options::sort::TIME,
-                    options::sort::NONE,
-                    options::sort::VERSION,
-                    options::sort::EXTENSION,
-                ]),
-        )
-        .arg(
-            Arg::new(options::sort::SIZE)
-                .short('S')
-                .help("Sort by file size, largest first.")
-                .overrides_with_all(&[
-                    options::SORT,
-                    options::sort::SIZE,
-                    options::sort::TIME,
-                    options::sort::NONE,
-                    options::sort::VERSION,
-                    options::sort::EXTENSION,
-                ]),
-        )
-        .arg(
-            Arg::new(options::sort::TIME)
-                .short('t')
-                .help("Sort by modification time (the 'mtime' in the inode), newest first.")
-                .overrides_with_all(&[
-                    options::SORT,
-                    options::sort::SIZE,
-                    options::sort::TIME,
-                    options::sort::NONE,
-                    options::sort::VERSION,
-                    options::sort::EXTENSION,
-                ]),
-        )
-        .arg(
-            Arg::new(options::sort::VERSION)
-                .short('v')
-                .help("Natural sort of (version) numbers in the filenames.")
-                .overrides_with_all(&[
-                    options::SORT,
-                    options::sort::SIZE,
-                    options::sort::TIME,
-                    options::sort::NONE,
-                    options::sort::VERSION,
-                    options::sort::EXTENSION,
-                ]),
-        )
-        .arg(
-            Arg::new(options::sort::EXTENSION)
-                .short('X')
-                .help("Sort alphabetically by entry extension.")
-                .overrides_with_all(&[
-                    options::SORT,
-                    options::sort::SIZE,
-                    options::sort::TIME,
-                    options::sort::NONE,
-                    options::sort::VERSION,
-                    options::sort::EXTENSION,
-                ]),
-        )
-        .arg(
-            Arg::new(options::sort::NONE)
-                .short('U')
-                .help(
-                    "Do not sort; list the files in whatever order they are stored in the \
-    directory.  This is especially useful when listing very large directories, \
-    since not doing any sorting can be noticeably faster.",
-                )
-                .overrides_with_all(&[
-                    options::SORT,
-                    options::sort::SIZE,
-                    options::sort::TIME,
-                    options::sort::NONE,
-                    options::sort::VERSION,
-                    options::sort::EXTENSION,
-                ]),
-        )
-        // Dereferencing
-        .arg(
-            Arg::new(options::dereference::ALL)
-                .short('L')
-                .long(options::dereference::ALL)
-                .help(
-                    "When showing file information for a symbolic link, show information for the \
-                file the link references rather than the link itself.",
-                )
-                .overrides_with_all(&[
-                    options::dereference::ALL,
-                    options::dereference::DIR_ARGS,
-                    options::dereference::ARGS,
-                ]),
-        )
-        .arg(
-            Arg::new(options::dereference::DIR_ARGS)
-                .long(options::dereference::DIR_ARGS)
-                .help(
-                    "Do not dereference symlinks except when they link to directories and are \
-                given as command line arguments.",
-                )
-                .overrides_with_all(&[
-                    options::dereference::ALL,
-                    options::dereference::DIR_ARGS,
-                    options::dereference::ARGS,
-                ]),
-        )
-        .arg(
-            Arg::new(options::dereference::ARGS)
-                .short('H')
-                .long(options::dereference::ARGS)
-                .help("Do not dereference symlinks except when given as command line arguments.")
-                .overrides_with_all(&[
-                    options::dereference::ALL,
-                    options::dereference::DIR_ARGS,
-                    options::dereference::ARGS,
-                ]),
-        )
-        // Long format options
-        .arg(
-            Arg::new(options::NO_GROUP)
-                .long(options::NO_GROUP)
-                .short('G')
-                .help("Do not show group in long format."),
-        )
-        .arg(Arg::new(options::AUTHOR).long(options::AUTHOR).help(
-            "Show author in long format. \
-            On the supported platforms, the author always matches the file owner.",
-        ))
-        // Other Flags
-        .arg(
-            Arg::new(options::files::ALL)
-                .short('a')
-                .long(options::files::ALL)
-                // Overrides -A (as the order matters)
-                .overrides_with(options::files::ALMOST_ALL)
-                .multiple_occurrences(true)
-                .help("Do not ignore hidden files (files with names that start with '.')."),
-        )
-        .arg(
-            Arg::new(options::files::ALMOST_ALL)
-                .short('A')
-                .long(options::files::ALMOST_ALL)
-                // Overrides -a (as the order matters)
-                .overrides_with(options::files::ALL)
-                .multiple_occurrences(true)
-                .help(
-                    "In a directory, do not ignore all file names that start with '.', \
-only ignore '.' and '..'.",
-                ),
-        )
-        .arg(
-            Arg::new(options::DIRECTORY)
-                .short('d')
-                .long(options::DIRECTORY)
-                .help(
-                    "Only list the names of directories, rather than listing directory contents. \
-                This will not follow symbolic links unless one of `--dereference-command-line \
-                (-H)`, `--dereference (-L)`, or `--dereference-command-line-symlink-to-dir` is \
-                specified.",
-                ),
-        )
-        .arg(
-            Arg::new(options::size::HUMAN_READABLE)
-                .short('h')
-                .long(options::size::HUMAN_READABLE)
-                .help("Print human readable file sizes (e.g. 1K 234M 56G).")
-                .overrides_with(options::size::SI),
-        )
-        .arg(
-            Arg::new(options::size::KIBIBYTES)
-                .short('k')
-                .long(options::size::KIBIBYTES)
-                .help("default to 1024-byte blocks for file system usage; used only with -s and per directory totals"),
-        )
-        .arg(
-            Arg::new(options::size::SI)
-                .long(options::size::SI)
-                .help("Print human readable file sizes using powers of 1000 instead of 1024."),
-        )
-        .arg(
-            Arg::new(options::size::BLOCK_SIZE)
-                .long(options::size::BLOCK_SIZE)
-                .takes_value(true)
-                .require_equals(true)
-                .value_name("BLOCK_SIZE")
-                .help("scale sizes by BLOCK_SIZE when printing them"),
-        )
-        .arg(
-            Arg::new(options::INODE)
-                .short('i')
-                .long(options::INODE)
-                .help("print the index number of each file"),
-        )
-        .arg(
-            Arg::new(options::REVERSE)
-                .short('r')
-                .long(options::REVERSE)
-                .help(
-                    "Reverse whatever the sorting method is e.g., list files in reverse \
-                alphabetical order, youngest first, smallest first, or whatever.",
-                ),
-        )
-        .arg(
-            Arg::new(options::RECURSIVE)
-                .short('R')
-                .long(options::RECURSIVE)
-                .help("List the contents of all directories recursively."),
-        )
-        .arg(
-            Arg::new(options::WIDTH)
-                .long(options::WIDTH)
-                .short('w')
-                .help("Assume that the terminal is COLS columns wide.")
-                .value_name("COLS")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::new(options::size::ALLOCATION_SIZE)
-                .short('s')
-                .long(options::size::ALLOCATION_SIZE)
-                .help("print the allocated size of each file, in blocks"),
-        )
-        .arg(
-            Arg::new(options::COLOR)
-                .long(options::COLOR)
-                .help("Color output based on file type.")
-                .takes_value(true)
-                .possible_values(&[
-                    "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
-                ])
-                .require_equals(true)
-                .min_values(0),
-        )
-        .arg(
-            Arg::new(options::INDICATOR_STYLE)
-                .long(options::INDICATOR_STYLE)
-                .help(
-                    "Append indicator with style WORD to entry names: \
-                    none (default),  slash (-p), file-type (--file-type), classify (-F)",
-                )
-                .takes_value(true)
-                .possible_values(&["none", "slash", "file-type", "classify"])
-                .overrides_with_all(&[
-                    options::indicator_style::FILE_TYPE,
-                    options::indicator_style::SLASH,
-                    options::indicator_style::CLASSIFY,
-                    options::INDICATOR_STYLE,
-                ]),
-        )
-        .arg(
-            // The --classify flag can take an optional when argument to
-            // control its behavior from version 9 of GNU coreutils.
-            // There is currently an inconsistency where GNU coreutils allows only
-            // the long form of the flag to take the argument while we allow it
-            // for both the long and short form of the flag.
-            Arg::new(options::indicator_style::CLASSIFY)
-                .short('F')
-                .long(options::indicator_style::CLASSIFY)
-                .help(
-                    "Append a character to each file name indicating the file type. Also, for \
-                regular files that are executable, append '*'. The file type indicators are \
-                '/' for directories, '@' for symbolic links, '|' for FIFOs, '=' for sockets, \
-                '>' for doors, and nothing for regular files. when may be omitted, or one of:\n\
-                    \tnone - Do not classify. This is the default.\n\
-                    \tauto - Only classify if standard output is a terminal.\n\
-                    \talways - Always classify.\n\
-                Specifying --classify and no when is equivalent to --classify=always. This will not follow\
-                symbolic links listed on the command line unless the --dereference-command-line (-H),\
-                --dereference (-L), or --dereference-command-line-symlink-to-dir options are specified.",
-                )
-                .takes_value(true)
-                .value_name("when")
-                .possible_values(&[
-                    "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
-                ])
-                .default_missing_value("always")
-                .require_equals(true)
-                .min_values(0)
-                .overrides_with_all(&[
-                    options::indicator_style::FILE_TYPE,
-                    options::indicator_style::SLASH,
-                    options::indicator_style::CLASSIFY,
-                    options::INDICATOR_STYLE,
-                ]),
-        )
-        .arg(
-            Arg::new(options::indicator_style::FILE_TYPE)
-                .long(options::indicator_style::FILE_TYPE)
-                .help("Same as --classify, but do not append '*'")
-                .overrides_with_all(&[
-                    options::indicator_style::FILE_TYPE,
-                    options::indicator_style::SLASH,
-                    options::indicator_style::CLASSIFY,
-                    options::INDICATOR_STYLE,
-                ]),
-        )
-        .arg(
-            Arg::new(options::indicator_style::SLASH)
-                .short('p')
-                .help("Append / indicator to directories.")
-                .overrides_with_all(&[
-                    options::indicator_style::FILE_TYPE,
-                    options::indicator_style::SLASH,
-                    options::indicator_style::CLASSIFY,
-                    options::INDICATOR_STYLE,
-                ]),
-        )
-        .arg(
-            //This still needs support for posix-*, +FORMAT
-            Arg::new(options::TIME_STYLE)
-                .long(options::TIME_STYLE)
-                .help("time/date format with -l; see TIME_STYLE below")
-                .value_name("TIME_STYLE")
-                .env("TIME_STYLE")
-                .possible_values(&["full-iso", "long-iso", "iso", "locale"])
-                .overrides_with_all(&[options::TIME_STYLE]),
-        )
-        .arg(
-            Arg::new(options::FULL_TIME)
-                .long(options::FULL_TIME)
-                .overrides_with(options::FULL_TIME)
-                .help("like -l --time-style=full-iso"),
-        )
-        .arg(
-            Arg::new(options::CONTEXT)
-                .short('Z')
-                .long(options::CONTEXT)
-                .help(CONTEXT_HELP_TEXT),
-        )
-        // Positional arguments
-        .arg(
-            Arg::new(options::PATHS)
-                .multiple_occurrences(true)
-                .takes_value(true)
-                .allow_invalid_utf8(true),
-        )
-        .after_help(
-            "The TIME_STYLE argument can be full-iso, long-iso, iso. \
-            Also the TIME_STYLE environment variable sets the default style to use.",
-        )
+            .override_usage(format_usage(USAGE))
+            .about("List directory contents. Ignore files and directories starting with a '.' by default")
+            .infer_long_args(true)
+            .arg(
+                Arg::new(options::HELP)
+                    .long(options::HELP)
+                    .help("Print help information.")
+            )
+            // Format arguments
+            .arg(
+                Arg::new(options::FORMAT)
+                    .long(options::FORMAT)
+                    .help("Set the display format.")
+                    .takes_value(true)
+                    .possible_values(&[
+                        "long",
+                        "verbose",
+                        "single-column",
+                        "columns",
+                        "vertical",
+                        "across",
+                        "horizontal",
+                        "commas",
+                    ])
+                    .hide_possible_values(true)
+                    .require_equals(true)
+                    .overrides_with_all(&[
+                        options::FORMAT,
+                        options::format::COLUMNS,
+                        options::format::LONG,
+                        options::format::ACROSS,
+                        options::format::COLUMNS,
+                    ]),
+            )
+            .arg(
+                Arg::new(options::format::COLUMNS)
+                    .short('C')
+                    .help("Display the files in columns.")
+                    .overrides_with_all(&[
+                        options::FORMAT,
+                        options::format::COLUMNS,
+                        options::format::LONG,
+                        options::format::ACROSS,
+                        options::format::COLUMNS,
+                    ]),
+            )
+            .arg(
+                Arg::new(options::format::LONG)
+                    .short('l')
+                    .long(options::format::LONG)
+                    .help("Display detailed information.")
+                    .overrides_with_all(&[
+                        options::FORMAT,
+                        options::format::COLUMNS,
+                        options::format::LONG,
+                        options::format::ACROSS,
+                        options::format::COLUMNS,
+                    ]),
+            )
+            .arg(
+                Arg::new(options::format::ACROSS)
+                    .short('x')
+                    .help("List entries in rows instead of in columns.")
+                    .overrides_with_all(&[
+                        options::FORMAT,
+                        options::format::COLUMNS,
+                        options::format::LONG,
+                        options::format::ACROSS,
+                        options::format::COLUMNS,
+                    ]),
+            )
+            .arg(
+                Arg::new(options::format::COMMAS)
+                    .short('m')
+                    .help("List entries separated by commas.")
+                    .overrides_with_all(&[
+                        options::FORMAT,
+                        options::format::COLUMNS,
+                        options::format::LONG,
+                        options::format::ACROSS,
+                        options::format::COLUMNS,
+                    ]),
+            )
+            // The next four arguments do not override with the other format
+            // options, see the comment in Config::from for the reason.
+            // Ideally, they would use Arg::override_with, with their own name
+            // but that doesn't seem to work in all cases. Example:
+            // ls -1g1
+            // even though `ls -11` and `ls -1 -g -1` work.
+            .arg(
+                Arg::new(options::format::ONE_LINE)
+                    .short('1')
+                    .help("List one file per line.")
+                    .multiple_occurrences(true),
+            )
+            .arg(
+                Arg::new(options::format::LONG_NO_GROUP)
+                    .short('o')
+                    .help(
+                        "Long format without group information. \
+                        Identical to --format=long with --no-group.",
+                    )
+                    .multiple_occurrences(true),
+            )
+            .arg(
+                Arg::new(options::format::LONG_NO_OWNER)
+                    .short('g')
+                    .help("Long format without owner information.")
+                    .multiple_occurrences(true),
+            )
+            .arg(
+                Arg::new(options::format::LONG_NUMERIC_UID_GID)
+                    .short('n')
+                    .long(options::format::LONG_NUMERIC_UID_GID)
+                    .help("-l with numeric UIDs and GIDs.")
+                    .multiple_occurrences(true),
+            )
+            // Quoting style
+            .arg(
+                Arg::new(options::QUOTING_STYLE)
+                    .long(options::QUOTING_STYLE)
+                    .takes_value(true)
+                    .help("Set quoting style.")
+                    .possible_values(&[
+                        "literal",
+                        "shell",
+                        "shell-always",
+                        "shell-escape",
+                        "shell-escape-always",
+                        "c",
+                        "escape",
+                    ])
+                    .overrides_with_all(&[
+                        options::QUOTING_STYLE,
+                        options::quoting::LITERAL,
+                        options::quoting::ESCAPE,
+                        options::quoting::C,
+                    ]),
+            )
+            .arg(
+                Arg::new(options::quoting::LITERAL)
+                    .short('N')
+                    .long(options::quoting::LITERAL)
+                    .help("Use literal quoting style. Equivalent to `--quoting-style=literal`")
+                    .overrides_with_all(&[
+                        options::QUOTING_STYLE,
+                        options::quoting::LITERAL,
+                        options::quoting::ESCAPE,
+                        options::quoting::C,
+                    ]),
+            )
+            .arg(
+                Arg::new(options::quoting::ESCAPE)
+                    .short('b')
+                    .long(options::quoting::ESCAPE)
+                    .help("Use escape quoting style. Equivalent to `--quoting-style=escape`")
+                    .overrides_with_all(&[
+                        options::QUOTING_STYLE,
+                        options::quoting::LITERAL,
+                        options::quoting::ESCAPE,
+                        options::quoting::C,
+                    ]),
+            )
+            .arg(
+                Arg::new(options::quoting::C)
+                    .short('Q')
+                    .long(options::quoting::C)
+                    .help("Use C quoting style. Equivalent to `--quoting-style=c`")
+                    .overrides_with_all(&[
+                        options::QUOTING_STYLE,
+                        options::quoting::LITERAL,
+                        options::quoting::ESCAPE,
+                        options::quoting::C,
+                    ]),
+            )
+            // Control characters
+            .arg(
+                Arg::new(options::HIDE_CONTROL_CHARS)
+                    .short('q')
+                    .long(options::HIDE_CONTROL_CHARS)
+                    .help("Replace control characters with '?' if they are not escaped.")
+                    .overrides_with_all(&[options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS]),
+            )
+            .arg(
+                Arg::new(options::SHOW_CONTROL_CHARS)
+                    .long(options::SHOW_CONTROL_CHARS)
+                    .help("Show control characters 'as is' if they are not escaped.")
+                    .overrides_with_all(&[options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS]),
+            )
+            // Time arguments
+            .arg(
+                Arg::new(options::TIME)
+                    .long(options::TIME)
+                    .help(
+                        "Show time in <field>:\n\
+                        \taccess time (-u): atime, access, use;\n\
+                        \tchange time (-t): ctime, status.\n\
+                        \tbirth time: birth, creation;",
+                    )
+                    .value_name("field")
+                    .takes_value(true)
+                    .possible_values(&[
+                        "atime", "access", "use", "ctime", "status", "birth", "creation",
+                    ])
+                    .hide_possible_values(true)
+                    .require_equals(true)
+                    .overrides_with_all(&[options::TIME, options::time::ACCESS, options::time::CHANGE]),
+            )
+            .arg(
+                Arg::new(options::time::CHANGE)
+                    .short('c')
+                    .help(
+                        "If the long listing format (e.g., -l, -o) is being used, print the status \
+                    change time (the 'ctime' in the inode) instead of the modification time. When \
+                    explicitly sorting by time (--sort=time or -t) or when not using a long listing \
+                    format, sort according to the status change time.",
+                    )
+                    .overrides_with_all(&[options::TIME, options::time::ACCESS, options::time::CHANGE]),
+            )
+            .arg(
+                Arg::new(options::time::ACCESS)
+                    .short('u')
+                    .help(
+                        "If the long listing format (e.g., -l, -o) is being used, print the status \
+                    access time instead of the modification time. When explicitly sorting by time \
+                    (--sort=time or -t) or when not using a long listing format, sort according to the \
+                    access time.",
+                    )
+                    .overrides_with_all(&[options::TIME, options::time::ACCESS, options::time::CHANGE]),
+            )
+            // Hide and ignore
+            .arg(
+                Arg::new(options::HIDE)
+                    .long(options::HIDE)
+                    .takes_value(true)
+                    .multiple_occurrences(true)
+                    .value_name("PATTERN")
+                    .help(
+                        "do not list implied entries matching shell PATTERN (overridden by -a or -A)",
+                    ),
+            )
+            .arg(
+                Arg::new(options::IGNORE)
+                    .short('I')
+                    .long(options::IGNORE)
+                    .takes_value(true)
+                    .multiple_occurrences(true)
+                    .value_name("PATTERN")
+                    .help("do not list implied entries matching shell PATTERN"),
+            )
+            .arg(
+                Arg::new(options::IGNORE_BACKUPS)
+                    .short('B')
+                    .long(options::IGNORE_BACKUPS)
+                    .help("Ignore entries which end with ~."),
+            )
+            // Sort arguments
+            .arg(
+                Arg::new(options::SORT)
+                    .long(options::SORT)
+                    .help("Sort by <field>: name, none (-U), time (-t), size (-S) or extension (-X)")
+                    .value_name("field")
+                    .takes_value(true)
+                    .possible_values(&["name", "none", "time", "size", "version", "extension"])
+                    .require_equals(true)
+                    .overrides_with_all(&[
+                        options::SORT,
+                        options::sort::SIZE,
+                        options::sort::TIME,
+                        options::sort::NONE,
+                        options::sort::VERSION,
+                        options::sort::EXTENSION,
+                    ]),
+            )
+            .arg(
+                Arg::new(options::sort::SIZE)
+                    .short('S')
+                    .help("Sort by file size, largest first.")
+                    .overrides_with_all(&[
+                        options::SORT,
+                        options::sort::SIZE,
+                        options::sort::TIME,
+                        options::sort::NONE,
+                        options::sort::VERSION,
+                        options::sort::EXTENSION,
+                    ]),
+            )
+            .arg(
+                Arg::new(options::sort::TIME)
+                    .short('t')
+                    .help("Sort by modification time (the 'mtime' in the inode), newest first.")
+                    .overrides_with_all(&[
+                        options::SORT,
+                        options::sort::SIZE,
+                        options::sort::TIME,
+                        options::sort::NONE,
+                        options::sort::VERSION,
+                        options::sort::EXTENSION,
+                    ]),
+            )
+            .arg(
+                Arg::new(options::sort::VERSION)
+                    .short('v')
+                    .help("Natural sort of (version) numbers in the filenames.")
+                    .overrides_with_all(&[
+                        options::SORT,
+                        options::sort::SIZE,
+                        options::sort::TIME,
+                        options::sort::NONE,
+                        options::sort::VERSION,
+                        options::sort::EXTENSION,
+                    ]),
+            )
+            .arg(
+                Arg::new(options::sort::EXTENSION)
+                    .short('X')
+                    .help("Sort alphabetically by entry extension.")
+                    .overrides_with_all(&[
+                        options::SORT,
+                        options::sort::SIZE,
+                        options::sort::TIME,
+                        options::sort::NONE,
+                        options::sort::VERSION,
+                        options::sort::EXTENSION,
+                    ]),
+            )
+            .arg(
+                Arg::new(options::sort::NONE)
+                    .short('U')
+                    .help(
+                        "Do not sort; list the files in whatever order they are stored in the \
+        directory.  This is especially useful when listing very large directories, \
+        since not doing any sorting can be noticeably faster.",
+                    )
+                    .overrides_with_all(&[
+                        options::SORT,
+                        options::sort::SIZE,
+                        options::sort::TIME,
+                        options::sort::NONE,
+                        options::sort::VERSION,
+                        options::sort::EXTENSION,
+                    ]),
+            )
+            // Dereferencing
+            .arg(
+                Arg::new(options::dereference::ALL)
+                    .short('L')
+                    .long(options::dereference::ALL)
+                    .help(
+                        "When showing file information for a symbolic link, show information for the \
+                    file the link references rather than the link itself.",
+                    )
+                    .overrides_with_all(&[
+                        options::dereference::ALL,
+                        options::dereference::DIR_ARGS,
+                        options::dereference::ARGS,
+                    ]),
+            )
+            .arg(
+                Arg::new(options::dereference::DIR_ARGS)
+                    .long(options::dereference::DIR_ARGS)
+                    .help(
+                        "Do not dereference symlinks except when they link to directories and are \
+                    given as command line arguments.",
+                    )
+                    .overrides_with_all(&[
+                        options::dereference::ALL,
+                        options::dereference::DIR_ARGS,
+                        options::dereference::ARGS,
+                    ]),
+            )
+            .arg(
+                Arg::new(options::dereference::ARGS)
+                    .short('H')
+                    .long(options::dereference::ARGS)
+                    .help("Do not dereference symlinks except when given as command line arguments.")
+                    .overrides_with_all(&[
+                        options::dereference::ALL,
+                        options::dereference::DIR_ARGS,
+                        options::dereference::ARGS,
+                    ]),
+            )
+            // Long format options
+            .arg(
+                Arg::new(options::NO_GROUP)
+                    .long(options::NO_GROUP)
+                    .short('G')
+                    .help("Do not show group in long format."),
+            )
+            .arg(Arg::new(options::AUTHOR).long(options::AUTHOR).help(
+                "Show author in long format. \
+                On the supported platforms, the author always matches the file owner.",
+            ))
+            // Other Flags
+            .arg(
+                Arg::new(options::files::ALL)
+                    .short('a')
+                    .long(options::files::ALL)
+                    // Overrides -A (as the order matters)
+                    .overrides_with(options::files::ALMOST_ALL)
+                    .multiple_occurrences(true)
+                    .help("Do not ignore hidden files (files with names that start with '.')."),
+            )
+            .arg(
+                Arg::new(options::files::ALMOST_ALL)
+                    .short('A')
+                    .long(options::files::ALMOST_ALL)
+                    // Overrides -a (as the order matters)
+                    .overrides_with(options::files::ALL)
+                    .multiple_occurrences(true)
+                    .help(
+                        "In a directory, do not ignore all file names that start with '.', \
+    only ignore '.' and '..'.",
+                    ),
+            )
+            .arg(
+                Arg::new(options::DIRECTORY)
+                    .short('d')
+                    .long(options::DIRECTORY)
+                    .help(
+                        "Only list the names of directories, rather than listing directory contents. \
+                    This will not follow symbolic links unless one of `--dereference-command-line \
+                    (-H)`, `--dereference (-L)`, or `--dereference-command-line-symlink-to-dir` is \
+                    specified.",
+                    ),
+            )
+            .arg(
+                Arg::new(options::size::HUMAN_READABLE)
+                    .short('h')
+                    .long(options::size::HUMAN_READABLE)
+                    .help("Print human readable file sizes (e.g. 1K 234M 56G).")
+                    .overrides_with(options::size::SI),
+            )
+            .arg(
+                Arg::new(options::size::KIBIBYTES)
+                    .short('k')
+                    .long(options::size::KIBIBYTES)
+                    .help("default to 1024-byte blocks for file system usage; used only with -s and per directory totals"),
+            )
+            .arg(
+                Arg::new(options::size::SI)
+                    .long(options::size::SI)
+                    .help("Print human readable file sizes using powers of 1000 instead of 1024."),
+            )
+            .arg(
+                Arg::new(options::size::BLOCK_SIZE)
+                    .long(options::size::BLOCK_SIZE)
+                    .takes_value(true)
+                    .require_equals(true)
+                    .value_name("BLOCK_SIZE")
+                    .help("scale sizes by BLOCK_SIZE when printing them"),
+            )
+            .arg(
+                Arg::new(options::INODE)
+                    .short('i')
+                    .long(options::INODE)
+                    .help("print the index number of each file"),
+            )
+            .arg(
+                Arg::new(options::REVERSE)
+                    .short('r')
+                    .long(options::REVERSE)
+                    .help(
+                        "Reverse whatever the sorting method is e.g., list files in reverse \
+                    alphabetical order, youngest first, smallest first, or whatever.",
+                    ),
+            )
+            .arg(
+                Arg::new(options::RECURSIVE)
+                    .short('R')
+                    .long(options::RECURSIVE)
+                    .help("List the contents of all directories recursively."),
+            )
+            .arg(
+                Arg::new(options::WIDTH)
+                    .long(options::WIDTH)
+                    .short('w')
+                    .help("Assume that the terminal is COLS columns wide.")
+                    .value_name("COLS")
+                    .takes_value(true),
+            )
+            .arg(
+                Arg::new(options::size::ALLOCATION_SIZE)
+                    .short('s')
+                    .long(options::size::ALLOCATION_SIZE)
+                    .help("print the allocated size of each file, in blocks"),
+            )
+            .arg(
+                Arg::new(options::COLOR)
+                    .long(options::COLOR)
+                    .help("Color output based on file type.")
+                    .takes_value(true)
+                    .possible_values(&[
+                        "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
+                    ])
+                    .require_equals(true)
+                    .min_values(0),
+            )
+            .arg(
+                Arg::new(options::INDICATOR_STYLE)
+                    .long(options::INDICATOR_STYLE)
+                    .help(
+                        "Append indicator with style WORD to entry names: \
+                        none (default),  slash (-p), file-type (--file-type), classify (-F)",
+                    )
+                    .takes_value(true)
+                    .possible_values(&["none", "slash", "file-type", "classify"])
+                    .overrides_with_all(&[
+                        options::indicator_style::FILE_TYPE,
+                        options::indicator_style::SLASH,
+                        options::indicator_style::CLASSIFY,
+                        options::INDICATOR_STYLE,
+                    ]),
+            )
+            .arg(
+                // The --classify flag can take an optional when argument to
+                // control its behavior from version 9 of GNU coreutils.
+                // There is currently an inconsistency where GNU coreutils allows only
+                // the long form of the flag to take the argument while we allow it
+                // for both the long and short form of the flag.
+                Arg::new(options::indicator_style::CLASSIFY)
+                    .short('F')
+                    .long(options::indicator_style::CLASSIFY)
+                    .help(
+                        "Append a character to each file name indicating the file type. Also, for \
+                    regular files that are executable, append '*'. The file type indicators are \
+                    '/' for directories, '@' for symbolic links, '|' for FIFOs, '=' for sockets, \
+                    '>' for doors, and nothing for regular files. when may be omitted, or one of:\n\
+                        \tnone - Do not classify. This is the default.\n\
+                        \tauto - Only classify if standard output is a terminal.\n\
+                        \talways - Always classify.\n\
+                    Specifying --classify and no when is equivalent to --classify=always. This will not follow\
+                    symbolic links listed on the command line unless the --dereference-command-line (-H),\
+                    --dereference (-L), or --dereference-command-line-symlink-to-dir options are specified.",
+                    )
+                    .takes_value(true)
+                    .value_name("when")
+                    .possible_values(&[
+                        "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
+                    ])
+                    .default_missing_value("always")
+                    .require_equals(true)
+                    .min_values(0)
+                    .overrides_with_all(&[
+                        options::indicator_style::FILE_TYPE,
+                        options::indicator_style::SLASH,
+                        options::indicator_style::CLASSIFY,
+                        options::INDICATOR_STYLE,
+                    ]),
+            )
+            .arg(
+                Arg::new(options::indicator_style::FILE_TYPE)
+                    .long(options::indicator_style::FILE_TYPE)
+                    .help("Same as --classify, but do not append '*'")
+                    .overrides_with_all(&[
+                        options::indicator_style::FILE_TYPE,
+                        options::indicator_style::SLASH,
+                        options::indicator_style::CLASSIFY,
+                        options::INDICATOR_STYLE,
+                    ]),
+            )
+            .arg(
+                Arg::new(options::indicator_style::SLASH)
+                    .short('p')
+                    .help("Append / indicator to directories.")
+                    .overrides_with_all(&[
+                        options::indicator_style::FILE_TYPE,
+                        options::indicator_style::SLASH,
+                        options::indicator_style::CLASSIFY,
+                        options::INDICATOR_STYLE,
+                    ]),
+            )
+            .arg(
+                //This still needs support for posix-*, +FORMAT
+                Arg::new(options::TIME_STYLE)
+                    .long(options::TIME_STYLE)
+                    .help("time/date format with -l; see TIME_STYLE below")
+                    .value_name("TIME_STYLE")
+                    .env("TIME_STYLE")
+                    .possible_values(&["full-iso", "long-iso", "iso", "locale"])
+                    .overrides_with_all(&[options::TIME_STYLE]),
+            )
+            .arg(
+                Arg::new(options::FULL_TIME)
+                    .long(options::FULL_TIME)
+                    .overrides_with(options::FULL_TIME)
+                    .help("like -l --time-style=full-iso"),
+            )
+            .arg(
+                Arg::new(options::CONTEXT)
+                    .short('Z')
+                    .long(options::CONTEXT)
+                    .help(CONTEXT_HELP_TEXT),
+            )
+            // Positional arguments
+            .arg(
+                Arg::new(options::PATHS)
+                    .multiple_occurrences(true)
+                    .takes_value(true)
+                    .allow_invalid_utf8(true),
+            )
+            .after_help(
+                "The TIME_STYLE argument can be full-iso, long-iso, iso. \
+                Also the TIME_STYLE environment variable sets the default style to use.",
+            )
 }
 
 /// Represents a Path along with it's associated data.
@@ -1543,7 +1542,7 @@ impl PathData {
     }
 }
 
-fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
+pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
     let mut out = BufWriter::new(stdout());

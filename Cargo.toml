@@ -45,6 +45,7 @@ feat_common_core = [
     "cut",
     "date",
     "df",
+    "dir",
     "dircolors",
     "dirname",
     "dd",
@@ -100,6 +101,7 @@ feat_common_core = [
     "unexpand",
     "uniq",
     "unlink",
+    "vdir",
     "wc",
     "yes",
 ]
@@ -276,6 +278,7 @@ cut      = { optional=true, version="0.0.13", package="uu_cut", path="src/uu/cut
 date     = { optional=true, version="0.0.13", package="uu_date", path="src/uu/date" }
 dd       = { optional=true, version="0.0.13", package="uu_dd", path="src/uu/dd" }
 df       = { optional=true, version="0.0.13", package="uu_df", path="src/uu/df" }
+dir      = { optional=true, version="0.0.13", package="uu_dir", path="src/uu/dir" }
 dircolors= { optional=true, version="0.0.13", package="uu_dircolors", path="src/uu/dircolors" }
 dirname  = { optional=true, version="0.0.13", package="uu_dirname", path="src/uu/dirname" }
 du       = { optional=true, version="0.0.13", package="uu_du", path="src/uu/du" }
@@ -352,6 +355,7 @@ uniq     = { optional=true, version="0.0.13", package="uu_uniq", path="src/uu/un
 unlink   = { optional=true, version="0.0.13", package="uu_unlink", path="src/uu/unlink" }
 uptime   = { optional=true, version="0.0.13", package="uu_uptime", path="src/uu/uptime" }
 users    = { optional=true, version="0.0.13", package="uu_users", path="src/uu/users" }
+vdir      = { optional=true, version="0.0.13", package="uu_vdir", path="src/uu/vdir" }
 wc       = { optional=true, version="0.0.13", package="uu_wc", path="src/uu/wc" }
 who      = { optional=true, version="0.0.13", package="uu_who", path="src/uu/who" }
 whoami   = { optional=true, version="0.0.13", package="uu_whoami", path="src/uu/whoami" }
