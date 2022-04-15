@@ -292,7 +292,7 @@ fn get_all_filesystems(opt: &Options) -> Vec<Filesystem> {
 }
 
 /// For each path, get the filesystem that contains that path.
-fn get_named_filesystems<P>(paths: &[P]) -> Vec<Filesystem>
+fn get_named_filesystems<P>(paths: &[P], opt: &Options) -> Vec<Filesystem>
 where
     P: AsRef<Path>,
 {
@@ -302,21 +302,35 @@ where
     // considered. The "lofs" filesystem is a loopback
     // filesystem present on Solaris and FreeBSD systems. It
     // is similar to a symbolic link.
-    let mounts: Vec<MountInfo> = read_fs_list()
+    let mounts: Vec<MountInfo> = filter_mount_list(read_fs_list(), opt)
         .into_iter()
         .filter(|mi| mi.fs_type != "lofs" && !mi.dummy)
         .collect();
 
+    let mut result = vec![];
+
+    // this happens if the file system type doesn't exist
+    if mounts.is_empty() {
+        show!(USimpleError::new(1, "no file systems processed"));
+        return result;
+    }
+
     // Convert each path into a `Filesystem`, which contains
     // both the mount information and usage information.
-    let mut result = vec![];
     for path in paths {
         match Filesystem::from_path(&mounts, path) {
             Some(fs) => result.push(fs),
-            None => show!(USimpleError::new(
-                1,
-                format!("{}: No such file or directory", path.as_ref().display())
-            )),
+            None => {
+                // this happens if specified file system type != file system type of the file
+                if path.as_ref().exists() {
+                    show!(USimpleError::new(1, "no file systems processed"));
+                } else {
+                    show!(USimpleError::new(
+                        1,
+                        format!("{}: No such file or directory", path.as_ref().display())
+                    ));
+                }
+            }
         }
     }
     result
@@ -370,7 +384,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         Some(paths) => {
             let paths: Vec<&str> = paths.collect();
-            let filesystems = get_named_filesystems(&paths);
+            let filesystems = get_named_filesystems(&paths, &opt);
 
             // This can happen if paths are given as command-line arguments
             // but none of the paths exist.
@@ -381,12 +395,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             filesystems
         }
     };
-
-    // This can happen if paths are given as command-line arguments
-    // but none of the paths exist.
-    if filesystems.is_empty() {
-        return Ok(());
-    }
 
     println!("{}", Table::new(&opt, filesystems));
 
