@@ -61,7 +61,6 @@ static OUTPUT_FIELD_LIST: [&str; 12] = [
 struct Options {
     show_local_fs: bool,
     show_all_fs: bool,
-    show_listed_fs: bool,
     block_size: BlockSize,
 
     /// Optional list of filesystem types to include in the output table.
@@ -88,7 +87,6 @@ impl Default for Options {
         Self {
             show_local_fs: Default::default(),
             show_all_fs: Default::default(),
-            show_listed_fs: Default::default(),
             block_size: Default::default(),
             include: Default::default(),
             exclude: Default::default(),
@@ -157,7 +155,6 @@ impl Options {
         Ok(Self {
             show_local_fs: matches.is_present(OPT_LOCAL),
             show_all_fs: matches.is_present(OPT_ALL),
-            show_listed_fs: false,
             block_size: block_size_from_matches(matches)
                 .map_err(|_| OptionsError::InvalidBlockSize)?,
             include,
@@ -188,7 +185,7 @@ fn is_included(mi: &MountInfo, opt: &Options) -> bool {
     }
 
     // Don't show pseudo filesystems unless `--all` has been given.
-    if mi.dummy && !opt.show_all_fs && !opt.show_listed_fs {
+    if mi.dummy && !opt.show_all_fs {
         return false;
     }
 
@@ -394,7 +391,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // If the filesystem is not empty, or if the options require
         // showing all filesystems, then print the data as a row in
         // the output table.
-        if opt.show_all_fs || opt.show_listed_fs || filesystem.usage.blocks > 0 {
+        if opt.show_all_fs || filesystem.usage.blocks > 0 {
             let row = Row::from(filesystem);
             println!("{}", DisplayRow::new(&row, &opt));
             total += row;
@@ -667,7 +664,6 @@ mod tests {
         fn test_dummy_included() {
             let opt = Options {
                 show_all_fs: true,
-                show_listed_fs: true,
                 ..Default::default()
             };
             let m = mount_info("ext4", "/mnt/foo", false, true);
