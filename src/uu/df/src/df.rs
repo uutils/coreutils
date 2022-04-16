@@ -443,14 +443,14 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_HUMAN_READABLE_BINARY)
                 .short('h')
                 .long("human-readable")
-                .conflicts_with(OPT_HUMAN_READABLE_DECIMAL)
+                .overrides_with(OPT_HUMAN_READABLE_DECIMAL)
                 .help("print sizes in human readable format (e.g., 1K 234M 2G)"),
         )
         .arg(
             Arg::new(OPT_HUMAN_READABLE_DECIMAL)
                 .short('H')
                 .long("si")
-                .conflicts_with(OPT_HUMAN_READABLE_BINARY)
+                .overrides_with(OPT_HUMAN_READABLE_DECIMAL)
                 .help("likewise, but use powers of 1000 not 1024"),
         )
         .arg(

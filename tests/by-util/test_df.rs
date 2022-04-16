@@ -27,6 +27,12 @@ fn test_df_compatible_si() {
 }
 
 #[test]
+fn test_df_overriding() {
+    new_ucmd!().arg("-hH").succeeds();
+    new_ucmd!().arg("-Hh").succeeds();
+}
+
+#[test]
 fn test_df_output() {
     let expected = if cfg!(target_os = "macos") {
         "Filesystem               Size         Used    Available     Capacity  Use% Mounted on       "
@@ -35,6 +41,22 @@ fn test_df_output() {
     };
     let output = new_ucmd!()
         .arg("-H")
+        .arg("--total")
+        .succeeds()
+        .stdout_move_str();
+    let actual = output.lines().take(1).collect::<Vec<&str>>()[0];
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn test_df_output_overridden() {
+    let expected = if cfg!(target_os = "macos") {
+        "Filesystem               Size         Used    Available     Capacity  Use% Mounted on       "
+    } else {
+        "Filesystem               Size         Used    Available  Use% Mounted on       "
+    };
+    let output = new_ucmd!()
+        .arg("-hH")
         .arg("--total")
         .succeeds()
         .stdout_move_str();
