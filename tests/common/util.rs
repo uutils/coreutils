@@ -913,19 +913,21 @@ impl UCommand {
                 let mut cmd = Command::new(bin_path);
                 cmd.current_dir(curdir.as_ref());
                 if env_clear {
+                    cmd.env_clear();
                     if cfg!(windows) {
                         // spell-checker:ignore (dll) rsaenh
                         // %SYSTEMROOT% is required on Windows to initialize crypto provider
                         // ... and crypto provider is required for std::rand
                         // From `procmon`: RegQueryValue HKLM\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Microsoft Strong Cryptographic Provider\Image Path
                         // SUCCESS  Type: REG_SZ, Length: 66, Data: %SystemRoot%\system32\rsaenh.dll"
-                        for (key, _) in env::vars_os() {
-                            if key.as_os_str() != "SYSTEMROOT" {
-                                cmd.env_remove(key);
-                            }
+                        if let Some(systemroot) = env::var_os("SYSTEMROOT") {
+                            cmd.env("SYSTEMROOT", systemroot);
                         }
                     } else {
-                        cmd.env_clear();
+                        // if someone is setting LD_PRELOAD, there's probably a good reason for it
+                        if let Some(ld_preload) = env::var_os("LD_PRELOAD") {
+                            cmd.env("LD_PRELOAD", ld_preload);
+                        }
                     }
                 }
                 cmd
