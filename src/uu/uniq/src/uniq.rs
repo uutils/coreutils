@@ -12,7 +12,7 @@ use std::path::Path;
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 
 static ABOUT: &str = "Report or omit repeated lines.";
@@ -284,6 +284,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ignore_case: matches.is_present(options::IGNORE_CASE),
         zero_terminated: matches.is_present(options::ZERO_TERMINATED),
     };
+
+    if uniq.show_counts && uniq.all_repeated {
+        return Err(UUsageError::new(
+            1,
+            "printing all duplicated lines and repeat counts is meaningless",
+        ));
+    }
+
     uniq.print_uniq(
         &mut open_input_file(&in_file_name)?,
         &mut open_output_file(&out_file_name)?,
