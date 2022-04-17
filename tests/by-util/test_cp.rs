@@ -1535,6 +1535,20 @@ fn test_cp_link_backup() {
 
 #[test]
 #[cfg(unix)]
+fn test_copy_symlink_with_no_dereference_and_attributes_only() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.symlink_file("file", "sym");
+    ucmd.arg("-d")
+        .arg("--attributes-only")
+        .arg("sym")
+        .arg("sym2")
+        .succeeds();
+    assert!(at.is_symlink("sym2"));
+}
+
+#[test]
+#[cfg(unix)]
 fn test_cp_fifo() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("fifo");

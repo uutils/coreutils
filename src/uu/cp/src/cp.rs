@@ -1412,12 +1412,25 @@ fn copy_file(
             }
         }
         CopyMode::AttrOnly => {
-            OpenOptions::new()
-                .write(true)
-                .truncate(false)
-                .create(true)
-                .open(&dest)
-                .unwrap();
+            let file_type = fs::symlink_metadata(&source)?.file_type();
+            if file_type.is_symlink() && !options.dereference {
+                copy_helper(
+                    &source,
+                    &dest,
+                    options,
+                    context,
+                    true,
+                    source_is_fifo,
+                    symlinked_files,
+                )?;
+            } else {
+                OpenOptions::new()
+                    .write(true)
+                    .truncate(false)
+                    .create(true)
+                    .open(&dest)
+                    .unwrap();
+            }
         }
     };
 
