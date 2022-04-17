@@ -607,7 +607,11 @@ fn test_install_and_strip_with_program() {
 #[test]
 #[cfg(not(windows))]
 fn test_install_and_strip_with_invalid_program() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene
+        .ucmd()
         .arg("-s")
         .arg("--strip-program")
         .arg("/bin/date")
@@ -615,12 +619,17 @@ fn test_install_and_strip_with_invalid_program() {
         .arg(STRIP_TARGET_FILE)
         .fails()
         .stderr_contains("strip program failed");
+    assert!(!at.file_exists(STRIP_TARGET_FILE));
 }
 
 #[test]
 #[cfg(not(windows))]
 fn test_install_and_strip_with_non_existent_program() {
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene
+        .ucmd()
         .arg("-s")
         .arg("--strip-program")
         .arg("/usr/bin/non_existent_program")
@@ -628,6 +637,7 @@ fn test_install_and_strip_with_non_existent_program() {
         .arg(STRIP_TARGET_FILE)
         .fails()
         .stderr_contains("No such file or directory");
+    assert!(!at.file_exists(STRIP_TARGET_FILE));
 }
 
 #[test]

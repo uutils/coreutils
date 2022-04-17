@@ -594,13 +594,19 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
         match process::Command::new(&b.strip_program).arg(to).output() {
             Ok(o) => {
                 if !o.status.success() {
+                    // Follow GNU's behavior: if strip fails, removes the target
+                    let _ = fs::remove_file(to);
                     return Err(InstallError::StripProgramFailed(
                         String::from_utf8(o.stderr).unwrap_or_default(),
                     )
                     .into());
                 }
             }
-            Err(e) => return Err(InstallError::StripProgramFailed(e.to_string()).into()),
+            Err(e) => {
+                // Follow GNU's behavior: if strip fails, removes the target
+                let _ = fs::remove_file(to);
+                return Err(InstallError::StripProgramFailed(e.to_string()).into());
+            }
         }
     }
 
