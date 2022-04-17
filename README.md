@@ -400,7 +400,7 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 
 Please note that this is not fully accurate:
 * Some new options can be added / removed in the GNU implementation;
-* Some errors management might be missing;
+* Some error management might be missing;
 * Some behaviors might be different.
 
 See https://github.com/uutils/coreutils/issues/3336 for the main meta bugs
