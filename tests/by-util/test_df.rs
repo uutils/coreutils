@@ -27,9 +27,41 @@ fn test_df_compatible_si() {
 }
 
 #[test]
-fn test_df_overriding() {
+fn test_df_arguments_override_themselves() {
+    new_ucmd!().args(&["--help", "--help"]).succeeds();
+    new_ucmd!().arg("-aa").succeeds();
+    new_ucmd!()
+        .args(&["--block-size=3000", "--block-size=1000"])
+        .succeeds();
+    new_ucmd!().args(&["--total", "--total"]).succeeds();
+    new_ucmd!().arg("-hh").succeeds();
+    new_ucmd!().arg("-HH").succeeds();
+    new_ucmd!().arg("-ii").succeeds();
+    new_ucmd!().arg("-kk").succeeds();
+    new_ucmd!().arg("-ll").succeeds();
+    new_ucmd!().args(&["--no-sync", "--no-sync"]).succeeds();
+    new_ucmd!().arg("-PP").succeeds();
+    new_ucmd!().args(&["--sync", "--sync"]).succeeds();
+    new_ucmd!().arg("-TT").succeeds();
+}
+
+#[test]
+fn test_df_conflicts_overriding() {
     new_ucmd!().arg("-hH").succeeds();
     new_ucmd!().arg("-Hh").succeeds();
+    new_ucmd!().args(&["--no-sync", "--sync"]).succeeds();
+    new_ucmd!().args(&["--sync", "--no-sync"]).succeeds();
+    new_ucmd!().args(&["-k", "--block-size=3000"]).succeeds();
+    new_ucmd!().args(&["--block-size=3000", "-k"]).succeeds();
+}
+
+#[test]
+fn test_df_output_arg() {
+    new_ucmd!().args(&["--output=source", "-iPT"]).fails();
+    new_ucmd!().args(&["-iPT", "--output=source"]).fails();
+    new_ucmd!()
+        .args(&["--output=source", "--output=source"])
+        .fails();
 }
 
 #[test]
