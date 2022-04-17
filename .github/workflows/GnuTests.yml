@@ -216,7 +216,7 @@ jobs:
       with:
         repository: 'coreutils/coreutils'
         path: 'gnu'
-        ref: 'v9.0'
+        ref: 'v9.1'
         submodules: recursive
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
