@@ -346,6 +346,7 @@ impl fmt::Display for DfError {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
+
     #[cfg(windows)]
     {
         if matches.is_present(OPT_INODES) {
@@ -406,6 +407,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_ALL)
                 .short('a')
                 .long("all")
+                .overrides_with(OPT_ALL)
                 .help("include dummy file systems"),
         )
         .arg(
@@ -413,47 +415,56 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('B')
                 .long("block-size")
                 .takes_value(true)
+                .overrides_with_all(&[OPT_KILO, OPT_BLOCKSIZE])
                 .help(
                     "scale sizes by SIZE before printing them; e.g.\
-                     '-BM' prints sizes in units of 1,048,576 bytes",
+                    '-BM' prints sizes in units of 1,048,576 bytes",
                 ),
         )
         .arg(
             Arg::new(OPT_TOTAL)
                 .long("total")
+                .overrides_with(OPT_TOTAL)
                 .help("produce a grand total"),
         )
         .arg(
             Arg::new(OPT_HUMAN_READABLE_BINARY)
                 .short('h')
                 .long("human-readable")
-                .conflicts_with(OPT_HUMAN_READABLE_DECIMAL)
+                .overrides_with_all(&[OPT_HUMAN_READABLE_DECIMAL, OPT_HUMAN_READABLE_BINARY])
                 .help("print sizes in human readable format (e.g., 1K 234M 2G)"),
         )
         .arg(
             Arg::new(OPT_HUMAN_READABLE_DECIMAL)
                 .short('H')
                 .long("si")
-                .conflicts_with(OPT_HUMAN_READABLE_BINARY)
+                .overrides_with_all(&[OPT_HUMAN_READABLE_BINARY, OPT_HUMAN_READABLE_DECIMAL])
                 .help("likewise, but use powers of 1000 not 1024"),
         )
         .arg(
             Arg::new(OPT_INODES)
                 .short('i')
                 .long("inodes")
+                .overrides_with(OPT_INODES)
                 .help("list inode information instead of block usage"),
         )
-        .arg(Arg::new(OPT_KILO).short('k').help("like --block-size=1K"))
+        .arg(
+            Arg::new(OPT_KILO)
+                .short('k')
+                .help("like --block-size=1K")
+                .overrides_with_all(&[OPT_BLOCKSIZE, OPT_KILO]),
+        )
         .arg(
             Arg::new(OPT_LOCAL)
                 .short('l')
                 .long("local")
+                .overrides_with(OPT_LOCAL)
                 .help("limit listing to local file systems"),
         )
         .arg(
             Arg::new(OPT_NO_SYNC)
                 .long("no-sync")
-                .conflicts_with(OPT_SYNC)
+                .overrides_with_all(&[OPT_SYNC, OPT_NO_SYNC])
                 .help("do not invoke sync before getting usage info (default)"),
         )
         .arg(
@@ -477,12 +488,13 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_PORTABILITY)
                 .short('P')
                 .long("portability")
+                .overrides_with(OPT_PORTABILITY)
                 .help("use the POSIX output format"),
         )
         .arg(
             Arg::new(OPT_SYNC)
                 .long("sync")
-                .conflicts_with(OPT_NO_SYNC)
+                .overrides_with_all(&[OPT_NO_SYNC, OPT_SYNC])
                 .help("invoke sync before getting usage info"),
         )
         .arg(
@@ -498,6 +510,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_PRINT_TYPE)
                 .short('T')
                 .long("print-type")
+                .overrides_with(OPT_PRINT_TYPE)
                 .help("print file system type"),
         )
         .arg(

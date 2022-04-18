@@ -27,6 +27,44 @@ fn test_df_compatible_si() {
 }
 
 #[test]
+fn test_df_arguments_override_themselves() {
+    new_ucmd!().args(&["--help", "--help"]).succeeds();
+    new_ucmd!().arg("-aa").succeeds();
+    new_ucmd!()
+        .args(&["--block-size=3000", "--block-size=1000"])
+        .succeeds();
+    new_ucmd!().args(&["--total", "--total"]).succeeds();
+    new_ucmd!().arg("-hh").succeeds();
+    new_ucmd!().arg("-HH").succeeds();
+    new_ucmd!().arg("-ii").succeeds();
+    new_ucmd!().arg("-kk").succeeds();
+    new_ucmd!().arg("-ll").succeeds();
+    new_ucmd!().args(&["--no-sync", "--no-sync"]).succeeds();
+    new_ucmd!().arg("-PP").succeeds();
+    new_ucmd!().args(&["--sync", "--sync"]).succeeds();
+    new_ucmd!().arg("-TT").succeeds();
+}
+
+#[test]
+fn test_df_conflicts_overriding() {
+    new_ucmd!().arg("-hH").succeeds();
+    new_ucmd!().arg("-Hh").succeeds();
+    new_ucmd!().args(&["--no-sync", "--sync"]).succeeds();
+    new_ucmd!().args(&["--sync", "--no-sync"]).succeeds();
+    new_ucmd!().args(&["-k", "--block-size=3000"]).succeeds();
+    new_ucmd!().args(&["--block-size=3000", "-k"]).succeeds();
+}
+
+#[test]
+fn test_df_output_arg() {
+    new_ucmd!().args(&["--output=source", "-iPT"]).fails();
+    new_ucmd!().args(&["-iPT", "--output=source"]).fails();
+    new_ucmd!()
+        .args(&["--output=source", "--output=source"])
+        .fails();
+}
+
+#[test]
 fn test_df_output() {
     let expected = if cfg!(target_os = "macos") {
         vec![
@@ -57,6 +95,22 @@ fn test_df_output() {
         .stdout_move_str();
     let actual = output.lines().take(1).collect::<Vec<&str>>()[0];
     let actual = actual.split_whitespace().collect::<Vec<_>>();
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn test_df_output_overridden() {
+    let expected = if cfg!(target_os = "macos") {
+        "Filesystem               Size         Used    Available     Capacity  Use% Mounted on       "
+    } else {
+        "Filesystem               Size         Used    Available  Use% Mounted on       "
+    };
+    let output = new_ucmd!()
+        .arg("-hH")
+        .arg("--total")
+        .succeeds()
+        .stdout_move_str();
+    let actual = output.lines().take(1).collect::<Vec<&str>>()[0];
     assert_eq!(actual, expected);
 }
 
