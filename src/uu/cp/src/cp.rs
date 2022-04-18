@@ -1244,7 +1244,7 @@ fn backup_dest(dest: &Path, backup_path: &Path) -> CopyResult<PathBuf> {
 }
 
 fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
-    if paths_refer_to_same_file(source, dest)? {
+    if paths_refer_to_same_file(source, dest)? && options.backup == BackupMode::NoBackup {
         return Err(format!("{}: same file", context_for(source, dest)).into());
     }
 

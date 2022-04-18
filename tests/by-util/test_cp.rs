@@ -1640,3 +1640,26 @@ fn test_cp_overriding_arguments() {
         s.fixtures.remove("file2");
     }
 }
+
+#[test]
+fn test_cp_same_file_backup() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("source.txt");
+    scene
+        .ucmd()
+        .arg("--backup=simple")
+        .arg("--suffix=.b")
+        .arg("source.txt")
+        .arg("source.txt")
+        .succeeds();
+    assert!(at.file_exists("source.txt.b"));
+
+    at.touch("source.txt");
+    scene
+        .ucmd()
+        .arg("source.txt")
+        .arg("source.txt")
+        .fails()
+        .stderr_contains("cp: 'source.txt' -> 'source.txt': same file");
+}
