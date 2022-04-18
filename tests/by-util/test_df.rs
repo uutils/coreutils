@@ -29,9 +29,26 @@ fn test_df_compatible_si() {
 #[test]
 fn test_df_output() {
     let expected = if cfg!(target_os = "macos") {
-        "Filesystem               Size         Used    Available     Capacity  Use% Mounted on       "
+        vec![
+            "Filesystem",
+            "Size",
+            "Used",
+            "Available",
+            "Capacity",
+            "Use%",
+            "Mounted",
+            "on",
+        ]
     } else {
-        "Filesystem               Size         Used    Available  Use% Mounted on       "
+        vec![
+            "Filesystem",
+            "Size",
+            "Used",
+            "Available",
+            "Use%",
+            "Mounted",
+            "on",
+        ]
     };
     let output = new_ucmd!()
         .arg("-H")
@@ -39,6 +56,7 @@ fn test_df_output() {
         .succeeds()
         .stdout_move_str();
     let actual = output.lines().take(1).collect::<Vec<&str>>()[0];
+    let actual = actual.split_whitespace().collect::<Vec<_>>();
     assert_eq!(actual, expected);
 }
 
@@ -253,23 +271,26 @@ fn test_block_size_1024() {
     assert_eq!(get_header(34 * 1024 * 1024 * 1024), "34G-blocks");
 }
 
-// TODO The spacing does not match GNU df. Also we need to remove
-// trailing spaces from the heading row.
 #[test]
 fn test_output_selects_columns() {
     let output = new_ucmd!()
         .args(&["--output=source"])
         .succeeds()
         .stdout_move_str();
-    assert_eq!(output.lines().next().unwrap(), "Filesystem       ");
+    assert_eq!(output.lines().next().unwrap().trim_end(), "Filesystem");
 
     let output = new_ucmd!()
         .args(&["--output=source,target"])
         .succeeds()
         .stdout_move_str();
     assert_eq!(
-        output.lines().next().unwrap(),
-        "Filesystem       Mounted on       "
+        output
+            .lines()
+            .next()
+            .unwrap()
+            .split_whitespace()
+            .collect::<Vec<_>>(),
+        vec!["Filesystem", "Mounted", "on"]
     );
 
     let output = new_ucmd!()
@@ -277,8 +298,13 @@ fn test_output_selects_columns() {
         .succeeds()
         .stdout_move_str();
     assert_eq!(
-        output.lines().next().unwrap(),
-        "Filesystem       Mounted on               Used "
+        output
+            .lines()
+            .next()
+            .unwrap()
+            .split_whitespace()
+            .collect::<Vec<_>>(),
+        vec!["Filesystem", "Mounted", "on", "Used"]
     );
 }
 
@@ -289,12 +315,16 @@ fn test_output_multiple_occurrences() {
         .succeeds()
         .stdout_move_str();
     assert_eq!(
-        output.lines().next().unwrap(),
-        "Filesystem       Mounted on       "
+        output
+            .lines()
+            .next()
+            .unwrap()
+            .split_whitespace()
+            .collect::<Vec<_>>(),
+        vec!["Filesystem", "Mounted", "on"]
     );
 }
 
-// TODO Fix the spacing.
 #[test]
 fn test_output_file_all_filesystems() {
     // When run with no positional arguments, `df` lets "-" represent
@@ -304,13 +334,12 @@ fn test_output_file_all_filesystems() {
         .succeeds()
         .stdout_move_str();
     let mut lines = output.lines();
-    assert_eq!(lines.next().unwrap(), "File            ");
+    assert_eq!(lines.next().unwrap(), "File");
     for line in lines {
-        assert_eq!(line, "-               ");
+        assert_eq!(line, "-   ");
     }
 }
 
-// TODO Fix the spacing.
 #[test]
 fn test_output_file_specific_files() {
     // Create three files.
@@ -326,15 +355,7 @@ fn test_output_file_specific_files() {
         .succeeds()
         .stdout_move_str();
     let actual: Vec<&str> = output.lines().collect();
-    assert_eq!(
-        actual,
-        vec![
-            "File            ",
-            "a               ",
-            "b               ",
-            "c               "
-        ]
-    );
+    assert_eq!(actual, vec!["File", "a   ", "b   ", "c   "]);
 }
 
 #[test]
@@ -355,5 +376,5 @@ fn test_nonexistent_file() {
         .args(&["--output=file", "does-not-exist", "."])
         .fails()
         .stderr_is("df: does-not-exist: No such file or directory\n")
-        .stdout_is("File            \n.               \n");
+        .stdout_is("File\n.   \n");
 }

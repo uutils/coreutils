@@ -5,13 +5,11 @@
 // spell-checker:ignore tmpfs Pcent Itotal Iused Iavail Ipcent
 //! The filesystem usage data table.
 //!
-//! A table comprises a header row ([`Header`]) and a collection of
-//! data rows ([`Row`]), one per filesystem. To display a [`Row`],
-//! combine it with [`Options`] in the [`DisplayRow`] struct; the
-//! [`DisplayRow`] implements [`std::fmt::Display`].
+//! A table ([`Table`]) comprises a header row ([`Header`]) and a
+//! collection of data rows ([`Row`]), one per filesystem.
 use number_prefix::NumberPrefix;
 
-use crate::columns::Column;
+use crate::columns::{Alignment, Column};
 use crate::filesystem::Filesystem;
 use crate::{BlockSize, Options};
 use uucore::fsext::{FsUsage, MountInfo};
@@ -189,14 +187,14 @@ impl From<Filesystem> for Row {
     }
 }
 
-/// A displayable wrapper around a [`Row`].
+/// A formatter for [`Row`].
 ///
-/// The `options` control how the information in the row gets displayed.
-pub(crate) struct DisplayRow<'a> {
+/// The `options` control how the information in the row gets formatted.
+pub(crate) struct RowFormatter<'a> {
     /// The data in this row.
     row: &'a Row,
 
-    /// Options that control how to display the data.
+    /// Options that control how to format the data.
     options: &'a Options,
     // TODO We don't need all of the command-line options here. Some
     // of the command-line options indicate which rows to include or
@@ -207,7 +205,7 @@ pub(crate) struct DisplayRow<'a> {
     // `df.rs` module.
 }
 
-impl<'a> DisplayRow<'a> {
+impl<'a> RowFormatter<'a> {
     /// Instantiate this struct.
     pub(crate) fn new(row: &'a Row, options: &'a Options) -> Self {
         Self { row, options }
@@ -261,84 +259,163 @@ impl<'a> DisplayRow<'a> {
             Some(x) => format!("{:.0}%", (100.0 * x).ceil()),
         }
     }
-}
 
-impl fmt::Display for DisplayRow<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    /// Returns formatted row data.
+    fn get_values(&self) -> Vec<String> {
+        let mut strings = Vec::new();
+
         for column in &self.options.columns {
-            match column {
-                Column::Source => write!(f, "{0: <16} ", self.row.fs_device)?,
-                Column::Size => write!(f, "{0: >12} ", self.scaled_bytes(self.row.bytes))?,
-                Column::Used => write!(f, "{0: >12} ", self.scaled_bytes(self.row.bytes_used))?,
-                Column::Avail => write!(f, "{0: >12} ", self.scaled_bytes(self.row.bytes_avail))?,
-                Column::Pcent => {
-                    write!(f, "{0: >5} ", DisplayRow::percentage(self.row.bytes_usage))?;
-                }
-                Column::Target => write!(f, "{0: <16}", self.row.fs_mount)?,
-                Column::Itotal => write!(f, "{0: >12} ", self.scaled_inodes(self.row.inodes))?,
-                Column::Iused => write!(f, "{0: >12} ", self.scaled_inodes(self.row.inodes_used))?,
-                Column::Iavail => {
-                    write!(f, "{0: >12} ", self.scaled_inodes(self.row.inodes_free))?;
-                }
-                Column::Ipcent => {
-                    write!(f, "{0: >5} ", DisplayRow::percentage(self.row.inodes_usage))?;
-                }
-                Column::File => {
-                    write!(f, "{0: <16}", self.row.file.as_ref().unwrap_or(&"-".into()))?;
-                }
-                Column::Fstype => write!(f, "{0: <5} ", self.row.fs_type)?,
+            let string = match column {
+                Column::Source => self.row.fs_device.to_string(),
+                Column::Size => self.scaled_bytes(self.row.bytes),
+                Column::Used => self.scaled_bytes(self.row.bytes_used),
+                Column::Avail => self.scaled_bytes(self.row.bytes_avail),
+                Column::Pcent => Self::percentage(self.row.bytes_usage),
+
+                Column::Target => self.row.fs_mount.to_string(),
+                Column::Itotal => self.scaled_inodes(self.row.inodes),
+                Column::Iused => self.scaled_inodes(self.row.inodes_used),
+                Column::Iavail => self.scaled_inodes(self.row.inodes_free),
+                Column::Ipcent => Self::percentage(self.row.inodes_usage),
+                Column::File => self.row.file.as_ref().unwrap_or(&"-".into()).to_string(),
+
+                Column::Fstype => self.row.fs_type.to_string(),
                 #[cfg(target_os = "macos")]
-                Column::Capacity => write!(
-                    f,
-                    "{0: >12} ",
-                    DisplayRow::percentage(self.row.bytes_capacity)
-                )?,
-            }
+                Column::Capacity => Self::percentage(self.row.bytes_capacity),
+            };
+
+            strings.push(string);
         }
-        Ok(())
+
+        strings
     }
 }
 
-/// The header row.
-///
-/// The `options` control which columns are displayed.
-pub(crate) struct Header<'a> {
-    /// Options that control which columns are displayed.
-    options: &'a Options,
-}
+/// The data of the header row.
+struct Header {}
 
-impl<'a> Header<'a> {
-    /// Instantiate this struct.
-    pub(crate) fn new(options: &'a Options) -> Self {
-        Self { options }
+impl Header {
+    /// Return the headers for the specified columns.
+    ///
+    /// The `options` control which column headers are returned.
+    fn get_headers(options: &Options) -> Vec<String> {
+        let mut headers = Vec::new();
+
+        for column in &options.columns {
+            let header = match column {
+                Column::Source => String::from("Filesystem"),
+                Column::Size => options.block_size.to_string(),
+                Column::Used => String::from("Used"),
+                Column::Avail => String::from("Available"),
+                Column::Pcent => String::from("Use%"),
+                Column::Target => String::from("Mounted on"),
+                Column::Itotal => String::from("Inodes"),
+                Column::Iused => String::from("IUsed"),
+                Column::Iavail => String::from("IFree"),
+                Column::Ipcent => String::from("IUse%"),
+                Column::File => String::from("File"),
+                Column::Fstype => String::from("Type"),
+                #[cfg(target_os = "macos")]
+                Column::Capacity => String::from("Capacity"),
+            };
+
+            headers.push(header);
+        }
+
+        headers
     }
 }
 
-impl fmt::Display for Header<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for column in &self.options.columns {
-            match column {
-                Column::Source => write!(f, "{0: <16} ", "Filesystem")?,
-                // `Display` is implemented for `BlockSize`, but
-                // `Display` only works when formatting an object into
-                // an empty format, `{}`. So we use `format!()` first
-                // to create the string, then use `write!()` to align
-                // the string and pad with spaces.
-                Column::Size => write!(f, "{0: >12} ", format!("{}", self.options.block_size))?,
-                Column::Used => write!(f, "{0: >12} ", "Used")?,
-                Column::Avail => write!(f, "{0: >12} ", "Available")?,
-                Column::Pcent => write!(f, "{0: >5} ", "Use%")?,
-                Column::Target => write!(f, "{0: <16} ", "Mounted on")?,
-                Column::Itotal => write!(f, "{0: >12} ", "Inodes")?,
-                Column::Iused => write!(f, "{0: >12} ", "IUsed")?,
-                Column::Iavail => write!(f, "{0: >12} ", "IFree")?,
-                Column::Ipcent => write!(f, "{0: >5} ", "IUse%")?,
-                Column::File => write!(f, "{0: <16}", "File")?,
-                Column::Fstype => write!(f, "{0: <5} ", "Type")?,
-                #[cfg(target_os = "macos")]
-                Column::Capacity => write!(f, "{0: >12} ", "Capacity")?,
+/// The output table.
+pub(crate) struct Table {
+    alignments: Vec<Alignment>,
+    rows: Vec<Vec<String>>,
+    widths: Vec<usize>,
+}
+
+impl Table {
+    pub(crate) fn new(options: &Options, filesystems: Vec<Filesystem>) -> Self {
+        let headers = Header::get_headers(options);
+        let mut widths: Vec<_> = options
+            .columns
+            .iter()
+            .enumerate()
+            .map(|(i, col)| Column::min_width(col).max(headers[i].len()))
+            .collect();
+
+        let mut rows = vec![headers];
+
+        // The running total of filesystem sizes and usage.
+        //
+        // This accumulator is computed in case we need to display the
+        // total counts in the last row of the table.
+        let mut total = Row::new("total");
+
+        for filesystem in filesystems {
+            // If the filesystem is not empty, or if the options require
+            // showing all filesystems, then print the data as a row in
+            // the output table.
+            if options.show_all_fs || filesystem.usage.blocks > 0 {
+                let row = Row::from(filesystem);
+                let fmt = RowFormatter::new(&row, options);
+                let values = fmt.get_values();
+                total += row;
+
+                for (i, value) in values.iter().enumerate() {
+                    if value.len() > widths[i] {
+                        widths[i] = value.len();
+                    }
+                }
+
+                rows.push(values);
             }
         }
+
+        if options.show_total {
+            let total_row = RowFormatter::new(&total, options);
+            rows.push(total_row.get_values());
+        }
+
+        Self {
+            rows,
+            widths,
+            alignments: Self::get_alignments(&options.columns),
+        }
+    }
+
+    fn get_alignments(columns: &Vec<Column>) -> Vec<Alignment> {
+        let mut alignments = Vec::new();
+
+        for column in columns {
+            alignments.push(Column::alignment(column));
+        }
+
+        alignments
+    }
+}
+
+impl fmt::Display for Table {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut row_iter = self.rows.iter().peekable();
+        while let Some(row) = row_iter.next() {
+            let mut col_iter = row.iter().enumerate().peekable();
+            while let Some((i, elem)) = col_iter.next() {
+                match self.alignments[i] {
+                    Alignment::Left => write!(f, "{:<width$}", elem, width = self.widths[i])?,
+                    Alignment::Right => write!(f, "{:>width$}", elem, width = self.widths[i])?,
+                }
+
+                if col_iter.peek().is_some() {
+                    // column separator
+                    write!(f, " ")?;
+                }
+            }
+
+            if row_iter.peek().is_some() {
+                writeln!(f)?;
+            }
+        }
+
         Ok(())
     }
 }
@@ -347,7 +424,7 @@ impl fmt::Display for Header<'_> {
 mod tests {
 
     use crate::columns::Column;
-    use crate::table::{DisplayRow, Header, Row};
+    use crate::table::{Header, Row, RowFormatter};
     use crate::{BlockSize, Options};
 
     const COLUMNS_WITH_FS_TYPE: [Column; 7] = [
@@ -369,76 +446,119 @@ mod tests {
     ];
 
     #[test]
-    fn test_header_display() {
+    fn test_default_header() {
         let options = Default::default();
         assert_eq!(
-            Header::new(&options).to_string(),
-            "Filesystem          1K-blocks         Used    Available  Use% Mounted on       "
+            Header::get_headers(&options),
+            vec!(
+                "Filesystem",
+                "1K-blocks",
+                "Used",
+                "Available",
+                "Use%",
+                "Mounted on"
+            )
         );
     }
 
     #[test]
-    fn test_header_display_fs_type() {
+    fn test_header_with_fs_type() {
         let options = Options {
             columns: COLUMNS_WITH_FS_TYPE.to_vec(),
             ..Default::default()
         };
         assert_eq!(
-            Header::new(&options).to_string(),
-            "Filesystem       Type     1K-blocks         Used    Available  Use% Mounted on       "
+            Header::get_headers(&options),
+            vec!(
+                "Filesystem",
+                "Type",
+                "1K-blocks",
+                "Used",
+                "Available",
+                "Use%",
+                "Mounted on"
+            )
         );
     }
 
     #[test]
-    fn test_header_display_inode() {
+    fn test_header_with_inodes() {
         let options = Options {
             columns: COLUMNS_WITH_INODES.to_vec(),
             ..Default::default()
         };
         assert_eq!(
-            Header::new(&options).to_string(),
-            "Filesystem             Inodes        IUsed        IFree IUse% Mounted on       "
+            Header::get_headers(&options),
+            vec!(
+                "Filesystem",
+                "Inodes",
+                "IUsed",
+                "IFree",
+                "IUse%",
+                "Mounted on"
+            )
         );
     }
 
     #[test]
-    fn test_header_display_block_size_1024() {
+    fn test_header_with_block_size_1024() {
         let options = Options {
             block_size: BlockSize::Bytes(3 * 1024),
             ..Default::default()
         };
         assert_eq!(
-            Header::new(&options).to_string(),
-            "Filesystem          3K-blocks         Used    Available  Use% Mounted on       "
+            Header::get_headers(&options),
+            vec!(
+                "Filesystem",
+                "3K-blocks",
+                "Used",
+                "Available",
+                "Use%",
+                "Mounted on"
+            )
         );
     }
 
     #[test]
-    fn test_header_display_human_readable_binary() {
+    fn test_header_with_human_readable_binary() {
         let options = Options {
             block_size: BlockSize::HumanReadableBinary,
             ..Default::default()
         };
         assert_eq!(
-            Header::new(&options).to_string(),
-            "Filesystem               Size         Used    Available  Use% Mounted on       "
+            Header::get_headers(&options),
+            vec!(
+                "Filesystem",
+                "Size",
+                "Used",
+                "Available",
+                "Use%",
+                "Mounted on"
+            )
         );
     }
 
     #[test]
-    fn test_header_display_human_readable_si() {
+    fn test_header_with_human_readable_si() {
         let options = Options {
             block_size: BlockSize::HumanReadableDecimal,
             ..Default::default()
         };
         assert_eq!(
-            Header::new(&options).to_string(),
-            "Filesystem               Size         Used    Available  Use% Mounted on       "
+            Header::get_headers(&options),
+            vec!(
+                "Filesystem",
+                "Size",
+                "Used",
+                "Available",
+                "Use%",
+                "Mounted on"
+            )
         );
     }
 
     #[test]
-    fn test_row_display() {
+    fn test_row_formatter() {
         let options = Options {
             block_size: BlockSize::Bytes(1),
             ..Default::default()
@@ -462,14 +582,15 @@ mod tests {
             inodes_free: 8,
             inodes_usage: Some(0.2),
         };
+        let fmt = RowFormatter::new(&row, &options);
         assert_eq!(
-            DisplayRow::new(&row, &options).to_string(),
-            "my_device                 100           25           75   25% my_mount        "
+            fmt.get_values(),
+            vec!("my_device", "100", "25", "75", "25%", "my_mount")
         );
     }
 
     #[test]
-    fn test_row_display_fs_type() {
+    fn test_row_formatter_with_fs_type() {
         let options = Options {
             columns: COLUMNS_WITH_FS_TYPE.to_vec(),
             block_size: BlockSize::Bytes(1),
@@ -494,14 +615,15 @@ mod tests {
             inodes_free: 8,
             inodes_usage: Some(0.2),
         };
+        let fmt = RowFormatter::new(&row, &options);
         assert_eq!(
-            DisplayRow::new(&row, &options).to_string(),
-            "my_device        my_type          100           25           75   25% my_mount        "
+            fmt.get_values(),
+            vec!("my_device", "my_type", "100", "25", "75", "25%", "my_mount")
         );
     }
 
     #[test]
-    fn test_row_display_inodes() {
+    fn test_row_formatter_with_inodes() {
         let options = Options {
             columns: COLUMNS_WITH_INODES.to_vec(),
             block_size: BlockSize::Bytes(1),
@@ -526,14 +648,15 @@ mod tests {
             inodes_free: 8,
             inodes_usage: Some(0.2),
         };
+        let fmt = RowFormatter::new(&row, &options);
         assert_eq!(
-            DisplayRow::new(&row, &options).to_string(),
-            "my_device                  10            2            8   20% my_mount        "
+            fmt.get_values(),
+            vec!("my_device", "10", "2", "8", "20%", "my_mount")
         );
     }
 
     #[test]
-    fn test_row_display_bytes_and_inodes() {
+    fn test_row_formatter_with_bytes_and_inodes() {
         let options = Options {
             columns: vec![Column::Size, Column::Itotal],
             block_size: BlockSize::Bytes(100),
@@ -558,14 +681,12 @@ mod tests {
             inodes_free: 8,
             inodes_usage: Some(0.2),
         };
-        assert_eq!(
-            DisplayRow::new(&row, &options).to_string(),
-            "           1           10 "
-        );
+        let fmt = RowFormatter::new(&row, &options);
+        assert_eq!(fmt.get_values(), vec!("1", "10"));
     }
 
     #[test]
-    fn test_row_display_human_readable_si() {
+    fn test_row_formatter_with_human_readable_si() {
         let options = Options {
             block_size: BlockSize::HumanReadableDecimal,
             columns: COLUMNS_WITH_FS_TYPE.to_vec(),
@@ -590,14 +711,23 @@ mod tests {
             inodes_free: 8,
             inodes_usage: Some(0.2),
         };
+        let fmt = RowFormatter::new(&row, &options);
         assert_eq!(
-            DisplayRow::new(&row, &options).to_string(),
-            "my_device        my_type         4.0k         1.0k         3.0k   25% my_mount        "
+            fmt.get_values(),
+            vec!(
+                "my_device",
+                "my_type",
+                "4.0k",
+                "1.0k",
+                "3.0k",
+                "25%",
+                "my_mount"
+            )
         );
     }
 
     #[test]
-    fn test_row_display_human_readable_binary() {
+    fn test_row_formatter_with_human_readable_binary() {
         let options = Options {
             block_size: BlockSize::HumanReadableBinary,
             columns: COLUMNS_WITH_FS_TYPE.to_vec(),
@@ -622,14 +752,23 @@ mod tests {
             inodes_free: 8,
             inodes_usage: Some(0.2),
         };
+        let fmt = RowFormatter::new(&row, &options);
         assert_eq!(
-            DisplayRow::new(&row, &options).to_string(),
-            "my_device        my_type        4.0Ki        1.0Ki        3.0Ki   25% my_mount        "
+            fmt.get_values(),
+            vec!(
+                "my_device",
+                "my_type",
+                "4.0Ki",
+                "1.0Ki",
+                "3.0Ki",
+                "25%",
+                "my_mount"
+            )
         );
     }
 
     #[test]
-    fn test_row_display_round_up_usage() {
+    fn test_row_formatter_with_round_up_usage() {
         let options = Options {
             block_size: BlockSize::Bytes(1),
             ..Default::default()
@@ -653,9 +792,10 @@ mod tests {
             inodes_free: 8,
             inodes_usage: Some(0.2),
         };
+        let fmt = RowFormatter::new(&row, &options);
         assert_eq!(
-            DisplayRow::new(&row, &options).to_string(),
-            "my_device                 100           25           75   26% my_mount        "
+            fmt.get_values(),
+            vec!("my_device", "100", "25", "75", "26%", "my_mount")
         );
     }
 }
