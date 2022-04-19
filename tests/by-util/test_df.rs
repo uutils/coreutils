@@ -101,9 +101,26 @@ fn test_df_output() {
 #[test]
 fn test_df_output_overridden() {
     let expected = if cfg!(target_os = "macos") {
-        "Filesystem               Size         Used    Available     Capacity  Use% Mounted on       "
+        vec![
+            "Filesystem",
+            "Size",
+            "Used",
+            "Available",
+            "Capacity",
+            "Use%",
+            "Mounted",
+            "on",
+        ]
     } else {
-        "Filesystem               Size         Used    Available  Use% Mounted on       "
+        vec![
+            "Filesystem",
+            "Size",
+            "Used",
+            "Available",
+            "Use%",
+            "Mounted",
+            "on",
+        ]
     };
     let output = new_ucmd!()
         .arg("-hH")
@@ -111,6 +128,7 @@ fn test_df_output_overridden() {
         .succeeds()
         .stdout_move_str();
     let actual = output.lines().take(1).collect::<Vec<&str>>()[0];
+    let actual = actual.split_whitespace().collect::<Vec<_>>();
     assert_eq!(actual, expected);
 }
 
