@@ -165,6 +165,7 @@ fn test_output_mp_repeat() {
     assert_eq!(3, output1.len());
     assert_eq!(output1[1], output1[2]);
 }
+
 #[test]
 fn test_output_conflict_options() {
     for option in ["-i", "-T", "-P"] {
@@ -428,6 +429,20 @@ fn test_output_file_specific_files() {
         .stdout_move_str();
     let actual: Vec<&str> = output.lines().collect();
     assert_eq!(actual, vec!["File", "a   ", "b   ", "c   "]);
+}
+
+#[test]
+fn test_file_column_width_if_filename_contains_unicode_chars() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("äöü.txt");
+
+    let output = ucmd
+        .args(&["--output=file,target", "äöü.txt"])
+        .succeeds()
+        .stdout_move_str();
+    let actual = output.lines().next().unwrap();
+    // expected width: 7 chars (length of äöü.txt) + 1 char (column separator)
+    assert_eq!(actual, "File    Mounted on");
 }
 
 #[test]
