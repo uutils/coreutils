@@ -61,7 +61,7 @@ fn test_do_not_remove_suffix() {
 
 #[test]
 fn test_multiple_param() {
-    for &multiple_param in &["-a", "--multiple"] {
+    for &multiple_param in &["-a", "--multiple", "--mul"] {
         let path = "/foo/bar/baz";
         new_ucmd!()
             .args(&[multiple_param, path, path])
@@ -72,7 +72,7 @@ fn test_multiple_param() {
 
 #[test]
 fn test_suffix_param() {
-    for &suffix_param in &["-s", "--suffix"] {
+    for &suffix_param in &["-s", "--suffix", "--suf"] {
         let path = "/foo/bar/baz.exe";
         new_ucmd!()
             .args(&[suffix_param, ".exe", path, path])
@@ -83,7 +83,7 @@ fn test_suffix_param() {
 
 #[test]
 fn test_zero_param() {
-    for &zero_param in &["-z", "--zero"] {
+    for &zero_param in &["-z", "--zero", "--ze"] {
         let path = "/foo/bar/baz";
         new_ucmd!()
             .args(&[zero_param, "-a", path, path])
@@ -92,9 +92,9 @@ fn test_zero_param() {
     }
 }
 
-fn expect_error(input: Vec<&str>) {
+fn expect_error(input: &[&str]) {
     assert!(!new_ucmd!()
-        .args(&input)
+        .args(input)
         .fails()
         .no_stdout()
         .stderr_str()
@@ -104,37 +104,30 @@ fn expect_error(input: Vec<&str>) {
 #[test]
 fn test_invalid_option() {
     let path = "/foo/bar/baz";
-    expect_error(vec!["-q", path]);
+    expect_error(&["-q", path]);
 }
 
 #[test]
 fn test_no_args() {
-    expect_error(vec![]);
+    expect_error(&[]);
 }
 
 #[test]
 fn test_no_args_output() {
-    let ts = TestScenario::new(util_name!());
-    ts.ucmd().fails().stderr_is(&format!(
-        "{0}: missing operand\nTry '{1} {0} --help' for more information.",
-        ts.util_name,
-        ts.bin_path.to_string_lossy()
-    ));
+    new_ucmd!().fails().usage_error("missing operand");
 }
 
 #[test]
 fn test_too_many_args() {
-    expect_error(vec!["a", "b", "c"]);
+    expect_error(&["a", "b", "c"]);
 }
 
 #[test]
 fn test_too_many_args_output() {
-    let ts = TestScenario::new(util_name!());
-    ts.ucmd().args(&["a", "b", "c"]).fails().stderr_is(format!(
-        "{0}: extra operand 'c'\nTry '{1} {0} --help' for more information.",
-        ts.util_name,
-        ts.bin_path.to_string_lossy()
-    ));
+    new_ucmd!()
+        .args(&["a", "b", "c"])
+        .fails()
+        .usage_error("extra operand 'c'");
 }
 
 #[cfg(any(unix, target_os = "redox"))]

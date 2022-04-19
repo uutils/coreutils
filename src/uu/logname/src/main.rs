@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_logname);
+uucore::bin!(uu_logname);

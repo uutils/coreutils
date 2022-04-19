@@ -1,170 +1,65 @@
-// TODO: Make -w flag work with decimals
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 // TODO: Support -f flag
-
-// spell-checker:ignore (ToDO) istr chiter argptr ilen
-
-#[macro_use]
-extern crate uucore;
-
-use clap::{crate_version, App, AppSettings, Arg};
-use num_bigint::BigInt;
-use num_traits::One;
-use num_traits::Zero;
-use num_traits::{Num, ToPrimitive};
-use std::cmp;
+// spell-checker:ignore (ToDO) istr chiter argptr ilen extendedbigdecimal extendedbigint numberparse
 use std::io::{stdout, ErrorKind, Write};
-use std::str::FromStr;
+use std::process::exit;
 
-mod digits;
-use crate::digits::num_fractional_digits;
-use crate::digits::num_integral_digits;
+use clap::{crate_version, Arg, Command};
+use num_traits::Zero;
 
-use uucore::display::Quotable;
+use uucore::error::FromIo;
+use uucore::error::UResult;
+use uucore::format_usage;
+use uucore::memo::Memo;
+use uucore::show;
+
+mod error;
+mod extendedbigdecimal;
+mod extendedbigint;
+mod number;
+mod numberparse;
+use crate::error::SeqError;
+use crate::extendedbigdecimal::ExtendedBigDecimal;
+use crate::extendedbigint::ExtendedBigInt;
+use crate::number::Number;
+use crate::number::PreciseNumber;
 
 static ABOUT: &str = "Display numbers from FIRST to LAST, in steps of INCREMENT.";
+const USAGE: &str = "\
+    {} [OPTION]... LAST
+    {} [OPTION]... FIRST LAST
+    {} [OPTION]... FIRST INCREMENT LAST";
 static OPT_SEPARATOR: &str = "separator";
 static OPT_TERMINATOR: &str = "terminator";
 static OPT_WIDTHS: &str = "widths";
+static OPT_FORMAT: &str = "format";
 
 static ARG_NUMBERS: &str = "numbers";
 
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... LAST
-    {0} [OPTION]... FIRST LAST
-    {0} [OPTION]... FIRST INCREMENT LAST",
-        uucore::execution_phrase()
-    )
-}
 #[derive(Clone)]
-struct SeqOptions {
+struct SeqOptions<'a> {
     separator: String,
     terminator: String,
     widths: bool,
-}
-
-enum Number {
-    /// Negative zero, as if it were an integer.
-    MinusZero,
-    BigInt(BigInt),
-    F64(f64),
-}
-
-impl Number {
-    fn is_zero(&self) -> bool {
-        match self {
-            Number::MinusZero => true,
-            Number::BigInt(n) => n.is_zero(),
-            Number::F64(n) => n.is_zero(),
-        }
-    }
-
-    fn into_f64(self) -> f64 {
-        match self {
-            Number::MinusZero => -0.,
-            // BigInt::to_f64() can not return None.
-            Number::BigInt(n) => n.to_f64().unwrap(),
-            Number::F64(n) => n,
-        }
-    }
-
-    /// Convert this number into a bigint, consuming it.
-    ///
-    /// For floats, this returns the [`BigInt`] corresponding to the
-    /// floor of the number.
-    fn into_bigint(self) -> BigInt {
-        match self {
-            Number::MinusZero => BigInt::zero(),
-            Number::F64(x) => BigInt::from(x.floor() as i64),
-            Number::BigInt(n) => n,
-        }
-    }
-}
-
-impl FromStr for Number {
-    type Err = String;
-    fn from_str(mut s: &str) -> Result<Self, Self::Err> {
-        s = s.trim_start();
-        if s.starts_with('+') {
-            s = &s[1..];
-        }
-        let is_neg = s.starts_with('-');
-
-        match s.to_lowercase().find("0x") {
-            Some(i) if i <= 1 => match &s.as_bytes()[i + 2] {
-                    b'-' | b'+' => Err(format!(
-                    "invalid hexadecimal argument: {}\nTry '{} --help' for more information.",
-                    s.quote(),
-                    uucore::execution_phrase(),
-                )),
-                    // TODO: hexadecimal floating point parsing (see #2660)
-                    b'.' => Err(format!(
-                    "NotImplemented: hexadecimal floating point numbers: {}\nTry '{} --help' for more information.",
-                    s.quote(),
-                    uucore::execution_phrase(),
-                )),
-                    _ => {
-                        let num = BigInt::from_str_radix(&s[i + 2..], 16)
-                            .map_err(|_| format!(
-                    "invalid hexadecimal argument: {}\nTry '{} --help' for more information.",
-                    s.quote(),
-                    uucore::execution_phrase(),
-                ))?;
-                        match (is_neg, num == BigInt::zero()) {
-                            (true, true) => Ok(Number::MinusZero),
-                            (true, false) => Ok(Number::BigInt(-num)),
-                            (false, _) => Ok(Number::BigInt(num)),
-                        }
-                    }
-                },
-            Some(_) => Err(format!(
-                "invalid hexadecimal argument: {}\nTry '{} --help' for more information.",
-                s.quote(),
-                uucore::execution_phrase(),
-            )),
-
-            None => match s.parse::<BigInt>() {
-                Ok(n) => {
-                    // If `s` is '-0', then `parse()` returns
-                    // `BigInt::zero()`, but we need to return
-                    // `Number::MinusZero` instead.
-                    if n == BigInt::zero() && is_neg {
-                        Ok(Number::MinusZero)
-                    } else {
-                        Ok(Number::BigInt(n))
-                    }
-                }
-                Err(_) => match s.parse::<f64>() {
-                    Ok(value) if value.is_nan() => Err(format!(
-                    "invalid 'not-a-number' argument: {}\nTry '{} --help' for more information.",
-                    s.quote(),
-                    uucore::execution_phrase(),
-                )),
-                    Ok(value) => Ok(Number::F64(value)),
-                    Err(_) => Err(format!(
-                    "invalid floating point argument: {}\nTry '{} --help' for more information.",
-                    s.quote(),
-                    uucore::execution_phrase(),
-                )),
-                },
-            },
-        }
-    }
+    format: Option<&'a str>,
 }
 
 /// A range of integers.
 ///
 /// The elements are (first, increment, last).
-type RangeInt = (BigInt, BigInt, BigInt);
+type RangeInt = (ExtendedBigInt, ExtendedBigInt, ExtendedBigInt);
 
-/// A range of f64.
+/// A range of floats.
 ///
 /// The elements are (first, increment, last).
-type RangeF64 = (f64, f64, f64);
+type RangeFloat = (ExtendedBigDecimal, ExtendedBigDecimal, ExtendedBigDecimal);
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = usage();
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uu_app().get_matches_from(args);
 
     let numbers = matches.values_of(ARG_NUMBERS).unwrap().collect::<Vec<_>>();
 
@@ -172,164 +67,128 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         separator: matches.value_of(OPT_SEPARATOR).unwrap_or("\n").to_string(),
         terminator: matches.value_of(OPT_TERMINATOR).unwrap_or("\n").to_string(),
         widths: matches.is_present(OPT_WIDTHS),
+        format: matches.value_of(OPT_FORMAT),
     };
 
-    let mut largest_dec = 0;
-    let mut padding = 0;
     let first = if numbers.len() > 1 {
-        let slice = numbers[0];
-        largest_dec = num_fractional_digits(slice).unwrap_or_else(|_| {
-            crash!(
-                1,
-                "invalid floating point argument: {}\n Try '{} --help' for more information.",
-                slice.quote(),
-                uucore::execution_phrase()
-            )
-        });
-        padding = num_integral_digits(slice).unwrap_or_else(|_| {
-            crash!(
-                1,
-                "invalid floating point argument: {}\n Try '{} --help' for more information.",
-                slice.quote(),
-                uucore::execution_phrase()
-            )
-        });
-        crash_if_err!(1, slice.parse())
+        match numbers[0].parse() {
+            Ok(num) => num,
+            Err(e) => return Err(SeqError::ParseError(numbers[0].to_string(), e).into()),
+        }
     } else {
-        Number::BigInt(BigInt::one())
+        PreciseNumber::one()
     };
     let increment = if numbers.len() > 2 {
-        let slice = numbers[1];
-        let dec = num_fractional_digits(slice).unwrap_or_else(|_| {
-            crash!(
-                1,
-                "invalid floating point argument: {}\n Try '{} --help' for more information.",
-                slice.quote(),
-                uucore::execution_phrase()
-            )
-        });
-        let int_digits = num_integral_digits(slice).unwrap_or_else(|_| {
-            crash!(
-                1,
-                "invalid floating point argument: {}\n Try '{} --help' for more information.",
-                slice.quote(),
-                uucore::execution_phrase()
-            )
-        });
-        largest_dec = cmp::max(largest_dec, dec);
-        padding = cmp::max(padding, int_digits);
-        crash_if_err!(1, slice.parse())
+        match numbers[1].parse() {
+            Ok(num) => num,
+            Err(e) => return Err(SeqError::ParseError(numbers[1].to_string(), e).into()),
+        }
     } else {
-        Number::BigInt(BigInt::one())
+        PreciseNumber::one()
     };
     if increment.is_zero() {
-        show_error!(
-            "invalid Zero increment value: '{}'\nTry '{} --help' for more information.",
-            numbers[1],
-            uucore::execution_phrase()
-        );
-        return 1;
+        return Err(SeqError::ZeroIncrement(numbers[1].to_string()).into());
     }
-    let last: Number = {
-        let slice = numbers[numbers.len() - 1];
-        let int_digits = num_integral_digits(slice).unwrap_or_else(|_| {
-            crash!(
-                1,
-                "invalid floating point argument: {}\n Try '{} --help' for more information.",
-                slice.quote(),
-                uucore::execution_phrase()
-            )
-        });
-        padding = cmp::max(padding, int_digits);
-        crash_if_err!(1, slice.parse())
+    let last: PreciseNumber = {
+        // We are guaranteed that `numbers.len()` is greater than zero
+        // and at most three because of the argument specification in
+        // `uu_app()`.
+        let n: usize = numbers.len();
+        match numbers[n - 1].parse() {
+            Ok(num) => num,
+            Err(e) => return Err(SeqError::ParseError(numbers[n - 1].to_string(), e).into()),
+        }
     };
 
-    let is_negative_zero_f64 = |x: f64| x == -0.0 && x.is_sign_negative() && largest_dec == 0;
-    let result = match (first, last, increment) {
-        // For example, `seq -0 1 2` or `seq -0 1 2.0`.
-        (Number::MinusZero, last, Number::BigInt(increment)) => print_seq_integers(
-            (BigInt::zero(), increment, last.into_bigint()),
-            options.separator,
-            options.terminator,
-            options.widths,
-            padding,
-            true,
-        ),
-        // For example, `seq -0e0 1 2` or `seq -0e0 1 2.0`.
-        (Number::F64(x), last, Number::BigInt(increment)) if is_negative_zero_f64(x) => {
+    let padding = first
+        .num_integral_digits
+        .max(increment.num_integral_digits)
+        .max(last.num_integral_digits);
+    let largest_dec = first
+        .num_fractional_digits
+        .max(increment.num_fractional_digits);
+
+    let result = match (first.number, increment.number, last.number) {
+        (Number::Int(first), Number::Int(increment), last) => {
+            let last = last.round_towards(&first);
             print_seq_integers(
-                (BigInt::zero(), increment, last.into_bigint()),
-                options.separator,
-                options.terminator,
+                (first, increment, last),
+                &options.separator,
+                &options.terminator,
                 options.widths,
                 padding,
-                true,
+                options.format,
             )
         }
-        // For example, `seq 0 1 2` or `seq 0 1 2.0`.
-        (Number::BigInt(first), last, Number::BigInt(increment)) => print_seq_integers(
-            (first, increment, last.into_bigint()),
-            options.separator,
-            options.terminator,
-            options.widths,
-            padding,
-            false,
-        ),
-        // For example, `seq 0 0.5 1` or `seq 0.0 0.5 1` or `seq 0.0 0.5 1.0`.
-        (first, last, increment) => print_seq(
-            (first.into_f64(), increment.into_f64(), last.into_f64()),
+        (first, increment, last) => print_seq(
+            (
+                first.into_extended_big_decimal(),
+                increment.into_extended_big_decimal(),
+                last.into_extended_big_decimal(),
+            ),
             largest_dec,
-            options.separator,
-            options.terminator,
+            &options.separator,
+            &options.terminator,
             options.widths,
             padding,
+            options.format,
         ),
     };
     match result {
-        Ok(_) => 0,
-        Err(err) if err.kind() == ErrorKind::BrokenPipe => 0,
-        Err(_) => 1,
+        Ok(_) => Ok(()),
+        Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
+        Err(e) => Err(e.map_err_context(|| "write error".into())),
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
-        .setting(AppSettings::AllowLeadingHyphen)
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
+        .trailing_var_arg(true)
+        .allow_negative_numbers(true)
+        .infer_long_args(true)
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .arg(
-            Arg::with_name(OPT_SEPARATOR)
-                .short("s")
+            Arg::new(OPT_SEPARATOR)
+                .short('s')
                 .long("separator")
                 .help("Separator character (defaults to \\n)")
                 .takes_value(true)
                 .number_of_values(1),
         )
         .arg(
-            Arg::with_name(OPT_TERMINATOR)
-                .short("t")
+            Arg::new(OPT_TERMINATOR)
+                .short('t')
                 .long("terminator")
                 .help("Terminator character (defaults to \\n)")
                 .takes_value(true)
                 .number_of_values(1),
         )
         .arg(
-            Arg::with_name(OPT_WIDTHS)
-                .short("w")
+            Arg::new(OPT_WIDTHS)
+                .short('w')
                 .long("widths")
                 .help("Equalize widths of all numbers by padding with zeros"),
         )
         .arg(
-            Arg::with_name(ARG_NUMBERS)
-                .multiple(true)
+            Arg::new(OPT_FORMAT)
+                .short('f')
+                .long(OPT_FORMAT)
+                .help("use printf style floating-point FORMAT")
                 .takes_value(true)
-                .allow_hyphen_values(true)
+                .number_of_values(1),
+        )
+        .arg(
+            Arg::new(ARG_NUMBERS)
+                .multiple_occurrences(true)
+                .takes_value(true)
                 .max_values(3)
                 .required(true),
         )
 }
 
-fn done_printing<T: Num + PartialOrd>(next: &T, increment: &T, last: &T) -> bool {
+fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> bool {
     if increment >= &T::zero() {
         next > last
     } else {
@@ -337,42 +196,112 @@ fn done_printing<T: Num + PartialOrd>(next: &T, increment: &T, last: &T) -> bool
     }
 }
 
+/// Write a big decimal formatted according to the given parameters.
+fn write_value_float(
+    writer: &mut impl Write,
+    value: &ExtendedBigDecimal,
+    width: usize,
+    precision: usize,
+    _is_first_iteration: bool,
+) -> std::io::Result<()> {
+    let value_as_str =
+        if *value == ExtendedBigDecimal::Infinity || *value == ExtendedBigDecimal::MinusInfinity {
+            format!(
+                "{value:>width$.precision$}",
+                value = value,
+                width = width,
+                precision = precision,
+            )
+        } else {
+            format!(
+                "{value:>0width$.precision$}",
+                value = value,
+                width = width,
+                precision = precision,
+            )
+        };
+    write!(writer, "{}", value_as_str)
+}
+
+/// Write a big int formatted according to the given parameters.
+fn write_value_int(
+    writer: &mut impl Write,
+    value: &ExtendedBigInt,
+    width: usize,
+    pad: bool,
+    is_first_iteration: bool,
+) -> std::io::Result<()> {
+    let value_as_str = if pad {
+        if *value == ExtendedBigInt::MinusZero && is_first_iteration {
+            format!("-{value:>0width$}", value = value, width = width - 1,)
+        } else {
+            format!("{value:>0width$}", value = value, width = width,)
+        }
+    } else if *value == ExtendedBigInt::MinusZero && is_first_iteration {
+        format!("-{}", value)
+    } else {
+        format!("{}", value)
+    };
+    write!(writer, "{}", value_as_str)
+}
+
+// TODO `print_seq()` and `print_seq_integers()` are nearly identical,
+// they could be refactored into a single more general function.
+
 /// Floating point based code path
 fn print_seq(
-    range: RangeF64,
+    range: RangeFloat,
     largest_dec: usize,
-    separator: String,
-    terminator: String,
+    separator: &str,
+    terminator: &str,
     pad: bool,
     padding: usize,
+    format: Option<&str>,
 ) -> std::io::Result<()> {
     let stdout = stdout();
     let mut stdout = stdout.lock();
     let (first, increment, last) = range;
-    let mut i = 0isize;
-    let is_first_minus_zero = first == -0.0 && first.is_sign_negative();
-    let mut value = first + i as f64 * increment;
+    let mut value = first;
     let padding = if pad { padding + 1 + largest_dec } else { 0 };
     let mut is_first_iteration = true;
     while !done_printing(&value, &increment, &last) {
         if !is_first_iteration {
             write!(stdout, "{}", separator)?;
         }
-        let mut width = padding;
-        if is_first_iteration && is_first_minus_zero {
-            write!(stdout, "-")?;
-            width -= 1;
+        // If there was an argument `-f FORMAT`, then use that format
+        // template instead of the default formatting strategy.
+        //
+        // The `Memo::run_all()` function takes in the template and
+        // the current value and writes the result to `stdout`.
+        //
+        // TODO The `run_all()` method takes a string as its second
+        // parameter but we have an `ExtendedBigDecimal`. In order to
+        // satisfy the signature of the function, we convert the
+        // `ExtendedBigDecimal` into a string. The `Memo::run_all()`
+        // logic will subsequently parse that string into something
+        // similar to an `ExtendedBigDecimal` again before rendering
+        // it as a string and ultimately writing to `stdout`. We
+        // shouldn't have to do so much converting back and forth via
+        // strings.
+        match format {
+            Some(f) => {
+                let s = format!("{}", value);
+                if let Err(x) = Memo::run_all(f, &[s]) {
+                    show!(x);
+                    exit(1);
+                }
+            }
+            None => write_value_float(
+                &mut stdout,
+                &value,
+                padding,
+                largest_dec,
+                is_first_iteration,
+            )?,
         }
+        // TODO Implement augmenting addition.
+        value = value + increment.clone();
         is_first_iteration = false;
-        write!(
-            stdout,
-            "{value:>0width$.precision$}",
-            value = value,
-            width = width,
-            precision = largest_dec,
-        )?;
-        i += 1;
-        value = first + i as f64 * increment;
     }
     if !is_first_iteration {
         write!(stdout, "{}", terminator)?;
@@ -397,11 +326,11 @@ fn print_seq(
 /// numbers). Only set this to `true` if `first` is actually zero.
 fn print_seq_integers(
     range: RangeInt,
-    separator: String,
-    terminator: String,
+    separator: &str,
+    terminator: &str,
     pad: bool,
     padding: usize,
-    is_first_minus_zero: bool,
+    format: Option<&str>,
 ) -> std::io::Result<()> {
     let stdout = stdout();
     let mut stdout = stdout.lock();
@@ -412,18 +341,26 @@ fn print_seq_integers(
         if !is_first_iteration {
             write!(stdout, "{}", separator)?;
         }
-        let mut width = padding;
-        if is_first_iteration && is_first_minus_zero {
-            write!(stdout, "-")?;
-            width -= 1;
+        // If there was an argument `-f FORMAT`, then use that format
+        // template instead of the default formatting strategy.
+        //
+        // The `Memo::run_all()` function takes in the template and
+        // the current value and writes the result to `stdout`.
+        //
+        // TODO See similar comment about formatting in `print_seq()`.
+        match format {
+            Some(f) => {
+                let s = format!("{}", value);
+                if let Err(x) = Memo::run_all(f, &[s]) {
+                    show!(x);
+                    exit(1);
+                }
+            }
+            None => write_value_int(&mut stdout, &value, padding, pad, is_first_iteration)?,
         }
+        // TODO Implement augmenting addition.
+        value = value + increment.clone();
         is_first_iteration = false;
-        if pad {
-            write!(stdout, "{number:>0width$}", number = value, width = width)?;
-        } else {
-            write!(stdout, "{}", value)?;
-        }
-        value += &increment;
     }
 
     if !is_first_iteration {

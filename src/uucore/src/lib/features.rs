@@ -6,8 +6,14 @@ pub mod encoding;
 pub mod fs;
 #[cfg(feature = "fsext")]
 pub mod fsext;
+#[cfg(feature = "lines")]
+pub mod lines;
+#[cfg(feature = "memo")]
+pub mod memo;
 #[cfg(feature = "ringbuffer")]
 pub mod ringbuffer;
+#[cfg(feature = "memo")]
+mod tokenize;
 
 // * (platform-specific) feature-gated modules
 // ** non-windows (i.e. Unix + Fuchsia)

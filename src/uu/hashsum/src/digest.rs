@@ -14,11 +14,9 @@ extern crate sha3;
 
 use std::io::Write;
 
-use hex::ToHex;
+use hex::encode;
 #[cfg(windows)]
 use memchr::memmem;
-
-use crate::digest::digest::{ExtendableOutput, Input, XofReader};
 
 pub trait Digest {
     fn new() -> Self
@@ -34,29 +32,7 @@ pub trait Digest {
     fn result_str(&mut self) -> String {
         let mut buf: Vec<u8> = vec![0; self.output_bytes()];
         self.result(&mut buf);
-        buf.to_hex()
-    }
-}
-
-impl Digest for md5::Context {
-    fn new() -> Self {
-        md5::Context::new()
-    }
-
-    fn input(&mut self, input: &[u8]) {
-        self.consume(input)
-    }
-
-    fn result(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(&*self.compute());
-    }
-
-    fn reset(&mut self) {
-        *self = md5::Context::new();
-    }
-
-    fn output_bits(&self) -> usize {
-        128
+        encode(buf)
     }
 }
 
@@ -83,9 +59,9 @@ impl Digest for blake2b_simd::State {
     }
 }
 
-impl Digest for sha1::Sha1 {
+impl Digest for blake3::Hasher {
     fn new() -> Self {
-        sha1::Sha1::new()
+        Self::new()
     }
 
     fn input(&mut self, input: &[u8]) {
@@ -93,20 +69,21 @@ impl Digest for sha1::Sha1 {
     }
 
     fn result(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(&self.digest().bytes());
+        let hash_result = &self.finalize();
+        out.copy_from_slice(hash_result.as_bytes());
     }
 
     fn reset(&mut self) {
-        self.reset();
+        *self = Self::new();
     }
 
     fn output_bits(&self) -> usize {
-        160
+        256
     }
 }
 
 // Implements the Digest trait for sha2 / sha3 algorithms with fixed output
-macro_rules! impl_digest_sha {
+macro_rules! impl_digest_common {
     ($type: ty, $size: expr) => {
         impl Digest for $type {
             fn new() -> Self {
@@ -114,11 +91,11 @@ macro_rules! impl_digest_sha {
             }
 
             fn input(&mut self, input: &[u8]) {
-                digest::Digest::input(self, input);
+                digest::Digest::update(self, input);
             }
 
             fn result(&mut self, out: &mut [u8]) {
-                out.copy_from_slice(digest::Digest::result(*self).as_slice());
+                digest::Digest::finalize_into_reset(self, out.into());
             }
 
             fn reset(&mut self) {
@@ -141,11 +118,11 @@ macro_rules! impl_digest_shake {
             }
 
             fn input(&mut self, input: &[u8]) {
-                self.process(input);
+                digest::Update::update(self, input);
             }
 
             fn result(&mut self, out: &mut [u8]) {
-                self.xof_result().read(out);
+                digest::ExtendableOutputReset::finalize_xof_reset_into(self, out);
             }
 
             fn reset(&mut self) {
@@ -159,15 +136,17 @@ macro_rules! impl_digest_shake {
     };
 }
 
-impl_digest_sha!(sha2::Sha224, 224);
-impl_digest_sha!(sha2::Sha256, 256);
-impl_digest_sha!(sha2::Sha384, 384);
-impl_digest_sha!(sha2::Sha512, 512);
+impl_digest_common!(md5::Md5, 128);
+impl_digest_common!(sha1::Sha1, 160);
+impl_digest_common!(sha2::Sha224, 224);
+impl_digest_common!(sha2::Sha256, 256);
+impl_digest_common!(sha2::Sha384, 384);
+impl_digest_common!(sha2::Sha512, 512);
 
-impl_digest_sha!(sha3::Sha3_224, 224);
-impl_digest_sha!(sha3::Sha3_256, 256);
-impl_digest_sha!(sha3::Sha3_384, 384);
-impl_digest_sha!(sha3::Sha3_512, 512);
+impl_digest_common!(sha3::Sha3_224, 224);
+impl_digest_common!(sha3::Sha3_256, 256);
+impl_digest_common!(sha3::Sha3_384, 384);
+impl_digest_common!(sha3::Sha3_512, 512);
 impl_digest_shake!(sha3::Shake128);
 impl_digest_shake!(sha3::Shake256);
 
@@ -295,7 +274,7 @@ mod tests {
         use crate::digest::DigestWriter;
 
         // Writing "\r" in one call to `write()`, and then "\n" in another.
-        let mut digest = Box::new(md5::Context::new()) as Box<dyn Digest>;
+        let mut digest = Box::new(md5::Md5::new()) as Box<dyn Digest>;
         let mut writer_crlf = DigestWriter::new(&mut digest, false);
         writer_crlf.write_all(&[b'\r']).unwrap();
         writer_crlf.write_all(&[b'\n']).unwrap();
@@ -303,7 +282,7 @@ mod tests {
         let result_crlf = digest.result_str();
 
         // We expect "\r\n" to be replaced with "\n" in text mode on Windows.
-        let mut digest = Box::new(md5::Context::new()) as Box<dyn Digest>;
+        let mut digest = Box::new(md5::Md5::new()) as Box<dyn Digest>;
         let mut writer_lf = DigestWriter::new(&mut digest, false);
         writer_lf.write_all(&[b'\n']).unwrap();
         writer_lf.finalize();

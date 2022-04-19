@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use remove_dir_all::remove_dir_all;
 use std::collections::VecDeque;
 use std::fs;
@@ -18,11 +18,13 @@ use std::io::{stderr, stdin, BufRead, Write};
 use std::ops::BitOr;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
+use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::format_usage;
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
 enum InteractiveMode {
-    None,
+    Never,
     Once,
     Always,
 }
@@ -39,6 +41,7 @@ struct Options {
 }
 
 static ABOUT: &str = "Remove (unlink) the FILE(s)";
+const USAGE: &str = "{} [OPTION]... FILE...";
 static OPT_DIR: &str = "dir";
 static OPT_INTERACTIVE: &str = "interactive";
 static OPT_FORCE: &str = "force";
@@ -50,12 +53,9 @@ static OPT_PROMPT_MORE: &str = "prompt-more";
 static OPT_RECURSIVE: &str = "recursive";
 static OPT_RECURSIVE_R: &str = "recursive_R";
 static OPT_VERBOSE: &str = "verbose";
+static PRESUME_INPUT_TTY: &str = "-presume-input-tty";
 
 static ARG_FILES: &str = "files";
-
-fn usage() -> String {
-    format!("{0} [OPTION]... FILE...", uucore::execution_phrase())
-}
 
 fn get_long_usage() -> String {
     String::from(
@@ -74,14 +74,11 @@ fn get_long_usage() -> String {
     )
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = usage();
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let long_usage = get_long_usage();
 
-    let matches = uu_app()
-        .usage(&usage[..])
-        .after_help(&long_usage[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&long_usage[..]).get_matches_from(args);
 
     let files: Vec<String> = matches
         .values_of(ARG_FILES)
@@ -93,9 +90,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if files.is_empty() && !force {
         // Still check by hand and not use clap
         // Because "rm -f" is a thing
-        show_error!("missing an argument");
-        show_error!("for help, try '{0} --help'", uucore::execution_phrase());
-        return 1;
+        return Err(UUsageError::new(1, "missing operand"));
     } else {
         let options = Options {
             force,
@@ -106,13 +101,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     InteractiveMode::Once
                 } else if matches.is_present(OPT_INTERACTIVE) {
                     match matches.value_of(OPT_INTERACTIVE).unwrap() {
-                        "none" => InteractiveMode::None,
+                        "never" => InteractiveMode::Never,
                         "once" => InteractiveMode::Once,
                         "always" => InteractiveMode::Always,
-                        val => crash!(1, "Invalid argument to interactive ({})", val),
+                        val => {
+                            return Err(USimpleError::new(
+                                1,
+                                format!("Invalid argument to interactive ({})", val),
+                            ))
+                        }
                     }
                 } else {
-                    InteractiveMode::None
+                    InteractiveMode::Never
                 }
             },
             one_fs: matches.is_present(OPT_ONE_FILE_SYSTEM),
@@ -128,107 +128,122 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 "Remove all arguments? "
             };
             if !prompt(msg) {
-                return 0;
+                return Ok(());
             }
         }
 
-        if remove(files, options) {
-            return 1;
+        if remove(&files, &options) {
+            return Err(1.into());
         }
     }
-
-    0
+    Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(OPT_FORCE)
-            .short("f")
+            Arg::new(OPT_FORCE)
+            .short('f')
             .long(OPT_FORCE)
-            .multiple(true)
+            .multiple_occurrences(true)
             .help("ignore nonexistent files and arguments, never prompt")
         )
         .arg(
-            Arg::with_name(OPT_PROMPT)
-            .short("i")
+            Arg::new(OPT_PROMPT)
+            .short('i')
             .long("prompt before every removal")
         )
         .arg(
-            Arg::with_name(OPT_PROMPT_MORE)
-            .short("I")
+            Arg::new(OPT_PROMPT_MORE)
+            .short('I')
             .help("prompt once before removing more than three files, or when removing recursively. Less intrusive than -i, while still giving some protection against most mistakes")
         )
         .arg(
-            Arg::with_name(OPT_INTERACTIVE)
+            Arg::new(OPT_INTERACTIVE)
             .long(OPT_INTERACTIVE)
             .help("prompt according to WHEN: never, once (-I), or always (-i). Without WHEN, prompts always")
             .value_name("WHEN")
             .takes_value(true)
         )
         .arg(
-            Arg::with_name(OPT_ONE_FILE_SYSTEM)
+            Arg::new(OPT_ONE_FILE_SYSTEM)
             .long(OPT_ONE_FILE_SYSTEM)
             .help("when removing a hierarchy recursively, skip any directory that is on a file system different from that of the corresponding command line argument (NOT IMPLEMENTED)")
         )
         .arg(
-            Arg::with_name(OPT_NO_PRESERVE_ROOT)
+            Arg::new(OPT_NO_PRESERVE_ROOT)
             .long(OPT_NO_PRESERVE_ROOT)
             .help("do not treat '/' specially")
         )
         .arg(
-            Arg::with_name(OPT_PRESERVE_ROOT)
+            Arg::new(OPT_PRESERVE_ROOT)
             .long(OPT_PRESERVE_ROOT)
             .help("do not remove '/' (default)")
         )
         .arg(
-            Arg::with_name(OPT_RECURSIVE).short("r")
+            Arg::new(OPT_RECURSIVE).short('r')
+            .multiple_occurrences(true)
             .long(OPT_RECURSIVE)
             .help("remove directories and their contents recursively")
         )
         .arg(
             // To mimic GNU's behavior we also want the '-R' flag. However, using clap's
             // alias method 'visible_alias("R")' would result in a long '--R' flag.
-            Arg::with_name(OPT_RECURSIVE_R).short("R")
+            Arg::new(OPT_RECURSIVE_R).short('R')
             .help("Equivalent to -r")
         )
         .arg(
-            Arg::with_name(OPT_DIR)
-            .short("d")
+            Arg::new(OPT_DIR)
+            .short('d')
             .long(OPT_DIR)
             .help("remove empty directories")
         )
         .arg(
-            Arg::with_name(OPT_VERBOSE)
-            .short("v")
+            Arg::new(OPT_VERBOSE)
+            .short('v')
             .long(OPT_VERBOSE)
             .help("explain what is being done")
         )
+        // From the GNU source code:
+        // This is solely for testing.
+        // Do not document.
+        // It is relatively difficult to ensure that there is a tty on stdin.
+        // Since rm acts differently depending on that, without this option,
+        // it'd be harder to test the parts of rm that depend on that setting.
+        // In contrast with Arg::long, Arg::alias does not strip leading
+        // hyphens. Therefore it supports 3 leading hyphens.
         .arg(
-            Arg::with_name(ARG_FILES)
-            .multiple(true)
+            Arg::new(PRESUME_INPUT_TTY)
+            .long(PRESUME_INPUT_TTY)
+            .alias(PRESUME_INPUT_TTY)
+            .hide(true)
+        )
+        .arg(
+            Arg::new(ARG_FILES)
+            .multiple_occurrences(true)
             .takes_value(true)
             .min_values(1)
         )
 }
 
 // TODO: implement one-file-system (this may get partially implemented in walkdir)
-fn remove(files: Vec<String>, options: Options) -> bool {
+fn remove(files: &[String], options: &Options) -> bool {
     let mut had_err = false;
 
-    for filename in &files {
+    for filename in files {
         let file = Path::new(filename);
         had_err = match file.symlink_metadata() {
             Ok(metadata) => {
                 if metadata.is_dir() {
-                    handle_dir(file, &options)
+                    handle_dir(file, options)
                 } else if is_symlink_dir(&metadata) {
-                    remove_dir(file, &options)
+                    remove_dir(file, options)
                 } else {
-                    remove_file(file, &options)
+                    remove_file(file, options)
                 }
             }
             Err(_e) => {

@@ -62,6 +62,10 @@ fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_p
 /// within a struct which has convenience assertion functions about those outputs
 #[derive(Debug, Clone)]
 pub struct CmdResult {
+    /// bin_path provided by `TestScenario` or `UCommand`
+    bin_path: String,
+    /// util_name provided by `TestScenario` or `UCommand`
+    util_name: Option<String>,
     //tmpd is used for convenience functions for asserts against fixtures
     tmpd: Option<Rc<TempDir>>,
     /// exit status for command (if there is one)
@@ -77,13 +81,17 @@ pub struct CmdResult {
 
 impl CmdResult {
     pub fn new(
+        bin_path: String,
+        util_name: Option<String>,
         tmpd: Option<Rc<TempDir>>,
         code: Option<i32>,
         success: bool,
         stdout: &[u8],
         stderr: &[u8],
-    ) -> CmdResult {
-        CmdResult {
+    ) -> Self {
+        Self {
+            bin_path,
+            util_name,
             tmpd,
             code,
             success,
@@ -142,7 +150,7 @@ impl CmdResult {
         self.code.expect("Program must be run first")
     }
 
-    pub fn code_is(&self, expected_code: i32) -> &CmdResult {
+    pub fn code_is(&self, expected_code: i32) -> &Self {
         assert_eq!(self.code(), expected_code);
         self
     }
@@ -162,7 +170,7 @@ impl CmdResult {
     }
 
     /// asserts that the command resulted in a success (zero) status code
-    pub fn success(&self) -> &CmdResult {
+    pub fn success(&self) -> &Self {
         assert!(
             self.success,
             "Command was expected to succeed.\nstdout = {}\n stderr = {}",
@@ -173,7 +181,7 @@ impl CmdResult {
     }
 
     /// asserts that the command resulted in a failure (non-zero) status code
-    pub fn failure(&self) -> &CmdResult {
+    pub fn failure(&self) -> &Self {
         assert!(
             !self.success,
             "Command was expected to fail.\nstdout = {}\n stderr = {}",
@@ -184,7 +192,7 @@ impl CmdResult {
     }
 
     /// asserts that the command's exit code is the same as the given one
-    pub fn status_code(&self, code: i32) -> &CmdResult {
+    pub fn status_code(&self, code: i32) -> &Self {
         assert_eq!(self.code, Some(code));
         self
     }
@@ -194,7 +202,7 @@ impl CmdResult {
     /// but you might find yourself using this function if
     /// 1.  you can not know exactly what stdout will be or
     /// 2.  you know that stdout will also be empty
-    pub fn no_stderr(&self) -> &CmdResult {
+    pub fn no_stderr(&self) -> &Self {
         assert!(
             self.stderr.is_empty(),
             "Expected stderr to be empty, but it's:\n{}",
@@ -209,7 +217,7 @@ impl CmdResult {
     /// but you might find yourself using this function if
     /// 1.  you can not know exactly what stderr will be or
     /// 2.  you know that stderr will also be empty
-    pub fn no_stdout(&self) -> &CmdResult {
+    pub fn no_stdout(&self) -> &Self {
         assert!(
             self.stdout.is_empty(),
             "Expected stdout to be empty, but it's:\n{}",
@@ -221,25 +229,25 @@ impl CmdResult {
     /// asserts that the command resulted in stdout stream output that equals the
     /// passed in value, trailing whitespace are kept to force strict comparison (#1235)
     /// stdout_only is a better choice unless stderr may or will be non-empty
-    pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
+    pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> &Self {
         assert_eq!(self.stdout_str(), String::from(msg.as_ref()));
         self
     }
 
     /// like `stdout_is`, but succeeds if any elements of `expected` matches stdout.
-    pub fn stdout_is_any<T: AsRef<str> + std::fmt::Debug>(&self, expected: Vec<T>) -> &CmdResult {
+    pub fn stdout_is_any<T: AsRef<str> + std::fmt::Debug>(&self, expected: &[T]) -> &Self {
         if !expected.iter().any(|msg| self.stdout_str() == msg.as_ref()) {
             panic!(
                 "stdout was {}\nExpected any of {:#?}",
                 self.stdout_str(),
                 expected
-            )
+            );
         }
         self
     }
 
     /// Like `stdout_is` but newlines are normalized to `\n`.
-    pub fn normalized_newlines_stdout_is<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
+    pub fn normalized_newlines_stdout_is<T: AsRef<str>>(&self, msg: T) -> &Self {
         let msg = msg.as_ref().replace("\r\n", "\n");
         assert_eq!(self.stdout_str().replace("\r\n", "\n"), msg);
         self
@@ -247,23 +255,45 @@ impl CmdResult {
 
     /// asserts that the command resulted in stdout stream output,
     /// whose bytes equal those of the passed in slice
-    pub fn stdout_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &CmdResult {
+    pub fn stdout_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
         assert_eq!(self.stdout, msg.as_ref());
         self
     }
 
     /// like stdout_is(...), but expects the contents of the file at the provided relative path
-    pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &CmdResult {
+    pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stdout_is(String::from_utf8(contents).unwrap())
     }
+
+    /// Assert that the bytes of stdout exactly match those of the given file.
+    ///
+    /// Contrast this with [`CmdResult::stdout_is_fixture`], which
+    /// decodes the contents of the file as a UTF-8 [`String`] before
+    /// comparison with stdout.
+    ///
+    /// # Examples
+    ///
+    /// Use this method in a unit test like this:
+    ///
+    /// ```rust,ignore
+    /// #[test]
+    /// fn test_something() {
+    ///     new_ucmd!().succeeds().stdout_is_fixture_bytes("expected.bin");
+    /// }
+    /// ```
+    pub fn stdout_is_fixture_bytes<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
+        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        self.stdout_is_bytes(contents)
+    }
+
     /// like stdout_is_fixture(...), but replaces the data in fixture file based on values provided in template_vars
     /// command output
     pub fn stdout_is_templated_fixture<T: AsRef<OsStr>>(
         &self,
         file_rel_path: T,
         template_vars: &[(&str, &str)],
-    ) -> &CmdResult {
+    ) -> &Self {
         let mut contents =
             String::from_utf8(read_scenario_fixture(&self.tmpd, file_rel_path)).unwrap();
         for kv in template_vars {
@@ -286,13 +316,13 @@ impl CmdResult {
             }
             contents
         });
-        self.stdout_is_any(possible_values.collect());
+        self.stdout_is_any(&possible_values.collect::<Vec<_>>());
     }
 
     /// asserts that the command resulted in stderr stream output that equals the
     /// passed in value, when both are trimmed of trailing whitespace
     /// stderr_only is a better choice unless stdout may or will be non-empty
-    pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
+    pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> &Self {
         assert_eq!(
             self.stderr_str().trim_end(),
             String::from(msg.as_ref()).trim_end()
@@ -302,13 +332,13 @@ impl CmdResult {
 
     /// asserts that the command resulted in stderr stream output,
     /// whose bytes equal those of the passed in slice
-    pub fn stderr_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &CmdResult {
+    pub fn stderr_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
         assert_eq!(self.stderr, msg.as_ref());
         self
     }
 
     /// Like stdout_is_fixture, but for stderr
-    pub fn stderr_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &CmdResult {
+    pub fn stderr_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stderr_is(String::from_utf8(contents).unwrap())
     }
@@ -317,7 +347,7 @@ impl CmdResult {
     /// 1.  the command resulted in stdout stream output that equals the
     ///     passed in value
     /// 2.  the command resulted in empty (zero-length) stderr stream output
-    pub fn stdout_only<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
+    pub fn stdout_only<T: AsRef<str>>(&self, msg: T) -> &Self {
         self.no_stderr().stdout_is(msg)
     }
 
@@ -325,12 +355,12 @@ impl CmdResult {
     /// 1.  the command resulted in a stdout stream whose bytes
     ///     equal those of the passed in value
     /// 2.  the command resulted in an empty stderr stream
-    pub fn stdout_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &CmdResult {
+    pub fn stdout_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
         self.no_stderr().stdout_is_bytes(msg)
     }
 
     /// like stdout_only(...), but expects the contents of the file at the provided relative path
-    pub fn stdout_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &CmdResult {
+    pub fn stdout_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stdout_only_bytes(contents)
     }
@@ -339,7 +369,7 @@ impl CmdResult {
     /// 1.  the command resulted in stderr stream output that equals the
     ///     passed in value, when both are trimmed of trailing whitespace
     /// 2.  the command resulted in empty (zero-length) stdout stream output
-    pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
+    pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> &Self {
         self.no_stdout().stderr_is(msg)
     }
 
@@ -347,17 +377,34 @@ impl CmdResult {
     /// 1.  the command resulted in a stderr stream whose bytes equal the ones
     ///     of the passed value
     /// 2.  the command resulted in an empty stdout stream
-    pub fn stderr_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &CmdResult {
-        self.no_stderr().stderr_is_bytes(msg)
+    pub fn stderr_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
+        self.no_stdout().stderr_is_bytes(msg)
     }
 
-    pub fn fails_silently(&self) -> &CmdResult {
+    pub fn fails_silently(&self) -> &Self {
         assert!(!self.success);
         assert!(self.stderr.is_empty());
         self
     }
 
-    pub fn stdout_contains<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
+    /// asserts that
+    /// 1.  the command resulted in stderr stream output that equals the
+    ///     the following format when both are trimmed of trailing whitespace
+    ///     `"{util_name}: {msg}\nTry '{bin_path} {util_name} --help' for more information."`
+    ///     This the expected format when a UUsageError is returned or when show_error! is called
+    ///     `msg` should be the same as the one provided to UUsageError::new or show_error!
+    ///
+    /// 2.  the command resulted in empty (zero-length) stdout stream output
+    pub fn usage_error<T: AsRef<str>>(&self, msg: T) -> &Self {
+        self.stderr_only(format!(
+            "{0}: {2}\nTry '{1} {0} --help' for more information.",
+            self.util_name.as_ref().unwrap(), // This shouldn't be called using a normal command
+            self.bin_path,
+            msg.as_ref()
+        ))
+    }
+
+    pub fn stdout_contains<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(
             self.stdout_str().contains(cmp.as_ref()),
             "'{}' does not contain '{}'",
@@ -367,7 +414,7 @@ impl CmdResult {
         self
     }
 
-    pub fn stderr_contains<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
+    pub fn stderr_contains<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(
             self.stderr_str().contains(cmp.as_ref()),
             "'{}' does not contain '{}'",
@@ -377,7 +424,7 @@ impl CmdResult {
         self
     }
 
-    pub fn stdout_does_not_contain<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
+    pub fn stdout_does_not_contain<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(
             !self.stdout_str().contains(cmp.as_ref()),
             "'{}' contains '{}' but should not",
@@ -387,21 +434,21 @@ impl CmdResult {
         self
     }
 
-    pub fn stderr_does_not_contain<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
+    pub fn stderr_does_not_contain<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(!self.stderr_str().contains(cmp.as_ref()));
         self
     }
 
-    pub fn stdout_matches(&self, regex: &regex::Regex) -> &CmdResult {
+    pub fn stdout_matches(&self, regex: &regex::Regex) -> &Self {
         if !regex.is_match(self.stdout_str().trim()) {
-            panic!("Stdout does not match regex:\n{}", self.stdout_str())
+            panic!("Stdout does not match regex:\n{}", self.stdout_str());
         }
         self
     }
 
-    pub fn stdout_does_not_match(&self, regex: &regex::Regex) -> &CmdResult {
+    pub fn stdout_does_not_match(&self, regex: &regex::Regex) -> &Self {
         if regex.is_match(self.stdout_str().trim()) {
-            panic!("Stdout matches regex:\n{}", self.stdout_str())
+            panic!("Stdout matches regex:\n{}", self.stdout_str());
         }
         self
     }
@@ -444,8 +491,8 @@ pub struct AtPath {
 }
 
 impl AtPath {
-    pub fn new(subdir: &Path) -> AtPath {
-        AtPath {
+    pub fn new(subdir: &Path) -> Self {
+        Self {
             subdir: PathBuf::from(subdir),
         }
     }
@@ -654,6 +701,11 @@ impl AtPath {
         symlink_file(&self.plus(original), &self.plus(link)).unwrap();
     }
 
+    pub fn relative_symlink_file(&self, original: &str, link: &str) {
+        log_info("symlink", &format!("{},{}", original, link));
+        symlink_file(original, link).unwrap();
+    }
+
     pub fn symlink_dir(&self, original: &str, link: &str) {
         log_info(
             "symlink",
@@ -728,20 +780,12 @@ impl AtPath {
         // Source:
         // http://stackoverflow.com/questions/31439011/getfinalpathnamebyhandle-without-prepended
         let prefix = "\\\\?\\";
-        // FixME: replace ...
-        #[allow(clippy::manual_strip)]
-        if s.starts_with(prefix) {
-            String::from(&s[prefix.len()..])
+
+        if let Some(stripped) = s.strip_prefix(prefix) {
+            String::from(stripped)
         } else {
             s
         }
-        // ... with ...
-        // if let Some(stripped) = s.strip_prefix(prefix) {
-        //     String::from(stripped)
-        // } else {
-        //     s
-        // }
-        // ... when using MSRV with stabilized `strip_prefix()`
     }
 }
 
@@ -759,9 +803,9 @@ pub struct TestScenario {
 }
 
 impl TestScenario {
-    pub fn new(util_name: &str) -> TestScenario {
+    pub fn new(util_name: &str) -> Self {
         let tmpd = Rc::new(TempDir::new().unwrap());
-        let ts = TestScenario {
+        let ts = Self {
             bin_path: {
                 // Instead of hard coding the path relative to the current
                 // directory, use Cargo's OUT_DIR to find path to executable.
@@ -788,31 +832,36 @@ impl TestScenario {
     /// Returns builder for invoking the target uutils binary. Paths given are
     /// treated relative to the environment's unique temporary test directory.
     pub fn ucmd(&self) -> UCommand {
-        let mut cmd = self.cmd(&self.bin_path);
-        cmd.arg(&self.util_name);
-        cmd
+        self.composite_cmd(&self.bin_path, &self.util_name, true)
+    }
+
+    /// Returns builder for invoking the target uutils binary. Paths given are
+    /// treated relative to the environment's unique temporary test directory.
+    pub fn composite_cmd<S: AsRef<OsStr>, T: AsRef<OsStr>>(
+        &self,
+        bin: S,
+        util_name: T,
+        env_clear: bool,
+    ) -> UCommand {
+        UCommand::new_from_tmp(bin, &Some(util_name), self.tmpd.clone(), env_clear)
     }
 
     /// Returns builder for invoking any system command. Paths given are treated
     /// relative to the environment's unique temporary test directory.
     pub fn cmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        UCommand::new_from_tmp(bin, self.tmpd.clone(), true)
+        UCommand::new_from_tmp::<S, S>(bin, &None, self.tmpd.clone(), true)
     }
 
     /// Returns builder for invoking any uutils command. Paths given are treated
     /// relative to the environment's unique temporary test directory.
     pub fn ccmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        let mut cmd = self.cmd(&self.bin_path);
-        cmd.arg(bin);
-        cmd
+        self.composite_cmd(&self.bin_path, bin, true)
     }
 
     // different names are used rather than an argument
     // because the need to keep the environment is exceedingly rare.
     pub fn ucmd_keepenv(&self) -> UCommand {
-        let mut cmd = self.cmd_keepenv(&self.bin_path);
-        cmd.arg(&self.util_name);
-        cmd
+        self.composite_cmd(&self.bin_path, &self.util_name, false)
     }
 
     /// Returns builder for invoking any system command. Paths given are treated
@@ -820,7 +869,7 @@ impl TestScenario {
     /// Differs from the builder returned by `cmd` in that `cmd_keepenv` does not call
     /// `Command::env_clear` (Clears the entire environment map for the child process.)
     pub fn cmd_keepenv<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        UCommand::new_from_tmp(bin, self.tmpd.clone(), false)
+        UCommand::new_from_tmp::<S, S>(bin, &None, self.tmpd.clone(), false)
     }
 }
 
@@ -834,6 +883,8 @@ impl TestScenario {
 pub struct UCommand {
     pub raw: Command,
     comm_string: String,
+    bin_path: String,
+    util_name: Option<String>,
     tmpd: Option<Rc<TempDir>>,
     has_run: bool,
     ignore_stdin_write_error: bool,
@@ -846,12 +897,20 @@ pub struct UCommand {
 }
 
 impl UCommand {
-    pub fn new<T: AsRef<OsStr>, U: AsRef<OsStr>>(arg: T, curdir: U, env_clear: bool) -> UCommand {
-        UCommand {
+    pub fn new<T: AsRef<OsStr>, S: AsRef<OsStr>, U: AsRef<OsStr>>(
+        bin_path: T,
+        util_name: &Option<S>,
+        curdir: U,
+        env_clear: bool,
+    ) -> Self {
+        let bin_path = bin_path.as_ref();
+        let util_name = util_name.as_ref().map(|un| un.as_ref());
+
+        let mut ucmd = Self {
             tmpd: None,
             has_run: false,
             raw: {
-                let mut cmd = Command::new(arg.as_ref());
+                let mut cmd = Command::new(bin_path);
                 cmd.current_dir(curdir.as_ref());
                 if env_clear {
                     if cfg!(windows) {
@@ -871,7 +930,9 @@ impl UCommand {
                 }
                 cmd
             },
-            comm_string: String::from(arg.as_ref().to_str().unwrap()),
+            comm_string: String::from(bin_path.to_str().unwrap()),
+            bin_path: bin_path.to_str().unwrap().to_string(),
+            util_name: util_name.map(|un| un.to_str().unwrap().to_string()),
             ignore_stdin_write_error: false,
             bytes_into_stdin: None,
             stdin: None,
@@ -879,34 +940,45 @@ impl UCommand {
             stderr: None,
             #[cfg(target_os = "linux")]
             limits: vec![],
+        };
+
+        if let Some(un) = util_name {
+            ucmd.arg(un);
         }
+
+        ucmd
     }
 
-    pub fn new_from_tmp<T: AsRef<OsStr>>(arg: T, tmpd: Rc<TempDir>, env_clear: bool) -> UCommand {
+    pub fn new_from_tmp<T: AsRef<OsStr>, S: AsRef<OsStr>>(
+        bin_path: T,
+        util_name: &Option<S>,
+        tmpd: Rc<TempDir>,
+        env_clear: bool,
+    ) -> Self {
         let tmpd_path_buf = String::from(&(*tmpd.as_ref().path().to_str().unwrap()));
-        let mut ucmd: UCommand = UCommand::new(arg.as_ref(), tmpd_path_buf, env_clear);
+        let mut ucmd: Self = Self::new(bin_path, util_name, tmpd_path_buf, env_clear);
         ucmd.tmpd = Some(tmpd);
         ucmd
     }
 
-    pub fn set_stdin<T: Into<Stdio>>(&mut self, stdin: T) -> &mut UCommand {
+    pub fn set_stdin<T: Into<Stdio>>(&mut self, stdin: T) -> &mut Self {
         self.stdin = Some(stdin.into());
         self
     }
 
-    pub fn set_stdout<T: Into<Stdio>>(&mut self, stdout: T) -> &mut UCommand {
+    pub fn set_stdout<T: Into<Stdio>>(&mut self, stdout: T) -> &mut Self {
         self.stdout = Some(stdout.into());
         self
     }
 
-    pub fn set_stderr<T: Into<Stdio>>(&mut self, stderr: T) -> &mut UCommand {
+    pub fn set_stderr<T: Into<Stdio>>(&mut self, stderr: T) -> &mut Self {
         self.stderr = Some(stderr.into());
         self
     }
 
     /// Add a parameter to the invocation. Path arguments are treated relative
     /// to the test environment directory.
-    pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> &mut UCommand {
+    pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> &mut Self {
         assert!(!self.has_run, "{}", ALREADY_RUN);
         self.comm_string.push(' ');
         self.comm_string
@@ -917,7 +989,7 @@ impl UCommand {
 
     /// Add multiple parameters to the invocation. Path arguments are treated relative
     /// to the test environment directory.
-    pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> &mut UCommand {
+    pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> &mut Self {
         assert!(!self.has_run, "{}", MULTIPLE_STDIN_MEANINGLESS);
         let strings = args
             .iter()
@@ -935,9 +1007,9 @@ impl UCommand {
     }
 
     /// provides standard input to feed in to the command when spawned
-    pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut UCommand {
+    pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut Self {
         assert!(
-            !self.bytes_into_stdin.is_some(),
+            self.bytes_into_stdin.is_none(),
             "{}",
             MULTIPLE_STDIN_MEANINGLESS
         );
@@ -946,7 +1018,7 @@ impl UCommand {
     }
 
     /// like pipe_in(...), but uses the contents of the file at the provided relative path as the piped in data
-    pub fn pipe_in_fixture<S: AsRef<OsStr>>(&mut self, file_rel_path: S) -> &mut UCommand {
+    pub fn pipe_in_fixture<S: AsRef<OsStr>>(&mut self, file_rel_path: S) -> &mut Self {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.pipe_in(contents)
     }
@@ -954,13 +1026,13 @@ impl UCommand {
     /// Ignores error caused by feeding stdin to the command.
     /// This is typically useful to test non-standard workflows
     /// like feeding something to a command that does not read it
-    pub fn ignore_stdin_write_error(&mut self) -> &mut UCommand {
-        assert!(!self.bytes_into_stdin.is_none(), "{}", NO_STDIN_MEANINGLESS);
+    pub fn ignore_stdin_write_error(&mut self) -> &mut Self {
+        assert!(self.bytes_into_stdin.is_some(), "{}", NO_STDIN_MEANINGLESS);
         self.ignore_stdin_write_error = true;
         self
     }
 
-    pub fn env<K, V>(&mut self, key: K, val: V) -> &mut UCommand
+    pub fn env<K, V>(&mut self, key: K, val: V) -> &mut Self
     where
         K: AsRef<OsStr>,
         V: AsRef<OsStr>,
@@ -1014,7 +1086,7 @@ impl UCommand {
                 .write_all(input);
             if !self.ignore_stdin_write_error {
                 if let Err(e) = write_result {
-                    panic!("failed to write to stdin of child: {}", e)
+                    panic!("failed to write to stdin of child: {}", e);
                 }
             }
         }
@@ -1029,6 +1101,8 @@ impl UCommand {
         let prog = self.run_no_wait().wait_with_output().unwrap();
 
         CmdResult {
+            bin_path: self.bin_path.clone(),
+            util_name: self.util_name.clone(),
             tmpd: self.tmpd.clone(),
             code: prog.status.code(),
             success: prog.status.success(),
@@ -1070,6 +1144,13 @@ impl UCommand {
 /// Wrapper for `child.stdout.read_exact()`.
 /// Careful, this blocks indefinitely if `size` bytes is never reached.
 pub fn read_size(child: &mut Child, size: usize) -> String {
+    String::from_utf8(read_size_bytes(child, size)).unwrap()
+}
+
+/// Read the specified number of bytes from the stdout of the child process.
+///
+/// Careful, this blocks indefinitely if `size` bytes is never reached.
+pub fn read_size_bytes(child: &mut Child, size: usize) -> Vec<u8> {
     let mut output = Vec::new();
     output.resize(size, 0);
     sleep(Duration::from_secs(1));
@@ -1079,7 +1160,7 @@ pub fn read_size(child: &mut Child, size: usize) -> String {
         .unwrap()
         .read_exact(output.as_mut_slice())
         .unwrap();
-    String::from_utf8(output).unwrap()
+    output
 }
 
 pub fn vec_of_size(n: usize) -> Vec<u8> {
@@ -1119,13 +1200,13 @@ pub fn host_name_for(util_name: &str) -> Cow<str> {
     {
         // make call to `host_name_for` idempotent
         if util_name.starts_with('g') && util_name != "groups" {
-            return util_name.into();
+            util_name.into()
         } else {
-            return format!("g{}", util_name).into();
+            format!("g{}", util_name).into()
         }
     }
     #[cfg(target_os = "linux")]
-    return util_name.into();
+    util_name.into()
 }
 
 // GNU coreutils version 8.32 is the reference version since it is the latest version and the
@@ -1183,14 +1264,7 @@ pub fn check_coreutil_version(
         .output()
     {
         Ok(s) => s,
-        Err(e) => {
-            return Err(format!(
-                "{}: '{}' {}",
-                UUTILS_WARNING,
-                util_name,
-                e.to_string()
-            ))
-        }
+        Err(e) => return Err(format!("{}: '{}' {}", UUTILS_WARNING, util_name, e)),
     };
     std::str::from_utf8(&version_check.stdout).unwrap()
         .split('\n')
@@ -1200,7 +1274,7 @@ pub fn check_coreutil_version(
             || Err(format!("{}: unexpected output format for reference coreutil: '{} --version'", UUTILS_WARNING, util_name)),
             |s| {
                 if s.contains(&format!("(GNU coreutils) {}", version_expected)) {
-                    Ok(format!("{}: {}", UUTILS_INFO, s.to_string()))
+                    Ok(format!("{}: {}", UUTILS_INFO, s))
                 } else if s.contains("(GNU coreutils)") {
                     let version_found = parse_coreutil_version(s);
                     let version_expected = version_expected.parse::<f32>().unwrap_or_default();
@@ -1276,6 +1350,8 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
     };
 
     Ok(CmdResult::new(
+        ts.bin_path.as_os_str().to_str().unwrap().to_string(),
+        Some(ts.util_name.clone()),
         Some(result.tmpd()),
         Some(result.code()),
         result.succeeded(),
@@ -1293,6 +1369,8 @@ mod tests {
     #[test]
     fn test_code_is() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: Some(32),
             success: false,
@@ -1306,6 +1384,8 @@ mod tests {
     #[should_panic]
     fn test_code_is_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: Some(32),
             success: false,
@@ -1318,6 +1398,8 @@ mod tests {
     #[test]
     fn test_failure() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: false,
@@ -1331,6 +1413,8 @@ mod tests {
     #[should_panic]
     fn test_failure_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1343,6 +1427,8 @@ mod tests {
     #[test]
     fn test_success() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1356,6 +1442,8 @@ mod tests {
     #[should_panic]
     fn test_success_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: false,
@@ -1368,6 +1456,8 @@ mod tests {
     #[test]
     fn test_no_stderr_output() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1382,6 +1472,8 @@ mod tests {
     #[should_panic]
     fn test_no_stderr_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1396,6 +1488,8 @@ mod tests {
     #[should_panic]
     fn test_no_stdout_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1409,6 +1503,8 @@ mod tests {
     #[test]
     fn test_std_does_not_contain() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1423,6 +1519,8 @@ mod tests {
     #[should_panic]
     fn test_stdout_does_not_contain_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1437,6 +1535,8 @@ mod tests {
     #[should_panic]
     fn test_stderr_does_not_contain_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1450,6 +1550,8 @@ mod tests {
     #[test]
     fn test_stdout_matches() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1466,6 +1568,8 @@ mod tests {
     #[should_panic]
     fn test_stdout_matches_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1481,6 +1585,8 @@ mod tests {
     #[should_panic]
     fn test_stdout_not_matches_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1495,6 +1601,8 @@ mod tests {
     #[test]
     fn test_normalized_newlines_stdout_is() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1511,6 +1619,8 @@ mod tests {
     #[should_panic]
     fn test_normalized_newlines_stdout_is_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,

@@ -62,7 +62,7 @@ pub fn parse_symbolic(
                     // keep the setgid and setuid bits for directories
                     srwx |= fperm & (0o4000 | 0o2000);
                 }
-                fperm = (fperm & !mask) | (srwx & mask)
+                fperm = (fperm & !mask) | (srwx & mask);
             }
             _ => unreachable!(),
         }
@@ -113,7 +113,7 @@ fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
             'x' => srwx |= 0o111,
             'X' => {
                 if considering_dir || (fperm & 0o0111) != 0 {
-                    srwx |= 0o111
+                    srwx |= 0o111;
                 }
             }
             's' => srwx |= 0o4000 | 0o2000,
@@ -163,12 +163,11 @@ pub fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
         if arg == "--" {
             break;
         }
-        if arg.starts_with('-') {
+        if let Some(arg_stripped) = arg.strip_prefix('-') {
             if let Some(second) = arg.chars().nth(1) {
                 match second {
                     'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'..='7' => {
-                        // TODO: use strip_prefix() once minimum rust version reaches 1.45.0
-                        *arg = arg[1..arg.len()].to_string();
+                        *arg = arg_stripped.to_string();
                         return true;
                     }
                     _ => {}

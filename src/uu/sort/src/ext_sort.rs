@@ -50,13 +50,13 @@ pub fn ext_sort(
     let (recycled_sender, recycled_receiver) = std::sync::mpsc::sync_channel(1);
     thread::spawn({
         let settings = settings.clone();
-        move || sorter(recycled_receiver, sorted_sender, settings)
+        move || sorter(&recycled_receiver, &sorted_sender, &settings)
     });
     if settings.compress_prog.is_some() {
         reader_writer::<_, WriteableCompressedTmpFile>(
             files,
             settings,
-            sorted_receiver,
+            &sorted_receiver,
             recycled_sender,
             output,
             tmp_dir,
@@ -65,7 +65,7 @@ pub fn ext_sort(
         reader_writer::<_, WriteablePlainTmpFile>(
             files,
             settings,
-            sorted_receiver,
+            &sorted_receiver,
             recycled_sender,
             output,
             tmp_dir,
@@ -79,7 +79,7 @@ fn reader_writer<
 >(
     files: F,
     settings: &GlobalSettings,
-    receiver: Receiver<Chunk>,
+    receiver: &Receiver<Chunk>,
     sender: SyncSender<Chunk>,
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
@@ -156,10 +156,10 @@ fn reader_writer<
 }
 
 /// The function that is executed on the sorter thread.
-fn sorter(receiver: Receiver<Chunk>, sender: SyncSender<Chunk>, settings: GlobalSettings) {
+fn sorter(receiver: &Receiver<Chunk>, sender: &SyncSender<Chunk>, settings: &GlobalSettings) {
     while let Ok(mut payload) = receiver.recv() {
         payload.with_contents_mut(|contents| {
-            sort_by(&mut contents.lines, &settings, &contents.line_data)
+            sort_by(&mut contents.lines, settings, &contents.line_data);
         });
         if sender.send(payload).is_err() {
             // The receiver has gone away, likely because the other thread hit an error.
@@ -187,7 +187,7 @@ fn read_write_loop<I: WriteableTmpFile>(
     separator: u8,
     buffer_size: usize,
     settings: &GlobalSettings,
-    receiver: Receiver<Chunk>,
+    receiver: &Receiver<Chunk>,
     sender: SyncSender<Chunk>,
 ) -> UResult<ReadResult<I>> {
     let mut file = files.next().unwrap()?;

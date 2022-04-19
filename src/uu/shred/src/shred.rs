@@ -8,7 +8,7 @@
 
 // spell-checker:ignore (words) writeback wipesync
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use rand::prelude::SliceRandom;
 use rand::Rng;
 use std::cell::{Cell, RefCell};
@@ -19,7 +19,8 @@ use std::io::prelude::*;
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::{util_name, InvalidEncodingHandling};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::{format_usage, util_name, InvalidEncodingHandling};
 
 #[macro_use]
 extern crate uucore;
@@ -67,9 +68,9 @@ struct FilenameGenerator {
 }
 
 impl FilenameGenerator {
-    fn new(name_len: usize) -> FilenameGenerator {
+    fn new(name_len: usize) -> Self {
         let indices: Vec<usize> = vec![0; name_len];
-        FilenameGenerator {
+        Self {
             name_len,
             name_charset_indices: RefCell::new(indices),
             exhausted: Cell::new(false),
@@ -95,7 +96,7 @@ impl Iterator for FilenameGenerator {
         }
 
         if name_charset_indices[0] == NAME_CHARSET.len() - 1 {
-            self.exhausted.set(true)
+            self.exhausted.set(true);
         }
         // Now increment the least significant index
         for i in (0..self.name_len).rev() {
@@ -213,10 +214,7 @@ impl<'a> BytesGenerator<'a> {
 static ABOUT: &str = "Overwrite the specified FILE(s) repeatedly, in order to make it harder\n\
 for even very expensive hardware probing to recover the data.
 ";
-
-fn usage() -> String {
-    format!("{} [OPTION]... FILE...", uucore::execution_phrase())
-}
+const USAGE: &str = "{} [OPTION]... FILE...";
 
 static AFTER_HELP: &str =
     "Delete FILE(s) if --remove (-u) is specified.  The default is not to remove\n\
@@ -266,31 +264,26 @@ pub mod options {
     pub const ZERO: &str = "zero";
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = usage();
-
-    let app = uu_app().usage(&usage[..]);
-
-    let matches = app.get_matches_from(args);
-
-    let mut errs: Vec<String> = vec![];
+    let matches = uu_app().get_matches_from(args);
 
     if !matches.is_present(options::FILE) {
-        show_error!("Missing an argument");
-        show_error!("For help, try '{} --help'", uucore::execution_phrase());
-        return 0;
+        return Err(UUsageError::new(1, "missing file operand"));
     }
 
     let iterations = match matches.value_of(options::ITERATIONS) {
         Some(s) => match s.parse::<usize>() {
             Ok(u) => u,
             Err(_) => {
-                errs.push(format!("invalid number of passes: {}", s.quote()));
-                0
+                return Err(USimpleError::new(
+                    1,
+                    format!("invalid number of passes: {}", s.quote()),
+                ))
             }
         },
         None => unreachable!(),
@@ -313,79 +306,76 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let zero = matches.is_present(options::ZERO);
     let verbose = matches.is_present(options::VERBOSE);
 
-    if !errs.is_empty() {
-        show_error!("Invalid arguments supplied.");
-        for message in errs {
-            show_error!("{}", message);
-        }
-        return 1;
-    }
-
     for path_str in matches.values_of(options::FILE).unwrap() {
-        wipe_file(
+        show_if_err!(wipe_file(
             path_str, iterations, remove, size, exact, zero, verbose, force,
-        );
+        ));
     }
-
-    0
+    Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::FORCE)
+            Arg::new(options::FORCE)
                 .long(options::FORCE)
-                .short("f")
+                .short('f')
                 .help("change permissions to allow writing if necessary"),
         )
         .arg(
-            Arg::with_name(options::ITERATIONS)
+            Arg::new(options::ITERATIONS)
                 .long(options::ITERATIONS)
-                .short("n")
+                .short('n')
                 .help("overwrite N times instead of the default (3)")
                 .value_name("NUMBER")
                 .default_value("3"),
         )
         .arg(
-            Arg::with_name(options::SIZE)
+            Arg::new(options::SIZE)
                 .long(options::SIZE)
-                .short("s")
+                .short('s')
                 .takes_value(true)
                 .value_name("N")
                 .help("shred this many bytes (suffixes like K, M, G accepted)"),
         )
         .arg(
-            Arg::with_name(options::REMOVE)
-                .short("u")
+            Arg::new(options::REMOVE)
+                .short('u')
                 .long(options::REMOVE)
                 .help("truncate and remove file after overwriting;  See below"),
         )
         .arg(
-            Arg::with_name(options::VERBOSE)
+            Arg::new(options::VERBOSE)
                 .long(options::VERBOSE)
-                .short("v")
+                .short('v')
                 .help("show progress"),
         )
         .arg(
-            Arg::with_name(options::EXACT)
+            Arg::new(options::EXACT)
                 .long(options::EXACT)
-                .short("x")
+                .short('x')
                 .help(
                     "do not round file sizes up to the next full block;\n\
                      this is the default for non-regular files",
                 ),
         )
         .arg(
-            Arg::with_name(options::ZERO)
+            Arg::new(options::ZERO)
                 .long(options::ZERO)
-                .short("z")
+                .short('z')
                 .help("add a final overwrite with zeros to hide shredding"),
         )
         // Positional arguments
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+        .arg(
+            Arg::new(options::FILE)
+                .hide(true)
+                .multiple_occurrences(true),
+        )
 }
 
 // TODO: Add support for all postfixes here up to and including EiB
@@ -419,7 +409,7 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
                 util_name(),
                 size_str_opt.unwrap().maybe_quote()
             );
-            exit!(1);
+            std::process::exit(1);
         }
     };
 
@@ -452,34 +442,28 @@ fn wipe_file(
     zero: bool,
     verbose: bool,
     force: bool,
-) {
+) -> UResult<()> {
     // Get these potential errors out of the way first
     let path: &Path = Path::new(path_str);
     if !path.exists() {
-        show_error!("{}: No such file or directory", path.maybe_quote());
-        return;
+        return Err(USimpleError::new(
+            1,
+            format!("{}: No such file or directory", path.maybe_quote()),
+        ));
     }
     if !path.is_file() {
-        show_error!("{}: Not a file", path.maybe_quote());
-        return;
+        return Err(USimpleError::new(
+            1,
+            format!("{}: Not a file", path.maybe_quote()),
+        ));
     }
 
     // If force is true, set file permissions to not-readonly.
     if force {
-        let metadata = match fs::metadata(path) {
-            Ok(m) => m,
-            Err(e) => {
-                show_error!("{}", e);
-                return;
-            }
-        };
-
+        let metadata = fs::metadata(path).map_err_context(String::new)?;
         let mut perms = metadata.permissions();
         perms.set_readonly(false);
-        if let Err(e) = fs::set_permissions(path, perms) {
-            show_error!("{}", e);
-            return;
-        }
+        fs::set_permissions(path, perms).map_err_context(String::new)?;
     }
 
     // Fill up our pass sequence
@@ -488,7 +472,7 @@ fn wipe_file(
     if n_passes <= 3 {
         // Only random passes if n_passes <= 3
         for _ in 0..n_passes {
-            pass_sequence.push(PassType::Random)
+            pass_sequence.push(PassType::Random);
         }
     }
     // First fill it with Patterns, shuffle it, then evenly distribute Random
@@ -521,13 +505,11 @@ fn wipe_file(
 
     {
         let total_passes: usize = pass_sequence.len();
-        let mut file: File = match OpenOptions::new().write(true).truncate(false).open(path) {
-            Ok(f) => f,
-            Err(e) => {
-                show_error!("{}: failed to open for writing: {}", path.maybe_quote(), e);
-                return;
-            }
-        };
+        let mut file: File = OpenOptions::new()
+            .write(true)
+            .truncate(false)
+            .open(path)
+            .map_err_context(|| format!("{}: failed to open for writing", path.maybe_quote()))?;
 
         // NOTE: it does not really matter what we set for total_bytes and gen_type here, so just
         //       use bogus values
@@ -557,24 +539,17 @@ fn wipe_file(
                 }
             }
             // size is an optional argument for exactly how many bytes we want to shred
-            match do_pass(&mut file, path, &mut generator, *pass_type, size) {
-                Ok(_) => {}
-                Err(e) => {
-                    show_error!("{}: File write pass failed: {}", path.maybe_quote(), e);
-                }
-            }
+            show_if_err!(do_pass(&mut file, path, &mut generator, *pass_type, size)
+                .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote())));
             // Ignore failed writes; just keep trying
         }
     }
 
     if remove {
-        match do_remove(path, path_str, verbose) {
-            Ok(_) => {}
-            Err(e) => {
-                show_error!("{}: failed to remove file: {}", path.maybe_quote(), e);
-            }
-        }
+        do_remove(path, path_str, verbose)
+            .map_err_context(|| format!("{}: failed to remove file", path.maybe_quote()))?;
     }
+    Ok(())
 }
 
 fn do_pass<'a>(

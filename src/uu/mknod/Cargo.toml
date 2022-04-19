@@ -1,12 +1,12 @@
 [package]
 name = "uu_mknod"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "mknod ~ (uutils) create special file NAME of TYPE"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/mknod"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/mknod"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -16,10 +16,9 @@ name = "uu_mknod"
 path = "src/mknod.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
-libc = "^0.2.42"
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["mode"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
+libc = "^0.2.121"
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["mode"] }
 
 [[bin]]
 name = "mknod"

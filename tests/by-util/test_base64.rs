@@ -26,7 +26,7 @@ fn test_base64_encode_file() {
 
 #[test]
 fn test_decode() {
-    for decode_param in &["-d", "--decode"] {
+    for decode_param in &["-d", "--decode", "--dec"] {
         let input = "aGVsbG8sIHdvcmxkIQ=="; // spell-checker:disable-line
         new_ucmd!()
             .arg(decode_param)
@@ -48,7 +48,7 @@ fn test_garbage() {
 
 #[test]
 fn test_ignore_garbage() {
-    for ignore_garbage_param in &["-i", "--ignore-garbage"] {
+    for ignore_garbage_param in &["-i", "--ignore-garbage", "--ig"] {
         let input = "aGVsbG8sIHdvcmxkIQ==\0"; // spell-checker:disable-line
         new_ucmd!()
             .arg("-d")
@@ -61,7 +61,7 @@ fn test_ignore_garbage() {
 
 #[test]
 fn test_wrap() {
-    for wrap_param in &["-w", "--wrap"] {
+    for wrap_param in &["-w", "--wrap", "--wr"] {
         let input = "The quick brown fox jumps over the lazy dog.";
         new_ucmd!()
             .arg(wrap_param)
@@ -95,18 +95,12 @@ fn test_wrap_bad_arg() {
 
 #[test]
 fn test_base64_extra_operand() {
-    let ts = TestScenario::new(util_name!());
-
     // Expect a failure when multiple files are specified.
-    ts.ucmd()
+    new_ucmd!()
         .arg("a.txt")
         .arg("b.txt")
         .fails()
-        .stderr_only(format!(
-            "{0}: extra operand 'b.txt'\nTry '{1} {0} --help' for more information.",
-            ts.util_name,
-            ts.bin_path.to_string_lossy()
-        ));
+        .usage_error("extra operand 'b.txt'");
 }
 
 #[test]

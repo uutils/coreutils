@@ -1,12 +1,12 @@
 [package]
 name = "uu_head"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "head ~ (uutils) display the first lines of input"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/head"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/head"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -15,15 +15,10 @@ edition = "2018"
 path = "src/head.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 memchr = "2"
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["ringbuffer"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["ringbuffer", "lines"] }
 
 [[bin]]
 name = "head"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-# Necessary for "make all"
-normal = ["uucore_procs"]

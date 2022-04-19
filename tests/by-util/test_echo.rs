@@ -138,11 +138,19 @@ fn test_escape_short_octal() {
 }
 
 #[test]
-fn test_escape_no_octal() {
+fn test_escape_nul() {
     new_ucmd!()
         .args(&["-e", "foo\\0 bar"])
         .succeeds()
-        .stdout_only("foo\\0 bar\n");
+        .stdout_only("foo\0 bar\n");
+}
+
+#[test]
+fn test_escape_octal_invalid_digit() {
+    new_ucmd!()
+        .args(&["-e", "foo\\08 bar"])
+        .succeeds()
+        .stdout_only("foo\u{0}8 bar\n");
 }
 
 #[test]

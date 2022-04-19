@@ -27,7 +27,7 @@ fn get_symlink_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
 }
 
 fn set_file_times(at: &AtPath, path: &str, atime: FileTime, mtime: FileTime) {
-    filetime::set_file_times(&at.plus_as_string(path), atime, mtime).unwrap()
+    filetime::set_file_times(&at.plus_as_string(path), atime, mtime).unwrap();
 }
 
 // Adjusts for local timezone
@@ -427,7 +427,7 @@ fn test_touch_mtime_dst_succeeds() {
 
     let target_time = str_to_filetime("%Y%m%d%H%M", "202103140300");
     let (_, mtime) = get_file_times(&at, file);
-    assert!(target_time == mtime);
+    assert_eq!(target_time, mtime);
 }
 
 // is_dst_switch_hour returns true if timespec ts is just before the switch
@@ -511,6 +511,27 @@ fn test_touch_no_such_file_error_msg() {
 }
 
 #[test]
+fn test_touch_changes_time_of_file_in_stdout() {
+    // command like: `touch - 1< ./c`
+    // should change the timestamp of c
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_changes_time_of_file_in_stdout";
+
+    at.touch(file);
+    assert!(at.file_exists(file));
+    let (_, mtime) = get_file_times(&at, file);
+
+    ucmd.args(&["-"])
+        .set_stdout(at.make_file(file))
+        .succeeds()
+        .no_stderr();
+
+    let (_, mtime_after) = get_file_times(&at, file);
+    assert!(mtime_after != mtime);
+}
+
+#[test]
 #[cfg(unix)]
 fn test_touch_permission_denied_error_msg() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -529,4 +550,26 @@ fn test_touch_permission_denied_error_msg() {
         "touch: cannot touch '{}': Permission denied",
         &full_path
     ));
+}
+
+#[test]
+fn test_touch_no_args() {
+    let mut ucmd = new_ucmd!();
+    ucmd.fails().stderr_only(
+        r##"touch: missing file operand
+Try 'touch --help' for more information."##,
+    );
+}
+
+#[test]
+fn test_no_dereference_no_file() {
+    new_ucmd!()
+        .args(&["-h", "not-a-file"])
+        .fails()
+        .stderr_contains("setting times of 'not-a-file': No such file or directory");
+    new_ucmd!()
+        .args(&["-h", "not-a-file-1", "not-a-file-2"])
+        .fails()
+        .stderr_contains("setting times of 'not-a-file-1': No such file or directory")
+        .stderr_contains("setting times of 'not-a-file-2': No such file or directory");
 }

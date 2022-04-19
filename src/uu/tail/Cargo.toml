@@ -1,13 +1,13 @@
 # spell-checker:ignore (libs) kqueue
 [package]
 name = "uu_tail"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tail ~ (uutils) display the last lines of input"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/tail"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tail"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -16,26 +16,17 @@ edition = "2018"
 path = "src/tail.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
+libc = "0.2.121"
 notify = { version = "5.0.0-pre.14", features=["macos_kqueue"]}
-libc = "0.2.42"
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["ringbuffer"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["ringbuffer", "lines"] }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version="0.3", features=["fileapi", "handleapi", "processthreadsapi", "synchapi", "winbase"] }
 
-[target.'cfg(target_os = "redox")'.dependencies]
-redox_syscall = "0.2"
-
 [target.'cfg(unix)'.dependencies]
-nix = "0.20"
-libc = "0.2"
+nix = "0.23.1"
 
 [[bin]]
 name = "tail"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-# Necessary for "make all"
-normal = ["uucore_procs"]

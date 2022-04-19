@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_join);
+uucore::bin!(uu_join);

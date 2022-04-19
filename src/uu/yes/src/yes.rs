@@ -13,17 +13,20 @@ use std::io::{self, Write};
 #[macro_use]
 extern crate clap;
 
-use clap::{App, Arg};
+use clap::{Arg, Command};
 use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod splice;
+
+const USAGE: &str = "{} [STRING]...";
 
 // it's possible that using a smaller or larger buffer might provide better performance on some
 // systems, but honestly this is good enough
 const BUF_SIZE: usize = 16 * 1024;
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
@@ -46,8 +49,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    app_from_crate!().arg(Arg::with_name("STRING").index(1).multiple(true))
+pub fn uu_app<'a>() -> Command<'a> {
+    command!()
+        .override_usage(format_usage(USAGE))
+        .arg(Arg::new("STRING").index(1).multiple_occurrences(true))
+        .infer_long_args(true)
 }
 
 fn prepare_buffer<'a>(input: &'a str, buffer: &'a mut [u8; BUF_SIZE]) -> &'a [u8] {

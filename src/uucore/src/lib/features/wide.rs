@@ -27,10 +27,10 @@ pub trait FromWide {
     fn from_wide_null(wide: &[u16]) -> Self;
 }
 impl FromWide for String {
-    fn from_wide(wide: &[u16]) -> String {
+    fn from_wide(wide: &[u16]) -> Self {
         OsString::from_wide(wide).to_string_lossy().into_owned()
     }
-    fn from_wide_null(wide: &[u16]) -> String {
+    fn from_wide_null(wide: &[u16]) -> Self {
         let len = wide.iter().take_while(|&&c| c != 0).count();
         OsString::from_wide(&wide[..len])
             .to_string_lossy()

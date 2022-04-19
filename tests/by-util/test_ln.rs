@@ -181,6 +181,33 @@ fn test_symlink_custom_backup_suffix() {
 }
 
 #[test]
+fn test_symlink_custom_backup_suffix_hyphen_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_symlink_custom_backup_suffix";
+    let link = "test_symlink_custom_backup_suffix_link";
+    let suffix = "-v";
+
+    at.touch(file);
+    at.symlink_file(file, link);
+    assert!(at.file_exists(file));
+    assert!(at.is_symlink(link));
+    assert_eq!(at.resolve_link(link), file);
+
+    let arg = &format!("--suffix={}", suffix);
+    ucmd.args(&["-b", arg, "-s", file, link])
+        .succeeds()
+        .no_stderr();
+    assert!(at.file_exists(file));
+
+    assert!(at.is_symlink(link));
+    assert_eq!(at.resolve_link(link), file);
+
+    let backup = &format!("{}{}", link, suffix);
+    assert!(at.is_symlink(backup));
+    assert_eq!(at.resolve_link(backup), file);
+}
+
+#[test]
 fn test_symlink_backup_numbering() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_symlink_backup_numbering";
@@ -587,4 +614,39 @@ fn test_relative_recursive() {
     at.mkdir("dir");
     ucmd.args(&["-sr", "dir", "dir/recursive"]).succeeds();
     assert_eq!(at.resolve_link("dir/recursive"), ".");
+}
+
+#[test]
+fn test_backup_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file1");
+    ucmd.args(&["--backup", "file1", "./file1"])
+        .fails()
+        .stderr_contains("n: failed to link 'file1' to './file1': Same file");
+}
+
+#[test]
+fn test_backup_force() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a", "a\n");
+    at.write("b", "b2\n");
+
+    scene.ucmd().args(&["-s", "b", "b~"]).succeeds().no_stderr();
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
+    assert!(at.file_exists("b~"));
+    scene
+        .ucmd()
+        .args(&["-f", "--b=simple", "a", "b"])
+        .succeeds()
+        .no_stderr();
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
+    assert!(at.file_exists("b~"));
+    assert_eq!(at.read("a"), "a\n");
+    assert_eq!(at.read("b"), "a\n");
+    // we should have the same content as b as we had time to do a backup
+    assert_eq!(at.read("b~"), "b2\n");
 }

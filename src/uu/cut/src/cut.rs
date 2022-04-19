@@ -11,21 +11,22 @@
 extern crate uucore;
 
 use bstr::io::BufReadExt;
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult, USimpleError};
 
 use self::searcher::Searcher;
 use uucore::ranges::Range;
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 mod searcher;
 
 static NAME: &str = "cut";
-static SYNTAX: &str =
-    "[-d] [-s] [-z] [--output-delimiter] ((-f|-b|-c) {{sequence}}) {{sourcefile}}+";
+static USAGE: &str =
+    "{} [-d] [-s] [-z] [--output-delimiter] ((-f|-b|-c) {{sequence}}) {{sourcefile}}+";
 static SUMMARY: &str =
     "Prints specified byte or field columns from each line of stdin or the input files";
 static LONG_HELP: &str = "
@@ -142,7 +143,7 @@ fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
     }
 }
 
-fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
+fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()> {
     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
     let buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
@@ -152,7 +153,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
         .map_or("", String::as_str)
         .as_bytes();
 
-    let res = buf_in.for_byte_record(newline_char, |line| {
+    let result = buf_in.for_byte_record(newline_char, |line| {
         let mut print_delim = false;
         for &Range { low, high } in ranges {
             if low > line.len() {
@@ -171,8 +172,12 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
         out.write_all(&[newline_char])?;
         Ok(true)
     });
-    crash_if_err!(1, res);
-    0
+
+    if let Err(e) = result {
+        return Err(USimpleError::new(1, e.to_string()));
+    }
+
+    Ok(())
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -183,7 +188,7 @@ fn cut_fields_delimiter<R: Read>(
     only_delimited: bool,
     newline_char: u8,
     out_delim: &str,
-) -> i32 {
+) -> UResult<()> {
     let buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
     let input_delim_len = delim.len();
@@ -246,12 +251,16 @@ fn cut_fields_delimiter<R: Read>(
         out.write_all(&[newline_char])?;
         Ok(true)
     });
-    crash_if_err!(1, result);
-    0
+
+    if let Err(e) = result {
+        return Err(USimpleError::new(1, e.to_string()));
+    }
+
+    Ok(())
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 {
+fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> UResult<()> {
     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
     if let Some(ref o_delim) = opts.out_delimiter {
         return cut_fields_delimiter(
@@ -323,13 +332,16 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 
         out.write_all(&[newline_char])?;
         Ok(true)
     });
-    crash_if_err!(1, result);
-    0
+
+    if let Err(e) = result {
+        return Err(USimpleError::new(1, e.to_string()));
+    }
+
+    Ok(())
 }
 
-fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
+fn cut_files(mut filenames: Vec<String>, mode: &Mode) -> UResult<()> {
     let mut stdin_read = false;
-    let mut exit_code = 0;
 
     if filenames.is_empty() {
         filenames.push("-".to_owned());
@@ -341,11 +353,11 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
                 continue;
             }
 
-            exit_code |= match mode {
+            show_if_err!(match mode {
                 Mode::Bytes(ref ranges, ref opts) => cut_bytes(stdin(), ranges, opts),
                 Mode::Characters(ref ranges, ref opts) => cut_bytes(stdin(), ranges, opts),
                 Mode::Fields(ref ranges, ref opts) => cut_fields(stdin(), ranges, opts),
-            };
+            });
 
             stdin_read = true;
         } else {
@@ -356,28 +368,20 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
                 continue;
             }
 
-            if path.metadata().is_err() {
-                show_error!("{}: No such file or directory", filename.maybe_quote());
-                continue;
-            }
-
-            let file = match File::open(&path) {
-                Ok(f) => f,
-                Err(e) => {
-                    show_error!("opening {}: {}", filename.quote(), e);
-                    continue;
-                }
-            };
-
-            exit_code |= match mode {
-                Mode::Bytes(ref ranges, ref opts) => cut_bytes(file, ranges, opts),
-                Mode::Characters(ref ranges, ref opts) => cut_bytes(file, ranges, opts),
-                Mode::Fields(ref ranges, ref opts) => cut_fields(file, ranges, opts),
-            };
+            show_if_err!(File::open(&path)
+                .map_err_context(|| filename.maybe_quote().to_string())
+                .and_then(|file| {
+                    match &mode {
+                        Mode::Bytes(ranges, opts) | Mode::Characters(ranges, opts) => {
+                            cut_bytes(file, ranges, opts)
+                        }
+                        Mode::Fields(ranges, opts) => cut_fields(file, ranges, opts),
+                    }
+                }));
         }
     }
 
-    exit_code
+    Ok(())
 }
 
 mod options {
@@ -392,7 +396,8 @@ mod options {
     pub const FILE: &str = "file";
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -462,12 +467,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                             delim = "=";
                         }
                         if delim.chars().count() > 1 {
-                            Err(msg_opt_invalid_should_be!(
-                                "empty or 1 character long",
-                                "a value 2 characters or longer",
-                                "--delimiter",
-                                "-d"
-                            ))
+                            Err("invalid input: The '--delimiter' ('-d') option expects empty or 1 character long, but was provided a value 2 characters or longer".into())
                         } else {
                             let delim = if delim.is_empty() {
                                 "\0".to_owned()
@@ -499,13 +499,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             })
         }
         (ref b, ref c, ref f) if b.is_some() || c.is_some() || f.is_some() => Err(
-            msg_expects_no_more_than_one_of!("--fields (-f)", "--chars (-c)", "--bytes (-b)"),
+            "invalid usage: expects no more than one of --fields (-f), --chars (-c) or --bytes (-b)".into()
         ),
-        _ => Err(msg_expects_one_of!(
-            "--fields (-f)",
-            "--chars (-c)",
-            "--bytes (-b)"
-        )),
+        _ => Err("invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)".into()),
     };
 
     let mode_parse = match mode_parse {
@@ -514,20 +510,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Mode::Bytes(_, _) | Mode::Characters(_, _)
                 if matches.is_present(options::DELIMITER) =>
             {
-                Err(msg_opt_only_usable_if!(
-                    "printing a sequence of fields",
-                    "--delimiter",
-                    "-d"
-                ))
+                Err("invalid input: The '--delimiter' ('-d') option only usable if printing a sequence of fields".into())
             }
             Mode::Bytes(_, _) | Mode::Characters(_, _)
                 if matches.is_present(options::ONLY_DELIMITED) =>
             {
-                Err(msg_opt_only_usable_if!(
-                    "printing a sequence of fields",
-                    "--only-delimited",
-                    "-s"
-                ))
+                Err("invalid input: The '--only-delimited' ('-s') option only usable if printing a sequence of fields".into())
             }
             _ => Ok(mode),
         },
@@ -540,24 +528,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect();
 
     match mode_parse {
-        Ok(mode) => cut_files(files, mode),
-        Err(err_msg) => {
-            show_error!("{}", err_msg);
-            1
-        }
+        Ok(mode) => cut_files(files, &mode),
+        Err(e) => Err(USimpleError::new(1, e)),
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .usage(SYNTAX)
+        .override_usage(format_usage(USAGE))
         .about(SUMMARY)
         .after_help(LONG_HELP)
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::BYTES)
-                .short("b")
+            Arg::new(options::BYTES)
+                .short('b')
                 .long(options::BYTES)
                 .takes_value(true)
                 .help("filter byte columns from the input source")
@@ -566,8 +552,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .display_order(1),
         )
         .arg(
-            Arg::with_name(options::CHARACTERS)
-                .short("c")
+            Arg::new(options::CHARACTERS)
+                .short('c')
                 .long(options::CHARACTERS)
                 .help("alias for character mode")
                 .takes_value(true)
@@ -576,8 +562,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .display_order(2),
         )
         .arg(
-            Arg::with_name(options::DELIMITER)
-                .short("d")
+            Arg::new(options::DELIMITER)
+                .short('d')
                 .long(options::DELIMITER)
                 .help("specify the delimiter character that separates fields in the input source. Defaults to Tab.")
                 .takes_value(true)
@@ -585,8 +571,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .display_order(3),
         )
         .arg(
-            Arg::with_name(options::FIELDS)
-                .short("f")
+            Arg::new(options::FIELDS)
+                .short('f')
                 .long(options::FIELDS)
                 .help("filter field columns from the input source")
                 .takes_value(true)
@@ -595,30 +581,30 @@ pub fn uu_app() -> App<'static, 'static> {
                 .display_order(4),
         )
         .arg(
-            Arg::with_name(options::COMPLEMENT)
+            Arg::new(options::COMPLEMENT)
                 .long(options::COMPLEMENT)
                 .help("invert the filter - instead of displaying only the filtered columns, display all but those columns")
                 .takes_value(false)
                 .display_order(5),
         )
         .arg(
-            Arg::with_name(options::ONLY_DELIMITED)
-            .short("s")
+            Arg::new(options::ONLY_DELIMITED)
+            .short('s')
                 .long(options::ONLY_DELIMITED)
                 .help("in field mode, only print lines which contain the delimiter")
                 .takes_value(false)
                 .display_order(6),
         )
         .arg(
-            Arg::with_name(options::ZERO_TERMINATED)
-            .short("z")
+            Arg::new(options::ZERO_TERMINATED)
+            .short('z')
                 .long(options::ZERO_TERMINATED)
                 .help("instead of filtering columns based on line, filter columns based on \\0 (NULL character)")
                 .takes_value(false)
                 .display_order(8),
         )
         .arg(
-            Arg::with_name(options::OUTPUT_DELIMITER)
+            Arg::new(options::OUTPUT_DELIMITER)
             .long(options::OUTPUT_DELIMITER)
                 .help("in field mode, replace the delimiter in output lines with this option's argument")
                 .takes_value(true)
@@ -626,8 +612,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .display_order(7),
         )
         .arg(
-            Arg::with_name(options::FILE)
-            .hidden(true)
-                .multiple(true)
+            Arg::new(options::FILE)
+            .hide(true)
+                .multiple_occurrences(true)
         )
 }

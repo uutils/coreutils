@@ -1,7 +1,6 @@
 // mods ~ cross-platforms modules (core/bundler file)
 
 pub mod backup_control;
-pub mod coreopts;
 pub mod display;
 pub mod error;
 pub mod os;

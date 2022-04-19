@@ -29,9 +29,9 @@ fn test_stdbuf_no_buffer_option_fails() {
 
     ts.ucmd().args(&["head"]).fails().stderr_is(&format!(
         "error: The following required arguments were not provided:\n    \
-         --error <MODE>\n    \
          --input <MODE>\n    \
-         --output <MODE>\n\n\
+         --output <MODE>\n    \
+         --error <MODE>\n\n\
          USAGE:\n    \
          {1} {0} OPTION... COMMAND\n\n\
          For more information try --help",
@@ -53,16 +53,10 @@ fn test_stdbuf_trailing_var_arg() {
 #[cfg(not(target_os = "windows"))]
 #[test]
 fn test_stdbuf_line_buffering_stdin_fails() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd()
+    new_ucmd!()
         .args(&["-i", "L", "head"])
         .fails()
-        .stderr_is(&format!(
-            "{0}: line buffering stdin is meaningless\nTry '{1} {0} --help' for more information.",
-            ts.util_name,
-            ts.bin_path.to_string_lossy()
-        ));
+        .usage_error("line buffering stdin is meaningless");
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -81,5 +75,15 @@ fn test_stdbuf_invalid_mode_fails() {
             .fails()
             .code_is(125)
             .stderr_contains("stdbuf: invalid mode '1Y': Value too large for defined data type");
+        #[cfg(target_pointer_width = "32")]
+        {
+            new_ucmd!()
+                .args(&[*option, "5GB", "head"])
+                .fails()
+                .code_is(125)
+                .stderr_contains(
+                    "stdbuf: invalid mode '5GB': Value too large for defined data type",
+                );
+        }
     }
 }

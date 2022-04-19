@@ -8,17 +8,20 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use retain_mut::RetainMut;
 use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::PathBuf;
 use uucore::display::Quotable;
+use uucore::error::UResult;
+use uucore::format_usage;
 
 #[cfg(unix)]
 use uucore::libc;
 
 static ABOUT: &str = "Copy standard input to each FILE, and also to standard output.";
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 mod options {
     pub const APPEND: &str = "append";
@@ -33,14 +36,9 @@ struct Options {
     files: Vec<String>,
 }
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
-}
-
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = usage();
-
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uu_app().get_matches_from(args);
 
     let options = Options {
         append: matches.is_present(options::APPEND),
@@ -51,30 +49,32 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             .unwrap_or_default(),
     };
 
-    match tee(options) {
-        Ok(_) => 0,
-        Err(_) => 1,
+    match tee(&options) {
+        Ok(_) => Ok(()),
+        Err(_) => Err(1.into()),
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .after_help("If a FILE is -, it refers to a file named - .")
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::APPEND)
+            Arg::new(options::APPEND)
                 .long(options::APPEND)
-                .short("a")
+                .short('a')
                 .help("append to the given FILEs, do not overwrite"),
         )
         .arg(
-            Arg::with_name(options::IGNORE_INTERRUPTS)
+            Arg::new(options::IGNORE_INTERRUPTS)
                 .long(options::IGNORE_INTERRUPTS)
-                .short("i")
+                .short('i')
                 .help("ignore interrupt signals (ignored on non-Unix platforms)"),
         )
-        .arg(Arg::with_name(options::FILE).multiple(true))
+        .arg(Arg::new(options::FILE).multiple_occurrences(true))
 }
 
 #[cfg(unix)]
@@ -92,9 +92,9 @@ fn ignore_interrupts() -> Result<()> {
     Ok(())
 }
 
-fn tee(options: Options) -> Result<()> {
+fn tee(options: &Options) -> Result<()> {
     if options.ignore_interrupts {
-        ignore_interrupts()?
+        ignore_interrupts()?;
     }
     let mut writers: Vec<NamedWriter> = options
         .files
@@ -164,7 +164,7 @@ impl MultiWriter {
 
 impl Write for MultiWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        self.writers.retain_mut(|writer| {
+        RetainMut::retain_mut(&mut self.writers, |writer| {
             let result = writer.write_all(buf);
             match result {
                 Err(f) => {
@@ -178,7 +178,7 @@ impl Write for MultiWriter {
     }
 
     fn flush(&mut self) -> Result<()> {
-        self.writers.retain_mut(|writer| {
+        RetainMut::retain_mut(&mut self.writers, |writer| {
             let result = writer.flush();
             match result {
                 Err(f) => {

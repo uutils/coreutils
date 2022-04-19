@@ -56,12 +56,12 @@ impl ExitStatus {
             use std::os::unix::process::ExitStatusExt;
 
             if let Some(signal) = status.signal() {
-                return ExitStatus::Signal(signal);
+                return Self::Signal(signal);
             }
         }
 
         // NOTE: this should never fail as we check if the program exited through a signal above
-        ExitStatus::Code(status.code().unwrap())
+        Self::Code(status.code().unwrap())
     }
 
     pub fn success(&self) -> bool {

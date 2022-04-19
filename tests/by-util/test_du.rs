@@ -179,15 +179,15 @@ fn test_du_hard_link() {
 
 #[cfg(target_vendor = "apple")]
 fn _du_hard_link(s: &str) {
-    assert_eq!(s, "12\tsubdir/links\n")
+    assert_eq!(s, "12\tsubdir/links\n");
 }
 #[cfg(target_os = "windows")]
 fn _du_hard_link(s: &str) {
-    assert_eq!(s, "8\tsubdir/links\n")
+    assert_eq!(s, "8\tsubdir/links\n");
 }
 #[cfg(target_os = "freebsd")]
 fn _du_hard_link(s: &str) {
-    assert_eq!(s, "16\tsubdir/links\n")
+    assert_eq!(s, "16\tsubdir/links\n");
 }
 #[cfg(all(
     not(target_vendor = "apple"),

@@ -50,6 +50,7 @@
 
 // spell-checker:ignore uioerror
 
+use clap;
 use std::{
     error::Error,
     fmt::{Display, Formatter},
@@ -139,7 +140,7 @@ pub type UResult<T> = Result<T, Box<dyn UError>>;
 /// The main routine would look like this:
 ///
 /// ```ignore
-/// #[uucore_procs::gen_uumain]
+/// #[uucore::main]
 /// pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 ///     // Perform computations here ...
 ///     return Err(LsError::InvalidLineWidth(String::from("test")).into())
@@ -265,7 +266,7 @@ impl<T> From<T> for Box<dyn UError>
 where
     T: UError + 'static,
 {
-    fn from(t: T) -> Box<dyn UError> {
+    fn from(t: T) -> Self {
         Box::new(t)
     }
 }
@@ -371,7 +372,7 @@ impl UError for UUsageError {
 /// ```
 #[derive(Debug)]
 pub struct UIoError {
-    context: String,
+    context: Option<String>,
     inner: std::io::Error,
 }
 
@@ -379,7 +380,7 @@ impl UIoError {
     #[allow(clippy::new_ret_no_self)]
     pub fn new<S: Into<String>>(kind: std::io::ErrorKind, context: S) -> Box<dyn UError> {
         Box::new(Self {
-            context: context.into(),
+            context: Some(context.into()),
             inner: kind.into(),
         })
     }
@@ -435,7 +436,11 @@ impl Display for UIoError {
             capitalize(&mut message);
             &message
         };
-        write!(f, "{}: {}", self.context, message)
+        if let Some(ctx) = &self.context {
+            write!(f, "{}: {}", ctx, message)
+        } else {
+            write!(f, "{}", message)
+        }
     }
 }
 
@@ -464,7 +469,7 @@ pub trait FromIo<T> {
 impl FromIo<Box<UIoError>> for std::io::Error {
     fn map_err_context(self, context: impl FnOnce() -> String) -> Box<UIoError> {
         Box::new(UIoError {
-            context: (context)(),
+            context: Some((context)()),
             inner: self,
         })
     }
@@ -479,9 +484,25 @@ impl<T> FromIo<UResult<T>> for std::io::Result<T> {
 impl FromIo<Box<UIoError>> for std::io::ErrorKind {
     fn map_err_context(self, context: impl FnOnce() -> String) -> Box<UIoError> {
         Box::new(UIoError {
-            context: (context)(),
+            context: Some((context)()),
             inner: std::io::Error::new(self, ""),
         })
+    }
+}
+
+impl From<std::io::Error> for UIoError {
+    fn from(f: std::io::Error) -> Self {
+        Self {
+            context: None,
+            inner: f,
+        }
+    }
+}
+
+impl From<std::io::Error> for Box<dyn UError> {
+    fn from(f: std::io::Error) -> Self {
+        let u_error: UIoError = f.into();
+        Box::new(u_error) as Self
     }
 }
 
@@ -593,5 +614,15 @@ impl UError for ExitCode {
 impl From<i32> for Box<dyn UError> {
     fn from(i: i32) -> Self {
         ExitCode::new(i)
+    }
+}
+
+/// Implementations for clap::Error
+impl UError for clap::Error {
+    fn code(&self) -> i32 {
+        match self.kind() {
+            clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion => 0,
+            _ => 1,
+        }
     }
 }

@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (methods) isnt
 
-#[macro_use]
-extern crate uucore;
-
 use std::{
     fs::File,
     io::{stdin, stdout, BufReader, Read, Stdout, Write},
@@ -20,7 +17,7 @@ use std::{
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 extern crate nix;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute, queue,
@@ -31,6 +28,7 @@ use crossterm::{
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
+use uucore::error::{UResult, USimpleError, UUsageError};
 
 const BELL: &str = "\x07";
 
@@ -51,7 +49,8 @@ pub mod options {
 
 const MULTI_FILE_TOP_PROMPT: &str = "::::::::::::::\n{}\n::::::::::::::\n";
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let mut buff = String::new();
@@ -65,92 +64,97 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let file = Path::new(file);
             if file.is_dir() {
                 terminal::disable_raw_mode().unwrap();
-                show_usage_error!("{} is a directory.", file.quote());
-                return 1;
+                return Err(UUsageError::new(
+                    1,
+                    format!("{} is a directory.", file.quote()),
+                ));
             }
             if !file.exists() {
                 terminal::disable_raw_mode().unwrap();
-                show_error!("cannot open {}: No such file or directory", file.quote());
-                return 1;
+                return Err(USimpleError::new(
+                    1,
+                    format!("cannot open {}: No such file or directory", file.quote()),
+                ));
             }
             if length > 1 {
                 buff.push_str(&MULTI_FILE_TOP_PROMPT.replace("{}", file.to_str().unwrap()));
             }
             let mut reader = BufReader::new(File::open(file).unwrap());
             reader.read_to_string(&mut buff).unwrap();
-            more(&buff, &mut stdout, next_file.copied(), silent);
+            more(&buff, &mut stdout, next_file.copied(), silent)?;
             buff.clear();
         }
         reset_term(&mut stdout);
     } else if atty::isnt(atty::Stream::Stdin) {
         stdin().read_to_string(&mut buff).unwrap();
         let mut stdout = setup_term();
-        more(&buff, &mut stdout, None, silent);
+        more(&buff, &mut stdout, None, silent)?;
         reset_term(&mut stdout);
     } else {
-        show_usage_error!("bad usage");
+        return Err(UUsageError::new(1, "bad usage"));
     }
-    0
+    Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .about("A file perusal filter for CRT viewing.")
         .version(crate_version!())
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::SILENT)
-                .short("d")
+            Arg::new(options::SILENT)
+                .short('d')
                 .long(options::SILENT)
                 .help("Display help instead of ringing bell"),
         )
         // The commented arguments below are unimplemented:
         /*
         .arg(
-            Arg::with_name(options::LOGICAL)
-                .short("f")
+            Arg::new(options::LOGICAL)
+                .short('f')
                 .long(options::LOGICAL)
                 .help("Count logical rather than screen lines"),
         )
         .arg(
-            Arg::with_name(options::NO_PAUSE)
-                .short("l")
+            Arg::new(options::NO_PAUSE)
+                .short('l')
                 .long(options::NO_PAUSE)
                 .help("Suppress pause after form feed"),
         )
         .arg(
-            Arg::with_name(options::PRINT_OVER)
-                .short("c")
+            Arg::new(options::PRINT_OVER)
+                .short('c')
                 .long(options::PRINT_OVER)
                 .help("Do not scroll, display text and clean line ends"),
         )
         .arg(
-            Arg::with_name(options::CLEAN_PRINT)
-                .short("p")
+            Arg::new(options::CLEAN_PRINT)
+                .short('p')
                 .long(options::CLEAN_PRINT)
                 .help("Do not scroll, clean screen and display text"),
         )
         .arg(
-            Arg::with_name(options::SQUEEZE)
-                .short("s")
+            Arg::new(options::SQUEEZE)
+                .short('s')
                 .long(options::SQUEEZE)
                 .help("Squeeze multiple blank lines into one"),
         )
         .arg(
-            Arg::with_name(options::PLAIN)
-                .short("u")
+            Arg::new(options::PLAIN)
+                .short('u')
                 .long(options::PLAIN)
                 .help("Suppress underlining and bold"),
         )
         .arg(
-            Arg::with_name(options::LINES)
-                .short("n")
+            Arg::new(options::LINES)
+                .short('n')
                 .long(options::LINES)
                 .value_name("number")
                 .takes_value(true)
                 .help("The number of lines per screen full"),
         )
         .arg(
-            Arg::with_name(options::NUMBER)
+            Arg::new(options::NUMBER)
                 .allow_hyphen_values(true)
                 .long(options::NUMBER)
                 .required(false)
@@ -158,8 +162,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("Same as --lines"),
         )
         .arg(
-            Arg::with_name(options::FROM_LINE)
-                .short("F")
+            Arg::new(options::FROM_LINE)
+                .short('F')
                 .allow_hyphen_values(true)
                 .required(false)
                 .takes_value(true)
@@ -167,8 +171,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("Display file beginning from line number"),
         )
         .arg(
-            Arg::with_name(options::PATTERN)
-                .short("P")
+            Arg::new(options::PATTERN)
+                .short('P')
                 .allow_hyphen_values(true)
                 .required(false)
                 .takes_value(true)
@@ -176,9 +180,9 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         */
         .arg(
-            Arg::with_name(options::FILES)
+            Arg::new(options::FILES)
                 .required(false)
-                .multiple(true)
+                .multiple_occurrences(true)
                 .help("Path to the files to be read"),
         )
 }
@@ -210,14 +214,14 @@ fn reset_term(stdout: &mut std::io::Stdout) {
 #[inline(always)]
 fn reset_term(_: &mut usize) {}
 
-fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) {
+fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) -> UResult<()> {
     let (cols, rows) = terminal::size().unwrap();
     let lines = break_buff(buff, usize::from(cols));
 
     let mut pager = Pager::new(rows, lines, next_file, silent);
     pager.draw(stdout, None);
     if pager.should_close() {
-        return;
+        return Ok(());
     }
 
     loop {
@@ -244,7 +248,7 @@ fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) 
                     modifiers: KeyModifiers::NONE,
                 }) => {
                     if pager.should_close() {
-                        return;
+                        return Ok(());
                     } else {
                         pager.page_down();
                     }
@@ -254,6 +258,22 @@ fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) 
                     modifiers: KeyModifiers::NONE,
                 }) => {
                     pager.page_up();
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Char('j'),
+                    modifiers: KeyModifiers::NONE,
+                }) => {
+                    if pager.should_close() {
+                        return Ok(());
+                    } else {
+                        pager.next_line();
+                    }
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Char('k'),
+                    modifiers: KeyModifiers::NONE,
+                }) => {
+                    pager.prev_line();
                 }
                 Event::Resize(col, row) => {
                     pager.page_resize(col, row);
@@ -301,11 +321,30 @@ impl<'a> Pager<'a> {
     }
 
     fn page_down(&mut self) {
+        // If the next page down position __after redraw__ is greater than the total line count,
+        // the upper mark must not grow past top of the screen at the end of the open file.
+        if self
+            .upper_mark
+            .saturating_add(self.content_rows as usize * 2)
+            .ge(&self.line_count)
+        {
+            self.upper_mark = self.line_count - self.content_rows as usize;
+            return;
+        }
+
         self.upper_mark = self.upper_mark.saturating_add(self.content_rows.into());
     }
 
     fn page_up(&mut self) {
         self.upper_mark = self.upper_mark.saturating_sub(self.content_rows.into());
+    }
+
+    fn next_line(&mut self) {
+        self.upper_mark = self.upper_mark.saturating_add(1);
+    }
+
+    fn prev_line(&mut self) {
+        self.upper_mark = self.upper_mark.saturating_sub(1);
     }
 
     // TODO: Deal with column size changes.

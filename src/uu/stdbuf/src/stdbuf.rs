@@ -10,21 +10,23 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
-use std::convert::TryFrom;
+use clap::{crate_version, Arg, ArgMatches, Command};
+use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::{self, Write};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process;
 use tempfile::tempdir;
 use tempfile::TempDir;
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parse_size::parse_size;
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static ABOUT: &str =
     "Run COMMAND, with modified buffering operations for its standard streams.\n\n\
      Mandatory arguments to long options are mandatory for short options too.";
+const USAGE: &str = "{} OPTION... COMMAND";
 static LONG_HELP: &str = "If MODE is 'L' the corresponding stream will be line buffered.\n\
      This option is invalid with standard input.\n\n\
      If MODE is '0' the corresponding stream will be unbuffered.\n\n\
@@ -39,16 +41,12 @@ static LONG_HELP: &str = "If MODE is 'L' the corresponding stream will be line b
 
 mod options {
     pub const INPUT: &str = "input";
-    pub const INPUT_SHORT: &str = "i";
+    pub const INPUT_SHORT: char = 'i';
     pub const OUTPUT: &str = "output";
-    pub const OUTPUT_SHORT: &str = "o";
+    pub const OUTPUT_SHORT: char = 'o';
     pub const ERROR: &str = "error";
-    pub const ERROR_SHORT: &str = "e";
+    pub const ERROR_SHORT: char = 'e';
     pub const COMMAND: &str = "command";
-}
-
-fn usage() -> String {
-    format!("{0} OPTION... COMMAND", uucore::execution_phrase())
 }
 
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
@@ -65,11 +63,11 @@ struct ProgramOptions {
     stderr: BufferType,
 }
 
-impl<'a> TryFrom<&ArgMatches<'a>> for ProgramOptions {
+impl<'a> TryFrom<&ArgMatches> for ProgramOptions {
     type Error = ProgramOptionsError;
 
     fn try_from(matches: &ArgMatches) -> Result<Self, Self::Error> {
-        Ok(ProgramOptions {
+        Ok(Self {
             stdin: check_option(matches, options::INPUT)?,
             stdout: check_option(matches, options::OUTPUT)?,
             stderr: check_option(matches, options::ERROR)?,
@@ -119,14 +117,21 @@ fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramO
             }
             x => parse_size(x).map_or_else(
                 |e| crash!(125, "invalid mode {}", e),
-                |m| Ok(BufferType::Size(m)),
+                |m| {
+                    Ok(BufferType::Size(m.try_into().map_err(|_| {
+                        ProgramOptionsError(format!(
+                            "invalid mode '{}': Value too large for defined data type",
+                            x
+                        ))
+                    })?))
+                },
             ),
         },
         None => Ok(BufferType::Default),
     }
 }
 
-fn set_command_env(command: &mut Command, buffer_name: &str, buffer_type: BufferType) {
+fn set_command_env(command: &mut process::Command, buffer_name: &str, buffer_type: &BufferType) {
     match buffer_type {
         BufferType::Size(m) => {
             command.env(buffer_name, m.to_string());
@@ -148,83 +153,84 @@ fn get_preload_env(tmp_dir: &mut TempDir) -> io::Result<(String, PathBuf)> {
     Ok((preload.to_owned(), inject_path))
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
-    let usage = usage();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
-    let options = ProgramOptions::try_from(&matches).unwrap_or_else(|e| {
-        crash!(
-            125,
-            "{}\nTry '{} --help' for more information.",
-            e.0,
-            uucore::execution_phrase()
-        )
-    });
+    let options = ProgramOptions::try_from(&matches).map_err(|e| UUsageError::new(125, e.0))?;
 
     let mut command_values = matches.values_of::<&str>(options::COMMAND).unwrap();
-    let mut command = Command::new(command_values.next().unwrap());
+    let mut command = process::Command::new(command_values.next().unwrap());
     let command_params: Vec<&str> = command_values.collect();
 
     let mut tmp_dir = tempdir().unwrap();
-    let (preload_env, libstdbuf) = crash_if_err!(1, get_preload_env(&mut tmp_dir));
+    let (preload_env, libstdbuf) = get_preload_env(&mut tmp_dir).map_err_context(String::new)?;
     command.env(preload_env, libstdbuf);
-    set_command_env(&mut command, "_STDBUF_I", options.stdin);
-    set_command_env(&mut command, "_STDBUF_O", options.stdout);
-    set_command_env(&mut command, "_STDBUF_E", options.stderr);
+    set_command_env(&mut command, "_STDBUF_I", &options.stdin);
+    set_command_env(&mut command, "_STDBUF_O", &options.stdout);
+    set_command_env(&mut command, "_STDBUF_E", &options.stderr);
     command.args(command_params);
 
-    let mut process = match command.spawn() {
-        Ok(p) => p,
-        Err(e) => crash!(1, "failed to execute process: {}", e),
-    };
-    match process.wait() {
-        Ok(status) => match status.code() {
-            Some(i) => i,
-            None => crash!(1, "process killed by signal {}", status.signal().unwrap()),
-        },
-        Err(e) => crash!(1, "{}", e),
+    let mut process = command
+        .spawn()
+        .map_err_context(|| "failed to execute process".to_string())?;
+    let status = process.wait().map_err_context(String::new)?;
+    match status.code() {
+        Some(i) => {
+            if i == 0 {
+                Ok(())
+            } else {
+                Err(i.into())
+            }
+        }
+        None => Err(USimpleError::new(
+            1,
+            format!("process killed by signal {}", status.signal().unwrap()),
+        )),
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
-        .setting(AppSettings::TrailingVarArg)
+        .override_usage(format_usage(USAGE))
+        .trailing_var_arg(true)
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::INPUT)
+            Arg::new(options::INPUT)
                 .long(options::INPUT)
                 .short(options::INPUT_SHORT)
                 .help("adjust standard input stream buffering")
                 .value_name("MODE")
-                .required_unless_one(&[options::OUTPUT, options::ERROR]),
+                .required_unless_present_any(&[options::OUTPUT, options::ERROR]),
         )
         .arg(
-            Arg::with_name(options::OUTPUT)
+            Arg::new(options::OUTPUT)
                 .long(options::OUTPUT)
                 .short(options::OUTPUT_SHORT)
                 .help("adjust standard output stream buffering")
                 .value_name("MODE")
-                .required_unless_one(&[options::INPUT, options::ERROR]),
+                .required_unless_present_any(&[options::INPUT, options::ERROR]),
         )
         .arg(
-            Arg::with_name(options::ERROR)
+            Arg::new(options::ERROR)
                 .long(options::ERROR)
                 .short(options::ERROR_SHORT)
                 .help("adjust standard error stream buffering")
                 .value_name("MODE")
-                .required_unless_one(&[options::INPUT, options::OUTPUT]),
+                .required_unless_present_any(&[options::INPUT, options::OUTPUT]),
         )
         .arg(
-            Arg::with_name(options::COMMAND)
-                .multiple(true)
+            Arg::new(options::COMMAND)
+                .multiple_occurrences(true)
                 .takes_value(true)
-                .hidden(true)
+                .hide(true)
                 .required(true),
         )
 }

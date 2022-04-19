@@ -1,3 +1,6 @@
+#[cfg(all(unix, not(target_os = "macos")))]
+use pretty_assertions::assert_ne;
+
 use crate::common::util::*;
 
 // spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars
@@ -178,7 +181,8 @@ fn test_file_one_long_word() {
         .stdout_is("    1     1 10001 10001 10000 onelongword.txt\n");
 }
 
-/// Test that the number of bytes in the file dictate the display width.
+/// Test that the total size of all the files in the input dictates
+/// the display width.
 ///
 /// The width in digits of any count is the width in digits of the
 /// number of bytes in the file, regardless of whether the number of
@@ -200,6 +204,27 @@ fn test_file_bytes_dictate_width() {
         .args(&["-lw", "emptyfile.txt"])
         .run()
         .stdout_is("0 0 emptyfile.txt\n");
+
+    // lorem_ipsum.txt contains 772 bytes, and alice_in_wonderland.txt contains
+    // 302 bytes. The total is 1074 bytes, which has a width of 4
+    new_ucmd!()
+        .args(&["-lwc", "alice_in_wonderland.txt", "lorem_ipsum.txt"])
+        .run()
+        .stdout_is(
+            "   5   57  302 alice_in_wonderland.txt\n  13  109  772 \
+                    lorem_ipsum.txt\n  18  166 1074 total\n",
+        );
+
+    // . is a directory, so minimum_width should get set to 7
+    #[cfg(not(windows))]
+    const STDOUT: &str = "      0       0       0 emptyfile.txt\n      0       0       0 \
+                          .\n      0       0       0 total\n";
+    #[cfg(windows)]
+    const STDOUT: &str = "      0       0       0 emptyfile.txt\n      0       0       0 total\n";
+    new_ucmd!()
+        .args(&["-lwc", "emptyfile.txt", "."])
+        .run()
+        .stdout_is(STDOUT);
 }
 
 /// Test that getting counts from a directory is an error.
@@ -231,6 +256,67 @@ fn test_read_from_nonexistent_file() {
     const MSG: &str = "bogusfile: The system cannot find the file specified";
     new_ucmd!()
         .args(&["bogusfile"])
+        .fails()
+        .stderr_contains(MSG)
+        .stdout_is("");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "macos")))]
+fn test_files_from_pseudo_filesystem() {
+    let result = new_ucmd!().arg("-c").arg("/proc/version").succeeds();
+    assert_ne!(result.stdout_str(), "0 /proc/version\n");
+}
+
+#[test]
+fn test_files0_disabled_files_argument() {
+    const MSG: &str = "file operands cannot be combined with --files0-from";
+    new_ucmd!()
+        .args(&["--files0-from=files0_list.txt"])
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .stderr_contains(MSG)
+        .stdout_is("");
+}
+
+#[test]
+fn test_files0_from() {
+    new_ucmd!()
+        .args(&["--files0-from=files0_list.txt"])
+        .run()
+        .stdout_is(
+            "  13  109  772 lorem_ipsum.txt\n  18  204 1115 moby_dick.txt\n   5   57  302 \
+             alice_in_wonderland.txt\n  36  370 2189 total\n",
+        );
+}
+
+#[test]
+fn test_files0_from_with_stdin() {
+    new_ucmd!()
+        .args(&["--files0-from=-"])
+        .pipe_in("lorem_ipsum.txt")
+        .run()
+        .stdout_is(" 13 109 772 lorem_ipsum.txt\n");
+}
+
+#[test]
+fn test_files0_from_with_stdin_in_file() {
+    new_ucmd!()
+        .args(&["--files0-from=files0_list_with_stdin.txt"])
+        .pipe_in_fixture("alice_in_wonderland.txt")
+        .run()
+        .stdout_is(
+            "     13     109     772 lorem_ipsum.txt\n     18     204    1115 moby_dick.txt\n      5      57     302 \
+             -\n     36     370    2189 total\n",
+        );
+}
+
+#[test]
+fn test_files0_from_with_stdin_try_read_from_stdin() {
+    const MSG: &str = "when reading file names from stdin, no file name of '-' allowed";
+    new_ucmd!()
+        .args(&["--files0-from=-"])
+        .pipe_in("-")
         .fails()
         .stderr_contains(MSG)
         .stdout_is("");

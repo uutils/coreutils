@@ -64,10 +64,10 @@ impl Error {
 
 pub(crate) fn report_full_error(mut err: &dyn std::error::Error) -> String {
     let mut desc = String::with_capacity(256);
-    write!(&mut desc, "{}", err).unwrap();
+    write!(desc, "{}", err).unwrap();
     while let Some(source) = err.source() {
         err = source;
-        write!(&mut desc, ". {}", err).unwrap();
+        write!(desc, ". {}", err).unwrap();
     }
     desc
 }

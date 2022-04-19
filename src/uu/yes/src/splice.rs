@@ -55,16 +55,13 @@ type Result<T> = std::result::Result<T, Error>;
 
 impl From<nix::Error> for Error {
     fn from(error: nix::Error) -> Self {
-        match error {
-            nix::Error::Sys(errno) => Error::Io(io::Error::from_raw_os_error(errno as i32)),
-            _ => Error::Io(io::Error::last_os_error()),
-        }
+        Self::Io(io::Error::from_raw_os_error(error as i32))
     }
 }
 
 fn maybe_unsupported(error: nix::Error) -> Error {
-    match error.as_errno() {
-        Some(Errno::EINVAL) | Some(Errno::ENOSYS) | Some(Errno::EBADF) => Error::Unsupported,
+    match error {
+        Errno::EINVAL | Errno::ENOSYS | Errno::EBADF => Error::Unsupported,
         _ => error.into(),
     }
 }

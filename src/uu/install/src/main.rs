@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_install);
+uucore::bin!(uu_install);

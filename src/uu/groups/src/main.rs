@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_groups);
+uucore::bin!(uu_groups);

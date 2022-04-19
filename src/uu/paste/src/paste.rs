@@ -7,14 +7,11 @@
 
 // spell-checker:ignore (ToDO) delim
 
-#[macro_use]
-extern crate uucore;
-
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use std::fs::File;
-use std::io::{stdin, BufRead, BufReader, Read};
-use std::iter::repeat;
+use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
 use std::path::Path;
+use uucore::error::{FromIo, UResult};
 
 static ABOUT: &str = "Write lines consisting of the sequentially corresponding lines from each
 FILE, separated by TABs, to standard output.";
@@ -36,120 +33,128 @@ fn read_line<R: Read>(
     }
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let serial = matches.is_present(options::SERIAL);
-    let delimiters = matches.value_of(options::DELIMITER).unwrap().to_owned();
+    let delimiters = matches.value_of(options::DELIMITER).unwrap();
     let files = matches
         .values_of(options::FILE)
         .unwrap()
         .map(|s| s.to_owned())
         .collect();
-    paste(files, serial, delimiters);
-
-    0
+    paste(files, serial, delimiters)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::SERIAL)
+            Arg::new(options::SERIAL)
                 .long(options::SERIAL)
-                .short("s")
+                .short('s')
                 .help("paste one file at a time instead of in parallel"),
         )
         .arg(
-            Arg::with_name(options::DELIMITER)
+            Arg::new(options::DELIMITER)
                 .long(options::DELIMITER)
-                .short("d")
+                .short('d')
                 .help("reuse characters from LIST instead of TABs")
                 .value_name("LIST")
                 .default_value("\t")
                 .hide_default_value(true),
         )
         .arg(
-            Arg::with_name(options::FILE)
+            Arg::new(options::FILE)
                 .value_name("FILE")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .default_value("-"),
         )
 }
 
-fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
-    let mut files: Vec<_> = filenames
-        .into_iter()
-        .map(|name| {
-            if name == "-" {
-                None
-            } else {
-                let r = crash_if_err!(1, File::open(Path::new(&name)));
-                Some(BufReader::new(r))
-            }
-        })
-        .collect();
+fn paste(filenames: Vec<String>, serial: bool, delimiters: &str) -> UResult<()> {
+    let mut files = Vec::with_capacity(filenames.len());
+    for name in filenames {
+        let file = if name == "-" {
+            None
+        } else {
+            let path = Path::new(&name);
+            let r = File::open(path).map_err_context(String::new)?;
+            Some(BufReader::new(r))
+        };
+        files.push(file);
+    }
 
-    let delimiters: Vec<String> = unescape(delimiters)
-        .chars()
-        .map(|x| x.to_string())
-        .collect();
+    let delimiters: Vec<char> = unescape(delimiters).chars().collect();
     let mut delim_count = 0;
+    let stdout = stdout();
+    let mut stdout = stdout.lock();
 
+    let mut output = String::new();
     if serial {
         for file in &mut files {
-            let mut output = String::new();
+            output.clear();
             loop {
-                let mut line = String::new();
-                match read_line(file.as_mut(), &mut line) {
+                match read_line(file.as_mut(), &mut output) {
                     Ok(0) => break,
                     Ok(_) => {
-                        output.push_str(line.trim_end());
-                        output.push_str(&delimiters[delim_count % delimiters.len()]);
+                        if output.ends_with('\n') {
+                            output.pop();
+                        }
+                        output.push(delimiters[delim_count % delimiters.len()]);
                     }
-                    Err(e) => crash!(1, "{}", e.to_string()),
+                    Err(e) => return Err(e.map_err_context(String::new)),
                 }
                 delim_count += 1;
             }
-            println!("{}", &output[..output.len() - 1]);
+            output.pop();
+            writeln!(stdout, "{}", output)?;
         }
     } else {
-        let mut eof: Vec<bool> = repeat(false).take(files.len()).collect();
+        let mut eof = vec![false; files.len()];
         loop {
-            let mut output = String::new();
+            output.clear();
             let mut eof_count = 0;
             for (i, file) in files.iter_mut().enumerate() {
                 if eof[i] {
                     eof_count += 1;
                 } else {
-                    let mut line = String::new();
-                    match read_line(file.as_mut(), &mut line) {
+                    match read_line(file.as_mut(), &mut output) {
                         Ok(0) => {
                             eof[i] = true;
                             eof_count += 1;
                         }
-                        Ok(_) => output.push_str(line.trim_end()),
-                        Err(e) => crash!(1, "{}", e.to_string()),
+                        Ok(_) => {
+                            if output.ends_with('\n') {
+                                output.pop();
+                            }
+                        }
+                        Err(e) => return Err(e.map_err_context(String::new)),
                     }
                 }
-                output.push_str(&delimiters[delim_count % delimiters.len()]);
+                output.push(delimiters[delim_count % delimiters.len()]);
                 delim_count += 1;
             }
             if files.len() == eof_count {
                 break;
             }
-            println!("{}", &output[..output.len() - 1]);
+            // Remove final delimiter
+            output.pop();
+            writeln!(stdout, "{}", output)?;
             delim_count = 0;
         }
     }
+    Ok(())
 }
 
 // Unescape all special characters
 // TODO: this will need work to conform to GNU implementation
-fn unescape(s: String) -> String {
+fn unescape(s: &str) -> String {
     s.replace("\\n", "\n")
         .replace("\\t", "\t")
         .replace("\\\\", "\\")
-        .replace("\\", "")
+        .replace('\\', "")
 }

@@ -10,29 +10,23 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use std::cmp;
 use std::fs::File;
 use std::io::{stdin, stdout, Write};
 use std::io::{BufReader, BufWriter, Read};
 use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::format_usage;
 
 use self::linebreak::break_lines;
 use self::parasplit::ParagraphStream;
-
-macro_rules! silent_unwrap(
-    ($exp:expr) => (
-        match $exp {
-            Ok(_) => (),
-            Err(_) => ::std::process::exit(1),
-        }
-    )
-);
 
 mod linebreak;
 mod parasplit;
 
 static ABOUT: &str = "Reformat paragraphs from input files (or stdin) to stdout.";
+const USAGE: &str = "{} [OPTION]... [FILE]...";
 static MAX_WIDTH: usize = 2500;
 
 static OPT_CROWN_MARGIN: &str = "crown-margin";
@@ -50,10 +44,6 @@ static OPT_QUICK: &str = "quick";
 static OPT_TAB_WIDTH: &str = "tab-width";
 
 static ARG_FILES: &str = "files";
-
-fn usage() -> String {
-    format!("{} [OPTION]... [FILE]...", uucore::execution_phrase())
-}
 
 pub type FileOrStdReader = BufReader<Box<dyn Read + 'static>>;
 pub struct FmtOptions {
@@ -74,11 +64,10 @@ pub struct FmtOptions {
     tabwidth: usize,
 }
 
+#[uucore::main]
 #[allow(clippy::cognitive_complexity)]
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = usage();
-
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uu_app().get_matches_from(args);
 
     let mut files: Vec<String> = matches
         .values_of(ARG_FILES)
@@ -133,15 +122,20 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         fmt_opts.width = match s.parse::<usize>() {
             Ok(t) => t,
             Err(e) => {
-                crash!(1, "Invalid WIDTH specification: {}: {}", s.quote(), e);
+                return Err(USimpleError::new(
+                    1,
+                    format!("Invalid WIDTH specification: {}: {}", s.quote(), e),
+                ));
             }
         };
         if fmt_opts.width > MAX_WIDTH {
-            crash!(
+            return Err(USimpleError::new(
                 1,
-                "invalid width: '{}': Numerical result out of range",
-                fmt_opts.width
-            );
+                format!(
+                    "invalid width: '{}': Numerical result out of range",
+                    fmt_opts.width,
+                ),
+            ));
         }
         fmt_opts.goal = cmp::min(fmt_opts.width * 94 / 100, fmt_opts.width - 3);
     };
@@ -150,13 +144,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         fmt_opts.goal = match s.parse::<usize>() {
             Ok(t) => t,
             Err(e) => {
-                crash!(1, "Invalid GOAL specification: {}: {}", s.quote(), e);
+                return Err(USimpleError::new(
+                    1,
+                    format!("Invalid GOAL specification: {}: {}", s.quote(), e),
+                ));
             }
         };
         if !matches.is_present(OPT_WIDTH) {
             fmt_opts.width = cmp::max(fmt_opts.goal * 100 / 94, fmt_opts.goal + 3);
         } else if fmt_opts.goal > fmt_opts.width {
-            crash!(1, "GOAL cannot be greater than WIDTH.");
+            return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
         }
     };
 
@@ -164,7 +161,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         fmt_opts.tabwidth = match s.parse::<usize>() {
             Ok(t) => t,
             Err(e) => {
-                crash!(1, "Invalid TABWIDTH specification: {}: {}", s.quote(), e);
+                return Err(USimpleError::new(
+                    1,
+                    format!("Invalid TABWIDTH specification: {}: {}", s.quote(), e),
+                ));
             }
         };
     };
@@ -197,27 +197,36 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         for para_result in p_stream {
             match para_result {
                 Err(s) => {
-                    silent_unwrap!(ostream.write_all(s.as_bytes()));
-                    silent_unwrap!(ostream.write_all(b"\n"));
+                    ostream
+                        .write_all(s.as_bytes())
+                        .map_err_context(|| "failed to write output".to_string())?;
+                    ostream
+                        .write_all(b"\n")
+                        .map_err_context(|| "failed to write output".to_string())?;
                 }
-                Ok(para) => break_lines(&para, &fmt_opts, &mut ostream),
+                Ok(para) => break_lines(&para, &fmt_opts, &mut ostream)
+                    .map_err_context(|| "failed to write output".to_string())?,
             }
         }
 
         // flush the output after each file
-        silent_unwrap!(ostream.flush());
+        ostream
+            .flush()
+            .map_err_context(|| "failed to write output".to_string())?;
     }
 
-    0
+    Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(OPT_CROWN_MARGIN)
-                .short("c")
+            Arg::new(OPT_CROWN_MARGIN)
+                .short('c')
                 .long(OPT_CROWN_MARGIN)
                 .help(
                     "First and second line of paragraph \
@@ -227,8 +236,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_TAGGED_PARAGRAPH)
-                .short("t")
+            Arg::new(OPT_TAGGED_PARAGRAPH)
+                .short('t')
                 .long("tagged-paragraph")
                 .help(
                     "Like -c, except that the first and second line of a paragraph *must* \
@@ -236,8 +245,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_PRESERVE_HEADERS)
-                .short("m")
+            Arg::new(OPT_PRESERVE_HEADERS)
+                .short('m')
                 .long("preserve-headers")
                 .help(
                     "Attempt to detect and preserve mail headers in the input. \
@@ -245,14 +254,14 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_SPLIT_ONLY)
-                .short("s")
+            Arg::new(OPT_SPLIT_ONLY)
+                .short('s')
                 .long("split-only")
                 .help("Split lines only, do not reflow."),
         )
         .arg(
-            Arg::with_name(OPT_UNIFORM_SPACING)
-                .short("u")
+            Arg::new(OPT_UNIFORM_SPACING)
+                .short('u')
                 .long("uniform-spacing")
                 .help(
                     "Insert exactly one \
@@ -263,8 +272,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_PREFIX)
-                .short("p")
+            Arg::new(OPT_PREFIX)
+                .short('p')
                 .long("prefix")
                 .help(
                     "Reformat only lines \
@@ -275,8 +284,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .value_name("PREFIX"),
         )
         .arg(
-            Arg::with_name(OPT_SKIP_PREFIX)
-                .short("P")
+            Arg::new(OPT_SKIP_PREFIX)
+                .short('P')
                 .long("skip-prefix")
                 .help(
                     "Do not reformat lines \
@@ -286,8 +295,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .value_name("PSKIP"),
         )
         .arg(
-            Arg::with_name(OPT_EXACT_PREFIX)
-                .short("x")
+            Arg::new(OPT_EXACT_PREFIX)
+                .short('x')
                 .long("exact-prefix")
                 .help(
                     "PREFIX must match at the \
@@ -295,8 +304,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_EXACT_SKIP_PREFIX)
-                .short("X")
+            Arg::new(OPT_EXACT_SKIP_PREFIX)
+                .short('X')
                 .long("exact-skip-prefix")
                 .help(
                     "PSKIP must match at the \
@@ -304,26 +313,26 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(OPT_WIDTH)
-                .short("w")
+            Arg::new(OPT_WIDTH)
+                .short('w')
                 .long("width")
                 .help("Fill output lines up to a maximum of WIDTH columns, default 79.")
                 .value_name("WIDTH"),
         )
         .arg(
-            Arg::with_name(OPT_GOAL)
-                .short("g")
+            Arg::new(OPT_GOAL)
+                .short('g')
                 .long("goal")
                 .help("Goal width, default ~0.94*WIDTH. Must be less than WIDTH.")
                 .value_name("GOAL"),
         )
-        .arg(Arg::with_name(OPT_QUICK).short("q").long("quick").help(
+        .arg(Arg::new(OPT_QUICK).short('q').long("quick").help(
             "Break lines more quickly at the \
             expense of a potentially more ragged appearance.",
         ))
         .arg(
-            Arg::with_name(OPT_TAB_WIDTH)
-                .short("T")
+            Arg::new(OPT_TAB_WIDTH)
+                .short('T')
                 .long("tab-width")
                 .help(
                     "Treat tabs as TABWIDTH spaces for \
@@ -332,5 +341,9 @@ pub fn uu_app() -> App<'static, 'static> {
                 )
                 .value_name("TABWIDTH"),
         )
-        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
+        .arg(
+            Arg::new(ARG_FILES)
+                .multiple_occurrences(true)
+                .takes_value(true),
+        )
 }

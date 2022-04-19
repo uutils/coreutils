@@ -1,66 +1,111 @@
 #!/bin/bash
+# `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
+#
+# UU_MAKE_PROFILE == 'debug' | 'release' ## build profile for *uutils* build; may be supplied by caller, defaults to 'debug'
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall gnulib inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode ; (vars/env) BUILDDIR SRCDIR
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules ; (vars/env) SRCDIR vdir rcexp
 
 set -e
-if test ! -d ../gnu; then
-    echo "Could not find ../gnu"
-    echo "git clone https://github.com:coreutils/coreutils.git gnu"
-    exit 1
-fi
-if test ! -d ../gnulib; then
-    echo "Could not find ../gnulib"
-    echo "git clone https://github.com/coreutils/gnulib.git gnulib"
+
+ME="${0}"
+ME_dir="$(dirname -- "$(readlink -fm -- "${ME}")")"
+REPO_main_dir="$(dirname -- "${ME_dir}")"
+
+echo "ME='${ME}'"
+echo "ME_dir='${ME_dir}'"
+echo "REPO_main_dir='${REPO_main_dir}'"
+
+### * config (from environment with fallback defaults); note: GNU is expected to be a sibling repo directory
+
+path_UUTILS=${path_UUTILS:-${REPO_main_dir}}
+path_GNU="$(readlink -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
+
+echo "path_UUTILS='${path_UUTILS}'"
+echo "path_GNU='${path_GNU}'"
+
+###
+
+if test ! -d "${path_GNU}"; then
+    echo "Could not find GNU (expected at '${path_GNU}')"
+    echo "git clone --recurse-submodules https://github.com/coreutils/coreutils.git \"${path_GNU}\""
     exit 1
 fi
 
+###
 
-pushd $(pwd)
-make PROFILE=release
-BUILDDIR="$PWD/target/release/"
-cp "${BUILDDIR}/install" "${BUILDDIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
+UU_MAKE_PROFILE=${UU_MAKE_PROFILE:-release}
+echo "UU_MAKE_PROFILE='${UU_MAKE_PROFILE}'"
+
+UU_BUILD_DIR="${path_UUTILS}/target/${UU_MAKE_PROFILE}"
+echo "UU_BUILD_DIR='${UU_BUILD_DIR}'"
+
+cd "${path_UUTILS}" && echo "[ pwd:'${PWD}' ]"
+SELINUX_ENABLED=1 make PROFILE="${UU_MAKE_PROFILE}"
+cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
 # Create *sum binaries
-for sum in b2sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum
-do
-    sum_path="${BUILDDIR}/${sum}"
-    test -f "${sum_path}" || cp "${BUILDDIR}/hashsum" "${sum_path}"
+for sum in b2sum b3sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum; do
+    sum_path="${UU_BUILD_DIR}/${sum}"
+    test -f "${sum_path}" || cp "${UU_BUILD_DIR}/hashsum" "${sum_path}"
 done
-test -f "${BUILDDIR}/[" || cp "${BUILDDIR}/test" "${BUILDDIR}/["
-popd
-GNULIB_SRCDIR="$PWD/../gnulib"
-pushd ../gnu/
+test -f "${UU_BUILD_DIR}/[" || cp "${UU_BUILD_DIR}/test" "${UU_BUILD_DIR}/["
+
+##
+
+cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
 
 # Any binaries that aren't built become `false` so their tests fail
-for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs)
-do
-    bin_path="${BUILDDIR}/${binary}"
-    test -f "${bin_path}" || { echo "'${binary}' was not built with uutils, using the 'false' program"; cp "${BUILDDIR}/false" "${bin_path}"; }
+for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
+    bin_path="${UU_BUILD_DIR}/${binary}"
+    test -f "${bin_path}" || {
+        echo "'${binary}' was not built with uutils, using the 'false' program"
+        cp "${UU_BUILD_DIR}/false" "${bin_path}"
+    }
 done
 
-./bootstrap --gnulib-srcdir="$GNULIB_SRCDIR"
+./bootstrap
 ./configure --quiet --disable-gcc-warnings
 #Add timeout to to protect against hangs
-sed -i 's|"\$@|/usr/bin/timeout 600 "\$@|' build-aux/test-driver
+sed -i 's|^"\$@|/usr/bin/timeout 600 "\$@|' build-aux/test-driver
 # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
-sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${BUILDDIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
+sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
 sed -i 's| tr | /usr/bin/tr |' tests/init.sh
 make -j "$(nproc)"
-# Generate the factor tests, so they can be fixed
-# Used to be 36. Reduced to 20 to decrease the log size
-for i in {00..20}
-do
-    make tests/factor/t${i}.sh
-done
-
-# strip the long stuff
-for i in {21..36}
-do
+# Handle generated factor tests
+t_first=00
+t_max=36
+# t_max_release=20
+# if test "${UU_MAKE_PROFILE}" != "debug"; then
+#     # Generate the factor tests, so they can be fixed
+#     # * reduced to 20 to decrease log size (down from 36 expected by GNU)
+#     # * only for 'release', skipped for 'debug' as redundant and too time consuming (causing timeout errors)
+#     seq=$(
+#         i=${t_first}
+#         while test "${i}" -le "${t_max_release}"; do
+#             printf '%02d ' $i
+#             i=$((i + 1))
+#         done
+#     )
+#     for i in ${seq}; do
+#         make "tests/factor/t${i}.sh"
+#     done
+#     cat
+#     sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*.sh
+#     t_first=$((t_max_release + 1))
+# fi
+# strip all (debug) or just the longer (release) factor tests from Makefile
+seq=$(
+    i=${t_first}
+    while test "${i}" -le "${t_max}"; do
+        printf '%02d ' ${i}
+        i=$((i + 1))
+    done
+)
+for i in ${seq}; do
+    echo "strip t${i}.sh from Makefile"
     sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
 done
 
-
 grep -rl 'path_prepend_' tests/* | xargs sed -i 's| path_prepend_ ./src||'
-sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*sh
 
 # Remove tests checking for --version & --help
 # Not really interesting for us and logs are too big
@@ -77,30 +122,22 @@ sed -i -e '/tests\/misc\/seq-precision.sh/ D' \
 sed -i '/INT_OFLOW/ D' tests/misc/printf.sh
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
-sed -i 's|stat|/usr/bin/stat|' tests/chgrp/basic.sh tests/cp/existing-perm-dir.sh tests/touch/60-seconds.sh tests/misc/sort-compress-proc.sh
-sed -i 's|ls -|/usr/bin/ls -|' tests/chgrp/posix-H.sh tests/chown/deref.sh tests/cp/same-file.sh tests/misc/mknod.sh tests/mv/part-symlink.sh tests/du/8gb.sh
-sed -i 's|mkdir |/usr/bin/mkdir |' tests/cp/existing-perm-dir.sh tests/rm/empty-inacc.sh
-sed -i 's|timeout \([[:digit:]]\)| /usr/bin/timeout \1|' tests/tail-2/inotify-rotate.sh tests/tail-2/inotify-dir-recreate.sh tests/tail-2/inotify-rotate-resources.sh tests/cp/parent-perm-race.sh tests/ls/infloop.sh tests/misc/sort-exit-early.sh tests/misc/sort-NaN-infloop.sh tests/misc/uniq-perf.sh tests/tail-2/inotify-only-regular.sh tests/tail-2/pipe-f2.sh tests/tail-2/retry.sh tests/tail-2/symlink.sh tests/tail-2/wait.sh tests/tail-2/pid.sh tests/dd/stats.sh tests/tail-2/follow-name.sh tests/misc/shuf.sh # Don't break the function called 'grep_timeout'
-sed -i 's|chmod |/usr/bin/chmod |' tests/du/inacc-dir.sh tests/mkdir/p-3.sh tests/tail-2/tail-n0f.sh tests/cp/fail-perm.sh tests/du/inaccessible-cwd.sh tests/mv/i-2.sh tests/chgrp/basic.sh tests/misc/shuf.sh
+sed -i 's|stat|/usr/bin/stat|' tests/touch/60-seconds.sh tests/misc/sort-compress-proc.sh
+sed -i 's|ls -|/usr/bin/ls -|' tests/cp/same-file.sh tests/misc/mknod.sh tests/mv/part-symlink.sh
+sed -i 's|chmod |/usr/bin/chmod |' tests/du/inacc-dir.sh tests/tail-2/tail-n0f.sh tests/cp/fail-perm.sh tests/mv/i-2.sh tests/misc/shuf.sh
 sed -i 's|sort |/usr/bin/sort |' tests/ls/hyperlink.sh tests/misc/test-N.sh
 sed -i 's|split |/usr/bin/split |' tests/misc/factor-parallel.sh
-sed -i 's|truncate |/usr/bin/truncate |' tests/split/fail.sh
-sed -i 's|dd |/usr/bin/dd |' tests/du/8gb.sh tests/tail-2/big-4gb.sh init.cfg
 sed -i 's|id -|/usr/bin/id -|' tests/misc/runcon-no-reorder.sh
-sed -i 's|touch |/usr/bin/touch |' tests/cp/preserve-link.sh tests/cp/reflink-perm.sh tests/ls/block-size.sh tests/ls/abmon-align.sh tests/ls/rt-1.sh tests/mv/update.sh tests/misc/ls-time.sh tests/misc/stat-nanoseconds.sh tests/misc/time-style.sh tests/misc/test-N.sh
+sed -i 's|touch |/usr/bin/touch |' tests/cp/preserve-link.sh tests/cp/reflink-perm.sh tests/ls/block-size.sh tests/mv/update.sh tests/misc/ls-time.sh tests/misc/stat-nanoseconds.sh tests/misc/time-style.sh tests/misc/test-N.sh
 sed -i 's|ln -|/usr/bin/ln -|' tests/cp/link-deref.sh
-sed -i 's|printf |/usr/bin/printf |' tests/dd/ascii.sh
 sed -i 's|cp |/usr/bin/cp |' tests/mv/hard-2.sh
 sed -i 's|paste |/usr/bin/paste |' tests/misc/od-endian.sh
-sed -i 's|seq |/usr/bin/seq |' tests/misc/sort-discrim.sh
 
 # Add specific timeout to tests that currently hang to limit time spent waiting
-sed -i 's|seq \$|/usr/bin/timeout 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh
-
+sed -i 's|\(^\s*\)seq \$|\1/usr/bin/timeout 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh
 
 # Remove dup of /usr/bin/ when executed several times
-grep -rl '/usr/bin//usr/bin/' tests/* | xargs --no-run-if-empty sed -i 's|/usr/bin//usr/bin/|/usr/bin/|g'
-
+grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs --no-run-if-empty sed -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
 
 #### Adjust tests to make them work with Rust/coreutils
 # in some cases, what we are doing in rust/coreutils is good (or better)
@@ -117,7 +154,7 @@ sed -i -e "s|rm: cannot remove 'a/1'|rm: cannot remove 'a'|g" tests/rm/rm2.sh
 
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
-test -f "${BUILDDIR}/getlimits" || cp src/getlimits "${BUILDDIR}"
+test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
 
 # When decoding an invalid base32/64 string, gnu writes everything it was able to decode until
 # it hit the decode error, while we don't write anything if the input is invalid.
@@ -133,3 +170,14 @@ sed -i "s/  {ERR_SUBST=>\"s\/(unrecognized|unknown) option \[-' \]\*foobar\[' \]
 
 # Remove the check whether a util was built. Otherwise tests against utils like "arch" are not run.
 sed -i "s|require_built_ |# require_built_ |g" init.cfg
+
+# with the option -/ is used, clap is returning a better error than GNU's. Adjust the GNU test
+sed -i -e "s~  grep \" '\*/'\*\" err || framework_failure_~  grep \" '*-/'*\" err || framework_failure_~" tests/misc/usage_vs_getopt.sh
+sed -i -e "s~  sed -n \"1s/'\\\/'/'OPT'/p\" < err >> pat || framework_failure_~  sed -n \"1s/'-\\\/'/'OPT'/p\" < err >> pat || framework_failure_~" tests/misc/usage_vs_getopt.sh
+# Ignore some binaries (not built)
+# And change the default error code to 2
+# see issue #3331
+sed -i -e "s/rcexp=1$/rcexp=2\n  case \"\$prg\" in chcon|dir|runcon|vdir) return;; esac/" tests/misc/usage_vs_getopt.sh
+
+# Update the GNU error message to match ours
+sed -i -e "s/ln: 'f' and 'f' are the same file/ln: failed to link 'f' to 'f': Same file/g" tests/ln/hard-backup.sh

@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (clap) DontDelimitTrailingValues
+// spell-checker:ignore (clap) dont
 // spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset mockstream nrofbytes partialreader odfunc multifile exitcode
 
 #[macro_use]
@@ -29,6 +29,7 @@ mod prn_float;
 mod prn_int;
 
 use std::cmp;
+use std::convert::TryFrom;
 
 use crate::byteorder_io::*;
 use crate::formatteriteminfo::*;
@@ -42,18 +43,20 @@ use crate::parse_nrofbytes::parse_number_of_bytes;
 use crate::partialreader::*;
 use crate::peekreader::*;
 use crate::prn_char::format_ascii_dump;
-use clap::{self, crate_version, AppSettings, Arg, ArgMatches};
+use clap::{crate_version, AppSettings, Arg, ArgMatches, Command};
 use uucore::display::Quotable;
+use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 use uucore::parse_size::ParseSizeError;
 use uucore::InvalidEncodingHandling;
 
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
 static ABOUT: &str = "dump files in octal and other formats";
 
-static USAGE: &str = r#"
-    od [OPTION]... [--] [FILENAME]...
-    od [-abcdDefFhHiIlLoOsxX] [FILENAME] [[+][0x]OFFSET[.][b]]
-    od --traditional [OPTION]... [FILENAME] [[+][0x]OFFSET[.][b] [[+][0x]LABEL[.][b]]]"#;
+static USAGE: &str = "\
+    {} [OPTION]... [--] [FILENAME]...
+    {} [-abcdDefFhHiIlLoOsxX] [FILENAME] [[+][0x]OFFSET[.][b]]
+    {} --traditional [OPTION]... [FILENAME] [[+][0x]OFFSET[.][b] [[+][0x]LABEL[.][b]]]";
 
 static LONG_HELP: &str = r#"
 Displays data in various human-readable formats. If multiple formats are
@@ -95,6 +98,7 @@ If an error occurred, a diagnostic message will be printed to stderr, and the
 exitcode will be non-zero."#;
 
 pub(crate) mod options {
+    pub const HELP: &str = "help";
     pub const ADDRESS_RADIX: &str = "address-radix";
     pub const SKIP_BYTES: &str = "skip-bytes";
     pub const READ_BYTES: &str = "read-bytes";
@@ -109,9 +113,9 @@ pub(crate) mod options {
 
 struct OdOptions {
     byte_order: ByteOrder,
-    skip_bytes: usize,
-    read_bytes: Option<usize>,
-    label: Option<usize>,
+    skip_bytes: u64,
+    read_bytes: Option<u64>,
+    label: Option<u64>,
     input_strings: Vec<String>,
     formats: Vec<ParsedFormatterItemInfo>,
     line_bytes: usize,
@@ -120,25 +124,36 @@ struct OdOptions {
 }
 
 impl OdOptions {
-    fn new(matches: ArgMatches, args: Vec<String>) -> Result<OdOptions, String> {
+    fn new(matches: &ArgMatches, args: &[String]) -> UResult<Self> {
         let byte_order = match matches.value_of(options::ENDIAN) {
             None => ByteOrder::Native,
             Some("little") => ByteOrder::Little,
             Some("big") => ByteOrder::Big,
             Some(s) => {
-                return Err(format!("Invalid argument --endian={}", s));
+                return Err(USimpleError::new(
+                    1,
+                    format!("Invalid argument --endian={}", s),
+                ));
             }
         };
 
-        let mut skip_bytes = matches.value_of(options::SKIP_BYTES).map_or(0, |s| {
-            parse_number_of_bytes(s).unwrap_or_else(|e| {
-                crash!(1, "{}", format_error_message(e, s, options::SKIP_BYTES))
-            })
-        });
+        let mut skip_bytes = match matches.value_of(options::SKIP_BYTES) {
+            None => 0,
+            Some(s) => match parse_number_of_bytes(s) {
+                Ok(n) => n,
+                Err(e) => {
+                    return Err(USimpleError::new(
+                        1,
+                        format_error_message(&e, s, options::SKIP_BYTES),
+                    ))
+                }
+            },
+        };
 
-        let mut label: Option<usize> = None;
+        let mut label: Option<u64> = None;
 
-        let parsed_input = parse_inputs(&matches).map_err(|e| format!("Invalid inputs: {}", e))?;
+        let parsed_input = parse_inputs(matches)
+            .map_err(|e| USimpleError::new(1, format!("Invalid inputs: {}", e)))?;
         let input_strings = match parsed_input {
             CommandLineInputs::FileNames(v) => v,
             CommandLineInputs::FileAndOffset((f, s, l)) => {
@@ -148,15 +163,27 @@ impl OdOptions {
             }
         };
 
-        let formats = parse_format_flags(&args)?;
+        let formats = parse_format_flags(args).map_err(|e| USimpleError::new(1, e))?;
 
-        let mut line_bytes = matches.value_of(options::WIDTH).map_or(16, |s| {
-            if matches.occurrences_of(options::WIDTH) == 0 {
-                return 16;
-            };
-            parse_number_of_bytes(s)
-                .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::WIDTH)))
-        });
+        let mut line_bytes = match matches.value_of(options::WIDTH) {
+            None => 16,
+            Some(s) => {
+                if matches.occurrences_of(options::WIDTH) == 0 {
+                    16
+                } else {
+                    match parse_number_of_bytes(s) {
+                        Ok(n) => usize::try_from(n)
+                            .map_err(|_| USimpleError::new(1, format!("‘{}‘ is too large", s)))?,
+                        Err(e) => {
+                            return Err(USimpleError::new(
+                                1,
+                                format_error_message(&e, s, options::WIDTH),
+                            ))
+                        }
+                    }
+                }
+            }
+        };
 
         let min_bytes = formats.iter().fold(1, |max, next| {
             cmp::max(max, next.formatter_item_info.byte_size)
@@ -168,18 +195,28 @@ impl OdOptions {
 
         let output_duplicates = matches.is_present(options::OUTPUT_DUPLICATES);
 
-        let read_bytes = matches.value_of(options::READ_BYTES).map(|s| {
-            parse_number_of_bytes(s).unwrap_or_else(|e| {
-                crash!(1, "{}", format_error_message(e, s, options::READ_BYTES))
-            })
-        });
+        let read_bytes = match matches.value_of(options::READ_BYTES) {
+            None => None,
+            Some(s) => match parse_number_of_bytes(s) {
+                Ok(n) => Some(n),
+                Err(e) => {
+                    return Err(USimpleError::new(
+                        1,
+                        format_error_message(&e, s, options::READ_BYTES),
+                    ))
+                }
+            },
+        };
 
         let radix = match matches.value_of(options::ADDRESS_RADIX) {
             None => Radix::Octal,
             Some(s) => {
                 let st = s.as_bytes();
                 if st.len() != 1 {
-                    return Err("Radix must be one of [d, o, n, x]".to_string());
+                    return Err(USimpleError::new(
+                        1,
+                        "Radix must be one of [d, o, n, x]".to_string(),
+                    ));
                 } else {
                     let radix: char =
                         *(st.get(0).expect("byte string of length 1 lacks a 0th elem")) as char;
@@ -188,13 +225,18 @@ impl OdOptions {
                         'x' => Radix::Hexadecimal,
                         'o' => Radix::Octal,
                         'n' => Radix::NoPrefix,
-                        _ => return Err("Radix must be one of [d, o, n, x]".to_string()),
+                        _ => {
+                            return Err(USimpleError::new(
+                                1,
+                                "Radix must be one of [d, o, n, x]".to_string(),
+                            ))
+                        }
                     }
                 }
             }
         };
 
-        Ok(OdOptions {
+        Ok(Self {
             byte_order,
             skip_bytes,
             read_bytes,
@@ -210,7 +252,8 @@ impl OdOptions {
 
 /// parses and validates command line parameters, prepares data structures,
 /// opens the input and calls `odfunc` to process the input.
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -221,12 +264,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .clone() // Clone to reuse clap_opts to print help
         .get_matches_from(args.clone());
 
-    let od_options = match OdOptions::new(clap_matches, args) {
-        Err(s) => {
-            crash!(1, "{}", s);
-        }
-        Ok(o) => o,
-    };
+    let od_options = OdOptions::new(&clap_matches, &args)?;
 
     let mut input_offset =
         InputOffset::new(od_options.radix, od_options.skip_bytes, od_options.label);
@@ -252,229 +290,231 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     odfunc(&mut input_offset, &mut input_decoder, &output_info)
 }
 
-pub fn uu_app() -> clap::App<'static, 'static> {
-    clap::App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(USAGE)
+        .override_usage(format_usage(USAGE))
         .after_help(LONG_HELP)
+        .trailing_var_arg(true)
+        .dont_delimit_trailing_values(true)
+        .infer_long_args(true)
+        .setting(AppSettings::DeriveDisplayOrder)
         .arg(
-            Arg::with_name(options::ADDRESS_RADIX)
-                .short("A")
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information.")
+        )
+        .arg(
+            Arg::new(options::ADDRESS_RADIX)
+                .short('A')
                 .long(options::ADDRESS_RADIX)
                 .help("Select the base in which file offsets are printed.")
                 .value_name("RADIX"),
         )
         .arg(
-            Arg::with_name(options::SKIP_BYTES)
-                .short("j")
+            Arg::new(options::SKIP_BYTES)
+                .short('j')
                 .long(options::SKIP_BYTES)
                 .help("Skip bytes input bytes before formatting and writing.")
                 .value_name("BYTES"),
         )
         .arg(
-            Arg::with_name(options::READ_BYTES)
-                .short("N")
+            Arg::new(options::READ_BYTES)
+                .short('N')
                 .long(options::READ_BYTES)
                 .help("limit dump to BYTES input bytes")
                 .value_name("BYTES"),
         )
         .arg(
-            Arg::with_name(options::ENDIAN)
+            Arg::new(options::ENDIAN)
                 .long(options::ENDIAN)
                 .help("byte order to use for multi-byte formats")
                 .possible_values(&["big", "little"])
                 .value_name("big|little"),
         )
         .arg(
-            Arg::with_name(options::STRINGS)
-                .short("S")
+            Arg::new(options::STRINGS)
+                .short('S')
                 .long(options::STRINGS)
                 .help(
                     "NotImplemented: output strings of at least BYTES graphic chars. 3 is assumed when \
                      BYTES is not specified.",
                 )
-                .default_value("3")
+                .default_missing_value("3")
                 .value_name("BYTES"),
         )
         .arg(
-            Arg::with_name("a")
-                .short("a")
+            Arg::new("a")
+                .short('a')
                 .help("named characters, ignoring high-order bit")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("b")
-                .short("b")
+            Arg::new("b")
+                .short('b')
                 .help("octal bytes")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("c")
-                .short("c")
+            Arg::new("c")
+                .short('c')
                 .help("ASCII characters or backslash escapes")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("d")
-                .short("d")
+            Arg::new("d")
+                .short('d')
                 .help("unsigned decimal 2-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("D")
-                .short("D")
+            Arg::new("D")
+                .short('D')
                 .help("unsigned decimal 4-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("o")
-                .short("o")
+            Arg::new("o")
+                .short('o')
                 .help("octal 2-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("I")
-                .short("I")
+            Arg::new("I")
+                .short('I')
                 .help("decimal 8-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("L")
-                .short("L")
+            Arg::new("L")
+                .short('L')
                 .help("decimal 8-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("i")
-                .short("i")
+            Arg::new("i")
+                .short('i')
                 .help("decimal 4-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("l")
-                .short("l")
+            Arg::new("l")
+                .short('l')
                 .help("decimal 8-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("x")
-                .short("x")
+            Arg::new("x")
+                .short('x')
                 .help("hexadecimal 2-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("h")
-                .short("h")
+            Arg::new("h")
+                .short('h')
                 .help("hexadecimal 2-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("O")
-                .short("O")
+            Arg::new("O")
+                .short('O')
                 .help("octal 4-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("s")
-                .short("s")
+            Arg::new("s")
+                .short('s')
                 .help("decimal 2-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("X")
-                .short("X")
+            Arg::new("X")
+                .short('X')
                 .help("hexadecimal 4-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("H")
-                .short("H")
+            Arg::new("H")
+                .short('H')
                 .help("hexadecimal 4-byte units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("e")
-                .short("e")
+            Arg::new("e")
+                .short('e')
                 .help("floating point double precision (64-bit) units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("f")
-                .short("f")
+            Arg::new("f")
+                .short('f')
                 .help("floating point double precision (32-bit) units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name("F")
-                .short("F")
+            Arg::new("F")
+                .short('F')
                 .help("floating point double precision (64-bit) units")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::FORMAT)
-                .short("t")
-                .long(options::FORMAT)
+            Arg::new(options::FORMAT)
+                .short('t')
+                .long("format")
                 .help("select output format or formats")
-                .multiple(true)
+                .multiple_occurrences(true)
                 .number_of_values(1)
                 .value_name("TYPE"),
         )
         .arg(
-            Arg::with_name(options::OUTPUT_DUPLICATES)
-                .short("v")
+            Arg::new(options::OUTPUT_DUPLICATES)
+                .short('v')
                 .long(options::OUTPUT_DUPLICATES)
                 .help("do not use * to mark line suppression")
-                .takes_value(false)
-                .possible_values(&["big", "little"]),
+                .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::WIDTH)
-                .short("w")
+            Arg::new(options::WIDTH)
+                .short('w')
                 .long(options::WIDTH)
                 .help(
                     "output BYTES bytes per output line. 32 is implied when BYTES is not \
                      specified.",
                 )
-                .default_value("32")
+                .default_missing_value("32")
                 .value_name("BYTES"),
         )
         .arg(
-            Arg::with_name(options::TRADITIONAL)
+            Arg::new(options::TRADITIONAL)
                 .long(options::TRADITIONAL)
                 .help("compatibility mode with one input, offset and label.")
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::FILENAME)
-                .hidden(true)
-                .multiple(true),
+            Arg::new(options::FILENAME)
+                .hide(true)
+                .multiple_occurrences(true),
         )
-        .settings(&[
-            AppSettings::TrailingVarArg,
-            AppSettings::DontDelimitTrailingValues,
-            AppSettings::DisableVersion,
-            AppSettings::DeriveDisplayOrder,
-        ])
 }
 
 /// Loops through the input line by line, calling print_bytes to take care of the output.
@@ -482,7 +522,7 @@ fn odfunc<I>(
     input_offset: &mut InputOffset,
     input_decoder: &mut InputDecoder<I>,
     output_info: &OutputInfo,
-) -> i32
+) -> UResult<()>
 where
     I: PeekRead + HasError,
 {
@@ -535,20 +575,20 @@ where
                     );
                 }
 
-                input_offset.increase_position(length);
+                input_offset.increase_position(length as u64);
             }
             Err(e) => {
                 show_error!("{}", e);
                 input_offset.print_final_offset();
-                return 1;
+                return Err(1.into());
             }
         };
     }
 
     if input_decoder.has_error() {
-        1
+        Err(1.into())
     } else {
-        0
+        Ok(())
     }
 }
 
@@ -614,8 +654,8 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
 /// `read_bytes` is an optional limit to the number of bytes to read
 fn open_input_peek_reader(
     input_strings: &[String],
-    skip_bytes: usize,
-    read_bytes: Option<usize>,
+    skip_bytes: u64,
+    read_bytes: Option<u64>,
 ) -> PeekReader<PartialReader<MultifileReader>> {
     // should return  "impl PeekRead + Read + HasError" when supported in (stable) rust
     let inputs = input_strings
@@ -631,7 +671,7 @@ fn open_input_peek_reader(
     PeekReader::new(pr)
 }
 
-fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
+fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
     // GNU's od echos affected flag, -N or --read-bytes (-j or --skip-bytes, etc.), depending user's selection
     // GNU's od does distinguish between "invalid (suffix in) argument"

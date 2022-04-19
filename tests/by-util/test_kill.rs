@@ -13,8 +13,8 @@ impl Target {
     // Creates a target that will naturally die after some time if not killed
     // fast enough.
     // This timeout avoids hanging failing tests.
-    fn new() -> Target {
-        Target {
+    fn new() -> Self {
+        Self {
             child: Command::new("sleep")
                 .arg("30")
                 .spawn()

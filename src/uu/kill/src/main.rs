@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_kill);
+uucore::bin!(uu_kill);

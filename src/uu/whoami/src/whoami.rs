@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate clap;
 
-use clap::App;
+use clap::Command;
 
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
@@ -19,7 +19,7 @@ mod platform;
 
 static ABOUT: &str = "Print the current username.";
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     uu_app().get_matches_from(args);
     let username = platform::get_username().map_err_context(|| "failed to get username".into())?;
@@ -27,8 +27,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .infer_long_args(true)
 }

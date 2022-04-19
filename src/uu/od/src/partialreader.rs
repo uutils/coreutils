@@ -15,16 +15,16 @@ const MAX_SKIP_BUFFER: usize = 16 * 1024;
 /// number of bytes.
 pub struct PartialReader<R> {
     inner: R,
-    skip: usize,
-    limit: Option<usize>,
+    skip: u64,
+    limit: Option<u64>,
 }
 
 impl<R> PartialReader<R> {
     /// Create a new `PartialReader` wrapping `inner`, which will skip
     /// `skip` bytes, and limits the output to `limit` bytes. Set `limit`
     /// to `None` if there should be no limit.
-    pub fn new(inner: R, skip: usize, limit: Option<usize>) -> Self {
-        PartialReader { inner, skip, limit }
+    pub fn new(inner: R, skip: u64, limit: Option<u64>) -> Self {
+        Self { inner, skip, limit }
     }
 }
 
@@ -34,7 +34,7 @@ impl<R: Read> Read for PartialReader<R> {
             let mut bytes = [0; MAX_SKIP_BUFFER];
 
             while self.skip > 0 {
-                let skip_count = cmp::min(self.skip, MAX_SKIP_BUFFER);
+                let skip_count: usize = cmp::min(self.skip as usize, MAX_SKIP_BUFFER);
 
                 match self.inner.read(&mut bytes[..skip_count])? {
                     0 => {
@@ -44,7 +44,7 @@ impl<R: Read> Read for PartialReader<R> {
                             "tried to skip past end of input",
                         ));
                     }
-                    n => self.skip -= n,
+                    n => self.skip -= n as u64,
                 }
             }
         }
@@ -53,15 +53,15 @@ impl<R: Read> Read for PartialReader<R> {
             None => self.inner.read(out),
             Some(0) => Ok(0),
             Some(ref mut limit) => {
-                let slice = if *limit > out.len() {
+                let slice = if *limit > (out.len() as u64) {
                     out
                 } else {
-                    &mut out[0..*limit]
+                    &mut out[0..(*limit as usize)]
                 };
                 match self.inner.read(slice) {
                     Err(e) => Err(e),
                     Ok(r) => {
-                        *limit -= r;
+                        *limit -= r as u64;
                         Ok(r)
                     }
                 }
@@ -145,7 +145,11 @@ mod tests {
     fn test_read_skipping_huge_number() {
         let mut v = [0; 10];
         // test if it does not eat all memory....
-        let mut sut = PartialReader::new(Cursor::new(&b"abcdefgh"[..]), usize::max_value(), None);
+        let mut sut = PartialReader::new(
+            Cursor::new(&b"abcdefgh"[..]),
+            usize::max_value() as u64,
+            None,
+        );
 
         sut.read(v.as_mut()).unwrap_err();
     }

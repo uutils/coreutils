@@ -91,7 +91,7 @@ fn test_head_count() {
         result_seq.iter().all(|x| input_seq.contains(x)),
         "Output includes element not from input: {}",
         result.stdout_str()
-    )
+    );
 }
 
 #[test]
@@ -129,7 +129,7 @@ fn test_repeat() {
             .iter()
             .filter(|x| !input_seq.contains(x))
             .collect::<Vec<&i32>>()
-    )
+    );
 }
 
 #[test]
@@ -154,9 +154,7 @@ fn test_shuf_echo_and_input_range_not_allowed() {
     new_ucmd!()
         .args(&["-e", "0", "-i", "0-2"])
         .fails()
-        .stderr_contains(
-            "The argument '--input-range <LO-HI>' cannot be used with '--echo <ARG>...'",
-        );
+        .stderr_contains("cannot be used with");
 }
 
 #[test]
@@ -164,7 +162,7 @@ fn test_shuf_input_range_and_file_not_allowed() {
     new_ucmd!()
         .args(&["-i", "0-9", "file"])
         .fails()
-        .stderr_contains("The argument '<file>' cannot be used with '--input-range <LO-HI>'");
+        .stderr_contains("cannot be used with");
 }
 
 #[test]
@@ -197,4 +195,20 @@ fn test_shuf_invalid_input_line_count() {
         .args(&["-n", "a"])
         .fails()
         .stderr_contains("invalid line count: 'a'");
+}
+
+#[test]
+fn test_shuf_multiple_input_line_count() {
+    let result = new_ucmd!()
+        .args(&["-i10-200", "-n", "10", "-n", "5"])
+        .succeeds();
+
+    result.no_stderr();
+
+    let result_count = result
+        .stdout_str()
+        .split('\n')
+        .filter(|x| !x.is_empty())
+        .count();
+    assert_eq!(result_count, 5, "Output should have 5 items");
 }

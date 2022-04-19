@@ -25,11 +25,12 @@ pub struct ProcessChecker {
 }
 
 impl ProcessChecker {
-    pub fn new(process_id: self::Pid) -> ProcessChecker {
-        ProcessChecker { pid: process_id }
+    pub fn new(process_id: self::Pid) -> Self {
+        Self { pid: process_id }
     }
 
     // Borrowing mutably to be aligned with Windows implementation
+    #[allow(clippy::wrong_self_convention)]
     pub fn is_dead(&mut self) -> bool {
         unsafe { libc::kill(self.pid, 0) != 0 && get_errno() != libc::EPERM }
     }

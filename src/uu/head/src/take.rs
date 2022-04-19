@@ -28,7 +28,7 @@ pub struct TakeAllBut<I: Iterator> {
 }
 
 impl<I: Iterator> TakeAllBut<I> {
-    pub fn new(mut iter: I, n: usize) -> TakeAllBut<I> {
+    pub fn new(mut iter: I, n: usize) -> Self {
         // Create a new ring buffer and fill it up.
         //
         // If there are fewer than `n` elements in `iter`, then we
@@ -44,7 +44,7 @@ impl<I: Iterator> TakeAllBut<I> {
             };
             buf.push_back(value);
         }
-        TakeAllBut { iter, buf }
+        Self { iter, buf }
     }
 }
 
@@ -65,11 +65,11 @@ where
 /// Like `std::io::Take`, but for lines instead of bytes.
 ///
 /// This struct is generally created by calling [`take_lines`] on a
-/// reader. Please see the documentation of [`take`] for more
+/// reader. Please see the documentation of [`take_lines`] for more
 /// details.
 pub struct TakeLines<T> {
     inner: T,
-    limit: usize,
+    limit: u64,
     separator: u8,
 }
 
@@ -103,7 +103,7 @@ impl<T: Read> Read for TakeLines<T> {
 ///
 /// The `separator` defines the character to interpret as the line
 /// ending. For the usual notion of "line", set this to `b'\n'`.
-pub fn take_lines<R>(reader: R, limit: usize, separator: u8) -> TakeLines<R> {
+pub fn take_lines<R>(reader: R, limit: u64, separator: u8) -> TakeLines<R> {
     TakeLines {
         inner: reader,
         limit,

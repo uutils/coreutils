@@ -1,11 +1,11 @@
 [package]
 name = "uu_runcon"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "runcon ~ (uutils) run command with specified security context"
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/runcon"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/runcon"
 keywords = ["coreutils", "uutils", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -14,11 +14,9 @@ edition = "2018"
 path = "src/runcon.rs"
 
 [dependencies]
-clap         = { version = "2.33", features = ["wrap_help"] }
+clap         = { version = "3.1", features = ["wrap_help", "cargo"] }
 uucore       = { version = ">=0.0.9", package="uucore", path="../../uucore", features=["entries", "fs", "perms"] }
-uucore_procs = { version = ">=0.0.6", package="uucore_procs", path="../../uucore_procs" }
 selinux      = { version = "0.2"   }
-fts-sys      = { version = "0.2"   }
 thiserror    = { version = "1.0"   }
 libc         = { version = "0.2"   }
 

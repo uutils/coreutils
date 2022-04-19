@@ -7,10 +7,10 @@
 
 //!
 //! Here we employ shunting-yard algorithm for building AST from tokens according to operators' precedence and associative-ness.
-//! * https://en.wikipedia.org/wiki/Shunting-yard_algorithm
+//! * `<https://en.wikipedia.org/wiki/Shunting-yard_algorithm>`
 //!
 
-// spell-checker:ignore (ToDO) binop binops ints paren prec
+// spell-checker:ignore (ToDO) binop binops ints paren prec multibytes
 
 use num_bigint::BigInt;
 use num_traits::{One, Zero};
@@ -66,23 +66,23 @@ impl AstNode {
         }
     }
 
-    fn new_node(token_idx: usize, op_type: &str, operands: OperandsList) -> Box<AstNode> {
-        Box::new(AstNode::Node {
+    fn new_node(token_idx: usize, op_type: &str, operands: OperandsList) -> Box<Self> {
+        Box::new(Self::Node {
             token_idx,
             op_type: op_type.into(),
             operands,
         })
     }
-    fn new_leaf(token_idx: usize, value: &str) -> Box<AstNode> {
-        Box::new(AstNode::Leaf {
+    fn new_leaf(token_idx: usize, value: &str) -> Box<Self> {
+        Box::new(Self::Leaf {
             token_idx,
             value: value.into(),
         })
     }
     pub fn evaluate(&self) -> Result<String, String> {
         match self {
-            AstNode::Leaf { value, .. } => Ok(value.clone()),
-            AstNode::Node { op_type, .. } => match self.operand_values() {
+            Self::Leaf { value, .. } => Ok(value.clone()),
+            Self::Node { op_type, .. } => match self.operand_values() {
                 Err(reason) => Err(reason),
                 Ok(operand_values) => match op_type.as_ref() {
                     "+" => {
@@ -302,12 +302,7 @@ fn push_token_to_either_stack(
             }
         }
 
-        Token::PrefixOp { .. } => {
-            op_stack.push((token_idx, token.clone()));
-            Ok(())
-        }
-
-        Token::ParOpen => {
+        Token::PrefixOp { .. } | Token::ParOpen => {
             op_stack.push((token_idx, token.clone()));
             Ok(())
         }
@@ -352,12 +347,7 @@ fn push_op_to_stack(
     {
         loop {
             match op_stack.last() {
-                None => {
-                    op_stack.push((token_idx, token.clone()));
-                    return Ok(());
-                }
-
-                Some(&(_, Token::ParOpen)) => {
+                None | Some(&(_, Token::ParOpen)) => {
                     op_stack.push((token_idx, token.clone()));
                     return Ok(());
                 }
@@ -370,7 +360,7 @@ fn push_op_to_stack(
                     },
                 )) => {
                     if la && prev_prec >= prec || !la && prev_prec > prec {
-                        out_stack.push(op_stack.pop().unwrap())
+                        out_stack.push(op_stack.pop().unwrap());
                     } else {
                         op_stack.push((token_idx, token.clone()));
                         return Ok(());
@@ -475,7 +465,9 @@ fn operator_match(values: &[String]) -> Result<String, String> {
 
 fn prefix_operator_length(values: &[String]) -> String {
     assert!(values.len() == 1);
-    values[0].len().to_string()
+    // Use chars().count() as we can have some multibytes chars
+    // See https://github.com/uutils/coreutils/issues/3132
+    values[0].chars().count().to_string()
 }
 
 fn prefix_operator_index(values: &[String]) -> String {

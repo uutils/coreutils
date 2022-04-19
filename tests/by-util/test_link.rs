@@ -23,7 +23,7 @@ fn test_link_no_circular() {
 
     ucmd.args(&[link, link])
         .fails()
-        .stderr_is("link: No such file or directory (os error 2)\n");
+        .stderr_is("link: cannot create link 'test_link_no_circular' to 'test_link_no_circular': No such file or directory");
     assert!(!at.file_exists(link));
 }
 
@@ -35,7 +35,7 @@ fn test_link_nonexistent_file() {
 
     ucmd.args(&[file, link])
         .fails()
-        .stderr_is("link: No such file or directory (os error 2)\n");
+        .stderr_only("link: cannot create link 'test_link_nonexistent_file_link' to 'test_link_nonexistent_file': No such file or directory");
     assert!(!at.file_exists(file));
     assert!(!at.file_exists(link));
 }
@@ -45,7 +45,7 @@ fn test_link_one_argument() {
     let (_, mut ucmd) = at_and_ucmd!();
     let file = "test_link_argument";
     ucmd.args(&[file]).fails().stderr_contains(
-        "error: The argument '<FILES>...' requires at least 2 values, but only 1 was provide",
+        "error: The argument '<FILES>...' requires at least 2 values but only 1 was provided",
     );
 }
 
@@ -58,6 +58,6 @@ fn test_link_three_arguments() {
         "test_link_argument3",
     ];
     ucmd.args(&arguments[..]).fails().stderr_contains(
-        format!("error: The value '{}' was provided to '<FILES>...', but it wasn't expecting any more values", arguments[2]),
+        format!("error: The value '{}' was provided to '<FILES>...' but it wasn't expecting any more values", arguments[2]),
     );
 }

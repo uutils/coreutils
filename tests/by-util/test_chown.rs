@@ -48,7 +48,7 @@ mod test_passgrp {
     #[test]
     fn test_grp2gid() {
         if cfg!(target_os = "linux") || cfg!(target_os = "android") || cfg!(target_os = "windows") {
-            assert_eq!(0, grp2gid("root").unwrap())
+            assert_eq!(0, grp2gid("root").unwrap());
         } else {
             assert_eq!(0, grp2gid("wheel").unwrap());
         }

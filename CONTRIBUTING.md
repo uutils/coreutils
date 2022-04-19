@@ -1,6 +1,6 @@
 # Contributing to coreutils
 
-Contributions are very welcome, and should target Rust's master branch until the
+Contributions are very welcome, and should target Rust's main branch until the
 standard libraries are stabilized. You may *claim* an item on the to-do list by
 following these steps:
 
@@ -92,6 +92,16 @@ uutils: add new utility
 
 ```
 gitignore: add temporary files
+```
+
+## cargo-deny
+
+This project uses [cargo-deny](https://github.com/EmbarkStudios/cargo-deny/) to
+detect duplicate dependencies, checks licenses, etc. To run it locally, first
+install it and then run with:
+
+```
+cargo deny --all-features check all
 ```
 
 ## Licensing

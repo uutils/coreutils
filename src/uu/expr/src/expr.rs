@@ -5,7 +5,7 @@
 //* For the full copyright and license information, please view the LICENSE
 //* file that was distributed with this source code.
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use uucore::error::{UResult, USimpleError};
 use uucore::InvalidEncodingHandling;
 
@@ -14,14 +14,26 @@ mod tokens;
 
 const VERSION: &str = "version";
 const HELP: &str = "help";
+static ABOUT: &str = "Print the value of EXPRESSION to standard output";
+static USAGE: &str = r#"
+    expr [EXPRESSION]
+    expr [OPTIONS]"#;
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
-        .arg(Arg::with_name(VERSION).long(VERSION))
-        .arg(Arg::with_name(HELP).long(HELP))
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
+        .version(crate_version!())
+        .about(ABOUT)
+        .override_usage(USAGE)
+        .infer_long_args(true)
+        .arg(
+            Arg::new(VERSION)
+                .long(VERSION)
+                .help("output version information and exit"),
+        )
+        .arg(Arg::new(HELP).long(HELP).help("display this help and exit"))
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)

@@ -1,3 +1,4 @@
+// spell-checker:ignore lmnop xlmnop
 use crate::common::util::*;
 use std::io::Read;
 
@@ -7,26 +8,26 @@ fn test_hex_rejects_sign_after_identifier() {
         .args(&["0x-123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid hexadecimal argument: '0x-123ABC'")
+        .stderr_contains("invalid floating point argument: '0x-123ABC'")
         .stderr_contains("for more information.");
     new_ucmd!()
         .args(&["0x+123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid hexadecimal argument: '0x+123ABC'")
+        .stderr_contains("invalid floating point argument: '0x+123ABC'")
         .stderr_contains("for more information.");
     new_ucmd!()
         .args(&["-0x-123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid hexadecimal argument: '-0x-123ABC'")
-        .stderr_contains("for more information.");
+        .stderr_contains("which wasn't expected, or isn't valid in this context")
+        .stderr_contains("For more information try --help");
     new_ucmd!()
         .args(&["-0x+123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid hexadecimal argument: '-0x+123ABC'")
-        .stderr_contains("for more information.");
+        .stderr_contains("which wasn't expected, or isn't valid in this context")
+        .stderr_contains("For more information try --help");
 }
 
 #[test]
@@ -60,30 +61,51 @@ fn test_hex_identifier_in_wrong_place() {
         .args(&["1234ABCD0x"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid hexadecimal argument: '1234ABCD0x'")
+        .stderr_contains("invalid floating point argument: '1234ABCD0x'")
         .stderr_contains("for more information.");
 }
 
 #[test]
 fn test_rejects_nan() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["NaN"]).fails().stderr_only(format!(
-        "{0}: invalid 'not-a-number' argument: 'NaN'\nTry '{1} {0} --help' for more information.",
-        ts.util_name,
-        ts.bin_path.to_string_lossy()
-    ));
+    new_ucmd!()
+        .arg("NaN")
+        .fails()
+        .usage_error("invalid 'not-a-number' argument: 'NaN'");
 }
 
 #[test]
 fn test_rejects_non_floats() {
-    let ts = TestScenario::new(util_name!());
+    new_ucmd!()
+        .arg("foo")
+        .fails()
+        .usage_error("invalid floating point argument: 'foo'");
+}
 
-    ts.ucmd().args(&["foo"]).fails().stderr_only(&format!(
-        "{0}: invalid floating point argument: 'foo'\nTry '{1} {0} --help' for more information.",
-        ts.util_name,
-        ts.bin_path.to_string_lossy()
-    ));
+#[test]
+fn test_accepts_option_argument_directly() {
+    new_ucmd!()
+        .arg("-s,")
+        .arg("2")
+        .succeeds()
+        .stdout_is("1,2\n");
+}
+
+#[test]
+fn test_option_with_detected_negative_argument() {
+    new_ucmd!()
+        .arg("-s,")
+        .args(&["-1", "2"])
+        .succeeds()
+        .stdout_is("-1,0,1,2\n");
+}
+
+#[test]
+fn test_negative_number_as_separator() {
+    new_ucmd!()
+        .arg("-s")
+        .args(&["-1", "2"])
+        .succeeds()
+        .stdout_is("1-12\n");
 }
 
 #[test]
@@ -479,6 +501,72 @@ fn test_width_decimal_scientific_notation_trailing_zeros_increment() {
         .no_stderr();
 }
 
+#[test]
+fn test_width_negative_decimal_notation() {
+    new_ucmd!()
+        .args(&["-w", "-.1", ".1", ".11"])
+        .succeeds()
+        .stdout_is("-0.1\n00.0\n00.1\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_width_negative_scientific_notation() {
+    new_ucmd!()
+        .args(&["-w", "-1e-3", "1"])
+        .succeeds()
+        .stdout_is("-0.001\n00.999\n")
+        .no_stderr();
+    new_ucmd!()
+        .args(&["-w", "-1.e-3", "1"])
+        .succeeds()
+        .stdout_is("-0.001\n00.999\n")
+        .no_stderr();
+    new_ucmd!()
+        .args(&["-w", "-1.0e-4", "1"])
+        .succeeds()
+        .stdout_is("-0.00010\n00.99990\n")
+        .no_stderr();
+    new_ucmd!()
+        .args(&["-w", "-.1e2", "10", "100"])
+        .succeeds()
+        .stdout_is(
+            "-010
+0000
+0010
+0020
+0030
+0040
+0050
+0060
+0070
+0080
+0090
+0100
+",
+        )
+        .no_stderr();
+    new_ucmd!()
+        .args(&["-w", "-0.1e2", "10", "100"])
+        .succeeds()
+        .stdout_is(
+            "-010
+0000
+0010
+0020
+0030
+0040
+0050
+0060
+0070
+0080
+0090
+0100
+",
+        )
+        .no_stderr();
+}
+
 /// Test that trailing zeros in the end argument do not contribute to width.
 #[test]
 fn test_width_decimal_scientific_notation_trailing_zeros_end() {
@@ -522,6 +610,22 @@ fn test_inf() {
 }
 
 #[test]
+fn test_inf_width() {
+    run(
+        &["-w", "1.000", "inf", "inf"],
+        b"1.000\n  inf\n  inf\n  inf\n",
+    );
+}
+
+#[test]
+fn test_neg_inf_width() {
+    run(
+        &["-w", "1.000", "-inf", "-inf"],
+        b"1.000\n -inf\n -inf\n -inf\n",
+    );
+}
+
+#[test]
 fn test_ignore_leading_whitespace() {
     new_ucmd!()
         .arg("   1")
@@ -538,9 +642,99 @@ fn test_trailing_whitespace_error() {
     new_ucmd!()
         .arg("1 ")
         .fails()
+        .usage_error("invalid floating point argument: '1 '");
+}
+
+#[test]
+fn test_negative_zero_int_start_float_increment() {
+    new_ucmd!()
+        .args(&["-0", "0.1", "0.1"])
+        .succeeds()
+        .stdout_is("-0.0\n0.1\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_float_precision_increment() {
+    new_ucmd!()
+        .args(&["999", "0.1", "1000.1"])
+        .succeeds()
+        .stdout_is(
+            "999.0
+999.1
+999.2
+999.3
+999.4
+999.5
+999.6
+999.7
+999.8
+999.9
+1000.0
+1000.1
+",
+        )
+        .no_stderr();
+}
+
+/// Test for floating point precision issues.
+#[test]
+fn test_negative_increment_decimal() {
+    new_ucmd!()
+        .args(&["0.1", "-0.1", "-0.2"])
+        .succeeds()
+        .stdout_is("0.1\n0.0\n-0.1\n-0.2\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_zero_not_first() {
+    new_ucmd!()
+        .args(&["-w", "-0.1", "0.1", "0.1"])
+        .succeeds()
+        .stdout_is("-0.1\n00.0\n00.1\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_rounding_end() {
+    new_ucmd!()
+        .args(&["1", "-1", "0.1"])
+        .succeeds()
+        .stdout_is("1\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_parse_error_float() {
+    new_ucmd!()
+        .arg("lmnop")
+        .fails()
+        .usage_error("invalid floating point argument: 'lmnop'");
+}
+
+#[test]
+fn test_parse_error_hex() {
+    new_ucmd!()
+        .arg("0xlmnop")
+        .fails()
+        .usage_error("invalid hexadecimal argument: '0xlmnop'");
+}
+
+#[test]
+fn test_format_option() {
+    new_ucmd!()
+        .args(&["-f", "%.2f", "0.0", "0.1", "0.5"])
+        .succeeds()
+        .stdout_only("0.00\n0.10\n0.20\n0.30\n0.40\n0.50\n");
+}
+
+#[test]
+fn test_invalid_zero_increment_value() {
+    new_ucmd!()
+        .args(&["0", "0", "1"])
+        .fails()
         .no_stdout()
-        .stderr_contains("seq: invalid floating point argument: '1 '")
-        // FIXME The second line of the error message is "Try 'seq
-        // --help' for more information."
+        .stderr_contains("invalid Zero increment value: '0'")
         .stderr_contains("for more information.");
 }

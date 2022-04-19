@@ -24,14 +24,11 @@ fn test_capitalize() {
 fn test_long_format() {
     let login = "root";
     let pw: Passwd = Passwd::locate(login).unwrap();
-    let real_name = pw.user_info().replace("&", &pw.name().capitalize());
+    let real_name = pw.user_info.replace('&', &pw.name.capitalize());
     let ts = TestScenario::new(util_name!());
     ts.ucmd().arg("-l").arg(login).succeeds().stdout_is(format!(
         "Login name: {:<28}In real life:  {}\nDirectory: {:<29}Shell:  {}\n\n",
-        login,
-        real_name,
-        pw.user_dir(),
-        pw.user_shell()
+        login, real_name, pw.user_dir, pw.user_shell
     ));
 
     ts.ucmd()
@@ -47,7 +44,14 @@ fn test_long_format() {
 #[cfg(unix)]
 #[test]
 fn test_long_format_multiple_users() {
-    let args = ["-l", "root", "root", "root"];
+    // multiple instances of one account we know exists,
+    // the account of the test runner,
+    // and an account that (probably) doesn't exist
+    let runner = match std::env::var("USER") {
+        Ok(user) => user,
+        Err(_) => "".to_string(),
+    };
+    let args = ["-l", "root", "root", "root", &runner, "no_such_user"];
     let ts = TestScenario::new(util_name!());
     let expect = unwrap_or_return!(expected_result(&ts, &args));
 
@@ -61,7 +65,7 @@ fn test_long_format_multiple_users() {
 #[test]
 fn test_long_format_wo_user() {
     // "no username specified; at least one must be specified when using -l"
-    new_ucmd!().arg("-l").fails().code_is(1);
+    new_ucmd!().arg("-l").fails();
 }
 
 #[cfg(unix)]

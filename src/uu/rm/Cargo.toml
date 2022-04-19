@@ -1,12 +1,12 @@
 [package]
 name = "uu_rm"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "rm ~ (uutils) remove PATHNAME"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/rm"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/rm"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -15,11 +15,10 @@ edition = "2018"
 path = "src/rm.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 walkdir = "2.2"
 remove_dir_all = "0.5.1"
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["fs"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["fs"] }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version="0.3", features=[] }
@@ -27,7 +26,3 @@ winapi = { version="0.3", features=[] }
 [[bin]]
 name = "rm"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-# Necessary for "make all"
-normal = ["uucore_procs"]

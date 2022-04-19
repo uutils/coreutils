@@ -10,16 +10,6 @@ use std::process::Command;
 use std::thread::sleep;
 
 #[test]
-fn test_install_help() {
-    let (_, mut ucmd) = at_and_ucmd!();
-
-    ucmd.arg("--help")
-        .succeeds()
-        .no_stderr()
-        .stdout_contains("FLAGS:");
-}
-
-#[test]
 fn test_install_basic() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "target_dir";
@@ -493,7 +483,7 @@ fn test_install_copy_then_compare_file() {
     file2_meta = at.metadata(file2);
     let after = FileTime::from_last_modification_time(&file2_meta);
 
-    assert!(before == after);
+    assert_eq!(before, after);
 }
 
 #[test]
@@ -826,6 +816,31 @@ fn test_install_backup_short_custom_suffix() {
 }
 
 #[test]
+fn test_install_backup_short_custom_suffix_hyphen_value() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_backup_custom_suffix_file_a";
+    let file_b = "test_install_backup_custom_suffix_file_b";
+    let suffix = "-v";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    scene
+        .ucmd()
+        .arg("-b")
+        .arg(format!("--suffix={}", suffix))
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}{}", file_b, suffix)));
+}
+
+#[test]
 fn test_install_backup_custom_suffix_via_env() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1084,4 +1099,68 @@ fn test_install_backup_off() {
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
     assert!(!at.file_exists(&format!("{}~", file_b)));
+}
+
+#[test]
+fn test_install_missing_arguments() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .fails()
+        .stderr_contains("install: missing file operand");
+}
+
+#[test]
+fn test_install_missing_destination() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_1 = "source_file1";
+
+    at.touch(file_1);
+    scene.ucmd().arg(file_1).fails().stderr_contains(format!(
+        "install: missing destination file operand after '{}'",
+        file_1
+    ));
+}
+
+#[test]
+fn test_install_dir_dot() {
+    // To match tests/install/d-slashdot.sh
+    let scene = TestScenario::new(util_name!());
+
+    scene.ucmd().arg("-d").arg("dir1/.").succeeds();
+    scene.ucmd().arg("-d").arg("dir2/..").succeeds();
+    // Tests that we don't have dir3/. in the output
+    // but only 'dir3'
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg("dir3/.")
+        .arg("-v")
+        .succeeds()
+        .stdout_contains("creating directory 'dir3'");
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg("dir4/./cal")
+        .arg("-v")
+        .succeeds()
+        .stdout_contains("creating directory 'dir4/./cal'");
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg("dir5/./cali/.")
+        .arg("-v")
+        .succeeds()
+        .stdout_contains("creating directory 'dir5/cali'");
+
+    let at = &scene.fixtures;
+
+    assert!(at.dir_exists("dir1"));
+    assert!(at.dir_exists("dir2"));
+    assert!(at.dir_exists("dir3"));
+    assert!(at.dir_exists("dir4/cal"));
+    assert!(at.dir_exists("dir5/cali"));
 }

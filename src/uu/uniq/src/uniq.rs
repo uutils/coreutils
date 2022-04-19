@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, Arg, ArgMatches, Command};
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
@@ -13,8 +13,10 @@ use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::format_usage;
 
 static ABOUT: &str = "Report or omit repeated lines.";
+const USAGE: &str = "{} [OPTION]... [INPUT [OUTPUT]]...";
 pub mod options {
     pub static ALL_REPEATED: &str = "all-repeated";
     pub static CHECK_CHARS: &str = "check-chars";
@@ -239,13 +241,6 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> UResult<Optio
     })
 }
 
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... [INPUT [OUTPUT]]...",
-        uucore::execution_phrase()
-    )
-}
-
 fn get_long_usage() -> String {
     String::from(
         "Filter adjacent matching lines from INPUT (or standard input),\n\
@@ -255,15 +250,11 @@ fn get_long_usage() -> String {
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let long_usage = get_long_usage();
 
-    let matches = uu_app()
-        .usage(&usage[..])
-        .after_help(&long_usage[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&long_usage[..]).get_matches_from(args);
 
     let files: Vec<String> = matches
         .values_of(ARG_FILES)
@@ -294,21 +285,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         zero_terminated: matches.is_present(options::ZERO_TERMINATED),
     };
     uniq.print_uniq(
-        &mut open_input_file(in_file_name)?,
-        &mut open_output_file(out_file_name)?,
+        &mut open_input_file(&in_file_name)?,
+        &mut open_output_file(&out_file_name)?,
     )
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::ALL_REPEATED)
-                .short("D")
+            Arg::new(options::ALL_REPEATED)
+                .short('D')
                 .long(options::ALL_REPEATED)
                 .possible_values(&[
-                    Delimiters::None.as_ref(), Delimiters::Prepend.as_ref(), Delimiters::Separate.as_ref()
+                    "none",
+                    "prepend",
+                    "separate"
                 ])
                 .help("print all duplicate lines. Delimiting is done with blank lines. [default: none]")
                 .value_name("delimit-method")
@@ -316,11 +311,13 @@ pub fn uu_app() -> App<'static, 'static> {
                 .max_values(1),
         )
         .arg(
-            Arg::with_name(options::GROUP)
+            Arg::new(options::GROUP)
                 .long(options::GROUP)
                 .possible_values(&[
-                    Delimiters::Separate.as_ref(), Delimiters::Prepend.as_ref(),
-                    Delimiters::Append.as_ref(), Delimiters::Both.as_ref()
+                    "separate",
+                    "prepend",
+                    "append",
+                    "both",
                 ])
                 .help("show all items, separating groups with an empty line. [default: separate]")
                 .value_name("group-method")
@@ -333,59 +330,59 @@ pub fn uu_app() -> App<'static, 'static> {
                 ]),
         )
         .arg(
-            Arg::with_name(options::CHECK_CHARS)
-                .short("w")
+            Arg::new(options::CHECK_CHARS)
+                .short('w')
                 .long(options::CHECK_CHARS)
                 .help("compare no more than N characters in lines")
                 .value_name("N"),
         )
         .arg(
-            Arg::with_name(options::COUNT)
-                .short("c")
+            Arg::new(options::COUNT)
+                .short('c')
                 .long(options::COUNT)
                 .help("prefix lines by the number of occurrences"),
         )
         .arg(
-            Arg::with_name(options::IGNORE_CASE)
-                .short("i")
+            Arg::new(options::IGNORE_CASE)
+                .short('i')
                 .long(options::IGNORE_CASE)
                 .help("ignore differences in case when comparing"),
         )
         .arg(
-            Arg::with_name(options::REPEATED)
-                .short("d")
+            Arg::new(options::REPEATED)
+                .short('d')
                 .long(options::REPEATED)
                 .help("only print duplicate lines"),
         )
         .arg(
-            Arg::with_name(options::SKIP_CHARS)
-                .short("s")
+            Arg::new(options::SKIP_CHARS)
+                .short('s')
                 .long(options::SKIP_CHARS)
                 .help("avoid comparing the first N characters")
                 .value_name("N"),
         )
         .arg(
-            Arg::with_name(options::SKIP_FIELDS)
-                .short("f")
+            Arg::new(options::SKIP_FIELDS)
+                .short('f')
                 .long(options::SKIP_FIELDS)
                 .help("avoid comparing the first N fields")
                 .value_name("N"),
         )
         .arg(
-            Arg::with_name(options::UNIQUE)
-                .short("u")
+            Arg::new(options::UNIQUE)
+                .short('u')
                 .long(options::UNIQUE)
                 .help("only print unique lines"),
         )
         .arg(
-            Arg::with_name(options::ZERO_TERMINATED)
-                .short("z")
+            Arg::new(options::ZERO_TERMINATED)
+                .short('z')
                 .long(options::ZERO_TERMINATED)
                 .help("end lines with 0 byte, not newline"),
         )
         .arg(
-            Arg::with_name(ARG_FILES)
-                .multiple(true)
+            Arg::new(ARG_FILES)
+                .multiple_occurrences(true)
                 .takes_value(true)
                 .max_values(2),
         )
@@ -396,7 +393,7 @@ fn get_delimiter(matches: &ArgMatches) -> Delimiters {
         .value_of(options::ALL_REPEATED)
         .or_else(|| matches.value_of(options::GROUP));
     if let Some(delimiter_arg) = value {
-        Delimiters::from_str(delimiter_arg).unwrap() // All possible values for ALL_REPEATED are &str's of Delimiters
+        Delimiters::from_str(delimiter_arg).unwrap() // All possible values for ALL_REPEATED are Delimiters (of type `&str`)
     } else if matches.is_present(options::GROUP) {
         Delimiters::Separate
     } else {
@@ -404,11 +401,11 @@ fn get_delimiter(matches: &ArgMatches) -> Delimiters {
     }
 }
 
-fn open_input_file(in_file_name: String) -> UResult<BufReader<Box<dyn Read + 'static>>> {
+fn open_input_file(in_file_name: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     let in_file = if in_file_name == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
-        let path = Path::new(&in_file_name[..]);
+        let path = Path::new(in_file_name);
         let in_file = File::open(&path)
             .map_err_context(|| format!("Could not open {}", in_file_name.maybe_quote()))?;
         Box::new(in_file) as Box<dyn Read>
@@ -416,11 +413,11 @@ fn open_input_file(in_file_name: String) -> UResult<BufReader<Box<dyn Read + 'st
     Ok(BufReader::new(in_file))
 }
 
-fn open_output_file(out_file_name: String) -> UResult<BufWriter<Box<dyn Write + 'static>>> {
+fn open_output_file(out_file_name: &str) -> UResult<BufWriter<Box<dyn Write + 'static>>> {
     let out_file = if out_file_name == "-" {
         Box::new(stdout()) as Box<dyn Write>
     } else {
-        let path = Path::new(&out_file_name[..]);
+        let path = Path::new(out_file_name);
         let out_file = File::create(&path)
             .map_err_context(|| format!("Could not create {}", out_file_name.maybe_quote()))?;
         Box::new(out_file) as Box<dyn Write>

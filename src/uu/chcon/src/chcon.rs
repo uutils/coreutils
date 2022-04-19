@@ -2,9 +2,11 @@
 
 #![allow(clippy::upper_case_acronyms)]
 
-use uucore::{display::Quotable, show_error, show_usage_error, show_warning};
+use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::format_usage;
+use uucore::{display::Quotable, show_error, show_warning};
 
-use clap::{App, Arg};
+use clap::{Arg, Command};
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
 use std::borrow::Cow;
@@ -21,8 +23,13 @@ use errors::*;
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Change the SELinux security context of each FILE to CONTEXT. \n\
                       With --reference, change the security context of each FILE to that of RFILE.";
+const USAGE: &str = "\
+    {} [OPTION]... CONTEXT FILE... \n    \
+    {} [OPTION]... [-u USER] [-r ROLE] [-l RANGE] [-t TYPE] FILE... \n    \
+    {} [OPTION]... --reference=RFILE FILE...";
 
 pub mod options {
+    pub static HELP: &str = "help";
     pub static VERBOSE: &str = "verbose";
 
     pub static REFERENCE: &str = "reference";
@@ -51,35 +58,24 @@ pub mod options {
     }
 }
 
-fn get_usage() -> String {
-    format!(
-        "{0} [OPTION]... CONTEXT FILE... \n    \
-         {0} [OPTION]... [-u USER] [-r ROLE] [-l RANGE] [-t TYPE] FILE... \n    \
-         {0} [OPTION]... --reference=RFILE FILE...",
-        uucore::execution_phrase()
-    )
-}
-
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
-
-    let config = uu_app().usage(usage.as_ref());
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let config = uu_app();
 
     let options = match parse_command_line(config, args) {
         Ok(r) => r,
         Err(r) => {
             if let Error::CommandLine(r) = &r {
-                match r.kind {
-                    clap::ErrorKind::HelpDisplayed | clap::ErrorKind::VersionDisplayed => {
+                match r.kind() {
+                    clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion => {
                         println!("{}", r);
-                        return libc::EXIT_SUCCESS;
+                        return Ok(());
                     }
                     _ => {}
                 }
             }
 
-            show_usage_error!("{}.\n", r);
-            return libc::EXIT_FAILURE;
+            return Err(UUsageError::new(libc::EXIT_FAILURE, format!("{}.\n", r)));
         }
     };
 
@@ -98,8 +94,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
             match result {
                 Err(r) => {
-                    show_error!("{}.", report_full_error(&r));
-                    return libc::EXIT_FAILURE;
+                    return Err(USimpleError::new(
+                        libc::EXIT_FAILURE,
+                        format!("{}.", report_full_error(&r)),
+                    ));
                 }
 
                 Ok(file_context) => SELinuxSecurityContext::File(file_context),
@@ -111,14 +109,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Ok(context) => context,
 
                 Err(_r) => {
-                    show_error!("Invalid security context {}.", context.quote());
-                    return libc::EXIT_FAILURE;
+                    return Err(USimpleError::new(
+                        libc::EXIT_FAILURE,
+                        format!("Invalid security context {}.", context.quote()),
+                    ));
                 }
             };
 
             if SecurityContext::from_c_str(&c_context, false).check() == Some(false) {
-                show_error!("Invalid security context {}.", context.quote());
-                return libc::EXIT_FAILURE;
+                return Err(USimpleError::new(
+                    libc::EXIT_FAILURE,
+                    format!("Invalid security context {}.", context.quote()),
+                ));
             }
 
             SELinuxSecurityContext::String(Some(c_context))
@@ -132,8 +134,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Ok(r) => Some(r),
 
             Err(r) => {
-                show_error!("{}.", report_full_error(&r));
-                return libc::EXIT_FAILURE;
+                return Err(USimpleError::new(
+                    libc::EXIT_FAILURE,
+                    format!("{}.", report_full_error(&r)),
+                ));
             }
         }
     } else {
@@ -142,21 +146,28 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let results = process_files(&options, &context, root_dev_ino);
     if results.is_empty() {
-        return libc::EXIT_SUCCESS;
+        return Ok(());
     }
 
     for result in &results {
         show_error!("{}.", report_full_error(result));
     }
-    libc::EXIT_FAILURE
+    Err(libc::EXIT_FAILURE.into())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::dereference::DEREFERENCE)
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information."),
+        )
+        .arg(
+            Arg::new(options::dereference::DEREFERENCE)
                 .long(options::dereference::DEREFERENCE)
                 .conflicts_with(options::dereference::NO_DEREFERENCE)
                 .help(
@@ -165,24 +176,24 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::dereference::NO_DEREFERENCE)
-                .short("h")
+            Arg::new(options::dereference::NO_DEREFERENCE)
+                .short('h')
                 .long(options::dereference::NO_DEREFERENCE)
                 .help("Affect symbolic links instead of any referenced file."),
         )
         .arg(
-            Arg::with_name(options::preserve_root::PRESERVE_ROOT)
+            Arg::new(options::preserve_root::PRESERVE_ROOT)
                 .long(options::preserve_root::PRESERVE_ROOT)
                 .conflicts_with(options::preserve_root::NO_PRESERVE_ROOT)
                 .help("Fail to operate recursively on '/'."),
         )
         .arg(
-            Arg::with_name(options::preserve_root::NO_PRESERVE_ROOT)
+            Arg::new(options::preserve_root::NO_PRESERVE_ROOT)
                 .long(options::preserve_root::NO_PRESERVE_ROOT)
                 .help("Do not treat '/' specially (the default)."),
         )
         .arg(
-            Arg::with_name(options::REFERENCE)
+            Arg::new(options::REFERENCE)
                 .long(options::REFERENCE)
                 .takes_value(true)
                 .value_name("RFILE")
@@ -190,49 +201,54 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help(
                     "Use security context of RFILE, rather than specifying \
                      a CONTEXT value.",
-                ),
+                )
+                .allow_invalid_utf8(true),
         )
         .arg(
-            Arg::with_name(options::USER)
-                .short("u")
+            Arg::new(options::USER)
+                .short('u')
                 .long(options::USER)
                 .takes_value(true)
                 .value_name("USER")
-                .help("Set user USER in the target security context."),
+                .help("Set user USER in the target security context.")
+                .allow_invalid_utf8(true),
         )
         .arg(
-            Arg::with_name(options::ROLE)
-                .short("r")
+            Arg::new(options::ROLE)
+                .short('r')
                 .long(options::ROLE)
                 .takes_value(true)
                 .value_name("ROLE")
-                .help("Set role ROLE in the target security context."),
+                .help("Set role ROLE in the target security context.")
+                .allow_invalid_utf8(true),
         )
         .arg(
-            Arg::with_name(options::TYPE)
-                .short("t")
+            Arg::new(options::TYPE)
+                .short('t')
                 .long(options::TYPE)
                 .takes_value(true)
                 .value_name("TYPE")
-                .help("Set type TYPE in the target security context."),
+                .help("Set type TYPE in the target security context.")
+                .allow_invalid_utf8(true),
         )
         .arg(
-            Arg::with_name(options::RANGE)
-                .short("l")
+            Arg::new(options::RANGE)
+                .short('l')
                 .long(options::RANGE)
                 .takes_value(true)
                 .value_name("RANGE")
-                .help("Set range RANGE in the target security context."),
+                .help("Set range RANGE in the target security context.")
+                .allow_invalid_utf8(true),
         )
         .arg(
-            Arg::with_name(options::RECURSIVE)
-                .short("R")
+            Arg::new(options::RECURSIVE)
+                .short('R')
                 .long(options::RECURSIVE)
                 .help("Operate on files and directories recursively."),
         )
         .arg(
-            Arg::with_name(options::sym_links::FOLLOW_ARG_DIR_SYM_LINK)
-                .short("H")
+            Arg::new(options::sym_links::FOLLOW_ARG_DIR_SYM_LINK)
+                .short('H')
                 .requires(options::RECURSIVE)
                 .overrides_with_all(&[
                     options::sym_links::FOLLOW_DIR_SYM_LINKS,
@@ -244,8 +260,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::sym_links::FOLLOW_DIR_SYM_LINKS)
-                .short("L")
+            Arg::new(options::sym_links::FOLLOW_DIR_SYM_LINKS)
+                .short('L')
                 .requires(options::RECURSIVE)
                 .overrides_with_all(&[
                     options::sym_links::FOLLOW_ARG_DIR_SYM_LINK,
@@ -257,8 +273,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::sym_links::NO_FOLLOW_SYM_LINKS)
-                .short("P")
+            Arg::new(options::sym_links::NO_FOLLOW_SYM_LINKS)
+                .short('P')
                 .requires(options::RECURSIVE)
                 .overrides_with_all(&[
                     options::sym_links::FOLLOW_ARG_DIR_SYM_LINK,
@@ -270,12 +286,17 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::VERBOSE)
-                .short("v")
+            Arg::new(options::VERBOSE)
+                .short('v')
                 .long(options::VERBOSE)
                 .help("Output a diagnostic for every file processed."),
         )
-        .arg(Arg::with_name("FILE").multiple(true).min_values(1))
+        .arg(
+            Arg::new("FILE")
+                .multiple_occurrences(true)
+                .min_values(1)
+                .allow_invalid_utf8(true),
+        )
 }
 
 #[derive(Debug)]
@@ -288,8 +309,8 @@ struct Options {
     files: Vec<PathBuf>,
 }
 
-fn parse_command_line(config: clap::App, args: impl uucore::Args) -> Result<Options> {
-    let matches = config.get_matches_from_safe(args)?;
+fn parse_command_line(config: clap::Command, args: impl uucore::Args) -> Result<Options> {
+    let matches = config.try_get_matches_from(args)?;
 
     let verbose = matches.is_present(options::VERBOSE);
 
@@ -387,23 +408,21 @@ enum RecursiveMode {
 impl RecursiveMode {
     fn is_recursive(self) -> bool {
         match self {
-            RecursiveMode::NotRecursive => false,
+            Self::NotRecursive => false,
 
-            RecursiveMode::RecursiveButDoNotFollowSymLinks
-            | RecursiveMode::RecursiveAndFollowAllDirSymLinks
-            | RecursiveMode::RecursiveAndFollowArgDirSymLinks => true,
+            Self::RecursiveButDoNotFollowSymLinks
+            | Self::RecursiveAndFollowAllDirSymLinks
+            | Self::RecursiveAndFollowArgDirSymLinks => true,
         }
     }
 
     fn fts_open_options(self) -> c_int {
         match self {
-            RecursiveMode::NotRecursive | RecursiveMode::RecursiveButDoNotFollowSymLinks => {
-                fts_sys::FTS_PHYSICAL
-            }
+            Self::NotRecursive | Self::RecursiveButDoNotFollowSymLinks => fts_sys::FTS_PHYSICAL,
 
-            RecursiveMode::RecursiveAndFollowAllDirSymLinks => fts_sys::FTS_LOGICAL,
+            Self::RecursiveAndFollowAllDirSymLinks => fts_sys::FTS_LOGICAL,
 
-            RecursiveMode::RecursiveAndFollowArgDirSymLinks => {
+            Self::RecursiveAndFollowArgDirSymLinks => {
                 fts_sys::FTS_PHYSICAL | fts_sys::FTS_COMFOLLOW
             }
         }
@@ -707,7 +726,7 @@ fn root_dev_ino_warn(dir_name: &Path) {
 // When a program like chgrp performs a recursive traversal that requires traversing symbolic links,
 // it is *not* a problem.
 // However, when invoked with "-P -R", it deserves a warning.
-// The fts_options parameter records the options that control this aspect of fts's behavior,
+// The fts_options parameter records the options that control this aspect of fts behavior,
 // so test that.
 fn cycle_warning_required(fts_options: c_int, entry: &fts::EntryRef) -> bool {
     // When dereferencing no symlinks, or when dereferencing only those listed on the command line
@@ -723,7 +742,7 @@ This almost certainly means that you have a corrupted file system.\n\
 NOTIFY YOUR SYSTEM MANAGER.\n\
 The following directory is part of the cycle {}.",
         file_name.quote()
-    )
+    );
 }
 
 #[derive(Debug)]

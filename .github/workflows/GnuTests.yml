@@ -1,6 +1,8 @@
 name: GnuTests
 
-# spell-checker:ignore (names) gnulib ; (utils) autopoint gperf pyinotify texinfo ; (vars) XPASS
+# spell-checker:ignore (names) gnulib ; (jargon) submodules ; (people) Dawid Dziurla * dawidd ; (utils) autopoint chksum gperf pyinotify shopt texinfo ; (vars) FILESET SUBDIRS XPASS
+
+# * note: to run a single test => `REPO/util/run-gnu-test.sh PATH/TO/TEST/SCRIPT`
 
 on: [push, pull_request]
 
@@ -9,23 +11,52 @@ jobs:
     name: Run GNU tests
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code uutil
+    - name: Initialize workflow variables
+      id: vars
+      shell: bash
+      run: |
+        ## VARs setup
+        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        # * config
+        path_GNU="gnu"
+        path_GNU_tests="${path_GNU}/tests"
+        path_UUTILS="uutils"
+        path_reference="reference"
+        outputs path_GNU path_GNU_tests path_reference path_UUTILS
+        #
+        repo_default_branch="${{ github.event.repository.default_branch }}"
+        repo_GNU_ref="v9.0"
+        repo_reference_branch="${{ github.event.repository.default_branch }}"
+        outputs repo_default_branch repo_GNU_ref repo_reference_branch
+        #
+        SUITE_LOG_FILE="${path_GNU_tests}/test-suite.log"
+        TEST_LOGS_GLOB="${path_GNU_tests}/**/*.log" ## note: not usable at bash CLI; [why] double globstar not enabled by default b/c MacOS includes only bash v3 which doesn't have double globstar support
+        TEST_FILESET_PREFIX='test-fileset-IDs.sha1#'
+        TEST_FILESET_SUFFIX='.txt'
+        TEST_SUMMARY_FILE='gnu-result.json'
+        TEST_FULL_SUMMARY_FILE='gnu-full-result.json'
+        outputs SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE
+    - name: Checkout code (uutil)
       uses: actions/checkout@v2
       with:
-        path: 'uutils'
-    - name: Checkout GNU coreutils
+        path: '${{ steps.vars.outputs.path_UUTILS }}'
+    - name: Checkout code (GNU coreutils)
       uses: actions/checkout@v2
       with:
         repository: 'coreutils/coreutils'
-        path: 'gnu'
-        ref: v8.32
-    - name: Checkout GNU coreutils library (gnulib)
-      uses: actions/checkout@v2
+        path: '${{ steps.vars.outputs.path_GNU }}'
+        ref: ${{ steps.vars.outputs.repo_GNU_ref }}
+        submodules: recursive
+    - name: Retrieve reference artifacts
+      uses: dawidd6/action-download-artifact@v2
+      # ref: <https://github.com/dawidd6/action-download-artifact>
+      continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:
-        repository: 'coreutils/gnulib'
-        path: 'gnulib'
-        ref: 8e99f24c0931a38880c6ee9b8287c7da80b0036b
-        fetch-depth: 0 # gnu gets upset if gnulib is a shallow checkout
+        workflow: GnuTests.yml
+        branch: "${{ steps.vars.outputs.repo_reference_branch }}"
+        # workflow_conclusion: success ## (default); * but, if commit with failed GnuTests is merged into the default branch, future commits will all show regression errors in GnuTests CI until o/w fixed
+        workflow_conclusion: completed ## continually recalibrates to last commit of default branch with a successful GnuTests (ie, "self-heals" from GnuTest regressions, but needs more supervision for/of regressions)
+        path: "${{ steps.vars.outputs.path_reference }}"
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
@@ -38,35 +69,58 @@ jobs:
       run: |
         ## Install dependencies
         sudo apt-get update
-        sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify python3-sphinx jq
+        sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify jq valgrind libexpect-perl
+    - name: Add various locales
+      shell: bash
+      run: |
+        echo "Before:"
+        locale -a
+        ## Some tests fail with 'cannot change locale (en_US.ISO-8859-1): No such file or directory'
+        ## Some others need a French locale
+        sudo locale-gen
+        sudo locale-gen fr_FR
+        sudo locale-gen fr_FR.UTF-8
+        sudo update-locale
+        echo "After:"
+        locale -a
     - name: Build binaries
       shell: bash
       run: |
         ## Build binaries
-        cd uutils
+        cd '${{ steps.vars.outputs.path_UUTILS }}'
         bash util/build-gnu.sh
     - name: Run GNU tests
       shell: bash
       run: |
-        bash uutils/util/run-gnu-test.sh
-    - name: Extract testing info
+        path_GNU='${{ steps.vars.outputs.path_GNU }}'
+        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
+        bash "${path_UUTILS}/util/run-gnu-test.sh"
+    - name: Extract testing info into JSON
+      shell: bash
+      run : |
+        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
+        python ${path_UUTILS}/util/gnu-json-result.py ${{ steps.vars.outputs.path_GNU_tests }} > ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
+    - name: Extract/summarize testing info
+      id: summary
       shell: bash
       run: |
-        ## Extract testing info
-        LOG_FILE=gnu/tests/test-suite.log
-        if test -f "$LOG_FILE"
+        ## Extract/summarize testing info
+        outputs() { step_id="summary"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        #
+        SUITE_LOG_FILE='${{ steps.vars.outputs.SUITE_LOG_FILE }}'
+        if test -f "${SUITE_LOG_FILE}"
         then
-            TOTAL=$(sed -n "s/.*# TOTAL: \(.*\)/\1/p"  "$LOG_FILE"|tr -d '\r'|head -n1)
-            PASS=$(sed -n "s/.*# PASS: \(.*\)/\1/p" "$LOG_FILE"|tr -d '\r'|head -n1)
-            SKIP=$(sed -n "s/.*# SKIP: \(.*\)/\1/p" "$LOG_FILE"|tr -d '\r'|head -n1)
-            FAIL=$(sed -n "s/.*# FAIL: \(.*\)/\1/p" "$LOG_FILE"|tr -d '\r'|head -n1)
-            XPASS=$(sed -n "s/.*# XPASS: \(.*\)/\1/p" "$LOG_FILE"|tr -d '\r'|head -n1)
-            ERROR=$(sed -n "s/.*# ERROR: \(.*\)/\1/p" "$LOG_FILE"|tr -d '\r'|head -n1)
+            TOTAL=$(sed -n "s/.*# TOTAL: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
+            PASS=$(sed -n "s/.*# PASS: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
+            SKIP=$(sed -n "s/.*# SKIP: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
+            FAIL=$(sed -n "s/.*# FAIL: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
+            XPASS=$(sed -n "s/.*# XPASS: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
+            ERROR=$(sed -n "s/.*# ERROR: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
             if [[ "$TOTAL" -eq 0 || "$TOTAL" -eq 1 ]]; then
-               echo "Error in the execution, failing early"
-               exit 1
+              echo "::error ::Failed to parse test results from '${SUITE_LOG_FILE}'; failing early"
+              exit 1
             fi
-            output="GNU tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / ERROR: $ERROR"
+            output="GNU tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / ERROR: $ERROR / SKIP: $SKIP"
             echo "${output}"
             if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
             jq -n \
@@ -78,54 +132,149 @@ jobs:
                   --arg fail "$FAIL" \
                   --arg xpass "$XPASS" \
                   --arg error "$ERROR" \
-                  '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, xpass: $xpass, error: $error, }}' > gnu-result.json
+                  '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, xpass: $xpass, error: $error, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+            HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
+            outputs HASH
           else
-            echo "::error ::Failed to get summary of test results"
+            echo "::error ::Failed to find summary of test results (missing '${SUITE_LOG_FILE}'); failing early"
+            exit 1
           fi
-    - uses: actions/upload-artifact@v2
+          # Compress logs before upload (fails otherwise)
+          gzip ${{ steps.vars.outputs.TEST_LOGS_GLOB }}
+    - name: Reserve SHA1/ID of 'test-summary'
+      uses: actions/upload-artifact@v2
       with:
-        name: test-report
-        path: gnu/tests/**/*.log
-    - uses: actions/upload-artifact@v2
+        name: "${{ steps.summary.outputs.HASH }}"
+        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
+    - name: Reserve test results summary
+      uses: actions/upload-artifact@v2
       with:
-        name: gnu-result
-        path: gnu-result.json
-    - name: Download the result
-      uses: dawidd6/action-download-artifact@v2
+        name: test-summary
+        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
+    - name: Reserve test logs
+      uses: actions/upload-artifact@v2
       with:
-        workflow: GnuTests.yml
-        name: gnu-result
-        repo: uutils/coreutils
-        branch: master
-        path: dl
-    - name: Download the log
-      uses: dawidd6/action-download-artifact@v2
+        name: test-logs
+        path: "${{ steps.vars.outputs.TEST_LOGS_GLOB }}"
+    - name: Upload full json results
+      uses: actions/upload-artifact@v2
       with:
-        workflow: GnuTests.yml
-        name: test-report
-        repo: uutils/coreutils
-        branch: master
-        path: dl
-    - name: Compare failing tests against master
+        name: gnu-full-result.json
+        path: ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
+    - name: Compare test failures VS reference
       shell: bash
       run: |
-            OLD_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" dl/test-suite.log | sort)
-            NEW_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" gnu/tests/test-suite.log | sort)
-            for LINE in $OLD_FAILING
-            do
-              if ! grep -Fxq $LINE<<<"$NEW_FAILING"; then
-                echo "::warning ::Congrats! The gnu test $LINE is now passing!"
-              fi
-            done
-            for LINE in $NEW_FAILING
-            do
-              if ! grep -Fxq $LINE<<<"$OLD_FAILING"
-              then
-                echo "::error ::GNU test failed: $LINE. $LINE is passing on 'master'. Maybe you have to rebase?"
-              fi
-            done
-    - name: Compare against master results
+        have_new_failures=""
+        REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/test-suite.log'
+        REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
+        REPO_DEFAULT_BRANCH='${{ steps.vars.outputs.repo_default_branch }}'
+        if test -f "${REF_LOG_FILE}"; then
+          echo "Reference SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
+          REF_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${REF_LOG_FILE}" | sort)
+          NEW_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" '${{ steps.vars.outputs.path_GNU_tests }}/test-suite.log' | sort)
+          for LINE in ${REF_FAILING}
+          do
+            if ! grep -Fxq ${LINE}<<<"${NEW_FAILING}"; then
+              echo "::warning ::Congrats! The gnu test ${LINE} is no longer failing!"
+            fi
+          done
+          for LINE in ${NEW_FAILING}
+          do
+            if ! grep -Fxq ${LINE}<<<"${REF_FAILING}"
+            then
+              echo "::error ::GNU test failed: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
+              have_new_failures="true"
+            fi
+          done
+        else
+          echo "::warning ::Skipping test failure comparison; no prior reference test logs are available."
+        fi
+        if test -n "${have_new_failures}" ; then exit -1 ; fi
+    - name: Compare test summary VS reference
+      if: success() || failure() # run regardless of prior step success/failure
       shell: bash
       run: |
-        mv dl/gnu-result.json master-gnu-result.json
-        python uutils/util/compare_gnu_result.py
+        REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
+        if test -f "${REF_SUMMARY_FILE}"; then
+          echo "Reference SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
+          mv "${REF_SUMMARY_FILE}" main-gnu-result.json
+          python uutils/util/compare_gnu_result.py
+        else
+          echo "::warning ::Skipping test summary comparison; no prior reference summary is available."
+        fi
+
+  gnu_coverage:
+    name: Run GNU tests with coverage
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code uutil
+      uses: actions/checkout@v2
+      with:
+        path: 'uutils'
+    - name: Checkout GNU coreutils
+      uses: actions/checkout@v2
+      with:
+        repository: 'coreutils/coreutils'
+        path: 'gnu'
+        ref: 'v9.0'
+        submodules: recursive
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly-2022-03-21
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+        components: rustfmt
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify jq valgrind libexpect-perl -y
+    - name: Add various locales
+      run: |
+        echo "Before:"
+        locale -a
+        ## Some tests fail with 'cannot change locale (en_US.ISO-8859-1): No such file or directory'
+        ## Some others need a French locale
+        sudo locale-gen
+        sudo locale-gen fr_FR
+        sudo locale-gen fr_FR.UTF-8
+        sudo update-locale
+        echo "After:"
+        locale -a
+    - name: Build binaries
+      env:
+        CARGO_INCREMENTAL: "0"
+        RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
+        RUSTDOCFLAGS: "-Cpanic=abort"
+      run: |
+        cd uutils
+        UU_MAKE_PROFILE=debug bash util/build-gnu.sh
+    - name: Run GNU tests
+      run: bash uutils/util/run-gnu-test.sh
+    - name: "`grcov` ~ install"
+      uses: actions-rs/install@v0.1
+      with:
+        crate: grcov
+        version: latest
+        use-tool-cache: false
+    - name: Generate coverage data (via `grcov`)
+      id: coverage
+      run: |
+        ## Generate coverage data
+        cd uutils
+        COVERAGE_REPORT_DIR="target/debug"
+        COVERAGE_REPORT_FILE="${COVERAGE_REPORT_DIR}/lcov.info"
+        mkdir -p "${COVERAGE_REPORT_DIR}"
+        sudo chown -R "$(whoami)" "${COVERAGE_REPORT_DIR}"
+        # display coverage files
+        grcov . --output-type files --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
+        # generate coverage report
+        grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
+        echo ::set-output name=report::${COVERAGE_REPORT_FILE}
+    - name: Upload coverage results (to Codecov.io)
+      uses: codecov/codecov-action@v2
+      with:
+        file: ${{ steps.coverage.outputs.report }}
+        flags: gnutests
+        name: gnutests
+        working-directory: uutils

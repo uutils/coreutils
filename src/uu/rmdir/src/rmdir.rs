@@ -10,30 +10,25 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use std::fs::{read_dir, remove_dir};
 use std::io;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UResult};
-use uucore::util_name;
+use uucore::{format_usage, util_name};
 
 static ABOUT: &str = "Remove the DIRECTORY(ies), if they are empty.";
+const USAGE: &str = "{} [OPTION]... DIRECTORY...";
 static OPT_IGNORE_FAIL_NON_EMPTY: &str = "ignore-fail-on-non-empty";
 static OPT_PARENTS: &str = "parents";
 static OPT_VERBOSE: &str = "verbose";
 
 static ARG_DIRS: &str = "dirs";
 
-fn usage() -> String {
-    format!("{0} [OPTION]... DIRECTORY...", uucore::execution_phrase())
-}
-
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let opts = Opts {
         ignore: matches.is_present(OPT_IGNORE_FAIL_NON_EMPTY),
@@ -175,35 +170,33 @@ struct Opts {
     verbose: bool,
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(OPT_IGNORE_FAIL_NON_EMPTY)
+            Arg::new(OPT_IGNORE_FAIL_NON_EMPTY)
                 .long(OPT_IGNORE_FAIL_NON_EMPTY)
                 .help("ignore each failure that is solely because a directory is non-empty"),
         )
-        .arg(
-            Arg::with_name(OPT_PARENTS)
-                .short("p")
-                .long(OPT_PARENTS)
-                .help(
-                    "remove DIRECTORY and its ancestors; e.g.,
+        .arg(Arg::new(OPT_PARENTS).short('p').long(OPT_PARENTS).help(
+            "remove DIRECTORY and its ancestors; e.g.,
                   'rmdir -p a/b/c' is similar to rmdir a/b/c a/b a",
-                ),
-        )
+        ))
         .arg(
-            Arg::with_name(OPT_VERBOSE)
-                .short("v")
+            Arg::new(OPT_VERBOSE)
+                .short('v')
                 .long(OPT_VERBOSE)
                 .help("output a diagnostic for every directory processed"),
         )
         .arg(
-            Arg::with_name(ARG_DIRS)
-                .multiple(true)
+            Arg::new(ARG_DIRS)
+                .multiple_occurrences(true)
                 .takes_value(true)
                 .min_values(1)
-                .required(true),
+                .required(true)
+                .allow_invalid_utf8(true),
         )
 }

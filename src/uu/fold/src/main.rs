@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_fold);
+uucore::bin!(uu_fold);

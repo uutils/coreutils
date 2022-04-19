@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_fmt);
+uucore::bin!(uu_fmt);

@@ -1,13 +1,14 @@
 // This file is part of the uutils coreutils package.
 //
 // (c) Jordi Boggiano <j.boggiano@seld.be>
+// (c) Thomas Queiroz <thomasqueirozb@gmail.com>
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
 /* last synced with: env (GNU coreutils) 8.13 */
 
-// spell-checker:ignore (ToDO) chdir execvp progname subcommand subcommands unsets
+// spell-checker:ignore (ToDO) chdir execvp progname subcommand subcommands unsets setenv putenv spawnp
 
 #[macro_use]
 extern crate clap;
@@ -15,17 +16,22 @@ extern crate clap;
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, AppSettings, Arg};
+use clap::{Arg, Command};
 use ini::Ini;
 use std::borrow::Cow;
 use std::env;
 use std::io::{self, Write};
 use std::iter::Iterator;
-use std::process::Command;
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
+use std::process;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::format_usage;
+#[cfg(unix)]
+use uucore::signals::signal_name_by_value;
 
-const USAGE: &str = "env [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
+const USAGE: &str = "{} [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
 const AFTER_HELP: &str = "\
 A mere - implies -i. If no COMMAND, print the resulting environment.
 ";
@@ -50,7 +56,7 @@ fn print_env(null: bool) {
     }
 }
 
-fn parse_name_value_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> Result<bool, i32> {
+fn parse_name_value_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> UResult<bool> {
     // is it a NAME=VALUE like opt ?
     if let Some(idx) = opt.find('=') {
         // yes, so push name, value pair
@@ -64,17 +70,12 @@ fn parse_name_value_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> Result<bool
     }
 }
 
-fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> Result<(), i32> {
+fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> UResult<()> {
     if opts.null {
-        eprintln!(
-            "{}: cannot specify --null (-0) with command",
-            uucore::util_name()
-        );
-        eprintln!(
-            "Type \"{} --help\" for detailed information",
-            uucore::execution_phrase()
-        );
-        Err(1)
+        Err(UUsageError::new(
+            125,
+            "cannot specify --null (-0) with command".to_string(),
+        ))
     } else {
         opts.program.push(opt);
         Ok(())
@@ -93,10 +94,8 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
             Ini::load_from_file(file)
         };
 
-        let conf = conf.map_err(|error| {
-            show_error!("{}: {}", file.maybe_quote(), error);
-            1
-        })?;
+        let conf =
+            conf.map_err(|e| USimpleError::new(1, format!("{}: {}", file.maybe_quote(), e)))?;
 
         for (_, prop) in &conf {
             // ignore all INI section lines (treat them as comments)
@@ -110,6 +109,7 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
 }
 
 #[cfg(not(windows))]
+#[allow(clippy::ptr_arg)]
 fn build_command<'a, 'b>(args: &'a mut Vec<&'b str>) -> (Cow<'b, str>, &'a [&'b str]) {
     let progname = Cow::from(args[0]);
     (progname, &args[1..])
@@ -125,46 +125,47 @@ fn build_command<'a, 'b>(args: &'a mut Vec<&'b str>) -> (Cow<'b, str>, &'a [&'b 
     (progname, &args[..])
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(crate_name!())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(crate_name!())
         .version(crate_version!())
         .author(crate_authors!())
         .about(crate_description!())
-        .usage(USAGE)
+        .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)
-        .setting(AppSettings::AllowExternalSubcommands)
-        .arg(Arg::with_name("ignore-environment")
-            .short("i")
+        .allow_external_subcommands(true)
+        .infer_long_args(true)
+        .arg(Arg::new("ignore-environment")
+            .short('i')
             .long("ignore-environment")
             .help("start with an empty environment"))
-        .arg(Arg::with_name("chdir")
-            .short("c")
+        .arg(Arg::new("chdir")
+            .short('C') // GNU env compatibility
             .long("chdir")
             .takes_value(true)
             .number_of_values(1)
             .value_name("DIR")
             .help("change working directory to DIR"))
-        .arg(Arg::with_name("null")
-            .short("0")
+        .arg(Arg::new("null")
+            .short('0')
             .long("null")
             .help("end each output line with a 0 byte rather than a newline (only valid when \
                     printing the environment)"))
-        .arg(Arg::with_name("file")
-            .short("f")
+        .arg(Arg::new("file")
+            .short('f')
             .long("file")
             .takes_value(true)
             .number_of_values(1)
             .value_name("PATH")
-            .multiple(true)
+            .multiple_occurrences(true)
             .help("read and set variables from a \".env\"-style configuration file (prior to any \
                     unset and/or set)"))
-        .arg(Arg::with_name("unset")
-            .short("u")
+        .arg(Arg::new("unset")
+            .short('u')
             .long("unset")
             .takes_value(true)
             .number_of_values(1)
             .value_name("NAME")
-            .multiple(true)
+            .multiple_occurrences(true)
             .help("remove variable from the environment"))
 }
 
@@ -209,7 +210,7 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
 
     // we handle the name, value pairs and the program to be executed by treating them as external
     // subcommands in clap
-    if let (external, Some(matches)) = matches.subcommand() {
+    if let Some((external, matches)) = matches.subcommand() {
         let mut begin_prog_opts = false;
 
         if external == "-" {
@@ -236,6 +237,14 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
+    // GNU env tests this behavior
+    if opts.program.is_empty() && running_directory.is_some() {
+        return Err(UUsageError::new(
+            125,
+            "must specify command with --chdir (-C)".to_string(),
+        ));
+    }
+
     // NOTE: we manually set and unset the env vars below rather than using Command::env() to more
     //       easily handle the case where no command is given
 
@@ -251,12 +260,44 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
 
     // unset specified env vars
     for name in &opts.unsets {
+        if name.is_empty() || name.contains(0 as char) || name.contains('=') {
+            return Err(USimpleError::new(
+                125,
+                format!("cannot unset {}: Invalid argument", name.quote()),
+            ));
+        }
+
         env::remove_var(name);
     }
 
     // set specified env vars
     for &(name, val) in &opts.sets {
-        // FIXME: set_var() panics if name is an empty string
+        /*
+         * set_var panics if name is an empty string
+         * set_var internally calls setenv (on unix at least), while GNU env calls putenv instead.
+         *
+         * putenv returns successfully if provided with something like "=a" and modifies the environ
+         * variable to contain "=a" inside it, effectively modifying the process' current environment
+         * to contain a malformed string in it. Using GNU's implementation, the command `env =a`
+         * prints out the malformed string and even invokes the child process with that environment.
+         * This can be seen by using `env -i =a env` or `env -i =a cat /proc/self/environ`
+         *
+         * POSIX.1-2017 doesn't seem to mention what to do if the string is malformed (at least
+         * not in "Chapter 8, Environment Variables" or in the definition for environ and various
+         * exec*'s or in the description of env in the "Shell & Utilities" volume).
+         *
+         * It also doesn't specify any checks for putenv before modifying the environ variable, which
+         * is likely why glibc doesn't do so. However, the first set_var argument cannot point to
+         * an empty string or a string containing '='.
+         *
+         * There is no benefit in replicating GNU's env behavior, since it will only modify the
+         * environment in weird ways
+         */
+
+        if name.is_empty() {
+            show_warning!("no name specified for value {}", val.quote());
+            continue;
+        }
         env::set_var(name, val);
     }
 
@@ -264,9 +305,44 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
         // we need to execute a command
         let (prog, args) = build_command(&mut opts.program);
 
-        // FIXME: this should just use execvp() (no fork()) on Unix-like systems
-        match Command::new(&*prog).args(args).status() {
-            Ok(exit) if !exit.success() => return Err(exit.code().unwrap().into()),
+        /*
+         * On Unix-like systems Command::status either ends up calling either fork or posix_spawnp
+         * (which ends up calling clone). Keep using the current process would be ideal, but the
+         * standard library contains many checks and fail-safes to ensure the process ends up being
+         * created. This is much simpler than dealing with the hassles of calling execvp directly.
+         */
+        match process::Command::new(&*prog).args(args).status() {
+            Ok(exit) if !exit.success() => {
+                #[cfg(unix)]
+                if let Some(exit_code) = exit.code() {
+                    return Err(exit_code.into());
+                } else {
+                    // `exit.code()` returns `None` on Unix when the process is terminated by a signal.
+                    // See std::os::unix::process::ExitStatusExt for more information. This prints out
+                    // the interrupted process and the signal it received.
+                    let signal_code = exit.signal().unwrap();
+                    eprintln!(
+                        "\"{}\" terminated by signal {}",
+                        {
+                            let mut command = uucore::util_name().to_owned();
+                            command.push(' ');
+                            command.push_str(&opts.program.join(" "));
+                            command
+                        },
+                        signal_name_by_value(signal_code as usize).map_or_else(
+                            || String::from("UNKNOWN"),
+                            |signal| {
+                                let mut full_signal_name = String::from("SIG");
+                                full_signal_name.push_str(signal);
+                                full_signal_name
+                            }
+                        )
+                    );
+                    return Err((128 + signal_code).into());
+                }
+                #[cfg(not(unix))]
+                return Err(exit.code().unwrap().into());
+            }
             Err(ref err) if err.kind() == io::ErrorKind::NotFound => return Err(127.into()),
             Err(_) => return Err(126.into()),
             Ok(_) => (),
@@ -279,7 +355,7 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     run_env(args)
 }

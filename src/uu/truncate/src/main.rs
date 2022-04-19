@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_truncate);
+uucore::bin!(uu_truncate);

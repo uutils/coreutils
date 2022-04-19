@@ -6,21 +6,23 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv
+// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv PWSTR lpszfilepath hresult
 
 pub extern crate filetime;
 
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg, ArgGroup};
+use clap::{crate_version, Arg, ArgGroup, Command};
 use filetime::*;
 use std::fs::{self, File};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::format_usage;
 
 static ABOUT: &str = "Update the access and modification times of each FILE to the current time.";
+const USAGE: &str = "{} [OPTION]... [USER]";
 pub mod options {
     // Both SOURCES and sources are needed as we need to be able to refer to the ArgGroup.
     pub static SOURCES: &str = "sources";
@@ -29,6 +31,7 @@ pub mod options {
         pub static REFERENCE: &str = "reference";
         pub static CURRENT: &str = "current";
     }
+    pub static HELP: &str = "help";
     pub static ACCESS: &str = "access";
     pub static MODIFICATION: &str = "modification";
     pub static NO_CREATE: &str = "no-create";
@@ -48,17 +51,17 @@ fn local_tm_to_filetime(tm: time::Tm) -> FileTime {
     FileTime::from_unix_time(ts.sec as i64, ts.nsec as u32)
 }
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [USER]", uucore::execution_phrase())
-}
-
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
+    let matches = uu_app().get_matches_from(args);
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
-
-    let files = matches.values_of_os(ARG_FILES).unwrap();
+    let files = matches.values_of_os(ARG_FILES).ok_or_else(|| {
+        USimpleError::new(
+            1,
+            r##"missing file operand
+Try 'touch --help' for more information."##,
+        )
+    })?;
 
     let (mut atime, mut mtime) =
         if let Some(reference) = matches.value_of_os(options::sources::REFERENCE) {
@@ -75,10 +78,28 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         };
 
     for filename in files {
-        let path = Path::new(filename);
+        // FIXME: find a way to avoid having to clone the path
+        let pathbuf = if filename == "-" {
+            pathbuf_from_stdout()?
+        } else {
+            PathBuf::from(filename)
+        };
+
+        let path = pathbuf.as_path();
+
         if !path.exists() {
-            // no-dereference included here for compatibility
-            if matches.is_present(options::NO_CREATE) || matches.is_present(options::NO_DEREF) {
+            if matches.is_present(options::NO_CREATE) {
+                continue;
+            }
+
+            if matches.is_present(options::NO_DEREF) {
+                show!(USimpleError::new(
+                    1,
+                    format!(
+                        "setting times of {}: No such file or directory",
+                        filename.quote()
+                    )
+                ));
                 continue;
             }
 
@@ -129,43 +150,50 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::ACCESS)
-                .short("a")
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information."),
+        )
+        .arg(
+            Arg::new(options::ACCESS)
+                .short('a')
                 .help("change only the access time"),
         )
         .arg(
-            Arg::with_name(options::sources::CURRENT)
-                .short("t")
+            Arg::new(options::sources::CURRENT)
+                .short('t')
                 .help("use [[CC]YY]MMDDhhmm[.ss] instead of the current time")
                 .value_name("STAMP")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(options::sources::DATE)
-                .short("d")
+            Arg::new(options::sources::DATE)
+                .short('d')
                 .long(options::sources::DATE)
                 .help("parse argument and use it instead of current time")
                 .value_name("STRING"),
         )
         .arg(
-            Arg::with_name(options::MODIFICATION)
-                .short("m")
+            Arg::new(options::MODIFICATION)
+                .short('m')
                 .help("change only the modification time"),
         )
         .arg(
-            Arg::with_name(options::NO_CREATE)
-                .short("c")
+            Arg::new(options::NO_CREATE)
+                .short('c')
                 .long(options::NO_CREATE)
                 .help("do not create any files"),
         )
         .arg(
-            Arg::with_name(options::NO_DEREF)
-                .short("h")
+            Arg::new(options::NO_DEREF)
+                .short('h')
                 .long(options::NO_DEREF)
                 .help(
                     "affect each symbolic link instead of any referenced file \
@@ -173,15 +201,15 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::sources::REFERENCE)
-                .short("r")
+            Arg::new(options::sources::REFERENCE)
+                .short('r')
                 .long(options::sources::REFERENCE)
-                .alias("ref") // clapv3
                 .help("use this file's times instead of the current time")
-                .value_name("FILE"),
+                .value_name("FILE")
+                .allow_invalid_utf8(true),
         )
         .arg(
-            Arg::with_name(options::TIME)
+            Arg::new(options::TIME)
                 .long(options::TIME)
                 .help(
                     "change only the specified time: \"access\", \"atime\", or \
@@ -193,12 +221,13 @@ pub fn uu_app() -> App<'static, 'static> {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(ARG_FILES)
-                .multiple(true)
+            Arg::new(ARG_FILES)
+                .multiple_occurrences(true)
                 .takes_value(true)
-                .min_values(1),
+                .min_values(1)
+                .allow_invalid_utf8(true),
         )
-        .group(ArgGroup::with_name(options::SOURCES).args(&[
+        .group(ArgGroup::new(options::SOURCES).args(&[
             options::sources::CURRENT,
             options::sources::DATE,
             options::sources::REFERENCE,
@@ -283,4 +312,90 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
     }
 
     Ok(ft)
+}
+
+// TODO: this may be a good candidate to put in fsext.rs
+/// Returns a PathBuf to stdout.
+///
+/// On Windows, uses GetFinalPathNameByHandleW to attempt to get the path
+/// from the stdout handle.
+fn pathbuf_from_stdout() -> UResult<PathBuf> {
+    #[cfg(unix)]
+    {
+        Ok(PathBuf::from("/dev/stdout"))
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::prelude::AsRawHandle;
+        use winapi::shared::minwindef::{DWORD, MAX_PATH};
+        use winapi::shared::winerror::{
+            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND,
+        };
+        use winapi::um::errhandlingapi::GetLastError;
+        use winapi::um::fileapi::GetFinalPathNameByHandleW;
+        use winapi::um::winnt::WCHAR;
+
+        let handle = std::io::stdout().lock().as_raw_handle();
+        let mut file_path_buffer: [WCHAR; MAX_PATH as usize] = [0; MAX_PATH as usize];
+
+        // Couldn't find this in winapi
+        const FILE_NAME_OPENED: DWORD = 0x8;
+
+        // https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlea#examples
+        // SAFETY: We transmute the handle to be able to cast *mut c_void into a
+        // HANDLE (i32) so rustc will let us call GetFinalPathNameByHandleW. The
+        // reference example code for GetFinalPathNameByHandleW implies that
+        // it is safe for us to leave lpszfilepath uninitialized, so long as
+        // the buffer size is correct. We know the buffer size (MAX_PATH) at
+        // compile time. MAX_PATH is a small number (260) so we can cast it
+        // to a u32.
+        let ret = unsafe {
+            GetFinalPathNameByHandleW(
+                std::mem::transmute(handle),
+                file_path_buffer.as_mut_ptr(),
+                file_path_buffer.len() as u32,
+                FILE_NAME_OPENED,
+            )
+        };
+
+        let buffer_size = match ret {
+            ERROR_PATH_NOT_FOUND | ERROR_NOT_ENOUGH_MEMORY | ERROR_INVALID_PARAMETER => {
+                return Err(USimpleError::new(
+                    1,
+                    format!("GetFinalPathNameByHandleW failed with code {}", ret),
+                ))
+            }
+            e if e == 0 => {
+                return Err(USimpleError::new(
+                    1,
+                    format!(
+                        "GetFinalPathNameByHandleW failed with code {}",
+                        // SAFETY: GetLastError is thread-safe and has no documented memory unsafety.
+                        unsafe { GetLastError() }
+                    ),
+                ));
+            }
+            e => e as usize,
+        };
+
+        // Don't include the null terminator
+        Ok(String::from_utf16(&file_path_buffer[0..buffer_size])
+            .map_err(|e| USimpleError::new(1, e.to_string()))?
+            .into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(windows)]
+    #[test]
+    fn test_get_pathbuf_from_stdout_fails_if_stdout_is_not_a_file() {
+        // We can trigger an error by not setting stdout to anything (will
+        // fail with code 1)
+        assert!(super::pathbuf_from_stdout()
+            .err()
+            .expect("pathbuf_from_stdout should have failed")
+            .to_string()
+            .contains("GetFinalPathNameByHandleW failed with code 1"));
+    }
 }

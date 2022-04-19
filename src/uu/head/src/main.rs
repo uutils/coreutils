@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_head);
+uucore::bin!(uu_head);

@@ -42,30 +42,30 @@ pub enum Token {
 }
 impl Token {
     fn new_infix_op(v: &str, left_assoc: bool, precedence: u8) -> Self {
-        Token::InfixOp {
+        Self::InfixOp {
             left_assoc,
             precedence,
             value: v.into(),
         }
     }
     fn new_value(v: &str) -> Self {
-        Token::Value { value: v.into() }
+        Self::Value { value: v.into() }
     }
 
     fn is_infix_plus(&self) -> bool {
         match self {
-            Token::InfixOp { value, .. } => value == "+",
+            Self::InfixOp { value, .. } => value == "+",
             _ => false,
         }
     }
     fn is_a_number(&self) -> bool {
         match self {
-            Token::Value { value, .. } => value.parse::<BigInt>().is_ok(),
+            Self::Value { value, .. } => value.parse::<BigInt>().is_ok(),
             _ => false,
         }
     }
     fn is_a_close_paren(&self) -> bool {
-        matches!(*self, Token::ParClose)
+        matches!(*self, Self::ParClose)
     }
 }
 
@@ -82,34 +82,22 @@ pub fn strings_to_tokens(strings: &[String]) -> Result<Vec<(usize, Token)>, Stri
 
             ":" => Token::new_infix_op(s, true, 6),
 
-            "*" => Token::new_infix_op(s, true, 5),
-            "/" => Token::new_infix_op(s, true, 5),
-            "%" => Token::new_infix_op(s, true, 5),
+            "*" | "/" | "%" => Token::new_infix_op(s, true, 5),
 
-            "+" => Token::new_infix_op(s, true, 4),
-            "-" => Token::new_infix_op(s, true, 4),
+            "+" | "-" => Token::new_infix_op(s, true, 4),
 
-            "=" => Token::new_infix_op(s, true, 3),
-            "!=" => Token::new_infix_op(s, true, 3),
-            "<" => Token::new_infix_op(s, true, 3),
-            ">" => Token::new_infix_op(s, true, 3),
-            "<=" => Token::new_infix_op(s, true, 3),
-            ">=" => Token::new_infix_op(s, true, 3),
+            "=" | "!=" | "<" | ">" | "<=" | ">=" => Token::new_infix_op(s, true, 3),
 
             "&" => Token::new_infix_op(s, true, 2),
 
             "|" => Token::new_infix_op(s, true, 1),
 
-            "match" => Token::PrefixOp {
+            "match" | "index" => Token::PrefixOp {
                 arity: 2,
                 value: s.clone(),
             },
             "substr" => Token::PrefixOp {
                 arity: 3,
-                value: s.clone(),
-            },
-            "index" => Token::PrefixOp {
-                arity: 2,
                 value: s.clone(),
             },
             "length" => Token::PrefixOp {
@@ -155,8 +143,8 @@ fn push_token_if_not_escaped(acc: &mut Vec<(usize, Token)>, tok_idx: usize, toke
 
     if should_use_as_escaped {
         acc.pop();
-        acc.push((tok_idx, Token::new_value(s)))
+        acc.push((tok_idx, Token::new_value(s)));
     } else {
-        acc.push((tok_idx, token))
+        acc.push((tok_idx, token));
     }
 }

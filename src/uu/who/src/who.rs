@@ -7,17 +7,17 @@
 
 // spell-checker:ignore (ToDO) ttyname hostnames runlevel mesg wtmp statted boottime deadprocs initspawn clockchange curr runlvline pidstr exitstr hoststr
 
-#[macro_use]
-extern crate uucore;
+use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult};
 use uucore::libc::{ttyname, STDIN_FILENO, S_IWGRP};
 use uucore::utmpx::{self, time, Utmpx};
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use std::borrow::Cow;
 use std::ffi::CStr;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 mod options {
     pub const ALL: &str = "all";
@@ -38,18 +38,12 @@ mod options {
 }
 
 static ABOUT: &str = "Print information about users who are currently logged in.";
+const USAGE: &str = "{} [OPTION]... [ FILE | ARG1 ARG2 ]";
 
 #[cfg(any(target_os = "linux"))]
 static RUNLEVEL_HELP: &str = "print current runlevel";
 #[cfg(not(target_os = "linux"))]
 static RUNLEVEL_HELP: &str = "print current runlevel (This is meaningless on non Linux)";
-
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... [ FILE | ARG1 ARG2 ]",
-        uucore::execution_phrase()
-    )
-}
 
 fn get_long_usage() -> String {
     format!(
@@ -59,18 +53,15 @@ fn get_long_usage() -> String {
     )
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = usage();
     let after_help = get_long_usage();
 
-    let matches = uu_app()
-        .usage(&usage[..])
-        .after_help(&after_help[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
     let files: Vec<String> = matches
         .values_of(options::FILE)
@@ -157,106 +148,106 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         args: files,
     };
 
-    who.exec();
-
-    0
+    who.exec()
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::ALL)
+            Arg::new(options::ALL)
                 .long(options::ALL)
-                .short("a")
+                .short('a')
                 .help("same as -b -d --login -p -r -t -T -u"),
         )
         .arg(
-            Arg::with_name(options::BOOT)
+            Arg::new(options::BOOT)
                 .long(options::BOOT)
-                .short("b")
+                .short('b')
                 .help("time of last system boot"),
         )
         .arg(
-            Arg::with_name(options::DEAD)
+            Arg::new(options::DEAD)
                 .long(options::DEAD)
-                .short("d")
+                .short('d')
                 .help("print dead processes"),
         )
         .arg(
-            Arg::with_name(options::HEADING)
+            Arg::new(options::HEADING)
                 .long(options::HEADING)
-                .short("H")
+                .short('H')
                 .help("print line of column headings"),
         )
         .arg(
-            Arg::with_name(options::LOGIN)
+            Arg::new(options::LOGIN)
                 .long(options::LOGIN)
-                .short("l")
+                .short('l')
                 .help("print system login processes"),
         )
         .arg(
-            Arg::with_name(options::LOOKUP)
+            Arg::new(options::LOOKUP)
                 .long(options::LOOKUP)
                 .help("attempt to canonicalize hostnames via DNS"),
         )
         .arg(
-            Arg::with_name(options::ONLY_HOSTNAME_USER)
-                .short("m")
+            Arg::new(options::ONLY_HOSTNAME_USER)
+                .short('m')
                 .help("only hostname and user associated with stdin"),
         )
         .arg(
-            Arg::with_name(options::PROCESS)
+            Arg::new(options::PROCESS)
                 .long(options::PROCESS)
-                .short("p")
+                .short('p')
                 .help("print active processes spawned by init"),
         )
         .arg(
-            Arg::with_name(options::COUNT)
+            Arg::new(options::COUNT)
                 .long(options::COUNT)
-                .short("q")
+                .short('q')
                 .help("all login names and number of users logged on"),
         )
         .arg(
-            Arg::with_name(options::RUNLEVEL)
+            Arg::new(options::RUNLEVEL)
                 .long(options::RUNLEVEL)
-                .short("r")
+                .short('r')
                 .help(RUNLEVEL_HELP),
         )
         .arg(
-            Arg::with_name(options::SHORT)
+            Arg::new(options::SHORT)
                 .long(options::SHORT)
-                .short("s")
+                .short('s')
                 .help("print only name, line, and time (default)"),
         )
         .arg(
-            Arg::with_name(options::TIME)
+            Arg::new(options::TIME)
                 .long(options::TIME)
-                .short("t")
+                .short('t')
                 .help("print last system clock change"),
         )
         .arg(
-            Arg::with_name(options::USERS)
+            Arg::new(options::USERS)
                 .long(options::USERS)
-                .short("u")
+                .short('u')
                 .help("list users logged in"),
         )
         .arg(
-            Arg::with_name(options::MESG)
+            Arg::new(options::MESG)
                 .long(options::MESG)
-                .short("T")
+                .short('T')
                 // .visible_short_alias('w')  // TODO: requires clap "3.0.0-beta.2"
                 .visible_aliases(&["message", "writable"])
                 .help("add user's message status as +, - or ?"),
         )
         .arg(
-            Arg::with_name("w") // work around for `Arg::visible_short_alias`
-                .short("w")
+            Arg::new("w") // work around for `Arg::visible_short_alias`
+                .short('w')
                 .help("same as -T"),
         )
         .arg(
-            Arg::with_name(options::FILE)
+            Arg::new(options::FILE)
                 .takes_value(true)
                 .min_values(1)
                 .max_values(2),
@@ -326,7 +317,7 @@ fn current_tty() -> String {
 }
 
 impl Who {
-    fn exec(&mut self) {
+    fn exec(&mut self) -> UResult<()> {
         let run_level_chk = |_record: i16| {
             #[cfg(not(target_os = "linux"))]
             return false;
@@ -351,7 +342,7 @@ impl Who {
             let records = Utmpx::iter_all_records_from(f).peekable();
 
             if self.include_heading {
-                self.print_heading()
+                self.print_heading();
             }
             let cur_tty = if self.my_line_only {
                 current_tty()
@@ -362,7 +353,7 @@ impl Who {
             for ut in records {
                 if !self.my_line_only || cur_tty == ut.tty_device() {
                     if self.need_users && ut.is_user_process() {
-                        self.print_user(&ut);
+                        self.print_user(&ut)?;
                     } else if self.need_runlevel && run_level_chk(ut.record_type()) {
                         if cfg!(target_os = "linux") {
                             self.print_runlevel(&ut);
@@ -383,6 +374,7 @@ impl Who {
                 if ut.record_type() == utmpx::BOOT_TIME {}
             }
         }
+        Ok(())
     }
 
     #[inline]
@@ -464,7 +456,7 @@ impl Who {
         self.print_line("", ' ', "system boot", &time_string(ut), "", "", "", "");
     }
 
-    fn print_user(&self, ut: &Utmpx) {
+    fn print_user(&self, ut: &Utmpx) -> UResult<()> {
         let mut p = PathBuf::from("/dev");
         p.push(ut.tty_device().as_str());
         let mesg;
@@ -491,7 +483,13 @@ impl Who {
         };
 
         let s = if self.do_lookup {
-            crash_if_err!(1, ut.canon_host())
+            ut.canon_host().map_err_context(|| {
+                let host = ut.host();
+                format!(
+                    "failed to canonicalize {}",
+                    host.split(':').next().unwrap_or(&host).quote()
+                )
+            })?
         } else {
             ut.host()
         };
@@ -507,6 +505,8 @@ impl Who {
             hoststr.as_str(),
             "",
         );
+
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]

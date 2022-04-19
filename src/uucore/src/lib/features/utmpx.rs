@@ -221,11 +221,7 @@ impl Utmpx {
     pub fn canon_host(&self) -> IOResult<String> {
         let host = self.host();
 
-        // TODO: change to use `split_once` when MSRV hits 1.52.0
-        // let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
-        let mut h = host.split(':');
-        let hostname = h.next().unwrap_or(&host);
-        let display = h.next().unwrap_or("");
+        let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
 
         if !hostname.is_empty() {
             extern crate dns_lookup;
@@ -236,17 +232,20 @@ impl Utmpx {
                 flags: AI_CANONNAME,
                 ..AddrInfoHints::default()
             };
-            let sockets = getaddrinfo(Some(hostname), None, Some(hints))
-                .unwrap()
-                .collect::<IOResult<Vec<_>>>()?;
-            for socket in sockets {
-                if let Some(ai_canonname) = socket.canonname {
-                    return Ok(if display.is_empty() {
-                        ai_canonname
-                    } else {
-                        format!("{}:{}", ai_canonname, display)
-                    });
+            if let Ok(sockets) = getaddrinfo(Some(hostname), None, Some(hints)) {
+                let sockets = sockets.collect::<IOResult<Vec<_>>>()?;
+                for socket in sockets {
+                    if let Some(ai_canonname) = socket.canonname {
+                        return Ok(if display.is_empty() {
+                            ai_canonname
+                        } else {
+                            format!("{}:{}", ai_canonname, display)
+                        });
+                    }
                 }
+            } else {
+                // GNU coreutils has this behavior
+                return Ok(hostname.to_string());
             }
         }
 
@@ -319,7 +318,7 @@ impl UtmpxIter {
     fn new() -> Self {
         // PoisonErrors can safely be ignored
         let guard = LOCK.lock().unwrap_or_else(|err| err.into_inner());
-        UtmpxIter {
+        Self {
             guard,
             phantom: PhantomData,
         }

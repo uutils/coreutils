@@ -6,16 +6,16 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use std::io::{self, Write};
 use std::iter::Peekable;
 use std::str::Chars;
 use uucore::error::{FromIo, UResult};
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 const NAME: &str = "echo";
 const SUMMARY: &str = "display a line of text";
-const USAGE: &str = "[OPTIONS]... [STRING]...";
+const USAGE: &str = "{} [OPTIONS]... [STRING]...";
 const AFTER_HELP: &str = r#"
  Echo the STRING(s) to standard output.
 
@@ -88,10 +88,7 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
                         start = 0;
                         next
                     }),
-                    '0' => parse_code(&mut iter, 8, 3, 3).unwrap_or_else(|| {
-                        start = 0;
-                        next
-                    }),
+                    '0' => parse_code(&mut iter, 8, 3, 3).unwrap_or('\0'),
                     _ => {
                         start = 0;
                         next
@@ -111,7 +108,7 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
     Ok(should_stop)
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -125,50 +122,45 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec!["".to_string()],
     };
 
-    execute(no_newline, escaped, values).map_err_context(|| "could not write to stdout".to_string())
+    execute(no_newline, escaped, &values)
+        .map_err_context(|| "could not write to stdout".to_string())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .name(NAME)
         // TrailingVarArg specifies the final positional argument is a VarArg
         // and it doesn't attempts the parse any further args.
         // Final argument must have multiple(true) or the usage string equivalent.
-        .setting(clap::AppSettings::TrailingVarArg)
-        .setting(clap::AppSettings::AllowLeadingHyphen)
+        .trailing_var_arg(true)
+        .allow_hyphen_values(true)
+        .infer_long_args(true)
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(AFTER_HELP)
-        .usage(USAGE)
+        .override_usage(format_usage(USAGE))
         .arg(
-            Arg::with_name(options::NO_NEWLINE)
-                .short("n")
+            Arg::new(options::NO_NEWLINE)
+                .short('n')
                 .help("do not output the trailing newline")
-                .takes_value(false)
-                .display_order(1),
+                .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::ENABLE_BACKSLASH_ESCAPE)
-                .short("e")
+            Arg::new(options::ENABLE_BACKSLASH_ESCAPE)
+                .short('e')
                 .help("enable interpretation of backslash escapes")
-                .takes_value(false)
-                .display_order(2),
+                .takes_value(false),
         )
         .arg(
-            Arg::with_name(options::DISABLE_BACKSLASH_ESCAPE)
-                .short("E")
+            Arg::new(options::DISABLE_BACKSLASH_ESCAPE)
+                .short('E')
                 .help("disable interpretation of backslash escapes (default)")
-                .takes_value(false)
-                .display_order(3),
+                .takes_value(false),
         )
-        .arg(
-            Arg::with_name(options::STRING)
-                .multiple(true)
-                .allow_hyphen_values(true),
-        )
+        .arg(Arg::new(options::STRING).multiple_occurrences(true))
 }
 
-fn execute(no_newline: bool, escaped: bool, free: Vec<String>) -> io::Result<()> {
+fn execute(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<()> {
     let stdout = io::stdout();
     let mut output = stdout.lock();
 

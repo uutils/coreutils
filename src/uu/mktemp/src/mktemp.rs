@@ -8,20 +8,22 @@
 
 // spell-checker:ignore (paths) GPGHome
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use uucore::display::{println_verbatim, Quotable};
 use uucore::error::{FromIo, UError, UResult};
+use uucore::format_usage;
 
 use std::env;
 use std::error::Error;
 use std::fmt::Display;
 use std::iter;
-use std::path::{is_separator, PathBuf};
+use std::path::{is_separator, Path, PathBuf};
 
 use rand::Rng;
 use tempfile::Builder;
 
 static ABOUT: &str = "create a temporary file or directory.";
+const USAGE: &str = "{} [OPTION]... [TEMPLATE]";
 
 static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
 
@@ -33,10 +35,6 @@ static OPT_TMPDIR: &str = "tmpdir";
 static OPT_T: &str = "t";
 
 static ARG_TEMPLATE: &str = "template";
-
-fn usage() -> String {
-    format!("{0} [OPTION]... [TEMPLATE]", uucore::execution_phrase())
-}
 
 #[derive(Debug)]
 enum MkTempError {
@@ -74,11 +72,9 @@ impl Display for MkTempError {
     }
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
-
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let template = matches.value_of(ARG_TEMPLATE).unwrap();
     let tmpdir = matches.value_of(OPT_TMPDIR).unwrap_or_default();
@@ -118,13 +114,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     if matches.is_present(OPT_T) {
-        tmpdir = env::temp_dir()
+        tmpdir = env::temp_dir();
     }
 
     let res = if dry_run {
         dry_exec(tmpdir, prefix, rand, suffix)
     } else {
-        exec(tmpdir, prefix, rand, suffix, make_dir)
+        exec(&tmpdir, prefix, rand, suffix, make_dir)
     };
 
     if suppress_file_err {
@@ -135,30 +131,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(OPT_DIRECTORY)
-                .short("d")
+            Arg::new(OPT_DIRECTORY)
+                .short('d')
                 .long(OPT_DIRECTORY)
                 .help("Make a directory instead of a file"),
         )
         .arg(
-            Arg::with_name(OPT_DRY_RUN)
-                .short("u")
+            Arg::new(OPT_DRY_RUN)
+                .short('u')
                 .long(OPT_DRY_RUN)
                 .help("do not create anything; merely print a name (unsafe)"),
         )
         .arg(
-            Arg::with_name(OPT_QUIET)
-                .short("q")
+            Arg::new(OPT_QUIET)
+                .short('q')
                 .long("quiet")
                 .help("Fail silently if an error occurs."),
         )
         .arg(
-            Arg::with_name(OPT_SUFFIX)
+            Arg::new(OPT_SUFFIX)
                 .long(OPT_SUFFIX)
                 .help(
                     "append SUFFIX to TEMPLATE; SUFFIX must not contain a path separator. \
@@ -167,8 +165,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .value_name("SUFFIX"),
         )
         .arg(
-            Arg::with_name(OPT_TMPDIR)
-                .short("p")
+            Arg::new(OPT_TMPDIR)
+                .short('p')
                 .long(OPT_TMPDIR)
                 .help(
                     "interpret TEMPLATE relative to DIR; if DIR is not specified, use \
@@ -178,13 +176,13 @@ pub fn uu_app() -> App<'static, 'static> {
                 )
                 .value_name("DIR"),
         )
-        .arg(Arg::with_name(OPT_T).short(OPT_T).help(
+        .arg(Arg::new(OPT_T).short('t').help(
             "Generate a template (using the supplied prefix and TMPDIR (TMP on windows) if set) \
              to create a filename template [deprecated]",
         ))
         .arg(
-            Arg::with_name(ARG_TEMPLATE)
-                .multiple(false)
+            Arg::new(ARG_TEMPLATE)
+                .multiple_occurrences(false)
                 .takes_value(true)
                 .max_values(1)
                 .default_value(DEFAULT_TEMPLATE),
@@ -248,7 +246,7 @@ pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) ->
     println_verbatim(tmpdir).map_err_context(|| "failed to print directory name".to_owned())
 }
 
-fn exec(dir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> UResult<()> {
+fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> UResult<()> {
     let context = || {
         format!(
             "failed to create file via template '{}{}{}'",

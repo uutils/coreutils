@@ -35,6 +35,7 @@ WASM
 XFS
 aarch
 flac
+impls
 lzma
 
 # * names
@@ -47,6 +48,7 @@ EditorConfig
 FreeBSD
 Gmail
 GNU
+Illumos
 Irix
 MS-DOS
 MSDOS

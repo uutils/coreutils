@@ -9,7 +9,7 @@ fn test_tee_processing_multiple_operands() {
     // POSIX says: "Processing of at least 13 file operands shall be supported."
 
     let content = "tee_sample_content";
-    for &n in [1, 2, 12, 13].iter() {
+    for &n in &[1, 2, 12, 13] {
         let files = (1..=n).map(|x| x.to_string()).collect::<Vec<_>>();
         let (at, mut ucmd) = at_and_ucmd!();
 
@@ -18,7 +18,7 @@ fn test_tee_processing_multiple_operands() {
             .succeeds()
             .stdout_is(content);
 
-        for file in files.iter() {
+        for file in &files {
             assert!(at.file_exists(file));
             assert_eq!(at.read(file), content);
         }
@@ -63,9 +63,7 @@ fn test_tee_append() {
 fn test_tee_no_more_writeable_1() {
     // equals to 'tee /dev/full out2 <multi_read' call
     let (at, mut ucmd) = at_and_ucmd!();
-    let content = (1..=10)
-        .map(|x| format!("{}\n", x.to_string()))
-        .collect::<String>();
+    let content = (1..=10).map(|x| format!("{}\n", x)).collect::<String>();
     let file_out = "tee_file_out";
 
     ucmd.arg("/dev/full")
@@ -85,9 +83,7 @@ fn test_tee_no_more_writeable_2() {
     // but currently there is no way to redirect stdout to /dev/full
     // so this test is disabled
     let (_at, mut ucmd) = at_and_ucmd!();
-    let _content = (1..=10)
-        .map(|x| format!("{}\n", x.to_string()))
-        .collect::<String>();
+    let _content = (1..=10).map(|x| format!("{}\n", x)).collect::<String>();
     let file_out_a = "tee_file_out_a";
     let file_out_b = "tee_file_out_b";
 

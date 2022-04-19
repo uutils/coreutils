@@ -16,9 +16,10 @@ mod macros; // crate macros (macro_rules-type; exported to `crate::...`)
 mod mods; // core cross-platform modules
 mod parser; // string parsing modules
 
+pub use uucore_procs::*;
+
 // * cross-platform modules
 pub use crate::mods::backup_control;
-pub use crate::mods::coreopts;
 pub use crate::mods::display;
 pub use crate::mods::error;
 pub use crate::mods::os;
@@ -37,6 +38,10 @@ pub use crate::features::encoding;
 pub use crate::features::fs;
 #[cfg(feature = "fsext")]
 pub use crate::features::fsext;
+#[cfg(feature = "lines")]
+pub use crate::features::lines;
+#[cfg(feature = "memo")]
+pub use crate::features::memo;
 #[cfg(feature = "ringbuffer")]
 pub use crate::features::ringbuffer;
 
@@ -76,12 +81,34 @@ use once_cell::sync::Lazy;
 
 use crate::display::Quotable;
 
+#[macro_export]
+macro_rules! bin {
+    ($util:ident) => {
+        pub fn main() {
+            use std::io::Write;
+            uucore::panic::mute_sigpipe_panic(); // suppress extraneous error output for SIGPIPE failures/panics
+            let code = $util::uumain(uucore::args_os()); // execute utility code
+            std::io::stdout().flush().expect("could not flush stdout"); // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
+            std::process::exit(code);
+        }
+    };
+}
+
+/// Generate the usage string for clap.
+///
+/// This function replaces all occurrences of `{}` with the execution phrase
+/// and leaks the result to return a `&'static str`. It does **not** support
+/// more advanced formatting features such as `{0}`.
+pub fn format_usage(s: &str) -> &'static str {
+    &*Box::leak(s.replace("{}", crate::execution_phrase()).into_boxed_str())
+}
+
 pub fn get_utility_is_second_arg() -> bool {
     crate::macros::UTILITY_IS_SECOND_ARG.load(Ordering::SeqCst)
 }
 
 pub fn set_utility_is_second_arg() {
-    crate::macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst)
+    crate::macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst);
 }
 
 // args_os() can be expensive to call, it copies all of argv before iterating.
@@ -135,8 +162,7 @@ pub enum ConversionResult {
 impl ConversionResult {
     pub fn accept_any(self) -> Vec<String> {
         match self {
-            Self::Complete(result) => result,
-            Self::Lossy(result) => result,
+            Self::Complete(result) | Self::Lossy(result) => result,
         }
     }
 

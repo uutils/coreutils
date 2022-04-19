@@ -10,17 +10,18 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use std::fs::File;
-use std::io::{stdin, Read, Result};
+use std::io::{stdin, Read};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::InvalidEncodingHandling;
+use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static NAME: &str = "sum";
-static USAGE: &str =
-    "[OPTION]... [FILE]...\nWith no FILE, or when  FILE is -, read standard input.";
-static SUMMARY: &str = "Checksum and count the blocks in a file.";
+static USAGE: &str = "{} [OPTION]... [FILE]...";
+static SUMMARY: &str = "Checksum and count the blocks in a file.\n\
+                        With no FILE, or when  FILE is -, read standard input.";
 
 fn bsd_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
     let mut buf = [0; 1024];
@@ -65,26 +66,25 @@ fn sysv_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
     (blocks_read, ret as u16)
 }
 
-fn open(name: &str) -> Result<Box<dyn Read>> {
+fn open(name: &str) -> UResult<Box<dyn Read>> {
     match name {
         "-" => Ok(Box::new(stdin()) as Box<dyn Read>),
         _ => {
             let path = &Path::new(name);
             if path.is_dir() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "Is a directory",
+                return Err(USimpleError::new(
+                    2,
+                    format!("{}: Is a directory", name.maybe_quote()),
                 ));
             };
             // Silent the warning as we want to the error message
-            #[allow(clippy::question_mark)]
             if path.metadata().is_err() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "No such file or directory",
+                return Err(USimpleError::new(
+                    2,
+                    format!("{}: No such file or directory", name.maybe_quote()),
                 ));
             };
-            let f = File::open(path)?;
+            let f = File::open(path).map_err_context(String::new)?;
             Ok(Box::new(f) as Box<dyn Read>)
         }
     }
@@ -96,7 +96,8 @@ mod options {
     pub static SYSTEM_V_COMPATIBLE: &str = "sysv";
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -116,13 +117,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         files.len() > 1
     };
 
-    let mut exit_code = 0;
     for file in &files {
         let reader = match open(file) {
             Ok(f) => f,
             Err(error) => {
-                show_error!("{}: {}", file.maybe_quote(), error);
-                exit_code = 2;
+                show!(error);
                 continue;
             }
         };
@@ -138,25 +137,29 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             println!("{} {}", sum, blocks);
         }
     }
-
-    exit_code
+    Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .usage(USAGE)
+        .override_usage(format_usage(USAGE))
         .about(SUMMARY)
-        .arg(Arg::with_name(options::FILE).multiple(true).hidden(true))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::BSD_COMPATIBLE)
-                .short(options::BSD_COMPATIBLE)
+            Arg::new(options::FILE)
+                .multiple_occurrences(true)
+                .hide(true),
+        )
+        .arg(
+            Arg::new(options::BSD_COMPATIBLE)
+                .short('r')
                 .help("use the BSD sum algorithm, use 1K blocks (default)"),
         )
         .arg(
-            Arg::with_name(options::SYSTEM_V_COMPATIBLE)
-                .short("s")
+            Arg::new(options::SYSTEM_V_COMPATIBLE)
+                .short('s')
                 .long(options::SYSTEM_V_COMPATIBLE)
                 .help("use System V sum algorithm, use 512 bytes blocks"),
         )

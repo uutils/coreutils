@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/coreutils.svg)](https://crates.io/crates/coreutils)
 [![Discord](https://img.shields.io/badge/discord-join-7289DA.svg?logo=discord&longCache=true&style=flat)](https://discord.gg/wQVJbvJ)
-[![License](http://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/uutils/coreutils/blob/master/LICENSE)
+[![License](http://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/uutils/coreutils/blob/main/LICENSE)
 [![LOC](https://tokei.rs/b1/github/uutils/coreutils?category=code)](https://github.com/Aaronepower/tokei)
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
@@ -15,35 +15,46 @@
 <!-- spell-checker:ignore markdownlint ; (options) DESTDIR RUNTEST UTILNAME -->
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
-utilities in [Rust](http://www.rust-lang.org). This repository is intended to
-aggregate GNU coreutils rewrites.
+utilities in [Rust](http://www.rust-lang.org).
+
+To install it:
+
+```
+$ cargo install coreutils
+$ ~/.cargo/bin/coreutils
+```
 
 ## Why?
 
-Many GNU, Linux and other utilities are useful, and obviously
-[some](http://gnuwin32.sourceforge.net) [effort](http://unxutils.sourceforge.net)
-has been spent in the past to port them to Windows. However, those projects
-are written in platform-specific C, a language considered unsafe compared to Rust, and
-have other issues.
+uutils aims to work on as many platforms as possible, to be able to use the
+same utils on Linux, Mac, Windows and other platforms. This ensures, for
+example, that scripts can be easily transferred between platforms. Rust was
+chosen not only because it is fast and safe, but is also excellent for
+writing cross-platform code.
 
-Rust provides a good, platform-agnostic way of writing systems utilities that are easy
-to compile anywhere, and this is as good a way as any to try and learn it.
+## Documentation
+uutils has both user and developer documentation available:
 
+- [User Manual](https://uutils.github.io/coreutils-docs/user/)
+- [Developer Documentation](https://uutils.github.io/coreutils-docs/dev/coreutils/)
+
+Both can also be generated locally, the instructions for that can be found in the
+[coreutils docs](https://github.com/uutils/coreutils-docs) repository.
+
+<!-- ANCHOR: installation (this mark is needed for mdbook) -->
 ## Requirements
 
 * Rust (`cargo`, `rustc`)
-* GNU Make (required to build documentation)
-* [Sphinx](http://www.sphinx-doc.org/) (for documentation)
-* gzip (for installing documentation)
+* GNU Make (optional)
 
 ### Rust Version
 
 uutils follows Rust's release channels and is tested against stable, beta and nightly.
-The current oldest supported version of the Rust compiler is `1.47`.
+The current oldest supported version of the Rust compiler is `1.56`.
 
 On both Windows and Redox, only the nightly version is tested currently.
 
-## Build Instructions
+## Building
 
 There are currently two methods to build the uutils binaries: either Cargo
 or GNU Make.
@@ -122,7 +133,7 @@ To build only a few of the available utilities:
 $ make UTILS='UTILITY_1 UTILITY_2'
 ```
 
-## Installation Instructions
+## Installation
 
 ### Cargo
 
@@ -212,7 +223,7 @@ run:
 cargo run completion ls bash > /usr/local/share/bash-completion/completions/ls
 ```
 
-## Un-installation Instructions
+## Un-installation
 
 Un-installation differs depending on how you have installed uutils.  If you used
 Cargo to install, use Cargo to uninstall.  If you used GNU Make to install, use
@@ -252,8 +263,9 @@ To uninstall from a custom parent directory:
 # DESTDIR is also supported
 $ make PREFIX=/my/path uninstall
 ```
+<!-- ANCHOR_END: installation (this mark is needed for mdbook) -->
 
-## Test Instructions
+## Testing
 
 Testing can be done using either Cargo or `make`.
 
@@ -319,7 +331,7 @@ To include tests for unimplemented behavior:
 $ make UTILS='UTILITY_1 UTILITY_2' SPEC=y test
 ```
 
-## Run Busybox Tests
+### Run Busybox Tests
 
 This testing functionality is only available on *nix operating systems and
 requires `make`.
@@ -342,7 +354,11 @@ To pass an argument like "-v" to the busybox test runtime
 $ make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
 ```
 
-## Comparing with GNU
+### Comparing with GNU
+
+Below is the evolution of how many GNU tests uutils passes. A more detailed
+breakdown of the GNU test results of the main branch can be found
+[in the user manual](https://uutils.github.io/coreutils-docs/user/test_coverage.html).
 
 ![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
 
@@ -357,7 +373,26 @@ $ bash util/run-gnu-test.sh tests/touch/not-owner.sh # for example
 
 Note that it relies on individual utilities (not the multicall binary).
 
-## Contribute
+### Improving the GNU compatibility
+
+The Python script `./util/remaining-gnu-error.py` shows the list of failing tests in the CI.
+
+To improve the GNU compatibility, the following process is recommended:
+
+1. Identify a test (the smaller, the better) on a program that you understand or is easy to understand. You can use the `./util/remaining-gnu-error.py` script to help with this decision.
+1. Build both the GNU and Rust coreutils using: `bash util/build-gnu.sh`
+1. Run the test with `bash util/run-gnu-test.sh <your test>`
+1. Start to modify `<your test>` to understand what is wrong. Examples:
+    1. Add `set -v` to have the bash verbose mode
+    1. Add `echo $?` where needed
+    1. Bump the content of the output (ex: `cat err`)
+    1. ...
+1. Or, if the test is simple, extract the relevant information to create a new test case running both GNU & Rust implementation
+1. Start to modify the Rust implementation to match the expected behavior
+1. Add a test to make sure that we don't regress (our test suite is super quick)
+
+
+## Contributing
 
 To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 
@@ -371,18 +406,18 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | basename  | df        |        |
 | basenc    | expr      |        |
 | cat       | install   |        |
-| chcon     | join      |        |
-| chgrp     | ls        |        |
-| chmod     | more      |        |
-| chown     | numfmt    |        |
-| chroot    | od (`--strings` and 128-bit data types missing) | |
-| cksum     | pr        |        |
-| comm      | printf    |        |
-| csplit    | sort      |        |
-| cut       | split     |        |
-| dircolors | tac       |        |
-| dirname   | tail      |        |
-| du        | test      |        |
+| chcon     | ls        |        |
+| chgrp     | more      |        |
+| chmod     | numfmt    |        |
+| chown     | od (`--strings` and 128-bit data types missing) | |
+| chroot    | pr        |        |
+| cksum     | printf    |        |
+| comm      | sort      |        |
+| csplit    | split     |        |
+| cut       | tac       |        |
+| dircolors | tail      |        |
+| dirname   | test      |        |
+| du        |           |        |
 | echo      |           |        |
 | env       |           |        |
 | expand    |           |        |
@@ -396,16 +431,17 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | hostid    |           |        |
 | hostname  |           |        |
 | id        |           |        |
+| join      |           |        |
 | kill      |           |        |
 | link      |           |        |
 | ln        |           |        |
 | logname   |           |        |
-| ~~md5sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
-| ~~sha1sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
-| ~~sha224sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
-| ~~sha256sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
-| ~~sha384sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
-| ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~md5sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha1sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha224sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha256sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha384sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | | |
 | mkdir     |           |        |
 | mkfifo    |           |        |
 | mknod     |           |        |

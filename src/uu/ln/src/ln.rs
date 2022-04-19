@@ -10,9 +10,10 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
+use uucore::format_usage;
 
 use std::borrow::Cow;
 use std::error::Error;
@@ -52,7 +53,8 @@ pub enum OverwriteMode {
 enum LnError {
     TargetIsDirectory(PathBuf),
     SomeLinksFailed,
-    FailedToLink(String),
+    FailedToLink(PathBuf, PathBuf, String),
+    SameFile(),
     MissingDestination(PathBuf),
     ExtraOperand(OsString),
 }
@@ -61,7 +63,12 @@ impl Display for LnError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::TargetIsDirectory(s) => write!(f, "target {} is not a directory", s.quote()),
-            Self::FailedToLink(e) => write!(f, "failed to link: {}", e),
+            Self::FailedToLink(s, d, e) => {
+                write!(f, "failed to link {} to {}: {}", s.quote(), d.quote(), e)
+            }
+            Self::SameFile() => {
+                write!(f, "Same file")
+            }
             Self::SomeLinksFailed => write!(f, "some links failed to create"),
             Self::MissingDestination(s) => {
                 write!(f, "missing destination file operand after {}", s.quote())
@@ -81,23 +88,14 @@ impl Error for LnError {}
 impl UError for LnError {
     fn code(&self) -> i32 {
         match self {
-            Self::TargetIsDirectory(_) => 1,
-            Self::SomeLinksFailed => 1,
-            Self::FailedToLink(_) => 1,
-            Self::MissingDestination(_) => 1,
-            Self::ExtraOperand(_) => 1,
+            Self::TargetIsDirectory(_)
+            | Self::SomeLinksFailed
+            | Self::FailedToLink(_, _, _)
+            | Self::SameFile()
+            | Self::MissingDestination(_)
+            | Self::ExtraOperand(_) => 1,
         }
     }
-}
-
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... [-T] TARGET LINK_NAME   (1st form)
-       {0} [OPTION]... TARGET                  (2nd form)
-       {0} [OPTION]... TARGET... DIRECTORY     (3rd form)
-       {0} [OPTION]... -t DIRECTORY TARGET...  (4th form)",
-        uucore::execution_phrase()
-    )
 }
 
 fn long_usage() -> String {
@@ -115,6 +113,11 @@ fn long_usage() -> String {
 }
 
 static ABOUT: &str = "change file owner and group";
+const USAGE: &str = "\
+    {} [OPTION]... [-T] TARGET LINK_NAME
+    {} [OPTION]... TARGET
+    {} [OPTION]... TARGET... DIRECTORY
+    {} [OPTION]... -t DIRECTORY TARGET...";
 
 mod options {
     pub const FORCE: &str = "force";
@@ -129,13 +132,11 @@ mod options {
 
 static ARG_FILES: &str = "files";
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let long_usage = long_usage();
 
     let matches = uu_app()
-        .usage(&usage[..])
         .after_help(&*format!(
             "{}\n{}",
             long_usage,
@@ -179,30 +180,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     exec(&paths[..], &settings)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
         // TODO: opts.arg(
-        //    Arg::with_name(("d", "directory", "allow users with appropriate privileges to attempt \
+        //    Arg::new(("d", "directory", "allow users with appropriate privileges to attempt \
         //                                       to make hard links to directories");
         .arg(
-            Arg::with_name(options::FORCE)
-                .short("f")
+            Arg::new(options::FORCE)
+                .short('f')
                 .long(options::FORCE)
                 .help("remove existing destination files"),
         )
         .arg(
-            Arg::with_name(options::INTERACTIVE)
-                .short("i")
+            Arg::new(options::INTERACTIVE)
+                .short('i')
                 .long(options::INTERACTIVE)
                 .help("prompt whether to remove existing destination files"),
         )
         .arg(
-            Arg::with_name(options::NO_DEREFERENCE)
-                .short("n")
+            Arg::new(options::NO_DEREFERENCE)
+                .short('n')
                 .long(options::NO_DEREFERENCE)
                 .help(
                     "treat LINK_NAME as a normal file if it is a \
@@ -210,13 +213,13 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         // TODO: opts.arg(
-        //    Arg::with_name(("L", "logical", "dereference TARGETs that are symbolic links");
+        //    Arg::new(("L", "logical", "dereference TARGETs that are symbolic links");
         //
         // TODO: opts.arg(
-        //    Arg::with_name(("P", "physical", "make hard links directly to symbolic links");
+        //    Arg::new(("P", "physical", "make hard links directly to symbolic links");
         .arg(
-            Arg::with_name(options::SYMBOLIC)
-                .short("s")
+            Arg::new(options::SYMBOLIC)
+                .short('s')
                 .long("symbolic")
                 .help("make symbolic links instead of hard links")
                 // override added for https://github.com/uutils/coreutils/issues/2359
@@ -224,35 +227,35 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         .arg(backup_control::arguments::suffix())
         .arg(
-            Arg::with_name(options::TARGET_DIRECTORY)
-                .short("t")
+            Arg::new(options::TARGET_DIRECTORY)
+                .short('t')
                 .long(options::TARGET_DIRECTORY)
                 .help("specify the DIRECTORY in which to create the links")
                 .value_name("DIRECTORY")
                 .conflicts_with(options::NO_TARGET_DIRECTORY),
         )
         .arg(
-            Arg::with_name(options::NO_TARGET_DIRECTORY)
-                .short("T")
+            Arg::new(options::NO_TARGET_DIRECTORY)
+                .short('T')
                 .long(options::NO_TARGET_DIRECTORY)
                 .help("treat LINK_NAME as a normal file always"),
         )
         .arg(
-            Arg::with_name(options::RELATIVE)
-                .short("r")
+            Arg::new(options::RELATIVE)
+                .short('r')
                 .long(options::RELATIVE)
                 .help("create symbolic links relative to link location")
                 .requires(options::SYMBOLIC),
         )
         .arg(
-            Arg::with_name(options::VERBOSE)
-                .short("v")
+            Arg::new(options::VERBOSE)
+                .short('v')
                 .long(options::VERBOSE)
                 .help("print name of each linked file"),
         )
         .arg(
-            Arg::with_name(ARG_FILES)
-                .multiple(true)
+            Arg::new(ARG_FILES)
+                .multiple_occurrences(true)
                 .takes_value(true)
                 .required(true)
                 .min_values(1),
@@ -289,7 +292,12 @@ fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
 
     match link(&files[0], &files[1], settings) {
         Ok(_) => Ok(()),
-        Err(e) => Err(LnError::FailedToLink(e.to_string()).into()),
+        Err(e) => {
+            Err(
+                LnError::FailedToLink(files[0].to_owned(), files[1].to_owned(), e.to_string())
+                    .into(),
+            )
+        }
     }
 }
 
@@ -307,7 +315,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                 if is_symlink(target_dir) {
                     if target_dir.is_file() {
                         if let Err(e) = fs::remove_file(target_dir) {
-                            show_error!("Could not update {}: {}", target_dir.quote(), e)
+                            show_error!("Could not update {}: {}", target_dir.quote(), e);
                         };
                     }
                     if target_dir.is_dir() {
@@ -315,7 +323,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                         // considered as a dir
                         // See test_ln::test_symlink_no_deref_dir
                         if let Err(e) = fs::remove_dir(target_dir) {
-                            show_error!("Could not update {}: {}", target_dir.quote(), e)
+                            show_error!("Could not update {}: {}", target_dir.quote(), e);
                         };
                     }
                 }
@@ -385,7 +393,7 @@ fn relative_path<'a>(src: &Path, dst: &Path) -> Result<Cow<'a, Path>> {
     Ok(result.into())
 }
 
-fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
+fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     let mut backup_path = None;
     let source: Cow<'_, Path> = if settings.relative {
         relative_path(src, dst)?
@@ -394,6 +402,27 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
     };
 
     if is_symlink(dst) || dst.exists() {
+        backup_path = match settings.backup {
+            BackupMode::NoBackup => None,
+            BackupMode::SimpleBackup => Some(simple_backup_path(dst, &settings.suffix)),
+            BackupMode::NumberedBackup => Some(numbered_backup_path(dst)),
+            BackupMode::ExistingBackup => Some(existing_backup_path(dst, &settings.suffix)),
+        };
+        if settings.backup == BackupMode::ExistingBackup && !settings.symbolic {
+            // when ln --backup f f, it should detect that it is the same file
+            let dst_abs = canonicalize(dst, MissingHandling::Normal, ResolveMode::Logical)?;
+            let source_abs = canonicalize(
+                source.clone(),
+                MissingHandling::Normal,
+                ResolveMode::Logical,
+            )?;
+            if dst_abs == source_abs {
+                return Err(LnError::SameFile().into());
+            }
+        }
+        if let Some(ref p) = backup_path {
+            fs::rename(dst, p)?;
+        }
         match settings.overwrite {
             OverwriteMode::NoClobber => {}
             OverwriteMode::Interactive => {
@@ -401,20 +430,15 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
                 if !read_yes() {
                     return Ok(());
                 }
-                fs::remove_file(dst)?
-            }
-            OverwriteMode::Force => fs::remove_file(dst)?,
-        };
 
-        backup_path = match settings.backup {
-            BackupMode::NoBackup => None,
-            BackupMode::SimpleBackup => Some(simple_backup_path(dst, &settings.suffix)),
-            BackupMode::NumberedBackup => Some(numbered_backup_path(dst)),
-            BackupMode::ExistingBackup => Some(existing_backup_path(dst, &settings.suffix)),
+                if fs::remove_file(dst).is_ok() {};
+                // In case of error, don't do anything
+            }
+            OverwriteMode::Force => {
+                if fs::remove_file(dst).is_ok() {};
+                // In case of error, don't do anything
+            }
         };
-        if let Some(ref p) = backup_path {
-            fs::rename(dst, p)?;
-        }
     }
 
     if settings.symbolic {
@@ -462,7 +486,7 @@ fn numbered_backup_path(path: &Path) -> PathBuf {
 }
 
 fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
-    let test_path = simple_backup_path(path, &".~1~".to_owned());
+    let test_path = simple_backup_path(path, ".~1~");
     if test_path.exists() {
         return numbered_backup_path(path);
     }

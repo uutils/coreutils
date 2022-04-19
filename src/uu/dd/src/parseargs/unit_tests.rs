@@ -1,4 +1,4 @@
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat
 
 use super::*;
 
@@ -25,7 +25,7 @@ fn unimplemented_flags_should_error_non_linux() {
             format!("--iflag={}", flag),
             format!("--oflag={}", flag),
         ];
-        let matches = uu_app().get_matches_from_safe(args).unwrap();
+        let matches = uu_app().try_get_matches_from(args).unwrap();
 
         if parse_iflags(&matches).is_ok() {
             succeeded.push(format!("iflag={}", flag));
@@ -53,13 +53,13 @@ fn unimplemented_flags_should_error() {
             format!("--iflag={}", flag),
             format!("--oflag={}", flag),
         ];
-        let matches = uu_app().get_matches_from_safe(args).unwrap();
+        let matches = uu_app().try_get_matches_from(args).unwrap();
 
         if parse_iflags(&matches).is_ok() {
-            succeeded.push(format!("iflag={}", flag))
+            succeeded.push(format!("iflag={}", flag));
         }
         if parse_oflags(&matches).is_ok() {
-            succeeded.push(format!("oflag={}", flag))
+            succeeded.push(format!("oflag={}", flag));
         }
     }
 
@@ -78,7 +78,7 @@ fn test_status_level_absent() {
         String::from("--of=bar.file"),
     ];
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
     let st = parse_status_level(&matches).unwrap();
 
     assert_eq!(st, None);
@@ -93,7 +93,7 @@ fn test_status_level_none() {
         String::from("--of=bar.file"),
     ];
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
     let st = parse_status_level(&matches).unwrap().unwrap();
 
     assert_eq!(st, StatusLevel::None);
@@ -112,6 +112,8 @@ fn test_all_top_level_args_no_leading_dashes() {
         String::from("count=2"),
         String::from("skip=2"),
         String::from("seek=2"),
+        String::from("iseek=2"),
+        String::from("oseek=2"),
         String::from("status=progress"),
         String::from("conv=ascii,ucase"),
         String::from("iflag=count_bytes,skip_bytes"),
@@ -121,7 +123,7 @@ fn test_all_top_level_args_no_leading_dashes() {
         .into_iter()
         .fold(Vec::new(), append_dashes_if_not_present);
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     assert_eq!(100, parse_ibs(&matches).unwrap());
     assert_eq!(100, parse_obs(&matches).unwrap());
@@ -140,13 +142,25 @@ fn test_all_top_level_args_no_leading_dashes() {
     );
     assert_eq!(
         200,
-        parse_skip_amt(&100, &IFlags::default(), &matches)
+        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::SKIP)
             .unwrap()
             .unwrap()
     );
     assert_eq!(
         200,
-        parse_seek_amt(&100, &OFlags::default(), &matches)
+        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::SEEK)
+            .unwrap()
+            .unwrap()
+    );
+    assert_eq!(
+        200,
+        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::ISEEK)
+            .unwrap()
+            .unwrap()
+    );
+    assert_eq!(
+        200,
+        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::OSEEK)
             .unwrap()
             .unwrap()
     );
@@ -156,7 +170,11 @@ fn test_all_top_level_args_no_leading_dashes() {
     );
     assert_eq!(
         IConvFlags {
-            ctable: Some(&EBCDIC_TO_ASCII_LCASE_TO_UCASE),
+            // ascii implies unblock
+            mode: Some(ConversionMode::ConvertThenUnblock(
+                &EBCDIC_TO_ASCII_LCASE_TO_UCASE,
+                1
+            )),
             ..IConvFlags::default()
         },
         parse_conv_flag_input(&matches).unwrap()
@@ -196,6 +214,8 @@ fn test_all_top_level_args_with_leading_dashes() {
         String::from("--count=2"),
         String::from("--skip=2"),
         String::from("--seek=2"),
+        String::from("--iseek=2"),
+        String::from("--oseek=2"),
         String::from("--status=progress"),
         String::from("--conv=ascii,ucase"),
         String::from("--iflag=count_bytes,skip_bytes"),
@@ -205,7 +225,7 @@ fn test_all_top_level_args_with_leading_dashes() {
         .into_iter()
         .fold(Vec::new(), append_dashes_if_not_present);
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     assert_eq!(100, parse_ibs(&matches).unwrap());
     assert_eq!(100, parse_obs(&matches).unwrap());
@@ -224,13 +244,25 @@ fn test_all_top_level_args_with_leading_dashes() {
     );
     assert_eq!(
         200,
-        parse_skip_amt(&100, &IFlags::default(), &matches)
+        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::SKIP)
             .unwrap()
             .unwrap()
     );
     assert_eq!(
         200,
-        parse_seek_amt(&100, &OFlags::default(), &matches)
+        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::SEEK)
+            .unwrap()
+            .unwrap()
+    );
+    assert_eq!(
+        200,
+        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::ISEEK)
+            .unwrap()
+            .unwrap()
+    );
+    assert_eq!(
+        200,
+        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::OSEEK)
             .unwrap()
             .unwrap()
     );
@@ -240,7 +272,11 @@ fn test_all_top_level_args_with_leading_dashes() {
     );
     assert_eq!(
         IConvFlags {
-            ctable: Some(&EBCDIC_TO_ASCII_LCASE_TO_UCASE),
+            // ascii implies unblock
+            mode: Some(ConversionMode::ConvertThenUnblock(
+                &EBCDIC_TO_ASCII_LCASE_TO_UCASE,
+                1
+            )),
             ..IConvFlags::default()
         },
         parse_conv_flag_input(&matches).unwrap()
@@ -276,7 +312,7 @@ fn test_status_level_progress() {
         String::from("--status=progress"),
     ];
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
     let st = parse_status_level(&matches).unwrap().unwrap();
 
     assert_eq!(st, StatusLevel::Progress);
@@ -291,10 +327,140 @@ fn test_status_level_noxfer() {
         String::from("--of=bar.file"),
     ];
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
     let st = parse_status_level(&matches).unwrap().unwrap();
 
     assert_eq!(st, StatusLevel::Noxfer);
+}
+
+#[test]
+fn test_multiple_flags_options() {
+    let args = vec![
+        String::from("dd"),
+        String::from("--iflag=fullblock,count_bytes"),
+        String::from("--iflag=skip_bytes"),
+        String::from("--oflag=append"),
+        String::from("--oflag=seek_bytes"),
+        String::from("--conv=ascii,ucase"),
+        String::from("--conv=unblock"),
+    ];
+    let matches = uu_app().try_get_matches_from(args).unwrap();
+
+    // iflag
+    let iflags = parse_flag_list::<Flag>(options::IFLAG, &matches).unwrap();
+    assert_eq!(
+        vec![Flag::FullBlock, Flag::CountBytes, Flag::SkipBytes],
+        iflags
+    );
+
+    // oflag
+    let oflags = parse_flag_list::<Flag>(options::OFLAG, &matches).unwrap();
+    assert_eq!(vec![Flag::Append, Flag::SeekBytes], oflags);
+
+    // conv
+    let conv = parse_flag_list::<ConvFlag>(options::CONV, &matches).unwrap();
+    assert_eq!(
+        vec![ConvFlag::FmtEtoA, ConvFlag::UCase, ConvFlag::Unblock],
+        conv
+    );
+}
+
+#[test]
+fn test_override_multiple_options() {
+    let args = vec![
+        String::from("dd"),
+        String::from("--if=foo.file"),
+        String::from("--if=correct.file"),
+        String::from("--of=bar.file"),
+        String::from("--of=correct.file"),
+        String::from("--ibs=256"),
+        String::from("--ibs=1024"),
+        String::from("--obs=256"),
+        String::from("--obs=1024"),
+        String::from("--cbs=1"),
+        String::from("--cbs=2"),
+        String::from("--skip=0"),
+        String::from("--skip=2"),
+        String::from("--seek=0"),
+        String::from("--seek=2"),
+        String::from("--iseek=0"),
+        String::from("--iseek=2"),
+        String::from("--oseek=0"),
+        String::from("--oseek=2"),
+        String::from("--status=none"),
+        String::from("--status=noxfer"),
+        String::from("--count=512"),
+        String::from("--count=1024"),
+    ];
+
+    let matches = uu_app().try_get_matches_from(args).unwrap();
+
+    // if
+    assert_eq!("correct.file", matches.value_of(options::INFILE).unwrap());
+
+    // of
+    assert_eq!("correct.file", matches.value_of(options::OUTFILE).unwrap());
+
+    // ibs
+    assert_eq!(1024, parse_ibs(&matches).unwrap());
+
+    // obs
+    assert_eq!(1024, parse_obs(&matches).unwrap());
+
+    // cbs
+    assert_eq!(2, parse_cbs(&matches).unwrap().unwrap());
+
+    // status
+    assert_eq!(
+        StatusLevel::Noxfer,
+        parse_status_level(&matches).unwrap().unwrap()
+    );
+
+    // skip
+    assert_eq!(
+        200,
+        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::SKIP)
+            .unwrap()
+            .unwrap()
+    );
+
+    // seek
+    assert_eq!(
+        200,
+        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::SEEK)
+            .unwrap()
+            .unwrap()
+    );
+
+    // iseek
+    assert_eq!(
+        200,
+        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::ISEEK)
+            .unwrap()
+            .unwrap()
+    );
+
+    // oseek
+    assert_eq!(
+        200,
+        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::OSEEK)
+            .unwrap()
+            .unwrap()
+    );
+
+    // count
+    assert_eq!(
+        CountType::Bytes(1024),
+        parse_count(
+            &IFlags {
+                count_bytes: true,
+                ..IFlags::default()
+            },
+            &matches
+        )
+        .unwrap()
+        .unwrap()
+    );
 }
 
 // ----- IConvFlags/Output -----
@@ -304,7 +470,7 @@ fn test_status_level_noxfer() {
 fn icf_ctable_error() {
     let args = vec![String::from("dd"), String::from("--conv=ascii,ebcdic,ibm")];
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let _ = parse_conv_flag_input(&matches).unwrap();
 }
@@ -314,7 +480,7 @@ fn icf_ctable_error() {
 fn icf_case_error() {
     let args = vec![String::from("dd"), String::from("--conv=ucase,lcase")];
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let _ = parse_conv_flag_input(&matches).unwrap();
 }
@@ -324,7 +490,7 @@ fn icf_case_error() {
 fn icf_block_error() {
     let args = vec![String::from("dd"), String::from("--conv=block,unblock")];
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let _ = parse_conv_flag_input(&matches).unwrap();
 }
@@ -334,7 +500,7 @@ fn icf_block_error() {
 fn icf_creat_error() {
     let args = vec![String::from("dd"), String::from("--conv=excl,nocreat")];
 
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let _ = parse_conv_flag_output(&matches).unwrap();
 }
@@ -344,7 +510,7 @@ fn parse_icf_token_ibm() {
     let exp = vec![ConvFlag::FmtAtoI];
 
     let args = vec![String::from("dd"), String::from("--conv=ibm")];
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
 
@@ -362,7 +528,7 @@ fn parse_icf_tokens_elu() {
         String::from("dd"),
         String::from("--conv=ebcdic,lcase,unblock"),
     ];
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
     let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
 
     assert_eq!(exp.len(), act.len());
@@ -393,7 +559,7 @@ fn parse_icf_tokens_remaining() {
         String::from("dd"),
         String::from("--conv=ascii,ucase,block,sparse,swab,sync,noerror,excl,nocreat,notrunc,noerror,fdatasync,fsync"),
     ];
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
 
@@ -417,7 +583,7 @@ fn parse_iflag_tokens() {
         String::from("dd"),
         String::from("--iflag=fullblock,count_bytes,skip_bytes,append,seek_bytes"),
     ];
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let act = parse_flag_list::<Flag>("iflag", &matches).unwrap();
 
@@ -441,7 +607,7 @@ fn parse_oflag_tokens() {
         String::from("dd"),
         String::from("--oflag=fullblock,count_bytes,skip_bytes,append,seek_bytes"),
     ];
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let act = parse_flag_list::<Flag>("oflag", &matches).unwrap();
 
@@ -469,7 +635,7 @@ fn parse_iflag_tokens_linux() {
         String::from("dd"),
         String::from("--iflag=direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow"),
     ];
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let act = parse_flag_list::<Flag>("iflag", &matches).unwrap();
 
@@ -497,7 +663,7 @@ fn parse_oflag_tokens_linux() {
         String::from("dd"),
         String::from("--oflag=direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow"),
     ];
-    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().try_get_matches_from(args).unwrap();
 
     let act = parse_flag_list::<Flag>("oflag", &matches).unwrap();
 
@@ -573,7 +739,7 @@ mod test_64bit_arch {
 #[test]
 #[should_panic]
 fn test_overflow_panic() {
-    let bs_str = format!("{}KiB", usize::MAX);
+    let bs_str = format!("{}KiB", u64::MAX);
 
     parse_bytes_with_opt_multiplier(&bs_str).unwrap();
 }

@@ -250,11 +250,24 @@ fn test_size_and_reference() {
 #[test]
 fn test_error_filename_only() {
     // truncate: you must specify either '--size' or '--reference'
-    new_ucmd!().args(&["file"]).fails().stderr_contains(
-        "error: The following required arguments were not provided:
+    new_ucmd!()
+        .args(&["file"])
+        .fails()
+        .code_is(1)
+        .stderr_contains(
+            "error: The following required arguments were not provided:
     --reference <RFILE>
     --size <SIZE>",
-    );
+        );
+}
+
+#[test]
+fn test_invalid_option() {
+    // truncate: cli parsing error returns 1
+    new_ucmd!()
+        .args(&["--this-arg-does-not-exist"])
+        .fails()
+        .code_is(1);
 }
 
 #[test]
@@ -306,18 +319,116 @@ fn test_truncate_bytes_size() {
         .fails()
         .code_is(1)
         .stderr_only("truncate: Invalid number: '1Y': Value too large for defined data type");
-    #[cfg(target_pointer_width = "32")]
-    {
-        let sizes = ["1000G", "10T"];
-        for size in &sizes {
-            new_ucmd!()
-                .args(&["--size", size, "file"])
-                .fails()
-                .code_is(1)
-                .stderr_only(format!(
-                    "truncate: Invalid number: '{}': Value too large for defined data type",
-                    size
-                ));
-        }
-    }
+}
+
+/// Test that truncating a non-existent file creates that file.
+#[test]
+fn test_new_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let filename = "new_file_that_does_not_exist_yet";
+    ucmd.args(&["-s", "8", filename])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(at.file_exists(filename));
+    assert_eq!(at.read_bytes(filename), vec![b'\0'; 8]);
+}
+
+/// Test for not creating a non-existent file.
+#[test]
+fn test_new_file_no_create() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let filename = "new_file_that_does_not_exist_yet";
+    ucmd.args(&["-s", "8", "-c", filename])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(!at.file_exists(filename));
+}
+
+#[test]
+fn test_division_by_zero_size_only() {
+    new_ucmd!()
+        .args(&["-s", "/0", "file"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("division by zero");
+    new_ucmd!()
+        .args(&["-s", "%0", "file"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("division by zero");
+}
+
+#[test]
+fn test_division_by_zero_reference_and_size() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.make_file(FILE1);
+    ucmd.args(&["-r", FILE1, "-s", "/0", "file"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("division by zero");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.make_file(FILE1);
+    ucmd.args(&["-r", FILE1, "-s", "%0", "file"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("division by zero");
+}
+
+#[test]
+fn test_no_such_dir() {
+    new_ucmd!()
+        .args(&["-s", "0", "a/b"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("cannot open 'a/b' for writing: No such file or directory");
+}
+
+/// Test that truncate with a relative size less than 0 is not an error.
+#[test]
+fn test_underflow_relative_size() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-s-1", FILE1])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(at.file_exists(FILE1));
+    assert!(at.read_bytes(FILE1).is_empty());
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_fifo_error_size_only() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    ucmd.args(&["-s", "0", "fifo"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("cannot open 'fifo' for writing: No such device or address");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_fifo_error_reference_file_only() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    at.make_file("reference_file");
+    ucmd.args(&["-r", "reference_file", "fifo"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("cannot open 'fifo' for writing: No such device or address");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_fifo_error_reference_and_size() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    at.make_file("reference_file");
+    ucmd.args(&["-r", "reference_file", "-s", "+0", "fifo"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("cannot open 'fifo' for writing: No such device or address");
 }

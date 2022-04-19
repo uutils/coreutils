@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_shuf);
+uucore::bin!(uu_shuf);

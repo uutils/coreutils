@@ -44,8 +44,8 @@ pub enum ExecutePattern {
 impl ExecutePattern {
     pub fn iter(&self) -> ExecutePatternIter {
         match self {
-            ExecutePattern::Times(n) => ExecutePatternIter::new(Some(*n)),
-            ExecutePattern::Always => ExecutePatternIter::new(None),
+            Self::Times(n) => ExecutePatternIter::new(Some(*n)),
+            Self::Always => ExecutePatternIter::new(None),
         }
     }
 }
@@ -56,8 +56,8 @@ pub struct ExecutePatternIter {
 }
 
 impl ExecutePatternIter {
-    fn new(max: Option<usize>) -> ExecutePatternIter {
-        ExecutePatternIter { max, cur: 0 }
+    fn new(max: Option<usize>) -> Self {
+        Self { max, cur: 0 }
     }
 }
 
@@ -88,7 +88,7 @@ impl Iterator for ExecutePatternIter {
 ///
 /// # Errors
 ///
-/// If a pattern is incorrect, a [`::CsplitError::InvalidPattern`] error is returned, which may be
+/// If a pattern is incorrect, a [`CsplitError::InvalidPattern`] error is returned, which may be
 /// due to, e.g.,:
 /// - an invalid regular expression;
 /// - an invalid number for, e.g., the offset.

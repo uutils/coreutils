@@ -1,9 +1,10 @@
 // spell-checker:ignore (vars) RFILE
 
-use uucore::{show_error, show_usage_error};
+use uucore::error::{UResult, UUsageError};
 
-use clap::{App, Arg};
+use clap::{Arg, Command};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
+use uucore::format_usage;
 
 use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
@@ -13,10 +14,14 @@ use std::{io, ptr};
 
 mod errors;
 
-use errors::{report_full_error, Error, Result};
+use errors::error_exit_status;
+use errors::{Error, Result, RunconError};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const ABOUT: &str = "Run command with specified security context.";
+const USAGE: &str = "\
+    {} [CONTEXT COMMAND [ARG...]]
+    {} [-c] [-u USER] [-r ROLE] [-t TYPE] [-l RANGE] COMMAND [ARG...]";
 const DESCRIPTION: &str = "Run COMMAND with completely-specified CONTEXT, or with current or \
                       transitioned security context modified by one or more of \
                       LEVEL, ROLE, TYPE, and USER.\n\n\
@@ -35,69 +40,39 @@ pub mod options {
     pub const RANGE: &str = "range";
 }
 
-// This list is NOT exhaustive. This command might perform an `execvp()` to run
-// a different program. When that happens successfully, the exit status of this
-// process will be the exit status of that program.
-mod error_exit_status {
-    pub const SUCCESS: i32 = libc::EXIT_SUCCESS;
-    pub const NOT_FOUND: i32 = 127;
-    pub const COULD_NOT_EXECUTE: i32 = 126;
-    pub const ANOTHER_ERROR: i32 = libc::EXIT_FAILURE;
-}
-
-fn get_usage() -> String {
-    format!(
-        "{0} [CONTEXT COMMAND [ARG...]]\n    \
-         {0} [-c] [-u USER] [-r ROLE] [-t TYPE] [-l RANGE] COMMAND [ARG...]",
-        uucore::execution_phrase()
-    )
-}
-
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
-
-    let config = uu_app().usage(usage.as_ref());
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let config = uu_app();
 
     let options = match parse_command_line(config, args) {
         Ok(r) => r,
         Err(r) => {
             if let Error::CommandLine(ref r) = r {
-                match r.kind {
-                    clap::ErrorKind::HelpDisplayed | clap::ErrorKind::VersionDisplayed => {
+                match r.kind() {
+                    clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion => {
                         println!("{}", r);
-                        return error_exit_status::SUCCESS;
+                        return Ok(());
                     }
                     _ => {}
                 }
             }
-
-            show_usage_error!("{}.\n", r);
-            return error_exit_status::ANOTHER_ERROR;
+            return Err(UUsageError::new(
+                error_exit_status::ANOTHER_ERROR,
+                format!("{}", r),
+            ));
         }
     };
 
     match &options.mode {
-        CommandLineMode::Print => {
-            if let Err(r) = print_current_context() {
-                show_error!("{}", report_full_error(&r));
-                return error_exit_status::ANOTHER_ERROR;
-            }
-        }
-
+        CommandLineMode::Print => print_current_context().map_err(|e| RunconError::new(e).into()),
         CommandLineMode::PlainContext { context, command } => {
-            let (exit_status, err) =
-                if let Err(err) = get_plain_context(context).and_then(set_next_exec_context) {
-                    (error_exit_status::ANOTHER_ERROR, err)
-                } else {
-                    // On successful execution, the following call never returns,
-                    // and this process image is replaced.
-                    execute_command(command, &options.arguments)
-                };
-
-            show_error!("{}", report_full_error(&err));
-            return exit_status;
+            get_plain_context(context)
+                .and_then(|ctx| set_next_exec_context(&ctx))
+                .map_err(RunconError::new)?;
+            // On successful execution, the following call never returns,
+            // and this process image is replaced.
+            execute_command(command, &options.arguments)
         }
-
         CommandLineMode::CustomContext {
             compute_transition_context,
             user,
@@ -106,86 +81,88 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             range,
             command,
         } => {
-            if let Some(command) = command {
-                let (exit_status, err) = if let Err(err) = get_custom_context(
-                    *compute_transition_context,
-                    user.as_deref(),
-                    role.as_deref(),
-                    the_type.as_deref(),
-                    range.as_deref(),
-                    command,
-                )
-                .and_then(set_next_exec_context)
-                {
-                    (error_exit_status::ANOTHER_ERROR, err)
-                } else {
+            match command {
+                Some(command) => {
+                    get_custom_context(
+                        *compute_transition_context,
+                        user.as_deref(),
+                        role.as_deref(),
+                        the_type.as_deref(),
+                        range.as_deref(),
+                        command,
+                    )
+                    .and_then(|ctx| set_next_exec_context(&ctx))
+                    .map_err(RunconError::new)?;
                     // On successful execution, the following call never returns,
                     // and this process image is replaced.
                     execute_command(command, &options.arguments)
-                };
-
-                show_error!("{}", report_full_error(&err));
-                return exit_status;
-            } else if let Err(r) = print_current_context() {
-                show_error!("{}", report_full_error(&r));
-                return error_exit_status::ANOTHER_ERROR;
+                }
+                None => print_current_context().map_err(|e| RunconError::new(e).into()),
             }
         }
     }
-
-    error_exit_status::SUCCESS
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
         .after_help(DESCRIPTION)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::COMPUTE)
-                .short("c")
+            Arg::new(options::COMPUTE)
+                .short('c')
                 .long(options::COMPUTE)
                 .takes_value(false)
                 .help("Compute process transition context before modifying."),
         )
         .arg(
-            Arg::with_name(options::USER)
-                .short("u")
+            Arg::new(options::USER)
+                .short('u')
                 .long(options::USER)
                 .takes_value(true)
                 .value_name("USER")
-                .help("Set user USER in the target security context."),
+                .help("Set user USER in the target security context.")
+                .allow_invalid_utf8(true),
         )
         .arg(
-            Arg::with_name(options::ROLE)
-                .short("r")
+            Arg::new(options::ROLE)
+                .short('r')
                 .long(options::ROLE)
                 .takes_value(true)
                 .value_name("ROLE")
-                .help("Set role ROLE in the target security context."),
+                .help("Set role ROLE in the target security context.")
+                .allow_invalid_utf8(true),
         )
         .arg(
-            Arg::with_name(options::TYPE)
-                .short("t")
+            Arg::new(options::TYPE)
+                .short('t')
                 .long(options::TYPE)
                 .takes_value(true)
                 .value_name("TYPE")
-                .help("Set type TYPE in the target security context."),
+                .help("Set type TYPE in the target security context.")
+                .allow_invalid_utf8(true),
         )
         .arg(
-            Arg::with_name(options::RANGE)
-                .short("l")
+            Arg::new(options::RANGE)
+                .short('l')
                 .long(options::RANGE)
                 .takes_value(true)
                 .value_name("RANGE")
-                .help("Set range RANGE in the target security context."),
+                .help("Set range RANGE in the target security context.")
+                .allow_invalid_utf8(true),
         )
-        .arg(Arg::with_name("ARG").multiple(true))
+        .arg(
+            Arg::new("ARG")
+                .multiple_occurrences(true)
+                .allow_invalid_utf8(true),
+        )
         // Once "ARG" is parsed, everything after that belongs to it.
         //
         // This is not how POSIX does things, but this is how the GNU implementation
         // parses its command line.
-        .setting(clap::AppSettings::TrailingVarArg)
+        .trailing_var_arg(true)
 }
 
 #[derive(Debug)]
@@ -228,8 +205,8 @@ struct Options {
     arguments: Vec<OsString>,
 }
 
-fn parse_command_line(config: App, args: impl uucore::Args) -> Result<Options> {
-    let matches = config.get_matches_from_safe(args)?;
+fn parse_command_line(config: Command, args: impl uucore::Args) -> Result<Options> {
+    let matches = config.try_get_matches_from(args)?;
 
     let compute_transition_context = matches.is_present(options::COMPUTE);
 
@@ -295,7 +272,7 @@ fn print_current_context() -> Result<()> {
     Ok(())
 }
 
-fn set_next_exec_context(context: OpaqueSecurityContext) -> Result<()> {
+fn set_next_exec_context(context: &OpaqueSecurityContext) -> Result<()> {
     let c_context = context
         .to_c_string()
         .map_err(|r| Error::from_selinux("Creating new context", r))?;
@@ -406,25 +383,19 @@ fn get_custom_context(
     Ok(osc)
 }
 
-/// The actual return type of this function should be `Result<!, (i32, Error)>`
+/// The actual return type of this function should be `UResult<!>`.
 /// However, until the *never* type is stabilized, one way to indicate to the
 /// compiler the only valid return type is to say "if this returns, it will
 /// always return an error".
-fn execute_command(command: &OsStr, arguments: &[OsString]) -> (i32, Error) {
-    let c_command = match os_str_to_c_string(command) {
-        Ok(v) => v,
-        Err(r) => return (error_exit_status::ANOTHER_ERROR, r),
-    };
+fn execute_command(command: &OsStr, arguments: &[OsString]) -> UResult<()> {
+    let c_command = os_str_to_c_string(command).map_err(RunconError::new)?;
 
-    let argv_storage: Vec<CString> = match arguments
+    let argv_storage: Vec<CString> = arguments
         .iter()
         .map(AsRef::as_ref)
         .map(os_str_to_c_string)
         .collect::<Result<_>>()
-    {
-        Ok(v) => v,
-        Err(r) => return (error_exit_status::ANOTHER_ERROR, r),
-    };
+        .map_err(RunconError::new)?;
 
     let mut argv: Vec<*const c_char> = Vec::with_capacity(arguments.len().saturating_add(2));
     argv.push(c_command.as_ptr());
@@ -441,7 +412,7 @@ fn execute_command(command: &OsStr, arguments: &[OsString]) -> (i32, Error) {
     };
 
     let err = Error::from_io1("Executing command", command, err);
-    (exit_status, err)
+    Err(RunconError::with_code(exit_status, err).into())
 }
 
 fn os_str_to_c_string(s: &OsStr) -> Result<CString> {

@@ -10,19 +10,21 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::OsValues;
-use clap::{crate_version, App, Arg, ArgMatches};
-use std::fs;
-use std::path::Path;
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+use clap::{crate_version, Arg, ArgMatches, Command, OsValues};
+use std::path::{Path, PathBuf};
+#[cfg(not(windows))]
+use uucore::error::FromIo;
+use uucore::error::{UResult, USimpleError};
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::InvalidEncodingHandling;
+use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static DEFAULT_PERM: u32 = 0o755;
 
 static ABOUT: &str = "Create the given DIRECTORY(ies) if they do not exist";
+const USAGE: &str = "{} [OPTION]... [USER]";
+
 mod options {
     pub const MODE: &str = "mode";
     pub const PARENTS: &str = "parents";
@@ -30,9 +32,6 @@ mod options {
     pub const DIRS: &str = "dirs";
 }
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [USER]", uucore::execution_phrase())
-}
 fn get_long_usage() -> String {
     String::from("Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.")
 }
@@ -79,7 +78,7 @@ fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
     mode::strip_minus_from_mode(args)
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -88,17 +87,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Before we can parse 'args' with clap (and previously getopts),
     // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").
     let mode_had_minus_prefix = strip_minus_from_mode(&mut args);
-
-    let usage = usage();
     let after_help = get_long_usage();
 
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
-    let matches = uu_app()
-        .usage(&usage[..])
-        .after_help(&after_help[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
     let dirs = matches.values_of_os(options::DIRS).unwrap_or_default();
     let verbose = matches.is_present(options::VERBOSE);
@@ -110,35 +104,37 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::MODE)
-                .short("m")
+            Arg::new(options::MODE)
+                .short('m')
                 .long(options::MODE)
                 .help("set file mode (not implemented on windows)")
                 .default_value("755"),
         )
         .arg(
-            Arg::with_name(options::PARENTS)
-                .short("p")
+            Arg::new(options::PARENTS)
+                .short('p')
                 .long(options::PARENTS)
-                .alias("parent")
                 .help("make parent directories as needed"),
         )
         .arg(
-            Arg::with_name(options::VERBOSE)
-                .short("v")
+            Arg::new(options::VERBOSE)
+                .short('v')
                 .long(options::VERBOSE)
                 .help("print a message for each printed directory"),
         )
         .arg(
-            Arg::with_name(options::DIRS)
-                .multiple(true)
+            Arg::new(options::DIRS)
+                .multiple_occurrences(true)
                 .takes_value(true)
-                .min_values(1),
+                .min_values(1)
+                .allow_invalid_utf8(true),
         )
 }
 
@@ -147,29 +143,22 @@ pub fn uu_app() -> App<'static, 'static> {
  */
 fn exec(dirs: OsValues, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
     for dir in dirs {
-        let path = Path::new(dir);
-        show_if_err!(mkdir(path, recursive, mode, verbose));
+        // Special case to match GNU's behavior:
+        // mkdir -p foo/. should work and just create foo/
+        // std::fs::create_dir("foo/."); fails in pure Rust
+        let path = if recursive {
+            dir_strip_dot_for_creation(&PathBuf::from(dir))
+        } else {
+            // Normal case
+            PathBuf::from(dir)
+        };
+        show_if_err!(mkdir(path.as_path(), recursive, mode, verbose));
     }
     Ok(())
 }
 
 fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
-    let create_dir = if recursive {
-        fs::create_dir_all
-    } else {
-        fs::create_dir
-    };
-
-    create_dir(path).map_err_context(|| format!("cannot create directory {}", path.quote()))?;
-
-    if verbose {
-        println!(
-            "{}: created directory {}",
-            uucore::util_name(),
-            path.quote()
-        );
-    }
-
+    create_dir(path, recursive, verbose)?;
     chmod(path, mode)
 }
 
@@ -188,4 +177,39 @@ fn chmod(path: &Path, mode: u32) -> UResult<()> {
 fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
     // chmod on Windows only sets the readonly flag, which isn't even honored on directories
     Ok(())
+}
+
+fn create_dir(path: &Path, recursive: bool, verbose: bool) -> UResult<()> {
+    if path.exists() && !recursive {
+        return Err(USimpleError::new(
+            1,
+            format!("{}: File exists", path.display()),
+        ));
+    }
+    if path == Path::new("") {
+        return Ok(());
+    }
+
+    if recursive {
+        match path.parent() {
+            Some(p) => create_dir(p, recursive, verbose)?,
+            None => {
+                USimpleError::new(1, "failed to create whole tree");
+            }
+        }
+    }
+    match std::fs::create_dir(path) {
+        Ok(()) => {
+            if verbose {
+                println!(
+                    "{}: created directory {}",
+                    uucore::util_name(),
+                    path.quote()
+                );
+            }
+            Ok(())
+        }
+        Err(_) if path.is_dir() => Ok(()),
+        Err(e) => Err(e.into()),
+    }
 }

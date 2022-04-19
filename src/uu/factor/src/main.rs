@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_factor);
+uucore::bin!(uu_factor);

@@ -10,7 +10,7 @@
 use std::fs::remove_file;
 use std::path::Path;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
@@ -18,7 +18,7 @@ use uucore::error::{FromIo, UResult};
 static ABOUT: &str = "Unlink the file at FILE.";
 static OPT_PATH: &str = "FILE";
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
@@ -27,9 +27,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     remove_file(path).map_err_context(|| format!("cannot unlink {}", path.quote()))
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .arg(Arg::with_name(OPT_PATH).required(true).hidden(true))
+        .infer_long_args(true)
+        .arg(
+            Arg::new(OPT_PATH)
+                .required(true)
+                .hide(true)
+                .allow_invalid_utf8(true),
+        )
 }

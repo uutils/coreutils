@@ -80,7 +80,13 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
         if let Ok(stat) = stat::fstat(fd) {
             // If the file is regular, then the `st_size` should hold
             // the file's size in bytes.
-            if (stat.st_mode & S_IFREG) != 0 {
+            // If stat.st_size = 0 then
+            //  - either the size is 0
+            //  - or the size is unknown.
+            // The second case happens for files in pseudo-filesystems. For
+            // example with /proc/version and /sys/kernel/profiling. So,
+            // if it is 0 we don't report that and instead do a full read.
+            if (stat.st_mode & S_IFREG) != 0 && stat.st_size > 0 {
                 return (stat.st_size as usize, None);
             }
             #[cfg(any(target_os = "linux", target_os = "android"))]

@@ -172,7 +172,7 @@ fn test_piped_to_dev_full() {
                 .set_stdout(dev_full)
                 .pipe_in_fixture("alpha.txt")
                 .fails()
-                .stderr_contains(&"No space left on device".to_owned());
+                .stderr_contains("No space left on device");
         }
     }
 }
@@ -264,7 +264,7 @@ fn test_numbered_lines_no_trailing_newline() {
 
 #[test]
 fn test_stdin_show_nonprinting() {
-    for same_param in &["-v", "--show-nonprinting"] {
+    for same_param in &["-v", "--show-nonprinting", "--show-non"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -275,7 +275,7 @@ fn test_stdin_show_nonprinting() {
 
 #[test]
 fn test_stdin_show_tabs() {
-    for same_param in &["-T", "--show-tabs"] {
+    for same_param in &["-T", "--show-tabs", "--show-ta"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -286,7 +286,7 @@ fn test_stdin_show_tabs() {
 
 #[test]
 fn test_stdin_show_ends() {
-    for &same_param in &["-E", "--show-ends"] {
+    for &same_param in &["-E", "--show-ends", "--show-e"] {
         new_ucmd!()
             .args(&[same_param, "-"])
             .pipe_in("\t\0\n\t")
@@ -317,7 +317,7 @@ fn test_show_ends_crlf() {
 
 #[test]
 fn test_stdin_show_all() {
-    for same_param in &["-A", "--show-all"] {
+    for same_param in &["-A", "--show-all", "--show-a"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -346,7 +346,7 @@ fn test_stdin_nonprinting_and_tabs() {
 
 #[test]
 fn test_stdin_squeeze_blank() {
-    for same_param in &["-s", "--squeeze-blank"] {
+    for same_param in &["-s", "--squeeze-blank", "--squeeze"] {
         new_ucmd!()
             .arg(same_param)
             .pipe_in("\n\na\n\n\n\n\nb\n\n\n")
@@ -358,7 +358,7 @@ fn test_stdin_squeeze_blank() {
 #[test]
 fn test_stdin_number_non_blank() {
     // spell-checker:disable-next-line
-    for same_param in &["-b", "--number-nonblank"] {
+    for same_param in &["-b", "--number-nonblank", "--number-non"] {
         new_ucmd!()
             .arg(same_param)
             .arg("-")

@@ -10,17 +10,15 @@
 
 use std::path::Path;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use uucore::error::UResult;
+use uucore::format_usage;
 use uucore::utmpx::{self, Utmpx};
 
 static ABOUT: &str = "Print the user names of users currently logged in to the current host";
+const USAGE: &str = "{} [FILE]";
 
 static ARG_FILES: &str = "files";
-
-fn usage() -> String {
-    format!("{0} [FILE]", uucore::execution_phrase())
-}
 
 fn get_long_usage() -> String {
     format!(
@@ -30,15 +28,11 @@ If FILE is not specified, use {}.  /var/log/wtmp as FILE is common.",
     )
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let after_help = get_long_usage();
 
-    let matches = uu_app()
-        .usage(&usage[..])
-        .after_help(&after_help[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
     let files: Vec<&Path> = matches
         .values_of_os(ARG_FILES)
@@ -64,9 +58,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .arg(Arg::with_name(ARG_FILES).takes_value(true).max_values(1))
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
+        .arg(Arg::new(ARG_FILES).takes_value(true).max_values(1))
 }

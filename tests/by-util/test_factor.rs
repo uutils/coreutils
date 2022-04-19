@@ -29,6 +29,8 @@ const NUM_TESTS: usize = 100;
 
 #[test]
 fn test_parallel() {
+    use hex_literal::hex;
+    use sha1::{Digest, Sha1};
     // factor should only flush the buffer at line breaks
     let n_integers = 100_000;
     let mut input_string = String::new();
@@ -60,13 +62,20 @@ fn test_parallel() {
         .ccmd("sort")
         .arg(tmp_dir.plus("output"))
         .succeeds();
-    let hash_check = sha1::Sha1::from(result.stdout()).hexdigest();
-    assert_eq!(hash_check, "cc743607c0ff300ff575d92f4ff0c87d5660c393");
+    let mut hasher = Sha1::new();
+    hasher.update(result.stdout());
+    let hash_check = hasher.finalize();
+    assert_eq!(
+        hash_check[..],
+        hex!("cc743607c0ff300ff575d92f4ff0c87d5660c393")
+    );
 }
 
 #[test]
 fn test_first_100000_integers() {
     extern crate sha1;
+    use hex_literal::hex;
+    use sha1::{Digest, Sha1};
 
     let n_integers = 100_000;
     let mut input_string = String::new();
@@ -78,8 +87,13 @@ fn test_first_100000_integers() {
     let result = new_ucmd!().pipe_in(input_string.as_bytes()).succeeds();
 
     // `seq 0 100000 | factor | sha1sum` => "4ed2d8403934fa1c76fe4b84c5d4b8850299c359"
-    let hash_check = sha1::Sha1::from(result.stdout()).hexdigest();
-    assert_eq!(hash_check, "4ed2d8403934fa1c76fe4b84c5d4b8850299c359");
+    let mut hasher = Sha1::new();
+    hasher.update(result.stdout());
+    let hash_check = hasher.finalize();
+    assert_eq!(
+        hash_check[..],
+        hex!("4ed2d8403934fa1c76fe4b84c5d4b8850299c359")
+    );
 }
 
 #[test]
@@ -115,7 +129,7 @@ fn test_random() {
             // log distribution---higher probability for lower numbers
             let factor;
             loop {
-                let next = rng.gen_range(0_f64, log_num_primes).exp2().floor() as usize;
+                let next = rng.gen_range(0_f64..log_num_primes).exp2().floor() as usize;
                 if next < NUM_PRIMES {
                     factor = primes[next];
                     break;

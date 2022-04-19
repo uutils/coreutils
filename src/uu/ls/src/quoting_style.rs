@@ -79,8 +79,8 @@ impl Iterator for EscapeOctal {
 }
 
 impl EscapeOctal {
-    fn from(c: char) -> EscapeOctal {
-        EscapeOctal {
+    fn from(c: char) -> Self {
+        Self {
             c,
             idx: 2,
             state: EscapeOctalState::Backslash,
@@ -363,7 +363,7 @@ mod tests {
         }
     }
 
-    fn check_names(name: &str, map: Vec<(&str, &str)>) {
+    fn check_names(name: &str, map: &[(&str, &str)]) {
         assert_eq!(
             map.iter()
                 .map(|(_, style)| escape_name(name.as_ref(), &get_style(style)))
@@ -378,7 +378,7 @@ mod tests {
     fn test_simple_names() {
         check_names(
             "one_two",
-            vec![
+            &[
                 ("one_two", "literal"),
                 ("one_two", "literal-show"),
                 ("one_two", "escape"),
@@ -397,7 +397,7 @@ mod tests {
     fn test_spaces() {
         check_names(
             "one two",
-            vec![
+            &[
                 ("one two", "literal"),
                 ("one two", "literal-show"),
                 ("one\\ two", "escape"),
@@ -413,7 +413,7 @@ mod tests {
 
         check_names(
             " one",
-            vec![
+            &[
                 (" one", "literal"),
                 (" one", "literal-show"),
                 ("\\ one", "escape"),
@@ -433,7 +433,7 @@ mod tests {
         // One double quote
         check_names(
             "one\"two",
-            vec![
+            &[
                 ("one\"two", "literal"),
                 ("one\"two", "literal-show"),
                 ("one\"two", "escape"),
@@ -450,7 +450,7 @@ mod tests {
         // One single quote
         check_names(
             "one\'two",
-            vec![
+            &[
                 ("one'two", "literal"),
                 ("one'two", "literal-show"),
                 ("one'two", "escape"),
@@ -467,7 +467,7 @@ mod tests {
         // One single quote and one double quote
         check_names(
             "one'two\"three",
-            vec![
+            &[
                 ("one'two\"three", "literal"),
                 ("one'two\"three", "literal-show"),
                 ("one'two\"three", "escape"),
@@ -484,7 +484,7 @@ mod tests {
         // Consecutive quotes
         check_names(
             "one''two\"\"three",
-            vec![
+            &[
                 ("one''two\"\"three", "literal"),
                 ("one''two\"\"three", "literal-show"),
                 ("one''two\"\"three", "escape"),
@@ -504,7 +504,7 @@ mod tests {
         // A simple newline
         check_names(
             "one\ntwo",
-            vec![
+            &[
                 ("one?two", "literal"),
                 ("one\ntwo", "literal-show"),
                 ("one\\ntwo", "escape"),
@@ -521,7 +521,7 @@ mod tests {
         // A control character followed by a special shell character
         check_names(
             "one\n&two",
-            vec![
+            &[
                 ("one?&two", "literal"),
                 ("one\n&two", "literal-show"),
                 ("one\\n&two", "escape"),
@@ -539,7 +539,7 @@ mod tests {
         // no importance for file names.
         check_names(
             "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F",
-            vec![
+            &[
                 ("????????????????", "literal"),
                 (
                     "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F",
@@ -577,7 +577,7 @@ mod tests {
         // The last 16 control characters.
         check_names(
             "\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F",
-            vec![
+            &[
                 ("????????????????", "literal"),
                 (
                     "\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F",
@@ -615,7 +615,7 @@ mod tests {
         // DEL
         check_names(
             "\x7F",
-            vec![
+            &[
                 ("?", "literal"),
                 ("\x7F", "literal-show"),
                 ("\\177", "escape"),
@@ -637,7 +637,7 @@ mod tests {
         // in other tests)
         check_names(
             "one?two",
-            vec![
+            &[
                 ("one?two", "literal"),
                 ("one?two", "literal-show"),
                 ("one?two", "escape"),
@@ -657,7 +657,7 @@ mod tests {
         // Escaped in C-style, but not in Shell-style escaping
         check_names(
             "one\\two",
-            vec![
+            &[
                 ("one\\two", "literal"),
                 ("one\\two", "literal-show"),
                 ("one\\\\two", "escape"),
@@ -672,34 +672,34 @@ mod tests {
 
     #[test]
     fn test_tilde_and_hash() {
-        check_names("~", vec![("'~'", "shell"), ("'~'", "shell-escape")]);
+        check_names("~", &[("'~'", "shell"), ("'~'", "shell-escape")]);
         check_names(
             "~name",
-            vec![("'~name'", "shell"), ("'~name'", "shell-escape")],
+            &[("'~name'", "shell"), ("'~name'", "shell-escape")],
         );
         check_names(
             "some~name",
-            vec![("some~name", "shell"), ("some~name", "shell-escape")],
+            &[("some~name", "shell"), ("some~name", "shell-escape")],
         );
-        check_names("name~", vec![("name~", "shell"), ("name~", "shell-escape")]);
+        check_names("name~", &[("name~", "shell"), ("name~", "shell-escape")]);
 
-        check_names("#", vec![("'#'", "shell"), ("'#'", "shell-escape")]);
+        check_names("#", &[("'#'", "shell"), ("'#'", "shell-escape")]);
         check_names(
             "#name",
-            vec![("'#name'", "shell"), ("'#name'", "shell-escape")],
+            &[("'#name'", "shell"), ("'#name'", "shell-escape")],
         );
         check_names(
             "some#name",
-            vec![("some#name", "shell"), ("some#name", "shell-escape")],
+            &[("some#name", "shell"), ("some#name", "shell-escape")],
         );
-        check_names("name#", vec![("name#", "shell"), ("name#", "shell-escape")]);
+        check_names("name#", &[("name#", "shell"), ("name#", "shell-escape")]);
     }
 
     #[test]
     fn test_special_chars_in_double_quotes() {
         check_names(
             "can'$t",
-            vec![
+            &[
                 ("'can'\\''$t'", "shell"),
                 ("'can'\\''$t'", "shell-always"),
                 ("'can'\\''$t'", "shell-escape"),
@@ -709,7 +709,7 @@ mod tests {
 
         check_names(
             "can'`t",
-            vec![
+            &[
                 ("'can'\\''`t'", "shell"),
                 ("'can'\\''`t'", "shell-always"),
                 ("'can'\\''`t'", "shell-escape"),
@@ -719,7 +719,7 @@ mod tests {
 
         check_names(
             "can'\\t",
-            vec![
+            &[
                 ("'can'\\''\\t'", "shell"),
                 ("'can'\\''\\t'", "shell-always"),
                 ("'can'\\''\\t'", "shell-escape"),

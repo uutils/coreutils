@@ -7,15 +7,16 @@
 
 // spell-checker:ignore (ToDO) cmdline evec seps rvec fdata
 
-#[macro_use]
-extern crate uucore;
-
-use clap::{crate_version, App, Arg};
-use rand::Rng;
+use clap::{crate_version, Arg, Command, Values};
+use rand::prelude::SliceRandom;
+use rand::RngCore;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use uucore::display::Quotable;
-use uucore::InvalidEncodingHandling;
+use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::{format_usage, InvalidEncodingHandling};
+
+mod rand_read_adapter;
 
 enum Mode {
     Default(String),
@@ -24,14 +25,14 @@ enum Mode {
 }
 
 static NAME: &str = "shuf";
-static USAGE: &str = r#"shuf [OPTION]... [FILE]
-  or:  shuf -e [OPTION]... [ARG]...
-  or:  shuf -i LO-HI [OPTION]...
-Write a random permutation of the input lines to standard output.
-
-With no FILE, or when FILE is -, read standard input.
-"#;
-static TEMPLATE: &str = "Usage: {usage}\nMandatory arguments to long options are mandatory for short options too.\n{unified}";
+static USAGE: &str = "\
+    {} [OPTION]... [FILE]
+    {} -e [OPTION]... [ARG]...
+    {} -i LO-HI [OPTION]...";
+static ABOUT: &str = "\
+    Shuffle the input by outputting a random permutation of input lines.\
+    Each output permutation is equally likely.\
+    With no FILE, or when FILE is -, read standard input.";
 
 struct Options {
     head_count: usize,
@@ -52,7 +53,8 @@ mod options {
     pub static FILE: &str = "file";
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -65,7 +67,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         match parse_range(range) {
             Ok(m) => Mode::InputRange(m),
             Err(msg) => {
-                crash!(1, "{}", msg);
+                return Err(USimpleError::new(1, msg));
             }
         }
     } else {
@@ -73,15 +75,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     let options = Options {
-        head_count: match matches.value_of(options::HEAD_COUNT) {
-            Some(count) => match count.parse::<usize>() {
+        head_count: {
+            let mut headcounts: Values<'_> =
+                matches.values_of(options::HEAD_COUNT).unwrap_or_default();
+            match parse_head_count(&mut headcounts) {
                 Ok(val) => val,
-                Err(_) => {
-                    show_error!("invalid line count: {}", count.quote());
-                    return 1;
-                }
-            },
-            None => std::usize::MAX,
+                Err(msg) => return Err(USimpleError::new(1, msg)),
+            }
         },
         output: matches.value_of(options::OUTPUT).map(String::from),
         random_source: matches.value_of(options::RANDOM_SOURCE).map(String::from),
@@ -97,45 +97,46 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         Mode::Echo(args) => {
             let mut evec = args.iter().map(String::as_bytes).collect::<Vec<_>>();
             find_seps(&mut evec, options.sep);
-            shuf_bytes(&mut evec, options);
+            shuf_bytes(&mut evec, options)?;
         }
         Mode::InputRange((b, e)) => {
             let rvec = (b..e).map(|x| format!("{}", x)).collect::<Vec<String>>();
             let mut rvec = rvec.iter().map(String::as_bytes).collect::<Vec<&[u8]>>();
-            shuf_bytes(&mut rvec, options);
+            shuf_bytes(&mut rvec, options)?;
         }
         Mode::Default(filename) => {
-            let fdata = read_input_file(&filename);
+            let fdata = read_input_file(&filename)?;
             let mut fdata = vec![&fdata[..]];
             find_seps(&mut fdata, options.sep);
-            shuf_bytes(&mut fdata, options);
+            shuf_bytes(&mut fdata, options)?;
         }
     }
 
-    0
+    Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .name(NAME)
+        .about(ABOUT)
         .version(crate_version!())
-        .template(TEMPLATE)
-        .usage(USAGE)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::ECHO)
-                .short("e")
+            Arg::new(options::ECHO)
+                .short('e')
                 .long(options::ECHO)
                 .takes_value(true)
                 .value_name("ARG")
                 .help("treat each ARG as an input line")
-                .multiple(true)
-                .use_delimiter(false)
+                .multiple_occurrences(true)
+                .use_value_delimiter(false)
                 .min_values(0)
                 .conflicts_with(options::INPUT_RANGE),
         )
         .arg(
-            Arg::with_name(options::INPUT_RANGE)
-                .short("i")
+            Arg::new(options::INPUT_RANGE)
+                .short('i')
                 .long(options::INPUT_RANGE)
                 .takes_value(true)
                 .value_name("LO-HI")
@@ -143,59 +144,58 @@ pub fn uu_app() -> App<'static, 'static> {
                 .conflicts_with(options::FILE),
         )
         .arg(
-            Arg::with_name(options::HEAD_COUNT)
-                .short("n")
+            Arg::new(options::HEAD_COUNT)
+                .short('n')
                 .long(options::HEAD_COUNT)
                 .takes_value(true)
+                .multiple_occurrences(true)
                 .value_name("COUNT")
                 .help("output at most COUNT lines"),
         )
         .arg(
-            Arg::with_name(options::OUTPUT)
-                .short("o")
+            Arg::new(options::OUTPUT)
+                .short('o')
                 .long(options::OUTPUT)
                 .takes_value(true)
                 .value_name("FILE")
                 .help("write result to FILE instead of standard output"),
         )
         .arg(
-            Arg::with_name(options::RANDOM_SOURCE)
+            Arg::new(options::RANDOM_SOURCE)
                 .long(options::RANDOM_SOURCE)
                 .takes_value(true)
                 .value_name("FILE")
                 .help("get random bytes from FILE"),
         )
         .arg(
-            Arg::with_name(options::REPEAT)
-                .short("r")
+            Arg::new(options::REPEAT)
+                .short('r')
                 .long(options::REPEAT)
                 .help("output lines can be repeated"),
         )
         .arg(
-            Arg::with_name(options::ZERO_TERMINATED)
-                .short("z")
+            Arg::new(options::ZERO_TERMINATED)
+                .short('z')
                 .long(options::ZERO_TERMINATED)
                 .help("line delimiter is NUL, not newline"),
         )
-        .arg(Arg::with_name(options::FILE).takes_value(true))
+        .arg(Arg::new(options::FILE).takes_value(true))
 }
 
-fn read_input_file(filename: &str) -> Vec<u8> {
+fn read_input_file(filename: &str) -> UResult<Vec<u8>> {
     let mut file = BufReader::new(if filename == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
-        match File::open(filename) {
-            Ok(f) => Box::new(f) as Box<dyn Read>,
-            Err(e) => crash!(1, "failed to open {}: {}", filename.quote(), e),
-        }
+        let file = File::open(filename)
+            .map_err_context(|| format!("failed to open {}", filename.quote()))?;
+        Box::new(file) as Box<dyn Read>
     });
 
     let mut data = Vec::new();
-    if let Err(e) = file.read_to_end(&mut data) {
-        crash!(1, "failed reading {}: {}", filename.quote(), e)
-    };
+    file.read_to_end(&mut data)
+        .map_err_context(|| format!("failed reading {}", filename.quote()))?;
 
-    data
+    Ok(data)
 }
 
 fn find_seps(data: &mut Vec<&[u8]>, sep: u8) {
@@ -231,86 +231,113 @@ fn find_seps(data: &mut Vec<&[u8]>, sep: u8) {
     }
 }
 
-fn shuf_bytes(input: &mut Vec<&[u8]>, opts: Options) {
+fn shuf_bytes(input: &mut Vec<&[u8]>, opts: Options) -> UResult<()> {
     let mut output = BufWriter::new(match opts.output {
         None => Box::new(stdout()) as Box<dyn Write>,
-        Some(s) => match File::create(&s[..]) {
-            Ok(f) => Box::new(f) as Box<dyn Write>,
-            Err(e) => crash!(1, "failed to open {} for writing: {}", s.quote(), e),
-        },
+        Some(s) => {
+            let file = File::create(&s[..])
+                .map_err_context(|| format!("failed to open {} for writing", s.quote()))?;
+            Box::new(file) as Box<dyn Write>
+        }
     });
 
     let mut rng = match opts.random_source {
-        Some(r) => WrappedRng::RngFile(rand::rngs::adapter::ReadRng::new(
-            match File::open(&r[..]) {
-                Ok(f) => f,
-                Err(e) => crash!(1, "failed to open random source {}: {}", r.quote(), e),
-            },
-        )),
+        Some(r) => {
+            let file = File::open(&r[..])
+                .map_err_context(|| format!("failed to open random source {}", r.quote()))?;
+            WrappedRng::RngFile(rand_read_adapter::ReadRng::new(file))
+        }
         None => WrappedRng::RngDefault(rand::thread_rng()),
     };
 
-    // we're generating a random usize. To keep things fair, we take this number mod ceil(log2(length+1))
-    let mut len_mod = 1;
-    let mut len = input.len();
-    while len > 0 {
-        len >>= 1;
-        len_mod <<= 1;
+    if input.is_empty() {
+        return Ok(());
     }
 
-    let mut count = opts.head_count;
-    while count > 0 && !input.is_empty() {
-        let mut r = input.len();
-        while r >= input.len() {
-            r = rng.next_usize() % len_mod;
+    if opts.repeat {
+        for _ in 0..opts.head_count {
+            // Returns None is the slice is empty. We checked this before, so
+            // this is safe.
+            let r = input.choose(&mut rng).unwrap();
+
+            output
+                .write_all(r)
+                .map_err_context(|| "write failed".to_string())?;
+            output
+                .write_all(&[opts.sep])
+                .map_err_context(|| "write failed".to_string())?;
         }
-
-        // write the randomly chosen value and the separator
-        output
-            .write_all(input[r])
-            .unwrap_or_else(|e| crash!(1, "write failed: {}", e));
-        output
-            .write_all(&[opts.sep])
-            .unwrap_or_else(|e| crash!(1, "write failed: {}", e));
-
-        // if we do not allow repeats, remove the chosen value from the input vector
-        if !opts.repeat {
-            // shrink the mask if we will drop below a power of 2
-            if input.len() % 2 == 0 && len_mod > 2 {
-                len_mod >>= 1;
-            }
-            input.swap_remove(r);
+    } else {
+        let (shuffled, _) = input.partial_shuffle(&mut rng, opts.head_count);
+        for r in shuffled {
+            output
+                .write_all(r)
+                .map_err_context(|| "write failed".to_string())?;
+            output
+                .write_all(&[opts.sep])
+                .map_err_context(|| "write failed".to_string())?;
         }
-
-        count -= 1;
     }
+
+    Ok(())
 }
 
 fn parse_range(input_range: &str) -> Result<(usize, usize), String> {
-    let split: Vec<&str> = input_range.split('-').collect();
-    if split.len() != 2 {
-        Err(format!("invalid input range: {}", input_range.quote()))
-    } else {
-        let begin = split[0]
+    if let Some((from, to)) = input_range.split_once('-') {
+        let begin = from
             .parse::<usize>()
-            .map_err(|_| format!("invalid input range: {}", split[0].quote()))?;
-        let end = split[1]
+            .map_err(|_| format!("invalid input range: {}", from.quote()))?;
+        let end = to
             .parse::<usize>()
-            .map_err(|_| format!("invalid input range: {}", split[1].quote()))?;
+            .map_err(|_| format!("invalid input range: {}", to.quote()))?;
         Ok((begin, end + 1))
+    } else {
+        Err(format!("invalid input range: {}", input_range.quote()))
     }
 }
 
+fn parse_head_count(headcounts: &mut Values<'_>) -> Result<usize, String> {
+    let mut result = std::usize::MAX;
+    for count in headcounts {
+        match count.parse::<usize>() {
+            Ok(pv) => result = std::cmp::min(result, pv),
+            Err(_) => return Err(format!("invalid line count: {}", count.quote())),
+        }
+    }
+    Ok(result)
+}
+
 enum WrappedRng {
-    RngFile(rand::rngs::adapter::ReadRng<File>),
+    RngFile(rand_read_adapter::ReadRng<File>),
     RngDefault(rand::rngs::ThreadRng),
 }
 
-impl WrappedRng {
-    fn next_usize(&mut self) -> usize {
-        match *self {
-            WrappedRng::RngFile(ref mut r) => r.gen(),
-            WrappedRng::RngDefault(ref mut r) => r.gen(),
+impl RngCore for WrappedRng {
+    fn next_u32(&mut self) -> u32 {
+        match self {
+            Self::RngFile(r) => r.next_u32(),
+            Self::RngDefault(r) => r.next_u32(),
+        }
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        match self {
+            Self::RngFile(r) => r.next_u64(),
+            Self::RngDefault(r) => r.next_u64(),
+        }
+    }
+
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        match self {
+            Self::RngFile(r) => r.fill_bytes(dest),
+            Self::RngDefault(r) => r.fill_bytes(dest),
+        }
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
+        match self {
+            Self::RngFile(r) => r.try_fill_bytes(dest),
+            Self::RngDefault(r) => r.try_fill_bytes(dest),
         }
     }
 }

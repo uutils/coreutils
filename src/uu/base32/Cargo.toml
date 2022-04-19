@@ -1,12 +1,12 @@
 [package]
 name = "uu_base32"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "base32 ~ (uutils) decode/encode input (base32-encoding)"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/base32"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/base32"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -15,14 +15,9 @@ edition = "2018"
 path = "src/base32.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features = ["encoding"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features = ["encoding"] }
 
 [[bin]]
 name = "base32"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-# Necessary for "make all"
-normal = ["uucore_procs"]

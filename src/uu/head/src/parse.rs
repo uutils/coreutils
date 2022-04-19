@@ -12,7 +12,7 @@ pub enum ParseError {
     Overflow,
 }
 /// Parses obsolete syntax
-/// head -NUM[kmzv] // spell-checker:disable-line
+/// head -NUM\[kmzv\] // spell-checker:disable-line
 pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>, ParseError>> {
     let mut chars = src.char_indices();
     if let Some((_, '-')) = chars.next() {
@@ -20,7 +20,7 @@ pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>
         let mut has_num = false;
         let mut last_char = 0 as char;
         for (n, c) in &mut chars {
-            if c.is_numeric() {
+            if c.is_digit(10) {
                 has_num = true;
                 num_end = n;
             } else {
@@ -43,11 +43,11 @@ pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>
                             // this also saves us 1 heap allocation
                             'q' => {
                                 quiet = true;
-                                verbose = false
+                                verbose = false;
                             }
                             'v' => {
                                 verbose = true;
-                                quiet = false
+                                quiet = false;
                             }
                             'z' => zero_terminated = true,
                             'c' => multiplier = Some(1),
@@ -58,20 +58,20 @@ pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>
                             _ => return Some(Err(ParseError::Syntax)),
                         }
                         if let Some((_, next)) = chars.next() {
-                            c = next
+                            c = next;
                         } else {
                             break;
                         }
                     }
                     let mut options = Vec::new();
                     if quiet {
-                        options.push(OsString::from("-q"))
+                        options.push(OsString::from("-q"));
                     }
                     if verbose {
-                        options.push(OsString::from("-v"))
+                        options.push(OsString::from("-v"));
                     }
                     if zero_terminated {
-                        options.push(OsString::from("-z"))
+                        options.push(OsString::from("-z"));
                     }
                     if let Some(n) = multiplier {
                         options.push(OsString::from("-c"));
@@ -97,7 +97,7 @@ pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>
 }
 /// Parses an -c or -n argument,
 /// the bool specifies whether to read from the end
-pub fn parse_num(src: &str) -> Result<(usize, bool), ParseSizeError> {
+pub fn parse_num(src: &str) -> Result<(u64, bool), ParseSizeError> {
     let mut size_string = src.trim();
     let mut all_but_last = false;
 

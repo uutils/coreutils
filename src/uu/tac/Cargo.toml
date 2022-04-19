@@ -2,13 +2,13 @@
 
 [package]
 name = "uu_tac"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tac ~ (uutils) concatenate and display input lines in reverse order"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/tac"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tac"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -20,14 +20,9 @@ path = "src/tac.rs"
 memchr = "2"
 memmap2 = "0.5"
 regex = "1"
-clap = { version = "2.33", features = ["wrap_help"] }
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
 
 [[bin]]
 name = "tac"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-# Necessary for "make all"
-normal = ["uucore_procs"]

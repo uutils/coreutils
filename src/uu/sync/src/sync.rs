@@ -9,16 +9,14 @@
 
 extern crate libc;
 
-#[macro_use]
-extern crate uucore;
-
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use std::path::Path;
 use uucore::display::Quotable;
-
-static EXIT_ERR: i32 = 1;
+use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 
 static ABOUT: &str = "Synchronize cached writes to persistent storage";
+const USAGE: &str = "{} [OPTION]... FILE...";
 pub mod options {
     pub static FILE_SYSTEM: &str = "file-system";
     pub static DATA: &str = "data";
@@ -72,6 +70,7 @@ mod platform {
     use std::mem;
     use std::os::windows::prelude::*;
     use std::path::Path;
+    use uucore::crash;
     use uucore::wide::{FromWide, ToWide};
 
     unsafe fn flush_volume(name: &str) {
@@ -160,14 +159,9 @@ mod platform {
     }
 }
 
-fn usage() -> String {
-    format!("{0} [OPTION]... FILE...", uucore::execution_phrase())
-}
-
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = usage();
-
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uu_app().get_matches_from(args);
 
     let files: Vec<String> = matches
         .values_of(ARG_FILES)
@@ -176,11 +170,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     for f in &files {
         if !Path::new(&f).exists() {
-            crash!(
-                EXIT_ERR,
-                "cannot stat {}: No such file or directory",
-                f.quote()
-            );
+            return Err(USimpleError::new(
+                1,
+                format!("cannot stat {}: No such file or directory", f.quote()),
+            ));
         }
     }
 
@@ -194,28 +187,34 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     } else {
         sync();
     }
-    0
+    Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::FILE_SYSTEM)
-                .short("f")
+            Arg::new(options::FILE_SYSTEM)
+                .short('f')
                 .long(options::FILE_SYSTEM)
                 .conflicts_with(options::DATA)
                 .help("sync the file systems that contain the files (Linux and Windows only)"),
         )
         .arg(
-            Arg::with_name(options::DATA)
-                .short("d")
+            Arg::new(options::DATA)
+                .short('d')
                 .long(options::DATA)
                 .conflicts_with(options::FILE_SYSTEM)
                 .help("sync only file data, no unneeded metadata (Linux only)"),
         )
-        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
+        .arg(
+            Arg::new(ARG_FILES)
+                .multiple_occurrences(true)
+                .takes_value(true),
+        )
 }
 
 fn sync() -> isize {

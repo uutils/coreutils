@@ -7,12 +7,9 @@ use rust_users::*;
 
 #[test]
 fn test_date_email() {
-    new_ucmd!().arg("--rfc-email").succeeds();
-}
-
-#[test]
-fn test_date_email2() {
-    new_ucmd!().arg("-R").succeeds();
+    for param in &["--rfc-email", "--rfc-e", "-R"] {
+        new_ucmd!().arg(param).succeeds();
+    }
 }
 
 #[test]
@@ -26,37 +23,40 @@ fn test_date_rfc_3339() {
     let re = Regex::new(rfc_regexp).unwrap();
 
     // Check that the output matches the regexp
-    scene
-        .ucmd()
-        .arg("--rfc-3339=ns")
-        .succeeds()
-        .stdout_matches(&re);
+    for param in &["--rfc-3339", "--rfc-3"] {
+        scene
+            .ucmd()
+            .arg(format!("{}=ns", param))
+            .succeeds()
+            .stdout_matches(&re);
 
-    scene
-        .ucmd()
-        .arg("--rfc-3339=seconds")
-        .succeeds()
-        .stdout_matches(&re);
+        scene
+            .ucmd()
+            .arg(format!("{}=seconds", param))
+            .succeeds()
+            .stdout_matches(&re);
+    }
 }
 
 #[test]
 fn test_date_rfc_8601() {
-    new_ucmd!().arg("--iso-8601=ns").succeeds();
+    for param in &["--iso-8601", "--i"] {
+        new_ucmd!().arg(format!("{}=ns", param)).succeeds();
+    }
 }
 
 #[test]
 fn test_date_rfc_8601_second() {
-    new_ucmd!().arg("--iso-8601=second").succeeds();
+    for param in &["--iso-8601", "--i"] {
+        new_ucmd!().arg(format!("{}=second", param)).succeeds();
+    }
 }
 
 #[test]
 fn test_date_utc() {
-    new_ucmd!().arg("--utc").succeeds();
-}
-
-#[test]
-fn test_date_universal() {
-    new_ucmd!().arg("--universal").succeeds();
+    for param in &["--universal", "--utc", "--uni", "--u"] {
+        new_ucmd!().arg(param).succeeds();
+    }
 }
 
 #[test]

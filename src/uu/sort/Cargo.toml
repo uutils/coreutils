@@ -1,12 +1,12 @@
 [package]
 name = "uu_sort"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "sort ~ (uutils) sort input lines"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/sort"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/sort"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -16,19 +16,18 @@ path = "src/sort.rs"
 
 [dependencies]
 binary-heap-plus = "0.4.1"
-clap = { version = "2.33", features = ["wrap_help"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 compare = "0.1.0"
 ctrlc = { version = "3.0", features = ["termination"] }
 fnv = "1.0.7"
 itertools = "0.10.0"
 memchr = "2.4.0"
-ouroboros = "0.10.1"
-rand = "0.7"
+ouroboros = "0.15.0"
+rand = "0.8"
 rayon = "1.5"
 tempfile = "3"
 unicode-width = "0.1.8"
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["fs"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["fs"] }
 
 [[bin]]
 name = "sort"

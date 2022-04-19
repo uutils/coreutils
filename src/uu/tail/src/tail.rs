@@ -23,13 +23,16 @@ extern crate clap;
 extern crate uucore;
 
 mod chunks;
+mod parse;
 mod platform;
 use chunks::ReverseChunks;
 
-use clap::{App, Arg};
+use clap::{Arg, Command};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use std::convert::TryInto;
+use std::ffi::OsString;
 use std::fmt;
 use std::fs::{File, Metadata};
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
@@ -38,6 +41,9 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, channel};
 use std::time::Duration;
 use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::format_usage;
+use uucore::lines::lines;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::ringbuffer::RingBuffer;
 
@@ -53,7 +59,7 @@ const ABOUT: &str = "\
                      \n\
                      Mandatory arguments to long flags are mandatory for short flags too.\
                      ";
-const USAGE: &str = "tail [FLAG]... [FILE]...";
+const USAGE: &str = "{} [FLAG]... [FILE]...";
 
 pub mod text {
     pub static STDIN_STR: &str = "standard input";
@@ -84,12 +90,19 @@ pub mod options {
     pub static FOLLOW_RETRY: &str = "F";
     pub static MAX_UNCHANGED_STATS: &str = "max-unchanged-stats";
     pub static ARG_FILES: &str = "files";
+    pub static PRESUME_INPUT_PIPE: &str = "-presume-input-pipe";
 }
 
 #[derive(Debug)]
 enum FilterMode {
-    Bytes(usize),
-    Lines(usize, u8), // (number of lines, delimiter)
+    Bytes(u64),
+    Lines(u64, u8), // (number of lines, delimiter)
+}
+
+impl Default for FilterMode {
+    fn default() -> Self {
+        Self::Lines(10, b'\n')
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -98,7 +111,7 @@ enum FollowMode {
     Name,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Settings {
     mode: FilterMode,
     sleep_sec: Duration,
@@ -109,169 +122,177 @@ struct Settings {
     verbose: bool,
     retry: bool,
     pid: platform::Pid,
+    paths: Vec<PathBuf>,
+    presume_input_pipe: bool,
+    return_code: i32,
 }
 
-impl Default for Settings {
-    fn default() -> Settings {
-        Settings {
-            mode: FilterMode::Lines(10, b'\n'),
+impl Settings {
+    pub fn get_from(args: impl uucore::Args) -> Result<Self, String> {
+        let matches = uu_app().get_matches_from(arg_iterate(args)?);
+
+        let mut settings: Self = Self {
             sleep_sec: Duration::from_secs_f32(1.0),
             max_unchanged_stats: 5,
-            beginning: false,
-            follow: None,
-            use_polling: false,
-            verbose: false,
-            retry: false,
-            pid: 0,
+            ..Default::default()
+        };
+
+        settings.follow = if matches.is_present(options::FOLLOW_RETRY) {
+            Some(FollowMode::Name)
+        } else if matches.occurrences_of(options::FOLLOW) == 0 {
+            None
+        } else if matches.value_of(options::FOLLOW) == Some("name") {
+            Some(FollowMode::Name)
+        } else {
+            Some(FollowMode::Descriptor)
+        };
+
+        if let Some(s) = matches.value_of(options::SLEEP_INT) {
+            settings.sleep_sec = match s.parse::<f32>() {
+                Ok(s) => Duration::from_secs_f32(s),
+                Err(_) => return Err(format!("invalid number of seconds: {}", s.quote())),
+            }
         }
+
+        if let Some(s) = matches.value_of(options::MAX_UNCHANGED_STATS) {
+            settings.max_unchanged_stats = match s.parse::<u32>() {
+                Ok(s) => s,
+                Err(_) => {
+                    // TODO: [2021-10; jhscheer] add test for this
+                    return Err(format!(
+                        "invalid maximum number of unchanged stats between opens: {}",
+                        s.quote()
+                    ));
+                }
+            }
+        }
+
+        if let Some(pid_str) = matches.value_of(options::PID) {
+            if let Ok(pid) = pid_str.parse() {
+                settings.pid = pid;
+                if pid != 0 {
+                    if settings.follow.is_none() {
+                        show_warning!("PID ignored; --pid=PID is useful only when following");
+                    }
+
+                    if !platform::supports_pid_checks(pid) {
+                        show_warning!("--pid=PID is not supported on this system");
+                        settings.pid = 0;
+                    }
+                }
+            }
+        }
+
+        let mode_and_beginning = if let Some(arg) = matches.value_of(options::BYTES) {
+            match parse_num(arg) {
+                Ok((n, beginning)) => (FilterMode::Bytes(n), beginning),
+                Err(e) => return Err(format!("invalid number of bytes: {}", e)),
+            }
+        } else if let Some(arg) = matches.value_of(options::LINES) {
+            match parse_num(arg) {
+                Ok((n, beginning)) => (FilterMode::Lines(n, b'\n'), beginning),
+                Err(e) => return Err(format!("invalid number of lines: {}", e)),
+            }
+        } else {
+            (FilterMode::default(), false)
+        };
+        settings.mode = mode_and_beginning.0;
+        settings.beginning = mode_and_beginning.1;
+
+        settings.use_polling = matches.is_present(options::USE_POLLING);
+        settings.retry =
+            matches.is_present(options::RETRY) || matches.is_present(options::FOLLOW_RETRY);
+
+        if settings.retry && settings.follow.is_none() {
+            show_warning!("--retry ignored; --retry is useful only when following");
+        }
+
+        if matches.is_present(options::ZERO_TERM) {
+            if let FilterMode::Lines(count, _) = settings.mode {
+                settings.mode = FilterMode::Lines(count, 0);
+            }
+        }
+
+        settings.presume_input_pipe = matches.is_present(options::PRESUME_INPUT_PIPE);
+
+        let mut paths = matches
+            .values_of(options::ARG_FILES)
+            .map(|v| v.map(PathBuf::from).collect())
+            .unwrap_or_else(|| vec![PathBuf::from("-")]);
+
+        // Filter out paths depending on `FollowMode`.
+        paths.retain(|path| {
+            if !path.is_stdin() {
+                if !path.is_file() {
+                    settings.return_code = 1;
+                    if settings.follow == Some(FollowMode::Descriptor) && settings.retry {
+                        show_warning!("--retry only effective for the initial open");
+                    }
+                    if path.is_dir() {
+                        show_error!("error reading {}: Is a directory", path.quote());
+                        if settings.follow.is_some() {
+                            let msg = if !settings.retry {
+                                "; giving up on this name"
+                            } else {
+                                ""
+                            };
+                            show_error!(
+                                "{}: cannot follow end of this type of file{}",
+                                path.display(),
+                                msg
+                            );
+                        }
+                    } else {
+                        show_error!(
+                            "cannot open {} for reading: {}",
+                            path.quote(),
+                            text::NO_SUCH_FILE
+                        );
+                    }
+                }
+            } else if settings.follow == Some(FollowMode::Name) {
+                // Mimic GNU's tail; Exit immediately even though there might be other valid files.
+                crash!(1, "cannot follow '-' by name");
+            }
+            if settings.follow == Some(FollowMode::Name) && settings.retry {
+                true
+            } else {
+                !path.is_dir() || path.is_stdin()
+            }
+        });
+        settings.paths = paths.clone();
+
+        settings.verbose = (matches.is_present(options::verbosity::VERBOSE)
+            || settings.paths.len() > 1)
+            && !matches.is_present(options::verbosity::QUIET);
+
+        Ok(settings)
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let app = uu_app();
-    let matches = app.get_matches_from(args);
-
-    let mut settings: Settings = Default::default();
-    let mut return_code = 0;
-
-    settings.follow = if matches.is_present(options::FOLLOW_RETRY) {
-        Some(FollowMode::Name)
-    } else if matches.occurrences_of(options::FOLLOW) == 0 {
-        None
-    } else if matches.value_of(options::FOLLOW) == Some("name") {
-        Some(FollowMode::Name)
-    } else {
-        Some(FollowMode::Descriptor)
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let args = match Settings::get_from(args) {
+        Ok(o) => o,
+        Err(s) => {
+            return Err(USimpleError::new(1, s));
+        }
     };
+    uu_tail(&args)
+}
 
-    if let Some(s) = matches.value_of(options::SLEEP_INT) {
-        settings.sleep_sec = match s.parse::<f32>() {
-            Ok(s) => Duration::from_secs_f32(s),
-            Err(_) => crash!(1, "invalid number of seconds: {}", s.quote()),
-        }
-    }
-
-    if let Some(s) = matches.value_of(options::MAX_UNCHANGED_STATS) {
-        settings.max_unchanged_stats = match s.parse::<u32>() {
-            Ok(s) => s,
-            Err(_) => {
-                // TODO: add test for this
-                crash!(
-                    1,
-                    "invalid maximum number of unchanged stats between opens: {}",
-                    s.quote()
-                )
-            }
-        }
-    }
-
-    if let Some(pid_str) = matches.value_of(options::PID) {
-        if let Ok(pid) = pid_str.parse() {
-            settings.pid = pid;
-            if pid != 0 {
-                if settings.follow.is_none() {
-                    show_warning!("PID ignored; --pid=PID is useful only when following");
-                }
-
-                if !platform::supports_pid_checks(pid) {
-                    show_warning!("--pid=PID is not supported on this system");
-                    settings.pid = 0;
-                }
-            }
-        }
-    }
-
-    let mode_and_beginning = if let Some(arg) = matches.value_of(options::BYTES) {
-        match parse_num(arg) {
-            Ok((n, beginning)) => (FilterMode::Bytes(n), beginning),
-            Err(e) => crash!(1, "invalid number of bytes: {}", e.to_string()),
-        }
-    } else if let Some(arg) = matches.value_of(options::LINES) {
-        match parse_num(arg) {
-            Ok((n, beginning)) => (FilterMode::Lines(n, b'\n'), beginning),
-            Err(e) => crash!(1, "invalid number of lines: {}", e.to_string()),
-        }
-    } else {
-        (FilterMode::Lines(10, b'\n'), false)
-    };
-    settings.mode = mode_and_beginning.0;
-    settings.beginning = mode_and_beginning.1;
-
-    settings.use_polling = matches.is_present(options::USE_POLLING);
-    settings.retry =
-        matches.is_present(options::RETRY) || matches.is_present(options::FOLLOW_RETRY);
-
-    if settings.retry && settings.follow.is_none() {
-        show_warning!("--retry ignored; --retry is useful only when following");
-    }
-
-    if matches.is_present(options::ZERO_TERM) {
-        if let FilterMode::Lines(count, _) = settings.mode {
-            settings.mode = FilterMode::Lines(count, 0);
-        }
-    }
-
-    let mut paths: Vec<PathBuf> = matches
-        .values_of(options::ARG_FILES)
-        .map(|v| v.map(PathBuf::from).collect())
-        .unwrap_or_else(|| vec![PathBuf::from("-")]);
-
-    // Filter out paths depending on `FollowMode`.
-    paths.retain(|path| {
-        if !path.is_stdin() {
-            if !path.is_file() {
-                return_code = 1;
-                if settings.follow == Some(FollowMode::Descriptor) && settings.retry {
-                    show_warning!("--retry only effective for the initial open");
-                }
-                if path.is_dir() {
-                    show_error!("error reading {}: Is a directory", path.quote());
-                    if settings.follow.is_some() {
-                        let msg = if !settings.retry {
-                            "; giving up on this name"
-                        } else {
-                            ""
-                        };
-                        show_error!(
-                            "{}: cannot follow end of this type of file{}",
-                            path.display(),
-                            msg
-                        );
-                    }
-                } else {
-                    show_error!(
-                        "cannot open {} for reading: {}",
-                        path.quote(),
-                        text::NO_SUCH_FILE
-                    );
-                }
-            }
-        } else if settings.follow == Some(FollowMode::Name) {
-            // Mimic GNU's tail; Exit immediately even though there might be other valid files.
-            crash!(1, "cannot follow '-' by name");
-        }
-        if settings.follow == Some(FollowMode::Name) && settings.retry {
-            true
-        } else {
-            !path.is_dir() || path.is_stdin()
-        }
-    });
-
-    settings.verbose = (matches.is_present(options::verbosity::VERBOSE) || paths.len() > 1)
-        && !matches.is_present(options::verbosity::QUIET);
-
+fn uu_tail(settings: &Settings) -> UResult<()> {
     let mut first_header = true;
     let mut files = FileHandling {
-        map: HashMap::with_capacity(paths.len()),
+        map: HashMap::with_capacity(settings.paths.len()),
         last: None,
     };
 
     // Do an initial tail print of each path's content.
     // Add `path` to `files` map if `--follow` is selected.
-    for path in &paths {
+    for path in &settings.paths {
         let md = path.metadata().ok();
-        if path.is_stdin() {
+        if path.is_stdin() || settings.presume_input_pipe {
             if settings.verbose {
                 if !first_header {
                     println!();
@@ -279,7 +300,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Path::new(text::STDIN_STR).print_header();
             }
             let mut reader = BufReader::new(stdin());
-            unbounded_tail(&mut reader, &settings);
+            unbounded_tail(&mut reader, settings)?;
 
             // Don't follow stdin since there are no checks for pipes/FIFOs
             //
@@ -290,7 +311,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             {
                 /*
                 POSIX specification regarding tail -f
-
                 If the input file is a regular file or if the file operand specifies a FIFO, do not
                 terminate after the last line of the input file has been copied, but read and copy
                 further bytes from the input file when they become available. If no file operand is
@@ -323,11 +343,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let mut reader;
 
             if is_seekable(&mut file) && get_block_size(md.as_ref().unwrap()) > 0 {
-                bounded_tail(&mut file, &settings);
+                bounded_tail(&mut file, settings);
                 reader = BufReader::new(file);
             } else {
                 reader = BufReader::new(file);
-                unbounded_tail(&mut reader, &settings);
+                unbounded_tail(&mut reader, settings)?;
             }
             if settings.follow.is_some() {
                 // Insert existing/file `path` into `files.map`.
@@ -364,14 +384,44 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         if files.map.is_empty() || !files.files_remaining() && !settings.retry {
             show_error!("{}", text::NO_FILES_REMAINING);
         } else {
-            follow(&mut files, &settings);
+            follow(&mut files, settings)?;
         }
     }
 
-    return_code
+    if settings.return_code > 0 {
+        return Err(USimpleError::new(settings.return_code, ""));
+    }
+
+    Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
+fn arg_iterate<'a>(
+    mut args: impl uucore::Args + 'a,
+) -> Result<Box<dyn Iterator<Item = OsString> + 'a>, String> {
+    // argv[0] is always present
+    let first = args.next().unwrap();
+    if let Some(second) = args.next() {
+        if let Some(s) = second.to_str() {
+            match parse::parse_obsolete(s) {
+                Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
+                Some(Err(e)) => match e {
+                    parse::ParseError::Syntax => Err(format!("bad argument format: {}", s.quote())),
+                    parse::ParseError::Overflow => Err(format!(
+                        "invalid argument: {} Value too large for defined datatype",
+                        s.quote()
+                    )),
+                },
+                None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
+            }
+        } else {
+            Err("bad argument encoding".to_owned())
+        }
+    } else {
+        Ok(Box::new(vec![first].into_iter()))
+    }
+}
+
+pub fn uu_app<'a>() -> Command<'a> {
     #[cfg(target_os = "linux")]
     pub static POLLING_HELP: &str = "Disable 'inotify' support and use polling instead";
     #[cfg(all(unix, not(target_os = "linux")))]
@@ -380,13 +430,14 @@ pub fn uu_app() -> App<'static, 'static> {
     pub static POLLING_HELP: &str =
         "Disable 'ReadDirectoryChanges' support and use polling instead";
 
-    App::new(uucore::util_name())
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(USAGE)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::BYTES)
-                .short("c")
+            Arg::new(options::BYTES)
+                .short('c')
                 .long(options::BYTES)
                 .takes_value(true)
                 .allow_hyphen_values(true)
@@ -394,8 +445,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("Number of bytes to print"),
         )
         .arg(
-            Arg::with_name(options::FOLLOW)
-                .short("f")
+            Arg::new(options::FOLLOW)
+                .short('f')
                 .long(options::FOLLOW)
                 .default_value("descriptor")
                 .takes_value(true)
@@ -406,8 +457,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("Print the file as it grows"),
         )
         .arg(
-            Arg::with_name(options::LINES)
-                .short("n")
+            Arg::new(options::LINES)
+                .short('n')
                 .long(options::LINES)
                 .takes_value(true)
                 .allow_hyphen_values(true)
@@ -415,28 +466,28 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("Number of lines to print"),
         )
         .arg(
-            Arg::with_name(options::PID)
+            Arg::new(options::PID)
                 .long(options::PID)
                 .takes_value(true)
                 .help("With -f, terminate after process ID, PID dies"),
         )
         .arg(
-            Arg::with_name(options::verbosity::QUIET)
-                .short("q")
+            Arg::new(options::verbosity::QUIET)
+                .short('q')
                 .long(options::verbosity::QUIET)
                 .visible_alias("silent")
                 .overrides_with_all(&[options::verbosity::QUIET, options::verbosity::VERBOSE])
                 .help("Never output headers giving file names"),
         )
         .arg(
-            Arg::with_name(options::SLEEP_INT)
-                .short("s")
+            Arg::new(options::SLEEP_INT)
+                .short('s')
                 .takes_value(true)
                 .long(options::SLEEP_INT)
                 .help("Number or seconds to sleep between polling the file when running with -f"),
         )
         .arg(
-            Arg::with_name(options::MAX_UNCHANGED_STATS)
+            Arg::new(options::MAX_UNCHANGED_STATS)
                 .takes_value(true)
                 .long(options::MAX_UNCHANGED_STATS)
                 .help(
@@ -447,45 +498,51 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::verbosity::VERBOSE)
-                .short("v")
+            Arg::new(options::verbosity::VERBOSE)
+                .short('v')
                 .long(options::verbosity::VERBOSE)
                 .overrides_with_all(&[options::verbosity::QUIET, options::verbosity::VERBOSE])
                 .help("Always output headers giving file names"),
         )
         .arg(
-            Arg::with_name(options::ZERO_TERM)
-                .short("z")
+            Arg::new(options::ZERO_TERM)
+                .short('z')
                 .long(options::ZERO_TERM)
                 .help("Line delimiter is NUL, not newline"),
         )
         .arg(
-            Arg::with_name(options::USE_POLLING)
+            Arg::new(options::USE_POLLING)
                 .visible_alias(options::DISABLE_INOTIFY_TERM)
                 .alias("dis") // Used by GNU's test suite
                 .long(options::USE_POLLING)
                 .help(POLLING_HELP),
         )
         .arg(
-            Arg::with_name(options::RETRY)
+            Arg::new(options::RETRY)
                 .long(options::RETRY)
                 .help("Keep trying to open a file if it is inaccessible"),
         )
         .arg(
-            Arg::with_name(options::FOLLOW_RETRY)
-                .short(options::FOLLOW_RETRY)
+            Arg::new(options::FOLLOW_RETRY)
+                .short('F')
                 .help("Same as --follow=name --retry")
                 .overrides_with_all(&[options::RETRY, options::FOLLOW]),
         )
         .arg(
-            Arg::with_name(options::ARG_FILES)
-                .multiple(true)
+            Arg::new(options::PRESUME_INPUT_PIPE)
+                .long(options::PRESUME_INPUT_PIPE)
+                .alias(options::PRESUME_INPUT_PIPE)
+                .hide(true),
+        )
+        .arg(
+            Arg::new(options::ARG_FILES)
+                .multiple_occurrences(true)
                 .takes_value(true)
                 .min_values(1),
         )
 }
 
-fn follow(files: &mut FileHandling, settings: &Settings) {
+fn follow(files: &mut FileHandling, settings: &Settings) -> UResult<()> {
     let mut process = platform::ProcessChecker::new(settings.pid);
 
     let (tx, rx) = channel();
@@ -526,7 +583,7 @@ fn follow(files: &mut FileHandling, settings: &Settings) {
         } else if settings.follow.is_some() && settings.retry {
             if path.is_orphan() {
                 orphans.push(path.to_path_buf());
-                // TODO: add test for this
+                // TODO: [2021-10; jhscheer] add test for this
             } else {
                 let parent = path.parent().unwrap();
                 watcher
@@ -534,7 +591,7 @@ fn follow(files: &mut FileHandling, settings: &Settings) {
                     .unwrap();
             }
         } else {
-            unreachable!()
+            unreachable!();
         }
     }
 
@@ -549,25 +606,25 @@ fn follow(files: &mut FileHandling, settings: &Settings) {
         // To be able to differentiate between the cases of test_retry8 and test_retry9,
         // here paths will not be removed from orphans if the path becomes available.
         if settings.retry && settings.follow == Some(FollowMode::Name) {
-            for new_path in orphans.iter() {
+            for new_path in &orphans {
                 if new_path.exists() {
                     let display_name = files.map.get(new_path).unwrap().display_name.to_path_buf();
                     if new_path.is_file() && files.map.get(new_path).unwrap().metadata.is_none() {
-                        // TODO: add test for this
+                        // TODO: [2021-10; jhscheer] add test for this
                         show_error!("{} has appeared;  following new file", display_name.quote());
                         if let Ok(new_path_canonical) = new_path.canonicalize() {
                             files.update_metadata(&new_path_canonical, None);
                             files.reopen_file(&new_path_canonical).unwrap();
-                            read_some = files.print_file(&new_path_canonical, settings);
+                            read_some = files.print_file(&new_path_canonical, settings)?;
                             let new_path = get_path(&new_path_canonical, settings);
                             watcher
                                 .watch(&new_path, RecursiveMode::NonRecursive)
                                 .unwrap();
                         } else {
-                            unreachable!()
+                            unreachable!();
                         }
                     } else if new_path.is_dir() {
-                        // TODO: does is_dir() need handling?
+                        // TODO: [2021-10; jhscheer] does is_dir() need handling?
                         todo!();
                     }
                 }
@@ -581,30 +638,25 @@ fn follow(files: &mut FileHandling, settings: &Settings) {
         }
         match rx_result {
             Ok(Ok(event)) => {
-                // eprintln!("=={:=>3}===========================", _event_counter);
-                // dbg!(&event);
-                // dbg!(files.map.keys());
-                // eprintln!("=={:=>3}===========================", _event_counter);
-                handle_event(event, files, settings, &mut watcher, &mut orphans);
+                handle_event(&event, files, settings, &mut watcher, &mut orphans);
             }
             Ok(Err(notify::Error {
                 kind: notify::ErrorKind::Io(ref e),
                 paths,
             })) if e.kind() == std::io::ErrorKind::NotFound => {
-                // dbg!(e, &paths);
-                // TODO: is this still needed ?
+                // TODO: [2021-10; jhscheer] is this case still needed ?
                 if let Some(event_path) = paths.first() {
                     if files.map.contains_key(event_path) {
-                        // TODO: handle this case for --follow=name --retry
+                        // TODO: [2021-10; jhscheer] handle this case for --follow=name --retry
                         let _ = watcher.unwatch(event_path);
-                        // TODO: add test for this
+                        // TODO: [2021-10; jhscheer] add test for this
                         show_error!(
                             "{}: {}",
                             files.map.get(event_path).unwrap().display_name.display(),
                             text::NO_SUCH_FILE
                         );
                         if !files.files_remaining() && !settings.retry {
-                            // TODO: add test for this
+                            // TODO: [2021-10; jhscheer] add test for this
                             crash!(1, "{}", text::NO_FILES_REMAINING);
                         }
                     }
@@ -622,7 +674,7 @@ fn follow(files: &mut FileHandling, settings: &Settings) {
         }
 
         for path in files.map.keys().cloned().collect::<Vec<_>>() {
-            read_some = files.print_file(&path, settings);
+            read_some = files.print_file(&path, settings)?;
         }
 
         if !read_some && settings.pid != 0 && process.is_dead() {
@@ -644,10 +696,11 @@ fn follow(files: &mut FileHandling, settings: &Settings) {
             // tail checks whether process p is alive at least every N seconds
         }
     }
+    Ok(())
 }
 
 fn handle_event(
-    event: notify::Event,
+    event: &notify::Event,
     files: &mut FileHandling,
     settings: &Settings,
     watcher: &mut Box<dyn Watcher>,
@@ -664,7 +717,6 @@ fn handle_event(
                 .display_name
                 .to_path_buf();
             match event.kind {
-                // notify::EventKind::Any => {}
                 EventKind::Access(AccessKind::Close(AccessMode::Write))
                 | EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any))
                 | EventKind::Modify(ModifyKind::Metadata(MetadataKind::WriteTime))
@@ -695,7 +747,7 @@ fn handle_event(
                             } else if new_md.len() <= old_md.len()
                                 && new_md.modified().unwrap() != old_md.modified().unwrap()
                             {
-                                // TODO: add test for this
+                                // TODO: [2021-10; jhscheer] add test for this
                                 show_error!("{}: file truncated", display_name.display());
                                 files.update_metadata(event_path, None);
                                 files.reopen_file(event_path).unwrap();
@@ -709,7 +761,7 @@ fn handle_event(
                 | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
                     if event_path.is_file() {
                         if settings.follow.is_some() {
-                            // TODO: add test for this
+                            // TODO: [2021-10; jhscheer] add test for this
                             let msg = if settings.use_polling && !settings.retry {
                                 format!("{} has been replaced", display_name.quote())
                             } else {
@@ -724,7 +776,7 @@ fn handle_event(
                         // behavior and is the usual truncation operation for log files.
                         files.reopen_file(event_path).unwrap();
                         if settings.follow == Some(FollowMode::Name) && settings.retry {
-                            // TODO: add test for this
+                            // TODO: [2021-10; jhscheer] add test for this
                             // Path has appeared, it's not an orphan any more.
                             orphans.retain(|path| path != event_path);
                         }
@@ -745,15 +797,13 @@ fn handle_event(
                                     crash!(1, "{}", text::NO_FILES_REMAINING);
                                 }
                             } else if settings.follow == Some(FollowMode::Name) {
-                                // TODO: add test for this
+                                // TODO: [2021-10; jhscheer] add test for this
                                 files.update_metadata(event_path, None);
                                 show_error!("{} {}", display_name.quote(), msg);
                             }
                         }
                     }
                 }
-                // EventKind::Modify(ModifyKind::Metadata(_)) => {}
-                // | EventKind::Remove(RemoveKind::Folder)
                 EventKind::Remove(RemoveKind::File) | EventKind::Remove(RemoveKind::Any) => {
                     if settings.follow == Some(FollowMode::Name) {
                         if settings.retry {
@@ -848,8 +898,7 @@ fn handle_event(
                             .unwrap();
                     }
                 }
-                // notify::EventKind::Other => {}
-                _ => {} // println!("{:?}", event.kind),
+                _ => {}
             }
         }
     }
@@ -866,7 +915,7 @@ fn get_path(path: &Path, settings: &Settings) -> PathBuf {
         let parent = path
             .parent()
             .unwrap_or_else(|| crash!(1, "cannot watch parent directory of {}", path.display()));
-        // TODO: add test for this - "cannot watch parent directory"
+        // TODO: [2021-10; jhscheer] add test for this - "cannot watch parent directory"
         if parent.is_dir() {
             parent.to_path_buf()
         } else {
@@ -905,7 +954,7 @@ impl FileHandling {
         false
     }
 
-    // TODO: change to update_reader() without error return
+    // TODO: [2021-10; jhscheer] change to update_reader() without error return
     fn reopen_file(&mut self, path: &Path) -> Result<(), Error> {
         assert!(self.map.contains_key(path));
         if let Some(pd) = self.map.get_mut(path) {
@@ -931,7 +980,7 @@ impl FileHandling {
     }
 
     // This prints from the current seek position forward.
-    fn print_file(&mut self, path: &Path, settings: &Settings) -> bool {
+    fn print_file(&mut self, path: &Path, settings: &Settings) -> UResult<bool> {
         assert!(self.map.contains_key(path));
         let mut last_display_name = self
             .map
@@ -940,11 +989,12 @@ impl FileHandling {
             .display_name
             .to_path_buf();
         let mut read_some = false;
+        let mut stdout = stdout();
         let pd = self.map.get_mut(path).unwrap();
         if let Some(reader) = pd.reader.as_mut() {
             loop {
-                let mut datum = String::new();
-                match reader.read_line(&mut datum) {
+                let mut datum = vec![];
+                match reader.read_until(b'\n', &mut datum) {
                     Ok(0) => break,
                     Ok(_) => {
                         read_some = true;
@@ -956,26 +1006,105 @@ impl FileHandling {
                                 pd.display_name.print_header();
                             }
                         }
-                        print!("{}", datum);
+                        stdout
+                            .write_all(&datum)
+                            .map_err_context(|| String::from("write error"))?;
                     }
-                    Err(err) => panic!("{}", err),
+                    Err(err) => return Err(USimpleError::new(1, err.to_string())),
                 }
             }
         } else {
-            return read_some;
+            return Ok(read_some);
         }
         if read_some {
             self.update_metadata(path, None);
-            // TODO: add test for this
+            // TODO: [2021-10; jhscheer] add test for this
         }
-        read_some
+        Ok(read_some)
     }
+}
+
+/// Find the index after the given number of instances of a given byte.
+///
+/// This function reads through a given reader until `num_delimiters`
+/// instances of `delimiter` have been seen, returning the index of
+/// the byte immediately following that delimiter. If there are fewer
+/// than `num_delimiters` instances of `delimiter`, this returns the
+/// total number of bytes read from the `reader` until EOF.
+///
+/// # Errors
+///
+/// This function returns an error if there is an error during reading
+/// from `reader`.
+///
+/// # Examples
+///
+/// Basic usage:
+///
+/// ```rust,ignore
+/// use std::io::Cursor;
+///
+/// let mut reader = Cursor::new("a\nb\nc\nd\ne\n");
+/// let i = forwards_thru_file(&mut reader, 2, b'\n').unwrap();
+/// assert_eq!(i, 4);
+/// ```
+///
+/// If `num_delimiters` is zero, then this function always returns
+/// zero:
+///
+/// ```rust,ignore
+/// use std::io::Cursor;
+///
+/// let mut reader = Cursor::new("a\n");
+/// let i = forwards_thru_file(&mut reader, 0, b'\n').unwrap();
+/// assert_eq!(i, 0);
+/// ```
+///
+/// If there are fewer than `num_delimiters` instances of `delimiter`
+/// in the reader, then this function returns the total number of
+/// bytes read:
+///
+/// ```rust,ignore
+/// use std::io::Cursor;
+///
+/// let mut reader = Cursor::new("a\n");
+/// let i = forwards_thru_file(&mut reader, 2, b'\n').unwrap();
+/// assert_eq!(i, 2);
+/// ```
+fn forwards_thru_file<R>(
+    reader: &mut R,
+    num_delimiters: u64,
+    delimiter: u8,
+) -> std::io::Result<usize>
+where
+    R: Read,
+{
+    let mut reader = BufReader::new(reader);
+
+    let mut buf = vec![];
+    let mut total = 0;
+    for _ in 0..num_delimiters {
+        match reader.read_until(delimiter, &mut buf) {
+            Ok(0) => {
+                return Ok(total);
+            }
+            Ok(n) => {
+                total += n;
+                buf.clear();
+                continue;
+            }
+            Err(e) => {
+                return Err(e);
+            }
+        }
+    }
+    Ok(total)
 }
 
 /// Iterate over bytes in the file, in reverse, until we find the
 /// `num_delimiters` instance of `delimiter`. The `file` is left seek'd to the
 /// position just after that delimiter.
-fn backwards_thru_file(file: &mut File, num_delimiters: usize, delimiter: u8) {
+fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
     // This variable counts the number of delimiters found in the file
     // so far (reading from the end of the file toward the beginning).
     let mut counter = 0;
@@ -1020,12 +1149,22 @@ fn backwards_thru_file(file: &mut File, num_delimiters: usize, delimiter: u8) {
 /// being a nice performance win for very large files.
 fn bounded_tail(file: &mut File, settings: &Settings) {
     // Find the position in the file to start printing from.
-    match settings.mode {
-        FilterMode::Lines(count, delimiter) => {
-            backwards_thru_file(file, count as usize, delimiter);
+    match (&settings.mode, settings.beginning) {
+        (FilterMode::Lines(count, delimiter), false) => {
+            backwards_thru_file(file, *count, *delimiter);
         }
-        FilterMode::Bytes(count) => {
-            file.seek(SeekFrom::End(-(count as i64))).unwrap();
+        (FilterMode::Lines(count, delimiter), true) => {
+            let i = forwards_thru_file(file, (*count).max(1) - 1, *delimiter).unwrap();
+            file.seek(SeekFrom::Start(i as u64)).unwrap();
+        }
+        (FilterMode::Bytes(count), false) => {
+            file.seek(SeekFrom::End(-(*count as i64))).unwrap();
+        }
+        (FilterMode::Bytes(count), true) => {
+            // GNU `tail` seems to index bytes and lines starting at 1, not
+            // at 0. It seems to treat `+0` and `+1` as the same thing.
+            file.seek(SeekFrom::Start(((*count).max(1) - 1) as u64))
+                .unwrap();
         }
     }
 
@@ -1033,6 +1172,18 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
     let stdout = stdout();
     let mut stdout = stdout.lock();
     std::io::copy(file, &mut stdout).unwrap();
+}
+
+/// An alternative to [`Iterator::skip`] with u64 instead of usize. This is
+/// necessary because the usize limit doesn't make sense when iterating over
+/// something that's not in memory. For example, a very large file. This allows
+/// us to skip data larger than 4 GiB even on 32-bit platforms.
+fn skip_u64(iter: &mut impl Iterator, num: u64) {
+    for _ in 0..num {
+        if iter.next().is_none() {
+            break;
+        }
+    }
 }
 
 /// Collect the last elements of an iterator into a `VecDeque`.
@@ -1047,10 +1198,10 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
 ///
 /// If any element of `iter` is an [`Err`], then this function panics.
 fn unbounded_tail_collect<T, E>(
-    iter: impl Iterator<Item = Result<T, E>>,
-    count: usize,
+    mut iter: impl Iterator<Item = Result<T, E>>,
+    count: u64,
     beginning: bool,
-) -> VecDeque<T>
+) -> UResult<VecDeque<T>>
 where
     E: fmt::Debug,
 {
@@ -1058,29 +1209,38 @@ where
         // GNU `tail` seems to index bytes and lines starting at 1, not
         // at 0. It seems to treat `+0` and `+1` as the same thing.
         let i = count.max(1) - 1;
-        iter.skip(i as usize).map(|r| r.unwrap()).collect()
+        skip_u64(&mut iter, i);
+        Ok(iter.map(|r| r.unwrap()).collect())
     } else {
-        RingBuffer::from_iter(iter.map(|r| r.unwrap()), count as usize).data
+        let count: usize = count
+            .try_into()
+            .map_err(|_| USimpleError::new(1, "Insufficient addressable memory"))?;
+        Ok(RingBuffer::from_iter(iter.map(|r| r.unwrap()), count).data)
     }
 }
 
-fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
+fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
     // Read through each line/char and store them in a ringbuffer that always
     // contains count lines/chars. When reaching the end of file, output the
     // data in the ringbuf.
     match settings.mode {
-        FilterMode::Lines(count, _) => {
-            for line in unbounded_tail_collect(reader.lines(), count, settings.beginning) {
-                println!("{}", line);
+        FilterMode::Lines(count, sep) => {
+            let mut stdout = stdout();
+            for line in unbounded_tail_collect(lines(reader, sep), count, settings.beginning)? {
+                stdout
+                    .write_all(&line)
+                    .map_err_context(|| String::from("IO error"))?;
             }
         }
         FilterMode::Bytes(count) => {
-            for byte in unbounded_tail_collect(reader.bytes(), count, settings.beginning) {
-                let mut stdout = stdout();
-                print_byte(&mut stdout, byte);
+            for byte in unbounded_tail_collect(reader.bytes(), count, settings.beginning)? {
+                if let Err(err) = stdout().write(&[byte]) {
+                    return Err(USimpleError::new(1, err.to_string()));
+                }
             }
         }
     }
+    Ok(())
 }
 
 fn is_seekable<T: Seek>(file: &mut T) -> bool {
@@ -1089,14 +1249,7 @@ fn is_seekable<T: Seek>(file: &mut T) -> bool {
         && file.seek(SeekFrom::Start(0)).is_ok()
 }
 
-#[inline]
-fn print_byte<T: Write>(stdout: &mut T, ch: u8) {
-    if let Err(err) = stdout.write(&[ch]) {
-        crash!(1, "{}", err);
-    }
-}
-
-fn parse_num(src: &str) -> Result<(usize, bool), ParseSizeError> {
+fn parse_num(src: &str) -> Result<(u64, bool), ParseSizeError> {
     let mut size_string = src.trim();
     let mut starting_with = false;
 
@@ -1141,5 +1294,34 @@ impl PathExt for Path {
     }
     fn is_orphan(&self) -> bool {
         !matches!(self.parent(), Some(parent) if parent.is_dir())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::forwards_thru_file;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_forwards_thru_file_zero() {
+        let mut reader = Cursor::new("a\n");
+        let i = forwards_thru_file(&mut reader, 0, b'\n').unwrap();
+        assert_eq!(i, 0);
+    }
+
+    #[test]
+    fn test_forwards_thru_file_basic() {
+        //                   01 23 45 67 89
+        let mut reader = Cursor::new("a\nb\nc\nd\ne\n");
+        let i = forwards_thru_file(&mut reader, 2, b'\n').unwrap();
+        assert_eq!(i, 4);
+    }
+
+    #[test]
+    fn test_forwards_thru_file_past_end() {
+        let mut reader = Cursor::new("x\n");
+        let i = forwards_thru_file(&mut reader, 2, b'\n').unwrap();
+        assert_eq!(i, 2);
     }
 }

@@ -1,12 +1,12 @@
 [package]
 name = "uu_rmdir"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "rmdir ~ (uutils) remove empty DIRECTORY"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/rmdir"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/rmdir"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -15,10 +15,9 @@ edition = "2018"
 path = "src/rmdir.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
-libc = "0.2.42"
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
+libc = "0.2.121"
 
 [[bin]]
 name = "rmdir"

@@ -1,12 +1,12 @@
 [package]
 name = "uu_shuf"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "shuf ~ (uutils) display random permutations of input lines"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/shuf"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/shuf"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -15,15 +15,11 @@ edition = "2018"
 path = "src/shuf.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
-rand = "0.5"
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
+rand = "0.8"
+rand_core = "0.6"
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
 
 [[bin]]
 name = "shuf"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-# Necessary for "make all"
-normal = ["uucore_procs"]

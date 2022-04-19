@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_whoami);
+uucore::bin!(uu_whoami);

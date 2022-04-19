@@ -4,15 +4,18 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore ctty, ctable, iconvflags, oconvflags
+// spell-checker:ignore ctty, ctable, iseek, oseek, iconvflags, oconvflags parseargs
 
 #[cfg(test)]
 mod unit_tests;
 
 use super::*;
 use std::error::Error;
+use uucore::error::UError;
+use uucore::parse_size::ParseSizeError;
+use uucore::show_warning;
 
-pub type Matches = clap::ArgMatches<'static>;
+pub type Matches = ArgMatches;
 
 /// Parser Errors describe errors with parser input
 #[derive(Debug, PartialEq)]
@@ -20,7 +23,7 @@ pub enum ParseError {
     MultipleFmtTable,
     MultipleUCaseLCase,
     MultipleBlockUnblock,
-    MultipleExclNoCreat,
+    MultipleExclNoCreate,
     FlagNoMatch(String),
     ConvFlagNoMatch(String),
     MultiplierStringParseFailure(String),
@@ -28,6 +31,33 @@ pub enum ParseError {
     BlockUnblockWithoutCBS,
     StatusLevelNotRecognized(String),
     Unimplemented(String),
+    BsOutOfRange,
+    IbsOutOfRange,
+    ObsOutOfRange,
+    CbsOutOfRange,
+}
+
+impl ParseError {
+    /// Replace the argument, if any, with the given string, consuming self.
+    fn with_arg(self, s: String) -> Self {
+        match self {
+            Self::MultipleFmtTable => Self::MultipleFmtTable,
+            Self::MultipleUCaseLCase => Self::MultipleUCaseLCase,
+            Self::MultipleBlockUnblock => Self::MultipleBlockUnblock,
+            Self::MultipleExclNoCreate => Self::MultipleExclNoCreate,
+            Self::FlagNoMatch(_) => Self::FlagNoMatch(s),
+            Self::ConvFlagNoMatch(_) => Self::ConvFlagNoMatch(s),
+            Self::MultiplierStringParseFailure(_) => Self::MultiplierStringParseFailure(s),
+            Self::MultiplierStringOverflow(_) => Self::MultiplierStringOverflow(s),
+            Self::BlockUnblockWithoutCBS => Self::BlockUnblockWithoutCBS,
+            Self::StatusLevelNotRecognized(_) => Self::StatusLevelNotRecognized(s),
+            Self::Unimplemented(_) => Self::Unimplemented(s),
+            Self::BsOutOfRange => Self::BsOutOfRange,
+            Self::IbsOutOfRange => Self::IbsOutOfRange,
+            Self::ObsOutOfRange => Self::ObsOutOfRange,
+            Self::CbsOutOfRange => Self::CbsOutOfRange,
+        }
+    }
 }
 
 impl std::fmt::Display for ParseError {
@@ -45,7 +75,7 @@ impl std::fmt::Display for ParseError {
             Self::MultipleBlockUnblock => {
                 write!(f, "Only one of conv=block or conv=unblock may be specified")
             }
-            Self::MultipleExclNoCreat => {
+            Self::MultipleExclNoCreate => {
                 write!(f, "Only one ov conv=excl or conv=nocreat may be specified")
             }
             Self::FlagNoMatch(arg) => {
@@ -70,6 +100,18 @@ impl std::fmt::Display for ParseError {
             Self::StatusLevelNotRecognized(arg) => {
                 write!(f, "status=LEVEL not recognized -> {}", arg)
             }
+            Self::BsOutOfRange => {
+                write!(f, "bs=N cannot fit into memory")
+            }
+            Self::IbsOutOfRange => {
+                write!(f, "ibs=N cannot fit into memory")
+            }
+            Self::ObsOutOfRange => {
+                write!(f, "obs=N cannot fit into memory")
+            }
+            Self::CbsOutOfRange => {
+                write!(f, "cbs=N cannot fit into memory")
+            }
             Self::Unimplemented(arg) => {
                 write!(f, "feature not implemented on this system -> {}", arg)
             }
@@ -79,7 +121,13 @@ impl std::fmt::Display for ParseError {
 
 impl Error for ParseError {}
 
-/// Some flags specified as part of a conv=CONV[,CONV]... block
+impl UError for ParseError {
+    fn code(&self) -> i32 {
+        1
+    }
+}
+
+/// Some flags specified as part of a conv=CONV\[,CONV\]... block
 /// relate to the input file, others to the output file.
 #[derive(Debug, PartialEq)]
 enum ConvFlag {
@@ -289,49 +337,130 @@ impl std::str::FromStr for StatusLevel {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "none" => Ok(StatusLevel::None),
-            "noxfer" => Ok(StatusLevel::Noxfer),
-            "progress" => Ok(StatusLevel::Progress),
+            "none" => Ok(Self::None),
+            "noxfer" => Ok(Self::Noxfer),
+            "progress" => Ok(Self::Progress),
             _ => Err(ParseError::StatusLevelNotRecognized(s.to_string())),
         }
     }
 }
 
+fn show_zero_multiplier_warning() {
+    show_warning!(
+        "{} is a zero multiplier; use {} if that is intended",
+        "0x".quote(),
+        "00x".quote()
+    );
+}
+
 /// Parse bytes using str::parse, then map error if needed.
-fn parse_bytes_only(s: &str) -> Result<usize, ParseError> {
+fn parse_bytes_only(s: &str) -> Result<u64, ParseError> {
     s.parse()
         .map_err(|_| ParseError::MultiplierStringParseFailure(s.to_string()))
+}
+
+/// Parse a number of bytes from the given string, assuming no `'x'` characters.
+///
+/// The `'x'` character means "multiply the number before the `'x'` by
+/// the number after the `'x'`". In order to compute the numbers
+/// before and after the `'x'`, use this function, which assumes there
+/// are no `'x'` characters in the string.
+///
+/// A suffix `'c'` means multiply by 1, `'w'` by 2, and `'b'` by
+/// 512. You can also use standard block size suffixes like `'k'` for
+/// 1024.
+///
+/// # Errors
+///
+/// If a number cannot be parsed or if the multiplication would cause
+/// an overflow.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// assert_eq!(parse_bytes_no_x("123").unwrap(), 123);
+/// assert_eq!(parse_bytes_no_x("2c").unwrap(), 2 * 1);
+/// assert_eq!(parse_bytes_no_x("3w").unwrap(), 3 * 2);
+/// assert_eq!(parse_bytes_no_x("2b").unwrap(), 2 * 512);
+/// assert_eq!(parse_bytes_no_x("2k").unwrap(), 2 * 1024);
+/// ```
+fn parse_bytes_no_x(s: &str) -> Result<u64, ParseError> {
+    let (num, multiplier) = match (s.find('c'), s.rfind('w'), s.rfind('b')) {
+        (None, None, None) => match uucore::parse_size::parse_size(s) {
+            Ok(n) => (n, 1),
+            Err(ParseSizeError::ParseFailure(s)) => {
+                return Err(ParseError::MultiplierStringParseFailure(s))
+            }
+            Err(ParseSizeError::SizeTooBig(s)) => {
+                return Err(ParseError::MultiplierStringOverflow(s))
+            }
+        },
+        (Some(i), None, None) => (parse_bytes_only(&s[..i])?, 1),
+        (None, Some(i), None) => (parse_bytes_only(&s[..i])?, 2),
+        (None, None, Some(i)) => (parse_bytes_only(&s[..i])?, 512),
+        _ => return Err(ParseError::MultiplierStringParseFailure(s.to_string())),
+    };
+    num.checked_mul(multiplier)
+        .ok_or_else(|| ParseError::MultiplierStringOverflow(s.to_string()))
 }
 
 /// Parse byte and multiplier like 512, 5KiB, or 1G.
 /// Uses uucore::parse_size, and adds the 'w' and 'c' suffixes which are mentioned
 /// in dd's info page.
-fn parse_bytes_with_opt_multiplier(s: &str) -> Result<usize, ParseError> {
-    if let Some(idx) = s.rfind('c') {
-        parse_bytes_only(&s[..idx])
-    } else if let Some(idx) = s.rfind('w') {
-        let partial = parse_bytes_only(&s[..idx])?;
+fn parse_bytes_with_opt_multiplier(s: &str) -> Result<u64, ParseError> {
+    // TODO On my Linux system, there seems to be a maximum block size of 4096 bytes:
+    //
+    //     $ printf "%0.sa" {1..10000} | dd bs=4095 count=1 status=none | wc -c
+    //     4095
+    //     $ printf "%0.sa" {1..10000} | dd bs=4k count=1 status=none | wc -c
+    //     4096
+    //     $ printf "%0.sa" {1..10000} | dd bs=4097 count=1 status=none | wc -c
+    //     4096
+    //     $ printf "%0.sa" {1..10000} | dd bs=5k count=1 status=none | wc -c
+    //     4096
+    //
 
-        partial
-            .checked_mul(2)
-            .ok_or_else(|| ParseError::MultiplierStringOverflow(s.to_string()))
+    // Split on the 'x' characters. Each component will be parsed
+    // individually, then multiplied together.
+    let parts: Vec<&str> = s.split('x').collect();
+    if parts.len() == 1 {
+        parse_bytes_no_x(parts[0]).map_err(|e| e.with_arg(s.to_string()))
     } else {
-        uucore::parse_size::parse_size(s).map_err(|e| match e {
-            uucore::parse_size::ParseSizeError::ParseFailure(s) => {
-                ParseError::MultiplierStringParseFailure(s)
+        let mut total = 1;
+        for part in parts {
+            if part == "0" {
+                show_zero_multiplier_warning();
             }
-            uucore::parse_size::ParseSizeError::SizeTooBig(s) => {
-                ParseError::MultiplierStringOverflow(s)
-            }
-        })
+            let num = parse_bytes_no_x(part).map_err(|e| e.with_arg(s.to_string()))?;
+            total *= num;
+        }
+        Ok(total)
     }
 }
 
 pub fn parse_ibs(matches: &Matches) -> Result<usize, ParseError> {
     if let Some(mixed_str) = matches.value_of(options::BS) {
-        parse_bytes_with_opt_multiplier(mixed_str)
+        parse_bytes_with_opt_multiplier(mixed_str)?
+            .try_into()
+            .map_err(|_| ParseError::BsOutOfRange)
     } else if let Some(mixed_str) = matches.value_of(options::IBS) {
-        parse_bytes_with_opt_multiplier(mixed_str)
+        parse_bytes_with_opt_multiplier(mixed_str)?
+            .try_into()
+            .map_err(|_| ParseError::IbsOutOfRange)
+    } else {
+        Ok(512)
+    }
+}
+
+pub fn parse_obs(matches: &Matches) -> Result<usize, ParseError> {
+    if let Some(mixed_str) = matches.value_of("bs") {
+        parse_bytes_with_opt_multiplier(mixed_str)?
+            .try_into()
+            .map_err(|_| ParseError::BsOutOfRange)
+    } else if let Some(mixed_str) = matches.value_of("obs") {
+        parse_bytes_with_opt_multiplier(mixed_str)?
+            .try_into()
+            .map_err(|_| ParseError::ObsOutOfRange)
     } else {
         Ok(512)
     }
@@ -339,30 +468,22 @@ pub fn parse_ibs(matches: &Matches) -> Result<usize, ParseError> {
 
 fn parse_cbs(matches: &Matches) -> Result<Option<usize>, ParseError> {
     if let Some(s) = matches.value_of(options::CBS) {
-        let bytes = parse_bytes_with_opt_multiplier(s)?;
+        let bytes = parse_bytes_with_opt_multiplier(s)?
+            .try_into()
+            .map_err(|_| ParseError::CbsOutOfRange)?;
         Ok(Some(bytes))
     } else {
         Ok(None)
     }
 }
 
-pub fn parse_status_level(matches: &Matches) -> Result<Option<StatusLevel>, ParseError> {
+pub(crate) fn parse_status_level(matches: &Matches) -> Result<Option<StatusLevel>, ParseError> {
     match matches.value_of(options::STATUS) {
         Some(s) => {
             let st = s.parse()?;
             Ok(Some(st))
         }
         None => Ok(None),
-    }
-}
-
-pub fn parse_obs(matches: &Matches) -> Result<usize, ParseError> {
-    if let Some(mixed_str) = matches.value_of("bs") {
-        parse_bytes_with_opt_multiplier(mixed_str)
-    } else if let Some(mixed_str) = matches.value_of("obs") {
-        parse_bytes_with_opt_multiplier(mixed_str)
-    } else {
-        Ok(512)
     }
 }
 
@@ -407,21 +528,57 @@ fn parse_flag_list<T: std::str::FromStr<Err = ParseError>>(
     tag: &str,
     matches: &Matches,
 ) -> Result<Vec<T>, ParseError> {
-    let mut flags = Vec::new();
+    matches
+        .values_of(tag)
+        .unwrap_or_default()
+        .map(|f| f.parse())
+        .collect()
+}
 
-    if let Some(comma_str) = matches.value_of(tag) {
-        for s in comma_str.split(',') {
-            let flag = s.parse()?;
-            flags.push(flag);
+/// Given the various command-line parameters, determine the conversion mode.
+///
+/// The `conv` command-line option can take many different values,
+/// each of which may combine with others. For example, `conv=ascii`,
+/// `conv=lcase`, `conv=sync`, and so on. The arguments to this
+/// function represent the settings of those various command-line
+/// parameters. This function translates those settings to a
+/// [`ConversionMode`].
+fn conversion_mode(
+    ctable: Option<&ConversionTable>,
+    block: Option<usize>,
+    unblock: Option<usize>,
+    non_ascii: bool,
+    is_sync: bool,
+) -> Option<ConversionMode> {
+    match (ctable, block, unblock) {
+        (Some(ct), None, None) => Some(ConversionMode::ConvertOnly(ct)),
+        (Some(ct), Some(cbs), None) => {
+            if non_ascii {
+                Some(ConversionMode::ConvertThenBlock(ct, cbs, is_sync))
+            } else {
+                Some(ConversionMode::BlockThenConvert(ct, cbs, is_sync))
+            }
         }
+        (Some(ct), None, Some(cbs)) => {
+            if non_ascii {
+                Some(ConversionMode::ConvertThenUnblock(ct, cbs))
+            } else {
+                Some(ConversionMode::UnblockThenConvert(ct, cbs))
+            }
+        }
+        (None, Some(cbs), None) => Some(ConversionMode::BlockOnly(cbs, is_sync)),
+        (None, None, Some(cbs)) => Some(ConversionMode::UnblockOnly(cbs)),
+        (None, None, None) => None,
+        // The remaining variants should never happen because the
+        // argument parsing above should result in an error before
+        // getting to this line of code.
+        _ => unreachable!(),
     }
-
-    Ok(flags)
 }
 
 /// Parse Conversion Options (Input Variety)
 /// Construct and validate a IConvFlags
-pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError> {
+pub(crate) fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError> {
     let mut iconvflags = IConvFlags::default();
     let mut fmt = None;
     let mut case = None;
@@ -430,6 +587,9 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
     let flags = parse_flag_list(options::CONV, matches)?;
     let cbs = parse_cbs(matches)?;
 
+    let mut block = None;
+    let mut unblock = None;
+
     for flag in flags {
         match flag {
             ConvFlag::FmtEtoA => {
@@ -437,6 +597,20 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
                     return Err(ParseError::MultipleFmtTable);
                 } else {
                     fmt = Some(flag);
+                    // From the GNU documentation:
+                    //
+                    // > ‘ascii’
+                    // >
+                    // > Convert EBCDIC to ASCII, using the conversion
+                    // > table specified by POSIX. This provides a 1:1
+                    // > translation for all 256 bytes. This implies
+                    // > ‘conv=unblock’; input is converted to ASCII
+                    // > before trailing spaces are deleted.
+                    //
+                    // -- https://www.gnu.org/software/coreutils/manual/html_node/dd-invocation.html
+                    if cbs.is_some() {
+                        unblock = cbs;
+                    }
                 }
             }
             ConvFlag::FmtAtoE => {
@@ -444,6 +618,19 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
                     return Err(ParseError::MultipleFmtTable);
                 } else {
                     fmt = Some(flag);
+                    // From the GNU documentation:
+                    //
+                    // > ‘ebcdic’
+                    // >
+                    // > Convert ASCII to EBCDIC. This is the inverse
+                    // > of the ‘ascii’ conversion. This implies
+                    // > ‘conv=block’; trailing spaces are added before
+                    // > being converted to EBCDIC.
+                    //
+                    // -- https://www.gnu.org/software/coreutils/manual/html_node/dd-invocation.html
+                    if cbs.is_some() {
+                        block = cbs;
+                    }
                 }
             }
             ConvFlag::FmtAtoI => {
@@ -453,27 +640,20 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
                     fmt = Some(flag);
                 }
             }
-            ConvFlag::UCase => {
+            ConvFlag::UCase | ConvFlag::LCase => {
                 if case.is_some() {
                     return Err(ParseError::MultipleUCaseLCase);
                 } else {
-                    case = Some(flag)
+                    case = Some(flag);
                 }
             }
-            ConvFlag::LCase => {
-                if case.is_some() {
-                    return Err(ParseError::MultipleUCaseLCase);
-                } else {
-                    case = Some(flag)
-                }
-            }
-            ConvFlag::Block => match (cbs, iconvflags.unblock) {
-                (Some(cbs), None) => iconvflags.block = Some(cbs),
+            ConvFlag::Block => match (cbs, unblock) {
+                (Some(cbs), None) => block = Some(cbs),
                 (None, _) => return Err(ParseError::BlockUnblockWithoutCBS),
                 (_, Some(_)) => return Err(ParseError::MultipleBlockUnblock),
             },
-            ConvFlag::Unblock => match (cbs, iconvflags.block) {
-                (Some(cbs), None) => iconvflags.unblock = Some(cbs),
+            ConvFlag::Unblock => match (cbs, block) {
+                (Some(cbs), None) => unblock = Some(cbs),
                 (None, _) => return Err(ParseError::BlockUnblockWithoutCBS),
                 (_, Some(_)) => return Err(ParseError::MultipleBlockUnblock),
             },
@@ -494,7 +674,7 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
     // block implies sync with ' '
     // unblock implies sync with 0
     // So the final value can't be set until all flags are parsed.
-    let sync = if is_sync && (iconvflags.block.is_some() || iconvflags.unblock.is_some()) {
+    let sync = if is_sync && (block.is_some() || unblock.is_some()) {
         Some(b' ')
     } else if is_sync {
         Some(0u8)
@@ -502,8 +682,27 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
         None
     };
 
+    // Some user options, such as the presence of conversion tables,
+    // will determine whether the input is assumed to be ascii. This
+    // parser sets the non_ascii flag accordingly.
+    //
+    // Examples:
+    //
+    // - If conv=ebcdic or conv=ibm is specified then block,
+    //   unblock or swab must be performed before the conversion
+    //   happens since the source will start in ascii.
+    // - If conv=ascii is specified then block, unblock or swab
+    //   must be performed after the conversion since the source
+    //   starts in ebcdic.
+    // - If no conversion is specified then the source is assumed
+    //   to be in ascii.
+    //
+    // For more info see `info dd`.
+    let non_ascii = parseargs::parse_input_non_ascii(matches)?;
+    let mode = conversion_mode(ctable, block, unblock, non_ascii, is_sync);
+
     Ok(IConvFlags {
-        ctable,
+        mode,
         sync,
         ..iconvflags
     })
@@ -523,14 +722,14 @@ pub fn parse_conv_flag_output(matches: &Matches) -> Result<OConvFlags, ParseErro
                 if !oconvflags.nocreat {
                     oconvflags.excl = true;
                 } else {
-                    return Err(ParseError::MultipleExclNoCreat);
+                    return Err(ParseError::MultipleExclNoCreate);
                 }
             }
             ConvFlag::NoCreat => {
                 if !oconvflags.excl {
                     oconvflags.nocreat = true;
                 } else {
-                    return Err(ParseError::MultipleExclNoCreat);
+                    return Err(ParseError::MultipleExclNoCreate);
                 }
             }
             ConvFlag::NoTrunc => oconvflags.notrunc = true,
@@ -604,36 +803,18 @@ pub fn parse_oflags(matches: &Matches) -> Result<OFlags, ParseError> {
     Ok(oflags)
 }
 
-/// Parse the amount of the input file to skip.
-pub fn parse_skip_amt(
+pub fn parse_seek_skip_amt(
     ibs: &usize,
-    iflags: &IFlags,
+    bytes: bool,
     matches: &Matches,
-) -> Result<Option<usize>, ParseError> {
-    if let Some(amt) = matches.value_of(options::SKIP) {
+    option: &str,
+) -> Result<Option<u64>, ParseError> {
+    if let Some(amt) = matches.value_of(option) {
         let n = parse_bytes_with_opt_multiplier(amt)?;
-        if iflags.skip_bytes {
+        if bytes {
             Ok(Some(n))
         } else {
-            Ok(Some(ibs * n))
-        }
-    } else {
-        Ok(None)
-    }
-}
-
-/// Parse the amount of the output file to seek.
-pub fn parse_seek_amt(
-    obs: &usize,
-    oflags: &OFlags,
-    matches: &Matches,
-) -> Result<Option<usize>, ParseError> {
-    if let Some(amt) = matches.value_of(options::SEEK) {
-        let n = parse_bytes_with_opt_multiplier(amt)?;
-        if oflags.seek_bytes {
-            Ok(Some(n))
-        } else {
-            Ok(Some(obs * n))
+            Ok(Some(*ibs as u64 * n))
         }
     } else {
         Ok(None)
@@ -660,5 +841,28 @@ pub fn parse_input_non_ascii(matches: &Matches) -> Result<bool, ParseError> {
         Ok(conv_opts.contains("ascii"))
     } else {
         Ok(false)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::parseargs::parse_bytes_with_opt_multiplier;
+
+    #[test]
+    fn test_parse_bytes_with_opt_multiplier() {
+        assert_eq!(parse_bytes_with_opt_multiplier("123").unwrap(), 123);
+        assert_eq!(parse_bytes_with_opt_multiplier("123c").unwrap(), 123); // 123 * 1
+        assert_eq!(parse_bytes_with_opt_multiplier("123w").unwrap(), 123 * 2);
+        assert_eq!(parse_bytes_with_opt_multiplier("123b").unwrap(), 123 * 512);
+        assert_eq!(parse_bytes_with_opt_multiplier("123x3").unwrap(), 123 * 3);
+        assert_eq!(parse_bytes_with_opt_multiplier("123k").unwrap(), 123 * 1024);
+        assert_eq!(parse_bytes_with_opt_multiplier("1x2x3").unwrap(), 6); // 1 * 2 * 3
+
+        assert_eq!(
+            parse_bytes_with_opt_multiplier("1wx2cx3w").unwrap(),
+            2 * 2 * (3 * 2) // (1 * 2) * (2 * 1) * (3 * 2)
+        );
+        assert!(parse_bytes_with_opt_multiplier("123asdf").is_err());
     }
 }

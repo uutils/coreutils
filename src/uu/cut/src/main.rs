@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_cut);
+uucore::bin!(uu_cut);

@@ -461,9 +461,9 @@ fn set_file_context(path: impl AsRef<Path>, context: &str) -> Result<(), selinux
             context,
             path.display(),
             r
-        )
+        );
     } else {
-        println!("set_file_context: '{}' => '{}'.", context, path.display())
+        println!("set_file_context: '{}' => '{}'.", context, path.display());
     }
     r
 }

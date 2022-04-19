@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_sum);
+uucore::bin!(uu_sum);

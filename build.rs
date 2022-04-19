@@ -12,29 +12,29 @@ pub fn main() {
         println!("cargo:rustc-cfg=build={:?}", profile);
     }
 
-    let env_feature_prefix: &str = "CARGO_FEATURE_";
-    let feature_prefix: &str = "feat_";
-    let override_prefix: &str = "uu_";
+    const ENV_FEATURE_PREFIX: &str = "CARGO_FEATURE_";
+    const FEATURE_PREFIX: &str = "feat_";
+    const OVERRIDE_PREFIX: &str = "uu_";
 
     let out_dir = env::var("OUT_DIR").unwrap();
     // println!("cargo:warning=out_dir={}", out_dir);
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap().replace("\\", "/");
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap().replace('\\', "/");
     // println!("cargo:warning=manifest_dir={}", manifest_dir);
     let util_tests_dir = format!("{}/tests/by-util", manifest_dir);
     // println!("cargo:warning=util_tests_dir={}", util_tests_dir);
 
     let mut crates = Vec::new();
     for (key, val) in env::vars() {
-        if val == "1" && key.starts_with(env_feature_prefix) {
-            let krate = key[env_feature_prefix.len()..].to_lowercase();
+        if val == "1" && key.starts_with(ENV_FEATURE_PREFIX) {
+            let krate = key[ENV_FEATURE_PREFIX.len()..].to_lowercase();
             match krate.as_ref() {
                 "default" | "macos" | "unix" | "windows" | "selinux" => continue, // common/standard feature names
                 "nightly" | "test_unimplemented" => continue, // crate-local custom features
                 "test" => continue, // over-ridden with 'uu_test' to avoid collision with rust core crate 'test'
-                s if s.starts_with(feature_prefix) => continue, // crate feature sets
+                s if s.starts_with(FEATURE_PREFIX) => continue, // crate feature sets
                 _ => {}             // util feature name
             }
-            crates.push(krate.to_string());
+            crates.push(krate);
         }
     }
     crates.sort();
@@ -43,33 +43,23 @@ pub fn main() {
     let mut tf = File::create(Path::new(&out_dir).join("test_modules.rs")).unwrap();
 
     mf.write_all(
-        "type UtilityMap<T> = HashMap<&'static str, (fn(T) -> i32, fn() -> App<'static, 'static>)>;\n\
+        "type UtilityMap<T> = phf::Map<&'static str, (fn(T) -> i32, fn() -> Command<'static>)>;\n\
          \n\
-         fn util_map<T: uucore::Args>() -> UtilityMap<T> {\n\
-         \t#[allow(unused_mut)]\n\
-         \t#[allow(clippy::let_and_return)]\n\
-         \tlet mut map = UtilityMap::new();\n\
-         "
-        .as_bytes(),
+         fn util_map<T: uucore::Args>() -> UtilityMap<T> {\n"
+            .as_bytes(),
     )
     .unwrap();
 
-    for krate in crates {
+    let mut phf_map = phf_codegen::Map::<&str>::new();
+    for krate in &crates {
+        let map_value = format!("({krate}::uumain, {krate}::uu_app)", krate = krate);
         match krate.as_ref() {
             // 'test' is named uu_test to avoid collision with rust core crate 'test'.
             // It can also be invoked by name '[' for the '[ expr ] syntax'.
             "uu_test" => {
-                mf.write_all(
-                    format!(
-                        "\
-                         \tmap.insert(\"test\", ({krate}::uumain, {krate}::uu_app));\n\
-                         \t\tmap.insert(\"[\", ({krate}::uumain, {krate}::uu_app));\n\
-                         ",
-                        krate = krate
-                    )
-                    .as_bytes(),
-                )
-                .unwrap();
+                phf_map.entry("test", &map_value);
+                phf_map.entry("[", &map_value);
+
                 tf.write_all(
                     format!(
                         "#[path=\"{dir}/test_test.rs\"]\nmod test_test;\n",
@@ -77,37 +67,25 @@ pub fn main() {
                     )
                     .as_bytes(),
                 )
-                .unwrap()
-            }
-            k if k.starts_with(override_prefix) => {
-                mf.write_all(
-                    format!(
-                        "\tmap.insert(\"{k}\", ({krate}::uumain, {krate}::uu_app));\n",
-                        k = krate[override_prefix.len()..].to_string(),
-                        krate = krate
-                    )
-                    .as_bytes(),
-                )
                 .unwrap();
+            }
+            k if k.starts_with(OVERRIDE_PREFIX) => {
+                phf_map.entry(&k[OVERRIDE_PREFIX.len()..], &map_value);
                 tf.write_all(
                     format!(
                         "#[path=\"{dir}/test_{k}.rs\"]\nmod test_{k};\n",
-                        k = krate[override_prefix.len()..].to_string(),
+                        k = &krate[OVERRIDE_PREFIX.len()..],
                         dir = util_tests_dir,
                     )
                     .as_bytes(),
                 )
-                .unwrap()
+                .unwrap();
             }
             "false" | "true" => {
-                mf.write_all(
-                    format!(
-                        "\tmap.insert(\"{krate}\", (r#{krate}::uumain, r#{krate}::uu_app));\n",
-                        krate = krate
-                    )
-                    .as_bytes(),
-                )
-                .unwrap();
+                phf_map.entry(
+                    krate,
+                    &format!("(r#{krate}::uumain, r#{krate}::uu_app)", krate = krate),
+                );
                 tf.write_all(
                     format!(
                         "#[path=\"{dir}/test_{krate}.rs\"]\nmod test_{krate};\n",
@@ -116,32 +94,30 @@ pub fn main() {
                     )
                     .as_bytes(),
                 )
-                .unwrap()
+                .unwrap();
             }
             "hashsum" => {
-                mf.write_all(
-                    format!(
-                        "\
-                         \tmap.insert(\"{krate}\", ({krate}::uumain, {krate}::uu_app_custom));\n\
-                         \t\tmap.insert(\"md5sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
-                         \t\tmap.insert(\"sha1sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
-                         \t\tmap.insert(\"sha224sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
-                         \t\tmap.insert(\"sha256sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
-                         \t\tmap.insert(\"sha384sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
-                         \t\tmap.insert(\"sha512sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
-                         \t\tmap.insert(\"sha3sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
-                         \t\tmap.insert(\"sha3-224sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
-                         \t\tmap.insert(\"sha3-256sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
-                         \t\tmap.insert(\"sha3-384sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
-                         \t\tmap.insert(\"sha3-512sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
-                         \t\tmap.insert(\"shake128sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
-                         \t\tmap.insert(\"shake256sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
-                         ",
-                        krate = krate
-                    )
-                    .as_bytes(),
-                )
-                .unwrap();
+                phf_map.entry(
+                    krate,
+                    &format!("({krate}::uumain, {krate}::uu_app_custom)", krate = krate),
+                );
+
+                let map_value = format!("({krate}::uumain, {krate}::uu_app_common)", krate = krate);
+                phf_map.entry("md5sum", &map_value);
+                phf_map.entry("sha1sum", &map_value);
+                phf_map.entry("sha224sum", &map_value);
+                phf_map.entry("sha256sum", &map_value);
+                phf_map.entry("sha384sum", &map_value);
+                phf_map.entry("sha512sum", &map_value);
+                phf_map.entry("sha3sum", &map_value);
+                phf_map.entry("sha3-224sum", &map_value);
+                phf_map.entry("sha3-256sum", &map_value);
+                phf_map.entry("sha3-384sum", &map_value);
+                phf_map.entry("sha3-512sum", &map_value);
+                phf_map.entry("shake128sum", &map_value);
+                phf_map.entry("shake256sum", &map_value);
+                phf_map.entry("b2sum", &map_value);
+                phf_map.entry("b3sum", &map_value);
                 tf.write_all(
                     format!(
                         "#[path=\"{dir}/test_{krate}.rs\"]\nmod test_{krate};\n",
@@ -150,17 +126,10 @@ pub fn main() {
                     )
                     .as_bytes(),
                 )
-                .unwrap()
+                .unwrap();
             }
             _ => {
-                mf.write_all(
-                    format!(
-                        "\tmap.insert(\"{krate}\", ({krate}::uumain, {krate}::uu_app));\n",
-                        krate = krate
-                    )
-                    .as_bytes(),
-                )
-                .unwrap();
+                phf_map.entry(krate, &map_value);
                 tf.write_all(
                     format!(
                         "#[path=\"{dir}/test_{krate}.rs\"]\nmod test_{krate};\n",
@@ -169,12 +138,12 @@ pub fn main() {
                     )
                     .as_bytes(),
                 )
-                .unwrap()
+                .unwrap();
             }
         }
     }
-
-    mf.write_all(b"map\n}\n").unwrap();
+    write!(mf, "{}", phf_map.build()).unwrap();
+    mf.write_all(b"\n}\n").unwrap();
 
     mf.flush().unwrap();
     tf.flush().unwrap();

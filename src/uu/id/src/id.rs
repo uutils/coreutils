@@ -39,12 +39,13 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use std::ffi::CStr;
 use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::UResult;
 use uucore::error::{set_exit_code, USimpleError};
+use uucore::format_usage;
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
 use uucore::process::{getegid, geteuid, getgid, getuid};
@@ -57,6 +58,7 @@ macro_rules! cstr2cow {
 
 static ABOUT: &str = "Print user and group information for each specified USER,
 or (when USER omitted) for the current user.";
+const USAGE: &str = "{} [OPTION]... [USER]...";
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print only the security context of the process (not enabled)";
@@ -75,10 +77,6 @@ mod options {
     pub const OPT_REAL_ID: &str = "real";
     pub const OPT_ZERO: &str = "zero"; // BSD's id does not have this
     pub const ARG_USERS: &str = "USER";
-}
-
-fn usage() -> String {
-    format!("{0} [OPTION]... [USER]...", uucore::execution_phrase())
 }
 
 fn get_description() -> String {
@@ -126,15 +124,11 @@ struct State {
     user_specified: bool,
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = usage();
     let after_help = get_description();
 
-    let matches = uu_app()
-        .usage(&usage[..])
-        .after_help(&after_help[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
     let users: Vec<String> = matches
         .values_of(options::ARG_USERS)
@@ -245,7 +239,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // GNU's `id` does not support the flags: -p/-P/-A.
         if matches.is_present(options::OPT_PASSWORD) {
             // BSD's `id` ignores all but the first specified user
-            pline(possible_pw.map(|v| v.uid()));
+            pline(possible_pw.as_ref().map(|v| v.uid));
             return Ok(());
         };
         if matches.is_present(options::OPT_HUMAN_READABLE) {
@@ -259,7 +253,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             return Ok(());
         }
 
-        let (uid, gid) = possible_pw.map(|p| (p.uid(), p.gid())).unwrap_or((
+        let (uid, gid) = possible_pw.as_ref().map(|p| (p.uid, p.gid)).unwrap_or((
             if state.rflag { getuid() } else { geteuid() },
             if state.rflag { getgid() } else { getegid() },
         ));
@@ -302,7 +296,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let groups = entries::get_groups_gnu(Some(gid)).unwrap();
         let groups = if state.user_specified {
-            possible_pw.map(|p| p.belongs_to()).unwrap()
+            possible_pw.as_ref().map(|p| p.belongs_to()).unwrap()
         } else {
             groups.clone()
         };
@@ -335,7 +329,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         if default_format {
-            id_print(&mut state, groups);
+            id_print(&mut state, &groups);
         }
         print!("{}", line_ending);
 
@@ -347,13 +341,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::OPT_AUDIT)
-                .short("A")
+            Arg::new(options::OPT_AUDIT)
+                .short('A')
                 .conflicts_with_all(&[
                     options::OPT_GROUP,
                     options::OPT_EFFECTIVE_USER,
@@ -368,22 +364,22 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::OPT_EFFECTIVE_USER)
-                .short("u")
+            Arg::new(options::OPT_EFFECTIVE_USER)
+                .short('u')
                 .long(options::OPT_EFFECTIVE_USER)
                 .conflicts_with(options::OPT_GROUP)
                 .help("Display only the effective user ID as a number."),
         )
         .arg(
-            Arg::with_name(options::OPT_GROUP)
-                .short("g")
+            Arg::new(options::OPT_GROUP)
+                .short('g')
                 .long(options::OPT_GROUP)
                 .conflicts_with(options::OPT_EFFECTIVE_USER)
                 .help("Display only the effective group ID as a number"),
         )
         .arg(
-            Arg::with_name(options::OPT_GROUPS)
-                .short("G")
+            Arg::new(options::OPT_GROUPS)
+                .short('G')
                 .long(options::OPT_GROUPS)
                 .conflicts_with_all(&[
                     options::OPT_GROUP,
@@ -399,13 +395,13 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::OPT_HUMAN_READABLE)
-                .short("p")
+            Arg::new(options::OPT_HUMAN_READABLE)
+                .short('p')
                 .help("Make the output human-readable. Each display is on a separate line."),
         )
         .arg(
-            Arg::with_name(options::OPT_NAME)
-                .short("n")
+            Arg::new(options::OPT_NAME)
+                .short('n')
                 .long(options::OPT_NAME)
                 .help(
                     "Display the name of the user or group ID for the -G, -g and -u options \
@@ -414,13 +410,13 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::OPT_PASSWORD)
-                .short("P")
+            Arg::new(options::OPT_PASSWORD)
+                .short('P')
                 .help("Display the id as a password file entry."),
         )
         .arg(
-            Arg::with_name(options::OPT_REAL_ID)
-                .short("r")
+            Arg::new(options::OPT_REAL_ID)
+                .short('r')
                 .long(options::OPT_REAL_ID)
                 .help(
                     "Display the real ID for the -G, -g and -u options instead of \
@@ -428,8 +424,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::OPT_ZERO)
-                .short("z")
+            Arg::new(options::OPT_ZERO)
+                .short('z')
                 .long(options::OPT_ZERO)
                 .help(
                     "delimit entries with NUL characters, not whitespace;\n\
@@ -437,15 +433,15 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::OPT_CONTEXT)
-                .short("Z")
+            Arg::new(options::OPT_CONTEXT)
+                .short('Z')
                 .long(options::OPT_CONTEXT)
                 .conflicts_with_all(&[options::OPT_GROUP, options::OPT_EFFECTIVE_USER])
                 .help(CONTEXT_HELP_TEXT),
         )
         .arg(
-            Arg::with_name(options::ARG_USERS)
-                .multiple(true)
+            Arg::new(options::ARG_USERS)
+                .multiple_occurrences(true)
                 .takes_value(true)
                 .value_name(options::ARG_USERS),
         )
@@ -453,7 +449,7 @@ pub fn uu_app() -> App<'static, 'static> {
 
 fn pretty(possible_pw: Option<Passwd>) {
     if let Some(p) = possible_pw {
-        print!("uid\t{}\ngroups\t", p.name());
+        print!("uid\t{}\ngroups\t", p.name);
         println!(
             "{}",
             p.belongs_to()
@@ -466,10 +462,10 @@ fn pretty(possible_pw: Option<Passwd>) {
         let login = cstr2cow!(getlogin() as *const _);
         let rid = getuid();
         if let Ok(p) = Passwd::locate(rid) {
-            if login == p.name() {
+            if login == p.name {
                 println!("login\t{}", login);
             }
-            println!("uid\t{}", p.name());
+            println!("uid\t{}", p.name);
         } else {
             println!("uid\t{}", rid);
         }
@@ -477,7 +473,7 @@ fn pretty(possible_pw: Option<Passwd>) {
         let eid = getegid();
         if eid == rid {
             if let Ok(p) = Passwd::locate(eid) {
-                println!("euid\t{}", p.name());
+                println!("euid\t{}", p.name);
             } else {
                 println!("euid\t{}", eid);
             }
@@ -486,7 +482,7 @@ fn pretty(possible_pw: Option<Passwd>) {
         let rid = getgid();
         if rid != eid {
             if let Ok(g) = Group::locate(rid) {
-                println!("euid\t{}", g.name());
+                println!("euid\t{}", g.name);
             } else {
                 println!("euid\t{}", rid);
             }
@@ -511,16 +507,16 @@ fn pline(possible_uid: Option<uid_t>) {
 
     println!(
         "{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
-        pw.name(),
-        pw.user_passwd(),
-        pw.uid(),
-        pw.gid(),
-        pw.user_access_class(),
-        pw.passwd_change_time(),
-        pw.expiration(),
-        pw.user_info(),
-        pw.user_dir(),
-        pw.user_shell()
+        pw.name,
+        pw.user_passwd,
+        pw.uid,
+        pw.gid,
+        pw.user_access_class,
+        pw.passwd_change_time,
+        pw.expiration,
+        pw.user_info,
+        pw.user_dir,
+        pw.user_shell
     );
 }
 
@@ -531,13 +527,7 @@ fn pline(possible_uid: Option<uid_t>) {
 
     println!(
         "{}:{}:{}:{}:{}:{}:{}",
-        pw.name(),
-        pw.user_passwd(),
-        pw.uid(),
-        pw.gid(),
-        pw.user_info(),
-        pw.user_dir(),
-        pw.user_shell()
+        pw.name, pw.user_passwd, pw.uid, pw.gid, pw.user_info, pw.user_dir, pw.user_shell
     );
 }
 
@@ -561,7 +551,7 @@ fn auditid() {
     println!("asid={}", auditinfo.ai_asid);
 }
 
-fn id_print(state: &mut State, groups: Vec<u32>) {
+fn id_print(state: &mut State, groups: &[u32]) {
     let uid = state.ids.as_ref().unwrap().uid;
     let gid = state.ids.as_ref().unwrap().gid;
     let euid = state.ids.as_ref().unwrap().euid;

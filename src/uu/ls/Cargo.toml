@@ -1,12 +1,12 @@
 [package]
 name = "uu_ls"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "ls ~ (uutils) display directory contents"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/ls"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/ls"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -16,18 +16,17 @@ path = "src/ls.rs"
 
 [dependencies]
 chrono = "0.4.19"
-clap = { version = "2.33", features = ["wrap_help"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo", "env"] }
 unicode-width = "0.1.8"
 number_prefix = "0.4"
 term_grid = "0.1.5"
 termsize = "0.1.6"
-globset = "0.4.6"
+glob = "0.3.0"
 lscolors = { version = "0.7.1", features = ["ansi_term"] }
 uucore = { version = ">=0.0.8", package = "uucore", path = "../../uucore", features = ["entries", "fs"] }
-uucore_procs = { version=">=0.0.7", package = "uucore_procs", path = "../../uucore_procs" }
-once_cell = "1.7.2"
+once_cell = "1.10.0"
 atty = "0.2"
-selinux = { version="0.2.1", optional = true }
+selinux = { version="0.2", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 lazy_static = "1.4.0"
@@ -38,7 +37,3 @@ path = "src/main.rs"
 
 [features]
 feat_selinux = ["selinux"]
-
-[package.metadata.cargo-udeps.ignore]
-# Necessary for "make all"
-normal = ["uucore_procs"]

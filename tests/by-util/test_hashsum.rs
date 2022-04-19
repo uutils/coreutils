@@ -80,4 +80,5 @@ test_digest! {
     shake128_256 shake128 256
     shake256_512 shake256 512
     b2sum b2sum 512
+    b3sum b3sum 256
 }

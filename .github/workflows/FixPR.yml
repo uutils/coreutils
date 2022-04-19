@@ -1,18 +1,20 @@
 name: FixPR
 
+# spell-checker:ignore Swatinem
+
 # Trigger automated fixes for PRs being merged (with associated commits)
 
 # ToDO: [2021-06; rivy] change from `cargo-tree` to `cargo tree` once MSRV is >= 1.45
 
 env:
-  BRANCH_TARGET: master
+  BRANCH_TARGET: main
 
 on:
   # * only trigger on pull request closed to specific branches
   # ref: https://github.community/t/trigger-workflow-only-on-pull-request-merge/17359/9
   pull_request:
     branches:
-      - master # == env.BRANCH_TARGET ## unfortunately, env context variables are only available in jobs/steps (see <https://github.community/t/how-to-use-env-context/16975/2>)
+      - main # == env.BRANCH_TARGET ## unfortunately, env context variables are only available in jobs/steps (see <https://github.community/t/how-to-use-env-context/16975/2>)
     types: [ closed ]
 
 jobs:
@@ -27,6 +29,7 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v2
+    - uses: Swatinem/rust-cache@v1
     - name: Initialize job variables
       id: vars
       shell: bash
@@ -98,6 +101,7 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v2
+    - uses: Swatinem/rust-cache@v1
     - name: Initialize job variables
       id: vars
       shell: bash

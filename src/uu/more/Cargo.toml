@@ -1,12 +1,12 @@
 [package]
 name = "uu_more"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "more ~ (uutils) input perusal filter"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/more"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/more"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
@@ -15,25 +15,16 @@ edition = "2018"
 path = "src/more.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 uucore = { version = ">=0.0.7", package = "uucore", path = "../../uucore" }
-uucore_procs = { version=">=0.0.7", package = "uucore_procs", path = "../../uucore_procs" }
 crossterm = ">=0.19"
 atty = "0.2"
 unicode-width = "0.1.7"
-unicode-segmentation = "1.7.1"
-
-[target.'cfg(target_os = "redox")'.dependencies]
-redox_termios = "0.1"
-redox_syscall = "0.2"
+unicode-segmentation = "1.9.0"
 
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
-nix = "0.19"
+nix = "0.23.1"
 
 [[bin]]
 name = "more"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-# Necessary for "make all"
-normal = ["uucore_procs"]

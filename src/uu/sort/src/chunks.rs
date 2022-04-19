@@ -100,7 +100,7 @@ pub struct RecycledChunk {
 
 impl RecycledChunk {
     pub fn new(capacity: usize) -> Self {
-        RecycledChunk {
+        Self {
             lines: Vec::new(),
             selections: Vec::new(),
             num_infos: Vec::new(),
@@ -193,16 +193,13 @@ pub fn read<T: Read>(
 
 /// Split `read` into `Line`s, and add them to `lines`.
 fn parse_lines<'a>(
-    mut read: &'a str,
+    read: &'a str,
     lines: &mut Vec<Line<'a>>,
     line_data: &mut LineData<'a>,
     separator: u8,
     settings: &GlobalSettings,
 ) {
-    // Strip a trailing separator. TODO: Once our MinRustV is 1.45 or above, use strip_suffix() instead.
-    if read.ends_with(separator as char) {
-        read = &read[..read.len() - 1];
-    }
+    let read = read.strip_suffix(separator as char).unwrap_or(read);
 
     assert!(lines.is_empty());
     assert!(line_data.selections.is_empty());
