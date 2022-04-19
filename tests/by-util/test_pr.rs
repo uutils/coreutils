@@ -69,7 +69,7 @@ fn test_with_long_header_option() {
     let test_file_path = "test_one_page.log";
     let expected_test_file_path = "test_one_page_header.log.expected";
     let header = "new file";
-    for args in &[&["-h", header][..], &["--header=new file"][..]] {
+    for args in [&["-h", header][..], &["--header=new file"][..]] {
         let mut scenario = new_ucmd!();
         let value = file_last_modified_time(&scenario, test_file_path);
         scenario
@@ -87,7 +87,7 @@ fn test_with_long_header_option() {
 fn test_with_double_space_option() {
     let test_file_path = "test_one_page.log";
     let expected_test_file_path = "test_one_page_double_line.log.expected";
-    for &arg in &["-d", "--double-space"] {
+    for arg in ["-d", "--double-space"] {
         let mut scenario = new_ucmd!();
         let value = file_last_modified_time(&scenario, test_file_path);
         scenario
@@ -183,7 +183,7 @@ fn test_with_page_range() {
     let test_file_path = "test.log";
     let expected_test_file_path = "test_page_range_1.log.expected";
     let expected_test_file_path1 = "test_page_range_2.log.expected";
-    for &arg in &["--pages=15", "+15"] {
+    for arg in ["--pages=15", "+15"] {
         let mut scenario = new_ucmd!();
         let value = file_last_modified_time(&scenario, test_file_path);
         scenario
@@ -194,7 +194,7 @@ fn test_with_page_range() {
                 &[("{last_modified_time}", &value)],
             );
     }
-    for &arg in &["--pages=15:17", "+15:17"] {
+    for arg in ["--pages=15:17", "+15:17"] {
         let mut scenario = new_ucmd!();
         let value = file_last_modified_time(&scenario, test_file_path);
         scenario
@@ -222,7 +222,7 @@ fn test_with_no_header_trailer_option() {
 #[test]
 fn test_with_page_length_option() {
     let test_file_path = "test.log";
-    for (arg, expected) in &[
+    for (arg, expected) in [
         ("100", "test_page_length.log.expected"),
         ("5", "test_page_length1.log.expected"),
     ] {
@@ -265,7 +265,7 @@ fn test_with_stdin() {
 fn test_with_column() {
     let test_file_path = "column.log";
     let expected_test_file_path = "column.log.expected";
-    for arg in &["-3", "--column=3"] {
+    for arg in ["-3", "--column=3"] {
         let mut scenario = new_ucmd!();
         let value = file_last_modified_time(&scenario, test_file_path);
         scenario
@@ -293,7 +293,7 @@ fn test_with_column_across_option() {
 #[test]
 fn test_with_column_across_option_and_column_separator() {
     let test_file_path = "column.log";
-    for (arg, expected) in &[
+    for (arg, expected) in [
         ("-s|", "column_across_sep.log.expected"),
         ("-Sdivide", "column_across_sep1.log.expected"),
     ] {

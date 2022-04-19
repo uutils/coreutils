@@ -10,7 +10,7 @@ repository = "https://github.com/uutils/coreutils/tree/main/src/uucore"
 # readme = "README.md"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 path="src/lib/lib.rs"
@@ -31,7 +31,7 @@ data-encoding-macro = { version="0.1.12", optional=true }
 z85 = { version="3.0.3", optional=true }
 libc = { version="0.2.121", optional=true }
 once_cell = "1.10.0"
-os_display = "0.1.0"
+os_display = "0.1.3"
 
 [target.'cfg(unix)'.dependencies]
 walkdir = { version="2.3.2", optional=true }

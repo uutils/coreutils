@@ -16,7 +16,7 @@ pub(crate) trait Arithmetic: Copy + Sized {
 
     fn new(m: u64) -> Self;
     fn modulus(&self) -> u64;
-    fn from_u64(&self, n: u64) -> Self::ModInt;
+    fn to_mod(&self, n: u64) -> Self::ModInt;
     fn to_u64(&self, n: Self::ModInt) -> u64;
     fn add(&self, a: Self::ModInt, b: Self::ModInt) -> Self::ModInt;
     fn mul(&self, a: Self::ModInt, b: Self::ModInt) -> Self::ModInt;
@@ -47,13 +47,13 @@ pub(crate) trait Arithmetic: Copy + Sized {
     }
 
     fn one(&self) -> Self::ModInt {
-        self.from_u64(1)
+        self.to_mod(1)
     }
     fn minus_one(&self) -> Self::ModInt {
-        self.from_u64(self.modulus() - 1)
+        self.to_mod(self.modulus() - 1)
     }
     fn zero(&self) -> Self::ModInt {
-        self.from_u64(0)
+        self.to_mod(0)
     }
 }
 
@@ -113,7 +113,7 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
         self.n.as_u64()
     }
 
-    fn from_u64(&self, x: u64) -> Self::ModInt {
+    fn to_mod(&self, x: u64) -> Self::ModInt {
         // TODO: optimise!
         debug_assert!(x < self.n.as_u64());
         let r = T::from_double_width(
@@ -189,9 +189,9 @@ mod tests {
             let n = 2 * n + 1;
             let m = Montgomery::<A>::new(n);
             for x in 0..n {
-                let m_x = m.from_u64(x);
+                let m_x = m.to_mod(x);
                 for y in 0..=x {
-                    let m_y = m.from_u64(y);
+                    let m_y = m.to_mod(y);
                     println!("{n:?}, {x:?}, {y:?}", n = n, x = x, y = y);
                     assert_eq!((x + y) % n, m.to_u64(m.add(m_x, m_y)));
                 }
@@ -205,9 +205,9 @@ mod tests {
             let n = 2 * n + 1;
             let m = Montgomery::<A>::new(n);
             for x in 0..n {
-                let m_x = m.from_u64(x);
+                let m_x = m.to_mod(x);
                 for y in 0..=x {
-                    let m_y = m.from_u64(y);
+                    let m_y = m.to_mod(y);
                     assert_eq!((x * y) % n, m.to_u64(m.mul(m_x, m_y)));
                 }
             }
@@ -220,7 +220,7 @@ mod tests {
             let n = 2 * n + 1;
             let m = Montgomery::<A>::new(n);
             for x in 0..n {
-                let x_ = m.from_u64(x);
+                let x_ = m.to_mod(x);
                 assert_eq!(x, m.to_u64(x_));
             }
         }

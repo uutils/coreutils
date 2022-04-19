@@ -463,7 +463,7 @@ fn test_zeros_to_stdout() {
 #[cfg(target_pointer_width = "32")]
 #[test]
 fn test_oversized_bs_32_bit() {
-    for bs_param in &["bs", "ibs", "obs", "cbs"] {
+    for bs_param in ["bs", "ibs", "obs", "cbs"] {
         new_ucmd!()
             .args(&[format!("{}=5GB", bs_param)])
             .run()

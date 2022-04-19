@@ -6,7 +6,7 @@ use std::ffi::OsStr;
 const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
 const SPECIAL_SHELL_CHARS: &str = "`$&*()|[]{};\\'\"<>?! ";
 
-pub(super) enum QuotingStyle {
+pub enum QuotingStyle {
     Shell {
         escape: bool,
         always_quote: bool,
@@ -21,7 +21,7 @@ pub(super) enum QuotingStyle {
 }
 
 #[derive(Clone, Copy)]
-pub(super) enum Quotes {
+pub enum Quotes {
     None,
     Single,
     Double,

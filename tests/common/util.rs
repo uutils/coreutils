@@ -3,13 +3,13 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-//spell-checker: ignore (linux) rlimit prlimit Rlim coreutil ggroups
+//spell-checker: ignore (linux) rlimit prlimit coreutil ggroups
 
 #![allow(dead_code)]
 
 use pretty_assertions::assert_eq;
 #[cfg(target_os = "linux")]
-use rlimit::{prlimit, rlim};
+use rlimit::prlimit;
 #[cfg(unix)]
 use std::borrow::Cow;
 use std::env;
@@ -221,7 +221,7 @@ impl CmdResult {
         assert!(
             self.stdout.is_empty(),
             "Expected stdout to be empty, but it's:\n{}",
-            self.stderr_str()
+            self.stdout_str()
         );
         self
     }
@@ -893,7 +893,7 @@ pub struct UCommand {
     stderr: Option<Stdio>,
     bytes_into_stdin: Option<Vec<u8>>,
     #[cfg(target_os = "linux")]
-    limits: Vec<(rlimit::Resource, rlim, rlim)>,
+    limits: Vec<(rlimit::Resource, u64, u64)>,
 }
 
 impl UCommand {
@@ -1046,8 +1046,8 @@ impl UCommand {
     pub fn with_limit(
         &mut self,
         resource: rlimit::Resource,
-        soft_limit: rlim,
-        hard_limit: rlim,
+        soft_limit: u64,
+        hard_limit: u64,
     ) -> &mut Self {
         self.limits.push((resource, soft_limit, hard_limit));
         self

@@ -10,7 +10,7 @@ fn unimplemented_flags_should_error_non_linux() {
     let mut succeeded = Vec::new();
 
     // The following flags are only implemented in linux
-    for &flag in &[
+    for flag in [
         "direct",
         "directory",
         "dsync",
@@ -47,7 +47,7 @@ fn unimplemented_flags_should_error() {
     let mut succeeded = Vec::new();
 
     // The following flags are not implemented
-    for &flag in &["cio", "nocache", "nolinks", "text", "binary"] {
+    for flag in ["cio", "nocache", "nolinks", "text", "binary"] {
         let args = vec![
             String::from("dd"),
             format!("--iflag={}", flag),

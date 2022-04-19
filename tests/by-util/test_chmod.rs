@@ -532,7 +532,7 @@ fn test_chmod_strip_minus_from_mode() {
 
 #[test]
 fn test_chmod_keep_setgid() {
-    for &(from, arg, to) in &[
+    for (from, arg, to) in [
         (0o7777, "777", 0o46777),
         (0o7777, "=777", 0o40777),
         (0o7777, "0777", 0o46777),

@@ -34,6 +34,7 @@ impl ProcessChecker {
         }
     }
 
+    #[allow(clippy::wrong_self_convention)]
     pub fn is_dead(&mut self) -> bool {
         if !self.dead {
             self.dead = unsafe {

@@ -12,7 +12,7 @@ use crate::common::util::*;
 #[ignore = "issue #3219"]
 fn test_count() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-q", "--count", "--c"] {
+    for opt in ["-q", "--count", "--c"] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
@@ -22,7 +22,7 @@ fn test_count() {
 #[test]
 fn test_boot() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-b", "--boot", "--b"] {
+    for opt in ["-b", "--boot", "--b"] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
@@ -33,7 +33,7 @@ fn test_boot() {
 #[ignore = "issue #3219"]
 fn test_heading() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-H", "--heading", "--head"] {
+    for opt in ["-H", "--heading", "--head"] {
         // allow whitespace variation
         // * minor whitespace differences occur between platform built-in outputs;
         //   specifically number of TABs between "TIME" and "COMMENT" may be variant
@@ -52,7 +52,7 @@ fn test_heading() {
 #[ignore = "issue #3219"]
 fn test_short() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-s", "--short", "--s"] {
+    for opt in ["-s", "--short", "--s"] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
@@ -62,7 +62,7 @@ fn test_short() {
 #[test]
 fn test_login() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-l", "--login", "--log"] {
+    for opt in ["-l", "--login", "--log"] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
@@ -80,7 +80,7 @@ fn test_m() {
 #[test]
 fn test_process() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-p", "--process", "--p"] {
+    for opt in ["-p", "--process", "--p"] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
@@ -90,7 +90,7 @@ fn test_process() {
 #[test]
 fn test_runlevel() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-r", "--runlevel", "--r"] {
+    for opt in ["-r", "--runlevel", "--r"] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
 
@@ -103,7 +103,7 @@ fn test_runlevel() {
 #[test]
 fn test_time() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-t", "--time", "--t"] {
+    for opt in ["-t", "--time", "--t"] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
@@ -120,7 +120,7 @@ fn test_mesg() {
     // --writable
     //     same as -T
     let ts = TestScenario::new(util_name!());
-    for opt in &[
+    for opt in [
         "-T",
         "-w",
         "--mesg",
@@ -157,7 +157,7 @@ fn test_too_many_args() {
 #[ignore = "issue #3219"]
 fn test_users() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-u", "--users", "--us"] {
+    for opt in ["-u", "--users", "--us"] {
         let actual = ts.ucmd().arg(opt).succeeds().stdout_move_str();
         let expect = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         println!("actual: {:?}", actual);
@@ -192,7 +192,7 @@ fn test_lookup() {
 #[test]
 fn test_dead() {
     let ts = TestScenario::new(util_name!());
-    for opt in &["-d", "--dead", "--de"] {
+    for opt in ["-d", "--dead", "--de"] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
@@ -226,7 +226,7 @@ fn test_all() {
     }
 
     let ts = TestScenario::new(util_name!());
-    for opt in &["-a", "--all", "--a"] {
+    for opt in ["-a", "--all", "--a"] {
         let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }

@@ -464,6 +464,19 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
     } else {
         if let Some(parent) = target.parent() {
             if !parent.exists() && b.create_leading {
+                if b.verbose {
+                    let mut result = PathBuf::new();
+                    // When creating directories with -Dv, show directory creations step
+                    // by step
+                    for part in parent.components() {
+                        result.push(part.as_os_str());
+                        if !Path::new(part.as_os_str()).is_dir() {
+                            // Don't display when the directory already exists
+                            println!("install: creating directory {}", result.quote());
+                        }
+                    }
+                }
+
                 if let Err(e) = fs::create_dir_all(parent) {
                     return Err(InstallError::CreateDirFailed(parent.to_path_buf(), e).into());
                 }
@@ -594,13 +607,19 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
         match process::Command::new(&b.strip_program).arg(to).output() {
             Ok(o) => {
                 if !o.status.success() {
+                    // Follow GNU's behavior: if strip fails, removes the target
+                    let _ = fs::remove_file(to);
                     return Err(InstallError::StripProgramFailed(
                         String::from_utf8(o.stderr).unwrap_or_default(),
                     )
                     .into());
                 }
             }
-            Err(e) => return Err(InstallError::StripProgramFailed(e.to_string()).into()),
+            Err(e) => {
+                // Follow GNU's behavior: if strip fails, removes the target
+                let _ = fs::remove_file(to);
+                return Err(InstallError::StripProgramFailed(e.to_string()).into());
+            }
         }
     }
 

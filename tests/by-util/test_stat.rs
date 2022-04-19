@@ -236,7 +236,7 @@ fn test_symlinks() {
 
     let mut tested: bool = false;
     // arbitrarily chosen symlinks with hope that the CI environment provides at least one of them
-    for file in &[
+    for file in [
         "/bin/sh",
         "/bin/sudoedit",
         "/usr/bin/ex",

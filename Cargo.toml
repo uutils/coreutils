@@ -16,7 +16,7 @@ repository = "https://github.com/uutils/coreutils"
 readme = "README.md"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2018"
+edition = "2021"
 
 build = "build.rs"
 
@@ -45,6 +45,7 @@ feat_common_core = [
     "cut",
     "date",
     "df",
+    "dir",
     "dircolors",
     "dirname",
     "dd",
@@ -100,6 +101,7 @@ feat_common_core = [
     "unexpand",
     "uniq",
     "unlink",
+    "vdir",
     "wc",
     "yes",
 ]
@@ -252,8 +254,7 @@ lazy_static = { version="1.3" }
 textwrap = { version="0.15", features=["terminal_size"] }
 uucore = { version=">=0.0.11", package="uucore", path="src/uucore" }
 selinux = { version="0.2", optional = true }
-ureq = "2.4.0"
-zip = { version = "0.5.13", default_features=false, features=["deflate"] }
+zip = { version = "0.6.0", default_features=false, features=["deflate"] }
 # * uutils
 uu_test  = { optional=true, version="0.0.13", package="uu_test", path="src/uu/test" }
 #
@@ -276,6 +277,7 @@ cut      = { optional=true, version="0.0.13", package="uu_cut", path="src/uu/cut
 date     = { optional=true, version="0.0.13", package="uu_date", path="src/uu/date" }
 dd       = { optional=true, version="0.0.13", package="uu_dd", path="src/uu/dd" }
 df       = { optional=true, version="0.0.13", package="uu_df", path="src/uu/df" }
+dir      = { optional=true, version="0.0.13", package="uu_dir", path="src/uu/dir" }
 dircolors= { optional=true, version="0.0.13", package="uu_dircolors", path="src/uu/dircolors" }
 dirname  = { optional=true, version="0.0.13", package="uu_dirname", path="src/uu/dirname" }
 du       = { optional=true, version="0.0.13", package="uu_du", path="src/uu/du" }
@@ -352,6 +354,7 @@ uniq     = { optional=true, version="0.0.13", package="uu_uniq", path="src/uu/un
 unlink   = { optional=true, version="0.0.13", package="uu_unlink", path="src/uu/unlink" }
 uptime   = { optional=true, version="0.0.13", package="uu_uptime", path="src/uu/uptime" }
 users    = { optional=true, version="0.0.13", package="uu_users", path="src/uu/users" }
+vdir      = { optional=true, version="0.0.13", package="uu_vdir", path="src/uu/vdir" }
 wc       = { optional=true, version="0.0.13", package="uu_wc", path="src/uu/wc" }
 who      = { optional=true, version="0.0.13", package="uu_who", path="src/uu/who" }
 whoami   = { optional=true, version="0.0.13", package="uu_whoami", path="src/uu/whoami" }
@@ -373,7 +376,7 @@ glob = "0.3.0"
 libc = "0.2"
 pretty_assertions = "1"
 rand = "0.8"
-regex = "1.0"
+regex = "1.5"
 sha1 = { version="0.10", features=["std"] }
 tempfile = "3"
 time = "0.1"
@@ -384,7 +387,7 @@ atty = "0.2"
 hex-literal = "0.3.1"
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
-rlimit = "0.4.0"
+rlimit = "0.8.3"
 
 [target.'cfg(unix)'.dev-dependencies]
 nix = "0.23.1"

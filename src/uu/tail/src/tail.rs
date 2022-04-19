@@ -31,7 +31,6 @@ use clap::{Arg, Command};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::collections::HashMap;
 use std::collections::VecDeque;
-use std::convert::TryInto;
 use std::ffi::OsString;
 use std::fmt;
 use std::fs::{File, Metadata};

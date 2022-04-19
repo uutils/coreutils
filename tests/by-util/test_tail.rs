@@ -676,7 +676,7 @@ fn test_bytes_for_funny_files() {
     // gnu/tests/tail-2/tail-c.sh
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    for &file in &["/proc/version", "/sys/kernel/profiling"] {
+    for file in ["/proc/version", "/sys/kernel/profiling"] {
         if !at.file_exists(file) {
             continue;
         }

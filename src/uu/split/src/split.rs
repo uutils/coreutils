@@ -14,7 +14,6 @@ mod platform;
 use crate::filenames::FilenameIterator;
 use crate::filenames::SuffixType;
 use clap::{crate_version, Arg, ArgMatches, Command};
-use std::convert::TryInto;
 use std::env;
 use std::fmt;
 use std::fs::{metadata, File};

@@ -1469,7 +1469,7 @@ fn test_canonicalize_symlink() {
 
 #[test]
 fn test_copy_through_just_created_symlink() {
-    for &create_t in &[true, false] {
+    for create_t in [true, false] {
         let (at, mut ucmd) = at_and_ucmd!();
         at.mkdir("a");
         at.mkdir("b");
@@ -1606,7 +1606,7 @@ fn test_cp_dir_vs_file() {
 fn test_cp_overriding_arguments() {
     let s = TestScenario::new(util_name!());
     s.fixtures.touch("file1");
-    for (arg1, arg2) in &[
+    for (arg1, arg2) in [
         #[cfg(not(windows))]
         ("--remove-destination", "--force"),
         #[cfg(not(windows))]

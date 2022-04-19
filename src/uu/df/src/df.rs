@@ -12,9 +12,9 @@ mod filesystem;
 mod table;
 
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult};
-use uucore::format_usage;
+use uucore::error::{UError, UResult, USimpleError};
 use uucore::fsext::{read_fs_list, MountInfo};
+use uucore::{format_usage, show};
 
 use clap::{crate_version, Arg, ArgMatches, Command};
 
@@ -25,7 +25,7 @@ use std::path::Path;
 use crate::blocks::{block_size_from_matches, BlockSize};
 use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
-use crate::table::{DisplayRow, Header, Row};
+use crate::table::Table;
 
 static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
                       or all file systems by default.";
@@ -61,7 +61,6 @@ static OUTPUT_FIELD_LIST: [&str; 12] = [
 struct Options {
     show_local_fs: bool,
     show_all_fs: bool,
-    show_listed_fs: bool,
     block_size: BlockSize,
 
     /// Optional list of filesystem types to include in the output table.
@@ -88,7 +87,6 @@ impl Default for Options {
         Self {
             show_local_fs: Default::default(),
             show_all_fs: Default::default(),
-            show_listed_fs: Default::default(),
             block_size: Default::default(),
             include: Default::default(),
             exclude: Default::default(),
@@ -111,6 +109,8 @@ enum OptionsError {
 
     /// An error getting the columns to display in the output table.
     ColumnError(ColumnError),
+
+    FilesystemTypeBothSelectedAndExcluded(Vec<String>),
 }
 
 impl fmt::Display for OptionsError {
@@ -126,6 +126,16 @@ impl fmt::Display for OptionsError {
                 "option --output: field {} used more than once",
                 s.quote()
             ),
+            Self::FilesystemTypeBothSelectedAndExcluded(types) => {
+                for t in types {
+                    eprintln!(
+                        "{}: file system type {} both selected and excluded",
+                        uucore::util_name(),
+                        t.quote()
+                    );
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -133,17 +143,37 @@ impl fmt::Display for OptionsError {
 impl Options {
     /// Convert command-line arguments into [`Options`].
     fn from(matches: &ArgMatches) -> Result<Self, OptionsError> {
+        let include = matches.values_of_lossy(OPT_TYPE);
+        let exclude = matches.values_of_lossy(OPT_EXCLUDE_TYPE);
+
+        if let (Some(include), Some(exclude)) = (&include, &exclude) {
+            if let Some(types) = Self::get_intersected_types(include, exclude) {
+                return Err(OptionsError::FilesystemTypeBothSelectedAndExcluded(types));
+            }
+        }
+
         Ok(Self {
             show_local_fs: matches.is_present(OPT_LOCAL),
             show_all_fs: matches.is_present(OPT_ALL),
-            show_listed_fs: false,
             block_size: block_size_from_matches(matches)
                 .map_err(|_| OptionsError::InvalidBlockSize)?,
-            include: matches.values_of_lossy(OPT_TYPE),
-            exclude: matches.values_of_lossy(OPT_EXCLUDE_TYPE),
+            include,
+            exclude,
             show_total: matches.is_present(OPT_TOTAL),
             columns: Column::from_matches(matches).map_err(OptionsError::ColumnError)?,
         })
+    }
+
+    fn get_intersected_types(include: &[String], exclude: &[String]) -> Option<Vec<String>> {
+        let mut intersected_types = Vec::new();
+
+        for t in include {
+            if exclude.contains(t) {
+                intersected_types.push(t.clone());
+            }
+        }
+
+        (!intersected_types.is_empty()).then(|| intersected_types)
     }
 }
 
@@ -155,7 +185,7 @@ fn is_included(mi: &MountInfo, opt: &Options) -> bool {
     }
 
     // Don't show pseudo filesystems unless `--all` has been given.
-    if mi.dummy && !opt.show_all_fs && !opt.show_listed_fs {
+    if mi.dummy && !opt.show_all_fs {
         return false;
     }
 
@@ -278,10 +308,17 @@ where
 
     // Convert each path into a `Filesystem`, which contains
     // both the mount information and usage information.
-    paths
-        .iter()
-        .filter_map(|p| Filesystem::from_path(&mounts, p))
-        .collect()
+    let mut result = vec![];
+    for path in paths {
+        match Filesystem::from_path(&mounts, path) {
+            Some(fs) => result.push(fs),
+            None => show!(USimpleError::new(
+                1,
+                format!("{}: No such file or directory", path.as_ref().display())
+            )),
+        }
+    }
+    result
 }
 
 #[derive(Debug)]
@@ -309,6 +346,7 @@ impl fmt::Display for DfError {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
+
     #[cfg(windows)]
     {
         if matches.is_present(OPT_INODES) {
@@ -318,36 +356,38 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let opt = Options::from(&matches).map_err(DfError::OptionsError)?;
-
     // Get the list of filesystems to display in the output table.
     let filesystems: Vec<Filesystem> = match matches.values_of(OPT_PATHS) {
-        None => get_all_filesystems(&opt),
+        None => {
+            let filesystems = get_all_filesystems(&opt);
+
+            if filesystems.is_empty() {
+                return Err(USimpleError::new(1, "No file systems processed"));
+            }
+
+            filesystems
+        }
         Some(paths) => {
             let paths: Vec<&str> = paths.collect();
-            get_named_filesystems(&paths)
+            let filesystems = get_named_filesystems(&paths);
+
+            // This can happen if paths are given as command-line arguments
+            // but none of the paths exist.
+            if filesystems.is_empty() {
+                return Ok(());
+            }
+
+            filesystems
         }
     };
 
-    // The running total of filesystem sizes and usage.
-    //
-    // This accumulator is computed in case we need to display the
-    // total counts in the last row of the table.
-    let mut total = Row::new("total");
+    // This can happen if paths are given as command-line arguments
+    // but none of the paths exist.
+    if filesystems.is_empty() {
+        return Ok(());
+    }
 
-    println!("{}", Header::new(&opt));
-    for filesystem in filesystems {
-        // If the filesystem is not empty, or if the options require
-        // showing all filesystems, then print the data as a row in
-        // the output table.
-        if opt.show_all_fs || opt.show_listed_fs || filesystem.usage.blocks > 0 {
-            let row = Row::from(filesystem);
-            println!("{}", DisplayRow::new(&row, &opt));
-            total += row;
-        }
-    }
-    if opt.show_total {
-        println!("{}", DisplayRow::new(&total, &opt));
-    }
+    println!("{}", Table::new(&opt, filesystems));
 
     Ok(())
 }
@@ -367,6 +407,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_ALL)
                 .short('a')
                 .long("all")
+                .overrides_with(OPT_ALL)
                 .help("include dummy file systems"),
         )
         .arg(
@@ -374,47 +415,56 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('B')
                 .long("block-size")
                 .takes_value(true)
+                .overrides_with_all(&[OPT_KILO, OPT_BLOCKSIZE])
                 .help(
                     "scale sizes by SIZE before printing them; e.g.\
-                     '-BM' prints sizes in units of 1,048,576 bytes",
+                    '-BM' prints sizes in units of 1,048,576 bytes",
                 ),
         )
         .arg(
             Arg::new(OPT_TOTAL)
                 .long("total")
+                .overrides_with(OPT_TOTAL)
                 .help("produce a grand total"),
         )
         .arg(
             Arg::new(OPT_HUMAN_READABLE_BINARY)
                 .short('h')
                 .long("human-readable")
-                .conflicts_with(OPT_HUMAN_READABLE_DECIMAL)
+                .overrides_with_all(&[OPT_HUMAN_READABLE_DECIMAL, OPT_HUMAN_READABLE_BINARY])
                 .help("print sizes in human readable format (e.g., 1K 234M 2G)"),
         )
         .arg(
             Arg::new(OPT_HUMAN_READABLE_DECIMAL)
                 .short('H')
                 .long("si")
-                .conflicts_with(OPT_HUMAN_READABLE_BINARY)
+                .overrides_with_all(&[OPT_HUMAN_READABLE_BINARY, OPT_HUMAN_READABLE_DECIMAL])
                 .help("likewise, but use powers of 1000 not 1024"),
         )
         .arg(
             Arg::new(OPT_INODES)
                 .short('i')
                 .long("inodes")
+                .overrides_with(OPT_INODES)
                 .help("list inode information instead of block usage"),
         )
-        .arg(Arg::new(OPT_KILO).short('k').help("like --block-size=1K"))
+        .arg(
+            Arg::new(OPT_KILO)
+                .short('k')
+                .help("like --block-size=1K")
+                .overrides_with_all(&[OPT_BLOCKSIZE, OPT_KILO]),
+        )
         .arg(
             Arg::new(OPT_LOCAL)
                 .short('l')
                 .long("local")
+                .overrides_with(OPT_LOCAL)
                 .help("limit listing to local file systems"),
         )
         .arg(
             Arg::new(OPT_NO_SYNC)
                 .long("no-sync")
-                .conflicts_with(OPT_SYNC)
+                .overrides_with_all(&[OPT_SYNC, OPT_NO_SYNC])
                 .help("do not invoke sync before getting usage info (default)"),
         )
         .arg(
@@ -438,12 +488,13 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_PORTABILITY)
                 .short('P')
                 .long("portability")
+                .overrides_with(OPT_PORTABILITY)
                 .help("use the POSIX output format"),
         )
         .arg(
             Arg::new(OPT_SYNC)
                 .long("sync")
-                .conflicts_with(OPT_NO_SYNC)
+                .overrides_with_all(&[OPT_NO_SYNC, OPT_SYNC])
                 .help("invoke sync before getting usage info"),
         )
         .arg(
@@ -459,6 +510,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_PRINT_TYPE)
                 .short('T')
                 .long("print-type")
+                .overrides_with(OPT_PRINT_TYPE)
                 .help("print file system type"),
         )
         .arg(
@@ -612,7 +664,6 @@ mod tests {
         fn test_dummy_included() {
             let opt = Options {
                 show_all_fs: true,
-                show_listed_fs: true,
                 ..Default::default()
             };
             let m = mount_info("ext4", "/mnt/foo", false, true);
@@ -707,22 +758,6 @@ mod tests {
             };
             let m = mount_info("ext4", "/mnt/foo", false, false);
             assert!(is_included(&m, &opt));
-        }
-
-        #[test]
-        fn test_include_and_exclude_match_both() {
-            // TODO The same filesystem type in both `include` and
-            // `exclude` should cause an error, but currently does
-            // not.
-            let include = Some(vec![String::from("ext4")]);
-            let exclude = Some(vec![String::from("ext4")]);
-            let opt = Options {
-                include,
-                exclude,
-                ..Default::default()
-            };
-            let m = mount_info("ext4", "/mnt/foo", false, false);
-            assert!(!is_included(&m, &opt));
         }
     }
 

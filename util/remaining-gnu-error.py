@@ -15,11 +15,11 @@ urllib.request.urlretrieve(
     "result.json",
 )
 
-tests = glob.glob(base + "/*/*.sh")
-tests_pl = glob.glob(base + "/*/*.pl")
-tests_xpl = glob.glob(base + "/*/*.xpl")
-tests = tests + tests_pl + tests_xpl
+types = ("/*/*.sh", "/*/*.pl", "/*/*.xpl")
 
+tests = []
+for files in types:
+    tests.extend(glob.glob(base + files))
 # sort by size
 list_of_files = sorted(tests, key=lambda x: os.stat(x).st_size)
 
@@ -30,7 +30,7 @@ for d in data:
     for e in data[d]:
         # Not all the tests are .sh files, rename them if not.
         script = e.replace(".log", ".sh")
-        a = f"{base}{d}{script}"
+        a = f"{base}{d}/{script}"
         if not os.path.exists(a):
             a = a.replace(".sh", ".pl")
             if not os.path.exists(a):

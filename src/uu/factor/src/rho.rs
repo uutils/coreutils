@@ -18,7 +18,7 @@ pub(crate) fn find_divisor<A: Arithmetic>(n: A) -> u64 {
     let mut rand = {
         let range = Uniform::new(1, n.modulus());
         let mut rng = SmallRng::from_rng(&mut thread_rng()).unwrap();
-        move || n.from_u64(range.sample(&mut rng))
+        move || n.to_mod(range.sample(&mut rng))
     };
 
     let quadratic = |a, b| move |x| n.add(n.mul(a, n.mul(x, x)), b);

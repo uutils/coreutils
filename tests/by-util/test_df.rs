@@ -1,4 +1,4 @@
-// spell-checker:ignore udev pcent
+// spell-checker:ignore udev pcent iuse itotal iused ipcent
 use crate::common::util::*;
 
 #[test]
@@ -27,17 +27,116 @@ fn test_df_compatible_si() {
 }
 
 #[test]
+fn test_df_arguments_override_themselves() {
+    new_ucmd!().args(&["--help", "--help"]).succeeds();
+    new_ucmd!().arg("-aa").succeeds();
+    new_ucmd!()
+        .args(&["--block-size=3000", "--block-size=1000"])
+        .succeeds();
+    new_ucmd!().args(&["--total", "--total"]).succeeds();
+    new_ucmd!().arg("-hh").succeeds();
+    new_ucmd!().arg("-HH").succeeds();
+    new_ucmd!().arg("-ii").succeeds();
+    new_ucmd!().arg("-kk").succeeds();
+    new_ucmd!().arg("-ll").succeeds();
+    new_ucmd!().args(&["--no-sync", "--no-sync"]).succeeds();
+    new_ucmd!().arg("-PP").succeeds();
+    new_ucmd!().args(&["--sync", "--sync"]).succeeds();
+    new_ucmd!().arg("-TT").succeeds();
+}
+
+#[test]
+fn test_df_conflicts_overriding() {
+    new_ucmd!().arg("-hH").succeeds();
+    new_ucmd!().arg("-Hh").succeeds();
+    new_ucmd!().args(&["--no-sync", "--sync"]).succeeds();
+    new_ucmd!().args(&["--sync", "--no-sync"]).succeeds();
+    new_ucmd!().args(&["-k", "--block-size=3000"]).succeeds();
+    new_ucmd!().args(&["--block-size=3000", "-k"]).succeeds();
+}
+
+#[test]
+fn test_df_output_arg() {
+    new_ucmd!().args(&["--output=source", "-iPT"]).fails();
+    new_ucmd!().args(&["-iPT", "--output=source"]).fails();
+    new_ucmd!()
+        .args(&["--output=source", "--output=source"])
+        .fails();
+}
+
+#[test]
 fn test_df_output() {
-    // TODO These should fail because `-total` should have two dashes,
-    // not just one. But they don't fail.
-    if cfg!(target_os = "macos") {
-        new_ucmd!().arg("-H").arg("-total").succeeds().
-        stdout_only("Filesystem               Size         Used    Available     Capacity  Use% Mounted on       \n");
+    let expected = if cfg!(target_os = "macos") {
+        vec![
+            "Filesystem",
+            "Size",
+            "Used",
+            "Available",
+            "Capacity",
+            "Use%",
+            "Mounted",
+            "on",
+        ]
     } else {
-        new_ucmd!().arg("-H").arg("-total").succeeds().stdout_only(
-            "Filesystem               Size         Used    Available  Use% Mounted on       \n",
-        );
-    }
+        vec![
+            "Filesystem",
+            "Size",
+            "Used",
+            "Available",
+            "Use%",
+            "Mounted",
+            "on",
+        ]
+    };
+    let output = new_ucmd!()
+        .arg("-H")
+        .arg("--total")
+        .succeeds()
+        .stdout_move_str();
+    let actual = output.lines().take(1).collect::<Vec<&str>>()[0];
+    let actual = actual.split_whitespace().collect::<Vec<_>>();
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn test_df_output_overridden() {
+    let expected = if cfg!(target_os = "macos") {
+        vec![
+            "Filesystem",
+            "Size",
+            "Used",
+            "Available",
+            "Capacity",
+            "Use%",
+            "Mounted",
+            "on",
+        ]
+    } else {
+        vec![
+            "Filesystem",
+            "Size",
+            "Used",
+            "Available",
+            "Use%",
+            "Mounted",
+            "on",
+        ]
+    };
+    let output = new_ucmd!()
+        .arg("-hH")
+        .arg("--total")
+        .succeeds()
+        .stdout_move_str();
+    let actual = output.lines().take(1).collect::<Vec<&str>>()[0];
+    let actual = actual.split_whitespace().collect::<Vec<_>>();
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn test_total_option_with_single_dash() {
+    // These should fail because `-total` should have two dashes,
+    // not just one.
+    new_ucmd!().arg("-total").fails();
 }
 
 /// Test that the order of rows in the table does not change across executions.
@@ -87,12 +186,37 @@ fn test_output_option_without_equals_sign() {
 
 #[test]
 fn test_type_option() {
-    new_ucmd!().args(&["-t", "ext4", "-t", "ext3"]).succeeds();
+    let fs_types = new_ucmd!()
+        .arg("--output=fstype")
+        .succeeds()
+        .stdout_move_str();
+    let fs_type = fs_types.lines().nth(1).unwrap().trim();
+
+    new_ucmd!().args(&["-t", fs_type]).succeeds();
+    new_ucmd!()
+        .args(&["-t", fs_type, "-t", "nonexisting"])
+        .succeeds();
+    new_ucmd!().args(&["-t", "nonexisting"]).fails();
 }
 
 #[test]
 fn test_exclude_type_option() {
     new_ucmd!().args(&["-x", "ext4", "-x", "ext3"]).succeeds();
+}
+
+#[test]
+fn test_include_exclude_same_type() {
+    new_ucmd!()
+        .args(&["-t", "ext4", "-x", "ext4"])
+        .fails()
+        .stderr_is("df: file system type 'ext4' both selected and excluded");
+    new_ucmd!()
+        .args(&["-t", "ext4", "-x", "ext4", "-t", "ext3", "-x", "ext3"])
+        .fails()
+        .stderr_is(
+            "df: file system type 'ext4' both selected and excluded\n\
+             df: file system type 'ext3' both selected and excluded",
+        );
 }
 
 #[test]
@@ -163,6 +287,36 @@ fn test_use_percentage() {
 }
 
 #[test]
+fn test_iuse_percentage() {
+    let output = new_ucmd!()
+        .args(&["--total", "--output=itotal,iused,ipcent"])
+        .succeeds()
+        .stdout_move_str();
+
+    // Skip the header line.
+    let lines: Vec<&str> = output.lines().skip(1).collect();
+
+    for line in lines {
+        let mut iter = line.split_whitespace();
+        let reported_inodes = iter.next().unwrap().parse::<f64>().unwrap();
+        let reported_iused = iter.next().unwrap().parse::<f64>().unwrap();
+        let reported_percentage = iter.next().unwrap();
+
+        if reported_percentage == "-" {
+            assert_eq!(0.0, reported_inodes);
+            assert_eq!(0.0, reported_iused);
+        } else {
+            let reported_percentage = reported_percentage[..reported_percentage.len() - 1]
+                .parse::<u8>()
+                .unwrap();
+            let computed_percentage = (100.0 * (reported_iused / reported_inodes)).ceil() as u8;
+
+            assert_eq!(computed_percentage, reported_percentage);
+        }
+    }
+}
+
+#[test]
 fn test_block_size_1024() {
     fn get_header(block_size: u64) -> String {
         // TODO When #3057 is resolved, we should just use
@@ -189,23 +343,26 @@ fn test_block_size_1024() {
     assert_eq!(get_header(34 * 1024 * 1024 * 1024), "34G-blocks");
 }
 
-// TODO The spacing does not match GNU df. Also we need to remove
-// trailing spaces from the heading row.
 #[test]
 fn test_output_selects_columns() {
     let output = new_ucmd!()
         .args(&["--output=source"])
         .succeeds()
         .stdout_move_str();
-    assert_eq!(output.lines().next().unwrap(), "Filesystem       ");
+    assert_eq!(output.lines().next().unwrap().trim_end(), "Filesystem");
 
     let output = new_ucmd!()
         .args(&["--output=source,target"])
         .succeeds()
         .stdout_move_str();
     assert_eq!(
-        output.lines().next().unwrap(),
-        "Filesystem       Mounted on       "
+        output
+            .lines()
+            .next()
+            .unwrap()
+            .split_whitespace()
+            .collect::<Vec<_>>(),
+        vec!["Filesystem", "Mounted", "on"]
     );
 
     let output = new_ucmd!()
@@ -213,8 +370,13 @@ fn test_output_selects_columns() {
         .succeeds()
         .stdout_move_str();
     assert_eq!(
-        output.lines().next().unwrap(),
-        "Filesystem       Mounted on               Used "
+        output
+            .lines()
+            .next()
+            .unwrap()
+            .split_whitespace()
+            .collect::<Vec<_>>(),
+        vec!["Filesystem", "Mounted", "on", "Used"]
     );
 }
 
@@ -225,12 +387,16 @@ fn test_output_multiple_occurrences() {
         .succeeds()
         .stdout_move_str();
     assert_eq!(
-        output.lines().next().unwrap(),
-        "Filesystem       Mounted on       "
+        output
+            .lines()
+            .next()
+            .unwrap()
+            .split_whitespace()
+            .collect::<Vec<_>>(),
+        vec!["Filesystem", "Mounted", "on"]
     );
 }
 
-// TODO Fix the spacing.
 #[test]
 fn test_output_file_all_filesystems() {
     // When run with no positional arguments, `df` lets "-" represent
@@ -240,13 +406,12 @@ fn test_output_file_all_filesystems() {
         .succeeds()
         .stdout_move_str();
     let mut lines = output.lines();
-    assert_eq!(lines.next().unwrap(), "File            ");
+    assert_eq!(lines.next().unwrap(), "File");
     for line in lines {
-        assert_eq!(line, "-               ");
+        assert_eq!(line, "-   ");
     }
 }
 
-// TODO Fix the spacing.
 #[test]
 fn test_output_file_specific_files() {
     // Create three files.
@@ -262,15 +427,7 @@ fn test_output_file_specific_files() {
         .succeeds()
         .stdout_move_str();
     let actual: Vec<&str> = output.lines().collect();
-    assert_eq!(
-        actual,
-        vec![
-            "File            ",
-            "a               ",
-            "b               ",
-            "c               "
-        ]
-    );
+    assert_eq!(actual, vec!["File", "a   ", "b   ", "c   "]);
 }
 
 #[test]
@@ -279,4 +436,17 @@ fn test_output_field_no_more_than_once() {
         .arg("--output=target,source,target")
         .fails()
         .usage_error("option --output: field 'target' used more than once");
+}
+
+#[test]
+fn test_nonexistent_file() {
+    new_ucmd!()
+        .arg("does-not-exist")
+        .fails()
+        .stderr_only("df: does-not-exist: No such file or directory");
+    new_ucmd!()
+        .args(&["--output=file", "does-not-exist", "."])
+        .fails()
+        .stderr_is("df: does-not-exist: No such file or directory\n")
+        .stdout_is("File\n.   \n");
 }

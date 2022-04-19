@@ -385,6 +385,7 @@ To improve the GNU compatibility, the following process is recommended:
 1. Start to modify `<your test>` to understand what is wrong. Examples:
     1. Add `set -v` to have the bash verbose mode
     1. Add `echo $?` where needed
+    1. When the variable `fail` is used in the test, `echo $fail` to see when the test started to fail
     1. Bump the content of the output (ex: `cat err`)
     1. ...
 1. Or, if the test is simple, extract the relevant information to create a new test case running both GNU & Rust implementation
@@ -398,7 +399,15 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 
 ## Utilities
 
-| Done      | Semi-Done | To Do  |
+Please note that this is not fully accurate:
+* Some new options can be added / removed in the GNU implementation;
+* Some error management might be missing;
+* Some behaviors might be different.
+
+See https://github.com/uutils/coreutils/issues/3336 for the main meta bugs
+(many are missing).
+
+| Done      | WIP       | To Do  |
 |-----------|-----------|--------|
 | arch      | cp        | stty   |
 | base32    | date      |        |
@@ -417,8 +426,8 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | cut       | tac       |        |
 | dircolors | tail      |        |
 | dirname   | test      |        |
-| du        |           |        |
-| echo      |           |        |
+| du        | dir       |        |
+| echo      | vdir      |        |
 | env       |           |        |
 | expand    |           |        |
 | factor    |           |        |
