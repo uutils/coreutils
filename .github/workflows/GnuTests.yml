@@ -25,7 +25,7 @@ jobs:
         outputs path_GNU path_GNU_tests path_reference path_UUTILS
         #
         repo_default_branch="${{ github.event.repository.default_branch }}"
-        repo_GNU_ref="v9.0"
+        repo_GNU_ref="v9.1"
         repo_reference_branch="${{ github.event.repository.default_branch }}"
         outputs repo_default_branch repo_GNU_ref repo_reference_branch
         #
