@@ -1,4 +1,4 @@
-// spell-checker:ignore (words) helloworld objdump
+// spell-checker:ignore (words) helloworld objdump n'source
 
 use crate::common::util::*;
 use filetime::FileTime;
@@ -1173,4 +1173,30 @@ fn test_install_dir_dot() {
     assert!(at.dir_exists("dir3"));
     assert!(at.dir_exists("dir4/cal"));
     assert!(at.dir_exists("dir5/cali"));
+}
+
+#[test]
+fn test_install_dir_req_verbose() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_1 = "source_file1";
+    let dest_dir = "sub4";
+    at.touch(file_1);
+    scene
+        .ucmd()
+        .arg("-Dv")
+        .arg(file_1)
+        .arg("sub3/a/b/c/file")
+        .succeeds()
+        .stdout_contains("install: creating directory 'sub3'\ninstall: creating directory 'sub3/a'\ninstall: creating directory 'sub3/a/b'\ninstall: creating directory 'sub3/a/b/c'\n'source_file1' -> 'sub3/a/b/c/file'");
+
+    at.mkdir(dest_dir);
+    scene
+        .ucmd()
+        .arg("-Dv")
+        .arg(file_1)
+        .arg("sub4/a/b/c/file")
+        .succeeds()
+        .stdout_contains("install: creating directory 'sub4/a'\ninstall: creating directory 'sub4/a/b'\ninstall: creating directory 'sub4/a/b/c'\n'source_file1' -> 'sub4/a/b/c/file'");
 }
