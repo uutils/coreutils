@@ -8,6 +8,7 @@
 //! A table ([`Table`]) comprises a header row ([`Header`]) and a
 //! collection of data rows ([`Row`]), one per filesystem.
 use number_prefix::NumberPrefix;
+use unicode_width::UnicodeWidthStr;
 
 use crate::columns::{Alignment, Column};
 use crate::filesystem::Filesystem;
@@ -362,8 +363,8 @@ impl Table {
                 total += row;
 
                 for (i, value) in values.iter().enumerate() {
-                    if value.len() > widths[i] {
-                        widths[i] = value.len();
+                    if UnicodeWidthStr::width(value.as_str()) > widths[i] {
+                        widths[i] = UnicodeWidthStr::width(value.as_str());
                     }
                 }
 
