@@ -11,6 +11,7 @@ mod columns;
 mod filesystem;
 mod table;
 
+use blocks::{HumanReadable, SizeFormat};
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::fsext::{read_fs_list, MountInfo};
@@ -62,6 +63,7 @@ static OUTPUT_FIELD_LIST: [&str; 12] = [
 struct Options {
     show_local_fs: bool,
     show_all_fs: bool,
+    size_format: SizeFormat,
     block_size: BlockSize,
 
     /// Optional list of filesystem types to include in the output table.
@@ -89,6 +91,7 @@ impl Default for Options {
             show_local_fs: Default::default(),
             show_all_fs: Default::default(),
             block_size: Default::default(),
+            size_format: Default::default(),
             include: Default::default(),
             exclude: Default::default(),
             show_total: Default::default(),
@@ -166,6 +169,15 @@ impl Options {
                 ),
                 ParseSizeError::ParseFailure(s) => OptionsError::InvalidBlockSize(s),
             })?,
+            size_format: {
+                if matches.is_present(OPT_HUMAN_READABLE_BINARY) {
+                    SizeFormat::HumanReadable(HumanReadable::Binary)
+                } else if matches.is_present(OPT_HUMAN_READABLE_DECIMAL) {
+                    SizeFormat::HumanReadable(HumanReadable::Decimal)
+                } else {
+                    SizeFormat::StaticBlockSize
+                }
+            },
             include,
             exclude,
             show_total: matches.is_present(OPT_TOTAL),
