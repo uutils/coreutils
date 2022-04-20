@@ -350,7 +350,7 @@ fn test_output_selects_columns() {
         .args(&["--output=source"])
         .succeeds()
         .stdout_move_str();
-    assert_eq!(output.lines().next().unwrap().trim_end(), "Filesystem");
+    assert_eq!(output.lines().next().unwrap(), "Filesystem");
 
     let output = new_ucmd!()
         .args(&["--output=source,target"])
@@ -409,7 +409,7 @@ fn test_output_file_all_filesystems() {
     let mut lines = output.lines();
     assert_eq!(lines.next().unwrap(), "File");
     for line in lines {
-        assert_eq!(line, "-   ");
+        assert_eq!(line, "-");
     }
 }
 
@@ -428,7 +428,7 @@ fn test_output_file_specific_files() {
         .succeeds()
         .stdout_move_str();
     let actual: Vec<&str> = output.lines().collect();
-    assert_eq!(actual, vec!["File", "a   ", "b   ", "c   "]);
+    assert_eq!(actual, vec!["File", "a", "b", "c"]);
 }
 
 #[test]
@@ -463,5 +463,5 @@ fn test_nonexistent_file() {
         .args(&["--output=file", "does-not-exist", "."])
         .fails()
         .stderr_is("df: does-not-exist: No such file or directory\n")
-        .stdout_is("File\n.   \n");
+        .stdout_is("File\n.\n");
 }
