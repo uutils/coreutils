@@ -1648,6 +1648,7 @@ fn test_cp_same_file_backup() {
     at.touch("source.txt");
     scene
         .ucmd()
+        .arg("--force")
         .arg("--backup=simple")
         .arg("--suffix=.b")
         .arg("source.txt")
