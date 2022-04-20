@@ -287,6 +287,7 @@ fn get_all_filesystems(opt: &Options) -> Vec<Filesystem> {
     mounts
         .into_iter()
         .filter_map(|m| Filesystem::new(m, None))
+        .filter(|fs| opt.show_all_fs || fs.usage.blocks > 0)
         .collect()
 }
 
@@ -362,7 +363,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let filesystems = get_all_filesystems(&opt);
 
             if filesystems.is_empty() {
-                return Err(USimpleError::new(1, "No file systems processed"));
+                return Err(USimpleError::new(1, "no file systems processed"));
             }
 
             filesystems

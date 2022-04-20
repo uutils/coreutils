@@ -1,4 +1,6 @@
 // spell-checker:ignore udev pcent iuse itotal iused ipcent
+use std::collections::HashSet;
+
 use crate::common::util::*;
 
 #[test]
@@ -203,6 +205,27 @@ fn test_type_option() {
 #[test]
 fn test_exclude_type_option() {
     new_ucmd!().args(&["-x", "ext4", "-x", "ext3"]).succeeds();
+}
+
+#[test]
+fn test_exclude_all_types() {
+    let fs_types = new_ucmd!()
+        .arg("--output=fstype")
+        .succeeds()
+        .stdout_move_str();
+    let fs_types: HashSet<_> = fs_types.lines().skip(1).collect();
+
+    let mut args = Vec::new();
+
+    for fs_type in fs_types {
+        args.push("-x");
+        args.push(fs_type.trim_end());
+    }
+
+    new_ucmd!()
+        .args(&args)
+        .fails()
+        .stderr_contains("no file systems processed");
 }
 
 #[test]
