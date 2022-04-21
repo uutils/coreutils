@@ -18,6 +18,7 @@ path = "src/df.rs"
 clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 number_prefix = "0.4"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["libc", "fsext"] }
+unicode-width = "0.1.9"
 
 [[bin]]
 name = "df"

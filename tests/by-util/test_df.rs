@@ -1,4 +1,6 @@
 // spell-checker:ignore udev pcent iuse itotal iused ipcent
+use std::collections::HashSet;
+
 use crate::common::util::*;
 
 #[test]
@@ -165,6 +167,7 @@ fn test_output_mp_repeat() {
     assert_eq!(3, output1.len());
     assert_eq!(output1[1], output1[2]);
 }
+
 #[test]
 fn test_output_conflict_options() {
     for option in ["-i", "-T", "-P"] {
@@ -202,6 +205,27 @@ fn test_type_option() {
 #[test]
 fn test_exclude_type_option() {
     new_ucmd!().args(&["-x", "ext4", "-x", "ext3"]).succeeds();
+}
+
+#[test]
+fn test_exclude_all_types() {
+    let fs_types = new_ucmd!()
+        .arg("--output=fstype")
+        .succeeds()
+        .stdout_move_str();
+    let fs_types: HashSet<_> = fs_types.lines().skip(1).collect();
+
+    let mut args = Vec::new();
+
+    for fs_type in fs_types {
+        args.push("-x");
+        args.push(fs_type.trim_end());
+    }
+
+    new_ucmd!()
+        .args(&args)
+        .fails()
+        .stderr_contains("no file systems processed");
 }
 
 #[test]
@@ -349,7 +373,7 @@ fn test_output_selects_columns() {
         .args(&["--output=source"])
         .succeeds()
         .stdout_move_str();
-    assert_eq!(output.lines().next().unwrap().trim_end(), "Filesystem");
+    assert_eq!(output.lines().next().unwrap(), "Filesystem");
 
     let output = new_ucmd!()
         .args(&["--output=source,target"])
@@ -408,7 +432,7 @@ fn test_output_file_all_filesystems() {
     let mut lines = output.lines();
     assert_eq!(lines.next().unwrap(), "File");
     for line in lines {
-        assert_eq!(line, "-   ");
+        assert_eq!(line, "-");
     }
 }
 
@@ -427,7 +451,21 @@ fn test_output_file_specific_files() {
         .succeeds()
         .stdout_move_str();
     let actual: Vec<&str> = output.lines().collect();
-    assert_eq!(actual, vec!["File", "a   ", "b   ", "c   "]);
+    assert_eq!(actual, vec!["File", "a", "b", "c"]);
+}
+
+#[test]
+fn test_file_column_width_if_filename_contains_unicode_chars() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("äöü.txt");
+
+    let output = ucmd
+        .args(&["--output=file,target", "äöü.txt"])
+        .succeeds()
+        .stdout_move_str();
+    let actual = output.lines().next().unwrap();
+    // expected width: 7 chars (length of äöü.txt) + 1 char (column separator)
+    assert_eq!(actual, "File    Mounted on");
 }
 
 #[test]
@@ -448,5 +486,5 @@ fn test_nonexistent_file() {
         .args(&["--output=file", "does-not-exist", "."])
         .fails()
         .stderr_is("df: does-not-exist: No such file or directory\n")
-        .stdout_is("File\n.   \n");
+        .stdout_is("File\n.\n");
 }

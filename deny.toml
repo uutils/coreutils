@@ -61,6 +61,8 @@ highlight = "all"
 # introduces it.
 # spell-checker: disable
 skip = [
+    # getrandom
+    { name = "wasi", version="0.10.2+wasi-snapshot-preview1" },
     # blake2d_simd
     { name = "arrayvec", version = "=0.7.2" },
     # flimit/unix_socket
@@ -76,6 +78,8 @@ skip = [
     { name = "cpp_common", version = "=0.4.0" },
     # quickcheck
     { name = "env_logger", version = "=0.8.4" },
+    # tempfile
+    { name = "remove_dir_all", version = "=0.5.3" },
     # cpp_*
     { name = "memchr", version = "=1.0.2" },
     { name = "quote", version = "=0.3.15" },
