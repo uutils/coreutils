@@ -1642,6 +1642,8 @@ fn test_cp_overriding_arguments() {
 }
 
 #[test]
+// TODO: enable on Windows once cp --force is implemented on this platform
+#[cfg(unix)]
 fn test_cp_same_file_backup() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
