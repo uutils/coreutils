@@ -382,12 +382,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    // This can happen if paths are given as command-line arguments
-    // but none of the paths exist.
-    if filesystems.is_empty() {
-        return Ok(());
-    }
-
     println!("{}", Table::new(&opt, filesystems));
 
     Ok(())
