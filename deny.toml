@@ -61,6 +61,8 @@ highlight = "all"
 # introduces it.
 # spell-checker: disable
 skip = [
+    # getrandom
+    { name = "wasi", version="0.10.2+wasi-snapshot-preview1" },
     # blake2d_simd
     { name = "arrayvec", version = "=0.7.2" },
     # flimit/unix_socket
