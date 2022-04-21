@@ -33,9 +33,11 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::fmt;
+use std::fs::metadata;
 use std::fs::{File, Metadata};
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::io::{Error, ErrorKind};
+use std::os::unix::prelude::FileTypeExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, channel};
 use std::time::Duration;
@@ -219,15 +221,22 @@ impl Settings {
             .map(|v| v.map(PathBuf::from).collect())
             .unwrap_or_else(|| vec![PathBuf::from("-")]);
 
-        // Filter out paths depending on `FollowMode`.
+        // Filter out non tailable paths depending on `FollowMode`.
         paths.retain(|path| {
             if !path.is_stdin() {
-                if !path.is_file() {
-                    settings.return_code = 1;
+                if !(path.is_tailable()) {
                     if settings.follow == Some(FollowMode::Descriptor) && settings.retry {
                         show_warning!("--retry only effective for the initial open");
                     }
-                    if path.is_dir() {
+                    if !path.exists() {
+                        settings.return_code = 1;
+                        show_error!(
+                            "cannot open {} for reading: {}",
+                            path.quote(),
+                            text::NO_SUCH_FILE
+                        );
+                    } else if path.is_dir() {
+                        settings.return_code = 1;
                         show_error!("error reading {}: Is a directory", path.quote());
                         if settings.follow.is_some() {
                             let msg = if !settings.retry {
@@ -242,11 +251,8 @@ impl Settings {
                             );
                         }
                     } else {
-                        show_error!(
-                            "cannot open {} for reading: {}",
-                            path.quote(),
-                            text::NO_SUCH_FILE
-                        );
+                        // TODO: [2021-10; jhscheer] how to handle block device, socket, fifo?
+                        todo!();
                     }
                 }
             } else if settings.follow == Some(FollowMode::Name) {
@@ -330,7 +336,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
                     );
                 }
             }
-        } else if path.is_file() {
+        } else if path.is_tailable() {
             if settings.verbose {
                 if !first_header {
                     println!();
@@ -361,7 +367,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
                 files.last = Some(path.canonicalize().unwrap());
             }
         } else if settings.retry && settings.follow.is_some() {
-            // Insert non-is_file() paths into `files.map`.
+            // Insert non-is_tailable() paths into `files.map`.
             let key = if path.is_relative() {
                 std::env::current_dir().unwrap().join(path)
             } else {
@@ -569,10 +575,10 @@ fn follow(files: &mut FileHandling, settings: &Settings) -> UResult<()> {
         };
 
     // Iterate user provided `paths`.
-    // Add existing files to `Watcher` (InotifyWatcher).
+    // Add existing regular files to `Watcher` (InotifyWatcher).
     // If `path` is not an existing file, add its parent to `Watcher`.
     // If there is no parent, add `path` to `orphans`.
-    let mut orphans = Vec::with_capacity(files.map.len());
+    let mut orphans = Vec::new();
     for path in files.map.keys() {
         if path.is_file() {
             let path = get_path(path, settings);
@@ -590,7 +596,7 @@ fn follow(files: &mut FileHandling, settings: &Settings) -> UResult<()> {
                     .unwrap();
             }
         } else {
-            unreachable!();
+            // TODO: [2021-10; jhscheer] does this case need handling?
         }
     }
 
@@ -946,7 +952,7 @@ struct FileHandling {
 impl FileHandling {
     fn files_remaining(&self) -> bool {
         for path in self.map.keys() {
-            if path.is_file() {
+            if path.is_tailable() {
                 return true;
             }
         }
@@ -1282,6 +1288,7 @@ trait PathExt {
     fn is_stdin(&self) -> bool;
     fn print_header(&self);
     fn is_orphan(&self) -> bool;
+    fn is_tailable(&self) -> bool;
 }
 
 impl PathExt for Path {
@@ -1293,6 +1300,10 @@ impl PathExt for Path {
     }
     fn is_orphan(&self) -> bool {
         !matches!(self.parent(), Some(parent) if parent.is_dir())
+    }
+    fn is_tailable(&self) -> bool {
+        // TODO: [2021-10; jhscheer] what about fifos?
+        self.is_file() || (self.exists() && metadata(self).unwrap().file_type().is_char_device())
     }
 }
 

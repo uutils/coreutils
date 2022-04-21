@@ -12,20 +12,22 @@ extern crate tail;
 use crate::common::util::*;
 use std::char::from_digit;
 use std::io::{Read, Write};
+#[cfg(unix)]
 use std::thread::sleep;
+#[cfg(unix)]
 use std::time::Duration;
 
 #[cfg(target_os = "linux")]
 pub static BACKEND: &str = "inotify";
 #[cfg(all(unix, not(target_os = "linux")))]
 pub static BACKEND: &str = "kqueue";
-#[cfg(target_os = "windows")]
-pub static BACKEND: &str = "ReadDirectoryChanges";
 
 static FOOBAR_TXT: &str = "foobar.txt";
 static FOOBAR_2_TXT: &str = "foobar2.txt";
 static FOOBAR_WITH_NULL_TXT: &str = "foobar_with_null.txt";
+#[cfg(unix)]
 static FOLLOW_NAME_TXT: &str = "follow_name.txt";
+#[cfg(unix)]
 static FOLLOW_NAME_SHORT_EXP: &str = "follow_name_short.expected";
 #[cfg(target_os = "linux")]
 static FOLLOW_NAME_EXP: &str = "follow_name.expected";
@@ -1405,6 +1407,25 @@ fn test_follow_name_move() {
         at.rename(backup, source);
         args.pop();
     }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_follow_inotify_only_regular() {
+    // The GNU test inotify-only-regular.sh uses strace to ensure that `tail -f`
+    // doesn't make inotify syscalls and only uses inotify for regular files or fifos.
+    // We just check if tailing a character device has the same behaviour than GNU's tail.
+
+    let ts = TestScenario::new(util_name!());
+
+    let mut p = ts.ucmd().arg("-f").arg("/dev/null").run_no_wait();
+    sleep(Duration::from_millis(200));
+
+    p.kill().unwrap();
+
+    let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+    assert_eq!(buf_stdout, "".to_string());
+    assert_eq!(buf_stderr, "".to_string());
 }
 
 fn take_stdout_stderr(p: &mut std::process::Child) -> (String, String) {
