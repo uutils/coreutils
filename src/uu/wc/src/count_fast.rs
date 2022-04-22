@@ -36,8 +36,8 @@ fn count_bytes_using_splice(fd: &impl AsRawFd) -> Result<usize, usize> {
         .map_err(|_| 0_usize)?;
     let null_rdev = stat::fstat(null_file.as_raw_fd())
         .map_err(|_| 0_usize)?
-        .st_rdev;
-    if (stat::major(null_rdev), stat::minor(null_rdev)) != (1, 3) {
+        .st_rdev as libc::dev_t;
+    if unsafe { (libc::major(null_rdev), libc::minor(null_rdev)) } != (1, 3) {
         // This is not a proper /dev/null, writing to it is probably bad
         // Bit of an edge case, but it has been known to happen
         return Err(0);
@@ -86,14 +86,14 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
             // The second case happens for files in pseudo-filesystems. For
             // example with /proc/version and /sys/kernel/profiling. So,
             // if it is 0 we don't report that and instead do a full read.
-            if (stat.st_mode & S_IFREG) != 0 && stat.st_size > 0 {
+            if (stat.st_mode as libc::mode_t & S_IFREG) != 0 && stat.st_size > 0 {
                 return (stat.st_size as usize, None);
             }
             #[cfg(any(target_os = "linux", target_os = "android"))]
             {
                 // Else, if we're on Linux and our file is a FIFO pipe
                 // (or stdin), we use splice to count the number of bytes.
-                if (stat.st_mode & S_IFIFO) != 0 {
+                if (stat.st_mode as libc::mode_t & S_IFIFO) != 0 {
                     match count_bytes_using_splice(handle) {
                         Ok(n) => return (n, None),
                         Err(n) => byte_count = n,

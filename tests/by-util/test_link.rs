@@ -1,5 +1,6 @@
 use crate::common::util::*;
 
+#[cfg(not(target_os = "android"))]
 #[test]
 fn test_link_existing_file() {
     let (at, mut ucmd) = at_and_ucmd!();

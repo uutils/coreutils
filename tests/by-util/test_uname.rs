@@ -53,6 +53,11 @@ fn test_uname_kernel() {
 
 #[test]
 fn test_uname_operating_system() {
+    #[cfg(target_os = "android")]
+    new_ucmd!()
+        .arg("--operating-system")
+        .succeeds()
+        .stdout_is("Android\n");
     #[cfg(target_vendor = "apple")]
     new_ucmd!()
         .arg("--operating-system")

@@ -27,7 +27,7 @@ selinux = { version="0.2", optional=true }
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["entries", "fs", "perms", "mode"] }
 walkdir = "2.2"
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 ioctl-sys = "0.8"
 
 [target.'cfg(target_os = "windows")'.dependencies]

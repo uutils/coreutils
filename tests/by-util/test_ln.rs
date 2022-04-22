@@ -360,7 +360,7 @@ fn test_symlink_verbose() {
 
     scene
         .ucmd()
-        .args(&["-v", file_a, file_b])
+        .args(&["-s", "-v", file_a, file_b])
         .succeeds()
         .stdout_only(format!("'{}' -> '{}'\n", file_b, file_a));
 
@@ -368,7 +368,7 @@ fn test_symlink_verbose() {
 
     scene
         .ucmd()
-        .args(&["-v", "-b", file_a, file_b])
+        .args(&["-s", "-v", "-b", file_a, file_b])
         .succeeds()
         .stdout_only(format!(
             "'{}' -> '{}' (backup: '{}~')\n",
@@ -639,7 +639,7 @@ fn test_backup_force() {
     assert!(at.file_exists("b~"));
     scene
         .ucmd()
-        .args(&["-f", "--b=simple", "a", "b"])
+        .args(&["-s", "-f", "--b=simple", "a", "b"])
         .succeeds()
         .no_stderr();
     assert!(at.file_exists("a"));

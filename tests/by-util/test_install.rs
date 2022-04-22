@@ -6,7 +6,7 @@ use rust_users::*;
 use std::os::unix::fs::PermissionsExt;
 #[cfg(not(any(windows, target_os = "freebsd")))]
 use std::process::Command;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 
 #[test]
@@ -98,7 +98,11 @@ fn test_install_ancestors_mode_directories() {
     let ancestor2 = "ancestor1/ancestor2";
     let target_dir = "ancestor1/ancestor2/target_dir";
     let directories_arg = "-d";
-    let mode_arg = "--mode=700";
+    let mode_arg = "--mode=200";
+    let probe = "probe";
+
+    at.mkdir(probe);
+    let default_perms = at.metadata(probe).permissions().mode();
 
     ucmd.args(&[mode_arg, directories_arg, target_dir])
         .succeeds()
@@ -108,11 +112,11 @@ fn test_install_ancestors_mode_directories() {
     assert!(at.dir_exists(ancestor2));
     assert!(at.dir_exists(target_dir));
 
-    assert_ne!(0o40_700_u32, at.metadata(ancestor1).permissions().mode());
-    assert_ne!(0o40_700_u32, at.metadata(ancestor2).permissions().mode());
+    assert_eq!(default_perms, at.metadata(ancestor1).permissions().mode());
+    assert_eq!(default_perms, at.metadata(ancestor2).permissions().mode());
 
     // Expected mode only on the target_dir.
-    assert_eq!(0o40_700_u32, at.metadata(target_dir).permissions().mode());
+    assert_eq!(0o40_200_u32, at.metadata(target_dir).permissions().mode());
 }
 
 #[test]
@@ -386,7 +390,7 @@ fn test_install_copy_file() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_install_target_file_dev_null() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -487,7 +491,7 @@ fn test_install_copy_then_compare_file() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_install_copy_then_compare_file_with_extra_mode() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -549,6 +553,8 @@ const STRIP_SOURCE_FILE_SYMBOL: &str = "main";
 fn strip_source_file() -> &'static str {
     if cfg!(target_os = "macos") {
         "helloworld_macos"
+    } else if cfg!(target_arch = "arm") || cfg!(target_arch = "aarch64") {
+        "helloworld_android"
     } else {
         "helloworld_linux"
     }

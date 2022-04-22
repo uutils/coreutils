@@ -320,9 +320,13 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
 /// On Windows, uses GetFinalPathNameByHandleW to attempt to get the path
 /// from the stdout handle.
 fn pathbuf_from_stdout() -> UResult<PathBuf> {
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "android")))]
     {
         Ok(PathBuf::from("/dev/stdout"))
+    }
+    #[cfg(target_os = "android")]
+    {
+        Ok(PathBuf::from("/proc/self/fd/1"))
     }
     #[cfg(windows)]
     {

@@ -27,17 +27,21 @@ static ARG_FILES: &str = "files";
 #[cfg(unix)]
 mod platform {
     use super::libc;
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     use std::fs::File;
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     use std::os::unix::io::AsRawFd;
 
     pub unsafe fn do_sync() -> isize {
+        // see https://github.com/rust-lang/libc/pull/2161
+        #[cfg(target_os = "android")]
+        libc::syscall(libc::SYS_sync);
+        #[cfg(not(target_os = "android"))]
         libc::sync();
         0
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     pub unsafe fn do_syncfs(files: Vec<String>) -> isize {
         for path in files {
             let f = File::open(&path).unwrap();
@@ -47,7 +51,7 @@ mod platform {
         0
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     pub unsafe fn do_fdatasync(files: Vec<String>) -> isize {
         for path in files {
             let f = File::open(&path).unwrap();
@@ -179,10 +183,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     #[allow(clippy::if_same_then_else)]
     if matches.is_present(options::FILE_SYSTEM) {
-        #[cfg(any(target_os = "linux", target_os = "windows"))]
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
         syncfs(files);
     } else if matches.is_present(options::DATA) {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "android"))]
         fdatasync(files);
     } else {
         sync();
@@ -221,12 +225,12 @@ fn sync() -> isize {
     unsafe { platform::do_sync() }
 }
 
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
 fn syncfs(files: Vec<String>) -> isize {
     unsafe { platform::do_syncfs(files) }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn fdatasync(files: Vec<String>) -> isize {
     unsafe { platform::do_fdatasync(files) }
 }

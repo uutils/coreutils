@@ -262,10 +262,10 @@ fn test_read_from_nonexistent_file() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_files_from_pseudo_filesystem() {
-    let result = new_ucmd!().arg("-c").arg("/proc/version").succeeds();
-    assert_ne!(result.stdout_str(), "0 /proc/version\n");
+    let result = new_ucmd!().arg("-c").arg("/proc/cpuinfo").succeeds();
+    assert_ne!(result.stdout_str(), "0 /proc/cpuinfo\n");
 }
 
 #[test]

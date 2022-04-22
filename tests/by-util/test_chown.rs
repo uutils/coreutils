@@ -1,7 +1,7 @@
 // spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist cuuser groupname notexisting passgrp
 
 use crate::common::util::*;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use rust_users::get_effective_uid;
 
 extern crate chown;
@@ -617,7 +617,7 @@ fn test_root_preserve() {
     result.stderr_contains(&"chown: it is dangerous to operate recursively");
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_big_p() {
     if get_effective_uid() != 0 {
@@ -627,7 +627,11 @@ fn test_big_p() {
             .arg("/proc/self/cwd")
             .fails()
             .stderr_contains(
-                "chown: changing ownership of '/proc/self/cwd': Operation not permitted (os error 1)",
+                // linux fails with "Operation not permitted (os error 1)"
+                // because of insufficient permissions,
+                // android fails with "Permission denied (os error 13)"
+                // because it can't resolve /proc (even though it can resolve /proc/self/)
+                "chown: changing ownership of '/proc/self/cwd': ",
             );
     }
 }

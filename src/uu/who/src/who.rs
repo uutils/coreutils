@@ -40,7 +40,7 @@ mod options {
 static ABOUT: &str = "Print information about users who are currently logged in.";
 const USAGE: &str = "{} [OPTION]... [ FILE | ARG1 ARG2 ]";
 
-#[cfg(any(target_os = "linux"))]
+#[cfg(target_os = "linux")]
 static RUNLEVEL_HELP: &str = "print current runlevel";
 #[cfg(not(target_os = "linux"))]
 static RUNLEVEL_HELP: &str = "print current runlevel (This is meaningless on non Linux)";

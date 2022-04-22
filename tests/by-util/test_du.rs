@@ -47,7 +47,7 @@ fn test_du_basics_subdir() {
 
     let result = ts.ucmd().arg(SUB_DIR).succeeds();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &[SUB_DIR]));
         if result_reference.succeeded() {
@@ -122,7 +122,7 @@ fn test_du_soft_link() {
 
     let result = ts.ucmd().arg(SUB_DIR_LINKS).succeeds();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &[SUB_DIR_LINKS]));
         if result_reference.succeeded() {
@@ -160,6 +160,7 @@ fn _du_soft_link(s: &str) {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[test]
 fn test_du_hard_link() {
     let ts = TestScenario::new(util_name!());
@@ -213,7 +214,7 @@ fn test_du_d_flag() {
 
     let result = ts.ucmd().arg("-d1").succeeds();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["-d1"]));
         if result_reference.succeeded() {
@@ -259,7 +260,7 @@ fn test_du_dereference() {
 
     let result = ts.ucmd().arg("-L").arg(SUB_DIR_LINKS).succeeds();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["-L", SUB_DIR_LINKS]));
 
@@ -303,13 +304,13 @@ fn test_du_inodes_basic() {
     let ts = TestScenario::new(util_name!());
     let result = ts.ucmd().arg("--inodes").succeeds();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["--inodes"]));
         assert_eq!(result.stdout_str(), result_reference.stdout_str());
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     _du_inodes_basic(result.stdout_str());
 }
 
@@ -357,7 +358,7 @@ fn test_du_inodes() {
     result.stdout_contains("3\t./subdir/links\n");
     result.stdout_contains("3\t.\n");
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference =
             unwrap_or_return!(expected_result(&ts, &["--separate-dirs", "--inodes"]));
@@ -438,7 +439,7 @@ fn test_du_no_permission() {
         "du: cannot read directory 'subdir/links': Permission denied (os error 13)",
     );
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &[SUB_DIR_LINKS]));
         if result_reference
@@ -483,7 +484,7 @@ fn test_du_one_file_system() {
 
     let result = ts.ucmd().arg("-x").arg(SUB_DIR).succeeds();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["-x", SUB_DIR]));
         if result_reference.succeeded() {
@@ -518,13 +519,13 @@ fn test_du_apparent_size() {
     let ts = TestScenario::new(util_name!());
     let result = ts.ucmd().arg("--apparent-size").succeeds();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["--apparent-size"]));
         assert_eq!(result.stdout_str(), result_reference.stdout_str());
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     _du_apparent_size(result.stdout_str());
 }
 
@@ -586,7 +587,7 @@ fn test_du_bytes() {
     let ts = TestScenario::new(util_name!());
     let result = ts.ucmd().arg("--bytes").succeeds();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["--bytes"]));
         assert_eq!(result.stdout_str(), result_reference.stdout_str());
@@ -602,7 +603,8 @@ fn test_du_bytes() {
         not(target_vendor = "apple"),
         not(target_os = "windows"),
         not(target_os = "freebsd"),
-        not(target_os = "linux")
+        not(target_os = "linux"),
+        not(target_os = "android"),
     ))]
     result.stdout_contains("21529\t./subdir\n");
 }

@@ -149,7 +149,7 @@ fn test_date_set_invalid() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 fn test_date_set_permissions_error() {
     if !(get_effective_uid() == 0 || uucore::os::is_wsl_1()) {
         let result = new_ucmd!()
