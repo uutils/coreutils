@@ -23,7 +23,7 @@ use nix::{errno::Errno, libc::S_IFIFO, sys::stat::fstat};
 use uucore::pipes::{pipe, splice_exact, vmsplice};
 
 pub(crate) fn splice_data(bytes: &[u8], out: &impl AsRawFd) -> Result<()> {
-    let is_pipe = fstat(out.as_raw_fd())?.st_mode & S_IFIFO != 0;
+    let is_pipe = fstat(out.as_raw_fd())?.st_mode as nix::libc::mode_t & S_IFIFO != 0;
 
     if is_pipe {
         loop {

@@ -208,7 +208,7 @@ fn set_groups(groups: &[libc::gid_t]) -> libc::c_int {
     unsafe { setgroups(groups.len() as libc::c_int, groups.as_ptr()) }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn set_groups(groups: &[libc::gid_t]) -> libc::c_int {
     unsafe { setgroups(groups.len() as libc::size_t, groups.as_ptr()) }
 }

@@ -147,16 +147,16 @@ pub struct Passwd {
     /// AKA passwd.pw_gid
     pub gid: gid_t,
     /// AKA passwd.pw_gecos
-    pub user_info: String,
+    pub user_info: Option<String>,
     /// AKA passwd.pw_shell
-    pub user_shell: String,
+    pub user_shell: Option<String>,
     /// AKA passwd.pw_dir
-    pub user_dir: String,
+    pub user_dir: Option<String>,
     /// AKA passwd.pw_passwd
-    pub user_passwd: String,
+    pub user_passwd: Option<String>,
     /// AKA passwd.pw_class
     #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
-    pub user_access_class: String,
+    pub user_access_class: Option<String>,
     /// AKA passwd.pw_change
     #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
     pub passwd_change_time: time_t,
@@ -166,8 +166,13 @@ pub struct Passwd {
 }
 
 /// SAFETY: ptr must point to a valid C string.
-unsafe fn cstr2string(ptr: *const c_char) -> String {
-    CStr::from_ptr(ptr).to_string_lossy().into_owned()
+/// Returns None if ptr is null.
+unsafe fn cstr2string(ptr: *const c_char) -> Option<String> {
+    if !ptr.is_null() {
+        Some(CStr::from_ptr(ptr).to_string_lossy().into_owned())
+    } else {
+        None
+    }
 }
 
 impl Passwd {
@@ -175,10 +180,16 @@ impl Passwd {
     /// the function runs. That means PW_LOCK must be held.
     unsafe fn from_raw(raw: passwd) -> Self {
         Self {
-            name: cstr2string(raw.pw_name),
+            name: cstr2string(raw.pw_name).expect("passwd without name"),
             uid: raw.pw_uid,
             gid: raw.pw_gid,
+            #[cfg(not(all(
+                target_os = "android",
+                any(target_arch = "x86", target_arch = "arm")
+            )))]
             user_info: cstr2string(raw.pw_gecos),
+            #[cfg(all(target_os = "android", any(target_arch = "x86", target_arch = "arm")))]
+            user_info: None,
             user_shell: cstr2string(raw.pw_shell),
             user_dir: cstr2string(raw.pw_dir),
             user_passwd: cstr2string(raw.pw_passwd),
@@ -243,7 +254,7 @@ impl Group {
     /// the function runs. That means PW_LOCK must be held.
     unsafe fn from_raw(raw: group) -> Self {
         Self {
-            name: cstr2string(raw.gr_name),
+            name: cstr2string(raw.gr_name).expect("group without name"),
             gid: raw.gr_gid,
         }
     }

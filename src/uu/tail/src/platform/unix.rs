@@ -54,7 +54,7 @@ pub fn stdin_is_pipe_or_fifo() -> bool {
     fd >= 0 // GNU tail checks fd >= 0
                             && match fstat(fd) {
                                 Ok(stat) => {
-                                    let mode = stat.st_mode;
+                                    let mode = stat.st_mode as libc::mode_t;
                                     // NOTE: This is probably not the most correct way to check this
                                     (mode & S_IFIFO != 0) || (mode & S_IFSOCK != 0)
                                 }

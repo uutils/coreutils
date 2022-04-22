@@ -6,7 +6,12 @@ use std::thread::sleep;
 // All that can be tested is the side-effects.
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_vendor = "apple"))]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "freebsd",
+    target_vendor = "apple"
+))]
 fn test_nohup_multiple_args_and_flags() {
     let (at, mut ucmd) = at_and_ucmd!();
 

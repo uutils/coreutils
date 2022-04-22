@@ -10,7 +10,7 @@
 
 // spell-checker:ignore (ToDO) ficlone linkgs lstat nlink nlinks pathbuf reflink strs xattrs symlinked
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[macro_use]
 extern crate ioctl_sys;
 #[macro_use]
@@ -49,7 +49,7 @@ use std::mem;
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::io::AsRawFd;
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
@@ -61,7 +61,7 @@ use uucore::error::{set_exit_code, ExitCode, UError, UResult};
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use walkdir::WalkDir;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 ioctl!(write ficlone with 0x94, 9; std::os::raw::c_int);
 
 quick_error! {
@@ -686,11 +686,15 @@ impl Options {
                         }
                     }
                 } else {
-                    #[cfg(any(target_os = "linux", target_os = "macos"))]
+                    #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
                     {
                         ReflinkMode::Auto
                     }
-                    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+                    #[cfg(not(any(
+                        target_os = "linux",
+                        target_os = "android",
+                        target_os = "macos"
+                    )))]
                     {
                         ReflinkMode::Never
                     }
@@ -1467,14 +1471,14 @@ fn copy_helper(
     } else if source_is_symlink {
         copy_link(source, dest, symlinked_files)?;
     } else if options.reflink_mode != ReflinkMode::Never {
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
         return Err("--reflink is only supported on linux and macOS"
             .to_string()
             .into());
 
         #[cfg(target_os = "macos")]
         copy_on_write_macos(source, dest, options.reflink_mode, context)?;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "android"))]
         copy_on_write_linux(source, dest, options.reflink_mode, context)?;
     } else {
         fs::copy(source, dest).context(context)?;
@@ -1528,7 +1532,7 @@ fn copy_link(
 }
 
 /// Copies `source` to `dest` using copy-on-write if possible.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn copy_on_write_linux(
     source: &Path,
     dest: &Path,

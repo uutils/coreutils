@@ -5,7 +5,7 @@ use std::fs::OpenOptions;
 #[cfg(unix)]
 use std::io::Read;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::Resource;
 
 #[test]
@@ -93,7 +93,7 @@ fn test_fifo_symlink() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_closes_file_descriptors() {
     // Each file creates a pipe, which has two file descriptors.
     // If they are not closed then five is certainly too many.
@@ -396,10 +396,10 @@ fn test_squeeze_blank_before_numbering() {
 #[cfg(unix)]
 fn test_dev_random() {
     let mut buf = [0; 2048];
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     const DEV_RANDOM: &str = "/dev/urandom";
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     const DEV_RANDOM: &str = "/dev/random";
 
     let mut proc = new_ucmd!().args(&[DEV_RANDOM]).run_no_wait();
