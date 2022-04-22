@@ -940,7 +940,7 @@ fn test_retry7() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_retry8() {
     // Ensure that inotify will switch to polling mode if directory
     // of the watched file was initially missing and later created.
@@ -994,7 +994,7 @@ fn test_retry8() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_retry9() {
     // gnu/tests/tail-2/inotify-dir-recreate.sh
     // Ensure that inotify will switch to polling mode if directory
@@ -1069,7 +1069,7 @@ fn test_retry9() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
 fn test_follow_descriptor_vs_rename1() {
     // gnu/tests/tail-2/descriptor-vs-rename.sh
     // $ ((rm -f A && touch A && sleep 1 && echo -n "A\n" >> A && sleep 1 && \
@@ -1092,14 +1092,8 @@ fn test_follow_descriptor_vs_rename1() {
         "--disable-inotify",
     ];
 
-    #[cfg(target_os = "linux")]
-    let i = 2;
-    // FIXME: fix the case without `--disable-inotify` for BSD/macOS
-    #[cfg(not(target_os = "linux"))]
-    let i = 1;
-
     let delay = 500;
-    for _ in 0..i {
+    for _ in 0..2 {
         at.touch(file_a);
 
         let mut p = ts.ucmd().args(&args).run_no_wait();
@@ -1152,14 +1146,8 @@ fn test_follow_descriptor_vs_rename2() {
         "--disable-inotify",
     ];
 
-    #[cfg(target_os = "linux")]
-    let i = 2;
-    // TODO: fix the case without `--disable-inotify` for bsd/macos
-    #[cfg(not(target_os = "linux"))]
-    let i = 1;
-
     let delay = 100;
-    for _ in 0..i {
+    for _ in 0..2 {
         at.touch(file_a);
         at.touch(file_b);
         let mut p = ts.ucmd().args(&args).run_no_wait();
@@ -1324,7 +1312,7 @@ fn test_follow_name_truncate3() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_follow_name_move_create() {
     // This test triggers a move/create event while `tail --follow=name logfile` is running.
     // ((sleep 2 && mv logfile backup && sleep 2 && cp backup logfile &)>/dev/null 2>&1 &) ; tail --follow=name logfile
@@ -1414,7 +1402,7 @@ fn test_follow_name_move() {
 fn test_follow_inotify_only_regular() {
     // The GNU test inotify-only-regular.sh uses strace to ensure that `tail -f`
     // doesn't make inotify syscalls and only uses inotify for regular files or fifos.
-    // We just check if tailing a character device has the same behaviour than GNU's tail.
+    // We just check if tailing a character device has the same behavior as GNU's tail.
 
     let ts = TestScenario::new(util_name!());
 

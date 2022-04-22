@@ -422,10 +422,10 @@ See https://github.com/uutils/coreutils/issues/3336 for the main meta bugs
 | comm      | sort      |        |
 | csplit    | split     |        |
 | cut       | tac       |        |
-| dircolors | tail      |        |
-| dirname   | test      |        |
-| du        | dir       |        |
-| echo      | vdir      |        |
+| dircolors | test      |        |
+| dirname   | dir       |        |
+| du        | vdir      |        |
+| echo      |           |        |
 | env       |           |        |
 | expand    |           |        |
 | factor    |           |        |
@@ -478,6 +478,7 @@ See https://github.com/uutils/coreutils/issues/3336 for the main meta bugs
 | stdbuf    |           |        |
 | sum       |           |        |
 | sync      |           |        |
+| tail      |           |        |
 | tee       |           |        |
 | timeout   |           |        |
 | touch     |           |        |

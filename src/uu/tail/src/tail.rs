@@ -33,11 +33,9 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::fmt;
-use std::fs::metadata;
 use std::fs::{File, Metadata};
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::io::{Error, ErrorKind};
-use std::os::unix::prelude::FileTypeExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, channel};
 use std::time::Duration;
@@ -52,6 +50,10 @@ use uucore::ringbuffer::RingBuffer;
 use crate::platform::stdin_is_pipe_or_fifo;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
+use std::os::unix::prelude::FileTypeExt;
+#[cfg(unix)]
+use std::fs::metadata;
 
 const ABOUT: &str = "\
                      Print the last 10 lines of each FILE to standard output.\n\
@@ -85,7 +87,7 @@ pub mod options {
     pub static PID: &str = "pid";
     pub static SLEEP_INT: &str = "sleep-interval";
     pub static ZERO_TERM: &str = "zero-terminated";
-    pub static DISABLE_INOTIFY_TERM: &str = "disable-inotify";
+    pub static DISABLE_INOTIFY_TERM: &str = "-disable-inotify";
     pub static USE_POLLING: &str = "use-polling";
     pub static RETRY: &str = "retry";
     pub static FOLLOW_RETRY: &str = "F";
@@ -1302,8 +1304,16 @@ impl PathExt for Path {
         !matches!(self.parent(), Some(parent) if parent.is_dir())
     }
     fn is_tailable(&self) -> bool {
-        // TODO: [2021-10; jhscheer] what about fifos?
-        self.is_file() || (self.exists() && metadata(self).unwrap().file_type().is_char_device())
+        #[cfg(unix)]
+        {
+            // TODO: [2021-10; jhscheer] what about fifos?
+            self.is_file()
+                || (self.exists() && metadata(self).unwrap().file_type().is_char_device())
+        }
+        #[cfg(not(unix))]
+        {
+            self.is_file()
+        }
     }
 }
 
