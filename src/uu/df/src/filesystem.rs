@@ -68,7 +68,7 @@ where
         path.as_ref().to_path_buf()
     };
     let matches = mounts.iter().filter(|mi| path.starts_with(&mi.mount_dir));
-    matches.max_by_key(|mi| mi.mount_dir.len())
+    matches.min_by_key(|mi| mi.mount_dir.len())
 }
 
 impl Filesystem {

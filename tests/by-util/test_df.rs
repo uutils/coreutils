@@ -488,3 +488,22 @@ fn test_nonexistent_file() {
         .stderr_is("df: does-not-exist: No such file or directory\n")
         .stdout_is("File\n.\n");
 }
+
+#[test]
+fn test_file_system_as_input_path() {
+    let fs = new_ucmd!()
+        .args(&[
+            "--output=source",
+            std::env::current_exe().unwrap().to_str().unwrap(),
+        ])
+        .succeeds()
+        .stdout_move_str();
+    let fs = fs.lines().nth(1).unwrap();
+
+    let actual = new_ucmd!()
+        .args(&["--output=source", fs])
+        .succeeds()
+        .stdout_move_str();
+    let actual = actual.lines().nth(1).unwrap();
+    assert_eq!(actual, fs);
+}
