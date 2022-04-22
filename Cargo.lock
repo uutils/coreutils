@@ -3226,9 +3226,9 @@ dependencies = [
 
 [[package]]
 name = "z85"
-version = "3.0.4"
+version = "3.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af896e93db81340b74b65f74276a99b210c086f3d34ed0abf433182a462af856"
+checksum = "2a599daf1b507819c1121f0bf87fa37eb19daac6aff3aefefd4e6e2e0f2020fc"
 
 [[package]]
 name = "zip"
