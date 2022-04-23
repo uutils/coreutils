@@ -199,7 +199,42 @@ fn test_type_option() {
     new_ucmd!()
         .args(&["-t", fs_type, "-t", "nonexisting"])
         .succeeds();
-    new_ucmd!().args(&["-t", "nonexisting"]).fails();
+    new_ucmd!()
+        .args(&["-t", "nonexisting"])
+        .fails()
+        .stderr_contains("no file systems processed");
+}
+
+#[test]
+fn test_type_option_with_file() {
+    let fs_type = new_ucmd!()
+        .args(&["--output=fstype", "."])
+        .succeeds()
+        .stdout_move_str();
+    let fs_type = fs_type.lines().nth(1).unwrap().trim();
+
+    new_ucmd!().args(&["-t", fs_type, "."]).succeeds();
+    new_ucmd!()
+        .args(&["-t", "nonexisting", "."])
+        .fails()
+        .stderr_contains("no file systems processed");
+
+    let fs_types = new_ucmd!()
+        .arg("--output=fstype")
+        .succeeds()
+        .stdout_move_str();
+    let fs_types: Vec<_> = fs_types
+        .lines()
+        .skip(1)
+        .filter(|t| t.trim() != fs_type && t.trim() != "")
+        .collect();
+
+    if !fs_types.is_empty() {
+        new_ucmd!()
+            .args(&["-t", fs_types[0], "."])
+            .fails()
+            .stderr_contains("no file systems processed");
+    }
 }
 
 #[test]
