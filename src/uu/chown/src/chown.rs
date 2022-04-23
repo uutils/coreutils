@@ -197,10 +197,17 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
                     // So, try to parse it this way
                     return parse_spec(spec, '.');
                 } else {
-                    return Err(USimpleError::new(
-                        1,
-                        format!("invalid user: {}", spec.quote()),
-                    ));
+                    // It's possible that the `user` string contains a
+                    // numeric user ID, in which case, we respect that.
+                    match user.parse() {
+                        Ok(uid) => uid,
+                        Err(_) => {
+                            return Err(USimpleError::new(
+                                1,
+                                format!("invalid user: {}", spec.quote()),
+                            ))
+                        }
+                    }
                 }
             }
         })
