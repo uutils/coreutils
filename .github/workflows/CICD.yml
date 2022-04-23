@@ -386,7 +386,7 @@ jobs:
         command: test
         args: -v ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
       env:
-        RUSTFLAGS: "-Awarnings"
+        RUSTFLAGS: "-Awarnings --cfg unsound_local_offset"
 
   deps:
     name: Dependencies

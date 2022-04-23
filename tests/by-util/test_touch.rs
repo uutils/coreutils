@@ -1,4 +1,10 @@
-// spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms
+// spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime
+
+// This test relies on
+// --cfg unsound_local_offset
+// https://github.com/time-rs/time/blob/deb8161b84f355b31e39ce09e40c4d6ce3fea837/src/sys/local_offset_at/unix.rs#L112-L120=
+// See https://github.com/time-rs/time/issues/293#issuecomment-946382614=
+// Defined in .cargo/config
 
 extern crate touch;
 use self::touch::filetime::{self, FileTime};
@@ -42,8 +48,14 @@ fn str_to_filetime(format: &str, s: &str) -> FileTime {
         "%Y%m%d%H%M.%S" => format_description!("[year][month][day][hour][minute].[second]"),
         _ => panic!("unexpected dt format"),
     };
-    let tm = time::PrimitiveDateTime::parse(&s, &format_description).unwrap();
-    let offset_dt = tm.assume_offset(time::OffsetDateTime::now_local().unwrap().offset());
+    let tm = time::PrimitiveDateTime::parse(s, &format_description).unwrap();
+    let d = match time::OffsetDateTime::now_local() {
+        Ok(now) => now,
+        Err(e) => {
+            panic!("Error {} retrieving the OffsetDateTime::now_local", e);
+        }
+    };
+    let offset_dt = tm.assume_offset(d.offset());
     FileTime::from_unix_time(offset_dt.unix_timestamp(), tm.nanosecond())
 }
 
@@ -461,7 +473,13 @@ fn test_touch_mtime_dst_succeeds() {
 // In other locales it will be a different date/time, and in some locales
 // it doesn't exist at all, in which case this function will return None.
 fn get_dst_switch_hour() -> Option<String> {
-    let now = time::OffsetDateTime::now_local().unwrap();
+    //let now = time::OffsetDateTime::now_local().unwrap();
+    let now = match time::OffsetDateTime::now_local() {
+        Ok(now) => now,
+        Err(e) => {
+            panic!("Error {} retrieving the OffsetDateTime::now_local", e);
+        }
+    };
 
     // Start from January 1, 2020, 00:00.
     let tm = datetime!(2020-01-01 00:00 UTC);
