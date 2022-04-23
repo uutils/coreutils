@@ -378,19 +378,11 @@ fn test_iuse_percentage() {
 #[test]
 fn test_block_size_1024() {
     fn get_header(block_size: u64) -> String {
-        // TODO When #3057 is resolved, we should just use
-        //
-        //     new_ucmd!().arg("--output=size").succeeds().stdout_move_str();
-        //
-        // instead of parsing the entire `df` table as a string.
         let output = new_ucmd!()
-            .args(&["-B", &format!("{}", block_size)])
+            .args(&["-B", &format!("{}", block_size), "--output=size"])
             .succeeds()
             .stdout_move_str();
-        let first_line = output.lines().next().unwrap();
-        let mut column_labels = first_line.split_whitespace();
-        let size_column_label = column_labels.nth(1).unwrap();
-        size_column_label.into()
+        output.lines().next().unwrap().to_string()
     }
 
     assert_eq!(get_header(1024), "1K-blocks");
