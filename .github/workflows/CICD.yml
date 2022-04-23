@@ -384,7 +384,7 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: test
-        args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
+        args: -v ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
       env:
         RUSTFLAGS: "-Awarnings"
 
