@@ -22,9 +22,9 @@ pub mod format;
 pub mod options;
 mod units;
 
-const ABOUT: &str = help_section!("about");
-const LONG_HELP: &str = help_section!("long help");
-const USAGE: &str = help_usage!();
+const ABOUT: &str = help_section!("about", "numfmt.md");
+const LONG_HELP: &str = help_section!("long help", "numfmt.md");
+const USAGE: &str = help_usage!("numfmt.md");
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions) -> UResult<()> {
     for l in args {

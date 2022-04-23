@@ -12,8 +12,8 @@ use uucore::{encoding::Format, error::UResult, help_section, help_usage};
 
 pub mod base_common;
 
-const ABOUT: &str = help_section!("about");
-const USAGE: &str = help_usage!();
+const ABOUT: &str = help_section!("about", "base32.md");
+const USAGE: &str = help_usage!("base32.md");
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {

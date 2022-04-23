@@ -13,8 +13,8 @@ use uucore::{encoding::Format, error::UResult, help_section, help_usage};
 
 use std::io::{stdin, Read};
 
-const ABOUT: &str = help_section!("about");
-const USAGE: &str = help_usage!();
+const ABOUT: &str = help_section!("about", "base64.md");
+const USAGE: &str = help_usage!("base64.md");
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
