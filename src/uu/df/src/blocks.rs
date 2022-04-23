@@ -6,7 +6,8 @@
 use crate::{OPT_BLOCKSIZE, OPT_HUMAN_READABLE_BINARY, OPT_HUMAN_READABLE_DECIMAL};
 use clap::ArgMatches;
 use std::fmt;
-use std::num::ParseIntError;
+
+use uucore::parse_size::{parse_size, ParseSizeError};
 
 /// The first ten powers of 1024.
 const IEC_BASES: [u128; 10] = [
@@ -107,14 +108,14 @@ impl Default for BlockSize {
     }
 }
 
-pub(crate) fn block_size_from_matches(matches: &ArgMatches) -> Result<BlockSize, ParseIntError> {
+pub(crate) fn block_size_from_matches(matches: &ArgMatches) -> Result<BlockSize, ParseSizeError> {
     if matches.is_present(OPT_HUMAN_READABLE_BINARY) {
         Ok(BlockSize::HumanReadableBinary)
     } else if matches.is_present(OPT_HUMAN_READABLE_DECIMAL) {
         Ok(BlockSize::HumanReadableDecimal)
     } else if matches.is_present(OPT_BLOCKSIZE) {
         let s = matches.value_of(OPT_BLOCKSIZE).unwrap();
-        Ok(BlockSize::Bytes(s.parse()?))
+        Ok(BlockSize::Bytes(parse_size(s)?))
     } else {
         Ok(Default::default())
     }
