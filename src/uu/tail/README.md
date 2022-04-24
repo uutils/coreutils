@@ -2,6 +2,10 @@
 
 ## Missing features
 
+The `-F` flag (same as `--follow=name --retry`) has very good support on Linux (inotify backend),
+works good enough on macOS/BSD (kqueue backend) with some minor tests not working,
+and is fully untested on Windows.
+
 ### Flags with features
 
 - [x] fast poll := '-s.1 --max-unchanged-stats=1'

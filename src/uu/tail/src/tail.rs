@@ -49,11 +49,11 @@ use uucore::ringbuffer::RingBuffer;
 #[cfg(unix)]
 use crate::platform::stdin_is_pipe_or_fifo;
 #[cfg(unix)]
+use std::fs::metadata;
+#[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 #[cfg(unix)]
 use std::os::unix::prelude::FileTypeExt;
-#[cfg(unix)]
-use std::fs::metadata;
 
 const ABOUT: &str = "\
                      Print the last 10 lines of each FILE to standard output.\n\

@@ -1416,6 +1416,7 @@ fn test_follow_inotify_only_regular() {
     assert_eq!(buf_stderr, "".to_string());
 }
 
+#[cfg(unix)]
 fn take_stdout_stderr(p: &mut std::process::Child) -> (String, String) {
     let mut buf_stdout = String::new();
     let mut p_stdout = p.stdout.take().unwrap();
