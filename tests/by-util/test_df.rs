@@ -395,6 +395,31 @@ fn test_block_size_1024() {
 }
 
 #[test]
+fn test_block_size_with_suffix() {
+    fn get_header(block_size: &str) -> String {
+        let output = new_ucmd!()
+            .args(&["-B", block_size, "--output=size"])
+            .succeeds()
+            .stdout_move_str();
+        output.lines().next().unwrap().to_string()
+    }
+
+    assert_eq!(get_header("K"), "1K-blocks");
+    assert_eq!(get_header("M"), "1M-blocks");
+    assert_eq!(get_header("G"), "1G-blocks");
+    assert_eq!(get_header("1K"), "1K-blocks");
+    assert_eq!(get_header("1M"), "1M-blocks");
+    assert_eq!(get_header("1G"), "1G-blocks");
+    assert_eq!(get_header("1KiB"), "1K-blocks");
+    assert_eq!(get_header("1MiB"), "1M-blocks");
+    assert_eq!(get_header("1GiB"), "1G-blocks");
+    // TODO enable the following asserts when #3193 is resolved
+    //assert_eq!(get_header("1KB"), "1kB-blocks");
+    //assert_eq!(get_header("1MB"), "1MB-blocks");
+    //assert_eq!(get_header("1GB"), "1GB-blocks");
+}
+
+#[test]
 fn test_output_selects_columns() {
     let output = new_ucmd!()
         .args(&["--output=source"])
