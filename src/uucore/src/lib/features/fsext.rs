@@ -733,7 +733,7 @@ where
 }
 
 // match strftime "%Y-%m-%d %H:%M:%S.%f %z"
-const PRETTY_DATETIME_FORMAT: &[time::format_description::FormatItem] = format_description!("[year]-[month]-[day padding:zero] [hour]:[minute]:[second].[subsecond] [offset_hour][offset_minute]");
+const PRETTY_DATETIME_FORMAT: &[time::format_description::FormatItem] = format_description!("[year]-[month]-[day padding:zero] [hour]:[minute]:[second].[subsecond] [offset_hour sign:mandatory][offset_minute]");
 
 pub fn pretty_time(sec: i64, nsec: i64) -> String {
     // sec == seconds since UNIX_EPOCH
