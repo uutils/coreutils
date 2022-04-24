@@ -283,6 +283,25 @@ fn test_char() {
     ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
 }
 
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+#[test]
+fn test_date() {
+    // Just test the date for the time 0.3 change
+    let args = [
+        "-c",
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        "%z",
+        #[cfg(target_os = "linux")]
+        "/dev/pts/ptmx",
+        #[cfg(any(target_vendor = "apple"))]
+        "%z",
+        #[cfg(any(target_os = "android", target_vendor = "apple"))]
+        "/dev/ptmx",
+    ];
+    let ts = TestScenario::new(util_name!());
+    let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
+    ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
+}
 #[cfg(unix)]
 #[test]
 fn test_multi_files() {
