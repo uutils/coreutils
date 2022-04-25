@@ -84,8 +84,6 @@ skip = [
     { name = "memchr", version = "=1.0.2" },
     { name = "quote", version = "=0.3.15" },
     { name = "unicode-xid", version = "=0.0.4" },
-    # exacl
-    { name = "nix", version = "=0.21.0" },
 ]
 # spell-checker: enable
 
