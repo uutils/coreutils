@@ -17,7 +17,7 @@ path = "src/touch.rs"
 [dependencies]
 filetime = "0.2.1"
 clap = { version = "3.1", features = ["wrap_help", "cargo"] }
-time = "0.1.40"
+time = "0.3.9"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["libc"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
