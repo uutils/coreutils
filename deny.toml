@@ -12,7 +12,6 @@ yanked = "warn"
 notice = "warn"
 ignore = [
     "RUSTSEC-2020-0159",
-    "RUSTSEC-2022-0013",
     "RUSTSEC-2020-0071",
     #"RUSTSEC-0000-0000",
 ]
@@ -87,6 +86,8 @@ skip = [
     { name = "memchr", version = "=1.0.2" },
     { name = "quote", version = "=0.3.15" },
     { name = "unicode-xid", version = "=0.0.4" },
+    # chrono
+    { name = "time", version = "=0.1.44" },
 ]
 # spell-checker: enable
 
