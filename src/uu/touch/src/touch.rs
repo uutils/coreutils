@@ -337,7 +337,12 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         format = YYYYMMDDHHMM_DOT_SS_FORMAT;
         ts = "20".to_owned() + &ts;
     }
-
+    if (format == YYYYMMDDHHMM_DOT_SS_FORMAT || format == YYMMDDHHMM_DOT_SS_FORMAT)
+        && ts.ends_with(".60")
+    {
+        // Work around to disable leap seconds
+        ts = ts.replace(".60", ".59");
+    }
     let tm = time::PrimitiveDateTime::parse(&ts, &format)
         .map_err(|_| USimpleError::new(1, format!("invalid date ts format {}", ts.quote())))?;
 
