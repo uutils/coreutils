@@ -1272,6 +1272,7 @@ pub fn uu_app<'a>() -> Command<'a> {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .after_help(LONG_HELP_KEYS)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(
@@ -1421,7 +1422,6 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('k')
                 .long(options::KEY)
                 .help("sort by a key")
-                .long_help(LONG_HELP_KEYS)
                 .multiple_occurrences(true)
                 .number_of_values(1)
                 .takes_value(true),
@@ -1466,8 +1466,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::COMPRESS_PROG)
                 .long(options::COMPRESS_PROG)
-                .help("compress temporary files with PROG, decompress with PROG -d")
-                .long_help("PROG has to take input from stdin and output to stdout")
+                .help("compress temporary files with PROG, decompress with PROG -d; PROG has to take input from stdin and output to stdout")
                 .value_name("PROG"),
         )
         .arg(
