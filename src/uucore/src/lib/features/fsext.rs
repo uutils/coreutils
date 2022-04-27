@@ -12,6 +12,7 @@
 // spell-checker:ignore (arch) bitrig ; (fs) cifs smbfs
 
 extern crate time;
+use time::macros::format_description;
 
 pub use crate::*; // import macros from `../../macros.rs`
 
@@ -63,7 +64,6 @@ fn LPWSTR2String(buf: &[u16]) -> String {
     String::from_utf16(&buf[..len]).unwrap()
 }
 
-use self::time::Timespec;
 #[cfg(unix)]
 use libc::{
     mode_t, strerror, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
@@ -732,11 +732,17 @@ where
     }
 }
 
+// match strftime "%Y-%m-%d %H:%M:%S.%f %z"
+const PRETTY_DATETIME_FORMAT: &[time::format_description::FormatItem] = format_description!("[year]-[month]-[day padding:zero] [hour]:[minute]:[second].[subsecond] [offset_hour][offset_minute]");
+
 pub fn pretty_time(sec: i64, nsec: i64) -> String {
     // sec == seconds since UNIX_EPOCH
     // nsec == nanoseconds since (UNIX_EPOCH + sec)
-    let tm = time::at(Timespec::new(sec, nsec as i32));
-    let res = time::strftime("%Y-%m-%d %H:%M:%S.%f %z", &tm).unwrap();
+    let ts_nanos: i128 = (sec * 1_000_000_000 + nsec).into();
+    // TODO: return errors to caller
+    let tm = time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos).unwrap();
+
+    let res = tm.format(&PRETTY_DATETIME_FORMAT).unwrap();
     if res.ends_with(" -0000") {
         res.replace(" -0000", " +0000")
     } else {
