@@ -88,6 +88,17 @@ fn read_word_filter_file(
     Ok(words)
 }
 
+fn read_char_filter_file(
+    matches: &clap::ArgMatches,
+    option: &str,
+) -> std::io::Result<HashSet<char>> {
+    let filename = matches.value_of(option).expect("parsing options failed!");
+    let mut reader = File::open(filename)?;
+    let mut buffer = String::new();
+    reader.read_to_string(&mut buffer)?;
+    Ok(buffer.chars().collect())
+}
+
 #[derive(Debug)]
 struct WordFilter {
     only_specified: bool,
@@ -113,9 +124,23 @@ impl WordFilter {
         } else {
             (false, HashSet::new())
         };
-        if matches.is_present(options::BREAK_FILE) {
-            return Err(PtxError::NotImplemented("-b").into());
-        }
+        let break_set: Option<HashSet<char>> = if matches.is_present(options::BREAK_FILE)
+            && !matches.is_present(options::WORD_REGEXP)
+        {
+            let chars =
+                read_char_filter_file(matches, options::BREAK_FILE).map_err_context(String::new)?;
+            let mut hs: HashSet<char> = if config.gnu_ext {
+                HashSet::new() // really only chars found in file
+            } else {
+                // GNU off means at least these are considered
+                [' ', '\t', '\n'].iter().cloned().collect()
+            };
+            hs.extend(chars);
+            Some(hs)
+        } else {
+            // if -W takes precedence or default
+            None
+        };
         // Ignore empty string regex from cmd-line-args
         let arg_reg: Option<String> = if matches.is_present(options::WORD_REGEXP) {
             match matches.value_of(options::WORD_REGEXP) {
@@ -134,7 +159,17 @@ impl WordFilter {
         let reg = match arg_reg {
             Some(arg_reg) => arg_reg,
             None => {
-                if config.gnu_ext {
+                if break_set.is_some() {
+                    format!(
+                        "[^{}]+",
+                        break_set
+                            .unwrap()
+                            .into_iter()
+                            .map(|c| c.to_string())
+                            .collect::<Vec<String>>()
+                            .join("")
+                    )
+                } else if config.gnu_ext {
                     "\\w+".to_owned()
                 } else {
                     "[^ \t\n]+".to_owned()
