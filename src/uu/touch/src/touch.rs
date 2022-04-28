@@ -247,7 +247,8 @@ fn stat(path: &Path, follow: bool) -> UResult<(FileTime, FileTime)> {
 }
 
 const POSIX_LOCALE_FORMAT: &[time::format_description::FormatItem] = format_description!(
-    "[weekday repr:short] [month repr:short] [day padding:space] [hour]:[minute]:[second] [year]"
+    "[weekday repr:short] [month repr:short] [day padding:space] \
+    [hour]:[minute]:[second] [year]"
 );
 
 const ISO_8601_FORMAT: &[time::format_description::FormatItem] =
@@ -294,20 +295,27 @@ fn parse_date(s: &str) -> UResult<FileTime> {
 
 // "%Y%m%d%H%M.%S" 15 chars
 const YYYYMMDDHHMM_DOT_SS_FORMAT: &[time::format_description::FormatItem] = format_description!(
-    "[year repr:full][month repr:numerical padding:zero][day][hour][minute].[second]"
+    "[year repr:full][month repr:numerical padding:zero]\
+    [day][hour][minute].[second]"
 );
 
 // "%Y%m%d%H%M" 12 chars
-const YYYYMMDDHHMM_FORMAT: &[time::format_description::FormatItem] =
-    format_description!("[year repr:full][month repr:numerical padding:zero][day][hour][minute]");
+const YYYYMMDDHHMM_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year repr:full][month repr:numerical padding:zero]\
+    [day][hour][minute]"
+);
 
 // "%y%m%d%H%M.%S" 13 chars
-const YYMMDDHHMM_DOT_SS_FORMAT: &[time::format_description::FormatItem] =
-    format_description!("[year repr:last_two padding:none][month][day][hour][minute].[second]");
+const YYMMDDHHMM_DOT_SS_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year repr:last_two padding:none][month][day]\
+    [hour][minute].[second]"
+);
 
 // "%y%m%d%H%M" 10 chars
-const YYMMDDHHMM_FORMAT: &[time::format_description::FormatItem] =
-    format_description!("[year repr:last_two padding:none][month padding:zero][day padding:zero][hour repr:24 padding:zero][minute padding:zero]");
+const YYMMDDHHMM_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year repr:last_two padding:none][month padding:zero][day padding:zero]\
+    [hour repr:24 padding:zero][minute padding:zero]"
+);
 
 fn parse_timestamp(s: &str) -> UResult<FileTime> {
     // TODO: handle error
