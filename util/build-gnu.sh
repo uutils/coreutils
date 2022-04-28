@@ -183,8 +183,6 @@ sed -i -e "s~  sed -n \"1s/'\\\/'/'OPT'/p\" < err >> pat || framework_failure_~ 
 sed -i -e "s/rcexp=1$/rcexp=2\n  case \"\$prg\" in chcon|runcon) return;; esac/" -e "s/rcexp=125 ;;/rcexp=2 ;;\ncp|truncate|pr) rcexp=1;;/" tests/misc/usage_vs_getopt.sh
 # GNU has option=[SUFFIX], clap is <SUFFIX>
 sed -i -e "s/cat opts/sed -i -e \"s| <.\*>$||g\" opts/" tests/misc/usage_vs_getopt.sh
-# Strip empty lines for the diff - see https://github.com/uutils/coreutils/issues/3370
-sed -i -e "s~out 2>err1~out  2>err1\nsed '/^$/d' out > out\nsed '/^$/d' help > help~" tests/misc/usage_vs_getopt.sh
 # for some reasons, some stuff are duplicated, strip that
 sed -i -e "s/provoked error./provoked error\ncat pat |sort -u > pat/" tests/misc/usage_vs_getopt.sh
 

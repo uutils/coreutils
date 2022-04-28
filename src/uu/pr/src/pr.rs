@@ -399,7 +399,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     if matches.is_present(options::HELP) {
-        command.print_long_help()?;
+        command.print_help()?;
         return Ok(());
     }
 
