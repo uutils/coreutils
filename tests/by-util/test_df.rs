@@ -413,10 +413,9 @@ fn test_block_size_with_suffix() {
     assert_eq!(get_header("1KiB"), "1K-blocks");
     assert_eq!(get_header("1MiB"), "1M-blocks");
     assert_eq!(get_header("1GiB"), "1G-blocks");
-    // TODO enable the following asserts when #3193 is resolved
-    //assert_eq!(get_header("1KB"), "1kB-blocks");
-    //assert_eq!(get_header("1MB"), "1MB-blocks");
-    //assert_eq!(get_header("1GB"), "1GB-blocks");
+    assert_eq!(get_header("1KB"), "1kB-blocks");
+    assert_eq!(get_header("1MB"), "1MB-blocks");
+    assert_eq!(get_header("1GB"), "1GB-blocks");
 }
 
 #[test]
