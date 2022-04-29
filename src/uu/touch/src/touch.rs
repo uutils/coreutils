@@ -17,6 +17,7 @@ use filetime::*;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use time::macros::{format_description, time};
+use time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::format_usage;
@@ -345,16 +346,25 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         format = YYYYMMDDHHMM_DOT_SS_FORMAT;
         ts = "20".to_owned() + &ts;
     }
-    if (format == YYYYMMDDHHMM_DOT_SS_FORMAT || format == YYMMDDHHMM_DOT_SS_FORMAT)
+
+    let leap_sec = if (format == YYYYMMDDHHMM_DOT_SS_FORMAT || format == YYMMDDHHMM_DOT_SS_FORMAT)
         && ts.ends_with(".60")
     {
         // Work around to disable leap seconds
+        // Used in gnu/tests/touch/60-seconds
         ts = ts.replace(".60", ".59");
-    }
+        true
+    } else {
+        false
+    };
+
     let tm = time::PrimitiveDateTime::parse(&ts, &format)
         .map_err(|_| USimpleError::new(1, format!("invalid date ts format {}", ts.quote())))?;
-
-    let local = to_local(tm);
+    let mut local = to_local(tm);
+    if leap_sec {
+        // We are dealing with a leap second, add it
+        local = local.saturating_add(Duration::SECOND);
+    }
     let ft = local_dt_to_filetime(local);
 
     // // We have to check that ft is valid time. Due to daylight saving

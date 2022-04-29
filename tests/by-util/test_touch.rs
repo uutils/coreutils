@@ -603,3 +603,21 @@ fn test_no_dereference_no_file() {
         .stderr_contains("setting times of 'not-a-file-1': No such file or directory")
         .stderr_contains("setting times of 'not-a-file-2': No such file or directory");
 }
+
+#[test]
+fn test_touch_leap_second() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_leap_sec";
+
+    ucmd.args(&["-t", "197001010000.60", file])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+
+    let epoch = str_to_filetime("%Y%m%d%H%M", "197001010000");
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime.unix_seconds() - epoch.unix_seconds(), 60);
+    assert_eq!(mtime.unix_seconds() - epoch.unix_seconds(), 60);
+}
