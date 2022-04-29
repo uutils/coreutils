@@ -6,7 +6,7 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv PWSTR lpszfilepath hresult mktime YYYYMMDDHHMM YYMMDDHHMM DATETIME subsecond
+// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv PWSTR lpszfilepath hresult mktime YYYYMMDDHHMM YYMMDDHHMM DATETIME YYYYMMDDHHMMS
 pub extern crate filetime;
 
 #[macro_use]
@@ -255,6 +255,41 @@ const POSIX_LOCALE_FORMAT: &[time::format_description::FormatItem] = format_desc
 const ISO_8601_FORMAT: &[time::format_description::FormatItem] =
     format_description!("[year]-[month]-[day]");
 
+// "%Y%m%d%H%M.%S" 15 chars
+const YYYYMMDDHHMM_DOT_SS_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year repr:full][month repr:numerical padding:zero]\
+    [day][hour][minute].[second]"
+);
+
+// "%Y-%m-%d %H:%M:%S.%SS" 12 chars
+const YYYYMMDDHHMMSS_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year repr:full]-[month repr:numerical padding:zero]-\
+    [day] [hour]:[minute]:[second].[subsecond]"
+);
+// "%Y-%m-%d %H:%M:%S" 12 chars
+const YYYYMMDDHHMMS_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year repr:full]-[month repr:numerical padding:zero]-\
+    [day] [hour]:[minute]:[second]"
+);
+
+// "%Y%m%d%H%M" 12 chars
+const YYYYMMDDHHMM_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year repr:full][month repr:numerical padding:zero]\
+    [day][hour][minute]"
+);
+
+// "%y%m%d%H%M.%S" 13 chars
+const YYMMDDHHMM_DOT_SS_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year repr:last_two padding:none][month][day]\
+    [hour][minute].[second]"
+);
+
+// "%y%m%d%H%M" 10 chars
+const YYMMDDHHMM_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year repr:last_two padding:none][month padding:zero][day padding:zero]\
+    [hour repr:24 padding:zero][minute padding:zero]"
+);
+
 fn parse_date(s: &str) -> UResult<FileTime> {
     // This isn't actually compatible with GNU touch, but there doesn't seem to
     // be any simple specification for what format this parameter allows and I'm
@@ -269,8 +304,17 @@ fn parse_date(s: &str) -> UResult<FileTime> {
     // which is equivalent to the POSIX locale: %a %b %e %H:%M:%S %Y
     // Tue Dec  3 ...
     // ("%c", POSIX_LOCALE_FORMAT),
-    if let Ok(parsed) = time::PrimitiveDateTime::parse(s, &POSIX_LOCALE_FORMAT) {
-        return Ok(local_dt_to_filetime(to_local(parsed)));
+    //
+    // But also support other format found in the GNU tests like
+    // in tests/misc/stat-nanoseconds.sh
+    for fmt in [
+        POSIX_LOCALE_FORMAT,
+        YYYYMMDDHHMMS_FORMAT,
+        YYYYMMDDHHMMSS_FORMAT,
+    ] {
+        if let Ok(parsed) = time::PrimitiveDateTime::parse(s, &fmt) {
+            return Ok(local_dt_to_filetime(to_local(parsed)));
+        }
     }
 
     // "Equivalent to %Y-%m-%d (the ISO 8601 date format). (C99)"
@@ -293,30 +337,6 @@ fn parse_date(s: &str) -> UResult<FileTime> {
 
     Err(USimpleError::new(1, format!("Unable to parse date: {}", s)))
 }
-
-// "%Y%m%d%H%M.%S" 15 chars
-const YYYYMMDDHHMM_DOT_SS_FORMAT: &[time::format_description::FormatItem] = format_description!(
-    "[year repr:full][month repr:numerical padding:zero]\
-    [day][hour][minute].[second]"
-);
-
-// "%Y%m%d%H%M" 12 chars
-const YYYYMMDDHHMM_FORMAT: &[time::format_description::FormatItem] = format_description!(
-    "[year repr:full][month repr:numerical padding:zero]\
-    [day][hour][minute]"
-);
-
-// "%y%m%d%H%M.%S" 13 chars
-const YYMMDDHHMM_DOT_SS_FORMAT: &[time::format_description::FormatItem] = format_description!(
-    "[year repr:last_two padding:none][month][day]\
-    [hour][minute].[second]"
-);
-
-// "%y%m%d%H%M" 10 chars
-const YYMMDDHHMM_FORMAT: &[time::format_description::FormatItem] = format_description!(
-    "[year repr:last_two padding:none][month padding:zero][day padding:zero]\
-    [hour repr:24 padding:zero][minute padding:zero]"
-);
 
 fn parse_timestamp(s: &str) -> UResult<FileTime> {
     // TODO: handle error
