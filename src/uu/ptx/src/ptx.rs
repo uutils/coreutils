@@ -88,6 +88,7 @@ fn read_word_filter_file(
     Ok(words)
 }
 
+/// reads contents of file as unique set of characters to be used with the break-file option
 fn read_char_filter_file(
     matches: &clap::ArgMatches,
     option: &str,
