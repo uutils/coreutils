@@ -87,3 +87,19 @@ fn gnu_ext_disabled_output_width_70() {
         .succeeds()
         .stdout_only_fixture("gnu_ext_disabled_output_width_70.expected");
 }
+
+#[test]
+fn gnu_ext_disabled_break_file() {
+    new_ucmd!()
+        .args(&["-G", "-b", "break_file", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_break_file.expected");
+}
+
+#[test]
+fn gnu_ext_disabled_empty_word_regexp_ignores_break_file() {
+    new_ucmd!()
+        .args(&["-G", "-b", "break_file", "-R", "-W", "", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_rightward_no_ref.expected");
+}
