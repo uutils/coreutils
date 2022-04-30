@@ -31,6 +31,8 @@ const ABOUT: &str = "\
     Mandatory arguments to long options are mandatory for short options too.\n\
     With no FILE, or when FILE is -, read standard input. Default is '-F /'.";
 
+const REGEX_CHARCLASS: &str = "^-]\\";
+
 #[derive(Debug)]
 enum OutFormat {
     Dumb,
@@ -166,7 +168,11 @@ impl WordFilter {
                         break_set
                             .unwrap()
                             .into_iter()
-                            .map(|c| c.to_string())
+                            .map(|c| if REGEX_CHARCLASS.contains(c) {
+                                format!("\\{}", c)
+                            } else {
+                                c.to_string()
+                            })
                             .collect::<Vec<String>>()
                             .join("")
                     )

@@ -29,6 +29,7 @@
 .xx "" "let's check special characte" "rs:" ""
 .xx "" """quote" "s"", for roff" ""
 .xx "" "oh, and back\sla" "sh" ""
+.xx "" "oh, and back\" "slash" ""
 .xx "" "and" "some other like %a, b#, c$c" ""
 .xx "" "let's check" "special characters:" ""
 .xx "" "let's check special charac" "ters:" ""
