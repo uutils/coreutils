@@ -617,12 +617,75 @@ impl From<i32> for Box<dyn UError> {
     }
 }
 
-/// Implementations for clap::Error
-impl UError for clap::Error {
+/// A wrapper for `clap::Error` that implements [`UError`]
+///
+/// Contains a custom error code. When `Display::fmt` is called on this struct
+/// the [`clap::Error`] will be printed _directly to `stdout` or `stderr`_.
+/// This is because `clap` only supports colored output when it prints directly.
+///
+/// [`ClapErrorWrapper`] is generally created by calling the
+/// [`UClapError::with_exit_code`] method on [`clap::Error`] or using the [`From`]
+/// implementation from [`clap::Error`] to `Box<dyn UError>`, which constructs
+/// a [`ClapErrorWrapper`] with an exit code of `1`.
+///
+/// ```rust
+/// use uucore::error::{ClapErrorWrapper, UError, UClapError};
+/// let command = clap::Command::new("test");
+/// let result: Result<_, ClapErrorWrapper> = command.try_get_matches().with_exit_code(125);
+///
+/// let command = clap::Command::new("test");
+/// let result: Result<_, Box<dyn UError>> = command.try_get_matches().map_err(Into::into);
+/// ```
+#[derive(Debug)]
+pub struct ClapErrorWrapper {
+    code: i32,
+    error: clap::Error,
+}
+
+/// Extension trait for `clap::Error` to adjust the exit code.
+pub trait UClapError<T> {
+    fn with_exit_code(self, code: i32) -> T;
+}
+
+impl From<clap::Error> for Box<dyn UError> {
+    fn from(e: clap::Error) -> Self {
+        Box::new(ClapErrorWrapper { code: 1, error: e })
+    }
+}
+
+impl UClapError<ClapErrorWrapper> for clap::Error {
+    fn with_exit_code(self, code: i32) -> ClapErrorWrapper {
+        ClapErrorWrapper { code, error: self }
+    }
+}
+
+impl UClapError<Result<clap::ArgMatches, ClapErrorWrapper>>
+    for Result<clap::ArgMatches, clap::Error>
+{
+    fn with_exit_code(self, code: i32) -> Result<clap::ArgMatches, ClapErrorWrapper> {
+        self.map_err(|e| e.with_exit_code(code))
+    }
+}
+
+impl UError for ClapErrorWrapper {
     fn code(&self) -> i32 {
-        match self.kind() {
-            clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion => 0,
-            _ => 1,
+        // If the error is a DisplayHelp or DisplayVersion variant,
+        // we don't want to apply the custom error code, but leave
+        // it 0.
+        if let clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion = self.error.kind() {
+            0
+        } else {
+            self.code
         }
+    }
+}
+
+impl Error for ClapErrorWrapper {}
+
+// This is abuse of the Display trait
+impl Display for ClapErrorWrapper {
+    fn fmt(&self, _f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        self.error.print().unwrap();
+        Ok(())
     }
 }
