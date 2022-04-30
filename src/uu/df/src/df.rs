@@ -14,6 +14,7 @@ mod table;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::fsext::{read_fs_list, MountInfo};
+use uucore::parse_size::ParseSizeError;
 use uucore::{format_usage, show};
 
 use clap::{crate_version, Arg, ArgMatches, Command};
@@ -105,7 +106,8 @@ impl Default for Options {
 
 #[derive(Debug)]
 enum OptionsError {
-    InvalidBlockSize,
+    BlockSizeTooLarge(String),
+    InvalidBlockSize(String),
 
     /// An error getting the columns to display in the output table.
     ColumnError(ColumnError),
@@ -116,11 +118,14 @@ enum OptionsError {
 impl fmt::Display for OptionsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            // TODO This should include the raw string provided as the argument.
-            //
             // TODO This needs to vary based on whether `--block-size`
             // or `-B` were provided.
-            Self::InvalidBlockSize => write!(f, "invalid --block-size argument"),
+            Self::BlockSizeTooLarge(s) => {
+                write!(f, "--block-size argument {} too large", s.quote())
+            }
+            // TODO This needs to vary based on whether `--block-size`
+            // or `-B` were provided.
+            Self::InvalidBlockSize(s) => write!(f, "invalid --block-size argument {}", s),
             Self::ColumnError(ColumnError::MultipleColumns(s)) => write!(
                 f,
                 "option --output: field {} used more than once",
@@ -155,8 +160,12 @@ impl Options {
         Ok(Self {
             show_local_fs: matches.is_present(OPT_LOCAL),
             show_all_fs: matches.is_present(OPT_ALL),
-            block_size: block_size_from_matches(matches)
-                .map_err(|_| OptionsError::InvalidBlockSize)?,
+            block_size: block_size_from_matches(matches).map_err(|e| match e {
+                ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
+                    matches.value_of(OPT_BLOCKSIZE).unwrap().to_string(),
+                ),
+                ParseSizeError::ParseFailure(s) => OptionsError::InvalidBlockSize(s),
+            })?,
             include,
             exclude,
             show_total: matches.is_present(OPT_TOTAL),
