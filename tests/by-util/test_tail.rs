@@ -778,8 +778,8 @@ fn test_retry4() {
                            tail: 'missing' has appeared;  following new file\n\
                            tail: missing: file truncated\n";
     let expected_stdout = "X1\nX\n";
-    let delay = 1000;
-    let mut args = vec!["--follow=descriptor", "--retry", missing, "--use-polling"];
+    let delay = 100;
+    let mut args = vec!["-s.1", "--max-unchanged-stats=1", "--follow=descriptor", "--retry", missing, "---disable-inotify"];
     for _ in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
@@ -787,9 +787,9 @@ fn test_retry4() {
         at.touch(missing);
         sleep(Duration::from_millis(delay));
         at.truncate(missing, "X1\n");
-        sleep(Duration::from_millis(3 * delay));
+        sleep(Duration::from_millis(delay));
         at.truncate(missing, "X\n");
-        sleep(Duration::from_millis(3 * delay));
+        sleep(Duration::from_millis(delay));
 
         p.kill().unwrap();
 
@@ -1089,7 +1089,7 @@ fn test_follow_descriptor_vs_rename1() {
         "-s.1",
         "--max-unchanged-stats=1",
         file_a,
-        "--disable-inotify",
+        "---disable-inotify",
     ];
 
     let delay = 500;
@@ -1143,7 +1143,7 @@ fn test_follow_descriptor_vs_rename2() {
         file_a,
         file_b,
         "--verbose",
-        "--disable-inotify",
+        "---disable-inotify",
     ];
 
     let delay = 100;
