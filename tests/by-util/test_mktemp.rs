@@ -473,7 +473,10 @@ fn test_respect_template() {
 fn test_respect_template_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("d");
+    #[cfg(not(windows))]
     let template = "d/XXX";
+    #[cfg(windows)]
+    let template = r"d\XXX";
     let result = ucmd.arg(template).succeeds();
     let filename = result.no_stderr().stdout_str().trim_end();
     assert_matches_template!(template, filename);
