@@ -43,8 +43,13 @@ pub mod options {
 static ARG_FILES: &str = "files";
 
 fn to_local(tm: time::PrimitiveDateTime) -> time::OffsetDateTime {
-    // TODO: handle error getting now
-    tm.assume_offset(time::OffsetDateTime::now_local().unwrap().offset())
+    let offset = match time::OffsetDateTime::now_local() {
+        Ok(lo) => lo.offset(),
+        Err(e) => {
+            panic!("error: {}", e);
+        }
+    };
+    tm.assume_offset(offset)
 }
 
 fn local_dt_to_filetime(dt: time::OffsetDateTime) -> FileTime {
