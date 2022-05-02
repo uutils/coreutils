@@ -21,7 +21,7 @@ compare = "0.1.0"
 ctrlc = { version = "3.0", features = ["termination"] }
 fnv = "1.0.7"
 itertools = "0.10.0"
-memchr = "2.4.0"
+memchr = "2.5.0"
 ouroboros = "0.15.0"
 rand = "0.8"
 rayon = "1.5"
