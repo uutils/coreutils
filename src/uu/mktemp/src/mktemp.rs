@@ -13,11 +13,12 @@ use uucore::display::{println_verbatim, Quotable};
 use uucore::error::{FromIo, UError, UResult};
 use uucore::format_usage;
 
-use std::env;
 use std::error::Error;
 use std::fmt::Display;
 use std::iter;
+use std::os::unix::prelude::PermissionsExt;
 use std::path::{is_separator, Path, PathBuf};
+use std::{env, fs};
 
 use rand::Rng;
 use tempfile::Builder;
@@ -272,5 +273,8 @@ fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> 
             .map_err(|e| MkTempError::PersistError(e.file.path().to_path_buf()))?
             .1
     };
+    if make_dir {
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
+    }
     println_verbatim(path).map_err_context(|| "failed to print directory name".to_owned())
 }
