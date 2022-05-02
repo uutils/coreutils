@@ -62,14 +62,23 @@ for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
     }
 done
 
-./bootstrap
-./configure --quiet --disable-gcc-warnings
-#Add timeout to to protect against hangs
-sed -i 's|^"\$@|/usr/bin/timeout 600 "\$@|' build-aux/test-driver
-# Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
-sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
-sed -i 's| tr | /usr/bin/tr |' tests/init.sh
-make -j "$(nproc)"
+if test -f gnu-built; then
+    echo "GNU build already found. Skip"
+    echo "'rm -f $(pwd)/gnu-built' to force the build"
+    echo "Note: the customization of the tests will still happen"
+    exit 0
+else
+    ./bootstrap
+    ./configure --quiet --disable-gcc-warnings
+    #Add timeout to to protect against hangs
+    sed -i 's|^"\$@|/usr/bin/timeout 600 "\$@|' build-aux/test-driver
+    # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
+    sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
+    sed -i 's| tr | /usr/bin/tr |' tests/init.sh
+    make -j "$(nproc)"
+    touch gnu-built
+fi
+
 # Handle generated factor tests
 t_first=00
 t_max=36
