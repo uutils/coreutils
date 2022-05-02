@@ -198,7 +198,7 @@ jobs:
           do
             if ! grep -Fxq ${LINE}<<<"${REF_ERROR}"
             then
-              echo "::error ::GNU test failed: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
+              echo "::error ::GNU test error: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
               have_new_failures="true"
             fi
           done
