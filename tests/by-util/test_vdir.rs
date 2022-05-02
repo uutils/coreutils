@@ -31,7 +31,7 @@ fn test_default_output() {
     scene
         .ucmd()
         .succeeds()
-        .stdout_matches(&Regex::new("[rwx][^some-file1]").unwrap());
+        .stdout_matches(&Regex::new("[rwx-]{10}.*some-file1$").unwrap());
 }
 
 #[test]
@@ -51,5 +51,5 @@ fn test_column_output() {
         .ucmd()
         .arg("-C")
         .succeeds()
-        .stdout_does_not_match(&Regex::new("[rwx][^some-file1]").unwrap());
+        .stdout_does_not_match(&Regex::new("[rwx-]{10}.*some-file1$").unwrap());
 }

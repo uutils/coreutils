@@ -80,7 +80,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let template = matches.value_of(ARG_TEMPLATE).unwrap();
     let tmpdir = matches.value_of(OPT_TMPDIR).unwrap_or_default();
 
-    let (template, mut tmpdir) = if matches.is_present(OPT_TMPDIR)
+    // Treat the template string as a path to get the directory
+    // containing the last component.
+    let path = PathBuf::from(template);
+
+    let (template, tmpdir) = if matches.is_present(OPT_TMPDIR)
         && !PathBuf::from(tmpdir).is_dir() // if a temp dir is provided, it must be an actual path
         && tmpdir.contains("XXX")
     // If this is a template, it has to contain at least 3 X
@@ -98,8 +102,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let tmp = env::temp_dir();
         (tmpdir, tmp)
     } else if !matches.is_present(OPT_TMPDIR) {
-        let tmp = env::temp_dir();
-        (template, tmp)
+        // In this case, the command line was `mktemp -t XXX`, so we
+        // treat the argument `XXX` as though it were a filename
+        // regardless of whether it has path separators in it.
+        if matches.is_present(OPT_T) {
+            let tmp = env::temp_dir();
+            (template, tmp)
+        // In this case, the command line was `mktemp XXX`, so we need
+        // to parse out the parent directory and the filename from the
+        // argument `XXX`, since it may be include path separators.
+        } else {
+            let tmp = match path.parent() {
+                None => PathBuf::from("."),
+                Some(d) => PathBuf::from(d),
+            };
+            let filename = path.file_name();
+            let template = filename.unwrap().to_str().unwrap();
+            (template, tmp)
+        }
     } else {
         (template, PathBuf::from(tmpdir))
     };
@@ -112,10 +132,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if matches.is_present(OPT_TMPDIR) && PathBuf::from(prefix).is_absolute() {
         return Err(MkTempError::InvalidTemplate(template.into()).into());
-    }
-
-    if matches.is_present(OPT_T) {
-        tmpdir = env::temp_dir();
     }
 
     let res = if dry_run {
@@ -273,8 +289,23 @@ fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> 
             .map_err(|e| MkTempError::PersistError(e.file.path().to_path_buf()))?
             .1
     };
+
     if make_dir {
         fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
     }
+
+    // Get just the last component of the path to the created
+    // temporary file or directory.
+    let filename = path.file_name();
+    let filename = filename.unwrap().to_str().unwrap();
+
+    // Join the directory to the path to get the path to print. We
+    // cannot use the path returned by the `Builder` because it gives
+    // the absolute path and we need to return a filename that matches
+    // the template given on the command-line which might be a
+    // relative path.
+    let mut path = dir.to_path_buf();
+    path.push(filename);
+
     println_verbatim(path).map_err_context(|| "failed to print directory name".to_owned())
 }
