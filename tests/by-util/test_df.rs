@@ -420,6 +420,30 @@ fn test_block_size_with_suffix() {
 }
 
 #[test]
+fn test_too_large_block_size() {
+    fn run_command(size: &str) {
+        new_ucmd!()
+            .arg(format!("--block-size={}", size))
+            .fails()
+            .stderr_contains(format!("--block-size argument '{}' too large", size));
+    }
+
+    let too_large_sizes = vec!["1Y", "1Z"];
+
+    for size in too_large_sizes {
+        run_command(size);
+    }
+}
+
+#[test]
+fn test_invalid_block_size() {
+    new_ucmd!()
+        .arg("--block-size=x")
+        .fails()
+        .stderr_contains("invalid --block-size argument 'x'");
+}
+
+#[test]
 fn test_output_selects_columns() {
     let output = new_ucmd!()
         .args(&["--output=source"])
