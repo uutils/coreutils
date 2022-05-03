@@ -992,7 +992,9 @@ fn copy_directory(
     }
 
     // if no-dereference is enabled and this is a symlink, copy it as a file
-    if !options.dereference && fs::symlink_metadata(root).unwrap().file_type().is_symlink() {
+    if !options.dereference && fs::symlink_metadata(root).unwrap().file_type().is_symlink()
+    // replace by is_symlink in rust>=1.58
+    {
         return copy_file(root, target, options, symlinked_files);
     }
 
@@ -1036,6 +1038,7 @@ fn copy_directory(
     {
         let p = or_continue!(path);
         let is_symlink = fs::symlink_metadata(p.path())?.file_type().is_symlink();
+        // replace by is_symlink in rust >=1.58
         let path = current_dir.join(&p.path());
 
         let local_to_root_parent = match root_parent {
@@ -1288,7 +1291,7 @@ fn copy_file(
 
     // Fail if dest is a dangling symlink or a symlink this program created previously
     if fs::symlink_metadata(dest)
-        .map(|m| m.file_type().is_symlink())
+        .map(|m| m.file_type().is_symlink()) // replace by is_symlink in rust>=1.58
         .unwrap_or(false)
     {
         if FileInformation::from_path(dest, false)
@@ -1301,7 +1304,7 @@ fn copy_file(
                 dest.display()
             )));
         }
-        if !dest.exists() {
+        if options.dereference && !dest.exists() {
             return Err(Error::Error(format!(
                 "not writing through dangling symlink '{}'",
                 dest.display()
@@ -1535,7 +1538,7 @@ fn copy_link(
     } else {
         // we always need to remove the file to be able to create a symlink,
         // even if it is writeable.
-        if dest.exists() {
+        if dest.is_file() {
             fs::remove_file(dest)?;
         }
         dest.into()
