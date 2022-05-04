@@ -446,6 +446,30 @@ mod tests {
         Column::Target,
     ];
 
+    impl Default for Row {
+        fn default() -> Self {
+            Self {
+                file: Some("/path/to/file".to_string()),
+                fs_device: "my_device".to_string(),
+                fs_type: "my_type".to_string(),
+                fs_mount: "my_mount".to_string(),
+
+                bytes: 100,
+                bytes_used: 25,
+                bytes_avail: 75,
+                bytes_usage: Some(0.25),
+
+                #[cfg(target_os = "macos")]
+                bytes_capacity: Some(0.5),
+
+                inodes: 10,
+                inodes_used: 2,
+                inodes_free: 8,
+                inodes_usage: Some(0.2),
+            }
+        }
+    }
+
     #[test]
     fn test_default_header() {
         let options = Default::default();
@@ -565,9 +589,7 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
-            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
-            fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
 
             bytes: 100,
@@ -575,13 +597,7 @@ mod tests {
             bytes_avail: 75,
             bytes_usage: Some(0.25),
 
-            #[cfg(target_os = "macos")]
-            bytes_capacity: Some(0.5),
-
-            inodes: 10,
-            inodes_used: 2,
-            inodes_free: 8,
-            inodes_usage: Some(0.2),
+            ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options);
         assert_eq!(
@@ -598,7 +614,6 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
-            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
@@ -608,13 +623,7 @@ mod tests {
             bytes_avail: 75,
             bytes_usage: Some(0.25),
 
-            #[cfg(target_os = "macos")]
-            bytes_capacity: Some(0.5),
-
-            inodes: 10,
-            inodes_used: 2,
-            inodes_free: 8,
-            inodes_usage: Some(0.2),
+            ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options);
         assert_eq!(
@@ -631,23 +640,15 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
-            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
-            fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
-
-            bytes: 100,
-            bytes_used: 25,
-            bytes_avail: 75,
-            bytes_usage: Some(0.25),
-
-            #[cfg(target_os = "macos")]
-            bytes_capacity: Some(0.5),
 
             inodes: 10,
             inodes_used: 2,
             inodes_free: 8,
             inodes_usage: Some(0.2),
+
+            ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options);
         assert_eq!(
@@ -664,23 +665,9 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
-            file: Some("/path/to/file".to_string()),
-            fs_device: "my_device".to_string(),
-            fs_type: "my_type".to_string(),
-            fs_mount: "my_mount".to_string(),
-
             bytes: 100,
-            bytes_used: 25,
-            bytes_avail: 75,
-            bytes_usage: Some(0.25),
-
-            #[cfg(target_os = "macos")]
-            bytes_capacity: Some(0.5),
-
             inodes: 10,
-            inodes_used: 2,
-            inodes_free: 8,
-            inodes_usage: Some(0.2),
+            ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options);
         assert_eq!(fmt.get_values(), vec!("1", "10"));
@@ -694,7 +681,6 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
-            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
@@ -704,13 +690,7 @@ mod tests {
             bytes_avail: 3000,
             bytes_usage: Some(0.25),
 
-            #[cfg(target_os = "macos")]
-            bytes_capacity: Some(0.5),
-
-            inodes: 10,
-            inodes_used: 2,
-            inodes_free: 8,
-            inodes_usage: Some(0.2),
+            ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options);
         assert_eq!(
@@ -735,7 +715,6 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
-            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
@@ -745,13 +724,7 @@ mod tests {
             bytes_avail: 3072,
             bytes_usage: Some(0.25),
 
-            #[cfg(target_os = "macos")]
-            bytes_capacity: Some(0.5),
-
-            inodes: 10,
-            inodes_used: 2,
-            inodes_free: 8,
-            inodes_usage: Some(0.2),
+            ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options);
         assert_eq!(
@@ -771,32 +744,14 @@ mod tests {
     #[test]
     fn test_row_formatter_with_round_up_usage() {
         let options = Options {
-            block_size: BlockSize::Bytes(1),
+            columns: vec![Column::Pcent],
             ..Default::default()
         };
         let row = Row {
-            file: Some("/path/to/file".to_string()),
-            fs_device: "my_device".to_string(),
-            fs_type: "my_type".to_string(),
-            fs_mount: "my_mount".to_string(),
-
-            bytes: 100,
-            bytes_used: 25,
-            bytes_avail: 75,
             bytes_usage: Some(0.251),
-
-            #[cfg(target_os = "macos")]
-            bytes_capacity: Some(0.5),
-
-            inodes: 10,
-            inodes_used: 2,
-            inodes_free: 8,
-            inodes_usage: Some(0.2),
+            ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options);
-        assert_eq!(
-            fmt.get_values(),
-            vec!("my_device", "100", "25", "75", "26%", "my_mount")
-        );
+        assert_eq!(fmt.get_values(), vec!("26%"));
     }
 }
