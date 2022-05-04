@@ -34,7 +34,7 @@ ioctl-sys = "0.8"
 winapi = { version="0.3", features=["fileapi"] }
 
 [target.'cfg(unix)'.dependencies]
-xattr="0.2.1"
+xattr="0.2.3"
 exacl= { version = "0.8.0", optional=true }
 
 [[bin]]
