@@ -435,9 +435,7 @@ fn test_du_no_permission() {
     ts.ccmd("chmod").arg("-r").arg(SUB_DIR_LINKS).succeeds();
 
     let result = ts.ucmd().arg(SUB_DIR_LINKS).fails();
-    result.stderr_contains(
-        "du: cannot read directory 'subdir/links': Permission denied (os error 13)",
-    );
+    result.stderr_contains("du: cannot read directory 'subdir/links': Permission denied");
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
