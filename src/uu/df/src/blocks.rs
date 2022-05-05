@@ -5,7 +5,7 @@
 //! Types for representing and displaying block sizes.
 use crate::OPT_BLOCKSIZE;
 use clap::ArgMatches;
-use std::fmt;
+use std::{env, fmt};
 
 use uucore::parse_size::{parse_size, ParseSizeError};
 
@@ -159,6 +159,7 @@ pub(crate) enum HumanReadable {
 /// size.
 ///
 /// The default variant is `Bytes(1024)`.
+#[derive(Debug, PartialEq)]
 pub(crate) enum BlockSize {
     /// A fixed number of bytes.
     ///
@@ -168,7 +169,11 @@ pub(crate) enum BlockSize {
 
 impl Default for BlockSize {
     fn default() -> Self {
-        Self::Bytes(1024)
+        if env::var("POSIXLY_CORRECT").is_ok() {
+            Self::Bytes(512)
+        } else {
+            Self::Bytes(1024)
+        }
     }
 }
 
@@ -194,6 +199,8 @@ impl fmt::Display for BlockSize {
 
 #[cfg(test)]
 mod tests {
+
+    use std::env;
 
     use crate::blocks::{to_magnitude_and_suffix, BlockSize};
 
@@ -251,5 +258,13 @@ mod tests {
         assert_eq!(format!("{}", BlockSize::Bytes(1024)), "1K");
         assert_eq!(format!("{}", BlockSize::Bytes(2 * 1024)), "2K");
         assert_eq!(format!("{}", BlockSize::Bytes(3 * 1024 * 1024)), "3M");
+    }
+
+    #[test]
+    fn test_default_block_size() {
+        assert_eq!(BlockSize::Bytes(1024), BlockSize::default());
+        env::set_var("POSIXLY_CORRECT", "1");
+        assert_eq!(BlockSize::Bytes(512), BlockSize::default());
+        env::remove_var("POSIXLY_CORRECT");
     }
 }
