@@ -10,6 +10,7 @@
 use number_prefix::NumberPrefix;
 use unicode_width::UnicodeWidthStr;
 
+use crate::blocks::{HumanReadable, SizeFormat};
 use crate::columns::{Alignment, Column};
 use crate::filesystem::Filesystem;
 use crate::{BlockSize, Options};
@@ -213,15 +214,10 @@ impl<'a> RowFormatter<'a> {
     }
 
     /// Get a human readable string giving the scaled version of the input number.
-    ///
-    /// The scaling factor is defined in the `options` field.
-    ///
-    /// This function is supposed to be used by `scaled_bytes()` and `scaled_inodes()` only.
-    fn scaled_human_readable(&self, size: u64) -> String {
-        let number_prefix = match self.options.block_size {
-            BlockSize::HumanReadableDecimal => NumberPrefix::decimal(size as f64),
-            BlockSize::HumanReadableBinary => NumberPrefix::binary(size as f64),
-            _ => unreachable!(),
+    fn scaled_human_readable(&self, size: u64, human_readable: HumanReadable) -> String {
+        let number_prefix = match human_readable {
+            HumanReadable::Decimal => NumberPrefix::decimal(size as f64),
+            HumanReadable::Binary => NumberPrefix::binary(size as f64),
         };
         match number_prefix {
             NumberPrefix::Standalone(bytes) => bytes.to_string(),
@@ -233,10 +229,12 @@ impl<'a> RowFormatter<'a> {
     ///
     /// The scaling factor is defined in the `options` field.
     fn scaled_bytes(&self, size: u64) -> String {
-        if let BlockSize::Bytes(d) = self.options.block_size {
-            (size / d).to_string()
-        } else {
-            self.scaled_human_readable(size)
+        match self.options.size_format {
+            SizeFormat::HumanReadable(h) => self.scaled_human_readable(size, h),
+            SizeFormat::StaticBlockSize => {
+                let BlockSize::Bytes(d) = self.options.block_size;
+                (size / d).to_string()
+            }
         }
     }
 
@@ -244,10 +242,9 @@ impl<'a> RowFormatter<'a> {
     ///
     /// The scaling factor is defined in the `options` field.
     fn scaled_inodes(&self, size: u64) -> String {
-        if let BlockSize::Bytes(_) = self.options.block_size {
-            size.to_string()
-        } else {
-            self.scaled_human_readable(size)
+        match self.options.size_format {
+            SizeFormat::HumanReadable(h) => self.scaled_human_readable(size, h),
+            SizeFormat::StaticBlockSize => size.to_string(),
         }
     }
 
@@ -305,7 +302,12 @@ impl Header {
         for column in &options.columns {
             let header = match column {
                 Column::Source => String::from("Filesystem"),
-                Column::Size => options.block_size.to_string(),
+                Column::Size => match options.size_format {
+                    SizeFormat::HumanReadable(_) => String::from("Size"),
+                    SizeFormat::StaticBlockSize => {
+                        format!("{}-blocks", options.block_size)
+                    }
+                },
                 Column::Used => String::from("Used"),
                 Column::Avail => String::from("Available"),
                 Column::Pcent => String::from("Use%"),
@@ -424,6 +426,7 @@ impl fmt::Display for Table {
 #[cfg(test)]
 mod tests {
 
+    use crate::blocks::{HumanReadable, SizeFormat};
     use crate::columns::Column;
     use crate::table::{Header, Row, RowFormatter};
     use crate::{BlockSize, Options};
@@ -523,7 +526,7 @@ mod tests {
     #[test]
     fn test_header_with_human_readable_binary() {
         let options = Options {
-            block_size: BlockSize::HumanReadableBinary,
+            size_format: SizeFormat::HumanReadable(HumanReadable::Binary),
             ..Default::default()
         };
         assert_eq!(
@@ -542,7 +545,7 @@ mod tests {
     #[test]
     fn test_header_with_human_readable_si() {
         let options = Options {
-            block_size: BlockSize::HumanReadableDecimal,
+            size_format: SizeFormat::HumanReadable(HumanReadable::Decimal),
             ..Default::default()
         };
         assert_eq!(
@@ -689,7 +692,7 @@ mod tests {
     #[test]
     fn test_row_formatter_with_human_readable_si() {
         let options = Options {
-            block_size: BlockSize::HumanReadableDecimal,
+            size_format: SizeFormat::HumanReadable(HumanReadable::Decimal),
             columns: COLUMNS_WITH_FS_TYPE.to_vec(),
             ..Default::default()
         };
@@ -730,7 +733,7 @@ mod tests {
     #[test]
     fn test_row_formatter_with_human_readable_binary() {
         let options = Options {
-            block_size: BlockSize::HumanReadableBinary,
+            size_format: SizeFormat::HumanReadable(HumanReadable::Binary),
             columns: COLUMNS_WITH_FS_TYPE.to_vec(),
             ..Default::default()
         };

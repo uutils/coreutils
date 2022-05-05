@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 //! Types for representing and displaying block sizes.
-use crate::{OPT_BLOCKSIZE, OPT_HUMAN_READABLE_BINARY, OPT_HUMAN_READABLE_DECIMAL};
+use crate::OPT_BLOCKSIZE;
 use clap::ArgMatches;
 use std::fmt;
 
@@ -117,14 +117,46 @@ fn to_magnitude_and_suffix(n: u128) -> Result<String, ()> {
     }
 }
 
+/// A mode to use in condensing the display of a large number of bytes.
+pub(crate) enum SizeFormat {
+    HumanReadable(HumanReadable),
+    StaticBlockSize,
+}
+
+impl Default for SizeFormat {
+    fn default() -> Self {
+        Self::StaticBlockSize
+    }
+}
+
+/// A mode to use in condensing the human readable display of a large number
+/// of bytes.
+///
+/// The [`HumanReadable::Decimal`] and[`HumanReadable::Binary`] variants
+/// represent dynamic block sizes: as the number of bytes increases, the
+/// divisor increases as well (for example, from 1 to 1,000 to 1,000,000
+/// and so on in the case of [`HumanReadable::Decimal`]).
+#[derive(Clone, Copy)]
+pub(crate) enum HumanReadable {
+    /// Use the largest divisor corresponding to a unit, like B, K, M, G, etc.
+    ///
+    /// This variant represents powers of 1,000. Contrast with
+    /// [`HumanReadable::Binary`], which represents powers of
+    /// 1,024.
+    Decimal,
+
+    /// Use the largest divisor corresponding to a unit, like B, K, M, G, etc.
+    ///
+    /// This variant represents powers of 1,024. Contrast with
+    /// [`HumanReadable::Decimal`], which represents powers
+    /// of 1,000.
+    Binary,
+}
+
 /// A block size to use in condensing the display of a large number of bytes.
 ///
 /// The [`BlockSize::Bytes`] variant represents a static block
-/// size. The [`BlockSize::HumanReadableDecimal`] and
-/// [`BlockSize::HumanReadableBinary`] variants represent dynamic
-/// block sizes: as the number of bytes increases, the divisor
-/// increases as well (for example, from 1 to 1,000 to 1,000,000 and
-/// so on in the case of [`BlockSize::HumanReadableDecimal`]).
+/// size.
 ///
 /// The default variant is `Bytes(1024)`.
 pub(crate) enum BlockSize {
@@ -132,20 +164,6 @@ pub(crate) enum BlockSize {
     ///
     /// The number must be positive.
     Bytes(u64),
-
-    /// Use the largest divisor corresponding to a unit, like B, K, M, G, etc.
-    ///
-    /// This variant represents powers of 1,000. Contrast with
-    /// [`BlockSize::HumanReadableBinary`], which represents powers of
-    /// 1,024.
-    HumanReadableDecimal,
-
-    /// Use the largest divisor corresponding to a unit, like B, K, M, G, etc.
-    ///
-    /// This variant represents powers of 1,024. Contrast with
-    /// [`BlockSize::HumanReadableDecimal`], which represents powers
-    /// of 1,000.
-    HumanReadableBinary,
 }
 
 impl Default for BlockSize {
@@ -155,11 +173,7 @@ impl Default for BlockSize {
 }
 
 pub(crate) fn block_size_from_matches(matches: &ArgMatches) -> Result<BlockSize, ParseSizeError> {
-    if matches.is_present(OPT_HUMAN_READABLE_BINARY) {
-        Ok(BlockSize::HumanReadableBinary)
-    } else if matches.is_present(OPT_HUMAN_READABLE_DECIMAL) {
-        Ok(BlockSize::HumanReadableDecimal)
-    } else if matches.is_present(OPT_BLOCKSIZE) {
+    if matches.is_present(OPT_BLOCKSIZE) {
         let s = matches.value_of(OPT_BLOCKSIZE).unwrap();
         Ok(BlockSize::Bytes(parse_size(s)?))
     } else {
@@ -170,10 +184,8 @@ pub(crate) fn block_size_from_matches(matches: &ArgMatches) -> Result<BlockSize,
 impl fmt::Display for BlockSize {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::HumanReadableBinary => write!(f, "Size"),
-            Self::HumanReadableDecimal => write!(f, "Size"),
             Self::Bytes(n) => match to_magnitude_and_suffix(*n as u128) {
-                Ok(s) => write!(f, "{}-blocks", s),
+                Ok(s) => write!(f, "{}", s),
                 Err(_) => Err(fmt::Error),
             },
         }
@@ -229,13 +241,8 @@ mod tests {
 
     #[test]
     fn test_block_size_display() {
-        assert_eq!(format!("{}", BlockSize::HumanReadableBinary), "Size");
-        assert_eq!(format!("{}", BlockSize::HumanReadableDecimal), "Size");
-        assert_eq!(format!("{}", BlockSize::Bytes(1024)), "1K-blocks");
-        assert_eq!(format!("{}", BlockSize::Bytes(2 * 1024)), "2K-blocks");
-        assert_eq!(
-            format!("{}", BlockSize::Bytes(3 * 1024 * 1024)),
-            "3M-blocks"
-        );
+        assert_eq!(format!("{}", BlockSize::Bytes(1024)), "1K");
+        assert_eq!(format!("{}", BlockSize::Bytes(2 * 1024)), "2K");
+        assert_eq!(format!("{}", BlockSize::Bytes(3 * 1024 * 1024)), "3M");
     }
 }
