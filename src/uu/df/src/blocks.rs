@@ -26,6 +26,22 @@ const IEC_BASES: [u128; 10] = [
 /// Suffixes for the first nine multi-byte unit suffixes.
 const SUFFIXES: [char; 9] = ['B', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'];
 
+const SI_BASES: [u128; 10] = [
+    1,
+    1_000,
+    1_000_000,
+    1_000_000_000,
+    1_000_000_000_000,
+    1_000_000_000_000_000,
+    1_000_000_000_000_000_000,
+    1_000_000_000_000_000_000_000,
+    1_000_000_000_000_000_000_000_000,
+    1_000_000_000_000_000_000_000_000_000,
+];
+
+// we use "kB" instead of "KB" because of GNU df
+const SI_SUFFIXES: [&str; 9] = ["B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+
 /// Convert a multiple of 1024 into a string like "12K" or "34M".
 ///
 /// # Examples
@@ -57,6 +73,37 @@ fn to_magnitude_and_suffix_1024(n: u128) -> Result<String, ()> {
     Err(())
 }
 
+/// Convert a number, except multiples of 1024, into a string like "12kB" or "34MB".
+///
+/// Powers of 1000 become "1kB", "1MB", "1GB", etc.
+///
+/// The returned string has a maximum length of 5 chars, for example: "1.1kB", "999kB", "1MB".
+fn to_magnitude_and_suffix_not_powers_of_1024(n: u128) -> Result<String, ()> {
+    let mut i = 0;
+
+    while SI_BASES[i + 1] - SI_BASES[i] < n && i < SI_SUFFIXES.len() {
+        i += 1;
+    }
+
+    let quot = n / SI_BASES[i];
+    let rem = n % SI_BASES[i];
+    let suffix = SI_SUFFIXES[i];
+
+    if rem == 0 {
+        Ok(format!("{}{}", quot, suffix))
+    } else {
+        let tenths_place = rem / (SI_BASES[i] / 10);
+
+        if rem % (SI_BASES[i] / 10) == 0 {
+            Ok(format!("{}.{}{}", quot, tenths_place, suffix))
+        } else if tenths_place + 1 == 10 {
+            Ok(format!("{}{}", quot + 1, suffix))
+        } else {
+            Ok(format!("{}.{}{}", quot, tenths_place + 1, suffix))
+        }
+    }
+}
+
 /// Convert a number into a magnitude and a multi-byte unit suffix.
 ///
 /// # Errors
@@ -66,8 +113,7 @@ fn to_magnitude_and_suffix(n: u128) -> Result<String, ()> {
     if n % 1024 == 0 {
         to_magnitude_and_suffix_1024(n)
     } else {
-        // TODO Implement this, probably using code from `numfmt`.
-        Ok("1kB".into())
+        to_magnitude_and_suffix_not_powers_of_1024(n)
     }
 }
 
@@ -153,36 +199,33 @@ mod tests {
         );
     }
 
-    // TODO We have not yet implemented this behavior, but when we do,
-    // uncomment this test.
+    #[test]
+    fn test_to_magnitude_and_suffix_not_powers_of_1024() {
+        assert_eq!(to_magnitude_and_suffix(1).unwrap(), "1B");
+        assert_eq!(to_magnitude_and_suffix(999).unwrap(), "999B");
 
-    // #[test]
-    // fn test_to_magnitude_and_suffix_not_powers_of_1024() {
-    //     assert_eq!(to_magnitude_and_suffix(1).unwrap(), "1B");
-    //     assert_eq!(to_magnitude_and_suffix(999).unwrap(), "999B");
+        assert_eq!(to_magnitude_and_suffix(1000).unwrap(), "1kB");
+        assert_eq!(to_magnitude_and_suffix(1001).unwrap(), "1.1kB");
+        assert_eq!(to_magnitude_and_suffix(1023).unwrap(), "1.1kB");
+        assert_eq!(to_magnitude_and_suffix(1025).unwrap(), "1.1kB");
+        assert_eq!(to_magnitude_and_suffix(999_000).unwrap(), "999kB");
 
-    //     assert_eq!(to_magnitude_and_suffix(1000).unwrap(), "1kB");
-    //     assert_eq!(to_magnitude_and_suffix(1001).unwrap(), "1.1kB");
-    //     assert_eq!(to_magnitude_and_suffix(1023).unwrap(), "1.1kB");
-    //     assert_eq!(to_magnitude_and_suffix(1025).unwrap(), "1.1kB");
-    //     assert_eq!(to_magnitude_and_suffix(999_000).unwrap(), "999kB");
+        assert_eq!(to_magnitude_and_suffix(999_001).unwrap(), "1MB");
+        assert_eq!(to_magnitude_and_suffix(999_999).unwrap(), "1MB");
+        assert_eq!(to_magnitude_and_suffix(1_000_000).unwrap(), "1MB");
+        assert_eq!(to_magnitude_and_suffix(1_000_001).unwrap(), "1.1MB");
+        assert_eq!(to_magnitude_and_suffix(1_100_000).unwrap(), "1.1MB");
+        assert_eq!(to_magnitude_and_suffix(1_100_001).unwrap(), "1.2MB");
+        assert_eq!(to_magnitude_and_suffix(1_900_000).unwrap(), "1.9MB");
+        assert_eq!(to_magnitude_and_suffix(1_900_001).unwrap(), "2MB");
+        assert_eq!(to_magnitude_and_suffix(9_900_000).unwrap(), "9.9MB");
+        assert_eq!(to_magnitude_and_suffix(9_900_001).unwrap(), "10MB");
+        assert_eq!(to_magnitude_and_suffix(999_000_000).unwrap(), "999MB");
 
-    //     assert_eq!(to_magnitude_and_suffix(999_001).unwrap(), "1MB");
-    //     assert_eq!(to_magnitude_and_suffix(999_999).unwrap(), "1MB");
-    //     assert_eq!(to_magnitude_and_suffix(1_000_000).unwrap(), "1MB");
-    //     assert_eq!(to_magnitude_and_suffix(1_000_001).unwrap(), "1.1MB");
-    //     assert_eq!(to_magnitude_and_suffix(1_100_000).unwrap(), "1.1MB");
-    //     assert_eq!(to_magnitude_and_suffix(1_100_001).unwrap(), "1.2MB");
-    //     assert_eq!(to_magnitude_and_suffix(1_900_000).unwrap(), "1.9MB");
-    //     assert_eq!(to_magnitude_and_suffix(1_900_001).unwrap(), "2MB");
-    //     assert_eq!(to_magnitude_and_suffix(9_900_000).unwrap(), "9.9MB");
-    //     assert_eq!(to_magnitude_and_suffix(9_900_001).unwrap(), "10MB");
-    //     assert_eq!(to_magnitude_and_suffix(999_000_000).unwrap(), "999MB");
-
-    //     assert_eq!(to_magnitude_and_suffix(999_000_001).unwrap(), "1GB");
-    //     assert_eq!(to_magnitude_and_suffix(1_000_000_000).unwrap(), "1GB");
-    //     // etc.
-    // }
+        assert_eq!(to_magnitude_and_suffix(999_000_001).unwrap(), "1GB");
+        assert_eq!(to_magnitude_and_suffix(1_000_000_000).unwrap(), "1GB");
+        assert_eq!(to_magnitude_and_suffix(1_000_000_001).unwrap(), "1.1GB");
+    }
 
     #[test]
     fn test_block_size_display() {
