@@ -57,7 +57,7 @@ use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use std::string::ToString;
 use uucore::backup_control::{self, BackupMode};
-use uucore::error::{set_exit_code, ExitCode, UError, UResult};
+use uucore::error::{set_exit_code, ExitCode, UClapError, UError, UResult};
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use walkdir::WalkDir;
 
@@ -485,7 +485,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 app.print_help()?;
             }
             clap::ErrorKind::DisplayVersion => println!("{}", app.render_version()),
-            _ => return Err(Box::new(e)),
+            _ => return Err(Box::new(e.with_exit_code(1))),
         };
     } else if let Ok(matches) = matches {
         let options = Options::from_matches(&matches)?;

@@ -17,7 +17,7 @@ use std::ptr;
 
 use clap::{crate_version, Arg, Command};
 use uucore::{
-    error::{set_exit_code, UResult, USimpleError, UUsageError},
+    error::{set_exit_code, UClapError, UResult, USimpleError, UUsageError},
     format_usage,
 };
 
@@ -35,7 +35,7 @@ const USAGE: &str = "{} [OPTIONS] [COMMAND [ARGS]]";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
 
     let mut niceness = unsafe {
         nix::errno::Errno::clear();
