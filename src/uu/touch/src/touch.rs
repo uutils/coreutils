@@ -16,7 +16,7 @@ use clap::{crate_version, Arg, ArgGroup, Command};
 use filetime::*;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
-use time::macros::{format_description, time};
+use time::macros::{format_description, offset, time};
 use time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
@@ -42,6 +42,7 @@ pub mod options {
 
 static ARG_FILES: &str = "files";
 
+// Convert a date/time to a date with a TZ offset
 fn to_local(tm: time::PrimitiveDateTime) -> time::OffsetDateTime {
     let offset = match time::OffsetDateTime::now_local() {
         Ok(lo) => lo.offset(),
@@ -52,8 +53,16 @@ fn to_local(tm: time::PrimitiveDateTime) -> time::OffsetDateTime {
     tm.assume_offset(offset)
 }
 
+// Convert a date/time with a TZ offset into a FileTime
 fn local_dt_to_filetime(dt: time::OffsetDateTime) -> FileTime {
     FileTime::from_unix_time(dt.unix_timestamp(), dt.nanosecond())
+}
+
+// Convert a date/time, considering that the input is in UTC time
+// Used for touch -d 1970-01-01 18:43:33.023456789 for example
+fn dt_to_filename(tm: time::PrimitiveDateTime) -> FileTime {
+    let dt = tm.assume_offset(offset!(UTC));
+    local_dt_to_filetime(dt)
 }
 
 #[uucore::main]
@@ -310,15 +319,15 @@ fn parse_date(s: &str) -> UResult<FileTime> {
     // Tue Dec  3 ...
     // ("%c", POSIX_LOCALE_FORMAT),
     //
-    // But also support other format found in the GNU tests like
+    if let Ok(parsed) = time::PrimitiveDateTime::parse(s, &POSIX_LOCALE_FORMAT) {
+        return Ok(local_dt_to_filetime(to_local(parsed)));
+    }
+
+    // Also support other formats found in the GNU tests like
     // in tests/misc/stat-nanoseconds.sh
-    for fmt in [
-        POSIX_LOCALE_FORMAT,
-        YYYYMMDDHHMMS_FORMAT,
-        YYYYMMDDHHMMSS_FORMAT,
-    ] {
+    for fmt in [YYYYMMDDHHMMS_FORMAT, YYYYMMDDHHMMSS_FORMAT] {
         if let Ok(parsed) = time::PrimitiveDateTime::parse(s, &fmt) {
-            return Ok(local_dt_to_filetime(to_local(parsed)));
+            return Ok(dt_to_filename(parsed));
         }
     }
 
