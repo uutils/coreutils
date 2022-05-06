@@ -170,8 +170,8 @@ jobs:
         REPO_DEFAULT_BRANCH='${{ steps.vars.outputs.repo_default_branch }}'
         if test -f "${REF_LOG_FILE}"; then
           echo "Reference SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
-          REF_ERROR=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${REF_LOG_FILE}" | sort)
-          NEW_ERROR=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" '${{ steps.vars.outputs.path_GNU_tests }}/test-suite.log' | sort)
+          REF_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${REF_LOG_FILE}" | sort)
+          NEW_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" '${{ steps.vars.outputs.path_GNU_tests }}/test-suite.log' | sort)
           REF_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${REF_LOG_FILE}" | sort)
           NEW_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" '${{ steps.vars.outputs.path_GNU_tests }}/test-suite.log' | sort)
           for LINE in ${REF_FAILING}
