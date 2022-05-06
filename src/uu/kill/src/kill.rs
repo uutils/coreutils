@@ -5,16 +5,17 @@
 //  * For the full copyright and license information, please view the LICENSE file
 //  * that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) signalname pids
+// spell-checker:ignore (ToDO) signalname pids killpg
 
 #[macro_use]
 extern crate uucore;
 
 use clap::{crate_version, Arg, Command};
-use libc::{c_int, pid_t};
+use nix::sys::signal::{self, Signal};
+use nix::unistd::Pid;
 use std::io::Error;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::signals::{signal_by_name_or_value, ALL_SIGNALS};
 use uucore::{format_usage, InvalidEncodingHandling};
 
@@ -67,8 +68,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             } else {
                 15_usize //SIGTERM
             };
+            let sig: Signal = (sig as i32)
+                .try_into()
+                .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
             let pids = parse_pids(&pids_or_signals)?;
-            kill(sig, &pids)
+            kill(sig, &pids);
+            Ok(())
         }
         Mode::Table => {
             table();
@@ -84,6 +89,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .allow_negative_numbers(true)
         .arg(
             Arg::new(options::LIST)
                 .short('l')
@@ -109,8 +115,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::PIDS_OR_SIGNALS)
                 .hide(true)
-                .multiple_occurrences(true)
-                .allow_hyphen_values(true)
+                .multiple_occurrences(true),
         )
 }
 
@@ -191,21 +196,21 @@ fn parse_signal_value(signal_name: &str) -> UResult<usize> {
     }
 }
 
-fn parse_pids(pids: &[String]) -> UResult<Vec<usize>> {
+fn parse_pids(pids: &[String]) -> UResult<Vec<i32>> {
     pids.iter()
         .map(|x| {
-            x.parse::<usize>().map_err(|e| {
+            x.parse::<i32>().map_err(|e| {
                 USimpleError::new(1, format!("failed to parse argument {}: {}", x.quote(), e))
             })
         })
         .collect()
 }
 
-fn kill(signal_value: usize, pids: &[usize]) -> UResult<()> {
+fn kill(sig: Signal, pids: &[i32]) {
     for &pid in pids {
-        if unsafe { libc::kill(pid as pid_t, signal_value as c_int) } != 0 {
-            show!(USimpleError::new(1, format!("{}", Error::last_os_error())));
+        if let Err(e) = signal::kill(Pid::from_raw(pid), sig) {
+            show!(Error::from_raw_os_error(e as i32)
+                .map_err_context(|| format!("sending signal to {} failed", pid)));
         }
     }
-    Ok(())
 }

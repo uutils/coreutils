@@ -1158,6 +1158,7 @@ dependencies = [
  "bitflags",
  "cfg-if 1.0.0",
  "libc",
+ "memoffset",
 ]
 
 [[package]]
@@ -2452,7 +2453,7 @@ name = "uu_kill"
 version = "0.0.13"
 dependencies = [
  "clap 3.1.15",
- "libc",
+ "nix",
  "uucore",
 ]
 
