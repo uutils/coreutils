@@ -73,7 +73,7 @@ fn to_magnitude_and_suffix_1024(n: u128) -> Result<String, ()> {
     Err(())
 }
 
-/// Convert a number, except multiples of 1024, into a string like "12kB" or "34MB".
+/// Convert a number into a string like "12kB" or "34MB".
 ///
 /// Powers of 1000 become "1kB", "1MB", "1GB", etc.
 ///
@@ -110,7 +110,7 @@ fn to_magnitude_and_suffix_not_powers_of_1024(n: u128) -> Result<String, ()> {
 ///
 /// If the number is too large to represent.
 fn to_magnitude_and_suffix(n: u128) -> Result<String, ()> {
-    if n % 1024 == 0 {
+    if n % 1024 == 0 && n % 1000 != 0 {
         to_magnitude_and_suffix_1024(n)
     } else {
         to_magnitude_and_suffix_not_powers_of_1024(n)
@@ -237,6 +237,13 @@ mod tests {
         assert_eq!(to_magnitude_and_suffix(999_000_001).unwrap(), "1GB");
         assert_eq!(to_magnitude_and_suffix(1_000_000_000).unwrap(), "1GB");
         assert_eq!(to_magnitude_and_suffix(1_000_000_001).unwrap(), "1.1GB");
+    }
+
+    #[test]
+    fn test_to_magnitude_and_suffix_multiples_of_1000_and_1024() {
+        assert_eq!(to_magnitude_and_suffix(128_000).unwrap(), "128kB");
+        assert_eq!(to_magnitude_and_suffix(1000 * 1024).unwrap(), "1.1MB");
+        assert_eq!(to_magnitude_and_suffix(1_000_000_000_000).unwrap(), "1TB");
     }
 
     #[test]
