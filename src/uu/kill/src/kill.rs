@@ -22,7 +22,7 @@ static ABOUT: &str = "Send signal to processes or list information about signals
 const USAGE: &str = "{} [OPTIONS]... PID...";
 
 pub mod options {
-    pub static PIDS_OR_SIGNALS: &str = "pids_of_signals";
+    pub static PIDS_OR_SIGNALS: &str = "pids_or_signals";
     pub static LIST: &str = "list";
     pub static TABLE: &str = "table";
     pub static TABLE_OLD: &str = "table_old";
@@ -109,7 +109,8 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::PIDS_OR_SIGNALS)
                 .hide(true)
-                .multiple_occurrences(true),
+                .multiple_occurrences(true)
+                .allow_hyphen_values(true)
         )
 }
 
