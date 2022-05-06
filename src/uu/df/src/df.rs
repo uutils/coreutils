@@ -445,6 +445,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('B')
                 .long("block-size")
                 .takes_value(true)
+                .value_name("SIZE")
                 .overrides_with_all(&[OPT_KILO, OPT_BLOCKSIZE])
                 .help(
                     "scale sizes by SIZE before printing them; e.g.\
@@ -501,6 +502,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_OUTPUT)
                 .long("output")
                 .takes_value(true)
+                .value_name("FIELD_LIST")
                 .min_values(0)
                 .require_equals(true)
                 .use_value_delimiter(true)
@@ -510,7 +512,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .default_values(&["source", "size", "used", "avail", "pcent", "target"])
                 .conflicts_with_all(&[OPT_INODES, OPT_PORTABILITY, OPT_PRINT_TYPE])
                 .help(
-                    "use the output format defined by FIELD_LIST,\
+                    "use the output format defined by FIELD_LIST, \
                      or print all fields if FIELD_LIST is omitted.",
                 ),
         )
@@ -533,6 +535,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long("type")
                 .allow_invalid_utf8(true)
                 .takes_value(true)
+                .value_name("TYPE")
                 .multiple_occurrences(true)
                 .help("limit listing to file systems of type TYPE"),
         )
@@ -549,6 +552,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long("exclude-type")
                 .allow_invalid_utf8(true)
                 .takes_value(true)
+                .value_name("TYPE")
                 .use_value_delimiter(true)
                 .multiple_occurrences(true)
                 .help("limit listing to file systems not of type TYPE"),
