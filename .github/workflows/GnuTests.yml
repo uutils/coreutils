@@ -41,11 +41,11 @@ jobs:
         TEST_FULL_SUMMARY_FILE='gnu-full-result.json'
         outputs SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE
     - name: Checkout code (uutil)
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         path: '${{ steps.vars.outputs.path_UUTILS }}'
     - name: Checkout code (GNU coreutils)
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         repository: 'coreutils/coreutils'
         path: '${{ steps.vars.outputs.path_GNU }}'
@@ -229,11 +229,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code uutil
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         path: 'uutils'
     - name: Checkout GNU coreutils
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         repository: 'coreutils/coreutils'
         path: 'gnu'
