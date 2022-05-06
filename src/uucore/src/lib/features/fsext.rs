@@ -84,6 +84,7 @@ use std::ffi::CString;
 use std::io::Error as IOError;
 #[cfg(unix)]
 use std::mem;
+#[cfg(not(unix))]
 use std::path::Path;
 use std::time::UNIX_EPOCH;
 
@@ -708,9 +709,9 @@ impl FsMeta for StatFs {
 }
 
 #[cfg(unix)]
-pub fn statfs<P: AsRef<Path>>(path: P) -> Result<StatFs, String>
+pub fn statfs<P>(path: P) -> Result<StatFs, String>
 where
-    Vec<u8>: From<P>,
+    P: Into<Vec<u8>>,
 {
     match CString::new(path) {
         Ok(p) => {
