@@ -1362,6 +1362,60 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
     ))
 }
 
+/// This is a convenience wrapper to run a ucmd with root permissions.
+/// It can be used to test programs when being root is needed
+/// This runs 'sudo -E --non-interactive target/debug/coreutils util_name args`
+/// This is primarily designed to run in an environment where whoami is in $path
+/// and where non-interactive sudo is possible.
+/// To check if i) non-interactive sudo is possible and ii) if sudo works, this runs:
+/// 'sudo -E --non-interactive whoami' first.
+///
+/// Example:
+///
+/// ```no_run
+/// use crate::common::util::*;
+/// #[test]
+/// fn test_xyz() {
+///    let ts = TestScenario::new("whoami");
+///    let expected = "root\n".to_string();
+///    if let Ok(result) = run_ucmd_as_root(&ts, &[]) {
+///        result.stdout_is(expected);
+///    } else {
+///        print!("TEST SKIPPED");
+///    }
+/// }
+///```
+#[cfg(unix)]
+pub fn run_ucmd_as_root(
+    ts: &TestScenario,
+    args: &[&str],
+) -> std::result::Result<CmdResult, String> {
+    // Apparently CICD environment has no `sudo`?
+    if ts
+        .cmd_keepenv("sudo")
+        .env("LC_ALL", "C")
+        .arg("-E")
+        .arg("--non-interactive")
+        .arg("whoami")
+        .run()
+        .stdout_str()
+        .trim()
+        != "root"
+    {
+        Err("\"sudo whoami\" didn't return \"root\"".to_string())
+    } else {
+        Ok(ts
+            .cmd_keepenv("sudo")
+            .env("LC_ALL", "C")
+            .arg("-E")
+            .arg("--non-interactive")
+            .arg(&ts.bin_path)
+            .arg(&ts.util_name)
+            .args(args)
+            .run())
+    }
+}
+
 /// Sanity checks for test utils
 #[cfg(test)]
 mod tests {
@@ -1710,6 +1764,25 @@ mod tests {
             std::assert_eq!(host_name_for("gid"), "gid");
             std::assert_eq!(host_name_for("ggroups"), "ggroups");
             std::assert_eq!(host_name_for("gwho"), "gwho");
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    #[cfg(feature = "whoami")]
+    fn test_run_ucmd_as_root() {
+        // Skip test if we can't guarantee non-interactive `sudo`.
+        if let Ok(_status) = Command::new("sudo")
+            .args(&["-E", "-v", "--non-interactive"])
+            .status()
+        {
+            let ts = TestScenario::new("whoami");
+            std::assert_eq!(
+                run_ucmd_as_root(&ts, &[]).unwrap().stdout_str().trim(),
+                "root"
+            );
+        } else {
+            print!("TEST SKIPPED");
         }
     }
 }

@@ -90,7 +90,7 @@ pub fn parse_base_cmd_args(args: impl uucore::Args, about: &str, usage: &str) ->
     let arg_list = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
-    Config::from(&command.get_matches_from(arg_list))
+    Config::from(&command.try_get_matches_from(arg_list)?)
 }
 
 pub fn base_app<'a>(about: &'a str, usage: &'a str) -> Command<'a> {

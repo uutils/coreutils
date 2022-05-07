@@ -188,7 +188,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let number_mode = if matches.is_present(options::NUMBER_NONBLANK) {
         NumberingMode::NonEmpty

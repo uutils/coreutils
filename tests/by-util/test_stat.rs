@@ -345,3 +345,58 @@ fn test_printf() {
     let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
     ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
 }
+
+#[cfg(unix)]
+#[test]
+#[cfg(disable_until_fixed)]
+fn test_stdin_pipe_fifo1() {
+    // $ echo | stat -
+    // File: -
+    // Size: 0               Blocks: 0          IO Block: 4096   fifo
+    // use std::process::{Command, Stdio};
+    new_ucmd!()
+        .arg("-")
+        .set_stdin(std::process::Stdio::piped())
+        .run()
+        .no_stderr()
+        .stdout_contains("fifo")
+        .stdout_contains("File: -")
+        .succeeded();
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg(disable_until_fixed)]
+fn test_stdin_pipe_fifo2() {
+    // $ stat -
+    // File: -
+    // Size: 0               Blocks: 0          IO Block: 1024   character special file
+    new_ucmd!()
+        .arg("-")
+        .run()
+        .no_stderr()
+        .stdout_contains("character special file")
+        .stdout_contains("File: -")
+        .succeeded();
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg(disable_until_fixed)]
+fn test_stdin_redirect() {
+    // $ touch f && stat - < f
+    // File: -
+    // Size: 0               Blocks: 0          IO Block: 4096   regular empty file
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("f");
+    new_ucmd!()
+        .arg("-")
+        .set_stdin(std::fs::File::open("f").unwrap())
+        .run()
+        .no_stderr()
+        .stdout_contains("regular empty file")
+        .stdout_contains("File: -")
+        .succeeded();
+}

@@ -11,9 +11,11 @@ mod columns;
 mod filesystem;
 mod table;
 
+use blocks::{HumanReadable, SizeFormat};
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::fsext::{read_fs_list, MountInfo};
+use uucore::parse_size::ParseSizeError;
 use uucore::{format_usage, show};
 
 use clap::{crate_version, Arg, ArgMatches, Command};
@@ -61,6 +63,7 @@ static OUTPUT_FIELD_LIST: [&str; 12] = [
 struct Options {
     show_local_fs: bool,
     show_all_fs: bool,
+    size_format: SizeFormat,
     block_size: BlockSize,
 
     /// Optional list of filesystem types to include in the output table.
@@ -88,6 +91,7 @@ impl Default for Options {
             show_local_fs: Default::default(),
             show_all_fs: Default::default(),
             block_size: Default::default(),
+            size_format: Default::default(),
             include: Default::default(),
             exclude: Default::default(),
             show_total: Default::default(),
@@ -105,7 +109,8 @@ impl Default for Options {
 
 #[derive(Debug)]
 enum OptionsError {
-    InvalidBlockSize,
+    BlockSizeTooLarge(String),
+    InvalidBlockSize(String),
 
     /// An error getting the columns to display in the output table.
     ColumnError(ColumnError),
@@ -116,11 +121,14 @@ enum OptionsError {
 impl fmt::Display for OptionsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            // TODO This should include the raw string provided as the argument.
-            //
             // TODO This needs to vary based on whether `--block-size`
             // or `-B` were provided.
-            Self::InvalidBlockSize => write!(f, "invalid --block-size argument"),
+            Self::BlockSizeTooLarge(s) => {
+                write!(f, "--block-size argument {} too large", s.quote())
+            }
+            // TODO This needs to vary based on whether `--block-size`
+            // or `-B` were provided.
+            Self::InvalidBlockSize(s) => write!(f, "invalid --block-size argument {}", s),
             Self::ColumnError(ColumnError::MultipleColumns(s)) => write!(
                 f,
                 "option --output: field {} used more than once",
@@ -155,8 +163,21 @@ impl Options {
         Ok(Self {
             show_local_fs: matches.is_present(OPT_LOCAL),
             show_all_fs: matches.is_present(OPT_ALL),
-            block_size: block_size_from_matches(matches)
-                .map_err(|_| OptionsError::InvalidBlockSize)?,
+            block_size: block_size_from_matches(matches).map_err(|e| match e {
+                ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
+                    matches.value_of(OPT_BLOCKSIZE).unwrap().to_string(),
+                ),
+                ParseSizeError::ParseFailure(s) => OptionsError::InvalidBlockSize(s),
+            })?,
+            size_format: {
+                if matches.is_present(OPT_HUMAN_READABLE_BINARY) {
+                    SizeFormat::HumanReadable(HumanReadable::Binary)
+                } else if matches.is_present(OPT_HUMAN_READABLE_DECIMAL) {
+                    SizeFormat::HumanReadable(HumanReadable::Decimal)
+                } else {
+                    SizeFormat::StaticBlockSize
+                }
+            },
             include,
             exclude,
             show_total: matches.is_present(OPT_TOTAL),
@@ -424,6 +445,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('B')
                 .long("block-size")
                 .takes_value(true)
+                .value_name("SIZE")
                 .overrides_with_all(&[OPT_KILO, OPT_BLOCKSIZE])
                 .help(
                     "scale sizes by SIZE before printing them; e.g.\
@@ -480,6 +502,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_OUTPUT)
                 .long("output")
                 .takes_value(true)
+                .value_name("FIELD_LIST")
                 .min_values(0)
                 .require_equals(true)
                 .use_value_delimiter(true)
@@ -489,7 +512,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .default_values(&["source", "size", "used", "avail", "pcent", "target"])
                 .conflicts_with_all(&[OPT_INODES, OPT_PORTABILITY, OPT_PRINT_TYPE])
                 .help(
-                    "use the output format defined by FIELD_LIST,\
+                    "use the output format defined by FIELD_LIST, \
                      or print all fields if FIELD_LIST is omitted.",
                 ),
         )
@@ -512,6 +535,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long("type")
                 .allow_invalid_utf8(true)
                 .takes_value(true)
+                .value_name("TYPE")
                 .multiple_occurrences(true)
                 .help("limit listing to file systems of type TYPE"),
         )
@@ -528,6 +552,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long("exclude-type")
                 .allow_invalid_utf8(true)
                 .takes_value(true)
+                .value_name("TYPE")
                 .use_value_delimiter(true)
                 .multiple_occurrences(true)
                 .help("limit listing to file systems not of type TYPE"),

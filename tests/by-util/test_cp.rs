@@ -1507,6 +1507,18 @@ fn test_copy_through_dangling_symlink() {
 }
 
 #[test]
+fn test_copy_through_dangling_symlink_no_dereference() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("no-such-file", "dangle");
+    ucmd.arg("-P")
+        .arg("dangle")
+        .arg("d2")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+}
+
+#[test]
 #[cfg(unix)]
 fn test_cp_archive_on_nonexistent_file() {
     new_ucmd!()
