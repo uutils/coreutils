@@ -26,7 +26,6 @@ pub mod options {
     pub static PIDS_OR_SIGNALS: &str = "pids_or_signals";
     pub static LIST: &str = "list";
     pub static TABLE: &str = "table";
-    pub static TABLE_OLD: &str = "table_old";
     pub static SIGNAL: &str = "signal";
 }
 
@@ -46,7 +45,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().get_matches_from(args);
 
-    let mode = if matches.is_present(options::TABLE) || matches.is_present(options::TABLE_OLD) {
+    let mode = if matches.is_present(options::TABLE) {
         Mode::Table
     } else if matches.is_present(options::LIST) {
         Mode::List
@@ -95,16 +94,15 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('l')
                 .long(options::LIST)
                 .help("Lists signals")
-                .conflicts_with(options::TABLE)
-                .conflicts_with(options::TABLE_OLD),
+                .conflicts_with(options::TABLE),
         )
         .arg(
             Arg::new(options::TABLE)
                 .short('t')
+                .short_alias('L')
                 .long(options::TABLE)
                 .help("Lists table of signals"),
         )
-        .arg(Arg::new(options::TABLE_OLD).short('L').hide(true))
         .arg(
             Arg::new(options::SIGNAL)
                 .short('s')
