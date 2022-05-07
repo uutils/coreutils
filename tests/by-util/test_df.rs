@@ -392,6 +392,11 @@ fn test_block_size_1024() {
     assert_eq!(get_header(2 * 1024 * 1024), "2M-blocks");
     assert_eq!(get_header(1024 * 1024 * 1024), "1G-blocks");
     assert_eq!(get_header(34 * 1024 * 1024 * 1024), "34G-blocks");
+
+    // multiples of both 1024 and 1000
+    assert_eq!(get_header(128_000), "128kB-blocks");
+    assert_eq!(get_header(1000 * 1024), "1.1MB-blocks");
+    assert_eq!(get_header(1_000_000_000_000), "1TB-blocks");
 }
 
 #[test]
