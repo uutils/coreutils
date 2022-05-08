@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 //! Types for representing and displaying block sizes.
-use crate::OPT_BLOCKSIZE;
+use crate::{OPT_BLOCKSIZE, OPT_PORTABILITY};
 use clap::ArgMatches;
 use std::{env, fmt};
 
@@ -189,7 +189,7 @@ impl Default for BlockSize {
     }
 }
 
-pub(crate) fn block_size_from_matches(matches: &ArgMatches) -> Result<BlockSize, ParseSizeError> {
+pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSizeError> {
     if matches.is_present(OPT_BLOCKSIZE) {
         let s = matches.value_of(OPT_BLOCKSIZE).unwrap();
         let bytes = parse_size(s)?;
@@ -199,9 +199,27 @@ pub(crate) fn block_size_from_matches(matches: &ArgMatches) -> Result<BlockSize,
         } else {
             Err(ParseSizeError::ParseFailure(format!("{}", s.quote())))
         }
+    } else if matches.is_present(OPT_PORTABILITY) {
+        Ok(BlockSize::default())
+    } else if let Some(bytes) = block_size_from_env() {
+        Ok(BlockSize::Bytes(bytes))
     } else {
-        Ok(Default::default())
+        Ok(BlockSize::default())
     }
+}
+
+fn block_size_from_env() -> Option<u64> {
+    for env_var in ["DF_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
+        if let Ok(env_size) = env::var(env_var) {
+            if let Ok(size) = parse_size(&env_size) {
+                return Some(size);
+            } else {
+                return None;
+            }
+        }
+    }
+
+    None
 }
 
 impl fmt::Display for BlockSize {

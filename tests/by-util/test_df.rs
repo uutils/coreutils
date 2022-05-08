@@ -533,6 +533,105 @@ fn test_block_size_in_posix_portability_mode() {
 }
 
 #[test]
+fn test_block_size_from_env() {
+    fn get_header(env_var: &str, env_value: &str) -> String {
+        let output = new_ucmd!()
+            .arg("--output=size")
+            .env(env_var, env_value)
+            .succeeds()
+            .stdout_move_str();
+        output.lines().next().unwrap().to_string()
+    }
+
+    assert_eq!(get_header("DF_BLOCK_SIZE", "111"), "111B-blocks");
+    assert_eq!(get_header("BLOCK_SIZE", "222"), "222B-blocks");
+    assert_eq!(get_header("BLOCKSIZE", "333"), "333B-blocks");
+}
+
+#[test]
+fn test_block_size_from_env_precedences() {
+    fn get_header(one: (&str, &str), two: (&str, &str)) -> String {
+        let (k1, v1) = one;
+        let (k2, v2) = two;
+        let output = new_ucmd!()
+            .arg("--output=size")
+            .env(k1, v1)
+            .env(k2, v2)
+            .succeeds()
+            .stdout_move_str();
+        output.lines().next().unwrap().to_string()
+    }
+
+    let df_block_size = ("DF_BLOCK_SIZE", "111");
+    let block_size = ("BLOCK_SIZE", "222");
+    let blocksize = ("BLOCKSIZE", "333");
+
+    assert_eq!(get_header(df_block_size, block_size), "111B-blocks");
+    assert_eq!(get_header(df_block_size, blocksize), "111B-blocks");
+    assert_eq!(get_header(block_size, blocksize), "222B-blocks");
+}
+
+#[test]
+fn test_precedence_of_block_size_arg_over_env() {
+    let output = new_ucmd!()
+        .args(&["-B", "999", "--output=size"])
+        .env("DF_BLOCK_SIZE", "111")
+        .succeeds()
+        .stdout_move_str();
+    let header = output.lines().next().unwrap().to_string();
+
+    assert_eq!(header, "999B-blocks");
+}
+
+#[test]
+fn test_invalid_block_size_from_env() {
+    let default_block_size_header = "1K-blocks";
+
+    let output = new_ucmd!()
+        .arg("--output=size")
+        .env("DF_BLOCK_SIZE", "invalid")
+        .succeeds()
+        .stdout_move_str();
+    let header = output.lines().next().unwrap().to_string();
+
+    assert_eq!(header, default_block_size_header);
+
+    let output = new_ucmd!()
+        .arg("--output=size")
+        .env("DF_BLOCK_SIZE", "invalid")
+        .env("BLOCK_SIZE", "222")
+        .succeeds()
+        .stdout_move_str();
+    let header = output.lines().next().unwrap().to_string();
+
+    assert_eq!(header, default_block_size_header);
+}
+
+#[test]
+fn test_ignore_block_size_from_env_in_posix_portability_mode() {
+    let default_block_size_header = "1024-blocks";
+
+    let output = new_ucmd!()
+        .arg("-P")
+        .env("DF_BLOCK_SIZE", "111")
+        .env("BLOCK_SIZE", "222")
+        .env("BLOCKSIZE", "333")
+        .succeeds()
+        .stdout_move_str();
+    let header = output
+        .lines()
+        .next()
+        .unwrap()
+        .to_string()
+        .split_whitespace()
+        .nth(1)
+        .unwrap()
+        .to_string();
+
+    assert_eq!(header, default_block_size_header);
+}
+
+#[test]
 fn test_too_large_block_size() {
     fn run_command(size: &str) {
         new_ucmd!()

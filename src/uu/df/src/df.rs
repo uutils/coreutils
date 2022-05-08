@@ -25,7 +25,7 @@ use std::error::Error;
 use std::fmt;
 use std::path::Path;
 
-use crate::blocks::{block_size_from_matches, BlockSize};
+use crate::blocks::{read_block_size, BlockSize};
 use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
 use crate::table::Table;
@@ -178,7 +178,7 @@ impl Options {
         Ok(Self {
             show_local_fs: matches.is_present(OPT_LOCAL),
             show_all_fs: matches.is_present(OPT_ALL),
-            block_size: block_size_from_matches(matches).map_err(|e| match e {
+            block_size: read_block_size(matches).map_err(|e| match e {
                 ParseSizeError::InvalidSuffix(s) => OptionsError::InvalidSuffix(s),
                 ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
                     matches.value_of(OPT_BLOCKSIZE).unwrap().to_string(),
