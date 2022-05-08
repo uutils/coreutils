@@ -24,6 +24,9 @@ file_diff = "1.0.0"
 libc = ">= 0.2"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["fs", "mode", "perms", "entries"] }
 
+[dev-dependencies]
+time = "0.3"
+
 [[bin]]
 name = "install"
 path = "src/main.rs"

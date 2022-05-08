@@ -1,9 +1,16 @@
-// spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms
+// spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime
+
+// This test relies on
+// --cfg unsound_local_offset
+// https://github.com/time-rs/time/blob/deb8161b84f355b31e39ce09e40c4d6ce3fea837/src/sys/local_offset_at/unix.rs#L112-L120=
+// See https://github.com/time-rs/time/issues/293#issuecomment-946382614=
+// Defined in .cargo/config
 
 extern crate touch;
 use self::touch::filetime::{self, FileTime};
 
 extern crate time;
+use time::macros::{datetime, format_description};
 
 use crate::common::util::*;
 use std::fs::remove_file;
@@ -32,11 +39,24 @@ fn set_file_times(at: &AtPath, path: &str, atime: FileTime, mtime: FileTime) {
 
 // Adjusts for local timezone
 fn str_to_filetime(format: &str, s: &str) -> FileTime {
-    let mut tm = time::strptime(s, format).unwrap();
-    tm.tm_utcoff = time::now().tm_utcoff;
-    tm.tm_isdst = -1; // Unknown flag DST
-    let ts = tm.to_timespec();
-    FileTime::from_unix_time(ts.sec as i64, ts.nsec as u32)
+    let format_description = match format {
+        "%y%m%d%H%M" => format_description!("[year repr:last_two][month][day][hour][minute]"),
+        "%y%m%d%H%M.%S" => {
+            format_description!("[year repr:last_two][month][day][hour][minute].[second]")
+        }
+        "%Y%m%d%H%M" => format_description!("[year][month][day][hour][minute]"),
+        "%Y%m%d%H%M.%S" => format_description!("[year][month][day][hour][minute].[second]"),
+        _ => panic!("unexpected dt format"),
+    };
+    let tm = time::PrimitiveDateTime::parse(s, &format_description).unwrap();
+    let d = match time::OffsetDateTime::now_local() {
+        Ok(now) => now,
+        Err(e) => {
+            panic!("Error {} retrieving the OffsetDateTime::now_local", e);
+        }
+    };
+    let offset_dt = tm.assume_offset(d.offset());
+    FileTime::from_unix_time(offset_dt.unix_timestamp(), tm.nanosecond())
 }
 
 #[test]
@@ -83,7 +103,10 @@ fn test_touch_set_mdhm_time() {
 
     let start_of_year = str_to_filetime(
         "%Y%m%d%H%M",
-        &format!("{}01010000", 1900 + time::now().tm_year),
+        &format!(
+            "{}01010000",
+            time::OffsetDateTime::now_local().unwrap().year()
+        ),
     );
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
@@ -104,7 +127,7 @@ fn test_touch_set_mdhms_time() {
 
     let start_of_year = str_to_filetime(
         "%Y%m%d%H%M.%S",
-        &format!("{}01010000.00", 1900 + time::now().tm_year),
+        &format!("{}01010000.00", time::OffsetDateTime::now_utc().year()),
     );
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
@@ -123,7 +146,7 @@ fn test_touch_set_ymdhm_time() {
 
     assert!(at.file_exists(file));
 
-    let start_of_year = str_to_filetime("%y%m%d%H%M", "1501010000");
+    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
     assert_eq!(atime.unix_seconds() - start_of_year.unix_seconds(), 45240);
@@ -141,7 +164,7 @@ fn test_touch_set_ymdhms_time() {
 
     assert!(at.file_exists(file));
 
-    let start_of_year = str_to_filetime("%y%m%d%H%M.%S", "1501010000.00");
+    let start_of_year = str_to_filetime("%Y%m%d%H%M.%S", "201501010000.00");
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
     assert_eq!(atime.unix_seconds() - start_of_year.unix_seconds(), 45296);
@@ -405,6 +428,86 @@ fn test_touch_set_date3() {
 }
 
 #[test]
+fn test_touch_set_date4() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_date";
+
+    ucmd.args(&["-d", "1970-01-01 18:43:33", file])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+
+    let expected = FileTime::from_unix_time(67413, 0);
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
+
+#[test]
+fn test_touch_set_date5() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_date";
+
+    ucmd.args(&["-d", "1970-01-01 18:43:33.023456789", file])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+
+    // Slightly different result on Windows for nano seconds
+    // TODO: investigate
+    #[cfg(windows)]
+    let expected = FileTime::from_unix_time(67413, 23456700);
+    #[cfg(not(windows))]
+    let expected = FileTime::from_unix_time(67413, 23456789);
+
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
+
+#[test]
+fn test_touch_set_date6() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_date";
+
+    ucmd.args(&["-d", "2000-01-01 00:00", file])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+
+    let expected = FileTime::from_unix_time(946684800, 0);
+
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
+
+#[test]
+fn test_touch_set_date7() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_date";
+
+    ucmd.args(&["-d", "2004-01-16 12:00 +0000", file])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+
+    let expected = FileTime::from_unix_time(1074254400, 0);
+
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
+
+#[test]
 fn test_touch_set_date_wrong_format() {
     let (_at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_date_wrong_format";
@@ -430,18 +533,18 @@ fn test_touch_mtime_dst_succeeds() {
     assert_eq!(target_time, mtime);
 }
 
-// is_dst_switch_hour returns true if timespec ts is just before the switch
-// to Daylight Saving Time.
-// For example, in EST (UTC-5), Timespec { sec: 1583647200, nsec: 0 }
-// for March 8 2020 01:00:00 AM
-// is just before the switch because on that day clock jumps by 1 hour,
-// so 1 minute after 01:59:00 is 03:00:00.
-fn is_dst_switch_hour(ts: time::Timespec) -> bool {
-    let ts_after = ts + time::Duration::hours(1);
-    let tm = time::at(ts);
-    let tm_after = time::at(ts_after);
-    tm_after.tm_hour == tm.tm_hour + 2
-}
+// // is_dst_switch_hour returns true if timespec ts is just before the switch
+// // to Daylight Saving Time.
+// // For example, in EST (UTC-5), Timespec { sec: 1583647200, nsec: 0 }
+// // for March 8 2020 01:00:00 AM
+// // is just before the switch because on that day clock jumps by 1 hour,
+// // so 1 minute after 01:59:00 is 03:00:00.
+// fn is_dst_switch_hour(ts: time::Timespec) -> bool {
+//     let ts_after = ts + time::Duration::hours(1);
+//     let tm = time::at(ts);
+//     let tm_after = time::at(ts_after);
+//     tm_after.tm_hour == tm.tm_hour + 2
+// }
 
 // get_dst_switch_hour returns date string for which touch -m -t fails.
 // For example, in EST (UTC-5), that will be "202003080200" so
@@ -450,23 +553,30 @@ fn is_dst_switch_hour(ts: time::Timespec) -> bool {
 // In other locales it will be a different date/time, and in some locales
 // it doesn't exist at all, in which case this function will return None.
 fn get_dst_switch_hour() -> Option<String> {
-    let now = time::now();
-    // Start from January 1, 2020, 00:00.
-    let mut tm = time::strptime("20200101-0000", "%Y%m%d-%H%M").unwrap();
-    tm.tm_isdst = -1;
-    tm.tm_utcoff = now.tm_utcoff;
-    let mut ts = tm.to_timespec();
-    // Loop through all hours in year 2020 until we find the hour just
-    // before the switch to DST.
-    for _i in 0..(366 * 24) {
-        if is_dst_switch_hour(ts) {
-            let mut tm = time::at(ts);
-            tm.tm_hour += 1;
-            let s = time::strftime("%Y%m%d%H%M", &tm).unwrap();
-            return Some(s);
+    //let now = time::OffsetDateTime::now_local().unwrap();
+    let now = match time::OffsetDateTime::now_local() {
+        Ok(now) => now,
+        Err(e) => {
+            panic!("Error {} retrieving the OffsetDateTime::now_local", e);
         }
-        ts = ts + time::Duration::hours(1);
-    }
+    };
+
+    // Start from January 1, 2020, 00:00.
+    let tm = datetime!(2020-01-01 00:00 UTC);
+    tm.to_offset(now.offset());
+
+    // let mut ts = tm.to_timespec();
+    // // Loop through all hours in year 2020 until we find the hour just
+    // // before the switch to DST.
+    // for _i in 0..(366 * 24) {
+    //     // if is_dst_switch_hour(ts) {
+    //     //     let mut tm = time::at(ts);
+    //     //     tm.tm_hour += 1;
+    //     //     let s = time::strftime("%Y%m%d%H%M", &tm).unwrap();
+    //     //     return Some(s);
+    //     // }
+    //     ts = ts + time::Duration::hours(1);
+    // }
     None
 }
 
@@ -572,4 +682,22 @@ fn test_no_dereference_no_file() {
         .fails()
         .stderr_contains("setting times of 'not-a-file-1': No such file or directory")
         .stderr_contains("setting times of 'not-a-file-2': No such file or directory");
+}
+
+#[test]
+fn test_touch_leap_second() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_leap_sec";
+
+    ucmd.args(&["-t", "197001010000.60", file])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+
+    let epoch = str_to_filetime("%Y%m%d%H%M", "197001010000");
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime.unix_seconds() - epoch.unix_seconds(), 60);
+    assert_eq!(mtime.unix_seconds() - epoch.unix_seconds(), 60);
 }

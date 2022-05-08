@@ -137,7 +137,8 @@ sed -i 's|chmod |/usr/bin/chmod |' tests/du/inacc-dir.sh tests/tail-2/tail-n0f.s
 sed -i 's|sort |/usr/bin/sort |' tests/ls/hyperlink.sh tests/misc/test-N.sh
 sed -i 's|split |/usr/bin/split |' tests/misc/factor-parallel.sh
 sed -i 's|id -|/usr/bin/id -|' tests/misc/runcon-no-reorder.sh
-sed -i 's|touch |/usr/bin/touch |' tests/cp/preserve-link.sh tests/cp/reflink-perm.sh tests/ls/block-size.sh tests/mv/update.sh tests/misc/ls-time.sh tests/misc/stat-nanoseconds.sh tests/misc/time-style.sh tests/misc/test-N.sh
+# tests/ls/abmon-align.sh - https://github.com/uutils/coreutils/issues/3505
+sed -i 's|touch |/usr/bin/touch |' tests/cp/preserve-link.sh tests/cp/reflink-perm.sh tests/ls/block-size.sh tests/mv/update.sh tests/misc/ls-time.sh tests/misc/stat-nanoseconds.sh tests/misc/time-style.sh tests/misc/test-N.sh tests/ls/abmon-align.sh
 sed -i 's|ln -|/usr/bin/ln -|' tests/cp/link-deref.sh
 sed -i 's|cp |/usr/bin/cp |' tests/mv/hard-2.sh
 sed -i 's|paste |/usr/bin/paste |' tests/misc/od-endian.sh
