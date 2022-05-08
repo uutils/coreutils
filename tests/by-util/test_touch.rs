@@ -470,6 +470,25 @@ fn test_touch_set_date5() {
 }
 
 #[test]
+fn test_touch_set_date6() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_date";
+
+    ucmd.args(&["-d", "2000-01-01 00:00", file])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+
+    let expected = FileTime::from_unix_time(946684800, 0);
+
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
+
+#[test]
 fn test_touch_set_date_wrong_format() {
     let (_at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_date_wrong_format";

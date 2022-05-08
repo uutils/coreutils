@@ -280,10 +280,18 @@ const YYYYMMDDHHMMSS_FORMAT: &[time::format_description::FormatItem] = format_de
     "[year repr:full]-[month repr:numerical padding:zero]-\
     [day] [hour]:[minute]:[second].[subsecond]"
 );
+
 // "%Y-%m-%d %H:%M:%S" 12 chars
 const YYYYMMDDHHMMS_FORMAT: &[time::format_description::FormatItem] = format_description!(
     "[year repr:full]-[month repr:numerical padding:zero]-\
     [day] [hour]:[minute]:[second]"
+);
+
+// "%Y-%m-%d %H:%M" 12 chars
+// Used for example in tests/touch/no-rights.sh
+const YYYY_MM_DD_HH_MM_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year repr:full]-[month repr:numerical padding:zero]-\
+    [day] [hour]:[minute]"
 );
 
 // "%Y%m%d%H%M" 12 chars
@@ -325,7 +333,12 @@ fn parse_date(s: &str) -> UResult<FileTime> {
 
     // Also support other formats found in the GNU tests like
     // in tests/misc/stat-nanoseconds.sh
-    for fmt in [YYYYMMDDHHMMS_FORMAT, YYYYMMDDHHMMSS_FORMAT] {
+    // or tests/touch/no-rights.sh
+    for fmt in [
+        YYYYMMDDHHMMS_FORMAT,
+        YYYYMMDDHHMMSS_FORMAT,
+        YYYY_MM_DD_HH_MM_FORMAT,
+    ] {
         if let Ok(parsed) = time::PrimitiveDateTime::parse(s, &fmt) {
             return Ok(dt_to_filename(parsed));
         }
