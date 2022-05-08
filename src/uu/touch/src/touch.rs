@@ -312,6 +312,13 @@ const YYMMDDHHMM_FORMAT: &[time::format_description::FormatItem] = format_descri
     [hour repr:24 padding:zero][minute padding:zero]"
 );
 
+// "%Y-%m-%d %H:%M +offset"
+// Used for example in tests/touch/relative.sh
+const YYYYMMDDHHMM_OFFSET_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year]-[month]-[day] [hour repr:24]:[minute] \
+    [offset_hour sign:mandatory][offset_minute]"
+);
+
 fn parse_date(s: &str) -> UResult<FileTime> {
     // This isn't actually compatible with GNU touch, but there doesn't seem to
     // be any simple specification for what format this parameter allows and I'm
@@ -338,6 +345,7 @@ fn parse_date(s: &str) -> UResult<FileTime> {
         YYYYMMDDHHMMS_FORMAT,
         YYYYMMDDHHMMSS_FORMAT,
         YYYY_MM_DD_HH_MM_FORMAT,
+        YYYYMMDDHHMM_OFFSET_FORMAT,
     ] {
         if let Ok(parsed) = time::PrimitiveDateTime::parse(s, &fmt) {
             return Ok(dt_to_filename(parsed));
