@@ -376,6 +376,26 @@ fn test_iuse_percentage() {
 }
 
 #[test]
+fn test_default_block_size() {
+    let output = new_ucmd!()
+        .arg("--output=size")
+        .succeeds()
+        .stdout_move_str();
+    let header = output.lines().next().unwrap().to_string();
+
+    assert_eq!(header, "1K-blocks");
+
+    let output = new_ucmd!()
+        .arg("--output=size")
+        .env("POSIXLY_CORRECT", "1")
+        .succeeds()
+        .stdout_move_str();
+    let header = output.lines().next().unwrap().to_string();
+
+    assert_eq!(header, "512B-blocks");
+}
+
+#[test]
 fn test_block_size_1024() {
     fn get_header(block_size: u64) -> String {
         let output = new_ucmd!()
