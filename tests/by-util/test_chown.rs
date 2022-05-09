@@ -484,6 +484,29 @@ fn test_chown_only_group_id() {
         .stderr_contains(&"failed to change");
 }
 
+/// Test for setting the group to a group ID for a group that does not exist.
+///
+/// For example:
+///
+///     $ touch f && chown :12345 f
+///
+/// succeeds with exit status 0 and outputs nothing. The group of the
+/// file is set to 12345, even though no group with that ID exists.
+///
+/// This test must be run as root, because only the root user can
+/// transfer ownership of a file.
+#[test]
+fn test_chown_only_group_id_nonexistent_group() {
+    let ts = TestScenario::new(util_name!());
+    let at = ts.fixtures.clone();
+    at.touch("f");
+    if let Ok(result) = run_ucmd_as_root(&ts, &[":12345", "f"]) {
+        result.success().no_stdout().no_stderr();
+    } else {
+        print!("Test skipped; requires root user");
+    }
+}
+
 #[test]
 fn test_chown_owner_group_id() {
     // test chown 1111:1111 file.txt
