@@ -680,6 +680,9 @@ fn gnu_tests() {
             stderr: None,
             exit: None,
         },
+        /*
+        Disable as it fails too often. See:
+        https://github.com/uutils/coreutils/issues/3509
         TestCase {
             name: "112",
             args: &["-D", "-c"],
@@ -687,7 +690,7 @@ fn gnu_tests() {
             stdout: Some(""),
             stderr: Some("uniq: printing all duplicated lines and repeat counts is meaningless"),
             exit: Some(1),
-        },
+        },*/
         TestCase {
             name: "113",
             args: &["--all-repeated=separate"],
