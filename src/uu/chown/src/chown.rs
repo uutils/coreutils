@@ -220,8 +220,7 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
             Ok(g) => g.gid,
             Err(_) => match group.parse() {
                 Ok(gid) => gid,
-                Err(e) => {
-                    eprintln!("error {}, user {}, group {}, uid {:?}", e, user, group, uid);
+                Err(_) => {
                     return Err(USimpleError::new(
                         1,
                         format!("invalid group: {}", spec.quote()),
