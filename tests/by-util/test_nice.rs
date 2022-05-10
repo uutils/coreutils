@@ -1,6 +1,7 @@
 use crate::common::util::*;
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_get_current_niceness() {
     // NOTE: this assumes the test suite is being run with a default niceness
     // of 0, which may not necessarily be true
@@ -8,6 +9,7 @@ fn test_get_current_niceness() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_negative_adjustment() {
     // This assumes the test suite is run as a normal (non-root) user, and as
     // such attempting to set a negative niceness value will be rejected by
@@ -55,4 +57,9 @@ fn test_command_where_command_takes_n_flag() {
         .args(&["-n", "19", "echo", "-n", "a"])
         .run()
         .stdout_is("a");
+}
+
+#[test]
+fn test_invalid_argument() {
+    new_ucmd!().arg("--invalid").fails().code_is(125);
 }

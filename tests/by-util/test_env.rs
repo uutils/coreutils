@@ -83,7 +83,7 @@ fn test_unset_invalid_variables() {
 
     // Cannot test input with \0 in it, since output will also contain \0. rlimit::prlimit fails
     // with this error: Error { kind: InvalidInput, message: "nul byte found in provided data" }
-    for var in &["", "a=b"] {
+    for var in ["", "a=b"] {
         new_ucmd!().arg("-u").arg(var).run().stderr_only(format!(
             "env: cannot unset {}: Invalid argument",
             var.quote()
@@ -187,7 +187,7 @@ fn test_change_directory() {
         .arg(pwd)
         .succeeds()
         .stdout_move_str();
-    assert_eq!(out.trim(), temporary_path.as_os_str())
+    assert_eq!(out.trim(), temporary_path.as_os_str());
 }
 
 #[cfg(windows)]
@@ -219,7 +219,7 @@ fn test_change_directory() {
         .args(&pwd)
         .succeeds()
         .stdout_move_str();
-    assert_eq!(out.trim(), temporary_path.as_os_str())
+    assert_eq!(out.trim(), temporary_path.as_os_str());
 }
 
 #[test]

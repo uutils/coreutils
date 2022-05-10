@@ -14,12 +14,13 @@
 extern crate unix_socket;
 
 // last synced with: cat (GNU coreutils) 8.13
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use std::fs::{metadata, File};
 use std::io::{self, Read, Write};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
+use uucore::fs::FileInformation;
 
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
@@ -35,10 +36,10 @@ use std::net::Shutdown;
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use unix_socket::UnixStream;
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static NAME: &str = "cat";
-static SYNTAX: &str = "[OPTION]... [FILE]...";
+static USAGE: &str = "{} [OPTION]... [FILE]...";
 static SUMMARY: &str = "Concatenate FILE(s), or standard input, to standard output
  With no FILE, or when FILE is -, read standard input.";
 
@@ -181,13 +182,13 @@ mod options {
     pub static SHOW_NONPRINTING: &str = "show-nonprinting";
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let number_mode = if matches.is_present(options::NUMBER_NONBLANK) {
         NumberingMode::NonEmpty
@@ -235,67 +236,72 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         show_tabs,
         squeeze_blank,
     };
-    cat_files(files, &options)
+    cat_files(&files, &options)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .usage(SYNTAX)
+        .override_usage(format_usage(USAGE))
         .about(SUMMARY)
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::SHOW_ALL)
-                .short("A")
+            Arg::new(options::FILE)
+                .hide(true)
+                .multiple_occurrences(true),
+        )
+        .arg(
+            Arg::new(options::SHOW_ALL)
+                .short('A')
                 .long(options::SHOW_ALL)
                 .help("equivalent to -vET"),
         )
         .arg(
-            Arg::with_name(options::NUMBER_NONBLANK)
-                .short("b")
+            Arg::new(options::NUMBER_NONBLANK)
+                .short('b')
                 .long(options::NUMBER_NONBLANK)
                 .help("number nonempty output lines, overrides -n")
                 .overrides_with(options::NUMBER),
         )
         .arg(
-            Arg::with_name(options::SHOW_NONPRINTING_ENDS)
-                .short("e")
+            Arg::new(options::SHOW_NONPRINTING_ENDS)
+                .short('e')
                 .help("equivalent to -vE"),
         )
         .arg(
-            Arg::with_name(options::SHOW_ENDS)
-                .short("E")
+            Arg::new(options::SHOW_ENDS)
+                .short('E')
                 .long(options::SHOW_ENDS)
                 .help("display $ at end of each line"),
         )
         .arg(
-            Arg::with_name(options::NUMBER)
-                .short("n")
+            Arg::new(options::NUMBER)
+                .short('n')
                 .long(options::NUMBER)
                 .help("number all output lines"),
         )
         .arg(
-            Arg::with_name(options::SQUEEZE_BLANK)
-                .short("s")
+            Arg::new(options::SQUEEZE_BLANK)
+                .short('s')
                 .long(options::SQUEEZE_BLANK)
                 .help("suppress repeated empty output lines"),
         )
         .arg(
-            Arg::with_name(options::SHOW_NONPRINTING_TABS)
-                .short("t")
+            Arg::new(options::SHOW_NONPRINTING_TABS)
+                .short('t')
                 .long(options::SHOW_NONPRINTING_TABS)
                 .help("equivalent to -vT"),
         )
         .arg(
-            Arg::with_name(options::SHOW_TABS)
-                .short("T")
+            Arg::new(options::SHOW_TABS)
+                .short('T')
                 .long(options::SHOW_TABS)
                 .help("display TAB characters at ^I"),
         )
         .arg(
-            Arg::with_name(options::SHOW_NONPRINTING)
-                .short("v")
+            Arg::new(options::SHOW_NONPRINTING)
+                .short('v')
                 .long(options::SHOW_NONPRINTING)
                 .help("use ^ and M- notation, except for LF (\\n) and TAB (\\t)"),
         )
@@ -317,18 +323,17 @@ fn cat_path(
     path: &str,
     options: &OutputOptions,
     state: &mut OutputState,
-    #[cfg(unix)] out_info: &nix::sys::stat::FileStat,
-    #[cfg(windows)] out_info: &winapi_util::file::Information,
+    out_info: Option<&FileInformation>,
 ) -> CatResult<()> {
-    if path == "-" {
-        let stdin = io::stdin();
-        let mut handle = InputHandle {
-            reader: stdin,
-            is_interactive: atty::is(atty::Stream::Stdin),
-        };
-        return cat_handle(&mut handle, options, state);
-    }
     match get_input_type(path)? {
+        InputType::StdIn => {
+            let stdin = io::stdin();
+            let mut handle = InputHandle {
+                reader: stdin,
+                is_interactive: atty::is(atty::Stream::Stdin),
+            };
+            cat_handle(&mut handle, options, state)
+        }
         InputType::Directory => Err(CatError::IsDirectory),
         #[cfg(unix)]
         InputType::Socket => {
@@ -342,10 +347,15 @@ fn cat_path(
         }
         _ => {
             let file = File::open(path)?;
-            #[cfg(any(windows, unix))]
-            if same_file(out_info, &file) {
-                return Err(CatError::OutputIsInput);
+
+            if let Some(out_info) = out_info {
+                if out_info.file_size() != 0
+                    && FileInformation::from_file(&file).as_ref() == Some(out_info)
+                {
+                    return Err(CatError::OutputIsInput);
+                }
             }
+
             let mut handle = InputHandle {
                 reader: file,
                 is_interactive: false,
@@ -355,25 +365,8 @@ fn cat_path(
     }
 }
 
-#[cfg(unix)]
-fn same_file(a_info: &nix::sys::stat::FileStat, b: &File) -> bool {
-    let b_info = nix::sys::stat::fstat(b.as_raw_fd()).unwrap();
-    b_info.st_size != 0 && b_info.st_dev == a_info.st_dev && b_info.st_ino == a_info.st_ino
-}
-
-#[cfg(windows)]
-fn same_file(a_info: &winapi_util::file::Information, b: &File) -> bool {
-    let b_info = winapi_util::file::information(b).unwrap();
-    b_info.file_size() != 0
-        && b_info.volume_serial_number() == a_info.volume_serial_number()
-        && b_info.file_index() == a_info.file_index()
-}
-
-fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
-    #[cfg(windows)]
-    let out_info = winapi_util::file::information(&std::io::stdout()).unwrap();
-    #[cfg(unix)]
-    let out_info = nix::sys::stat::fstat(std::io::stdout().as_raw_fd()).unwrap();
+fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
+    let out_info = FileInformation::from_file(&std::io::stdout());
 
     let mut state = OutputState {
         line_number: 1,
@@ -383,8 +376,8 @@ fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
     };
     let mut error_messages: Vec<String> = Vec::new();
 
-    for path in &files {
-        if let Err(err) = cat_path(path, options, &mut state, &out_info) {
+    for path in files {
+        if let Err(err) = cat_path(path, options, &mut state, out_info.as_ref()) {
             error_messages.push(format!("{}: {}", path.maybe_quote(), err));
         }
     }
@@ -486,7 +479,7 @@ fn write_lines<R: FdReadable>(
                 if !state.at_line_start || !options.squeeze_blank || !state.one_blank_kept {
                     state.one_blank_kept = true;
                     if state.at_line_start && options.number == NumberingMode::All {
-                        write!(&mut writer, "{0:6}\t", state.line_number)?;
+                        write!(writer, "{0:6}\t", state.line_number)?;
                         state.line_number += 1;
                     }
                     writer.write_all(options.end_of_line().as_bytes())?;
@@ -505,7 +498,7 @@ fn write_lines<R: FdReadable>(
             }
             state.one_blank_kept = false;
             if state.at_line_start && options.number != NumberingMode::None {
-                write!(&mut writer, "{0:6}\t", state.line_number)?;
+                write!(writer, "{0:6}\t", state.line_number)?;
                 state.line_number += 1;
             }
 
@@ -567,13 +560,12 @@ fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
         {
             Some(p) => {
                 writer.write_all(&in_buf[..p]).unwrap();
-                if in_buf[p] == b'\n' {
-                    return count + p;
-                } else if in_buf[p] == b'\t' {
+                if in_buf[p] == b'\t' {
                     writer.write_all(b"^I").unwrap();
                     in_buf = &in_buf[p + 1..];
                     count += p + 1;
                 } else {
+                    // b'\n' or b'\r'
                     return count + p;
                 }
             }
@@ -596,10 +588,10 @@ fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) ->
             9 => writer.write_all(tab),
             0..=8 | 10..=31 => writer.write_all(&[b'^', byte + 64]),
             32..=126 => writer.write_all(&[byte]),
-            127 => writer.write_all(&[b'^', byte - 64]),
+            127 => writer.write_all(&[b'^', b'?']),
             128..=159 => writer.write_all(&[b'M', b'-', b'^', byte - 64]),
             160..=254 => writer.write_all(&[b'M', b'-', byte - 128]),
-            _ => writer.write_all(&[b'M', b'-', b'^', 63]),
+            _ => writer.write_all(&[b'M', b'-', b'^', b'?']),
         }
         .unwrap();
         count += 1;

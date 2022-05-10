@@ -1,4 +1,4 @@
-# spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest distclean manpages pkgs ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MANDIR MULTICALL
+# spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest distclean manpages pkgs ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR
 
 # Config options
 PROFILE         ?= debug
@@ -22,15 +22,10 @@ CARGOFLAGS ?=
 # Install directories
 PREFIX ?= /usr/local
 DESTDIR ?=
-BINDIR ?= /bin
-MANDIR ?= /man/man1
+BINDIR ?= $(PREFIX)/bin
+DATAROOTDIR ?= $(PREFIX)/share
 
-INSTALLDIR_BIN=$(DESTDIR)$(PREFIX)$(BINDIR)
-INSTALLDIR_MAN=$(DESTDIR)$(PREFIX)/share/$(MANDIR)
-$(shell test -d $(INSTALLDIR_MAN))
-ifneq ($(.SHELLSTATUS),0)
-override INSTALLDIR_MAN=$(DESTDIR)$(PREFIX)$(MANDIR)
-endif
+INSTALLDIR_BIN=$(DESTDIR)$(BINDIR)
 
 #prefix to apply to coreutils binary and all tool binaries
 PROG_PREFIX ?=
@@ -47,18 +42,19 @@ BUSYBOX_VER  := 1.32.1
 BUSYBOX_SRC  := $(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER)
 
 ifeq ($(SELINUX_ENABLED),)
-    SELINUX_ENABLED := 0
-    ifneq ($(OS),Windows_NT)
-        ifeq ($(shell /sbin/selinuxenabled 2>/dev/null ; echo $$?),0)
-            SELINUX_ENABLED := 1
-        endif
-    endif
+	SELINUX_ENABLED := 0
+	ifneq ($(OS),Windows_NT)
+		ifeq ($(shell /sbin/selinuxenabled 2>/dev/null ; echo $$?),0)
+			SELINUX_ENABLED := 1
+		endif
+	endif
 endif
 
 # Possible programs
 PROGS       := \
 	base32 \
 	base64 \
+	basenc \
 	basename \
 	cat \
 	cksum \
@@ -67,7 +63,9 @@ PROGS       := \
 	csplit \
 	cut \
 	date \
+	dd \
 	df \
+	dir \
 	dircolors \
 	dirname \
 	echo \
@@ -121,6 +119,7 @@ PROGS       := \
 	tsort \
 	unexpand \
 	uniq \
+	vdir \
 	wc \
 	whoami \
 	yes
@@ -161,11 +160,11 @@ SELINUX_PROGS := \
 	runcon
 
 ifneq ($(OS),Windows_NT)
-	PROGS    := $(PROGS) $(UNIX_PROGS)
+	PROGS := $(PROGS) $(UNIX_PROGS)
 endif
 
 ifeq ($(SELINUX_ENABLED),1)
-    PROGS := $(PROGS) $(SELINUX_PROGS)
+	PROGS := $(PROGS) $(SELINUX_PROGS)
 endif
 
 UTILS ?= $(PROGS)
@@ -279,10 +278,7 @@ endif
 build-coreutils:
 	${CARGO} build ${CARGOFLAGS} --features "${EXES}" ${PROFILE_CMD} --no-default-features
 
-build-manpages:
-	cd $(DOCSDIR) && $(MAKE) man
-
-build: build-coreutils build-pkgs build-manpages
+build: build-coreutils build-pkgs
 
 $(foreach test,$(filter-out $(SKIP_UTILS),$(PROGS)),$(eval $(call TEST_BUSYBOX,$(test))))
 
@@ -316,7 +312,7 @@ busytest: $(BUILDDIR)/busybox $(addprefix test_busybox_,$(filter-out $(SKIP_UTIL
 endif
 
 clean:
-	$(RM) $(BUILDDIR)
+	cargo clean
 	cd $(DOCSDIR) && $(MAKE) clean
 
 distclean: clean
@@ -324,39 +320,33 @@ distclean: clean
 
 install: build
 	mkdir -p $(INSTALLDIR_BIN)
-	mkdir -p $(INSTALLDIR_MAN)
 ifeq (${MULTICALL}, y)
 	$(INSTALL) $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
 	cd $(INSTALLDIR_BIN) && $(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
 		ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) &&) :
 	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
-	cat $(DOCSDIR)/_build/man/coreutils.1 | gzip > $(INSTALLDIR_MAN)/$(PROG_PREFIX)coreutils.1.gz
 else
 	$(foreach prog, $(INSTALLEES), \
 		$(INSTALL) $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
 	$(if $(findstring test,$(INSTALLEES)), $(INSTALL) $(BUILDDIR)/test $(INSTALLDIR_BIN)/$(PROG_PREFIX)[)
 endif
-	$(foreach man, $(filter $(INSTALLEES), $(basename $(notdir $(wildcard $(DOCSDIR)/_build/man/*)))), \
-		cat $(DOCSDIR)/_build/man/$(man).1 | gzip > $(INSTALLDIR_MAN)/$(PROG_PREFIX)$(man).1.gz &&) :
-	mkdir -p $(DESTDIR)$(PREFIX)/share/zsh/site-functions
-	mkdir -p $(DESTDIR)$(PREFIX)/share/bash-completion/completions
-	mkdir -p $(DESTDIR)$(PREFIX)/share/fish/vendor_completions.d
+	mkdir -p $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions
+	mkdir -p $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions
+	mkdir -p $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
 	$(foreach prog, $(INSTALLEES), \
-		$(BUILDDIR)/coreutils completion $(prog) zsh > $(DESTDIR)$(PREFIX)/share/zsh/site-functions/_$(PROG_PREFIX)$(prog); \
-		$(BUILDDIR)/coreutils completion $(prog) bash > $(DESTDIR)$(PREFIX)/share/bash-completion/completions/$(PROG_PREFIX)$(prog); \
-		$(BUILDDIR)/coreutils completion $(prog) fish > $(DESTDIR)$(PREFIX)/share/fish/vendor_completions.d/$(PROG_PREFIX)$(prog).fish; \
+		$(BUILDDIR)/coreutils completion $(prog) zsh > $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX)$(prog); \
+		$(BUILDDIR)/coreutils completion $(prog) bash > $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX)$(prog); \
+		$(BUILDDIR)/coreutils completion $(prog) fish > $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX)$(prog).fish; \
 	)
 
 uninstall:
 ifeq (${MULTICALL}, y)
 	rm -f $(addprefix $(INSTALLDIR_BIN)/,$(PROG_PREFIX)coreutils)
 endif
-	rm -f $(addprefix $(INSTALLDIR_MAN)/,$(PROG_PREFIX)coreutils.1.gz)
 	rm -f $(addprefix $(INSTALLDIR_BIN)/$(PROG_PREFIX),$(PROGS))
 	rm -f $(INSTALLDIR_BIN)/$(PROG_PREFIX)[
-	rm -f $(addprefix $(DESTDIR)$(PREFIX)/share/zsh/site-functions/_$(PROG_PREFIX),$(PROGS))
-	rm -f $(addprefix $(DESTDIR)$(PREFIX)/share/bash-completion/completions/$(PROG_PREFIX),$(PROGS))
-	rm -f $(addprefix $(DESTDIR)$(PREFIX)/share/fish/vendor_completions.d/$(PROG_PREFIX),$(addsuffix .fish,$(PROGS)))
-	rm -f $(addprefix $(INSTALLDIR_MAN)/$(PROG_PREFIX),$(addsuffix .1.gz,$(PROGS)))
+	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX),$(PROGS))
+	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX),$(PROGS))
+	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX),$(addsuffix .fish,$(PROGS)))
 
-.PHONY: all build build-coreutils build-pkgs build-docs test distclean clean busytest install uninstall
+.PHONY: all build build-coreutils build-pkgs test distclean clean busytest install uninstall

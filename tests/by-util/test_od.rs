@@ -37,7 +37,7 @@ fn test_file() {
         let mut f = File::create(&file).unwrap();
         // spell-checker:disable-next-line
         assert!(
-            !f.write_all(b"abcdefghijklmnopqrstuvwxyz\n").is_err(),
+            f.write_all(b"abcdefghijklmnopqrstuvwxyz\n").is_ok(),
             "Test setup failed - could not write file"
         );
     }
@@ -70,15 +70,15 @@ fn test_2files() {
     let file1 = tmpdir.join("test1");
     let file2 = tmpdir.join("test2");
 
-    for &(n, a) in &[(1, "a"), (2, "b")] {
+    for (n, a) in [(1, "a"), (2, "b")] {
         println!("number: {} letter:{}", n, a);
     }
 
     // spell-checker:disable-next-line
-    for &(path, data) in &[(&file1, "abcdefghijklmnop"), (&file2, "qrstuvwxyz\n")] {
+    for (path, data) in [(&file1, "abcdefghijklmnop"), (&file2, "qrstuvwxyz\n")] {
         let mut f = File::create(&path).unwrap();
         assert!(
-            !f.write_all(data.as_bytes()).is_err(),
+            f.write_all(data.as_bytes()).is_ok(),
             "Test setup failed - could not write file"
         );
     }
@@ -127,10 +127,10 @@ fn test_from_mixed() {
 
     // spell-checker:disable-next-line
     let (data1, data2, data3) = ("abcdefg", "hijklmnop", "qrstuvwxyz\n");
-    for &(path, data) in &[(&file1, data1), (&file3, data3)] {
+    for (path, data) in [(&file1, data1), (&file3, data3)] {
         let mut f = File::create(&path).unwrap();
         assert!(
-            !f.write_all(data.as_bytes()).is_err(),
+            f.write_all(data.as_bytes()).is_ok(),
             "Test setup failed - could not write file"
         );
     }

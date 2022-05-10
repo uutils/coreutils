@@ -5,11 +5,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::App;
-use clap::Arg;
-use clap::Shell;
+use clap::{Arg, Command};
+use clap_complete::Shell;
 use std::cmp;
-use std::collections::hash_map::HashMap;
 use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::io::{self, Write};
@@ -65,7 +63,7 @@ fn main() {
     // * prefix/stem may be any string ending in a non-alphanumeric character
     let util_name = if let Some(util) = utils.keys().find(|util| {
         binary_as_util.ends_with(*util)
-            && !(&binary_as_util[..binary_as_util.len() - (*util).len()])
+            && !binary_as_util[..binary_as_util.len() - (*util).len()]
                 .ends_with(char::is_alphanumeric)
     }) {
         // prefixed util => replace 0th (aka, executable name) argument
@@ -89,7 +87,7 @@ fn main() {
         };
 
         if util == "completion" {
-            gen_completions(args, utils);
+            gen_completions(args, &utils);
         }
 
         match utils.get(util) {
@@ -134,22 +132,22 @@ fn main() {
 /// Prints completions for the utility in the first parameter for the shell in the second parameter to stdout
 fn gen_completions<T: uucore::Args>(
     args: impl Iterator<Item = OsString>,
-    util_map: UtilityMap<T>,
+    util_map: &UtilityMap<T>,
 ) -> ! {
     let all_utilities: Vec<_> = std::iter::once("coreutils")
         .chain(util_map.keys().copied())
         .collect();
 
-    let matches = App::new("completion")
+    let matches = Command::new("completion")
         .about("Prints completions to stdout")
         .arg(
-            Arg::with_name("utility")
-                .possible_values(&all_utilities)
+            Arg::new("utility")
+                .possible_values(all_utilities)
                 .required(true),
         )
         .arg(
-            Arg::with_name("shell")
-                .possible_values(&Shell::variants())
+            Arg::new("shell")
+                .possible_values(Shell::possible_values())
                 .required(true),
         )
         .get_matches_from(std::iter::once(OsString::from("completion")).chain(args));
@@ -157,7 +155,7 @@ fn gen_completions<T: uucore::Args>(
     let utility = matches.value_of("utility").unwrap();
     let shell = matches.value_of("shell").unwrap();
 
-    let mut app = if utility == "coreutils" {
+    let mut command = if utility == "coreutils" {
         gen_coreutils_app(util_map)
     } else {
         util_map.get(utility).unwrap().1()
@@ -165,15 +163,15 @@ fn gen_completions<T: uucore::Args>(
     let shell: Shell = shell.parse().unwrap();
     let bin_name = std::env::var("PROG_PREFIX").unwrap_or_default() + utility;
 
-    app.gen_completions_to(bin_name, shell, &mut io::stdout());
+    clap_complete::generate(shell, &mut command, bin_name, &mut io::stdout());
     io::stdout().flush().unwrap();
     process::exit(0);
 }
 
-fn gen_coreutils_app<T: uucore::Args>(util_map: UtilityMap<T>) -> App<'static, 'static> {
-    let mut app = App::new("coreutils");
+fn gen_coreutils_app<T: uucore::Args>(util_map: &UtilityMap<T>) -> Command<'static> {
+    let mut command = Command::new("coreutils");
     for (_, (_, sub_app)) in util_map {
-        app = app.subcommand(sub_app());
+        command = command.subcommand(sub_app());
     }
-    app
+    command
 }

@@ -1,3 +1,5 @@
+// spell-checker:ignore αbcdef
+
 use crate::common::util::*;
 
 #[test]
@@ -93,6 +95,27 @@ fn test_and() {
         .stdout_only("foo\n");
 
     new_ucmd!().args(&["", "&", "1"]).run().stdout_is("0\n");
+}
+
+#[test]
+fn test_length_fail() {
+    new_ucmd!().args(&["length", "αbcdef", "1"]).fails();
+}
+
+#[test]
+fn test_length() {
+    new_ucmd!()
+        .args(&["length", "abcdef"])
+        .succeeds()
+        .stdout_only("6\n");
+}
+
+#[test]
+fn test_length_mb() {
+    new_ucmd!()
+        .args(&["length", "αbcdef"])
+        .succeeds()
+        .stdout_only("6\n");
 }
 
 #[test]

@@ -1,15 +1,17 @@
 /// Thin pipe-related wrappers around functions from the `nix` crate.
 use std::fs::File;
 #[cfg(any(target_os = "linux", target_os = "android"))]
+use std::io::IoSlice;
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::io::AsRawFd;
 use std::os::unix::io::FromRawFd;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::{fcntl::SpliceFFlags, sys::uio::IoVec};
+use nix::fcntl::SpliceFFlags;
 
 pub use nix::{Error, Result};
 
-/// A wrapper around [`nix::unistd::Pipe`] that ensures the pipe is cleaned up.
+/// A wrapper around [`nix::unistd::pipe`] that ensures the pipe is cleaned up.
 ///
 /// Returns two `File` objects: everything written to the second can be read
 /// from the first.
@@ -63,7 +65,7 @@ pub fn splice_exact(source: &impl AsRawFd, target: &impl AsRawFd, len: usize) ->
 pub fn vmsplice(target: &impl AsRawFd, bytes: &[u8]) -> Result<usize> {
     nix::fcntl::vmsplice(
         target.as_raw_fd(),
-        &[IoVec::from_slice(bytes)],
+        &[IoSlice::new(bytes)],
         SpliceFFlags::empty(),
     )
 }

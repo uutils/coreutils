@@ -92,7 +92,7 @@ impl ExtendedBigDecimal {
     /// The smallest integer greater than or equal to this number.
     pub fn ceil(self) -> ExtendedBigInt {
         match self {
-            ExtendedBigDecimal::BigDecimal(x) => ExtendedBigInt::BigInt(ceil(x)),
+            Self::BigDecimal(x) => ExtendedBigInt::BigInt(ceil(x)),
             other => From::from(other),
         }
     }
@@ -100,7 +100,7 @@ impl ExtendedBigDecimal {
     /// The largest integer less than or equal to this number.
     pub fn floor(self) -> ExtendedBigInt {
         match self {
-            ExtendedBigDecimal::BigDecimal(x) => ExtendedBigInt::BigInt(floor(x)),
+            Self::BigDecimal(x) => ExtendedBigInt::BigInt(floor(x)),
             other => From::from(other),
         }
     }
@@ -110,10 +110,10 @@ impl From<ExtendedBigInt> for ExtendedBigDecimal {
     fn from(big_int: ExtendedBigInt) -> Self {
         match big_int {
             ExtendedBigInt::BigInt(n) => Self::BigDecimal(BigDecimal::from(n)),
-            ExtendedBigInt::Infinity => ExtendedBigDecimal::Infinity,
-            ExtendedBigInt::MinusInfinity => ExtendedBigDecimal::MinusInfinity,
-            ExtendedBigInt::MinusZero => ExtendedBigDecimal::MinusZero,
-            ExtendedBigInt::Nan => ExtendedBigDecimal::Nan,
+            ExtendedBigInt::Infinity => Self::Infinity,
+            ExtendedBigInt::MinusInfinity => Self::MinusInfinity,
+            ExtendedBigInt::MinusZero => Self::MinusZero,
+            ExtendedBigInt::Nan => Self::Nan,
         }
     }
 }
@@ -121,31 +121,24 @@ impl From<ExtendedBigInt> for ExtendedBigDecimal {
 impl Display for ExtendedBigDecimal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExtendedBigDecimal::BigDecimal(x) => {
+            Self::BigDecimal(x) => {
                 let (n, p) = x.as_bigint_and_exponent();
                 match p {
-                    0 => ExtendedBigDecimal::BigDecimal(BigDecimal::new(n * 10, 1)).fmt(f),
+                    0 => Self::BigDecimal(BigDecimal::new(n * 10, 1)).fmt(f),
                     _ => x.fmt(f),
                 }
             }
-            ExtendedBigDecimal::Infinity => f32::INFINITY.fmt(f),
-            ExtendedBigDecimal::MinusInfinity => f32::NEG_INFINITY.fmt(f),
-            ExtendedBigDecimal::MinusZero => {
-                // FIXME In Rust version 1.53.0 and later, the display
-                // of floats was updated to allow displaying negative
-                // zero. See
-                // https://github.com/rust-lang/rust/pull/78618. Currently,
-                // this just formats "0.0".
-                (0.0f32).fmt(f)
-            }
-            ExtendedBigDecimal::Nan => "nan".fmt(f),
+            Self::Infinity => f32::INFINITY.fmt(f),
+            Self::MinusInfinity => f32::NEG_INFINITY.fmt(f),
+            Self::MinusZero => (-0.0f32).fmt(f),
+            Self::Nan => "nan".fmt(f),
         }
     }
 }
 
 impl Zero for ExtendedBigDecimal {
     fn zero() -> Self {
-        ExtendedBigDecimal::BigDecimal(BigDecimal::zero())
+        Self::BigDecimal(BigDecimal::zero())
     }
     fn is_zero(&self) -> bool {
         match self {
@@ -280,11 +273,6 @@ mod tests {
         assert_eq!(format!("{}", ExtendedBigDecimal::Infinity), "inf");
         assert_eq!(format!("{}", ExtendedBigDecimal::MinusInfinity), "-inf");
         assert_eq!(format!("{}", ExtendedBigDecimal::Nan), "nan");
-        // FIXME In Rust version 1.53.0 and later, the display of floats
-        // was updated to allow displaying negative zero. Until then, we
-        // just display `MinusZero` as "0.0".
-        //
-        //     assert_eq!(format!("{}", ExtendedBigDecimal::MinusZero), "-0.0");
-        //
+        assert_eq!(format!("{}", ExtendedBigDecimal::MinusZero), "-0");
     }
 }

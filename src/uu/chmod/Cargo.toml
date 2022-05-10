@@ -1,29 +1,24 @@
 [package]
 name = "uu_chmod"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "chmod ~ (uutils) change mode of FILE"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/chmod"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/chmod"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 path = "src/chmod.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
-libc = "0.2.42"
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["fs", "mode"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
-walkdir = "2.2"
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
+libc = "0.2.125"
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["fs", "mode"] }
 
 [[bin]]
 name = "chmod"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

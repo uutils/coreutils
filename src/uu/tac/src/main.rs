@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_tac);
+uucore::bin!(uu_tac);

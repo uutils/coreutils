@@ -1,27 +1,23 @@
 [package]
 name = "uu_stat"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "stat ~ (uutils) display FILE status"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/stat"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/stat"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 path = "src/stat.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["entries", "libc", "fs", "fsext"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["entries", "libc", "fs", "fsext"] }
 
 [[bin]]
 name = "stat"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

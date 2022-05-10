@@ -4,7 +4,7 @@
 //! The [`Number`] enumeration represents the possible values for the
 //! start, increment, and end values for `seq`. These may be integers,
 //! floating point numbers, negative zero, etc. A [`Number`] can be
-//! parsed from a string by calling [`parse`].
+//! parsed from a string by calling [`str::parse`].
 use num_traits::Zero;
 
 use crate::extendedbigdecimal::ExtendedBigDecimal;
@@ -42,7 +42,7 @@ impl Number {
         // We would like to implement `num_traits::One`, but it requires
         // a multiplication implementation, and we don't want to
         // implement that here.
-        Number::Int(ExtendedBigInt::one())
+        Self::Int(ExtendedBigInt::one())
     }
 
     /// Round this number towards the given other number.
@@ -77,7 +77,7 @@ impl Number {
 ///
 /// This struct can be used to represent a number along with information
 /// on how many significant digits to use when displaying the number.
-/// The [`num_integral_digits`] field also includes the width needed to
+/// The [`PreciseNumber::num_integral_digits`] field also includes the width needed to
 /// display the "-" character for a negative number.
 ///
 /// You can get an instance of this struct by calling [`str::parse`].
@@ -89,12 +89,8 @@ pub struct PreciseNumber {
 }
 
 impl PreciseNumber {
-    pub fn new(
-        number: Number,
-        num_integral_digits: usize,
-        num_fractional_digits: usize,
-    ) -> PreciseNumber {
-        PreciseNumber {
+    pub fn new(number: Number, num_integral_digits: usize, num_fractional_digits: usize) -> Self {
+        Self {
             number,
             num_integral_digits,
             num_fractional_digits,
@@ -106,7 +102,7 @@ impl PreciseNumber {
         // We would like to implement `num_traits::One`, but it requires
         // a multiplication implementation, and we don't want to
         // implement that here.
-        PreciseNumber::new(Number::one(), 1, 0)
+        Self::new(Number::one(), 1, 0)
     }
 
     /// Decide whether this number is zero (either positive or negative).

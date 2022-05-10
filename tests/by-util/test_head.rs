@@ -157,11 +157,17 @@ fn test_negative_byte_syntax() {
 #[test]
 fn test_negative_zero_lines() {
     new_ucmd!()
-        .args(&["--lines=-0"])
+        .arg("--lines=-0")
         .pipe_in("a\nb\n")
         .succeeds()
         .stdout_is("a\nb\n");
+    new_ucmd!()
+        .arg("--lines=-0")
+        .pipe_in("a\nb")
+        .succeeds()
+        .stdout_is("a\nb");
 }
+
 #[test]
 fn test_negative_zero_bytes() {
     new_ucmd!()
@@ -220,9 +226,9 @@ fn test_zero_terminated() {
 fn test_obsolete_extras() {
     new_ucmd!()
         .args(&["-5zv"])
-        .pipe_in("1\02\03\04\05\06")
+        .pipe_in("1\x002\x003\x004\x005\x006")
         .succeeds()
-        .stdout_is("==> standard input <==\n1\02\03\04\05\0");
+        .stdout_is("==> standard input <==\n1\x002\x003\x004\x005\0");
 }
 
 #[test]
@@ -296,16 +302,23 @@ fn test_head_invalid_num() {
     {
         let sizes = ["1000G", "10T"];
         for size in &sizes {
+            new_ucmd!().args(&["-c", size]).succeeds();
+        }
+    }
+    #[cfg(target_pointer_width = "32")]
+    {
+        let sizes = ["-1000G", "-10T"];
+        for size in &sizes {
             new_ucmd!()
                 .args(&["-c", size])
                 .fails()
-                .code_is(1)
-                .stderr_only(format!(
-                    "head: invalid number of bytes: '{}': Value too large for defined data type",
-                    size
-                ));
+                .stderr_is("head: out of range integral type conversion attempted: number of bytes is too large");
         }
     }
+    new_ucmd!()
+        .args(&["-c", "-³"])
+        .fails()
+        .stderr_is("head: invalid number of bytes: '³'");
 }
 
 #[test]
@@ -328,4 +341,22 @@ fn test_head_num_with_undocumented_sign_bytes() {
         .pipe_in(ALPHABET)
         .succeeds()
         .stdout_is("abcde");
+}
+
+#[test]
+fn test_presume_input_pipe_default() {
+    new_ucmd!()
+        .args(&["---presume-input-pipe"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("lorem_ipsum_default.expected");
+}
+
+#[test]
+fn test_presume_input_pipe_5_chars() {
+    new_ucmd!()
+        .args(&["-c", "5", "---presume-input-pipe"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("lorem_ipsum_5_chars.expected");
 }

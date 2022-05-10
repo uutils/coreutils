@@ -5,7 +5,7 @@ use std::fs::OpenOptions;
 #[cfg(unix)]
 use std::io::Read;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::Resource;
 
 #[test]
@@ -19,7 +19,7 @@ fn test_output_simple() {
 #[test]
 fn test_no_options() {
     // spell-checker:disable-next-line
-    for fixture in &["empty.txt", "alpha.txt", "nonewline.txt"] {
+    for fixture in ["empty.txt", "alpha.txt", "nonewline.txt"] {
         // Give fixture through command line file argument
         new_ucmd!()
             .args(&[fixture])
@@ -36,7 +36,7 @@ fn test_no_options() {
 #[test]
 #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
 fn test_no_options_big_input() {
-    for &n in &[
+    for n in [
         0,
         1,
         42,
@@ -93,7 +93,7 @@ fn test_fifo_symlink() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_closes_file_descriptors() {
     // Each file creates a pipe, which has two file descriptors.
     // If they are not closed then five is certainly too many.
@@ -114,7 +114,7 @@ fn test_closes_file_descriptors() {
 fn test_piped_to_regular_file() {
     use std::fs::read_to_string;
 
-    for &append in &[true, false] {
+    for append in [true, false] {
         let s = TestScenario::new(util_name!());
         let file_path = s.fixtures.plus("file.txt");
 
@@ -139,7 +139,7 @@ fn test_piped_to_regular_file() {
 #[test]
 #[cfg(unix)]
 fn test_piped_to_dev_null() {
-    for &append in &[true, false] {
+    for append in [true, false] {
         let s = TestScenario::new(util_name!());
         {
             let dev_null = OpenOptions::new()
@@ -159,7 +159,7 @@ fn test_piped_to_dev_null() {
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_piped_to_dev_full() {
-    for &append in &[true, false] {
+    for append in [true, false] {
         let s = TestScenario::new(util_name!());
         {
             let dev_full = OpenOptions::new()
@@ -172,7 +172,7 @@ fn test_piped_to_dev_full() {
                 .set_stdout(dev_full)
                 .pipe_in_fixture("alpha.txt")
                 .fails()
-                .stderr_contains(&"No space left on device".to_owned());
+                .stderr_contains("No space left on device");
         }
     }
 }
@@ -192,7 +192,7 @@ fn test_directory_and_file() {
     let s = TestScenario::new(util_name!());
     s.fixtures.mkdir("test_directory2");
     // spell-checker:disable-next-line
-    for fixture in &["empty.txt", "alpha.txt", "nonewline.txt"] {
+    for fixture in ["empty.txt", "alpha.txt", "nonewline.txt"] {
         s.ucmd()
             .args(&["test_directory2", fixture])
             .fails()
@@ -264,7 +264,7 @@ fn test_numbered_lines_no_trailing_newline() {
 
 #[test]
 fn test_stdin_show_nonprinting() {
-    for same_param in &["-v", "--show-nonprinting"] {
+    for same_param in ["-v", "--show-nonprinting", "--show-non"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -275,7 +275,7 @@ fn test_stdin_show_nonprinting() {
 
 #[test]
 fn test_stdin_show_tabs() {
-    for same_param in &["-T", "--show-tabs"] {
+    for same_param in ["-T", "--show-tabs", "--show-ta"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -286,7 +286,7 @@ fn test_stdin_show_tabs() {
 
 #[test]
 fn test_stdin_show_ends() {
-    for &same_param in &["-E", "--show-ends"] {
+    for same_param in ["-E", "--show-ends", "--show-e"] {
         new_ucmd!()
             .args(&[same_param, "-"])
             .pipe_in("\t\0\n\t")
@@ -317,7 +317,7 @@ fn test_show_ends_crlf() {
 
 #[test]
 fn test_stdin_show_all() {
-    for same_param in &["-A", "--show-all"] {
+    for same_param in ["-A", "--show-all", "--show-a"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -346,7 +346,7 @@ fn test_stdin_nonprinting_and_tabs() {
 
 #[test]
 fn test_stdin_squeeze_blank() {
-    for same_param in &["-s", "--squeeze-blank"] {
+    for same_param in ["-s", "--squeeze-blank", "--squeeze"] {
         new_ucmd!()
             .arg(same_param)
             .pipe_in("\n\na\n\n\n\n\nb\n\n\n")
@@ -358,7 +358,7 @@ fn test_stdin_squeeze_blank() {
 #[test]
 fn test_stdin_number_non_blank() {
     // spell-checker:disable-next-line
-    for same_param in &["-b", "--number-nonblank"] {
+    for same_param in ["-b", "--number-nonblank", "--number-non"] {
         new_ucmd!()
             .arg(same_param)
             .arg("-")
@@ -371,7 +371,7 @@ fn test_stdin_number_non_blank() {
 #[test]
 fn test_non_blank_overrides_number() {
     // spell-checker:disable-next-line
-    for &same_param in &["-b", "--number-nonblank"] {
+    for same_param in ["-b", "--number-nonblank"] {
         new_ucmd!()
             .args(&[same_param, "-"])
             .pipe_in("\na\nb\n\n\nc")
@@ -382,7 +382,7 @@ fn test_non_blank_overrides_number() {
 
 #[test]
 fn test_squeeze_blank_before_numbering() {
-    for &same_param in &["-s", "--squeeze-blank"] {
+    for same_param in ["-s", "--squeeze-blank"] {
         new_ucmd!()
             .args(&[same_param, "-n", "-"])
             .pipe_in("a\n\n\nb")
@@ -396,10 +396,10 @@ fn test_squeeze_blank_before_numbering() {
 #[cfg(unix)]
 fn test_dev_random() {
     let mut buf = [0; 2048];
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     const DEV_RANDOM: &str = "/dev/urandom";
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     const DEV_RANDOM: &str = "/dev/random";
 
     let mut proc = new_ucmd!().args(&[DEV_RANDOM]).run_no_wait();

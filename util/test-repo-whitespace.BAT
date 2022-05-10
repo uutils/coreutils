@@ -1,19 +1,21 @@
 @setLocal
 @echo off
 
-:: `test-repo-whitespace [DIR]...`
+:: `test-repo-whitespace [DIR]...` v2022.01.01
 :: style inspector ~ whitespace: find nonconforming files in repository
 
-:: Copyright (C) 2016-2020 ~ Roy Ivy III <rivy.dev@gmail.com>
+:: Copyright (C) 2016-2022 ~ Roy Ivy III <rivy.dev@gmail.com>
 :: License: MIT/Apache-2.0 (see https://opensource.org/licenses/Apache-2.0 , https://opensource.org/licenses/MIT)
 :: * this software is provided for free, WITHOUT ANY EXPRESS OR IMPLIED WARRANTY (see the license for details)
 
-:: spell-checker:ignore (ignore) CTYPE POSIX RETval RETvar akefile makefile makefiles multiline
 :: spell-checker:ignore (shell/cmd) COMSPEC ERRORLEVEL
+:: spell-checker:ignore () CTYPE POSIX Tval Tvar akefile makefile makefiles multiline testdata
 
 :config
-set "_exclude_dir=(?i)[_.#]build|[.]git|[.]gpg|[.]vs|fixtures|vendor"
-set "_exclude=(?i)[.](cache|dll|exe|gif|gz|zip)$"
+set "_exclude_dirs_rx=(?i)[_.#]build|[.]git|[.]gpg|[.]obj|[.]vs|fixtures|node_modules|target|testdata|test-resources|vendor"
+set "_exclude_files_rx=(?i)[.](cache|dll|exe|gif|gz|ico|png|zip)$"
+set "_crlf_files_rx=(?i)[.](bat|cmd|csv)$"
+set "_tabbed_files_rx=(?i)^^(.*[.]go|go[.](mod|sum)|(GNU)?[Mm]akefile([.].*)?)$"
 :config_done
 
 set _dp0=%~dp0.
@@ -34,36 +36,36 @@ if /i "%LC_CTYPE%"=="posix" (set "LC_CTYPE=C") &:: `pcregrep` doesn't understand
 set "ERRORLEVEL="
 set "ERROR="
 :: 1. Test for TABs within leading whitespace (except go files makefiles)
-"%PCREGREP%" -I --exclude-dir "%_exclude_dir%" --exclude "%_exclude%" --exclude "(?i)[.]go$" --exclude "go[.](mod|sum)" --exclude "(GNU)?[Mm]akefile([.].*)?" --count --files-with-matches --recursive "^\s*\t" %dirs%
+"%PCREGREP%" -I --exclude-dir "%_exclude_dirs_rx%" --exclude "%_exclude_files_rx%" --exclude "%_tabbed_files_rx%" --count --files-with-matches --recursive "^\s*\t" %dirs%
 if NOT "%ERRORLEVEL%" == "1" ( set ERROR=1 & echo ERROR: files found with TABs within leading whitespace [file:#lines_matched])
 
 :: 2. Test for lines with internal TABs
-"%PCREGREP%" -I --exclude-dir "%_exclude_dir%" --exclude "%_exclude%" --count --files-with-matches --recursive "^.*[^\t]\t" %dirs%
+"%PCREGREP%" -I --exclude-dir "%_exclude_dirs_rx%" --exclude "%_exclude_files_rx%" --count --files-with-matches --recursive "^.*[^\t]\t" %dirs%
 if NOT "%ERRORLEVEL%" == "1" ( set ERROR=1 & echo ERROR: files found with lines containing internal TABs [file:#lines_matched])
 
 :: 3. Test that makefiles have ONLY initial-TAB leading whitespace
-"%PCREGREP%" -I --exclude-dir "%_exclude_dir%" --include "(GNU)?[Mm]akefile([.].*)?" --exclude "[.](to|y)ml$" --recursive --line-number --invert-match "^([\t]\s*\S|\S|$)" %dirs%
+"%PCREGREP%" -I --exclude-dir "%_exclude_dirs_rx%" --include "(GNU)?[Mm]akefile([.].*)?" --exclude "[.](to|y)ml$" --recursive --line-number --invert-match "^([\t]\s*\S|\S|$)" %dirs%
 if NOT "%ERRORLEVEL%" == "1" ( set ERROR=1 & echo ERROR: Makefiles found with lines having non-TAB leading whitespace [file:line_number])
 
 :: 4. Test for non-LF line endings
 set "HAVE_NonLF_ERROR="
-"%PCREGREP%" --buffer-size=1M -I --exclude-dir "%_exclude_dir%" --exclude "%_exclude%" -NLF --files-with-matches --multiline --recursive "\r[^\n]" %dirs%
+"%PCREGREP%" --buffer-size=1M -I --exclude-dir "%_exclude_dirs_rx%" --exclude "%_exclude_files_rx%" -NLF --files-with-matches --multiline --recursive "\r[^\n]" %dirs%
 if NOT "%ERRORLEVEL%" == "1" ( set HAVE_NonLF_ERROR=1 & echo ## files found with CR line endings)
-"%PCREGREP%" --buffer-size=1M -I --exclude-dir "%_exclude_dir%" --exclude "%_exclude%" --exclude "(?i)\.bat$|\.cmd$" -NLF --files-with-matches --multiline --recursive "\r\n" %dirs%
+"%PCREGREP%" --buffer-size=1M -I --exclude-dir "%_exclude_dirs_rx%" --exclude "%_exclude_files_rx%" --exclude "%_crlf_files_rx%" -NLF --files-with-matches --multiline --recursive "\r\n" %dirs%
 if NOT "%ERRORLEVEL%" == "1" ( set HAVE_NonLF_ERROR=1 & echo ## files found with CRLF line endings)
 if DEFINED HAVE_NonLF_ERROR ( set ERROR=1 & echo ERROR: files found with non-LF line endings)
 
 :: 5. Test for files without trailing newline
-:: "%PCREGREP%" -I --exclude-dir "%_exclude_dir%" --exclude "%_exclude%" --files-without-match --multiline --recursive "\r?[\r\n]\z" %dirs%
-"%PCREGREP%" -I --exclude-dir "%_exclude_dir%" --exclude "%_exclude%" --files-with-matches --multiline --recursive "\z" %dirs%
+:: "%PCREGREP%" -I --exclude-dir "%_exclude_dirs_rx%" --exclude "%_exclude_files_rx%" --files-without-match --multiline --recursive "\r?[\r\n]\z" %dirs%
+"%PCREGREP%" -I --exclude-dir "%_exclude_dirs_rx%" --exclude "%_exclude_files_rx%" --files-with-matches --multiline --recursive "\z" %dirs%
 if NOT "%ERRORLEVEL%" == "1" ( set ERROR=1 & echo ERROR: files found without trailing newline)
 
 :: 6. Test for files with lines having trailing whitespace
-"%PCREGREP%" -I --exclude-dir "%_exclude_dir%" --exclude "%_exclude%" --recursive --line-number "\s$" %dirs%
+"%PCREGREP%" -I --exclude-dir "%_exclude_dirs_rx%" --exclude "%_exclude_files_rx%" --recursive --line-number "\s$" %dirs%
 if NOT "%ERRORLEVEL%" == "1" ( set ERROR=1 & echo ERROR: files found with lines having trailing whitespace [file:line_number])
 
 :: 7. Test for files with BOM
-"%PCREGREP%" -I --exclude-dir "%_exclude_dir%" --exclude "%_exclude%" --files-with-matches --multiline --recursive "\A[\xEF][\xBB][\xBF]" %dirs%
+"%PCREGREP%" -I --exclude-dir "%_exclude_dirs_rx%" --exclude "%_exclude_files_rx%" --files-with-matches --multiline --recursive "\A[\xEF][\xBB][\xBF]" %dirs%
 if NOT "%ERRORLEVEL%" == "1" ( set ERROR=1 & echo ERROR: files found with leading BOM)
 
 :script_done

@@ -155,7 +155,7 @@ fn test_multiple_decimals_general() {
     test_helper(
         "multiple_decimals_general",
         &["-g", "--general-numeric-sort", "--sort=general-numeric"],
-    )
+    );
 }
 
 #[test]
@@ -163,7 +163,7 @@ fn test_multiple_decimals_numeric() {
     test_helper(
         "multiple_decimals_numeric",
         &["-n", "--numeric-sort", "--sort=numeric"],
-    )
+    );
 }
 
 #[test]
@@ -171,7 +171,7 @@ fn test_numeric_with_trailing_invalid_chars() {
     test_helper(
         "numeric_trailing_chars",
         &["-n", "--numeric-sort", "--sort=numeric"],
-    )
+    );
 }
 
 #[test]
@@ -220,7 +220,7 @@ fn test_random_shuffle_contains_all_lines() {
 
 #[test]
 fn test_random_shuffle_two_runs_not_the_same() {
-    for arg in &["-R", "-k1,1R"] {
+    for arg in ["-R", "-k1,1R"] {
         // check to verify that two random shuffles are not equal; this has the
         // potential to fail in the very unlikely event that the random order is the same
         // as the starting order, or if both random sorts end up having the same order.
@@ -338,24 +338,20 @@ fn test_dictionary_order() {
 
 #[test]
 fn test_dictionary_order2() {
-    for non_dictionary_order2_param in &["-d"] {
-        new_ucmd!()
-            .pipe_in("a👦🏻aa	b\naaaa	b") // spell-checker:disable-line
-            .arg(non_dictionary_order2_param) // spell-checker:disable-line
-            .succeeds()
-            .stdout_only("a👦🏻aa	b\naaaa	b\n"); // spell-checker:disable-line
-    }
+    new_ucmd!()
+        .pipe_in("a👦🏻aa\tb\naaaa\tb") // spell-checker:disable-line
+        .arg("-d")
+        .succeeds()
+        .stdout_only("a👦🏻aa\tb\naaaa\tb\n"); // spell-checker:disable-line
 }
 
 #[test]
 fn test_non_printing_chars() {
-    for non_printing_chars_param in &["-i"] {
-        new_ucmd!()
-            .pipe_in("a👦🏻aa\naaaa") // spell-checker:disable-line
-            .arg(non_printing_chars_param) // spell-checker:disable-line
-            .succeeds()
-            .stdout_only("a👦🏻aa\naaaa\n"); // spell-checker:disable-line
-    }
+    new_ucmd!()
+        .pipe_in("a👦🏻aa\naaaa") // spell-checker:disable-line
+        .arg("-i")
+        .succeeds()
+        .stdout_only("a👦🏻aa\naaaa\n"); // spell-checker:disable-line
 }
 
 #[test]
@@ -411,7 +407,7 @@ fn test_mixed_floats_ints_chars_numeric_stable() {
 
 #[test]
 fn test_numeric_floats_and_ints2() {
-    for numeric_sort_param in &["-n", "--numeric-sort"] {
+    for numeric_sort_param in ["-n", "--numeric-sort"] {
         let input = "1.444\n8.013\n1\n-8\n1.04\n-1";
         new_ucmd!()
             .arg(numeric_sort_param)
@@ -423,7 +419,7 @@ fn test_numeric_floats_and_ints2() {
 
 #[test]
 fn test_numeric_floats2() {
-    for numeric_sort_param in &["-n", "--numeric-sort"] {
+    for numeric_sort_param in ["-n", "--numeric-sort"] {
         let input = "1.444\n8.013\n1.58590\n-8.90880\n1.040000000\n-.05";
         new_ucmd!()
             .arg(numeric_sort_param)
@@ -443,7 +439,7 @@ fn test_numeric_floats_with_nan2() {
 
 #[test]
 fn test_human_block_sizes2() {
-    for human_numeric_sort_param in &["-h", "--human-numeric-sort", "--sort=human-numeric"] {
+    for human_numeric_sort_param in ["-h", "--human-numeric-sort", "--sort=human-numeric"] {
         let input = "8981K\n909991M\n-8T\n21G\n0.8M";
         new_ucmd!()
             .arg(human_numeric_sort_param)
@@ -465,7 +461,7 @@ fn test_human_numeric_zero_stable() {
 
 #[test]
 fn test_month_default2() {
-    for month_sort_param in &["-M", "--month-sort", "--sort=month"] {
+    for month_sort_param in ["-M", "--month-sort", "--sort=month"] {
         let input = "JAn\nMAY\n000may\nJun\nFeb";
         new_ucmd!()
             .arg(month_sort_param)
@@ -486,14 +482,12 @@ fn test_default_unsorted_ints2() {
 
 #[test]
 fn test_numeric_unique_ints2() {
-    for numeric_unique_sort_param in &["-nu"] {
-        let input = "9\n9\n8\n1\n";
-        new_ucmd!()
-            .arg(numeric_unique_sort_param)
-            .pipe_in(input)
-            .succeeds()
-            .stdout_only("1\n8\n9\n");
-    }
+    let input = "9\n9\n8\n1\n";
+    new_ucmd!()
+        .arg("-nu")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("1\n8\n9\n");
 }
 
 #[test]
@@ -561,7 +555,7 @@ fn test_keys_invalid_char_zero() {
 #[test]
 fn test_keys_with_options() {
     let input = "aa 3 cc\ndd 1 ff\ngg 2 cc\n";
-    for param in &[
+    for param in [
         &["-k", "2,2n"][..],
         &["-k", "2n,2"][..],
         &["-k", "2,2", "-n"][..],
@@ -577,7 +571,7 @@ fn test_keys_with_options() {
 #[test]
 fn test_keys_with_options_blanks_start() {
     let input = "aa   3 cc\ndd  1 ff\ngg         2 cc\n";
-    for param in &[&["-k", "2b,2"][..], &["-k", "2,2", "-b"][..]] {
+    for param in [&["-k", "2b,2"][..], &["-k", "2,2", "-b"][..]] {
         new_ucmd!()
             .args(param)
             .pipe_in(input)
@@ -588,7 +582,7 @@ fn test_keys_with_options_blanks_start() {
 
 #[test]
 fn test_keys_blanks_with_char_idx() {
-    test_helper("keys_blanks", &["-k 1.2b"])
+    test_helper("keys_blanks", &["-k 1.2b"]);
 }
 
 #[test]
@@ -648,7 +642,7 @@ fn test_keys_negative_size_match() {
 
 #[test]
 fn test_keys_ignore_flag() {
-    test_helper("keys_ignore_flag", &["-k 1n -b"])
+    test_helper("keys_ignore_flag", &["-k 1n -b"]);
 }
 
 #[test]
@@ -767,7 +761,7 @@ fn test_pipe() {
 
 #[test]
 fn test_check() {
-    for diagnose_arg in &["-c", "--check", "--check=diagnose-first"] {
+    for diagnose_arg in ["-c", "--check", "--check=diagnose-first"] {
         new_ucmd!()
             .arg(diagnose_arg)
             .arg("check_fail.txt")
@@ -785,7 +779,7 @@ fn test_check() {
 
 #[test]
 fn test_check_silent() {
-    for silent_arg in &["-C", "--check=silent", "--check=quiet"] {
+    for silent_arg in ["-C", "--check=silent", "--check=quiet"] {
         new_ucmd!()
             .arg(silent_arg)
             .arg("check_fail.txt")
@@ -809,7 +803,7 @@ fn test_check_unique() {
 #[test]
 fn test_dictionary_and_nonprinting_conflicts() {
     let conflicting_args = ["n", "h", "g", "M"];
-    for restricted_arg in &["d", "i"] {
+    for restricted_arg in ["d", "i"] {
         for conflicting_arg in &conflicting_args {
             new_ucmd!()
                 .arg(&format!("-{}{}", restricted_arg, conflicting_arg))
@@ -878,7 +872,7 @@ fn sort_empty_chunk() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_compress() {
     new_ucmd!()
         .args(&[
@@ -894,7 +888,7 @@ fn test_compress() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_compress_merge() {
     new_ucmd!()
         .args(&[
@@ -918,6 +912,7 @@ fn test_compress_merge() {
 
 #[test]
 fn test_compress_fail() {
+    #[cfg(not(windows))]
     TestScenario::new(util_name!())
         .ucmd_keepenv()
         .args(&[
@@ -930,6 +925,21 @@ fn test_compress_fail() {
         ])
         .fails()
         .stderr_only("sort: couldn't execute compress program: errno 2");
+    // With coverage, it fails with a different error:
+    // "thread 'main' panicked at 'called `Option::unwrap()` on ...
+    // So, don't check the output
+    #[cfg(windows)]
+    TestScenario::new(util_name!())
+        .ucmd_keepenv()
+        .args(&[
+            "ext_sort.txt",
+            "-n",
+            "--compress-program",
+            "nonexistent-program",
+            "-S",
+            "10",
+        ])
+        .fails();
 }
 
 #[test]
@@ -980,7 +990,8 @@ fn test_conflict_check_out() {
             .arg("-o=/dev/null")
             .fails()
             .stderr_contains(
-                "error: The argument '--output <FILENAME>' cannot be used with '--check",
+                // the rest of the message might be subject to change
+                "error: The argument",
             );
     }
 }
@@ -1049,10 +1060,13 @@ fn test_separator_null() {
 #[test]
 fn test_output_is_input() {
     let input = "a\nb\nc\n";
-    let (at, mut cmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
     at.touch("file");
     at.append("file", input);
-    cmd.args(&["-m", "-u", "-o", "file", "file", "file", "file"])
+    scene
+        .ucmd_keepenv()
+        .args(&["-m", "-u", "-o", "file", "file", "file", "file"])
         .succeeds();
     assert_eq!(at.read("file"), input);
 }

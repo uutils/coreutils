@@ -1,4 +1,4 @@
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob
 
 use crate::common::util::*;
 #[cfg(not(windows))]
@@ -14,21 +14,22 @@ use std::os::unix::fs::PermissionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use filetime::FileTime;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::Resource;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs as std_fs;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::time::Duration;
 
 static TEST_EXISTING_FILE: &str = "existing_file.txt";
 static TEST_HELLO_WORLD_SOURCE: &str = "hello_world.txt";
 static TEST_HELLO_WORLD_SOURCE_SYMLINK: &str = "hello_world.txt.link";
 static TEST_HELLO_WORLD_DEST: &str = "copy_of_hello_world.txt";
+static TEST_HELLO_WORLD_DEST_SYMLINK: &str = "copy_of_hello_world.txt.link";
 static TEST_HOW_ARE_YOU_SOURCE: &str = "how_are_you.txt";
 static TEST_HOW_ARE_YOU_DEST: &str = "hello_dir/how_are_you.txt";
 static TEST_COPY_TO_FOLDER: &str = "hello_dir/";
@@ -37,12 +38,14 @@ static TEST_COPY_FROM_FOLDER: &str = "hello_dir_with_file/";
 static TEST_COPY_FROM_FOLDER_FILE: &str = "hello_dir_with_file/hello_world.txt";
 static TEST_COPY_TO_FOLDER_NEW: &str = "hello_dir_new";
 static TEST_COPY_TO_FOLDER_NEW_FILE: &str = "hello_dir_new/hello_world.txt";
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 static TEST_MOUNT_COPY_FROM_FOLDER: &str = "dir_with_mount";
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 static TEST_MOUNT_MOUNTPOINT: &str = "mount";
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
+#[cfg(unix)]
+static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
 
 #[test]
 fn test_cp_cp() {
@@ -181,6 +184,16 @@ fn test_cp_arg_no_target_directory() {
 }
 
 #[test]
+fn test_cp_target_directory_is_file() {
+    new_ucmd!()
+        .arg("-t")
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .fails()
+        .stderr_contains(format!("'{}' is not a directory", TEST_HOW_ARE_YOU_SOURCE));
+}
+
+#[test]
 fn test_cp_arg_interactive() {
     new_ucmd!()
         .arg(TEST_HELLO_WORLD_SOURCE)
@@ -222,6 +235,17 @@ fn test_cp_arg_no_clobber() {
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg("--no-clobber")
+        .succeeds();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
+}
+
+#[test]
+fn test_cp_arg_no_clobber_inferred_arg() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("--no-clob")
         .succeeds();
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
@@ -368,6 +392,24 @@ fn test_cp_arg_suffix() {
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
         at.read(&*format!("{}.bak", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_arg_suffix_hyphen_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("-b")
+        .arg("--suffix")
+        .arg("-v")
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}-v", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
 }
@@ -658,6 +700,51 @@ fn test_cp_no_deref() {
 }
 
 #[test]
+fn test_cp_no_deref_link_onto_link() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.copy(TEST_HELLO_WORLD_SOURCE, TEST_HELLO_WORLD_DEST);
+
+    #[cfg(not(windows))]
+    let _r = fs::symlink(
+        TEST_HELLO_WORLD_SOURCE,
+        at.subdir.join(TEST_HELLO_WORLD_SOURCE_SYMLINK),
+    );
+    #[cfg(windows)]
+    let _r = symlink_file(
+        TEST_HELLO_WORLD_SOURCE,
+        at.subdir.join(TEST_HELLO_WORLD_SOURCE_SYMLINK),
+    );
+
+    #[cfg(not(windows))]
+    let _r = fs::symlink(
+        TEST_HELLO_WORLD_DEST,
+        at.subdir.join(TEST_HELLO_WORLD_DEST_SYMLINK),
+    );
+    #[cfg(windows)]
+    let _r = symlink_file(
+        TEST_HELLO_WORLD_DEST,
+        at.subdir.join(TEST_HELLO_WORLD_DEST_SYMLINK),
+    );
+
+    ucmd.arg("-P")
+        .arg(TEST_HELLO_WORLD_SOURCE_SYMLINK)
+        .arg(TEST_HELLO_WORLD_DEST_SYMLINK)
+        .succeeds();
+
+    // Ensure that the target of the destination was not modified.
+    assert!(!at
+        .symlink_metadata(TEST_HELLO_WORLD_DEST)
+        .file_type()
+        .is_symlink());
+    assert!(at
+        .symlink_metadata(TEST_HELLO_WORLD_DEST_SYMLINK)
+        .file_type()
+        .is_symlink());
+    assert_eq!(at.read(TEST_HELLO_WORLD_DEST_SYMLINK), "Hello, World!\n");
+}
+
+#[test]
 fn test_cp_strip_trailing_slashes() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -723,6 +810,21 @@ fn test_cp_parents_dest_not_directory() {
         .arg(TEST_HELLO_WORLD_DEST)
         .fails()
         .stderr_contains("with --parents, the destination must be a directory");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_writable_special_file_permissions() {
+    new_ucmd!().arg("/dev/null").arg("/dev/zero").succeeds();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_issue_1665() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("/dev/null").arg("foo").succeeds();
+    assert!(at.file_exists("foo"));
+    assert_eq!(at.read("foo"), "");
 }
 
 #[test]
@@ -930,8 +1032,8 @@ fn test_cp_no_deref_folder_to_folder() {
 #[cfg(target_os = "linux")]
 fn test_cp_archive() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let ts = time::now().to_timespec();
-    let previous = FileTime::from_unix_time(ts.sec as i64 - 3600, ts.nsec as u32);
+    let ts = time::OffsetDateTime::now_local().unwrap();
+    let previous = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond() as u32);
     // set the file creation/modification an hour ago
     filetime::set_file_times(
         at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
@@ -960,7 +1062,7 @@ fn test_cp_archive() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_cp_archive_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1030,11 +1132,11 @@ fn test_cp_archive_recursive() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let ts = time::now().to_timespec();
-    let previous = FileTime::from_unix_time(ts.sec as i64 - 3600, ts.nsec as u32);
+    let ts = time::OffsetDateTime::now_local().unwrap();
+    let previous = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
     // set the file creation/modification an hour ago
     filetime::set_file_times(
         at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
@@ -1063,11 +1165,11 @@ fn test_cp_preserve_timestamps() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_no_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let ts = time::now().to_timespec();
-    let previous = FileTime::from_unix_time(ts.sec as i64 - 3600, ts.nsec as u32);
+    let ts = time::OffsetDateTime::now_local().unwrap();
+    let previous = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
     // set the file creation/modification an hour ago
     filetime::set_file_times(
         at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
@@ -1104,7 +1206,7 @@ fn test_cp_no_preserve_timestamps() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_target_file_dev_null() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "/dev/null";
@@ -1117,7 +1219,7 @@ fn test_cp_target_file_dev_null() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 fn test_cp_one_file_system() {
     use crate::common::util::AtPath;
     use walkdir::WalkDir;
@@ -1181,7 +1283,7 @@ fn test_cp_one_file_system() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 fn test_cp_reflink_always() {
     let (at, mut ucmd) = at_and_ucmd!();
     let result = ucmd
@@ -1199,7 +1301,7 @@ fn test_cp_reflink_always() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 fn test_cp_reflink_auto() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg("--reflink=auto")
@@ -1212,7 +1314,7 @@ fn test_cp_reflink_auto() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 fn test_cp_reflink_never() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg("--reflink=never")
@@ -1225,7 +1327,7 @@ fn test_cp_reflink_never() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 fn test_cp_reflink_bad() {
     let (_, mut ucmd) = at_and_ucmd!();
     let _result = ucmd
@@ -1237,7 +1339,7 @@ fn test_cp_reflink_bad() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_reflink_insufficient_permission() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1253,7 +1355,7 @@ fn test_cp_reflink_insufficient_permission() {
         .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied (os error 13)");
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_closes_file_descriptors() {
     new_ucmd!()
@@ -1363,4 +1465,178 @@ fn test_canonicalize_symlink() {
         .succeeds()
         .no_stderr()
         .no_stdout();
+}
+
+#[test]
+fn test_copy_through_just_created_symlink() {
+    for create_t in [true, false] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("a");
+        at.mkdir("b");
+        at.mkdir("c");
+        #[cfg(unix)]
+        fs::symlink("../t", at.plus("a/1")).unwrap();
+        #[cfg(target_os = "windows")]
+        symlink_file("../t", at.plus("a/1")).unwrap();
+        at.touch("b/1");
+        if create_t {
+            at.touch("t");
+        }
+        ucmd.arg("--no-dereference")
+            .arg("a/1")
+            .arg("b/1")
+            .arg("c")
+            .fails()
+            .stderr_only(if cfg!(not(target_os = "windows")) {
+                "cp: will not copy 'b/1' through just-created symlink 'c/1'"
+            } else {
+                "cp: will not copy 'b/1' through just-created symlink 'c\\1'"
+            });
+    }
+}
+
+#[test]
+fn test_copy_through_dangling_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.symlink_file("nonexistent", "target");
+    ucmd.arg("file")
+        .arg("target")
+        .fails()
+        .stderr_only("cp: not writing through dangling symlink 'target'");
+}
+
+#[test]
+fn test_copy_through_dangling_symlink_no_dereference() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("no-such-file", "dangle");
+    ucmd.arg("-P")
+        .arg("dangle")
+        .arg("d2")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_archive_on_nonexistent_file() {
+    new_ucmd!()
+        .arg("-a")
+        .arg(TEST_NONEXISTENT_FILE)
+        .arg(TEST_EXISTING_FILE)
+        .fails()
+        .stderr_only(
+            "cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)",
+        );
+}
+
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_cp_link_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file2");
+    ucmd.arg("-l")
+        .arg("-b")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("file2")
+        .succeeds();
+
+    assert!(at.file_exists("file2~"));
+    assert_eq!(at.read("file2"), "Hello, World!\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_fifo() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    ucmd.arg("-r")
+        .arg("fifo")
+        .arg("fifo2")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert!(at.is_fifo("fifo2"));
+}
+
+#[test]
+fn test_dir_recursive_copy() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("parent1");
+    at.mkdir("parent2");
+    at.mkdir("parent1/child");
+    at.mkdir("parent2/child1");
+    at.mkdir("parent2/child1/child2");
+    at.mkdir("parent2/child1/child2/child3");
+
+    // case-1: copy parent1 -> parent1: should fail
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("parent1")
+        .arg("parent1")
+        .fails()
+        .stderr_contains("cannot copy a directory");
+    // case-2: copy parent1 -> parent1/child should fail
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("parent1")
+        .arg("parent1/child")
+        .fails()
+        .stderr_contains("cannot copy a directory");
+    // case-3: copy parent1/child -> parent2 should pass
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("parent1/child")
+        .arg("parent2")
+        .succeeds();
+    // case-4: copy parent2/child1/ -> parent2/child1/child2/child3
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("parent2/child1/")
+        .arg("parent2/child1/child2/child3")
+        .fails()
+        .stderr_contains("cannot copy a directory");
+}
+
+#[test]
+fn test_cp_dir_vs_file() {
+    new_ucmd!()
+        .arg("-R")
+        .arg(TEST_COPY_FROM_FOLDER)
+        .arg(TEST_EXISTING_FILE)
+        .fails()
+        .stderr_only("cp: cannot overwrite non-directory with directory");
+}
+
+#[test]
+fn test_cp_overriding_arguments() {
+    let s = TestScenario::new(util_name!());
+    s.fixtures.touch("file1");
+    for (arg1, arg2) in [
+        #[cfg(not(windows))]
+        ("--remove-destination", "--force"),
+        #[cfg(not(windows))]
+        ("--force", "--remove-destination"),
+        ("--interactive", "--no-clobber"),
+        ("--link", "--symbolic-link"),
+        #[cfg(not(target_os = "android"))]
+        ("--symbolic-link", "--link"),
+        ("--dereference", "--no-dereference"),
+        ("--no-dereference", "--dereference"),
+    ] {
+        s.ucmd()
+            .arg(arg1)
+            .arg(arg2)
+            .arg("file1")
+            .arg("file2")
+            .succeeds();
+        s.fixtures.remove("file2");
+    }
 }

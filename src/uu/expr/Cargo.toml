@@ -1,31 +1,26 @@
 [package]
 name = "uu_expr"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "expr ~ (uutils) display the value of EXPRESSION"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/expr"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/expr"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 path = "src/expr.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
-libc = "0.2.42"
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 num-bigint = "0.4.0"
-num-traits = "0.2.14"
-onig = "~4.3.2"
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+num-traits = "0.2.15"
+onig = { version = "~6.3", default-features = false }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
 
 [[bin]]
 name = "expr"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

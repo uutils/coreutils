@@ -3,7 +3,6 @@
 //!
 //! This module provides an implementation of [`FromStr`] for the
 //! [`PreciseNumber`] struct.
-use std::convert::TryInto;
 use std::str::FromStr;
 
 use bigdecimal::BigDecimal;
@@ -172,7 +171,14 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
 /// ```
 fn parse_decimal_no_exponent(s: &str, i: usize) -> Result<PreciseNumber, ParseNumberError> {
     let x: BigDecimal = s.parse().map_err(|_| ParseNumberError::Float)?;
-    let num_integral_digits = i;
+
+    // The number of integral digits is the number of chars until the period.
+    //
+    // This includes the negative sign if there is one. Also, it is
+    // possible that a number is expressed as "-.123" instead of
+    // "-0.123", but when we display the number we want it to include
+    // the leading 0.
+    let num_integral_digits = if s.starts_with("-.") { i + 1 } else { i };
     let num_fractional_digits = s.len() - (i + 1);
     if is_minus_zero_float(s, &x) {
         Ok(PreciseNumber::new(
@@ -215,20 +221,26 @@ fn parse_decimal_and_exponent(
     let num_integral_digits = {
         let minimum: usize = {
             let integral_part: f64 = s[..j].parse().map_err(|_| ParseNumberError::Float)?;
-            if integral_part == -0.0 && integral_part.is_sign_negative() {
+            if integral_part.is_sign_negative() {
                 2
             } else {
                 1
             }
         };
-
-        let total = i as i64 + exponent;
+        // Special case: if the string is "-.1e2", we need to treat it
+        // as if it were "-0.1e2".
+        let total = if s.starts_with("-.") {
+            i as i64 + exponent + 1
+        } else {
+            i as i64 + exponent
+        };
         if total < minimum as i64 {
             minimum
         } else {
             total.try_into().unwrap()
         }
     };
+
     let num_fractional_digits = if num_digits_between_decimal_point_and_e < exponent {
         0
     } else {
@@ -532,6 +544,8 @@ mod tests {
         assert_eq!(num_integral_digits("123"), 3);
         // decimal, no exponent
         assert_eq!(num_integral_digits("123.45"), 3);
+        assert_eq!(num_integral_digits("-0.1"), 2);
+        assert_eq!(num_integral_digits("-.1"), 2);
         // exponent, no decimal
         assert_eq!(num_integral_digits("123e4"), 3 + 4);
         assert_eq!(num_integral_digits("123e-4"), 1);
@@ -540,6 +554,12 @@ mod tests {
         assert_eq!(num_integral_digits("123.45e6"), 3 + 6);
         assert_eq!(num_integral_digits("123.45e-6"), 1);
         assert_eq!(num_integral_digits("123.45e-1"), 2);
+        assert_eq!(num_integral_digits("-0.1e0"), 2);
+        assert_eq!(num_integral_digits("-0.1e2"), 4);
+        assert_eq!(num_integral_digits("-.1e0"), 2);
+        assert_eq!(num_integral_digits("-.1e2"), 4);
+        assert_eq!(num_integral_digits("-1.e-3"), 2);
+        assert_eq!(num_integral_digits("-1.0e-4"), 2);
         // minus zero int
         assert_eq!(num_integral_digits("-0e0"), 2);
         assert_eq!(num_integral_digits("-0e-0"), 2);
@@ -565,6 +585,8 @@ mod tests {
         assert_eq!(num_fractional_digits("0xff"), 0);
         // decimal, no exponent
         assert_eq!(num_fractional_digits("123.45"), 2);
+        assert_eq!(num_fractional_digits("-0.1"), 1);
+        assert_eq!(num_fractional_digits("-.1"), 1);
         // exponent, no decimal
         assert_eq!(num_fractional_digits("123e4"), 0);
         assert_eq!(num_fractional_digits("123e-4"), 4);
@@ -575,6 +597,12 @@ mod tests {
         assert_eq!(num_fractional_digits("123.45e1"), 1);
         assert_eq!(num_fractional_digits("123.45e-6"), 8);
         assert_eq!(num_fractional_digits("123.45e-1"), 3);
+        assert_eq!(num_fractional_digits("-0.1e0"), 1);
+        assert_eq!(num_fractional_digits("-0.1e2"), 0);
+        assert_eq!(num_fractional_digits("-.1e0"), 1);
+        assert_eq!(num_fractional_digits("-.1e2"), 0);
+        assert_eq!(num_fractional_digits("-1.e-3"), 3);
+        assert_eq!(num_fractional_digits("-1.0e-4"), 5);
         // minus zero int
         assert_eq!(num_fractional_digits("-0e0"), 0);
         assert_eq!(num_fractional_digits("-0e-0"), 0);

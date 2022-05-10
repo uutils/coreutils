@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_paste);
+uucore::bin!(uu_paste);

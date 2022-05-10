@@ -1,24 +1,23 @@
 [package]
 name = "uu_id"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "id ~ (uutils) display user and group information for USER"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/id"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/id"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 path = "src/id.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["entries", "process"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
-selinux = { version="0.2.1", optional = true }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["entries", "process"] }
+selinux = { version="0.2", optional = true }
 
 [[bin]]
 name = "id"

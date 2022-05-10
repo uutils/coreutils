@@ -76,7 +76,7 @@ fn output_delimiter_require_arg() {
 #[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn zero_terminated() {
-    for &param in &["-z", "--zero-terminated"] {
+    for param in ["-z", "--zero-terminated"] {
         new_ucmd!()
             .args(&[param, "a", "b"])
             .fails()
@@ -169,4 +169,12 @@ fn no_arguments() {
 #[test]
 fn one_argument() {
     new_ucmd!().arg("a").fails().no_stdout().no_stderr();
+}
+
+#[test]
+fn test_no_such_file() {
+    new_ucmd!()
+        .args(&["bogus_file_1", "bogus_file_2"])
+        .fails()
+        .stderr_only("comm: bogus_file_1: No such file or directory");
 }

@@ -17,12 +17,16 @@
 
 #[macro_use]
 extern crate uucore;
+use std::error::Error;
+use std::fmt::Display;
 use uucore::{
     display::Quotable,
     entries::{get_groups_gnu, gid2grp, Locate, Passwd},
+    error::{UError, UResult},
+    format_usage,
 };
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 
 mod options {
     pub const USERS: &str = "USERNAME";
@@ -31,69 +35,82 @@ static ABOUT: &str = "Print group memberships for each USERNAME or, \
                       if no USERNAME is specified, for\nthe current process \
                       (which may differ if the groups data‐base has changed).";
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [USERNAME]...", uucore::execution_phrase())
+const USAGE: &str = "{} [OPTION]... [USERNAME]...";
+
+#[derive(Debug)]
+enum GroupsError {
+    GetGroupsFailed,
+    GroupNotFound(u32),
+    UserNotFound(String),
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = usage();
+impl Error for GroupsError {}
+impl UError for GroupsError {}
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+impl Display for GroupsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::GetGroupsFailed => write!(f, "failed to fetch groups"),
+            Self::GroupNotFound(gid) => write!(f, "cannot find name for group ID {}", gid),
+            Self::UserNotFound(user) => write!(f, "{}: no such user", user.quote()),
+        }
+    }
+}
+
+fn infallible_gid2grp(gid: &u32) -> String {
+    match gid2grp(*gid) {
+        Ok(grp) => grp,
+        Err(_) => {
+            // The `show!()` macro sets the global exit code for the program.
+            show!(GroupsError::GroupNotFound(*gid));
+            gid.to_string()
+        }
+    }
+}
+
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uu_app().get_matches_from(args);
 
     let users: Vec<String> = matches
         .values_of(options::USERS)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let mut exit_code = 0;
-
     if users.is_empty() {
-        println!(
-            "{}",
-            get_groups_gnu(None)
-                .unwrap()
-                .iter()
-                .map(|&gid| gid2grp(gid).unwrap_or_else(|_| {
-                    show_error!("cannot find name for group ID {}", gid);
-                    exit_code = 1;
-                    gid.to_string()
-                }))
-                .collect::<Vec<_>>()
-                .join(" ")
-        );
-        return exit_code;
+        let gids = match get_groups_gnu(None) {
+            Ok(v) => v,
+            Err(_) => return Err(GroupsError::GetGroupsFailed.into()),
+        };
+        let groups: Vec<String> = gids.iter().map(infallible_gid2grp).collect();
+        println!("{}", groups.join(" "));
+        return Ok(());
     }
 
     for user in users {
-        if let Ok(p) = Passwd::locate(user.as_str()) {
-            println!(
-                "{} : {}",
-                user,
-                p.belongs_to()
-                    .iter()
-                    .map(|&gid| gid2grp(gid).unwrap_or_else(|_| {
-                        show_error!("cannot find name for group ID {}", gid);
-                        exit_code = 1;
-                        gid.to_string()
-                    }))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            );
-        } else {
-            show_error!("{}: no such user", user.quote());
-            exit_code = 1;
+        match Passwd::locate(user.as_str()) {
+            Ok(p) => {
+                let groups: Vec<String> = p.belongs_to().iter().map(infallible_gid2grp).collect();
+                println!("{} : {}", user, groups.join(" "));
+            }
+            Err(_) => {
+                // The `show!()` macro sets the global exit code for the program.
+                show!(GroupsError::UserNotFound(user));
+            }
         }
     }
-    exit_code
+    Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::USERS)
-                .multiple(true)
+            Arg::new(options::USERS)
+                .multiple_occurrences(true)
                 .takes_value(true)
                 .value_name(options::USERS),
         )

@@ -8,16 +8,14 @@
 
 // spell-checker:ignore (ToDO) clrtoeol dircolors eightbit endcode fnmatch leftcode multihardlink rightcode setenv sgid suid
 
-#[macro_use]
-extern crate uucore;
-
 use std::borrow::Borrow;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use uucore::display::Quotable;
+use uucore::error::{UResult, USimpleError, UUsageError};
 
 mod options {
     pub const BOURNE_SHELL: &str = "bourne-shell";
@@ -26,7 +24,7 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-static SYNTAX: &str = "[OPTION]... [FILE]";
+static USAGE: &str = "{} [OPTION]... [FILE]";
 static SUMMARY: &str = "Output commands to set the LS_COLORS environment variable.";
 static LONG_HELP: &str = "
  If FILE is specified, read it to determine which colors to use for which
@@ -63,18 +61,13 @@ pub fn guess_syntax() -> OutputFmt {
     }
 }
 
-fn usage() -> String {
-    format!("{0} {1}", uucore::execution_phrase(), SYNTAX)
-}
-
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = usage();
-
-    let matches = uu_app().usage(&usage[..]).get_matches_from(&args);
+    let matches = uu_app().get_matches_from(&args);
 
     let files = matches
         .values_of(options::FILE)
@@ -85,24 +78,26 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if (matches.is_present(options::C_SHELL) || matches.is_present(options::BOURNE_SHELL))
         && matches.is_present(options::PRINT_DATABASE)
     {
-        show_usage_error!(
+        return Err(UUsageError::new(
+            1,
             "the options to output dircolors' internal database and\nto select a shell \
-             syntax are mutually exclusive"
-        );
-        return 1;
+             syntax are mutually exclusive",
+        ));
     }
 
     if matches.is_present(options::PRINT_DATABASE) {
         if !files.is_empty() {
-            show_usage_error!(
-                "extra operand {}\nfile operands cannot be combined with \
-                 --print-database (-p)",
-                files[0].quote()
-            );
-            return 1;
+            return Err(UUsageError::new(
+                1,
+                format!(
+                    "extra operand {}\nfile operands cannot be combined with \
+                     --print-database (-p)",
+                    files[0].quote()
+                ),
+            ));
         }
         println!("{}", INTERNAL_DB);
-        return 0;
+        return Ok(());
     }
 
     let mut out_format = OutputFmt::Unknown;
@@ -115,8 +110,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if out_format == OutputFmt::Unknown {
         match guess_syntax() {
             OutputFmt::Unknown => {
-                show_error!("no SHELL environment variable, and no shell type option given");
-                return 1;
+                return Err(USimpleError::new(
+                    1,
+                    "no SHELL environment variable, and no shell type option given",
+                ));
             }
             fmt => out_format = fmt,
         }
@@ -124,64 +121,74 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let result;
     if files.is_empty() {
-        result = parse(INTERNAL_DB.lines(), out_format, "")
+        result = parse(INTERNAL_DB.lines(), &out_format, "");
     } else {
         if files.len() > 1 {
-            show_usage_error!("extra operand {}", files[1].quote());
-            return 1;
+            return Err(UUsageError::new(
+                1,
+                format!("extra operand {}", files[1].quote()),
+            ));
         }
         match File::open(files[0]) {
             Ok(f) => {
                 let fin = BufReader::new(f);
-                result = parse(fin.lines().filter_map(Result::ok), out_format, files[0])
+                result = parse(fin.lines().filter_map(Result::ok), &out_format, files[0]);
             }
             Err(e) => {
-                show_error!("{}: {}", files[0].maybe_quote(), e);
-                return 1;
+                return Err(USimpleError::new(
+                    1,
+                    format!("{}: {}", files[0].maybe_quote(), e),
+                ));
             }
         }
     }
+
     match result {
         Ok(s) => {
             println!("{}", s);
-            0
+            Ok(())
         }
         Err(s) => {
-            show_error!("{}", s);
-            1
+            return Err(USimpleError::new(1, s));
         }
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(LONG_HELP)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::BOURNE_SHELL)
+            Arg::new(options::BOURNE_SHELL)
                 .long("sh")
-                .short("b")
+                .short('b')
                 .visible_alias("bourne-shell")
                 .help("output Bourne shell code to set LS_COLORS")
                 .display_order(1),
         )
         .arg(
-            Arg::with_name(options::C_SHELL)
+            Arg::new(options::C_SHELL)
                 .long("csh")
-                .short("c")
+                .short('c')
                 .visible_alias("c-shell")
                 .help("output C shell code to set LS_COLORS")
                 .display_order(2),
         )
         .arg(
-            Arg::with_name(options::PRINT_DATABASE)
+            Arg::new(options::PRINT_DATABASE)
                 .long("print-database")
-                .short("p")
+                .short('p')
                 .help("print the byte counts")
                 .display_order(3),
         )
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+        .arg(
+            Arg::new(options::FILE)
+                .hide(true)
+                .multiple_occurrences(true),
+        )
 }
 
 pub trait StrUtils {
@@ -245,9 +252,9 @@ enum ParseState {
     Pass,
 }
 use std::collections::HashMap;
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
-fn parse<T>(lines: T, fmt: OutputFmt, fp: &str) -> Result<String, String>
+fn parse<T>(lines: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
 where
     T: IntoIterator,
     T::Item: Borrow<str>,

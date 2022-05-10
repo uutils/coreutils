@@ -17,12 +17,15 @@ use libc::{
 use std::borrow::Cow;
 use std::env;
 use std::fs;
+use std::hash::Hash;
 use std::io::Error as IOError;
 use std::io::Result as IOResult;
 use std::io::{Error, ErrorKind};
-#[cfg(any(unix, target_os = "redox"))]
-use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
+use std::os::unix::{fs::MetadataExt, io::AsRawFd};
 use std::path::{Component, Path, PathBuf};
+#[cfg(target_os = "windows")]
+use winapi_util::AsHandleRef;
 
 #[cfg(unix)]
 #[macro_export]
@@ -30,6 +33,112 @@ macro_rules! has {
     ($mode:expr, $perm:expr) => {
         $mode & $perm != 0
     };
+}
+
+/// Information to uniquely identify a file
+pub struct FileInformation(
+    #[cfg(unix)] nix::sys::stat::FileStat,
+    #[cfg(windows)] winapi_util::file::Information,
+);
+
+impl FileInformation {
+    /// Get information from a currently open file
+    #[cfg(unix)]
+    pub fn from_file(file: &impl AsRawFd) -> Option<Self> {
+        if let Ok(x) = nix::sys::stat::fstat(file.as_raw_fd()) {
+            Some(Self(x))
+        } else {
+            None
+        }
+    }
+
+    /// Get information from a currently open file
+    #[cfg(target_os = "windows")]
+    pub fn from_file(file: &impl AsHandleRef) -> Option<Self> {
+        if let Ok(x) = winapi_util::file::information(file.as_handle_ref()) {
+            Some(Self(x))
+        } else {
+            None
+        }
+    }
+
+    /// Get information for a given path.
+    ///
+    /// If `path` points to a symlink and `dereference` is true, information about
+    /// the link's target will be returned.
+    pub fn from_path(path: impl AsRef<Path>, dereference: bool) -> Option<Self> {
+        #[cfg(unix)]
+        {
+            let stat = if dereference {
+                nix::sys::stat::stat(path.as_ref())
+            } else {
+                nix::sys::stat::lstat(path.as_ref())
+            };
+            if let Ok(stat) = stat {
+                Some(Self(stat))
+            } else {
+                None
+            }
+        }
+        #[cfg(target_os = "windows")]
+        {
+            use std::fs::OpenOptions;
+            use std::os::windows::prelude::*;
+            let mut open_options = OpenOptions::new();
+            if !dereference {
+                open_options.custom_flags(winapi::um::winbase::FILE_FLAG_OPEN_REPARSE_POINT);
+            }
+            open_options
+                .read(true)
+                .open(path.as_ref())
+                .ok()
+                .and_then(|file| Self::from_file(&file))
+        }
+    }
+
+    pub fn file_size(&self) -> u64 {
+        #[cfg(unix)]
+        {
+            assert!(self.0.st_size >= 0, "File size is negative");
+            self.0.st_size.try_into().unwrap()
+        }
+        #[cfg(target_os = "windows")]
+        {
+            self.0.file_size()
+        }
+    }
+}
+
+#[cfg(unix)]
+impl PartialEq for FileInformation {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl PartialEq for FileInformation {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.volume_serial_number() == other.0.volume_serial_number()
+            && self.0.file_index() == other.0.file_index()
+    }
+}
+
+impl Eq for FileInformation {}
+
+impl Hash for FileInformation {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        #[cfg(unix)]
+        {
+            self.0.st_dev.hash(state);
+            self.0.st_ino.hash(state);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            self.0.volume_serial_number().hash(state);
+            self.0.file_index().hash(state);
+        }
+    }
 }
 
 pub fn resolve_relative_path(path: &Path) -> Cow<Path> {
@@ -48,7 +157,7 @@ pub fn resolve_relative_path(path: &Path) -> Cow<Path> {
             }
             Component::CurDir => (),
             Component::RootDir | Component::Normal(_) | Component::Prefix(_) => {
-                result.push(comp.as_os_str())
+                result.push(comp.as_os_str());
             }
         }
     }
@@ -112,15 +221,17 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     ret
 }
 
-fn resolve<P: AsRef<Path>>(original: P) -> Result<PathBuf, (PathBuf, IOError)> {
+fn resolve<P: AsRef<Path>>(original: P) -> Result<PathBuf, (bool, PathBuf, IOError)> {
     const MAX_LINKS_FOLLOWED: u32 = 255;
     let mut followed = 0;
     let mut result = original.as_ref().to_path_buf();
-
+    let mut symlink_is_absolute = false;
     let mut first_resolution = None;
+
     loop {
         if followed == MAX_LINKS_FOLLOWED {
             return Err((
+                symlink_is_absolute,
                 // When we hit MAX_LINKS_FOLLOWED we should return the first resolution (that's what GNU does - for whatever reason)
                 first_resolution.unwrap(),
                 Error::new(ErrorKind::InvalidInput, "maximum links followed"),
@@ -133,16 +244,17 @@ fn resolve<P: AsRef<Path>>(original: P) -> Result<PathBuf, (PathBuf, IOError)> {
                     break;
                 }
             }
-            Err(e) => return Err((result, e)),
+            Err(e) => return Err((symlink_is_absolute, result, e)),
         }
 
         followed += 1;
         match fs::read_link(&result) {
             Ok(path) => {
                 result.pop();
+                symlink_is_absolute = path.is_absolute();
                 result.push(path);
             }
-            Err(e) => return Err((result, e)),
+            Err(e) => return Err((symlink_is_absolute, result, e)),
         }
 
         if first_resolution.is_none() {
@@ -188,9 +300,8 @@ pub fn canonicalize<P: AsRef<Path>>(
     let original = if original.is_absolute() {
         original.to_path_buf()
     } else {
-        dunce::canonicalize(env::current_dir().unwrap())
-            .unwrap()
-            .join(original)
+        let current_dir = env::current_dir()?;
+        dunce::canonicalize(current_dir)?.join(original)
     };
 
     let mut result = PathBuf::new();
@@ -233,8 +344,13 @@ pub fn canonicalize<P: AsRef<Path>>(
             }
 
             match resolve(&result) {
-                Err((path, _)) if miss_mode == MissingHandling::Missing => result = path,
-                Err((_, e)) => return Err(e),
+                Err((_, path, e)) => {
+                    if miss_mode == MissingHandling::Missing {
+                        result = path;
+                    } else {
+                        return Err(e);
+                    }
+                }
                 Ok(path) => {
                     result = path;
                 }
@@ -248,10 +364,20 @@ pub fn canonicalize<P: AsRef<Path>>(
         }
 
         match resolve(&result) {
-            Err((_, e)) if miss_mode == MissingHandling::Existing => {
-                return Err(e);
+            Err((is_absolute, path, err)) => {
+                // If the resolved symlink is an absolute path and non-existent,
+                // `realpath` throws no such file error.
+                if miss_mode == MissingHandling::Existing
+                    || (err.kind() == ErrorKind::NotFound
+                        && is_absolute
+                        && miss_mode == MissingHandling::Normal)
+                {
+                    return Err(err);
+                } else {
+                    result = path;
+                }
             }
-            Ok(path) | Err((path, _)) => {
+            Ok(path) => {
                 result = path;
             }
         }
@@ -342,6 +468,20 @@ pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String
     result
 }
 
+// For some programs like install or mkdir, dir/. can be provided
+// Special case to match GNU's behavior:
+// install -d foo/. should work and just create foo/
+// std::fs::create_dir("foo/."); fails in pure Rust
+// See also mkdir.rs for another occurrence of this
+pub fn dir_strip_dot_for_creation(path: &Path) -> PathBuf {
+    if path.to_string_lossy().ends_with("/.") {
+        // Do a simple dance to strip the "/."
+        Path::new(&path).components().collect::<PathBuf>()
+    } else {
+        path.to_path_buf()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -389,12 +529,12 @@ mod tests {
 
     #[test]
     fn test_normalize_path() {
-        for test in NORMALIZE_PATH_TESTS.iter() {
+        for test in &NORMALIZE_PATH_TESTS {
             let path = Path::new(test.path);
             let normalized = normalize_path(path);
             assert_eq!(
                 test.test
-                    .replace("/", std::path::MAIN_SEPARATOR.to_string().as_str()),
+                    .replace('/', std::path::MAIN_SEPARATOR.to_string().as_str()),
                 normalized.to_str().expect("Path is not valid utf-8!")
             );
         }

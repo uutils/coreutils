@@ -23,7 +23,7 @@ fn help() {
 
 #[test]
 fn reference_errors() {
-    for args in &[
+    for args in [
         &["--verbose", "--reference"] as &[&str],
         &["--verbose", "--reference=/dev/null"],
         &["--verbose", "--reference=/inexistent", "/dev/null"],
@@ -34,7 +34,7 @@ fn reference_errors() {
 
 #[test]
 fn recursive_errors() {
-    for args in &[
+    for args in [
         &["--verbose", "-P"] as &[&str],
         &["--verbose", "-H"],
         &["--verbose", "-L"],
@@ -461,9 +461,9 @@ fn set_file_context(path: impl AsRef<Path>, context: &str) -> Result<(), selinux
             context,
             path.display(),
             r
-        )
+        );
     } else {
-        println!("set_file_context: '{}' => '{}'.", context, path.display())
+        println!("set_file_context: '{}' => '{}'.", context, path.display());
     }
     r
 }

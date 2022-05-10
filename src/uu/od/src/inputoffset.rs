@@ -11,16 +11,16 @@ pub struct InputOffset {
     /// The radix to print the byte offset. NoPrefix will not print a byte offset.
     radix: Radix,
     /// The current position. Initialize at `new`, increase using `increase_position`.
-    byte_pos: usize,
+    byte_pos: u64,
     /// An optional label printed in parentheses, typically different from `byte_pos`,
     /// but will increase with the same value if `byte_pos` in increased.
-    label: Option<usize>,
+    label: Option<u64>,
 }
 
 impl InputOffset {
     /// creates a new `InputOffset` using the provided values.
-    pub fn new(radix: Radix, byte_pos: usize, label: Option<usize>) -> InputOffset {
-        InputOffset {
+    pub fn new(radix: Radix, byte_pos: u64, label: Option<u64>) -> Self {
+        Self {
             radix,
             byte_pos,
             label,
@@ -28,7 +28,7 @@ impl InputOffset {
     }
 
     /// Increase `byte_pos` and `label` if a label is used.
-    pub fn increase_position(&mut self, n: usize) {
+    pub fn increase_position(&mut self, n: u64) {
         self.byte_pos += n;
         if let Some(l) = self.label {
             self.label = Some(l + n);

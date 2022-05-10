@@ -12,13 +12,13 @@ use std::io::{stdout, Read, Write};
 use uucore::display::Quotable;
 use uucore::encoding::{wrap_print, Data, Format};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::InvalidEncodingHandling;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 use std::fs::File;
 use std::io::{BufReader, Stdin};
 use std::path::Path;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 
 pub static BASE_CMD_PARSE_ERROR: i32 = 1;
 
@@ -38,7 +38,7 @@ pub mod options {
 }
 
 impl Config {
-    pub fn from(options: &clap::ArgMatches) -> UResult<Config> {
+    pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let file: Option<String> = match options.values_of(options::FILE) {
             Some(mut values) => {
                 let name = values.next().unwrap();
@@ -76,7 +76,7 @@ impl Config {
             })
             .transpose()?;
 
-        Ok(Config {
+        Ok(Self {
             decode: options.is_present(options::DECODE),
             ignore_garbage: options.is_present(options::IGNORE_GARBAGE),
             wrap_cols: cols,
@@ -86,33 +86,35 @@ impl Config {
 }
 
 pub fn parse_base_cmd_args(args: impl uucore::Args, about: &str, usage: &str) -> UResult<Config> {
-    let app = base_app(about).usage(usage);
+    let command = base_app(about, usage);
     let arg_list = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
-    Config::from(&app.get_matches_from(arg_list))
+    Config::from(&command.try_get_matches_from(arg_list)?)
 }
 
-pub fn base_app<'a>(about: &'a str) -> App<'static, 'a> {
-    App::new(uucore::util_name())
+pub fn base_app<'a>(about: &'a str, usage: &'a str) -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(about)
+        .override_usage(format_usage(usage))
+        .infer_long_args(true)
         // Format arguments.
         .arg(
-            Arg::with_name(options::DECODE)
-                .short("d")
+            Arg::new(options::DECODE)
+                .short('d')
                 .long(options::DECODE)
                 .help("decode data"),
         )
         .arg(
-            Arg::with_name(options::IGNORE_GARBAGE)
-                .short("i")
+            Arg::new(options::IGNORE_GARBAGE)
+                .short('i')
                 .long(options::IGNORE_GARBAGE)
                 .help("when decoding, ignore non-alphabetic characters"),
         )
         .arg(
-            Arg::with_name(options::WRAP)
-                .short("w")
+            Arg::new(options::WRAP)
+                .short('w')
                 .long(options::WRAP)
                 .takes_value(true)
                 .help(
@@ -121,7 +123,7 @@ pub fn base_app<'a>(about: &'a str) -> App<'static, 'a> {
         )
         // "multiple" arguments are used to check whether there is more than one
         // file passed in.
-        .arg(Arg::with_name(options::FILE).index(1).multiple(true))
+        .arg(Arg::new(options::FILE).index(1).multiple_occurrences(true))
 }
 
 pub fn get_input<'a>(config: &Config, stdin_ref: &'a Stdin) -> UResult<Box<dyn Read + 'a>> {
@@ -152,7 +154,7 @@ pub fn handle_input<R: Read>(
     if !decode {
         match data.encode() {
             Ok(s) => {
-                wrap_print(&data, s);
+                wrap_print(&data, &s);
                 Ok(())
             }
             Err(_) => Err(USimpleError::new(

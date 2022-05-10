@@ -11,12 +11,15 @@ use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, stdin, BufRead, BufReader, Stdin};
 use std::path::Path;
-use uucore::InvalidEncodingHandling;
+use uucore::error::FromIo;
+use uucore::error::UResult;
+use uucore::{format_usage, InvalidEncodingHandling};
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::{crate_version, Arg, ArgMatches, Command};
 
 static ABOUT: &str = "compare two sorted files line by line";
 static LONG_HELP: &str = "";
+const USAGE: &str = "{} [OPTION]... FILE1 FILE2";
 
 mod options {
     pub const COLUMN_1: &str = "1";
@@ -26,10 +29,6 @@ mod options {
     pub const DELIMITER_DEFAULT: &str = "\t";
     pub const FILE_1: &str = "FILE1";
     pub const FILE_2: &str = "FILE2";
-}
-
-fn usage() -> String {
-    format!("{} [OPTION]... FILE1 FILE2", uucore::execution_phrase())
 }
 
 fn mkdelim(col: usize, opts: &ArgMatches) -> String {
@@ -128,50 +127,52 @@ fn open_file(name: &str) -> io::Result<LineReader> {
     }
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = usage();
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
-
-    let mut f1 = open_file(matches.value_of(options::FILE_1).unwrap()).unwrap();
-    let mut f2 = open_file(matches.value_of(options::FILE_2).unwrap()).unwrap();
+    let matches = uu_app().get_matches_from(args);
+    let filename1 = matches.value_of(options::FILE_1).unwrap();
+    let filename2 = matches.value_of(options::FILE_2).unwrap();
+    let mut f1 = open_file(filename1).map_err_context(|| filename1.to_string())?;
+    let mut f2 = open_file(filename2).map_err_context(|| filename2.to_string())?;
 
     comm(&mut f1, &mut f2, &matches);
-
-    0
+    Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::COLUMN_1)
-                .short(options::COLUMN_1)
+            Arg::new(options::COLUMN_1)
+                .short('1')
                 .help("suppress column 1 (lines unique to FILE1)"),
         )
         .arg(
-            Arg::with_name(options::COLUMN_2)
-                .short(options::COLUMN_2)
+            Arg::new(options::COLUMN_2)
+                .short('2')
                 .help("suppress column 2 (lines unique to FILE2)"),
         )
         .arg(
-            Arg::with_name(options::COLUMN_3)
-                .short(options::COLUMN_3)
+            Arg::new(options::COLUMN_3)
+                .short('3')
                 .help("suppress column 3 (lines that appear in both files)"),
         )
         .arg(
-            Arg::with_name(options::DELIMITER)
+            Arg::new(options::DELIMITER)
                 .long(options::DELIMITER)
                 .help("separate columns with STR")
                 .value_name("STR")
                 .default_value(options::DELIMITER_DEFAULT)
                 .hide_default_value(true),
         )
-        .arg(Arg::with_name(options::FILE_1).required(true))
-        .arg(Arg::with_name(options::FILE_2).required(true))
+        .arg(Arg::new(options::FILE_1).required(true))
+        .arg(Arg::new(options::FILE_2).required(true))
 }

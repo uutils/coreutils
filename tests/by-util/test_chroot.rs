@@ -14,6 +14,7 @@ fn test_missing_operand() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_enter_chroot_fails() {
     // NOTE: since #2689 this test also ensures that we don't regress #2687
     let (at, mut ucmd) = at_and_ucmd!();

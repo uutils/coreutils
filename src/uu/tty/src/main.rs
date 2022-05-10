@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_tty);
+uucore::bin!(uu_tty);

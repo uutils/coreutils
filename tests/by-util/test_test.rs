@@ -440,7 +440,27 @@ fn test_file_is_not_writable() {
 
 #[test]
 fn test_file_is_not_executable() {
-    new_ucmd!().args(&["!", "-x", "regular_file"]).succeeds();
+    #[cfg(unix)]
+    let (at, mut ucmd) = at_and_ucmd!();
+    #[cfg(not(unix))]
+    let (_, mut ucmd) = at_and_ucmd!();
+
+    // WSL creates executable files by default, so if we are on unix, make sure
+    // to set make it non-executable.
+    // Files on other targets are non-executable by default.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let metadata = std::fs::metadata(at.plus("regular_file")).unwrap();
+        let mut permissions = metadata.permissions();
+
+        // The conversion is useless on some platforms and casts from u16 to
+        // u32 on others
+        #[allow(clippy::useless_conversion)]
+        permissions.set_mode(permissions.mode() & !u32::from(libc::S_IXUSR));
+        std::fs::set_permissions(at.plus("regular_file"), permissions).unwrap();
+    }
+    ucmd.args(&["!", "-x", "regular_file"]).succeeds();
 }
 
 #[test]

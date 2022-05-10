@@ -34,6 +34,14 @@ fn test_group_num() {
     assert_eq!("24", group_num("24"));
     assert_eq!("4", group_num("4"));
     assert_eq!("", group_num(""));
+    assert_eq!("-5", group_num("-5"));
+    assert_eq!("-1,234", group_num("-1234"));
+}
+
+#[test]
+#[should_panic]
+fn test_group_num_panic_if_invalid_numeric_characters() {
+    group_num("³³³³³");
 }
 
 #[cfg(test)]
@@ -105,14 +113,14 @@ fn test_invalid_option() {
 #[cfg(unix)]
 const NORMAL_FORMAT_STR: &str =
     "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s %u %U %x %X %y %Y %z %Z"; // avoid "%w %W" (birth/creation) due to `stat` limitations and linux kernel & rust version capability variations
-#[cfg(any(target_os = "linux"))]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const DEV_FORMAT_STR: &str =
     "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s (%t/%T) %u %U %w %W %x %X %y %Y %z %Z";
 #[cfg(target_os = "linux")]
 const FS_FORMAT_STR: &str = "%b %c %i %l %n %s %S %t %T"; // avoid "%a %d %f" which can cause test failure due to race conditions
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_terse_fs_format() {
     let args = ["-f", "-t", "/proc"];
     let ts = TestScenario::new(util_name!());
@@ -228,8 +236,9 @@ fn test_symlinks() {
 
     let mut tested: bool = false;
     // arbitrarily chosen symlinks with hope that the CI environment provides at least one of them
-    for file in &[
+    for file in [
         "/bin/sh",
+        "/data/data/com.termux/files/usr/bin/sh", // spell-checker:disable-line
         "/bin/sudoedit",
         "/usr/bin/ex",
         "/etc/localtime",
@@ -251,7 +260,7 @@ fn test_symlinks() {
     }
 }
 
-#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
 #[test]
 fn test_char() {
     // TODO: "(%t) (%x) (%w)" deviate from GNU stat for `character special file` on macOS
@@ -260,13 +269,13 @@ fn test_char() {
     // >"(f) (2021-05-20 23:08:03.455598000 +0200) (-)\n"
     let args = [
         "-c",
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "android"))]
         DEV_FORMAT_STR,
         #[cfg(target_os = "linux")]
         "/dev/pts/ptmx",
         #[cfg(any(target_vendor = "apple"))]
         "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s (/%T) %u %U %W %X %y %Y %z %Z",
-        #[cfg(any(target_vendor = "apple"))]
+        #[cfg(any(target_os = "android", target_vendor = "apple"))]
         "/dev/ptmx",
     ];
     let ts = TestScenario::new(util_name!());
@@ -274,6 +283,40 @@ fn test_char() {
     ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
 }
 
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+#[test]
+fn test_date() {
+    // Just test the date for the time 0.3 change
+    let args = [
+        "-c",
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        "%z",
+        #[cfg(target_os = "linux")]
+        "/bin/sh",
+        #[cfg(any(target_vendor = "apple"))]
+        "%z",
+        #[cfg(any(target_os = "android", target_vendor = "apple"))]
+        "/bin/sh",
+    ];
+    let ts = TestScenario::new(util_name!());
+    let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
+    ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
+    // Just test the date for the time 0.3 change
+    let args = [
+        "-c",
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        "%z",
+        #[cfg(target_os = "linux")]
+        "/dev/ptmx",
+        #[cfg(any(target_vendor = "apple"))]
+        "%z",
+        #[cfg(any(target_os = "android", target_vendor = "apple"))]
+        "/dev/ptmx",
+    ];
+    let ts = TestScenario::new(util_name!());
+    let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
+    ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
+}
 #[cfg(unix)]
 #[test]
 fn test_multi_files() {
@@ -301,4 +344,59 @@ fn test_printf() {
     let ts = TestScenario::new(util_name!());
     let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
     ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg(disable_until_fixed)]
+fn test_stdin_pipe_fifo1() {
+    // $ echo | stat -
+    // File: -
+    // Size: 0               Blocks: 0          IO Block: 4096   fifo
+    // use std::process::{Command, Stdio};
+    new_ucmd!()
+        .arg("-")
+        .set_stdin(std::process::Stdio::piped())
+        .run()
+        .no_stderr()
+        .stdout_contains("fifo")
+        .stdout_contains("File: -")
+        .succeeded();
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg(disable_until_fixed)]
+fn test_stdin_pipe_fifo2() {
+    // $ stat -
+    // File: -
+    // Size: 0               Blocks: 0          IO Block: 1024   character special file
+    new_ucmd!()
+        .arg("-")
+        .run()
+        .no_stderr()
+        .stdout_contains("character special file")
+        .stdout_contains("File: -")
+        .succeeded();
+}
+
+#[cfg(unix)]
+#[test]
+#[cfg(disable_until_fixed)]
+fn test_stdin_redirect() {
+    // $ touch f && stat - < f
+    // File: -
+    // Size: 0               Blocks: 0          IO Block: 4096   regular empty file
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("f");
+    new_ucmd!()
+        .arg("-")
+        .set_stdin(std::fs::File::open("f").unwrap())
+        .run()
+        .no_stderr()
+        .stdout_contains("regular empty file")
+        .stdout_contains("File: -")
+        .succeeded();
 }

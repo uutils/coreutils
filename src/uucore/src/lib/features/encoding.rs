@@ -107,7 +107,7 @@ pub struct Data<R: Read> {
 
 impl<R: Read> Data<R> {
     pub fn new(input: R, format: Format) -> Self {
-        Data {
+        Self {
             line_wrap: 76,
             ignore_garbage: false,
             input,
@@ -125,11 +125,13 @@ impl<R: Read> Data<R> {
         }
     }
 
+    #[must_use]
     pub fn line_wrap(mut self, wrap: usize) -> Self {
         self.line_wrap = wrap;
         self
     }
 
+    #[must_use]
     pub fn ignore_garbage(mut self, ignore: bool) -> Self {
         self.ignore_garbage = ignore;
         self
@@ -154,12 +156,12 @@ impl<R: Read> Data<R> {
 }
 
 // NOTE: this will likely be phased out at some point
-pub fn wrap_print<R: Read>(data: &Data<R>, res: String) {
+pub fn wrap_print<R: Read>(data: &Data<R>, res: &str) {
     let stdout = io::stdout();
     wrap_write(stdout.lock(), data.line_wrap, res).unwrap();
 }
 
-pub fn wrap_write<W: Write>(mut writer: W, line_wrap: usize, res: String) -> io::Result<()> {
+pub fn wrap_write<W: Write>(mut writer: W, line_wrap: usize, res: &str) -> io::Result<()> {
     use std::cmp::min;
 
     if line_wrap == 0 {

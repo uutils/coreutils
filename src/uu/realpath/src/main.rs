@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_realpath);
+uucore::bin!(uu_realpath);

@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_printenv);
+uucore::bin!(uu_printenv);

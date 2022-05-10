@@ -64,7 +64,7 @@ const TESTS: [TestCase; 10] = [
 #[allow(clippy::needless_lifetimes)]
 fn convert_path<'a>(path: &'a str) -> Cow<'a, str> {
     #[cfg(windows)]
-    return path.replace("/", "\\").into();
+    return path.replace('/', "\\").into();
     #[cfg(not(windows))]
     return path.into();
 }
@@ -74,7 +74,7 @@ fn test_relpath_with_from_no_d() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    for test in TESTS.iter() {
+    for test in &TESTS {
         let from: &str = &convert_path(test.from);
         let to: &str = &convert_path(test.to);
         let expected: &str = &convert_path(test.expected);
@@ -96,7 +96,7 @@ fn test_relpath_with_from_with_d() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    for test in TESTS.iter() {
+    for test in &TESTS {
         let from: &str = &convert_path(test.from);
         let to: &str = &convert_path(test.to);
         let pwd = at.as_string();
@@ -132,7 +132,7 @@ fn test_relpath_no_from_no_d() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    for test in TESTS.iter() {
+    for test in &TESTS {
         let to: &str = &convert_path(test.to);
         at.mkdir_all(to);
 
@@ -150,7 +150,7 @@ fn test_relpath_no_from_with_d() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    for test in TESTS.iter() {
+    for test in &TESTS {
         let to: &str = &convert_path(test.to);
         let pwd = at.as_string();
         at.mkdir_all(to);

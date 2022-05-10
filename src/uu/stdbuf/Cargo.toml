@@ -1,27 +1,26 @@
 [package]
 name = "uu_stdbuf"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "stdbuf ~ (uutils) run COMMAND with modified standard stream buffering"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/stdbuf"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/stdbuf"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 path = "src/stdbuf.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
-tempfile = "3.1"
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
+tempfile = "3"
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
 
 [build-dependencies]
-libstdbuf = { version="0.0.8", package="uu_stdbuf_libstdbuf", path="src/libstdbuf" }
+libstdbuf = { version="0.0.13", package="uu_stdbuf_libstdbuf", path="src/libstdbuf" }
 
 [[bin]]
 name = "stdbuf"

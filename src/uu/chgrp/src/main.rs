@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_chgrp);
+uucore::bin!(uu_chgrp);

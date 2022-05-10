@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_nice);
+uucore::bin!(uu_nice);

@@ -26,9 +26,7 @@
 //!   - From custom messages: [`show_error!`], [`show_usage_error!`]
 //! - Print warnings: [`show_warning!`]
 //! - Terminate util execution
-//!   - Terminate regularly: [`exit!`], [`return_if_err!`]
-//!   - Crash program: [`crash!`], [`crash_if_err!`], [`safe_unwrap!`]
-//! - Unwrapping result types: [`safe_unwrap!`]
+//!   - Crash program: [`crash!`], [`crash_if_err!`]
 
 // spell-checker:ignore sourcepath targetpath
 
@@ -223,22 +221,10 @@ macro_rules! show_usage_error(
     })
 );
 
-//====
-
-/// Calls [`std::process::exit`] with the provided exit code.
-///
-/// Why not call exit directly?
-#[macro_export]
-macro_rules! exit(
-    ($exit_code:expr) => ({
-        ::std::process::exit($exit_code)
-    })
-);
-
-/// Display an error and [`exit!`]
+/// Display an error and [`std::process::exit`]
 ///
 /// Displays the provided error message using [`show_error!`], then invokes
-/// [`exit!`] with the provided exit code.
+/// [`std::process::exit`] with the provided exit code.
 ///
 /// # Examples
 ///
@@ -255,7 +241,7 @@ macro_rules! exit(
 macro_rules! crash(
     ($exit_code:expr, $($args:tt)+) => ({
         $crate::show_error!($($args)+);
-        $crate::exit!($exit_code)
+        std::process::exit($exit_code);
     })
 );
 
@@ -288,150 +274,3 @@ macro_rules! crash_if_err(
         }
     )
 );
-
-/// Unwrap some Result, crashing instead of panicking.
-///
-/// Drop this in favor of `crash_if_err!`
-#[macro_export]
-macro_rules! safe_unwrap(
-    ($exp:expr) => (
-        match $exp {
-            Ok(m) => m,
-            Err(f) => $crate::crash!(1, "{}", f.to_string())
-        }
-    )
-);
-
-//====
-
-/// Unwraps the Result. Instead of panicking, it shows the error and then
-/// returns from the function with the provided exit code.
-/// Assumes the current function returns an i32 value.
-///
-/// Replace with `crash_if_err`?
-#[macro_export]
-macro_rules! return_if_err(
-    ($exit_code:expr, $exp:expr) => (
-        match $exp {
-            Ok(m) => m,
-            Err(f) => {
-                $crate::show_error!("{}", f);
-                return $exit_code;
-            }
-        }
-    )
-);
-
-//====
-
-/// This is used exclusively by du...
-#[macro_export]
-macro_rules! safe_writeln(
-    ($fd:expr, $($args:tt)+) => (
-        match writeln!($fd, $($args)+) {
-            Ok(_) => {}
-            Err(f) => panic!("{}", f)
-        }
-    )
-);
-
-//-- message templates
-
-//-- message templates : (join utility sub-macros)
-
-// used only by "cut"
-#[macro_export]
-macro_rules! snippet_list_join_oxford_comma {
-    ($conjunction:expr, $valOne:expr, $valTwo:expr) => (
-        format!("{}, {} {}", $valOne, $conjunction, $valTwo)
-    );
-    ($conjunction:expr, $valOne:expr, $valTwo:expr $(, $remaining_values:expr)*) => (
-        format!("{}, {}", $valOne, $crate::snippet_list_join_oxford_comma!($conjunction, $valTwo $(, $remaining_values)*))
-    );
-}
-
-// used only by "cut"
-#[macro_export]
-macro_rules! snippet_list_join {
-    ($conjunction:expr, $valOne:expr, $valTwo:expr) => (
-        format!("{} {} {}", $valOne, $conjunction, $valTwo)
-    );
-    ($conjunction:expr, $valOne:expr, $valTwo:expr $(, $remaining_values:expr)*) => (
-        format!("{}, {}", $valOne, $crate::snippet_list_join_oxford_comma!($conjunction, $valTwo $(, $remaining_values)*))
-    );
-}
-
-//-- message templates : invalid input
-
-#[macro_export]
-macro_rules! msg_invalid_input {
-    ($reason: expr) => {
-        format!("invalid input: {}", $reason)
-    };
-}
-
-// -- message templates : invalid input : flag
-
-#[macro_export]
-macro_rules! msg_invalid_opt_use {
-    ($about:expr, $flag:expr) => {
-        $crate::msg_invalid_input!(format!("The '{}' option {}", $flag, $about))
-    };
-    ($about:expr, $long_flag:expr, $short_flag:expr) => {
-        $crate::msg_invalid_input!(format!(
-            "The '{}' ('{}') option {}",
-            $long_flag, $short_flag, $about
-        ))
-    };
-}
-
-// Only used by "cut"
-#[macro_export]
-macro_rules! msg_opt_only_usable_if {
-    ($clause:expr, $flag:expr) => {
-        $crate::msg_invalid_opt_use!(format!("only usable if {}", $clause), $flag)
-    };
-    ($clause:expr, $long_flag:expr, $short_flag:expr) => {
-        $crate::msg_invalid_opt_use!(
-            format!("only usable if {}", $clause),
-            $long_flag,
-            $short_flag
-        )
-    };
-}
-
-// Used only by "cut"
-#[macro_export]
-macro_rules! msg_opt_invalid_should_be {
-    ($expects:expr, $received:expr, $flag:expr) => {
-        $crate::msg_invalid_opt_use!(
-            format!("expects {}, but was provided {}", $expects, $received),
-            $flag
-        )
-    };
-    ($expects:expr, $received:expr, $long_flag:expr, $short_flag:expr) => {
-        $crate::msg_invalid_opt_use!(
-            format!("expects {}, but was provided {}", $expects, $received),
-            $long_flag,
-            $short_flag
-        )
-    };
-}
-
-// -- message templates : invalid input : input combinations
-
-// UNUSED!
-#[macro_export]
-macro_rules! msg_expects_one_of {
-    ($valOne:expr $(, $remaining_values:expr)*) => (
-        $crate::msg_invalid_input!(format!("expects one of {}", $crate::snippet_list_join!("or", $valOne $(, $remaining_values)*)))
-    );
-}
-
-// Used only by "cut"
-#[macro_export]
-macro_rules! msg_expects_no_more_than_one_of {
-    ($valOne:expr $(, $remaining_values:expr)*) => (
-        $crate::msg_invalid_input!(format!("expects no more than one of {}", $crate::snippet_list_join!("or", $valOne $(, $remaining_values)*))) ;
-    );
-}

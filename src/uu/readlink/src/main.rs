@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_readlink);
+uucore::bin!(uu_readlink);

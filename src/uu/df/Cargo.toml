@@ -1,28 +1,25 @@
 [package]
 name = "uu_df"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "df ~ (uutils) display file system information"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/df"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/df"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 path = "src/df.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 number_prefix = "0.4"
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["libc", "fsext"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["libc", "fsext"] }
+unicode-width = "0.1.9"
 
 [[bin]]
 name = "df"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

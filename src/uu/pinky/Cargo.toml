@@ -1,27 +1,23 @@
 [package]
 name = "uu_pinky"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "pinky ~ (uutils) display user information"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/pinky"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/pinky"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 path = "src/pinky.rs"
 
 [dependencies]
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["utmpx", "entries"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
-clap = { version = "2.33", features = ["wrap_help"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["utmpx", "entries"] }
 
 [[bin]]
 name = "pinky"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

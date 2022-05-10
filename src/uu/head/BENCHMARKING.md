@@ -20,7 +20,7 @@ and most other parts of the world.
 This particular file has about 170,000 lines, each of which is no longer
 than 96 characters:
 
-    $ wc -lL shakespeare.txt 
+    $ wc -lL shakespeare.txt
     170592      96 shakespeare.txt
 
 You could use files of different shapes and sizes to test the

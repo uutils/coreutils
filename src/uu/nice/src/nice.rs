@@ -15,61 +15,61 @@ use std::ffi::CString;
 use std::io::Error;
 use std::ptr;
 
-use clap::{crate_version, App, AppSettings, Arg};
+use clap::{crate_version, Arg, Command};
+use uucore::{
+    error::{set_exit_code, UClapError, UResult, USimpleError, UUsageError},
+    format_usage,
+};
 
 pub mod options {
     pub static ADJUSTMENT: &str = "adjustment";
     pub static COMMAND: &str = "COMMAND";
 }
 
-fn usage() -> String {
-    format!(
-        "
-  {0} [OPTIONS] [COMMAND [ARGS]]
+const ABOUT: &str = "\
+    Run COMMAND with an adjusted niceness, which affects process scheduling. \
+    With no COMMAND, print the current niceness.  Niceness values range from at \
+    least -20 (most favorable to the process) to 19 (least favorable to the \
+    process).";
+const USAGE: &str = "{} [OPTIONS] [COMMAND [ARGS]]";
 
-Run COMMAND with an adjusted niceness, which affects process scheduling.
-With no COMMAND, print the current niceness.  Niceness values range from at
-least -20 (most favorable to the process) to 19 (least favorable to the
-process).",
-        uucore::execution_phrase()
-    )
-}
-
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = usage();
-
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
 
     let mut niceness = unsafe {
         nix::errno::Errno::clear();
         libc::getpriority(PRIO_PROCESS, 0)
     };
     if Error::last_os_error().raw_os_error().unwrap() != 0 {
-        show_error!("getpriority: {}", Error::last_os_error());
-        return 125;
+        return Err(USimpleError::new(
+            125,
+            format!("getpriority: {}", Error::last_os_error()),
+        ));
     }
 
     let adjustment = match matches.value_of(options::ADJUSTMENT) {
         Some(nstr) => {
             if !matches.is_present(options::COMMAND) {
-                show_error!(
-                    "A command must be given with an adjustment.\nTry '{} --help' for more information.",
-                    uucore::execution_phrase()
-                );
-                return 125;
+                return Err(UUsageError::new(
+                    125,
+                    "A command must be given with an adjustment.",
+                ));
             }
             match nstr.parse() {
                 Ok(num) => num,
                 Err(e) => {
-                    show_error!("\"{}\" is not a valid number: {}", nstr, e);
-                    return 125;
+                    return Err(USimpleError::new(
+                        125,
+                        format!("\"{}\" is not a valid number: {}", nstr, e),
+                    ))
                 }
             }
         }
         None => {
             if !matches.is_present(options::COMMAND) {
                 println!("{}", niceness);
-                return 0;
+                return Ok(());
             }
             10_i32
         }
@@ -93,24 +93,29 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     show_error!("execvp: {}", Error::last_os_error());
-    if Error::last_os_error().raw_os_error().unwrap() as c_int == libc::ENOENT {
+    let exit_code = if Error::last_os_error().raw_os_error().unwrap() as c_int == libc::ENOENT {
         127
     } else {
         126
-    }
+    };
+    set_exit_code(exit_code);
+    Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
-        .setting(AppSettings::TrailingVarArg)
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
+        .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .trailing_var_arg(true)
+        .infer_long_args(true)
         .version(crate_version!())
         .arg(
-            Arg::with_name(options::ADJUSTMENT)
-                .short("n")
+            Arg::new(options::ADJUSTMENT)
+                .short('n')
                 .long(options::ADJUSTMENT)
                 .help("add N to the niceness (default is 10)")
                 .takes_value(true)
                 .allow_hyphen_values(true),
         )
-        .arg(Arg::with_name(options::COMMAND).multiple(true))
+        .arg(Arg::new(options::COMMAND).multiple_occurrences(true))
 }

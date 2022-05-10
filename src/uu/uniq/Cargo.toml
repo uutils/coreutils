@@ -1,29 +1,25 @@
 [package]
 name = "uu_uniq"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "uniq ~ (uutils) filter identical adjacent lines from input"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/uniq"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/uniq"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 path = "src/uniq.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
-strum = "0.21"
-strum_macros = "0.21"
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
+strum = "0.24.0"
+strum_macros = "0.24.0"
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
 
 [[bin]]
 name = "uniq"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

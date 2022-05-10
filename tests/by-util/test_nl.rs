@@ -42,7 +42,7 @@ fn test_padding_with_overflow() {
 #[test]
 fn test_sections_and_styles() {
     // spell-checker:disable
-    for &(fixture, output) in &[
+    for (fixture, output) in [
         (
             "section.txt",
             "\nHEADER1\nHEADER2\n\n1  |BODY1\n2  \

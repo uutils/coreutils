@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile
+// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile bogusfile siette ocho nueve diez
 
 extern crate tail;
 
@@ -73,6 +73,34 @@ fn test_follow() {
     at.append(FOOBAR_TXT, expected);
 
     assert_eq!(read_size(&mut child, expected.len()), expected);
+
+    child.kill().unwrap();
+}
+
+/// Test for following when bytes are written that are not valid UTF-8.
+#[test]
+fn test_follow_non_utf8_bytes() {
+    // Tail the test file and start following it.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut child = ucmd.arg("-f").arg(FOOBAR_TXT).run_no_wait();
+    let expected = at.read("foobar_single_default.expected");
+    assert_eq!(read_size(&mut child, expected.len()), expected);
+
+    // Now append some bytes that are not valid UTF-8.
+    //
+    // The binary integer "10000000" is *not* a valid UTF-8 encoding
+    // of a character: https://en.wikipedia.org/wiki/UTF-8#Encoding
+    //
+    // We also write the newline character because our implementation
+    // of `tail` is attempting to read a line of input, so the
+    // presence of a newline character will force the `follow()`
+    // function to conclude reading input bytes and start writing them
+    // to output. The newline character is not fundamental to this
+    // test, it is just a requirement of the current implementation.
+    let expected = [0b10000000, b'\n'];
+    at.append_bytes(FOOBAR_TXT, &expected);
+    let actual = read_size_bytes(&mut child, expected.len());
+    assert_eq!(actual, expected.to_vec());
 
     child.kill().unwrap();
 }
@@ -177,13 +205,13 @@ fn test_single_big_args() {
 
     let mut big_input = at.make_file(FILE);
     for i in 0..LINES {
-        writeln!(&mut big_input, "Line {}", i).expect("Could not write to FILE");
+        writeln!(big_input, "Line {}", i).expect("Could not write to FILE");
     }
     big_input.flush().expect("Could not flush FILE");
 
     let mut big_expected = at.make_file(EXPECTED_FILE);
     for i in (LINES - N_ARG)..LINES {
-        writeln!(&mut big_expected, "Line {}", i).expect("Could not write to EXPECTED_FILE");
+        writeln!(big_expected, "Line {}", i).expect("Could not write to EXPECTED_FILE");
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
@@ -226,14 +254,14 @@ fn test_bytes_big() {
     let mut big_input = at.make_file(FILE);
     for i in 0..BYTES {
         let digit = from_digit((i % 10) as u32, 10).unwrap();
-        write!(&mut big_input, "{}", digit).expect("Could not write to FILE");
+        write!(big_input, "{}", digit).expect("Could not write to FILE");
     }
     big_input.flush().expect("Could not flush FILE");
 
     let mut big_expected = at.make_file(EXPECTED_FILE);
     for i in (BYTES - N_ARG)..BYTES {
         let digit = from_digit((i % 10) as u32, 10).unwrap();
-        write!(&mut big_expected, "{}", digit).expect("Could not write to EXPECTED_FILE");
+        write!(big_expected, "{}", digit).expect("Could not write to EXPECTED_FILE");
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
@@ -262,13 +290,13 @@ fn test_lines_with_size_suffix() {
 
     let mut big_input = at.make_file(FILE);
     for i in 0..LINES {
-        writeln!(&mut big_input, "Line {}", i).expect("Could not write to FILE");
+        writeln!(big_input, "Line {}", i).expect("Could not write to FILE");
     }
     big_input.flush().expect("Could not flush FILE");
 
     let mut big_expected = at.make_file(EXPECTED_FILE);
     for i in (LINES - N_ARG)..LINES {
-        writeln!(&mut big_expected, "Line {}", i).expect("Could not write to EXPECTED_FILE");
+        writeln!(big_expected, "Line {}", i).expect("Could not write to EXPECTED_FILE");
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
@@ -358,6 +386,37 @@ fn test_positive_lines() {
         .stdout_is("c\nd\ne\n");
 }
 
+/// Test for reading all but the first NUM lines of a file: `tail -n +3 infile`.
+#[test]
+fn test_positive_lines_file() {
+    new_ucmd!()
+        .args(&["-n", "+7", "foobar.txt"])
+        .succeeds()
+        .stdout_is(
+            "siette
+ocho
+nueve
+diez
+once
+",
+        );
+}
+
+/// Test for reading all but the first NUM bytes of a file: `tail -c +3 infile`.
+#[test]
+fn test_positive_bytes_file() {
+    new_ucmd!()
+        .args(&["-c", "+42", "foobar.txt"])
+        .succeeds()
+        .stdout_is(
+            "ho
+nueve
+diez
+once
+",
+        );
+}
+
 /// Test for reading all but the first NUM lines: `tail -3`.
 #[test]
 fn test_obsolete_syntax_positive_lines() {
@@ -426,12 +485,13 @@ fn test_tail_invalid_num() {
                 .args(&["-c", size])
                 .fails()
                 .code_is(1)
-                .stderr_only(format!(
-                    "tail: invalid number of bytes: '{}': Value too large for defined data type",
-                    size
-                ));
+                .stderr_only("tail: Insufficient addressable memory");
         }
     }
+    new_ucmd!()
+        .args(&["-c", "-³"])
+        .fails()
+        .stderr_is("tail: invalid number of bytes: '³'");
 }
 
 #[test]
@@ -462,7 +522,7 @@ fn test_tail_bytes_for_funny_files() {
     // gnu/tests/tail-2/tail-c.sh
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    for &file in &["/proc/version", "/sys/kernel/profiling"] {
+    for file in ["/proc/version", "/sys/kernel/profiling"] {
         if !at.file_exists(file) {
             continue;
         }
@@ -474,4 +534,41 @@ fn test_tail_bytes_for_funny_files() {
             .stderr_is(exp_result.stderr_str())
             .code_is(exp_result.code());
     }
+}
+
+#[test]
+fn test_no_such_file() {
+    new_ucmd!()
+        .arg("bogusfile")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cannot open 'bogusfile' for reading: No such file or directory");
+}
+
+#[test]
+fn test_no_trailing_newline() {
+    new_ucmd!().pipe_in("x").succeeds().stdout_only("x");
+}
+
+#[test]
+fn test_lines_zero_terminated() {
+    new_ucmd!()
+        .args(&["-z", "-n", "2"])
+        .pipe_in("a\0b\0c\0d\0e\0")
+        .succeeds()
+        .stdout_only("d\0e\0");
+    new_ucmd!()
+        .args(&["-z", "-n", "+2"])
+        .pipe_in("a\0b\0c\0d\0e\0")
+        .succeeds()
+        .stdout_only("b\0c\0d\0e\0");
+}
+
+#[test]
+fn test_presume_input_pipe_default() {
+    new_ucmd!()
+        .arg("---presume-input-pipe")
+        .pipe_in_fixture(FOOBAR_TXT)
+        .run()
+        .stdout_is_fixture("foobar_stdin_default.expected");
 }

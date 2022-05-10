@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_echo);
+uucore::bin!(uu_echo);

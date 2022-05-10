@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_uptime);
+uucore::bin!(uu_uptime);

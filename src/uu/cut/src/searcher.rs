@@ -72,7 +72,7 @@ mod tests {
         assert_eq!(vec![] as Vec<usize>, items);
     }
 
-    fn test_multibyte(line: &[u8], expected: Vec<usize>) {
+    fn test_multibyte(line: &[u8], expected: &[usize]) {
         let iter = Searcher::new(line, NEEDLE);
         let items: Vec<usize> = iter.collect();
         assert_eq!(expected, items);
@@ -80,26 +80,26 @@ mod tests {
 
     #[test]
     fn test_multibyte_normal() {
-        test_multibyte("...ab...ab...".as_bytes(), vec![3, 8]);
+        test_multibyte("...ab...ab...".as_bytes(), &[3, 8]);
     }
 
     #[test]
     fn test_multibyte_needle_head_at_end() {
-        test_multibyte("a".as_bytes(), vec![]);
+        test_multibyte("a".as_bytes(), &[]);
     }
 
     #[test]
     fn test_multibyte_starting_needle() {
-        test_multibyte("ab...ab...".as_bytes(), vec![0, 5]);
+        test_multibyte("ab...ab...".as_bytes(), &[0, 5]);
     }
 
     #[test]
     fn test_multibyte_trailing_needle() {
-        test_multibyte("...ab...ab".as_bytes(), vec![3, 8]);
+        test_multibyte("...ab...ab".as_bytes(), &[3, 8]);
     }
 
     #[test]
     fn test_multibyte_first_byte_false_match() {
-        test_multibyte("aA..aCaC..ab..aD".as_bytes(), vec![10]);
+        test_multibyte("aA..aCaC..ab..aD".as_bytes(), &[10]);
     }
 }

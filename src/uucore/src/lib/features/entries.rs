@@ -41,15 +41,17 @@ use libc::{c_char, c_int, gid_t, uid_t};
 use libc::{getgrgid, getgrnam, getgroups};
 use libc::{getpwnam, getpwuid, group, passwd};
 
-use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::io::Error as IOError;
 use std::io::ErrorKind;
 use std::io::Result as IOResult;
 use std::ptr;
+use std::sync::Mutex;
+
+use once_cell::sync::Lazy;
 
 extern "C" {
-    /// From: https://man7.org/linux/man-pages/man3/getgrouplist.3.html
+    /// From: `<https://man7.org/linux/man-pages/man3/getgrouplist.3.html>`
     /// > The getgrouplist() function scans the group database to obtain
     /// > the list of groups that user belongs to.
     fn getgrouplist(
@@ -60,7 +62,7 @@ extern "C" {
     ) -> c_int;
 }
 
-/// From: https://man7.org/linux/man-pages/man2/getgroups.2.html
+/// From: `<https://man7.org/linux/man-pages/man2/getgroups.2.html>`
 /// > getgroups() returns the supplementary group IDs of the calling
 /// > process in list.
 /// > If size is zero, list is not modified, but the total number of
@@ -69,19 +71,31 @@ extern "C" {
 /// > to be used in a further call to getgroups().
 #[cfg(not(target_os = "redox"))]
 pub fn get_groups() -> IOResult<Vec<gid_t>> {
-    let ngroups = unsafe { getgroups(0, ptr::null_mut()) };
-    if ngroups == -1 {
-        return Err(IOError::last_os_error());
-    }
-    let mut groups = Vec::with_capacity(ngroups as usize);
-    let ngroups = unsafe { getgroups(ngroups, groups.as_mut_ptr()) };
-    if ngroups == -1 {
-        Err(IOError::last_os_error())
-    } else {
-        unsafe {
-            groups.set_len(ngroups as usize);
+    let mut groups = Vec::new();
+    loop {
+        let ngroups = match unsafe { getgroups(0, ptr::null_mut()) } {
+            -1 => return Err(IOError::last_os_error()),
+            // Not just optimization; 0 would mess up the next call
+            0 => return Ok(Vec::new()),
+            n => n,
+        };
+
+        // This is a small buffer, so we can afford to zero-initialize it and
+        // use safe Vec operations
+        groups.resize(ngroups.try_into().unwrap(), 0);
+        let res = unsafe { getgroups(ngroups, groups.as_mut_ptr()) };
+        if res == -1 {
+            let err = IOError::last_os_error();
+            if err.raw_os_error() == Some(libc::EINVAL) {
+                // Number of groups changed, retry
+                continue;
+            } else {
+                return Err(err);
+            }
+        } else {
+            groups.truncate(ngroups.try_into().unwrap());
+            return Ok(groups);
         }
-        Ok(groups)
     }
 }
 
@@ -95,7 +109,7 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
 /// to the first entry in the returned Vector. This might be necessary
 /// for `id --groups --real` if `gid` and `egid` are not equal.
 ///
-/// From: https://www.man7.org/linux/man-pages/man3/getgroups.3p.html
+/// From: `<https://www.man7.org/linux/man-pages/man3/getgroups.3p.html>`
 /// > As implied by the definition of supplementary groups, the
 /// > effective group ID may appear in the array returned by
 /// > getgroups() or it may be returned only by getegid().  Duplication
@@ -124,82 +138,73 @@ fn sort_groups(mut groups: Vec<gid_t>, egid: gid_t) -> Vec<gid_t> {
     groups
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone, Debug)]
 pub struct Passwd {
-    inner: passwd,
+    /// AKA passwd.pw_name
+    pub name: String,
+    /// AKA passwd.pw_uid
+    pub uid: uid_t,
+    /// AKA passwd.pw_gid
+    pub gid: gid_t,
+    /// AKA passwd.pw_gecos
+    pub user_info: Option<String>,
+    /// AKA passwd.pw_shell
+    pub user_shell: Option<String>,
+    /// AKA passwd.pw_dir
+    pub user_dir: Option<String>,
+    /// AKA passwd.pw_passwd
+    pub user_passwd: Option<String>,
+    /// AKA passwd.pw_class
+    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+    pub user_access_class: Option<String>,
+    /// AKA passwd.pw_change
+    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+    pub passwd_change_time: time_t,
+    /// AKA passwd.pw_expire
+    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+    pub expiration: time_t,
 }
 
-macro_rules! cstr2cow {
-    ($v:expr) => {
-        unsafe { CStr::from_ptr($v).to_string_lossy() }
-    };
+/// SAFETY: ptr must point to a valid C string.
+/// Returns None if ptr is null.
+unsafe fn cstr2string(ptr: *const c_char) -> Option<String> {
+    if !ptr.is_null() {
+        Some(CStr::from_ptr(ptr).to_string_lossy().into_owned())
+    } else {
+        None
+    }
 }
 
 impl Passwd {
-    /// AKA passwd.pw_name
-    pub fn name(&self) -> Cow<str> {
-        cstr2cow!(self.inner.pw_name)
-    }
-
-    /// AKA passwd.pw_uid
-    pub fn uid(&self) -> uid_t {
-        self.inner.pw_uid
-    }
-
-    /// AKA passwd.pw_gid
-    pub fn gid(&self) -> gid_t {
-        self.inner.pw_gid
-    }
-
-    /// AKA passwd.pw_gecos
-    pub fn user_info(&self) -> Cow<str> {
-        cstr2cow!(self.inner.pw_gecos)
-    }
-
-    /// AKA passwd.pw_shell
-    pub fn user_shell(&self) -> Cow<str> {
-        cstr2cow!(self.inner.pw_shell)
-    }
-
-    /// AKA passwd.pw_dir
-    pub fn user_dir(&self) -> Cow<str> {
-        cstr2cow!(self.inner.pw_dir)
-    }
-
-    /// AKA passwd.pw_passwd
-    pub fn user_passwd(&self) -> Cow<str> {
-        cstr2cow!(self.inner.pw_passwd)
-    }
-
-    /// AKA passwd.pw_class
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
-    pub fn user_access_class(&self) -> Cow<str> {
-        cstr2cow!(self.inner.pw_class)
-    }
-
-    /// AKA passwd.pw_change
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
-    pub fn passwd_change_time(&self) -> time_t {
-        self.inner.pw_change
-    }
-
-    /// AKA passwd.pw_expire
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
-    pub fn expiration(&self) -> time_t {
-        self.inner.pw_expire
-    }
-
-    pub fn as_inner(&self) -> &passwd {
-        &self.inner
-    }
-
-    pub fn into_inner(self) -> passwd {
-        self.inner
+    /// SAFETY: All the pointed-to strings must be valid and not change while
+    /// the function runs. That means PW_LOCK must be held.
+    unsafe fn from_raw(raw: passwd) -> Self {
+        Self {
+            name: cstr2string(raw.pw_name).expect("passwd without name"),
+            uid: raw.pw_uid,
+            gid: raw.pw_gid,
+            #[cfg(not(all(
+                target_os = "android",
+                any(target_arch = "x86", target_arch = "arm")
+            )))]
+            user_info: cstr2string(raw.pw_gecos),
+            #[cfg(all(target_os = "android", any(target_arch = "x86", target_arch = "arm")))]
+            user_info: None,
+            user_shell: cstr2string(raw.pw_shell),
+            user_dir: cstr2string(raw.pw_dir),
+            user_passwd: cstr2string(raw.pw_passwd),
+            #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+            user_access_class: cstr2string(raw.pw_class),
+            #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+            passwd_change_time: raw.pw_change,
+            #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+            expiration: raw.pw_expire,
+        }
     }
 
     /// This is a wrapper function for `libc::getgrouplist`.
     ///
-    /// From: https://man7.org/linux/man-pages/man3/getgrouplist.3.html
+    /// From: `<https://man7.org/linux/man-pages/man3/getgrouplist.3.html>`
     /// > If the number of groups of which user is a member is less than or
     /// > equal to *ngroups, then the value *ngroups is returned.
     /// > If the user is a member of more than *ngroups groups, then
@@ -214,49 +219,44 @@ impl Passwd {
     pub fn belongs_to(&self) -> Vec<gid_t> {
         let mut ngroups: c_int = 8;
         let mut ngroups_old: c_int;
-        let mut groups = Vec::with_capacity(ngroups as usize);
-        let gid = self.inner.pw_gid;
-        let name = self.inner.pw_name;
+        let mut groups = vec![0; ngroups.try_into().unwrap()];
+        let name = CString::new(self.name.clone()).unwrap();
         loop {
             ngroups_old = ngroups;
-            if unsafe { getgrouplist(name, gid, groups.as_mut_ptr(), &mut ngroups) } == -1 {
+            if unsafe { getgrouplist(name.as_ptr(), self.gid, groups.as_mut_ptr(), &mut ngroups) }
+                == -1
+            {
                 if ngroups == ngroups_old {
                     ngroups *= 2;
                 }
-                groups.resize(ngroups as usize, 0);
+                groups.resize(ngroups.try_into().unwrap(), 0);
             } else {
                 break;
             }
         }
-        unsafe {
-            groups.set_len(ngroups as usize);
-        }
-        groups.truncate(ngroups as usize);
+        let ngroups = ngroups.try_into().unwrap();
+        assert!(ngroups <= groups.len());
+        groups.truncate(ngroups);
         groups
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct Group {
-    inner: group,
+    /// AKA group.gr_name
+    pub name: String,
+    /// AKA group.gr_gid
+    pub gid: gid_t,
 }
 
 impl Group {
-    /// AKA group.gr_name
-    pub fn name(&self) -> Cow<str> {
-        cstr2cow!(self.inner.gr_name)
-    }
-
-    /// AKA group.gr_gid
-    pub fn gid(&self) -> gid_t {
-        self.inner.gr_gid
-    }
-
-    pub fn as_inner(&self) -> &group {
-        &self.inner
-    }
-
-    pub fn into_inner(self) -> group {
-        self.inner
+    /// SAFETY: gr_name must be valid and not change while
+    /// the function runs. That means PW_LOCK must be held.
+    unsafe fn from_raw(raw: group) -> Self {
+        Self {
+            name: cstr2string(raw.gr_name).expect("group without name"),
+            gid: raw.gr_gid,
+        }
     }
 }
 
@@ -267,17 +267,32 @@ pub trait Locate<K> {
         Self: ::std::marker::Sized;
 }
 
+// These functions are not thread-safe:
+// > The return value may point to a static area, and may be
+// > overwritten by subsequent calls to getpwent(3), getpwnam(),
+// > or getpwuid().
+// This applies not just to the struct but also the strings it points
+// to, so we must copy all the data we want before releasing the lock.
+// (Technically we must also ensure that the raw functions aren't being called
+// anywhere else in the program.)
+static PW_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
 macro_rules! f {
     ($fnam:ident, $fid:ident, $t:ident, $st:ident) => {
         impl Locate<$t> for $st {
             fn locate(k: $t) -> IOResult<Self> {
+                let _guard = PW_LOCK.lock();
+                // SAFETY: We're holding PW_LOCK.
                 unsafe {
                     let data = $fid(k);
                     if !data.is_null() {
-                        Ok($st {
-                            inner: ptr::read(data as *const _),
-                        })
+                        Ok($st::from_raw(ptr::read(data as *const _)))
                     } else {
+                        // FIXME: Resource limits, signals and I/O failure may
+                        // cause this too. See getpwnam(3).
+                        // errno must be set to zero before the call. We can
+                        // use libc::__errno_location() on some platforms.
+                        // The same applies for the two cases below.
                         Err(IOError::new(
                             ErrorKind::NotFound,
                             format!("No such id: {}", k),
@@ -289,25 +304,26 @@ macro_rules! f {
 
         impl<'a> Locate<&'a str> for $st {
             fn locate(k: &'a str) -> IOResult<Self> {
+                let _guard = PW_LOCK.lock();
                 if let Ok(id) = k.parse::<$t>() {
-                    let data = unsafe { $fid(id) };
-                    if !data.is_null() {
-                        Ok($st {
-                            inner: unsafe { ptr::read(data as *const _) },
-                        })
-                    } else {
-                        Err(IOError::new(
-                            ErrorKind::NotFound,
-                            format!("No such id: {}", id),
-                        ))
+                    // SAFETY: We're holding PW_LOCK.
+                    unsafe {
+                        let data = $fid(id);
+                        if !data.is_null() {
+                            Ok($st::from_raw(ptr::read(data as *const _)))
+                        } else {
+                            Err(IOError::new(
+                                ErrorKind::NotFound,
+                                format!("No such id: {}", id),
+                            ))
+                        }
                     }
                 } else {
+                    // SAFETY: We're holding PW_LOCK.
                     unsafe {
                         let data = $fnam(CString::new(k).unwrap().as_ptr());
                         if !data.is_null() {
-                            Ok($st {
-                                inner: ptr::read(data as *const _),
-                            })
+                            Ok($st::from_raw(ptr::read(data as *const _)))
                         } else {
                             Err(IOError::new(
                                 ErrorKind::NotFound,
@@ -327,24 +343,24 @@ f!(getgrnam, getgrgid, gid_t, Group);
 
 #[inline]
 pub fn uid2usr(id: uid_t) -> IOResult<String> {
-    Passwd::locate(id).map(|p| p.name().into_owned())
+    Passwd::locate(id).map(|p| p.name)
 }
 
 #[cfg(not(target_os = "redox"))]
 #[inline]
 pub fn gid2grp(id: gid_t) -> IOResult<String> {
-    Group::locate(id).map(|p| p.name().into_owned())
+    Group::locate(id).map(|p| p.name)
 }
 
 #[inline]
 pub fn usr2uid(name: &str) -> IOResult<uid_t> {
-    Passwd::locate(name).map(|p| p.uid())
+    Passwd::locate(name).map(|p| p.uid)
 }
 
 #[cfg(not(target_os = "redox"))]
 #[inline]
 pub fn grp2gid(name: &str) -> IOResult<gid_t> {
-    Group::locate(name).map(|p| p.gid())
+    Group::locate(name).map(|p| p.gid)
 }
 
 #[cfg(test)]

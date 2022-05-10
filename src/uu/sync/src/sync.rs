@@ -9,16 +9,14 @@
 
 extern crate libc;
 
-#[macro_use]
-extern crate uucore;
-
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use std::path::Path;
 use uucore::display::Quotable;
-
-static EXIT_ERR: i32 = 1;
+use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 
 static ABOUT: &str = "Synchronize cached writes to persistent storage";
+const USAGE: &str = "{} [OPTION]... FILE...";
 pub mod options {
     pub static FILE_SYSTEM: &str = "file-system";
     pub static DATA: &str = "data";
@@ -29,17 +27,21 @@ static ARG_FILES: &str = "files";
 #[cfg(unix)]
 mod platform {
     use super::libc;
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     use std::fs::File;
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     use std::os::unix::io::AsRawFd;
 
     pub unsafe fn do_sync() -> isize {
+        // see https://github.com/rust-lang/libc/pull/2161
+        #[cfg(target_os = "android")]
+        libc::syscall(libc::SYS_sync);
+        #[cfg(not(target_os = "android"))]
         libc::sync();
         0
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     pub unsafe fn do_syncfs(files: Vec<String>) -> isize {
         for path in files {
             let f = File::open(&path).unwrap();
@@ -49,7 +51,7 @@ mod platform {
         0
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     pub unsafe fn do_fdatasync(files: Vec<String>) -> isize {
         for path in files {
             let f = File::open(&path).unwrap();
@@ -72,6 +74,7 @@ mod platform {
     use std::mem;
     use std::os::windows::prelude::*;
     use std::path::Path;
+    use uucore::crash;
     use uucore::wide::{FromWide, ToWide};
 
     unsafe fn flush_volume(name: &str) {
@@ -160,14 +163,9 @@ mod platform {
     }
 }
 
-fn usage() -> String {
-    format!("{0} [OPTION]... FILE...", uucore::execution_phrase())
-}
-
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = usage();
-
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uu_app().get_matches_from(args);
 
     let files: Vec<String> = matches
         .values_of(ARG_FILES)
@@ -176,58 +174,63 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     for f in &files {
         if !Path::new(&f).exists() {
-            crash!(
-                EXIT_ERR,
-                "cannot stat {}: No such file or directory",
-                f.quote()
-            );
+            return Err(USimpleError::new(
+                1,
+                format!("cannot stat {}: No such file or directory", f.quote()),
+            ));
         }
     }
 
     #[allow(clippy::if_same_then_else)]
     if matches.is_present(options::FILE_SYSTEM) {
-        #[cfg(any(target_os = "linux", target_os = "windows"))]
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
         syncfs(files);
     } else if matches.is_present(options::DATA) {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "android"))]
         fdatasync(files);
     } else {
         sync();
     }
-    0
+    Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::FILE_SYSTEM)
-                .short("f")
+            Arg::new(options::FILE_SYSTEM)
+                .short('f')
                 .long(options::FILE_SYSTEM)
                 .conflicts_with(options::DATA)
                 .help("sync the file systems that contain the files (Linux and Windows only)"),
         )
         .arg(
-            Arg::with_name(options::DATA)
-                .short("d")
+            Arg::new(options::DATA)
+                .short('d')
                 .long(options::DATA)
                 .conflicts_with(options::FILE_SYSTEM)
                 .help("sync only file data, no unneeded metadata (Linux only)"),
         )
-        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
+        .arg(
+            Arg::new(ARG_FILES)
+                .multiple_occurrences(true)
+                .takes_value(true),
+        )
 }
 
 fn sync() -> isize {
     unsafe { platform::do_sync() }
 }
 
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
 fn syncfs(files: Vec<String>) -> isize {
     unsafe { platform::do_syncfs(files) }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn fdatasync(files: Vec<String>) -> isize {
     unsafe { platform::do_fdatasync(files) }
 }

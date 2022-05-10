@@ -10,16 +10,19 @@
 
 mod parser;
 
-use clap::{crate_version, App, AppSettings};
+use clap::{crate_version, Command};
 use parser::{parse, Operator, Symbol, UnaryOperator};
 use std::ffi::{OsStr, OsString};
-use uucore::{display::Quotable, show_error};
+use uucore::display::Quotable;
+use uucore::error::{UResult, USimpleError};
+use uucore::format_usage;
 
-const USAGE: &str = "test EXPRESSION
-or:  test
-or:  [ EXPRESSION ]
-or:  [ ]
-or:  [ OPTION";
+const USAGE: &str = "\
+    {} EXPRESSION
+    {}
+    [ EXPRESSION ]
+    [ ]
+    [ OPTION";
 
 // We use after_help so that this comes after the usage string (it would come before if we used about)
 const AFTER_HELP: &str = "
@@ -85,13 +88,18 @@ NOTE: your shell may have its own version of test and/or [, which usually supers
 the version described here.  Please refer to your shell's documentation
 for details about the options it supports.";
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
-        .setting(AppSettings::DisableHelpFlags)
-        .setting(AppSettings::DisableVersion)
+const ABOUT: &str = "Check file types and compare values.";
+
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
+        .version(crate_version!())
+        .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .after_help(AFTER_HELP)
 }
 
-pub fn uumain(mut args: impl uucore::Args) -> i32 {
+#[uucore::main]
+pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     let program = args.next().unwrap_or_else(|| OsString::from("test"));
     let binary_name = uucore::util_name();
     let mut args: Vec<_> = args.collect();
@@ -100,22 +108,20 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
         // If invoked as [ we should recognize --help and --version (but not -h or -v)
         if args.len() == 1 && (args[0] == "--help" || args[0] == "--version") {
             // Let clap pretty-print help and version
-            App::new(binary_name)
+            Command::new(binary_name)
                 .version(crate_version!())
-                .usage(USAGE)
+                .about(ABOUT)
+                .override_usage(format_usage(USAGE))
                 .after_help(AFTER_HELP)
                 // Disable printing of -h and -v as valid alternatives for --help and --version,
                 // since we don't recognize -h and -v as help/version flags.
-                .setting(AppSettings::NeedsLongHelp)
-                .setting(AppSettings::NeedsLongVersion)
                 .get_matches_from(std::iter::once(program).chain(args.into_iter()));
-            return 0;
+            return Ok(());
         }
         // If invoked via name '[', matching ']' must be in the last arg
         let last = args.pop();
         if last.as_deref() != Some(OsStr::new("]")) {
-            show_error!("missing ']'");
-            return 2;
+            return Err(USimpleError::new(2, "missing ']'"));
         }
     }
 
@@ -124,15 +130,12 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
     match result {
         Ok(result) => {
             if result {
-                0
+                Ok(())
             } else {
-                1
+                Err(1.into())
             }
         }
-        Err(e) => {
-            show_error!("{}", e);
-            2
-        }
+        Err(e) => Err(USimpleError::new(2, e)),
     }
 }
 
@@ -192,37 +195,36 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
             let f = pop_literal!();
 
             Ok(match op {
-                "-b" => path(&f, PathCondition::BlockSpecial),
-                "-c" => path(&f, PathCondition::CharacterSpecial),
-                "-d" => path(&f, PathCondition::Directory),
-                "-e" => path(&f, PathCondition::Exists),
-                "-f" => path(&f, PathCondition::Regular),
-                "-g" => path(&f, PathCondition::GroupIdFlag),
-                "-G" => path(&f, PathCondition::GroupOwns),
-                "-h" => path(&f, PathCondition::SymLink),
-                "-k" => path(&f, PathCondition::Sticky),
-                "-L" => path(&f, PathCondition::SymLink),
-                "-O" => path(&f, PathCondition::UserOwns),
-                "-p" => path(&f, PathCondition::Fifo),
-                "-r" => path(&f, PathCondition::Readable),
-                "-S" => path(&f, PathCondition::Socket),
-                "-s" => path(&f, PathCondition::NonEmpty),
+                "-b" => path(&f, &PathCondition::BlockSpecial),
+                "-c" => path(&f, &PathCondition::CharacterSpecial),
+                "-d" => path(&f, &PathCondition::Directory),
+                "-e" => path(&f, &PathCondition::Exists),
+                "-f" => path(&f, &PathCondition::Regular),
+                "-g" => path(&f, &PathCondition::GroupIdFlag),
+                "-G" => path(&f, &PathCondition::GroupOwns),
+                "-h" => path(&f, &PathCondition::SymLink),
+                "-k" => path(&f, &PathCondition::Sticky),
+                "-L" => path(&f, &PathCondition::SymLink),
+                "-O" => path(&f, &PathCondition::UserOwns),
+                "-p" => path(&f, &PathCondition::Fifo),
+                "-r" => path(&f, &PathCondition::Readable),
+                "-S" => path(&f, &PathCondition::Socket),
+                "-s" => path(&f, &PathCondition::NonEmpty),
                 "-t" => isatty(&f)?,
-                "-u" => path(&f, PathCondition::UserIdFlag),
-                "-w" => path(&f, PathCondition::Writable),
-                "-x" => path(&f, PathCondition::Executable),
+                "-u" => path(&f, &PathCondition::UserIdFlag),
+                "-w" => path(&f, &PathCondition::Writable),
+                "-x" => path(&f, &PathCondition::Executable),
                 _ => panic!(),
             })
         }
         Some(Symbol::Literal(s)) => Ok(!s.is_empty()),
-        Some(Symbol::None) => Ok(false),
+        Some(Symbol::None) | None => Ok(false),
         Some(Symbol::BoolOp(op)) => {
             let b = eval(stack)?;
             let a = eval(stack)?;
 
             Ok(if op == "-a" { a && b } else { a || b })
         }
-        None => Ok(false),
         _ => Err("expected value".to_string()),
     }
 }
@@ -287,7 +289,7 @@ enum PathCondition {
 }
 
 #[cfg(not(windows))]
-fn path(path: &OsStr, condition: PathCondition) -> bool {
+fn path(path: &OsStr, condition: &PathCondition) -> bool {
     use std::fs::{self, Metadata};
     use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
@@ -329,7 +331,7 @@ fn path(path: &OsStr, condition: PathCondition) -> bool {
         }
     };
 
-    let metadata = if condition == PathCondition::SymLink {
+    let metadata = if condition == &PathCondition::SymLink {
         fs::symlink_metadata(path)
     } else {
         fs::metadata(path)
@@ -366,7 +368,7 @@ fn path(path: &OsStr, condition: PathCondition) -> bool {
 }
 
 #[cfg(windows)]
-fn path(path: &OsStr, condition: PathCondition) -> bool {
+fn path(path: &OsStr, condition: &PathCondition) -> bool {
     use std::fs::metadata;
 
     let stat = match metadata(path) {

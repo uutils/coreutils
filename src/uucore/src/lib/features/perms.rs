@@ -12,9 +12,9 @@ use crate::error::USimpleError;
 pub use crate::features::entries;
 use crate::fs::resolve_relative_path;
 use crate::show_error;
-use clap::App;
 use clap::Arg;
 use clap::ArgMatches;
+use clap::Command;
 use libc::{self, gid_t, uid_t};
 use walkdir::WalkDir;
 
@@ -296,9 +296,9 @@ impl ChownExecutor {
                             } else {
                                 "Too many levels of symbolic links".into()
                             }
-                        )
+                        );
                     } else {
-                        show_error!("{}", e)
+                        show_error!("{}", e);
                     }
                     continue;
                 }
@@ -383,6 +383,7 @@ impl ChownExecutor {
 }
 
 pub mod options {
+    pub const HELP: &str = "help";
     pub mod verbosity {
         pub const CHANGES: &str = "changes";
         pub const QUIET: &str = "quiet";
@@ -410,20 +411,20 @@ pub mod options {
     pub const ARG_FILES: &str = "FILE";
 }
 
-type GidUidFilterParser<'a> = fn(&ArgMatches<'a>) -> UResult<(Option<u32>, Option<u32>, IfFrom)>;
+type GidUidFilterParser = fn(&ArgMatches) -> UResult<(Option<u32>, Option<u32>, IfFrom)>;
 
 /// Base implementation for `chgrp` and `chown`.
 ///
-/// An argument called `add_arg_if_not_reference` will be added to `app` if
+/// An argument called `add_arg_if_not_reference` will be added to `command` if
 /// `args` does not contain the `--reference` option.
 /// `parse_gid_uid_and_filter` will be called to obtain the target gid and uid, and the filter,
 /// from `ArgMatches`.
 /// `groups_only` determines whether verbose output will only mention the group.
 pub fn chown_base<'a>(
-    mut app: App<'a, 'a>,
+    mut command: Command<'a>,
     args: impl crate::Args,
     add_arg_if_not_reference: &'a str,
-    parse_gid_uid_and_filter: GidUidFilterParser<'a>,
+    parse_gid_uid_and_filter: GidUidFilterParser,
     groups_only: bool,
 ) -> UResult<()> {
     let args: Vec<_> = args.collect();
@@ -444,23 +445,23 @@ pub fn chown_base<'a>(
     if help || !reference {
         // add both positional arguments
         // arg_group is only required if
-        app = app.arg(
-            Arg::with_name(add_arg_if_not_reference)
+        command = command.arg(
+            Arg::new(add_arg_if_not_reference)
                 .value_name(add_arg_if_not_reference)
                 .required(true)
                 .takes_value(true)
-                .multiple(false),
-        )
+                .multiple_occurrences(false),
+        );
     }
-    app = app.arg(
-        Arg::with_name(options::ARG_FILES)
+    command = command.arg(
+        Arg::new(options::ARG_FILES)
             .value_name(options::ARG_FILES)
-            .multiple(true)
+            .multiple_occurrences(true)
             .takes_value(true)
             .required(true)
             .min_values(1),
     );
-    let matches = app.get_matches_from(args);
+    let matches = command.get_matches_from(args);
 
     let files: Vec<String> = matches
         .values_of(options::ARG_FILES)

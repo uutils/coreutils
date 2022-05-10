@@ -33,21 +33,24 @@ use std::collections::VecDeque;
 /// let expected = VecDeque::from_iter([1, 2].iter());
 /// assert_eq!(expected, actual);
 /// ```
+///
+/// [`push_back`]: struct.RingBuffer.html#method.push_back
+/// [`from_iter`]: struct.RingBuffer.html#method.from_iter
 pub struct RingBuffer<T> {
     pub data: VecDeque<T>,
     size: usize,
 }
 
 impl<T> RingBuffer<T> {
-    pub fn new(size: usize) -> RingBuffer<T> {
-        RingBuffer {
+    pub fn new(size: usize) -> Self {
+        Self {
             data: VecDeque::new(),
             size,
         }
     }
 
-    pub fn from_iter(iter: impl Iterator<Item = T>, size: usize) -> RingBuffer<T> {
-        let mut ring_buffer = RingBuffer::new(size);
+    pub fn from_iter(iter: impl Iterator<Item = T>, size: usize) -> Self {
+        let mut ring_buffer = Self::new(size);
         for value in iter {
             ring_buffer.push_back(value);
         }

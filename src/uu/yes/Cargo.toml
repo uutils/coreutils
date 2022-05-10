@@ -1,26 +1,25 @@
 [package]
 name = "uu_yes"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "yes ~ (uutils) repeatedly display a line with STRING (or 'y')"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/yes"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/yes"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 path = "src/yes.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["pipes"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["pipes"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-nix = "=0.23.1"
+nix = { version = "0.24.1", default-features = false }
 
 [[bin]]
 name = "yes"

@@ -7,17 +7,18 @@
 
 // spell-checker:ignore N'th M'th
 
-#[macro_use]
-extern crate uucore;
-
+use crate::errors::*;
 use crate::format::format_and_print;
 use crate::options::*;
 use crate::units::{Result, Unit};
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
+use clap::{crate_version, Arg, ArgMatches, Command};
 use std::io::{BufRead, Write};
 use uucore::display::Quotable;
+use uucore::error::UResult;
+use uucore::format_usage;
 use uucore::ranges::Range;
 
+pub mod errors;
 pub mod format;
 pub mod options;
 mod units;
@@ -50,33 +51,37 @@ FIELDS supports cut(1) style field ranges:
   -    all fields
 Multiple fields/ranges can be separated with commas
 ";
+const USAGE: &str = "{} [OPTION]... [NUMBER]...";
 
-fn usage() -> String {
-    format!("{0} [OPTION]... [NUMBER]...", uucore::execution_phrase())
-}
-
-fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: NumfmtOptions) -> Result<()> {
+fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions) -> UResult<()> {
     for l in args {
-        format_and_print(l, &options)?;
+        match format_and_print(l, options) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(NumfmtError::FormattingError(e.to_string())),
+        }?;
     }
 
     Ok(())
 }
 
-fn handle_stdin(options: NumfmtOptions) -> Result<()> {
-    let stdin = std::io::stdin();
-    let locked_stdin = stdin.lock();
-
-    let mut lines = locked_stdin.lines();
-    for l in lines.by_ref().take(options.header) {
-        l.map(|s| println!("{}", s)).map_err(|e| e.to_string())?;
+fn handle_buffer<R>(input: R, options: &NumfmtOptions) -> UResult<()>
+where
+    R: BufRead,
+{
+    let mut lines = input.lines();
+    for (idx, line) in lines.by_ref().enumerate() {
+        match line {
+            Ok(l) if idx < options.header => {
+                println!("{}", l);
+                Ok(())
+            }
+            Ok(l) => match format_and_print(&l, options) {
+                Ok(_) => Ok(()),
+                Err(e) => Err(NumfmtError::FormattingError(e.to_string())),
+            },
+            Err(e) => Err(NumfmtError::IoError(e.to_string())),
+        }?;
     }
-
-    for l in lines {
-        l.map_err(|e| e.to_string())
-            .and_then(|l| format_and_print(&l, &options))?;
-    }
-
     Ok(())
 }
 
@@ -144,6 +149,8 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         _ => unreachable!("Should be restricted by clap"),
     };
 
+    let suffix = args.value_of(options::SUFFIX).map(|s| s.to_owned());
+
     Ok(NumfmtOptions {
         transform,
         padding,
@@ -151,66 +158,72 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         fields,
         delimiter,
         round,
+        suffix,
     })
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = usage();
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uu_app().get_matches_from(args);
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
 
-    let result =
-        parse_options(&matches).and_then(|options| match matches.values_of(options::NUMBER) {
-            Some(values) => handle_args(values, options),
-            None => handle_stdin(options),
-        });
+    let result = match matches.values_of(options::NUMBER) {
+        Some(values) => handle_args(values, &options),
+        None => {
+            let stdin = std::io::stdin();
+            let mut locked_stdin = stdin.lock();
+            handle_buffer(&mut locked_stdin, &options)
+        }
+    };
 
     match result {
         Err(e) => {
             std::io::stdout().flush().expect("error flushing stdout");
-            show_error!("{}", e);
-            1
+            Err(e)
         }
-        _ => 0,
+        _ => Ok(()),
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
-        .setting(AppSettings::AllowNegativeNumbers)
+        .override_usage(format_usage(USAGE))
+        .allow_negative_numbers(true)
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::DELIMITER)
-                .short("d")
+            Arg::new(options::DELIMITER)
+                .short('d')
                 .long(options::DELIMITER)
                 .value_name("X")
                 .help("use X instead of whitespace for field delimiter"),
         )
         .arg(
-            Arg::with_name(options::FIELD)
+            Arg::new(options::FIELD)
                 .long(options::FIELD)
                 .help("replace the numbers in these input fields (default=1) see FIELDS below")
                 .value_name("FIELDS")
                 .default_value(options::FIELD_DEFAULT),
         )
         .arg(
-            Arg::with_name(options::FROM)
+            Arg::new(options::FROM)
                 .long(options::FROM)
                 .help("auto-scale input numbers to UNITs; see UNIT below")
                 .value_name("UNIT")
                 .default_value(options::FROM_DEFAULT),
         )
         .arg(
-            Arg::with_name(options::TO)
+            Arg::new(options::TO)
                 .long(options::TO)
                 .help("auto-scale output numbers to UNITs; see UNIT below")
                 .value_name("UNIT")
                 .default_value(options::TO_DEFAULT),
         )
         .arg(
-            Arg::with_name(options::PADDING)
+            Arg::new(options::PADDING)
                 .long(options::PADDING)
                 .help(
                     "pad the output to N characters; positive N will \
@@ -221,18 +234,18 @@ pub fn uu_app() -> App<'static, 'static> {
                 .value_name("N"),
         )
         .arg(
-            Arg::with_name(options::HEADER)
+            Arg::new(options::HEADER)
                 .long(options::HEADER)
                 .help(
                     "print (without converting) the first N header lines; \
                      N defaults to 1 if not specified",
                 )
                 .value_name("N")
-                .default_value(options::HEADER_DEFAULT)
+                .default_missing_value(options::HEADER_DEFAULT)
                 .hide_default_value(true),
         )
         .arg(
-            Arg::with_name(options::ROUND)
+            Arg::new(options::ROUND)
                 .long(options::ROUND)
                 .help(
                     "use METHOD for rounding when scaling; METHOD can be: up,\
@@ -242,5 +255,80 @@ pub fn uu_app() -> App<'static, 'static> {
                 .default_value("from-zero")
                 .possible_values(&["up", "down", "from-zero", "towards-zero", "nearest"]),
         )
-        .arg(Arg::with_name(options::NUMBER).hidden(true).multiple(true))
+        .arg(
+            Arg::new(options::SUFFIX)
+                .long(options::SUFFIX)
+                .help(
+                    "print SUFFIX after each formatted number, and accept \
+                    inputs optionally ending with SUFFIX",
+                )
+                .value_name("SUFFIX"),
+        )
+        .arg(
+            Arg::new(options::NUMBER)
+                .hide(true)
+                .multiple_occurrences(true),
+        )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{handle_buffer, NumfmtOptions, Range, RoundMethod, TransformOptions, Unit};
+    use std::io::{BufReader, Error, ErrorKind, Read};
+    struct MockBuffer {}
+
+    impl Read for MockBuffer {
+        fn read(&mut self, _: &mut [u8]) -> Result<usize, Error> {
+            Err(Error::new(ErrorKind::BrokenPipe, "broken pipe"))
+        }
+    }
+
+    fn get_valid_options() -> NumfmtOptions {
+        NumfmtOptions {
+            transform: TransformOptions {
+                from: Unit::None,
+                to: Unit::None,
+            },
+            padding: 10,
+            header: 1,
+            fields: vec![Range { low: 0, high: 1 }],
+            delimiter: None,
+            round: RoundMethod::Nearest,
+            suffix: None,
+        }
+    }
+
+    #[test]
+    fn broken_buffer_returns_io_error() {
+        let mock_buffer = MockBuffer {};
+        let result = handle_buffer(BufReader::new(mock_buffer), &get_valid_options())
+            .expect_err("returned Ok after receiving IO error");
+        let result_debug = format!("{:?}", result);
+        let result_display = format!("{}", result);
+        assert_eq!(result_debug, "IoError(\"broken pipe\")");
+        assert_eq!(result_display, "broken pipe");
+        assert_eq!(result.code(), 1);
+    }
+
+    #[test]
+    fn non_numeric_returns_formatting_error() {
+        let input_value = b"135\nhello";
+        let result = handle_buffer(BufReader::new(&input_value[..]), &get_valid_options())
+            .expect_err("returned Ok after receiving improperly formatted input");
+        let result_debug = format!("{:?}", result);
+        let result_display = format!("{}", result);
+        assert_eq!(
+            result_debug,
+            "FormattingError(\"invalid suffix in input: 'hello'\")"
+        );
+        assert_eq!(result_display, "invalid suffix in input: 'hello'");
+        assert_eq!(result.code(), 2);
+    }
+
+    #[test]
+    fn valid_input_returns_ok() {
+        let input_value = b"165\n100\n300\n500";
+        let result = handle_buffer(BufReader::new(&input_value[..]), &get_valid_options());
+        assert!(result.is_ok(), "did not return Ok for valid input");
+    }
 }

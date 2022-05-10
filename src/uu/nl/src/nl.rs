@@ -8,21 +8,18 @@
 
 // spell-checker:ignore (ToDO) corasick memchr
 
-#[macro_use]
-extern crate uucore;
-
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
 use std::path::Path;
-use uucore::InvalidEncodingHandling;
+use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::{format_usage, InvalidEncodingHandling};
 
 mod helper;
 
 static NAME: &str = "nl";
-static USAGE: &str = "nl [OPTION]... [FILE]...";
-// A regular expression matching everything.
+static USAGE: &str = "{} [OPTION]... [FILE]...";
 
 // Settings store options used by nl to produce its output.
 pub struct Settings {
@@ -69,6 +66,7 @@ enum NumberFormat {
 }
 
 pub mod options {
+    pub const HELP: &str = "help";
     pub const FILE: &str = "file";
     pub const BODY_NUMBERING: &str = "body-numbering";
     pub const SECTION_DELIMITER: &str = "section-delimiter";
@@ -83,7 +81,8 @@ pub mod options {
     pub const NUMBER_WIDTH: &str = "number-width";
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -109,11 +108,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // program if some options could not successfully be parsed.
     let parse_errors = helper::parse_options(&mut settings, &matches);
     if !parse_errors.is_empty() {
-        show_error!("Invalid arguments supplied.");
-        for message in &parse_errors {
-            println!("{}", message);
-        }
-        return 1;
+        return Err(USimpleError::new(
+            1,
+            format!("Invalid arguments supplied.\n{}", parse_errors.join("\n")),
+        ));
     }
 
     let mut read_stdin = false;
@@ -130,96 +128,106 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             continue;
         }
         let path = Path::new(file);
-        let reader = File::open(path).unwrap();
+        let reader = File::open(path).map_err_context(|| file.to_string())?;
         let mut buffer = BufReader::new(reader);
-        nl(&mut buffer, &settings);
+        nl(&mut buffer, &settings)?;
     }
 
     if read_stdin {
         let mut buffer = BufReader::new(stdin());
-        nl(&mut buffer, &settings);
+        nl(&mut buffer, &settings)?;
     }
-    0
+    Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .usage(USAGE)
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::BODY_NUMBERING)
-                .short("b")
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information."),
+        )
+        .arg(
+            Arg::new(options::FILE)
+                .hide(true)
+                .multiple_occurrences(true),
+        )
+        .arg(
+            Arg::new(options::BODY_NUMBERING)
+                .short('b')
                 .long(options::BODY_NUMBERING)
                 .help("use STYLE for numbering body lines")
                 .value_name("SYNTAX"),
         )
         .arg(
-            Arg::with_name(options::SECTION_DELIMITER)
-                .short("d")
+            Arg::new(options::SECTION_DELIMITER)
+                .short('d')
                 .long(options::SECTION_DELIMITER)
                 .help("use CC for separating logical pages")
                 .value_name("CC"),
         )
         .arg(
-            Arg::with_name(options::FOOTER_NUMBERING)
-                .short("f")
+            Arg::new(options::FOOTER_NUMBERING)
+                .short('f')
                 .long(options::FOOTER_NUMBERING)
                 .help("use STYLE for numbering footer lines")
                 .value_name("STYLE"),
         )
         .arg(
-            Arg::with_name(options::HEADER_NUMBERING)
-                .short("h")
+            Arg::new(options::HEADER_NUMBERING)
+                .short('h')
                 .long(options::HEADER_NUMBERING)
                 .help("use STYLE for numbering header lines")
                 .value_name("STYLE"),
         )
         .arg(
-            Arg::with_name(options::LINE_INCREMENT)
-                .short("i")
+            Arg::new(options::LINE_INCREMENT)
+                .short('i')
                 .long(options::LINE_INCREMENT)
                 .help("line number increment at each line")
                 .value_name("NUMBER"),
         )
         .arg(
-            Arg::with_name(options::JOIN_BLANK_LINES)
-                .short("l")
+            Arg::new(options::JOIN_BLANK_LINES)
+                .short('l')
                 .long(options::JOIN_BLANK_LINES)
                 .help("group of NUMBER empty lines counted as one")
                 .value_name("NUMBER"),
         )
         .arg(
-            Arg::with_name(options::NUMBER_FORMAT)
-                .short("n")
+            Arg::new(options::NUMBER_FORMAT)
+                .short('n')
                 .long(options::NUMBER_FORMAT)
                 .help("insert line numbers according to FORMAT")
                 .value_name("FORMAT"),
         )
         .arg(
-            Arg::with_name(options::NO_RENUMBER)
-                .short("p")
+            Arg::new(options::NO_RENUMBER)
+                .short('p')
                 .long(options::NO_RENUMBER)
                 .help("do not reset line numbers at logical pages"),
         )
         .arg(
-            Arg::with_name(options::NUMBER_SEPARATOR)
-                .short("s")
+            Arg::new(options::NUMBER_SEPARATOR)
+                .short('s')
                 .long(options::NUMBER_SEPARATOR)
                 .help("add STRING after (possible) line number")
                 .value_name("STRING"),
         )
         .arg(
-            Arg::with_name(options::STARTING_LINE_NUMBER)
-                .short("v")
+            Arg::new(options::STARTING_LINE_NUMBER)
+                .short('v')
                 .long(options::STARTING_LINE_NUMBER)
                 .help("first line number on each logical page")
                 .value_name("NUMBER"),
         )
         .arg(
-            Arg::with_name(options::NUMBER_WIDTH)
-                .short("w")
+            Arg::new(options::NUMBER_WIDTH)
+                .short('w')
                 .long(options::NUMBER_WIDTH)
                 .help("use NUMBER columns for line numbers")
                 .value_name("NUMBER"),
@@ -227,7 +235,7 @@ pub fn uu_app() -> App<'static, 'static> {
 }
 
 // nl implements the main functionality for an individual buffer.
-fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
+fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
     let regexp: regex::Regex = regex::Regex::new(r".?").unwrap();
     let mut line_no = settings.starting_line_number;
     // The current line number's width as a string. Using to_string is inefficient
@@ -248,7 +256,8 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
         _ => &regexp,
     };
     let mut line_filter: fn(&str, &regex::Regex) -> bool = pass_regex;
-    for mut l in reader.lines().map(|r| r.unwrap()) {
+    for l in reader.lines() {
+        let mut l = l.map_err_context(|| "could not read line".to_string())?;
         // Sanitize the string. We want to print the newline ourselves.
         if l.ends_with('\n') {
             l.pop();
@@ -372,6 +381,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
             line_no_width += 1;
         }
     }
+    Ok(())
 }
 
 fn pass_regex(line: &str, re: &regex::Regex) -> bool {

@@ -1,6 +1,6 @@
 [package]
 name = "uu_install"
-version = "0.0.8"
+version = "0.0.13"
 authors = [
     "Ben Eills <ben@beneills.com>",
     "uutils developers",
@@ -9,24 +9,23 @@ license = "MIT"
 description = "install ~ (uutils) copy files from SOURCE to DESTINATION (with specified attributes)"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/install"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/install"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 path = "src/install.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 filetime = "0.2"
 file_diff = "1.0.0"
 libc = ">= 0.2"
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["fs", "mode", "perms", "entries"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["fs", "mode", "perms", "entries"] }
 
 [dev-dependencies]
-time = "0.1.40"
+time = "0.3"
 
 [[bin]]
 name = "install"

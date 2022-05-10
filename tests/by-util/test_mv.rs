@@ -233,6 +233,40 @@ fn test_mv_force_replace_file() {
 }
 
 #[test]
+fn test_mv_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_same_file_a";
+
+    at.touch(file_a);
+    ucmd.arg(file_a).arg(file_a).fails().stderr_is(format!(
+        "mv: '{f}' and '{f}' are the same file\n",
+        f = file_a,
+    ));
+}
+
+#[test]
+fn test_mv_same_file_not_dot_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_mv_errors_dir";
+
+    at.mkdir(dir);
+    ucmd.arg(dir).arg(dir).fails().stderr_is(format!(
+        "mv: cannot move '{d}' to a subdirectory of itself, '{d}/{d}'",
+        d = dir,
+    ));
+}
+
+#[test]
+fn test_mv_same_file_dot_dir() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg(".")
+        .arg(".")
+        .fails()
+        .stderr_is("mv: '.' and '.' are the same file\n");
+}
+
+#[test]
 fn test_mv_simple_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_simple_backup_file_a";
@@ -291,6 +325,27 @@ fn test_mv_custom_backup_suffix() {
     let file_a = "test_mv_custom_backup_suffix_file_a";
     let file_b = "test_mv_custom_backup_suffix_file_b";
     let suffix = "super-suffix-of-the-century";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    ucmd.arg("-b")
+        .arg(format!("--suffix={}", suffix))
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}{}", file_b, suffix)));
+}
+
+#[test]
+fn test_mv_custom_backup_suffix_hyphen_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_custom_backup_suffix_file_a";
+    let file_b = "test_mv_custom_backup_suffix_file_b";
+    let suffix = "-v";
 
     at.touch(file_a);
     at.touch(file_b);
@@ -540,9 +595,9 @@ fn test_mv_update_option() {
 
     at.touch(file_a);
     at.touch(file_b);
-    let ts = time::now().to_timespec();
-    let now = FileTime::from_unix_time(ts.sec as i64, ts.nsec as u32);
-    let later = FileTime::from_unix_time(ts.sec as i64 + 3600, ts.nsec as u32);
+    let ts = time::OffsetDateTime::now_local().unwrap();
+    let now = FileTime::from_unix_time(ts.unix_timestamp(), ts.nanosecond());
+    let later = FileTime::from_unix_time(ts.unix_timestamp() as i64 + 3600, ts.nanosecond() as u32);
     filetime::set_file_times(at.plus_as_string(file_a), now, now).unwrap();
     filetime::set_file_times(at.plus_as_string(file_b), now, later).unwrap();
 
@@ -728,7 +783,7 @@ fn test_mv_verbose() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // mkdir does not support -m on windows. Freebsd doesn't return a permission error either.
+#[cfg(any(target_os = "linux", target_os = "android"))] // mkdir does not support -m on windows. Freebsd doesn't return a permission error either.
 fn test_mv_permission_error() {
     let scene = TestScenario::new("mkdir");
     let folder1 = "bar";
@@ -743,6 +798,47 @@ fn test_mv_permission_error() {
         .arg(folder_to_move)
         .fails()
         .stderr_contains("Permission denied");
+}
+
+#[test]
+fn test_mv_interactive_error() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir = "test_mv_errors_dir";
+    let file_a = "test_mv_errors_file_a";
+    at.mkdir(dir);
+    at.touch(file_a);
+
+    // $ at.mkdir dir && at.touch file
+    // $ mv -i dir file
+    // err == mv: cannot overwrite non-directory 'file' with directory 'dir'
+    assert!(!scene
+        .ucmd()
+        .arg("-i")
+        .arg(dir)
+        .arg(file_a)
+        .pipe_in("y")
+        .fails()
+        .stderr_str()
+        .is_empty());
+}
+
+#[test]
+fn test_mv_info_self() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir1 = "dir1";
+    let dir2 = "dir2";
+    at.mkdir(dir1);
+    at.mkdir(dir2);
+
+    scene
+        .ucmd()
+        .arg(dir1)
+        .arg(dir2)
+        .arg(dir2)
+        .fails()
+        .stderr_contains("mv: cannot move 'dir2' to a subdirectory of itself, 'dir2/dir2'");
 }
 
 // Todo:

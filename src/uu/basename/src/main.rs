@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_basename);
+uucore::bin!(uu_basename);

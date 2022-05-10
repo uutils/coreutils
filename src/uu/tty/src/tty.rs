@@ -9,36 +9,26 @@
 
 // spell-checker:ignore (ToDO) ttyname filedesc
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use std::ffi::CStr;
 use std::io::Write;
-use uucore::InvalidEncodingHandling;
+use uucore::error::UResult;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static ABOUT: &str = "Print the file name of the terminal connected to standard input.";
+const USAGE: &str = "{} [OPTION]...";
 
 mod options {
     pub const SILENT: &str = "silent";
 }
 
-fn usage() -> String {
-    format!("{0} [OPTION]...", uucore::execution_phrase())
-}
-
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = usage();
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from_safe(args);
-
-    let matches = match matches {
-        Ok(m) => m,
-        Err(e) => {
-            eprint!("{}", e);
-            return 2;
-        }
-    };
+    let matches = uu_app().get_matches_from(args);
 
     let silent = matches.is_present(options::SILENT);
 
@@ -68,21 +58,23 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     if atty::is(atty::Stream::Stdin) {
-        libc::EXIT_SUCCESS
+        Ok(())
     } else {
-        libc::EXIT_FAILURE
+        Err(libc::EXIT_FAILURE.into())
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::SILENT)
+            Arg::new(options::SILENT)
                 .long(options::SILENT)
                 .visible_alias("quiet")
-                .short("s")
+                .short('s')
                 .help("print nothing, only return an exit status")
                 .required(false),
         )

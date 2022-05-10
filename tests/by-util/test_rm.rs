@@ -280,7 +280,7 @@ fn test_rm_force_no_operand() {
 fn test_rm_no_operand() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd().fails().stderr_is(&format!(
-        "{0}: missing an argument\n{0}: for help, try '{1} {0} --help'\n",
+        "{0}: missing operand\nTry '{1} {0} --help' for more information.\n",
         ts.util_name,
         ts.bin_path.to_string_lossy()
     ));
@@ -316,18 +316,6 @@ fn test_rm_verbose_slash() {
 }
 
 #[test]
-fn test_rm_silently_accepts_presume_input_tty1() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_1 = "test_rm_silently_accepts_presume_input_tty1";
-
-    at.touch(file_1);
-
-    ucmd.arg("--presume-input-tty").arg(file_1).succeeds();
-
-    assert!(!at.file_exists(file_1));
-}
-
-#[test]
 fn test_rm_silently_accepts_presume_input_tty2() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_2 = "test_rm_silently_accepts_presume_input_tty2";
@@ -340,13 +328,22 @@ fn test_rm_silently_accepts_presume_input_tty2() {
 }
 
 #[test]
-fn test_rm_silently_accepts_presume_input_tty3() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_3 = "test_rm_silently_accepts_presume_input_tty3";
+fn test_rm_interactive_never() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
-    at.touch(file_3);
+    let file_2 = "test_rm_interactive";
 
-    ucmd.arg("----presume-input-tty").arg(file_3).succeeds();
+    at.touch(file_2);
+    #[cfg(feature = "chmod")]
+    scene.ccmd("chmod").arg("0").arg(file_2).succeeds();
 
-    assert!(!at.file_exists(file_3));
+    scene
+        .ucmd()
+        .arg("--interactive=never")
+        .arg(file_2)
+        .succeeds()
+        .stdout_is("");
+
+    assert!(!at.file_exists(file_2));
 }

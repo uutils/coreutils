@@ -55,7 +55,7 @@ fn test_long_input() {
 fn test_piped_to_dev_full() {
     use std::fs::OpenOptions;
 
-    for &append in &[true, false] {
+    for append in [true, false] {
         {
             let dev_full = OpenOptions::new()
                 .write(true)

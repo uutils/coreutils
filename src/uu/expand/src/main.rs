@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_expand);
+uucore::bin!(uu_expand);

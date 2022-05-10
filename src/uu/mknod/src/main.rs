@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_mknod);
+uucore::bin!(uu_mknod);

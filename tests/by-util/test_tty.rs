@@ -65,6 +65,11 @@ fn test_wrong_argument() {
 }
 
 #[test]
+fn test_help() {
+    new_ucmd!().args(&["--help"]).succeeds();
+}
+
+#[test]
 // FixME: freebsd panic
 #[cfg(all(unix, not(target_os = "freebsd")))]
 fn test_stdout_fail() {

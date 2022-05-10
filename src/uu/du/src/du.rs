@@ -10,15 +10,17 @@ extern crate uucore;
 
 use chrono::prelude::DateTime;
 use chrono::Local;
-use clap::ArgMatches;
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, ArgMatches, Command};
+use glob::Pattern;
 use std::collections::HashSet;
-use std::convert::TryFrom;
 use std::env;
 use std::fs;
+use std::fs::File;
 #[cfg(not(windows))]
 use std::fs::Metadata;
-use std::io::{stderr, ErrorKind, Result, Write};
+use std::io::BufRead;
+use std::io::BufReader;
+use std::io::Result;
 use std::iter;
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
@@ -26,14 +28,15 @@ use std::os::unix::fs::MetadataExt;
 use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
-#[cfg(windows)]
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::{Duration, UNIX_EPOCH};
 use std::{error::Error, fmt::Display};
 use uucore::display::{print_verbatim, Quotable};
+use uucore::error::FromIo;
 use uucore::error::{UError, UResult};
+use uucore::format_usage;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::InvalidEncodingHandling;
 #[cfg(windows)]
@@ -48,6 +51,7 @@ use winapi::um::winbase::GetFileInformationByHandleEx;
 use winapi::um::winnt::{FILE_ID_128, ULONGLONG};
 
 mod options {
+    pub const HELP: &str = "help";
     pub const NULL: &str = "0";
     pub const ALL: &str = "all";
     pub const APPARENT_SIZE: &str = "apparent-size";
@@ -68,6 +72,9 @@ mod options {
     pub const ONE_FILE_SYSTEM: &str = "one-file-system";
     pub const DEREFERENCE: &str = "dereference";
     pub const INODES: &str = "inodes";
+    pub const EXCLUDE: &str = "exclude";
+    pub const EXCLUDE_FROM: &str = "exclude-from";
+    pub const VERBOSE: &str = "verbose";
     pub const FILE: &str = "FILE";
 }
 
@@ -80,20 +87,29 @@ Otherwise, units default to 1024 bytes (or 512 if POSIXLY_CORRECT is set).
 SIZE is an integer and optional unit (example: 10M is 10*1024*1024).
 Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB,... (powers
 of 1000).
+
+PATTERN allows some advanced exclusions. For example, the following syntaxes
+are supported:
+? will match only one character
+* will match zero or more characters
+{a,b} will match a or b
 ";
+const USAGE: &str = "\
+    {} [OPTION]... [FILE]...
+    {} [OPTION]... --files0-from=F";
 
 // TODO: Support Z & Y (currently limited by size of u64)
 const UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2), ('K', 1)];
 
 struct Options {
     all: bool,
-    util_name: String,
     max_depth: Option<usize>,
     total: bool,
     separate_dirs: bool,
     one_file_system: bool,
     dereference: bool,
     inodes: bool,
+    verbose: bool,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -115,7 +131,7 @@ struct Stat {
 }
 
 impl Stat {
-    fn new(path: PathBuf, options: &Options) -> Result<Stat> {
+    fn new(path: PathBuf, options: &Options) -> Result<Self> {
         let metadata = if options.dereference {
             fs::metadata(&path)?
         } else {
@@ -128,7 +144,7 @@ impl Stat {
             dev_id: metadata.dev(),
         };
         #[cfg(not(windows))]
-        return Ok(Stat {
+        return Ok(Self {
             path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
@@ -145,7 +161,7 @@ impl Stat {
         #[cfg(windows)]
         let file_info = get_file_info(&path);
         #[cfg(windows)]
-        Ok(Stat {
+        Ok(Self {
             path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
@@ -245,12 +261,12 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
     result
 }
 
-fn read_block_size(s: Option<&str>) -> usize {
+fn read_block_size(s: Option<&str>) -> u64 {
     if let Some(s) = s {
         parse_size(s)
-            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::BLOCK_SIZE)))
+            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::BLOCK_SIZE)))
     } else {
-        for env_var in &["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
+        for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
             if let Ok(env_size) = env::var(env_var) {
                 if let Ok(v) = parse_size(&env_size) {
                     return v;
@@ -284,6 +300,7 @@ fn du(
     options: &Options,
     depth: usize,
     inodes: &mut HashSet<FileInfo>,
+    exclude: &[Pattern],
 ) -> Box<dyn DoubleEndedIterator<Item = Stat>> {
     let mut stats = vec![];
     let mut futures = vec![];
@@ -292,56 +309,66 @@ fn du(
         let read = match fs::read_dir(&my_stat.path) {
             Ok(read) => read,
             Err(e) => {
-                safe_writeln!(
-                    stderr(),
-                    "{}: cannot read directory {}: {}",
-                    options.util_name,
-                    my_stat.path.quote(),
-                    e
+                show!(
+                    e.map_err_context(|| format!("cannot read directory {}", my_stat.path.quote()))
                 );
                 return Box::new(iter::once(my_stat));
             }
         };
 
-        for f in read {
+        'file_loop: for f in read {
             match f {
-                Ok(entry) => match Stat::new(entry.path(), options) {
-                    Ok(this_stat) => {
-                        if let Some(inode) = this_stat.inode {
-                            if inodes.contains(&inode) {
-                                continue;
-                            }
-                            inodes.insert(inode);
-                        }
-                        if this_stat.is_dir {
-                            if options.one_file_system {
-                                if let (Some(this_inode), Some(my_inode)) =
-                                    (this_stat.inode, my_stat.inode)
+                Ok(entry) => {
+                    match Stat::new(entry.path(), options) {
+                        Ok(this_stat) => {
+                            // We have an exclude list
+                            for pattern in exclude {
+                                // Look at all patterns with both short and long paths
+                                // if we have 'du foo' but search to exclude 'foo/bar'
+                                // we need the full path
+                                if pattern.matches(&this_stat.path.to_string_lossy())
+                                    || pattern.matches(&entry.file_name().into_string().unwrap())
                                 {
-                                    if this_inode.dev_id != my_inode.dev_id {
-                                        continue;
+                                    // if the directory is ignored, leave early
+                                    if options.verbose {
+                                        println!("{} ignored", &this_stat.path.quote());
                                     }
+                                    // Go to the next file
+                                    continue 'file_loop;
                                 }
                             }
-                            futures.push(du(this_stat, options, depth + 1, inodes));
-                        } else {
-                            my_stat.size += this_stat.size;
-                            my_stat.blocks += this_stat.blocks;
-                            my_stat.inodes += 1;
-                            if options.all {
-                                stats.push(this_stat);
+
+                            if let Some(inode) = this_stat.inode {
+                                if inodes.contains(&inode) {
+                                    continue;
+                                }
+                                inodes.insert(inode);
+                            }
+                            if this_stat.is_dir {
+                                if options.one_file_system {
+                                    if let (Some(this_inode), Some(my_inode)) =
+                                        (this_stat.inode, my_stat.inode)
+                                    {
+                                        if this_inode.dev_id != my_inode.dev_id {
+                                            continue;
+                                        }
+                                    }
+                                }
+                                futures.push(du(this_stat, options, depth + 1, inodes, exclude));
+                            } else {
+                                my_stat.size += this_stat.size;
+                                my_stat.blocks += this_stat.blocks;
+                                my_stat.inodes += 1;
+                                if options.all {
+                                    stats.push(this_stat);
+                                }
                             }
                         }
+                        Err(e) => show!(
+                            e.map_err_context(|| format!("cannot access {}", entry.path().quote()))
+                        ),
                     }
-                    Err(error) => match error.kind() {
-                        ErrorKind::PermissionDenied => {
-                            let description = format!("cannot access {}", entry.path().quote());
-                            let error_message = "Permission denied";
-                            show_error_custom_description!(description, "{}", error_message)
-                        }
-                        _ => show_error!("cannot access {}: {}", entry.path().quote(), error),
-                    },
-                },
+                }
                 Err(error) => show_error!("{}", error),
             }
         }
@@ -393,20 +420,13 @@ fn convert_size_other(size: u64, _multiplier: u64, block_size: u64) -> String {
     format!("{}", ((size as f64) / (block_size as f64)).ceil())
 }
 
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... [FILE]...
-    {0} [OPTION]... --files0-from=F",
-        uucore::execution_phrase()
-    )
-}
-
 #[derive(Debug)]
 enum DuError {
     InvalidMaxDepthArg(String),
     SummarizeDepthConflict(String),
     InvalidTimeStyleArg(String),
     InvalidTimeArg(String),
+    InvalidGlob(String),
 }
 
 impl Display for DuError {
@@ -437,6 +457,7 @@ Try '{} --help' for more information.",
 'birth' and 'creation' arguments are not supported on this platform.",
                 s.quote()
             ),
+            DuError::InvalidGlob(s) => write!(f, "Invalid exclude syntax: {}", s),
         }
     }
 }
@@ -446,24 +467,86 @@ impl Error for DuError {}
 impl UError for DuError {
     fn code(&self) -> i32 {
         match self {
-            Self::InvalidMaxDepthArg(_) => 1,
-            Self::SummarizeDepthConflict(_) => 1,
-            Self::InvalidTimeStyleArg(_) => 1,
-            Self::InvalidTimeArg(_) => 1,
+            Self::InvalidMaxDepthArg(_)
+            | Self::SummarizeDepthConflict(_)
+            | Self::InvalidTimeStyleArg(_)
+            | Self::InvalidTimeArg(_)
+            | Self::InvalidGlob(_) => 1,
         }
     }
 }
 
-#[uucore_procs::gen_uumain]
+// Read a file and return each line in a vector of String
+fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
+    let file = File::open(filename).expect("no such file");
+    let buf = BufReader::new(file);
+
+    buf.lines()
+        .map(|l| l.expect("Could not parse line"))
+        .collect()
+}
+
+// Given the --exclude-from and/or --exclude arguments, returns the globset lists
+// to ignore the files
+fn get_glob_ignore(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
+    let mut excludes_from = if matches.is_present(options::EXCLUDE_FROM) {
+        match matches.values_of(options::EXCLUDE_FROM) {
+            Some(all_files) => {
+                let mut exclusion = Vec::<String>::new();
+                // Read the exclude lists from all the files
+                // and add them into a vector of string
+                let files: Vec<String> = all_files.clone().map(|v| v.to_owned()).collect();
+                for f in files {
+                    exclusion.extend(file_as_vec(&f));
+                }
+                exclusion
+            }
+            None => Vec::<String>::new(),
+        }
+    } else {
+        Vec::<String>::new()
+    };
+
+    let mut excludes = if matches.is_present(options::EXCLUDE) {
+        match matches.values_of(options::EXCLUDE) {
+            Some(v) => {
+                // Read the various arguments
+                v.clone().map(|v| v.to_owned()).collect()
+            }
+            None => Vec::<String>::new(),
+        }
+    } else {
+        Vec::<String>::new()
+    };
+
+    // Merge the two lines
+    excludes.append(&mut excludes_from);
+    if !&excludes.is_empty() {
+        let mut builder = Vec::new();
+        // Create the `Vec` of excludes
+        for f in excludes {
+            if matches.is_present(options::VERBOSE) {
+                println!("adding {:?} to the exclude list ", &f);
+            }
+            match Pattern::new(&f) {
+                Ok(glob) => builder.push(glob),
+                Err(err) => return Err(DuError::InvalidGlob(err.to_string()).into()),
+            };
+        }
+        Ok(builder)
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+#[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = usage();
-
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let summarize = matches.is_present(options::SUMMARIZE);
 
@@ -471,13 +554,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let options = Options {
         all: matches.is_present(options::ALL),
-        util_name: uucore::util_name().to_owned(),
         max_depth,
         total: matches.is_present(options::TOTAL),
         separate_dirs: matches.is_present(options::SEPARATE_DIRS),
         one_file_system: matches.is_present(options::ONE_FILE_SYSTEM),
         dereference: matches.is_present(options::DEREFERENCE),
         inodes: matches.is_present(options::INODES),
+        verbose: matches.is_present(options::VERBOSE),
     };
 
     let files = match matches.value_of(options::FILE) {
@@ -488,14 +571,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if options.inodes
         && (matches.is_present(options::APPARENT_SIZE) || matches.is_present(options::BYTES))
     {
-        show_warning!("options --apparent-size and -b are ineffective with --inodes")
+        show_warning!("options --apparent-size and -b are ineffective with --inodes");
     }
 
-    let block_size = u64::try_from(read_block_size(matches.value_of(options::BLOCK_SIZE))).unwrap();
+    let block_size = read_block_size(matches.value_of(options::BLOCK_SIZE));
 
     let threshold = matches.value_of(options::THRESHOLD).map(|s| {
         Threshold::from_str(s)
-            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::THRESHOLD)))
+            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::THRESHOLD)))
     });
 
     let multiplier: u64 = if matches.is_present(options::SI) {
@@ -532,8 +615,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         "\n"
     };
 
+    let excludes = get_glob_ignore(&matches)?;
+
     let mut grand_total = 0;
-    for path_string in files {
+    'loop_file: for path_string in files {
+        // Skip if we don't want to ignore anything
+        if !&excludes.is_empty() {
+            for pattern in &excludes {
+                {
+                    if pattern.matches(path_string) {
+                        // if the directory is ignored, leave early
+                        if options.verbose {
+                            println!("{} ignored", path_string.quote());
+                        }
+                        continue 'loop_file;
+                    }
+                }
+            }
+        }
+
         let path = PathBuf::from(&path_string);
         match Stat::new(path, &options) {
             Ok(stat) => {
@@ -541,7 +641,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 if let Some(inode) = stat.inode {
                     inodes.insert(inode);
                 }
-                let iter = du(stat, &options, 0, &mut inodes);
+                let iter = du(stat, &options, 0, &mut inodes, &excludes);
                 let (_, len) = iter.size_hint();
                 let len = len.unwrap();
                 for (index, stat) in iter.enumerate() {
@@ -626,30 +726,36 @@ fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<u
     }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(LONG_HELP)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::ALL)
-                .short("a")
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information.")
+        )
+        .arg(
+            Arg::new(options::ALL)
+                .short('a')
                 .long(options::ALL)
                 .help("write counts for all files, not just directories"),
         )
         .arg(
-            Arg::with_name(options::APPARENT_SIZE)
+            Arg::new(options::APPARENT_SIZE)
                 .long(options::APPARENT_SIZE)
                 .help(
                     "print apparent sizes,  rather  than  disk  usage \
                     although  the apparent  size is usually smaller, it may be larger due to holes \
                     in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like"
                 )
-                .alias("app") // The GNU test suite uses this alias
         )
         .arg(
-            Arg::with_name(options::BLOCK_SIZE)
-                .short("B")
+            Arg::new(options::BLOCK_SIZE)
+                .short('B')
                 .long(options::BLOCK_SIZE)
                 .value_name("SIZE")
                 .help(
@@ -658,20 +764,20 @@ pub fn uu_app() -> App<'static, 'static> {
                 )
         )
         .arg(
-            Arg::with_name(options::BYTES)
-                .short("b")
+            Arg::new(options::BYTES)
+                .short('b')
                 .long("bytes")
                 .help("equivalent to '--apparent-size --block-size=1'")
         )
         .arg(
-            Arg::with_name(options::TOTAL)
+            Arg::new(options::TOTAL)
                 .long("total")
-                .short("c")
+                .short('c')
                 .help("produce a grand total")
         )
         .arg(
-            Arg::with_name(options::MAX_DEPTH)
-                .short("d")
+            Arg::new(options::MAX_DEPTH)
+                .short('d')
                 .long("max-depth")
                 .value_name("N")
                 .help(
@@ -681,101 +787,109 @@ pub fn uu_app() -> App<'static, 'static> {
                 )
         )
         .arg(
-            Arg::with_name(options::HUMAN_READABLE)
+            Arg::new(options::HUMAN_READABLE)
                 .long("human-readable")
-                .short("h")
+                .short('h')
                 .help("print sizes in human readable format (e.g., 1K 234M 2G)")
         )
         .arg(
-            Arg::with_name(options::INODES)
+            Arg::new(options::INODES)
                 .long(options::INODES)
                 .help(
                     "list inode usage information instead of block usage like --block-size=1K"
                 )
         )
         .arg(
-            Arg::with_name(options::BLOCK_SIZE_1K)
-                .short("k")
+            Arg::new(options::BLOCK_SIZE_1K)
+                .short('k')
                 .help("like --block-size=1K")
         )
         .arg(
-            Arg::with_name(options::COUNT_LINKS)
-                .short("l")
+            Arg::new(options::COUNT_LINKS)
+                .short('l')
                 .long("count-links")
                 .help("count sizes many times if hard linked")
         )
         .arg(
-            Arg::with_name(options::DEREFERENCE)
-                .short("L")
+            Arg::new(options::DEREFERENCE)
+                .short('L')
                 .long(options::DEREFERENCE)
                 .help("dereference all symbolic links")
         )
         // .arg(
-        //     Arg::with_name("no-dereference")
-        //         .short("P")
+        //     Arg::new("no-dereference")
+        //         .short('P')
         //         .long("no-dereference")
         //         .help("don't follow any symbolic links (this is the default)")
         // )
         .arg(
-            Arg::with_name(options::BLOCK_SIZE_1M)
-                .short("m")
+            Arg::new(options::BLOCK_SIZE_1M)
+                .short('m')
                 .help("like --block-size=1M")
         )
         .arg(
-            Arg::with_name(options::NULL)
-                .short("0")
+            Arg::new(options::NULL)
+                .short('0')
                 .long("null")
                 .help("end each output line with 0 byte rather than newline")
         )
         .arg(
-            Arg::with_name(options::SEPARATE_DIRS)
-                .short("S")
+            Arg::new(options::SEPARATE_DIRS)
+                .short('S')
                 .long("separate-dirs")
                 .help("do not include size of subdirectories")
         )
         .arg(
-            Arg::with_name(options::SUMMARIZE)
-                .short("s")
+            Arg::new(options::SUMMARIZE)
+                .short('s')
                 .long("summarize")
                 .help("display only a total for each argument")
         )
         .arg(
-            Arg::with_name(options::SI)
+            Arg::new(options::SI)
                 .long(options::SI)
                 .help("like -h, but use powers of 1000 not 1024")
         )
         .arg(
-            Arg::with_name(options::ONE_FILE_SYSTEM)
-                .short("x")
+            Arg::new(options::ONE_FILE_SYSTEM)
+                .short('x')
                 .long(options::ONE_FILE_SYSTEM)
                 .help("skip directories on different file systems")
         )
         .arg(
-            Arg::with_name(options::THRESHOLD)
-                .short("t")
+            Arg::new(options::THRESHOLD)
+                .short('t')
                 .long(options::THRESHOLD)
-                .alias("th")
                 .value_name("SIZE")
                 .number_of_values(1)
                 .allow_hyphen_values(true)
                 .help("exclude entries smaller than SIZE if positive, \
                           or entries greater than SIZE if negative")
         )
-        // .arg(
-        //     Arg::with_name("")
-        //         .short("x")
-        //         .long("exclude-from")
-        //         .value_name("FILE")
-        //         .help("exclude files that match any pattern in FILE")
-        // )
-        // .arg(
-        //     Arg::with_name("exclude")
-        //         .long("exclude")
-        //         .value_name("PATTERN")
-        //         .help("exclude files that match PATTERN")
-        // )
         .arg(
-            Arg::with_name(options::TIME)
+            Arg::new(options::VERBOSE)
+                .short('v')
+                .long("verbose")
+                .help("verbose mode (option not present in GNU/Coreutils)")
+        )
+        .arg(
+            Arg::new(options::EXCLUDE)
+                .long(options::EXCLUDE)
+                .value_name("PATTERN")
+                .help("exclude files that match PATTERN")
+                .multiple_occurrences(true)
+        )
+        .arg(
+            Arg::new(options::EXCLUDE_FROM)
+                .short('X')
+                .long("exclude-from")
+                .value_name("FILE")
+                .help("exclude files that match any pattern in FILE")
+                .multiple_occurrences(true)
+
+        )
+        .arg(
+            Arg::new(options::TIME)
                 .long(options::TIME)
                 .value_name("WORD")
                 .require_equals(true)
@@ -788,7 +902,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 )
         )
         .arg(
-            Arg::with_name(options::TIME_STYLE)
+            Arg::new(options::TIME_STYLE)
                 .long(options::TIME_STYLE)
                 .value_name("STYLE")
                 .help(
@@ -797,9 +911,9 @@ pub fn uu_app() -> App<'static, 'static> {
                 )
         )
         .arg(
-            Arg::with_name(options::FILE)
-                .hidden(true)
-                .multiple(true)
+            Arg::new(options::FILE)
+                .hide(true)
+                .multiple_occurrences(true)
         )
 }
 
@@ -815,12 +929,12 @@ impl FromStr for Threshold {
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         let offset = if s.starts_with(&['-', '+'][..]) { 1 } else { 0 };
 
-        let size = u64::try_from(parse_size(&s[offset..])?).unwrap();
+        let size = parse_size(&s[offset..])?;
 
         if s.starts_with('-') {
-            Ok(Threshold::Upper(size))
+            Ok(Self::Upper(size))
         } else {
-            Ok(Threshold::Lower(size))
+            Ok(Self::Lower(size))
         }
     }
 }
@@ -828,13 +942,13 @@ impl FromStr for Threshold {
 impl Threshold {
     fn should_exclude(&self, size: u64) -> bool {
         match *self {
-            Threshold::Upper(threshold) => size > threshold,
-            Threshold::Lower(threshold) => size < threshold,
+            Self::Upper(threshold) => size > threshold,
+            Self::Lower(threshold) => size < threshold,
         }
     }
 }
 
-fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
+fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
     // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
     // GNU's du does distinguish between "invalid (suffix in) argument"
@@ -856,7 +970,7 @@ mod test_du {
             (Some("K".to_string()), 1024),
             (None, 1024),
         ];
-        for it in test_data.iter() {
+        for it in &test_data {
             assert_eq!(read_block_size(it.0.as_deref()), it.1);
         }
     }

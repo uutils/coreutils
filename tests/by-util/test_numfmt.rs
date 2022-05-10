@@ -484,7 +484,7 @@ fn test_delimiter_with_padding_and_fields() {
 
 #[test]
 fn test_round() {
-    for (method, exp) in &[
+    for (method, exp) in [
         ("from-zero", ["9.1K", "-9.1K", "9.1K", "-9.1K"]),
         ("towards-zero", ["9.0K", "-9.0K", "9.0K", "-9.0K"]),
         ("up", ["9.1K", "-9.0K", "9.1K", "-9.0K"]),
@@ -504,4 +504,92 @@ fn test_round() {
             .succeeds()
             .stdout_only(exp.join("\n") + "\n");
     }
+}
+
+#[test]
+fn test_suffix_is_added_if_not_supplied() {
+    new_ucmd!()
+        .args(&["--suffix=TEST"])
+        .pipe_in("1000")
+        .succeeds()
+        .stdout_only("1000TEST\n");
+}
+
+#[test]
+fn test_suffix_is_preserved() {
+    new_ucmd!()
+        .args(&["--suffix=TEST"])
+        .pipe_in("1000TEST")
+        .succeeds()
+        .stdout_only("1000TEST\n");
+}
+
+#[test]
+fn test_suffix_is_only_applied_to_selected_field() {
+    new_ucmd!()
+        .args(&["--suffix=TEST", "--field=2"])
+        .pipe_in("1000 2000 3000")
+        .succeeds()
+        .stdout_only("1000 2000TEST 3000\n");
+}
+
+#[test]
+fn test_transform_with_suffix_on_input() {
+    new_ucmd!()
+        .args(&["--suffix=b", "--to=si"])
+        .pipe_in("2000b")
+        .succeeds()
+        .stdout_only("2.0Kb\n");
+}
+
+#[test]
+fn test_transform_without_suffix_on_input() {
+    new_ucmd!()
+        .args(&["--suffix=b", "--to=si"])
+        .pipe_in("2000")
+        .succeeds()
+        .stdout_only("2.0Kb\n");
+}
+
+#[test]
+fn test_transform_with_suffix_and_delimiter() {
+    new_ucmd!()
+        .args(&["--suffix=b", "--to=si", "-d=|"])
+        .pipe_in("1000b|2000|3000")
+        .succeeds()
+        .stdout_only("1.0Kb|2000|3000\n");
+}
+
+#[test]
+fn test_suffix_with_padding() {
+    new_ucmd!()
+        .args(&["--suffix=pad", "--padding=12"])
+        .pipe_in("1000 2000 3000")
+        .succeeds()
+        .stdout_only("     1000pad 2000 3000\n");
+}
+
+#[test]
+fn test_invalid_stdin_number_returns_status_2() {
+    new_ucmd!().pipe_in("hello").fails().code_is(2);
+}
+
+#[test]
+fn test_invalid_stdin_number_in_middle_of_input() {
+    new_ucmd!().pipe_in("100\nhello\n200").fails().code_is(2);
+}
+
+#[test]
+fn test_invalid_argument_number_returns_status_2() {
+    new_ucmd!().args(&["hello"]).fails().code_is(2);
+}
+
+#[test]
+fn test_invalid_argument_returns_status_1() {
+    new_ucmd!()
+        .args(&["--header=hello"])
+        .pipe_in("53478")
+        .ignore_stdin_write_error()
+        .fails()
+        .code_is(1);
 }

@@ -1,29 +1,25 @@
 [package]
 name = "uu_tee"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tee ~ (uutils) display input and copy to FILE"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/tee"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tee"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 path = "src/tee.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
-libc = "0.2.42"
-retain_mut = "0.1.2"
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["libc"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
+libc = "0.2.125"
+retain_mut = "=0.1.7" # ToDO: [2021-01-01; rivy; maint/MinSRV] ~ v0.1.5 uses const generics which aren't stabilized until rust v1.51.0
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["libc"] }
 
 [[bin]]
 name = "tee"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

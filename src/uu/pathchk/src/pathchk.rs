@@ -8,15 +8,12 @@
 //  * that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) lstat
-
-#[macro_use]
-extern crate uucore;
-
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::display::Quotable;
-use uucore::InvalidEncodingHandling;
+use uucore::error::{set_exit_code, UResult, UUsageError};
+use uucore::{format_usage, InvalidEncodingHandling};
 
 // operating mode
 enum Mode {
@@ -27,6 +24,7 @@ enum Mode {
 }
 
 static ABOUT: &str = "Check whether file names are valid or portable";
+const USAGE: &str = "{} [OPTION]... NAME...";
 
 mod options {
     pub const POSIX: &str = "posix";
@@ -39,17 +37,13 @@ mod options {
 const POSIX_PATH_MAX: usize = 256;
 const POSIX_NAME_MAX: usize = 14;
 
-fn usage() -> String {
-    format!("{0} [OPTION]... NAME...", uucore::execution_phrase())
-}
-
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = usage();
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     // set working mode
     let is_posix = matches.values_of(options::POSIX).is_some();
@@ -68,56 +62,54 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     // take necessary actions
     let paths = matches.values_of(options::PATH);
-    let mut res = if paths.is_none() {
-        show_error!(
-            "missing operand\nTry '{} --help' for more information",
-            uucore::execution_phrase()
-        );
-        false
-    } else {
-        true
-    };
+    if paths.is_none() {
+        return Err(UUsageError::new(1, "missing operand"));
+    }
 
-    if res {
-        // free strings are path operands
-        // FIXME: TCS, seems inefficient and overly verbose (?)
-        for p in paths.unwrap() {
-            let mut path = Vec::new();
-            for path_segment in p.split('/') {
-                path.push(path_segment.to_string());
-            }
-            res &= check_path(&mode, &path);
+    // free strings are path operands
+    // FIXME: TCS, seems inefficient and overly verbose (?)
+    let mut res = true;
+    for p in paths.unwrap() {
+        let mut path = Vec::new();
+        for path_segment in p.split('/') {
+            path.push(path_segment.to_string());
         }
+        res &= check_path(&mode, &path);
     }
 
     // determine error code
-    if res {
-        0
-    } else {
-        1
+    if !res {
+        set_exit_code(1);
     }
+    Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::POSIX)
-                .short("p")
+            Arg::new(options::POSIX)
+                .short('p')
                 .help("check for most POSIX systems"),
         )
         .arg(
-            Arg::with_name(options::POSIX_SPECIAL)
-                .short("P")
+            Arg::new(options::POSIX_SPECIAL)
+                .short('P')
                 .help(r#"check for empty names and leading "-""#),
         )
         .arg(
-            Arg::with_name(options::PORTABILITY)
+            Arg::new(options::PORTABILITY)
                 .long(options::PORTABILITY)
                 .help("check for all POSIX systems (equivalent to -p -P)"),
         )
-        .arg(Arg::with_name(options::PATH).hidden(true).multiple(true))
+        .arg(
+            Arg::new(options::PATH)
+                .hide(true)
+                .multiple_occurrences(true),
+        )
 }
 
 // check a path, given as a slice of it's components and an operating mode
@@ -137,7 +129,7 @@ fn check_basic(path: &[String]) -> bool {
     // path length
     if total_len > POSIX_PATH_MAX {
         writeln!(
-            &mut std::io::stderr(),
+            std::io::stderr(),
             "limit {} exceeded by length {} of file name {}",
             POSIX_PATH_MAX,
             total_len,
@@ -145,7 +137,7 @@ fn check_basic(path: &[String]) -> bool {
         );
         return false;
     } else if total_len == 0 {
-        writeln!(&mut std::io::stderr(), "empty file name");
+        writeln!(std::io::stderr(), "empty file name");
         return false;
     }
     // components: character portability and length
@@ -153,7 +145,7 @@ fn check_basic(path: &[String]) -> bool {
         let component_len = p.len();
         if component_len > POSIX_NAME_MAX {
             writeln!(
-                &mut std::io::stderr(),
+                std::io::stderr(),
                 "limit {} exceeded by length {} of file name component {}",
                 POSIX_NAME_MAX,
                 component_len,
@@ -175,7 +167,7 @@ fn check_extra(path: &[String]) -> bool {
     for p in path {
         if p.starts_with('-') {
             writeln!(
-                &mut std::io::stderr(),
+                std::io::stderr(),
                 "leading hyphen in file name component {}",
                 p.quote()
             );
@@ -184,7 +176,7 @@ fn check_extra(path: &[String]) -> bool {
     }
     // path length
     if path.join("/").is_empty() {
-        writeln!(&mut std::io::stderr(), "empty file name");
+        writeln!(std::io::stderr(), "empty file name");
         return false;
     }
     true
@@ -197,7 +189,7 @@ fn check_default(path: &[String]) -> bool {
     // path length
     if total_len > libc::PATH_MAX as usize {
         writeln!(
-            &mut std::io::stderr(),
+            std::io::stderr(),
             "limit {} exceeded by length {} of file name {}",
             libc::PATH_MAX,
             total_len,
@@ -210,7 +202,7 @@ fn check_default(path: &[String]) -> bool {
         let component_len = p.len();
         if component_len > libc::FILENAME_MAX as usize {
             writeln!(
-                &mut std::io::stderr(),
+                std::io::stderr(),
                 "limit {} exceeded by length {} of file name component {}",
                 libc::FILENAME_MAX,
                 component_len,
@@ -232,7 +224,7 @@ fn check_searchable(path: &str) -> bool {
             if e.kind() == ErrorKind::NotFound {
                 true
             } else {
-                writeln!(&mut std::io::stderr(), "{}", e);
+                writeln!(std::io::stderr(), "{}", e);
                 false
             }
         }
@@ -246,7 +238,7 @@ fn check_portable_chars(path_segment: &str) -> bool {
         if !VALID_CHARS.contains(ch) {
             let invalid = path_segment[i..].chars().next().unwrap();
             writeln!(
-                &mut std::io::stderr(),
+                std::io::stderr(),
                 "nonportable character '{}' in file name component {}",
                 invalid,
                 path_segment.quote()

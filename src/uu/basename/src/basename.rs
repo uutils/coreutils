@@ -7,23 +7,17 @@
 
 // spell-checker:ignore (ToDO) fullname
 
-#[macro_use]
-extern crate uucore;
-
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use std::path::{is_separator, PathBuf};
-use uucore::InvalidEncodingHandling;
+use uucore::display::Quotable;
+use uucore::error::{UResult, UUsageError};
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static SUMMARY: &str = "Print NAME with any leading directory components removed
 If specified, also remove a trailing SUFFIX";
 
-fn usage() -> String {
-    format!(
-        "{0} NAME [SUFFIX]
-    {0} OPTION... NAME...",
-        uucore::execution_phrase()
-    )
-}
+const USAGE: &str = "{} NAME [SUFFIX]
+    {} OPTION... NAME...";
 
 pub mod options {
     pub static MULTIPLE: &str = "multiple";
@@ -32,24 +26,19 @@ pub mod options {
     pub static ZERO: &str = "zero";
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
-    let usage = usage();
     //
     // Argument parsing
     //
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     // too few arguments
     if !matches.is_present(options::NAME) {
-        crash!(
-            1,
-            "{1}\nTry '{0} --help' for more information.",
-            uucore::execution_phrase(),
-            "missing operand"
-        );
+        return Err(UUsageError::new(1, "missing operand".to_string()));
     }
 
     let opt_suffix = matches.is_present(options::SUFFIX);
@@ -58,12 +47,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let multiple_paths = opt_suffix || opt_multiple;
     // too many arguments
     if !multiple_paths && matches.occurrences_of(options::NAME) > 2 {
-        crash!(
+        return Err(UUsageError::new(
             1,
-            "extra operand '{1}'\nTry '{0} --help' for more information.",
-            uucore::execution_phrase(),
-            matches.values_of(options::NAME).unwrap().nth(2).unwrap()
-        );
+            format!(
+                "extra operand {}",
+                matches
+                    .values_of(options::NAME)
+                    .unwrap()
+                    .nth(2)
+                    .unwrap()
+                    .quote()
+            ),
+        ));
     }
 
     let suffix = if opt_suffix {
@@ -89,30 +84,36 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         print!("{}{}", basename(path, suffix), line_ending);
     }
 
-    0
+    Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::MULTIPLE)
-                .short("a")
+            Arg::new(options::MULTIPLE)
+                .short('a')
                 .long(options::MULTIPLE)
                 .help("support multiple arguments and treat each as a NAME"),
         )
-        .arg(Arg::with_name(options::NAME).multiple(true).hidden(true))
         .arg(
-            Arg::with_name(options::SUFFIX)
-                .short("s")
+            Arg::new(options::NAME)
+                .multiple_occurrences(true)
+                .hide(true),
+        )
+        .arg(
+            Arg::new(options::SUFFIX)
+                .short('s')
                 .long(options::SUFFIX)
                 .value_name("SUFFIX")
                 .help("remove a trailing SUFFIX; implies -a"),
         )
         .arg(
-            Arg::with_name(options::ZERO)
-                .short("z")
+            Arg::new(options::ZERO)
+                .short('z')
                 .long(options::ZERO)
                 .help("end each output line with NUL, not newline"),
         )

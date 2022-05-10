@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_seq);
+uucore::bin!(uu_seq);

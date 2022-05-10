@@ -49,7 +49,7 @@ fn test_id_single_user() {
         .code_is(exp_result.code());
 
     // u/g/G z/n
-    for &opt in &["--user", "--group", "--groups"] {
+    for opt in ["--user", "--group", "--groups"] {
         let mut args = vec![opt];
         args.extend_from_slice(&test_users);
         exp_result = unwrap_or_return!(expected_result(&ts, &args));
@@ -108,7 +108,7 @@ fn test_id_single_user_non_existing() {
 #[cfg(unix)]
 fn test_id_name() {
     let ts = TestScenario::new(util_name!());
-    for &opt in &["--user", "--group", "--groups"] {
+    for opt in ["--user", "--group", "--groups"] {
         let args = [opt, "--name"];
         let result = ts.ucmd().args(&args).run();
         let exp_result = unwrap_or_return!(expected_result(&ts, &args));
@@ -127,7 +127,7 @@ fn test_id_name() {
 #[cfg(unix)]
 fn test_id_real() {
     let ts = TestScenario::new(util_name!());
-    for &opt in &["--user", "--group", "--groups"] {
+    for opt in ["--user", "--group", "--groups"] {
         let args = [opt, "--real"];
         let result = ts.ucmd().args(&args).run();
         let exp_result = unwrap_or_return!(expected_result(&ts, &args));
@@ -139,7 +139,7 @@ fn test_id_real() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "linux")))]
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
 fn test_id_pretty_print() {
     // `-p` is BSD only and not supported on GNU's `id`
     let username = whoami();
@@ -159,7 +159,7 @@ fn test_id_pretty_print() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "linux")))]
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
 fn test_id_password_style() {
     // `-P` is BSD only and not supported on GNU's `id`
     let username = whoami();
@@ -188,7 +188,7 @@ fn test_id_multiple_users() {
         .code_is(exp_result.code());
 
     // u/g/G z/n
-    for &opt in &["--user", "--group", "--groups"] {
+    for opt in ["--user", "--group", "--groups"] {
         let mut args = vec![opt];
         args.extend_from_slice(&test_users);
         exp_result = unwrap_or_return!(expected_result(&ts, &args));
@@ -256,7 +256,7 @@ fn test_id_multiple_users_non_existing() {
         .code_is(exp_result.code());
 
     // u/g/G z/n
-    for &opt in &["--user", "--group", "--groups"] {
+    for opt in ["--user", "--group", "--groups"] {
         let mut args = vec![opt];
         args.extend_from_slice(&test_users);
         exp_result = unwrap_or_return!(expected_result(&ts, &args));
@@ -297,14 +297,14 @@ fn test_id_multiple_users_non_existing() {
 #[cfg(unix)]
 fn test_id_default_format() {
     let ts = TestScenario::new(util_name!());
-    for &opt1 in &["--name", "--real"] {
+    for opt1 in ["--name", "--real"] {
         // id: cannot print only names or real IDs in default format
         let args = [opt1];
         ts.ucmd()
             .args(&args)
             .fails()
             .stderr_only(unwrap_or_return!(expected_result(&ts, &args)).stderr_str());
-        for &opt2 in &["--user", "--group", "--groups"] {
+        for opt2 in ["--user", "--group", "--groups"] {
             // u/g/G n/r
             let args = [opt2, opt1];
             let result = ts.ucmd().args(&args).run();
@@ -315,7 +315,7 @@ fn test_id_default_format() {
                 .code_is(exp_result.code());
         }
     }
-    for &opt2 in &["--user", "--group", "--groups"] {
+    for opt2 in ["--user", "--group", "--groups"] {
         // u/g/G
         let args = [opt2];
         ts.ucmd()
@@ -329,20 +329,20 @@ fn test_id_default_format() {
 #[cfg(unix)]
 fn test_id_zero() {
     let ts = TestScenario::new(util_name!());
-    for z_flag in &["-z", "--zero"] {
+    for z_flag in ["-z", "--zero"] {
         // id: option --zero not permitted in default format
         ts.ucmd()
             .args(&[z_flag])
             .fails()
             .stderr_only(unwrap_or_return!(expected_result(&ts, &[z_flag])).stderr_str());
-        for &opt1 in &["--name", "--real"] {
+        for opt1 in ["--name", "--real"] {
             // id: cannot print only names or real IDs in default format
             let args = [opt1, z_flag];
             ts.ucmd()
                 .args(&args)
                 .fails()
                 .stderr_only(unwrap_or_return!(expected_result(&ts, &args)).stderr_str());
-            for &opt2 in &["--user", "--group", "--groups"] {
+            for opt2 in ["--user", "--group", "--groups"] {
                 // u/g/G n/r z
                 let args = [opt2, z_flag, opt1];
                 let result = ts.ucmd().args(&args).run();
@@ -353,7 +353,7 @@ fn test_id_zero() {
                     .code_is(exp_result.code());
             }
         }
-        for &opt2 in &["--user", "--group", "--groups"] {
+        for opt2 in ["--user", "--group", "--groups"] {
             // u/g/G z
             let args = [opt2, z_flag];
             ts.ucmd()
@@ -373,18 +373,18 @@ fn test_id_context() {
         return;
     }
     let ts = TestScenario::new(util_name!());
-    for c_flag in &["-Z", "--context"] {
+    for c_flag in ["-Z", "--context"] {
         ts.ucmd()
             .args(&[c_flag])
             .succeeds()
             .stdout_only(unwrap_or_return!(expected_result(&ts, &[c_flag])).stdout_str());
-        for &z_flag in &["-z", "--zero"] {
+        for z_flag in ["-z", "--zero"] {
             let args = [c_flag, z_flag];
             ts.ucmd()
                 .args(&args)
                 .succeeds()
                 .stdout_only(unwrap_or_return!(expected_result(&ts, &args)).stdout_str());
-            for &opt1 in &["--name", "--real"] {
+            for opt1 in ["--name", "--real"] {
                 // id: cannot print only names or real IDs in default format
                 let args = [opt1, c_flag];
                 ts.ucmd()
@@ -396,7 +396,7 @@ fn test_id_context() {
                     .args(&args)
                     .succeeds()
                     .stdout_only(unwrap_or_return!(expected_result(&ts, &args)).stdout_str());
-                for &opt2 in &["--user", "--group", "--groups"] {
+                for opt2 in ["--user", "--group", "--groups"] {
                     // u/g/G n/r z Z
                     // for now, we print clap's standard response for "conflicts_with" instead of:
                     // id: cannot print "only" of more than one choice
@@ -409,7 +409,7 @@ fn test_id_context() {
                     //     .code_is(exp_result.code());
                 }
             }
-            for &opt2 in &["--user", "--group", "--groups"] {
+            for opt2 in ["--user", "--group", "--groups"] {
                 // u/g/G z Z
                 // for now, we print clap's standard response for "conflicts_with" instead of:
                 // id: cannot print "only" of more than one choice
@@ -437,7 +437,10 @@ fn test_id_no_specified_user_posixly() {
         result.success();
     }
 
-    #[cfg(all(target_os = "linux", feature = "feat_selinux"))]
+    #[cfg(all(
+        any(target_os = "linux", target_os = "android"),
+        feature = "feat_selinux"
+    ))]
     {
         use selinux::{self, KernelSupport};
         if selinux::kernel_support() == KernelSupport::Unsupported {

@@ -2,6 +2,7 @@ use std::io;
 use thiserror::Error;
 
 use uucore::display::Quotable;
+use uucore::error::UError;
 
 /// Errors thrown by the csplit command
 #[derive(Debug, Error)]
@@ -28,10 +29,18 @@ pub enum CsplitError {
     SuffixFormatIncorrect,
     #[error("too many % conversion specifications in suffix")]
     SuffixFormatTooManyPercents,
+    #[error("{} is not a regular file", ._0.quote())]
+    NotRegularFile(String),
 }
 
 impl From<io::Error> for CsplitError {
     fn from(error: io::Error) -> Self {
-        CsplitError::IoError(error)
+        Self::IoError(error)
+    }
+}
+
+impl UError for CsplitError {
+    fn code(&self) -> i32 {
+        1
     }
 }

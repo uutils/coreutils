@@ -41,7 +41,7 @@ static COMPLEX_SEQUENCE: &TestedSequence = &TestedSequence {
 
 #[test]
 fn test_byte_sequence() {
-    for &param in &["-b", "--bytes"] {
+    for param in ["-b", "--bytes", "--byt"] {
         for example_seq in EXAMPLE_SEQUENCES {
             new_ucmd!()
                 .args(&[param, example_seq.sequence, INPUT])
@@ -53,7 +53,7 @@ fn test_byte_sequence() {
 
 #[test]
 fn test_char_sequence() {
-    for &param in &["-c", "--characters"] {
+    for param in ["-c", "--characters", "--char"] {
         for example_seq in EXAMPLE_SEQUENCES {
             //as of coreutils 8.25 a char range is effectively the same as a byte range; there is no distinct treatment of utf8 chars.
             new_ucmd!()
@@ -66,7 +66,7 @@ fn test_char_sequence() {
 
 #[test]
 fn test_field_sequence() {
-    for &param in &["-f", "--fields"] {
+    for param in ["-f", "--fields", "--fie"] {
         for example_seq in EXAMPLE_SEQUENCES {
             new_ucmd!()
                 .args(&[param, example_seq.sequence, INPUT])
@@ -78,7 +78,7 @@ fn test_field_sequence() {
 
 #[test]
 fn test_specify_delimiter() {
-    for &param in &["-d", "--delimiter"] {
+    for param in ["-d", "--delimiter", "--del"] {
         new_ucmd!()
             .args(&[param, ":", "-f", COMPLEX_SEQUENCE.sequence, INPUT])
             .succeeds()
@@ -100,29 +100,42 @@ fn test_output_delimiter() {
         ])
         .succeeds()
         .stdout_only_fixture("output_delimiter.expected");
+
+    new_ucmd!()
+        .args(&[
+            "-d:",
+            "--output-del=@",
+            "-f",
+            COMPLEX_SEQUENCE.sequence,
+            INPUT,
+        ])
+        .succeeds()
+        .stdout_only_fixture("output_delimiter.expected");
 }
 
 #[test]
 fn test_complement() {
-    new_ucmd!()
-        .args(&["-d_", "--complement", "-f", "2"])
-        .pipe_in("9_1\n8_2\n7_3")
-        .succeeds()
-        .stdout_only("9\n8\n7\n");
+    for param in ["--complement", "--com"] {
+        new_ucmd!()
+            .args(&["-d_", param, "-f", "2"])
+            .pipe_in("9_1\n8_2\n7_3")
+            .succeeds()
+            .stdout_only("9\n8\n7\n");
+    }
 }
 
 #[test]
 fn test_zero_terminated() {
     new_ucmd!()
         .args(&["-d_", "-z", "-f", "1"])
-        .pipe_in("9_1\n8_2\n\07_3")
+        .pipe_in("9_1\n8_2\n\x007_3")
         .succeeds()
-        .stdout_only("9\07\0");
+        .stdout_only("9\x007\0");
 }
 
 #[test]
 fn test_only_delimited() {
-    for param in &["-s", "--only-delimited"] {
+    for param in ["-s", "--only-delimited", "--only-del"] {
         new_ucmd!()
             .args(&["-d_", param, "-f", "1"])
             .pipe_in("91\n82\n7_3")

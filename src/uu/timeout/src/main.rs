@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_timeout);
+uucore::bin!(uu_timeout);

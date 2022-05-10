@@ -25,6 +25,7 @@ getrandom
 globset
 itertools
 lscolors
+mdbook
 memchr
 multifilereader
 onig
@@ -43,6 +44,7 @@ termsize
 termwidth
 textwrap
 thiserror
+ureq
 walkdir
 winapi
 xattr
@@ -182,6 +184,7 @@ getgrgid
 getgrnam
 getgrouplist
 getgroups
+getpwent
 getpwnam
 getpwuid
 getuid
@@ -321,6 +324,7 @@ ucommand
 utmpx
 uucore
 uucore_procs
+uudoc
 uumain
 uutil
 uutils

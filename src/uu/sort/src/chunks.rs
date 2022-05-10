@@ -100,7 +100,7 @@ pub struct RecycledChunk {
 
 impl RecycledChunk {
     pub fn new(capacity: usize) -> Self {
-        RecycledChunk {
+        Self {
             lines: Vec::new(),
             selections: Vec::new(),
             num_infos: Vec::new(),

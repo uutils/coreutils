@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
@@ -17,8 +17,7 @@ use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::{show_error, InvalidEncodingHandling};
-use walkdir::WalkDir;
+use uucore::{format_usage, show_error, InvalidEncodingHandling};
 
 static ABOUT: &str = "Change the mode of each FILE to MODE.
  With --reference, change the mode of each FILE to that of RFILE.";
@@ -35,20 +34,16 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-fn usage() -> String {
-    format!(
-        "{0} [OPTION]... MODE[,MODE]... FILE...
-or: {0} [OPTION]... OCTAL-MODE FILE...
-or: {0} [OPTION]... --reference=RFILE FILE...",
-        uucore::execution_phrase()
-    )
-}
+const USAGE: &str = "\
+    {} [OPTION]... MODE[,MODE]... FILE...
+    {} [OPTION]... OCTAL-MODE FILE...
+    {} [OPTION]... --reference=RFILE FILE...";
 
 fn get_long_usage() -> String {
     String::from("Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.")
 }
 
-#[uucore_procs::gen_uumain]
+#[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -58,13 +53,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").
     let mode_had_minus_prefix = mode::strip_minus_from_mode(&mut args);
 
-    let usage = usage();
     let after_help = get_long_usage();
 
-    let matches = uu_app()
-        .usage(&usage[..])
-        .after_help(&after_help[..])
-        .get_matches_from(args);
+    let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
     let changes = matches.is_present(options::CHANGES);
     let quiet = matches.is_present(options::QUIET);
@@ -118,66 +109,68 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         cmode,
     };
 
-    chmoder.chmod(files)
+    chmoder.chmod(&files)
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
         .arg(
-            Arg::with_name(options::CHANGES)
+            Arg::new(options::CHANGES)
                 .long(options::CHANGES)
-                .short("c")
+                .short('c')
                 .help("like verbose but report only when a change is made"),
         )
         .arg(
-            Arg::with_name(options::QUIET)
+            Arg::new(options::QUIET)
                 .long(options::QUIET)
                 .visible_alias("silent")
-                .short("f")
+                .short('f')
                 .help("suppress most error messages"),
         )
         .arg(
-            Arg::with_name(options::VERBOSE)
+            Arg::new(options::VERBOSE)
                 .long(options::VERBOSE)
-                .short("v")
+                .short('v')
                 .help("output a diagnostic for every file processed"),
         )
         .arg(
-            Arg::with_name(options::NO_PRESERVE_ROOT)
+            Arg::new(options::NO_PRESERVE_ROOT)
                 .long(options::NO_PRESERVE_ROOT)
                 .help("do not treat '/' specially (the default)"),
         )
         .arg(
-            Arg::with_name(options::PRESERVE_ROOT)
+            Arg::new(options::PRESERVE_ROOT)
                 .long(options::PRESERVE_ROOT)
                 .help("fail to operate recursively on '/'"),
         )
         .arg(
-            Arg::with_name(options::RECURSIVE)
+            Arg::new(options::RECURSIVE)
                 .long(options::RECURSIVE)
-                .short("R")
+                .short('R')
                 .help("change files and directories recursively"),
         )
         .arg(
-            Arg::with_name(options::REFERENCE)
+            Arg::new(options::REFERENCE)
                 .long("reference")
                 .takes_value(true)
                 .help("use RFILE's mode instead of MODE values"),
         )
         .arg(
-            Arg::with_name(options::MODE)
-                .required_unless(options::REFERENCE)
+            Arg::new(options::MODE)
+                .required_unless_present(options::REFERENCE)
                 .takes_value(true),
             // It would be nice if clap could parse with delimiter, e.g. "g-x,u+x",
-            // however .multiple(true) cannot be used here because FILE already needs that.
-            // Only one positional argument with .multiple(true) set is allowed per command
+            // however .multiple_occurrences(true) cannot be used here because FILE already needs that.
+            // Only one positional argument with .multiple_occurrences(true) set is allowed per command
         )
         .arg(
-            Arg::with_name(options::FILE)
-                .required_unless(options::MODE)
-                .multiple(true),
+            Arg::new(options::FILE)
+                .required_unless_present(options::MODE)
+                .multiple_occurrences(true),
         )
 }
 
@@ -192,10 +185,10 @@ struct Chmoder {
 }
 
 impl Chmoder {
-    fn chmod(&self, files: Vec<String>) -> UResult<()> {
+    fn chmod(&self, files: &[String]) -> UResult<()> {
         let mut r = Ok(());
 
-        for filename in &files {
+        for filename in files {
             let filename = &filename[..];
             let file = Path::new(filename);
             if !file.exists() {
@@ -233,9 +226,19 @@ impl Chmoder {
             if !self.recursive {
                 r = self.chmod_file(file).and(r);
             } else {
-                for entry in WalkDir::new(&filename).into_iter().filter_map(|e| e.ok()) {
-                    let file = entry.path();
-                    r = self.chmod_file(file).and(r);
+                r = self.walk_dir(file);
+            }
+        }
+        r
+    }
+
+    fn walk_dir(&self, file_path: &Path) -> UResult<()> {
+        let mut r = self.chmod_file(file_path);
+        if !is_symlink(file_path) && file_path.is_dir() {
+            for dir_entry in file_path.read_dir()? {
+                let path = dir_entry?.path();
+                if !is_symlink(&path) {
+                    r = self.walk_dir(path.as_path());
                 }
             }
         }

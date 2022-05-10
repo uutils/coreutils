@@ -14,9 +14,10 @@ use std::fmt::Write as FmtWrite;
 use std::io::{self, stdin, stdout, BufRead, Write};
 
 mod factor;
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
 pub use factor::*;
 use uucore::display::Quotable;
+use uucore::error::UResult;
 
 mod miller_rabin;
 pub mod numeric;
@@ -43,7 +44,8 @@ fn print_factors_str(
     })
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
     let stdout = stdout();
     // We use a smaller buffer here to pass a gnu test. 4KiB appears to be the default pipe size for bash.
@@ -72,12 +74,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         show_error!("{}", e);
     }
 
-    0
+    Ok(())
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(uucore::util_name())
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
-        .arg(Arg::with_name(options::NUMBER).multiple(true))
+        .infer_long_args(true)
+        .arg(Arg::new(options::NUMBER).multiple_occurrences(true))
 }

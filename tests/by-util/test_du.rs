@@ -3,7 +3,11 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (paths) sublink subwords
+// spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty
+#[cfg(not(windows))]
+use regex::Regex;
+#[cfg(not(windows))]
+use std::io::Write;
 
 use crate::common::util::*;
 
@@ -43,7 +47,7 @@ fn test_du_basics_subdir() {
 
     let result = ts.ucmd().arg(SUB_DIR).succeeds();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &[SUB_DIR]));
         if result_reference.succeeded() {
@@ -118,7 +122,7 @@ fn test_du_soft_link() {
 
     let result = ts.ucmd().arg(SUB_DIR_LINKS).succeeds();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &[SUB_DIR_LINKS]));
         if result_reference.succeeded() {
@@ -156,6 +160,7 @@ fn _du_soft_link(s: &str) {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[test]
 fn test_du_hard_link() {
     let ts = TestScenario::new(util_name!());
@@ -179,15 +184,15 @@ fn test_du_hard_link() {
 
 #[cfg(target_vendor = "apple")]
 fn _du_hard_link(s: &str) {
-    assert_eq!(s, "12\tsubdir/links\n")
+    assert_eq!(s, "12\tsubdir/links\n");
 }
 #[cfg(target_os = "windows")]
 fn _du_hard_link(s: &str) {
-    assert_eq!(s, "8\tsubdir/links\n")
+    assert_eq!(s, "8\tsubdir/links\n");
 }
 #[cfg(target_os = "freebsd")]
 fn _du_hard_link(s: &str) {
-    assert_eq!(s, "16\tsubdir/links\n")
+    assert_eq!(s, "16\tsubdir/links\n");
 }
 #[cfg(all(
     not(target_vendor = "apple"),
@@ -209,7 +214,7 @@ fn test_du_d_flag() {
 
     let result = ts.ucmd().arg("-d1").succeeds();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["-d1"]));
         if result_reference.succeeded() {
@@ -255,7 +260,7 @@ fn test_du_dereference() {
 
     let result = ts.ucmd().arg("-L").arg(SUB_DIR_LINKS).succeeds();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["-L", SUB_DIR_LINKS]));
 
@@ -299,13 +304,13 @@ fn test_du_inodes_basic() {
     let ts = TestScenario::new(util_name!());
     let result = ts.ucmd().arg("--inodes").succeeds();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["--inodes"]));
         assert_eq!(result.stdout_str(), result_reference.stdout_str());
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     _du_inodes_basic(result.stdout_str());
 }
 
@@ -353,7 +358,7 @@ fn test_du_inodes() {
     result.stdout_contains("3\t./subdir/links\n");
     result.stdout_contains("3\t.\n");
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference =
             unwrap_or_return!(expected_result(&ts, &["--separate-dirs", "--inodes"]));
@@ -429,12 +434,10 @@ fn test_du_no_permission() {
 
     ts.ccmd("chmod").arg("-r").arg(SUB_DIR_LINKS).succeeds();
 
-    let result = ts.ucmd().arg(SUB_DIR_LINKS).run(); // TODO: replace with ".fails()" once `du` is fixed
-    result.stderr_contains(
-        "du: cannot read directory 'subdir/links': Permission denied (os error 13)",
-    );
+    let result = ts.ucmd().arg(SUB_DIR_LINKS).fails();
+    result.stderr_contains("du: cannot read directory 'subdir/links': Permission denied");
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &[SUB_DIR_LINKS]));
         if result_reference
@@ -447,6 +450,21 @@ fn test_du_no_permission() {
     }
 
     _du_no_permission(result.stdout_str());
+}
+
+#[cfg(not(target_os = "windows"))]
+#[cfg(feature = "chmod")]
+#[test]
+fn test_du_no_exec_permission() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("d/no-x/y");
+
+    ts.ccmd("chmod").arg("u=rw").arg("d/no-x").succeeds();
+
+    let result = ts.ucmd().arg("d/no-x").fails();
+    result.stderr_contains("du: cannot access 'd/no-x/y': Permission denied");
 }
 
 #[cfg(target_vendor = "apple")]
@@ -464,7 +482,7 @@ fn test_du_one_file_system() {
 
     let result = ts.ucmd().arg("-x").arg(SUB_DIR).succeeds();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["-x", SUB_DIR]));
         if result_reference.succeeded() {
@@ -499,13 +517,13 @@ fn test_du_apparent_size() {
     let ts = TestScenario::new(util_name!());
     let result = ts.ucmd().arg("--apparent-size").succeeds();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["--apparent-size"]));
         assert_eq!(result.stdout_str(), result_reference.stdout_str());
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     _du_apparent_size(result.stdout_str());
 }
 
@@ -567,7 +585,7 @@ fn test_du_bytes() {
     let ts = TestScenario::new(util_name!());
     let result = ts.ucmd().arg("--bytes").succeeds();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["--bytes"]));
         assert_eq!(result.stdout_str(), result_reference.stdout_str());
@@ -583,7 +601,176 @@ fn test_du_bytes() {
         not(target_vendor = "apple"),
         not(target_os = "windows"),
         not(target_os = "freebsd"),
-        not(target_os = "linux")
+        not(target_os = "linux"),
+        not(target_os = "android"),
     ))]
     result.stdout_contains("21529\t./subdir\n");
+}
+
+#[test]
+fn test_du_exclude() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.symlink_dir(SUB_DEEPER_DIR, SUB_DIR_LINKS_DEEPER_SYM_DIR);
+    at.mkdir_all(SUB_DIR_LINKS);
+
+    ts.ucmd()
+        .arg("--exclude=subdir")
+        .arg(SUB_DEEPER_DIR)
+        .succeeds()
+        .stdout_contains("subdir/deeper/deeper_dir");
+    ts.ucmd()
+        .arg("--exclude=subdir")
+        .arg("subdir")
+        .succeeds()
+        .stdout_is("");
+    ts.ucmd()
+        .arg("--exclude=subdir")
+        .arg("--verbose")
+        .arg("subdir")
+        .succeeds()
+        .stdout_contains("'subdir' ignored");
+}
+
+#[test]
+// Disable on Windows because we are looking for /
+// And the tests would be more complex if we have to support \ too
+#[cfg(not(target_os = "windows"))]
+fn test_du_exclude_2() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("azerty/xcwww/azeaze");
+
+    let result = ts.ucmd().arg("azerty").succeeds();
+
+    let path_regexp = r"(.*)azerty/xcwww/azeaze(.*)azerty/xcwww(.*)azerty";
+    let re = Regex::new(path_regexp).unwrap();
+    assert!(re.is_match(result.stdout_str().replace('\n', "").trim()));
+
+    // Exact match
+    ts.ucmd()
+        .arg("--exclude=azeaze")
+        .arg("azerty")
+        .succeeds()
+        .stdout_does_not_contain("azerty/xcwww/azeaze");
+    // Partial match and NOT a glob
+    ts.ucmd()
+        .arg("--exclude=azeaz")
+        .arg("azerty")
+        .succeeds()
+        .stdout_contains("azerty/xcwww/azeaze");
+    // Partial match and a various glob
+    ts.ucmd()
+        .arg("--exclude=azea?")
+        .arg("azerty")
+        .succeeds()
+        .stdout_contains("azerty/xcwww/azeaze");
+    ts.ucmd()
+        .arg("--exclude=azea{z,b}")
+        .arg("azerty")
+        .succeeds()
+        .stdout_contains("azerty/xcwww/azeaze");
+    ts.ucmd()
+        .arg("--exclude=azea*")
+        .arg("azerty")
+        .succeeds()
+        .stdout_does_not_contain("azerty/xcwww/azeaze");
+    ts.ucmd()
+        .arg("--exclude=azeaz?")
+        .arg("azerty")
+        .succeeds()
+        .stdout_does_not_contain("azerty/xcwww/azeaze");
+}
+
+#[test]
+// Disable on Windows because we are looking for /
+// And the tests would be more complex if we have to support \ too
+#[cfg(not(target_os = "windows"))]
+fn test_du_exclude_mix() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let mut file1 = at.make_file("file-ignore1");
+    file1.write_all(b"azeaze").unwrap();
+    let mut file2 = at.make_file("file-ignore2");
+    file2.write_all(b"amaz?ng").unwrap();
+
+    at.mkdir_all("azerty/xcwww/azeaze");
+    at.mkdir_all("azerty/xcwww/qzerty");
+    at.mkdir_all("azerty/xcwww/amazing");
+
+    ts.ucmd()
+        .arg("azerty")
+        .succeeds()
+        .stdout_contains("azerty/xcwww/azeaze");
+    ts.ucmd()
+        .arg("--exclude=azeaze")
+        .arg("azerty")
+        .succeeds()
+        .stdout_does_not_contain("azerty/xcwww/azeaze");
+
+    // Just exclude one file name
+    let result = ts.ucmd().arg("--exclude=qzerty").arg("azerty").succeeds();
+    assert!(!result.stdout_str().contains("qzerty"));
+    assert!(result.stdout_str().contains("azerty"));
+    assert!(result.stdout_str().contains("xcwww"));
+
+    // Exclude from file
+    let result = ts
+        .ucmd()
+        .arg("--exclude-from=file-ignore1")
+        .arg("azerty")
+        .succeeds();
+    assert!(!result.stdout_str().contains("azeaze"));
+    assert!(result.stdout_str().contains("qzerty"));
+    assert!(result.stdout_str().contains("xcwww"));
+
+    // Mix two files and string
+    let result = ts
+        .ucmd()
+        .arg("--exclude=qzerty")
+        .arg("--exclude-from=file-ignore1")
+        .arg("--exclude-from=file-ignore2")
+        .arg("azerty")
+        .succeeds();
+    assert!(!result.stdout_str().contains("amazing"));
+    assert!(!result.stdout_str().contains("qzerty"));
+    assert!(!result.stdout_str().contains("azeaze"));
+    assert!(result.stdout_str().contains("xcwww"));
+}
+
+#[test]
+fn test_du_exclude_several_components() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("a/b/c");
+    at.mkdir_all("a/x/y");
+    at.mkdir_all("a/u/y");
+
+    // Exact match
+    let result = ts
+        .ucmd()
+        .arg("--exclude=a/u")
+        .arg("--exclude=a/b")
+        .arg("a")
+        .succeeds();
+    assert!(!result.stdout_str().contains("a/u"));
+    assert!(!result.stdout_str().contains("a/b"));
+}
+
+#[test]
+fn test_du_exclude_invalid_syntax() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("azerty/xcwww/azeaze");
+
+    ts.ucmd()
+        .arg("--exclude=a[ze")
+        .arg("azerty")
+        .fails()
+        .stderr_contains("du: Invalid exclude syntax");
 }

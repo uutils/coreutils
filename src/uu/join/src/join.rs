@@ -10,13 +10,50 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+use clap::{crate_version, Arg, Command};
+use memchr::{memchr3_iter, memchr_iter};
 use std::cmp::Ordering;
+use std::convert::From;
+use std::error::Error;
+use std::fmt::Display;
 use std::fs::File;
-use std::io::{stdin, BufRead, BufReader, Lines, Stdin};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Split, Stdin, Write};
+use std::num::IntErrorKind;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use uucore::display::Quotable;
+use uucore::error::{set_exit_code, UError, UResult, USimpleError};
 
 static NAME: &str = "join";
+
+#[derive(Debug)]
+enum JoinError {
+    IOError(std::io::Error),
+    UnorderedInput(String),
+}
+
+impl UError for JoinError {
+    fn code(&self) -> i32 {
+        1
+    }
+}
+
+impl Error for JoinError {}
+
+impl Display for JoinError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            JoinError::IOError(e) => write!(f, "io error: {}", e),
+            JoinError::UnorderedInput(e) => f.write_str(e),
+        }
+    }
+}
+
+impl From<std::io::Error> for JoinError {
+    fn from(error: std::io::Error) -> Self {
+        Self::IOError(error)
+    }
+}
 
 #[derive(Copy, Clone, PartialEq)]
 enum FileNum {
@@ -24,9 +61,16 @@ enum FileNum {
     File2,
 }
 
+#[repr(u8)]
 #[derive(Copy, Clone)]
+enum LineEnding {
+    Nul = 0,
+    Newline = b'\n',
+}
+
+#[derive(Copy, Clone, PartialEq)]
 enum Sep {
-    Char(char),
+    Char(u8),
     Line,
     Whitespaces,
 }
@@ -45,27 +89,29 @@ struct Settings {
     print_unpaired2: bool,
     print_joined: bool,
     ignore_case: bool,
+    line_ending: LineEnding,
     separator: Sep,
     autoformat: bool,
     format: Vec<Spec>,
-    empty: String,
+    empty: Vec<u8>,
     check_order: CheckOrder,
     headers: bool,
 }
 
 impl Default for Settings {
-    fn default() -> Settings {
-        Settings {
+    fn default() -> Self {
+        Self {
             key1: 0,
             key2: 0,
             print_unpaired1: false,
             print_unpaired2: false,
             print_joined: true,
             ignore_case: false,
+            line_ending: LineEnding::Newline,
             separator: Sep::Whitespaces,
             autoformat: false,
             format: vec![],
-            empty: String::new(),
+            empty: vec![],
             check_order: CheckOrder::Default,
             headers: false,
         }
@@ -74,14 +120,21 @@ impl Default for Settings {
 
 /// Output representation.
 struct Repr<'a> {
-    separator: char,
+    line_ending: LineEnding,
+    separator: u8,
     format: &'a [Spec],
-    empty: &'a str,
+    empty: &'a [u8],
 }
 
 impl<'a> Repr<'a> {
-    fn new(separator: char, format: &'a [Spec], empty: &'a str) -> Repr<'a> {
+    fn new(
+        line_ending: LineEnding,
+        separator: u8,
+        format: &'a [Spec],
+        empty: &'a [u8],
+    ) -> Repr<'a> {
         Repr {
+            line_ending,
             separator,
             format,
             empty,
@@ -93,32 +146,43 @@ impl<'a> Repr<'a> {
     }
 
     /// Print the field or empty filler if the field is not set.
-    fn print_field(&self, field: Option<&str>) {
+    fn print_field(
+        &self,
+        writer: &mut impl Write,
+        field: Option<&[u8]>,
+    ) -> Result<(), std::io::Error> {
         let value = match field {
             Some(field) => field,
             None => self.empty,
         };
 
-        print!("{}", value);
+        writer.write_all(value)
     }
 
     /// Print each field except the one at the index.
-    fn print_fields(&self, line: &Line, index: usize) {
-        for i in 0..line.fields.len() {
+    fn print_fields(
+        &self,
+        writer: &mut impl Write,
+        line: &Line,
+        index: usize,
+    ) -> Result<(), std::io::Error> {
+        for i in 0..line.field_ranges.len() {
             if i != index {
-                print!("{}{}", self.separator, line.fields[i]);
+                writer.write_all(&[self.separator])?;
+                writer.write_all(line.get_field(i).unwrap())?;
             }
         }
+        Ok(())
     }
 
     /// Print each field or the empty filler if the field is not set.
-    fn print_format<F>(&self, f: F)
+    fn print_format<F>(&self, writer: &mut impl Write, f: F) -> Result<(), std::io::Error>
     where
-        F: Fn(&Spec) -> Option<&'a str>,
+        F: Fn(&Spec) -> Option<&'a [u8]>,
     {
         for i in 0..self.format.len() {
             if i > 0 {
-                print!("{}", self.separator);
+                writer.write_all(&[self.separator])?;
             }
 
             let field = match f(&self.format[i]) {
@@ -126,8 +190,13 @@ impl<'a> Repr<'a> {
                 None => self.empty,
             };
 
-            print!("{}", field);
+            writer.write_all(field)?;
         }
+        Ok(())
+    }
+
+    fn print_line_ending(&self, writer: &mut impl Write) -> Result<(), std::io::Error> {
+        writer.write_all(&[self.line_ending as u8])
     }
 }
 
@@ -139,18 +208,20 @@ struct Input {
 }
 
 impl Input {
-    fn new(separator: Sep, ignore_case: bool, check_order: CheckOrder) -> Input {
-        Input {
+    fn new(separator: Sep, ignore_case: bool, check_order: CheckOrder) -> Self {
+        Self {
             separator,
             ignore_case,
             check_order,
         }
     }
 
-    fn compare(&self, field1: Option<&str>, field2: Option<&str>) -> Ordering {
+    fn compare(&self, field1: Option<&[u8]>, field2: Option<&[u8]>) -> Ordering {
         if let (Some(field1), Some(field2)) = (field1, field2) {
             if self.ignore_case {
-                field1.to_lowercase().cmp(&field2.to_lowercase())
+                field1
+                    .to_ascii_lowercase()
+                    .cmp(&field2.to_ascii_lowercase())
             } else {
                 field1.cmp(field2)
             }
@@ -172,50 +243,77 @@ enum Spec {
 }
 
 impl Spec {
-    fn parse(format: &str) -> Spec {
+    fn parse(format: &str) -> UResult<Self> {
         let mut chars = format.chars();
 
         let file_num = match chars.next() {
             Some('0') => {
                 // Must be all alone without a field specifier.
                 if chars.next().is_none() {
-                    return Spec::Key;
+                    return Ok(Self::Key);
                 }
-
-                crash!(1, "invalid field specifier: {}", format.quote());
+                return Err(USimpleError::new(
+                    1,
+                    format!("invalid field specifier: {}", format.quote()),
+                ));
             }
             Some('1') => FileNum::File1,
             Some('2') => FileNum::File2,
-            _ => crash!(1, "invalid file number in field spec: {}", format.quote()),
+            _ => {
+                return Err(USimpleError::new(
+                    1,
+                    format!("invalid file number in field spec: {}", format.quote()),
+                ));
+            }
         };
 
         if let Some('.') = chars.next() {
-            return Spec::Field(file_num, parse_field_number(chars.as_str()));
+            return Ok(Self::Field(file_num, parse_field_number(chars.as_str())?));
         }
 
-        crash!(1, "invalid field specifier: {}", format.quote());
+        Err(USimpleError::new(
+            1,
+            format!("invalid field specifier: {}", format.quote()),
+        ))
     }
 }
 
 struct Line {
-    fields: Vec<String>,
+    field_ranges: Vec<(usize, usize)>,
+    string: Vec<u8>,
 }
 
 impl Line {
-    fn new(string: String, separator: Sep) -> Line {
-        let fields = match separator {
-            Sep::Whitespaces => string.split_whitespace().map(String::from).collect(),
-            Sep::Char(sep) => string.split(sep).map(String::from).collect(),
-            Sep::Line => vec![string],
-        };
+    fn new(string: Vec<u8>, separator: Sep, len_guess: usize) -> Self {
+        let mut field_ranges = Vec::with_capacity(len_guess);
+        let mut last_end = 0;
+        if separator == Sep::Whitespaces {
+            // GNU join uses Bourne shell field splitters by default
+            for i in memchr3_iter(b' ', b'\t', b'\n', &string) {
+                if i > last_end {
+                    field_ranges.push((last_end, i));
+                }
+                last_end = i + 1;
+            }
+        } else if let Sep::Char(sep) = separator {
+            for i in memchr_iter(sep, &string) {
+                field_ranges.push((last_end, i));
+                last_end = i + 1;
+            }
+        }
+        field_ranges.push((last_end, string.len()));
 
-        Line { fields }
+        Self {
+            field_ranges,
+            string,
+        }
     }
 
     /// Get field at index.
-    fn get_field(&self, index: usize) -> Option<&str> {
-        if index < self.fields.len() {
-            Some(&self.fields[index])
+    fn get_field(&self, index: usize) -> Option<&[u8]> {
+        if index < self.field_ranges.len() {
+            let (low, high) = self.field_ranges[index];
+            Some(&self.string[low..high])
         } else {
             None
         }
@@ -227,10 +325,12 @@ struct State<'a> {
     file_name: &'a str,
     file_num: FileNum,
     print_unpaired: bool,
-    lines: Lines<Box<dyn BufRead + 'a>>,
+    lines: Split<Box<dyn BufRead + 'a>>,
+    max_len: usize,
     seq: Vec<Line>,
     line_num: usize,
     has_failed: bool,
+    has_unpaired: bool,
 }
 
 impl<'a> State<'a> {
@@ -239,6 +339,7 @@ impl<'a> State<'a> {
         name: &'a str,
         stdin: &'a Stdin,
         key: usize,
+        line_ending: LineEnding,
         print_unpaired: bool,
     ) -> State<'a> {
         let f = if name == "-" {
@@ -255,59 +356,79 @@ impl<'a> State<'a> {
             file_name: name,
             file_num,
             print_unpaired,
-            lines: f.lines(),
+            lines: f.split(line_ending as u8),
+            max_len: 1,
             seq: Vec::new(),
             line_num: 0,
             has_failed: false,
+            has_unpaired: false,
         }
     }
 
     /// Skip the current unpaired line.
-    fn skip_line(&mut self, input: &Input, repr: &Repr) {
+    fn skip_line(
+        &mut self,
+        writer: &mut impl Write,
+        input: &Input,
+        repr: &Repr,
+    ) -> Result<(), JoinError> {
         if self.print_unpaired {
-            self.print_first_line(repr);
+            self.print_first_line(writer, repr)?;
         }
 
-        self.reset_next_line(input);
+        self.reset_next_line(input)?;
+        Ok(())
     }
 
     /// Keep reading line sequence until the key does not change, return
     /// the first line whose key differs.
-    fn extend(&mut self, input: &Input) -> Option<Line> {
-        while let Some(line) = self.next_line(input) {
+    fn extend(&mut self, input: &Input) -> Result<Option<Line>, JoinError> {
+        while let Some(line) = self.next_line(input)? {
             let diff = input.compare(self.get_current_key(), line.get_field(self.key));
 
             if diff == Ordering::Equal {
                 self.seq.push(line);
             } else {
-                return Some(line);
+                return Ok(Some(line));
             }
         }
 
-        None
+        Ok(None)
     }
 
     /// Print lines in the buffers as headers.
-    fn print_headers(&self, other: &State, repr: &Repr) {
+    fn print_headers(
+        &self,
+        writer: &mut impl Write,
+        other: &State,
+        repr: &Repr,
+    ) -> Result<(), std::io::Error> {
         if self.has_line() {
             if other.has_line() {
-                self.combine(other, repr);
+                self.combine(writer, other, repr)?;
             } else {
-                self.print_first_line(repr);
+                self.print_first_line(writer, repr)?;
             }
         } else if other.has_line() {
-            other.print_first_line(repr);
+            other.print_first_line(writer, repr)?;
         }
+
+        Ok(())
     }
 
     /// Combine two line sequences.
-    fn combine(&self, other: &State, repr: &Repr) {
+    fn combine(
+        &self,
+        writer: &mut impl Write,
+        other: &State,
+        repr: &Repr,
+    ) -> Result<(), std::io::Error> {
         let key = self.get_current_key();
 
         for line1 in &self.seq {
             for line2 in &other.seq {
                 if repr.uses_format() {
-                    repr.print_format(|spec| match *spec {
+                    repr.print_format(writer, |spec| match *spec {
                         Spec::Key => key,
                         Spec::Field(file_num, field_num) => {
                             if file_num == self.file_num {
@@ -320,16 +441,18 @@ impl<'a> State<'a> {
 
                             None
                         }
-                    });
+                    })?;
                 } else {
-                    repr.print_field(key);
-                    repr.print_fields(line1, self.key);
-                    repr.print_fields(line2, other.key);
+                    repr.print_field(writer, key)?;
+                    repr.print_fields(writer, line1, self.key)?;
+                    repr.print_fields(writer, line2, other.key)?;
                 }
 
-                println!();
+                repr.print_line_ending(writer)?;
             }
         }
+
+        Ok(())
     }
 
     /// Reset with the next line.
@@ -341,14 +464,16 @@ impl<'a> State<'a> {
         }
     }
 
-    fn reset_read_line(&mut self, input: &Input) {
-        let line = self.read_line(input.separator);
+    fn reset_read_line(&mut self, input: &Input) -> Result<(), std::io::Error> {
+        let line = self.read_line(input.separator)?;
         self.reset(line);
+        Ok(())
     }
 
-    fn reset_next_line(&mut self, input: &Input) {
-        let line = self.next_line(input);
+    fn reset_next_line(&mut self, input: &Input) -> Result<(), JoinError> {
+        let line = self.next_line(input)?;
         self.reset(line);
+        Ok(())
     }
 
     fn has_line(&self) -> bool {
@@ -356,69 +481,101 @@ impl<'a> State<'a> {
     }
 
     fn initialize(&mut self, read_sep: Sep, autoformat: bool) -> usize {
-        if let Some(line) = self.read_line(read_sep) {
+        if let Some(line) = crash_if_err!(1, self.read_line(read_sep)) {
             self.seq.push(line);
 
             if autoformat {
-                return self.seq[0].fields.len();
+                return self.seq[0].field_ranges.len();
             }
         }
         0
     }
 
-    fn finalize(&mut self, input: &Input, repr: &Repr) {
-        if self.has_line() && self.print_unpaired {
-            self.print_first_line(repr);
+    fn finalize(
+        &mut self,
+        writer: &mut impl Write,
+        input: &Input,
+        repr: &Repr,
+    ) -> Result<(), JoinError> {
+        if self.has_line() {
+            if self.print_unpaired {
+                self.print_first_line(writer, repr)?;
+            }
 
-            while let Some(line) = self.next_line(input) {
-                self.print_line(&line, repr);
+            let mut next_line = self.next_line(input)?;
+            while let Some(line) = &next_line {
+                if self.print_unpaired {
+                    self.print_line(writer, line, repr)?;
+                }
+                self.reset(next_line);
+                next_line = self.next_line(input)?;
             }
         }
+
+        Ok(())
     }
 
     /// Get the next line without the order check.
-    fn read_line(&mut self, sep: Sep) -> Option<Line> {
-        let value = self.lines.next()?;
-        self.line_num += 1;
-        Some(Line::new(crash_if_err!(1, value), sep))
+    fn read_line(&mut self, sep: Sep) -> Result<Option<Line>, std::io::Error> {
+        match self.lines.next() {
+            Some(value) => {
+                self.line_num += 1;
+                let line = Line::new(value?, sep, self.max_len);
+                if line.field_ranges.len() > self.max_len {
+                    self.max_len = line.field_ranges.len();
+                }
+                Ok(Some(line))
+            }
+            None => Ok(None),
+        }
     }
 
     /// Get the next line with the order check.
-    fn next_line(&mut self, input: &Input) -> Option<Line> {
-        let line = self.read_line(input.separator)?;
-
-        if input.check_order == CheckOrder::Disabled {
-            return Some(line);
-        }
-
-        let diff = input.compare(self.get_current_key(), line.get_field(self.key));
-
-        if diff == Ordering::Greater {
-            eprintln!(
-                "{}:{}: is not sorted",
-                self.file_name.maybe_quote(),
-                self.line_num
-            );
-
-            // This is fatal if the check is enabled.
-            if input.check_order == CheckOrder::Enabled {
-                exit!(1);
+    fn next_line(&mut self, input: &Input) -> Result<Option<Line>, JoinError> {
+        if let Some(line) = self.read_line(input.separator)? {
+            if input.check_order == CheckOrder::Disabled {
+                return Ok(Some(line));
             }
 
-            self.has_failed = true;
-        }
+            let diff = input.compare(self.get_current_key(), line.get_field(self.key));
 
-        Some(line)
+            if diff == Ordering::Greater
+                && (input.check_order == CheckOrder::Enabled
+                    || (self.has_unpaired && !self.has_failed))
+            {
+                let err_msg = format!(
+                    "{}:{}: is not sorted: {}",
+                    self.file_name.maybe_quote(),
+                    self.line_num,
+                    String::from_utf8_lossy(&line.string)
+                );
+                // This is fatal if the check is enabled.
+                if input.check_order == CheckOrder::Enabled {
+                    return Err(JoinError::UnorderedInput(err_msg));
+                }
+                eprintln!("{}: {}", uucore::execution_phrase(), err_msg);
+                self.has_failed = true;
+            }
+
+            Ok(Some(line))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Gets the key value of the lines stored in seq.
-    fn get_current_key(&self) -> Option<&str> {
+    fn get_current_key(&self) -> Option<&[u8]> {
         self.seq[0].get_field(self.key)
     }
 
-    fn print_line(&self, line: &Line, repr: &Repr) {
+    fn print_line(
+        &self,
+        writer: &mut impl Write,
+        line: &Line,
+        repr: &Repr,
+    ) -> Result<(), std::io::Error> {
         if repr.uses_format() {
-            repr.print_format(|spec| match *spec {
+            repr.print_format(writer, |spec| match *spec {
                 Spec::Key => line.get_field(self.key),
                 Spec::Field(file_num, field_num) => {
                     if file_num == self.file_num {
@@ -427,26 +584,27 @@ impl<'a> State<'a> {
                         None
                     }
                 }
-            });
+            })?;
         } else {
-            repr.print_field(line.get_field(self.key));
-            repr.print_fields(line, self.key);
+            repr.print_field(writer, line.get_field(self.key))?;
+            repr.print_fields(writer, line, self.key)?;
         }
 
-        println!();
+        repr.print_line_ending(writer)
     }
 
-    fn print_first_line(&self, repr: &Repr) {
-        self.print_line(&self.seq[0], repr);
+    fn print_first_line(&self, writer: &mut impl Write, repr: &Repr) -> Result<(), std::io::Error> {
+        self.print_line(writer, &self.seq[0], repr)
     }
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
-    let keys = parse_field_number_option(matches.value_of("j"));
-    let key1 = parse_field_number_option(matches.value_of("1"));
-    let key2 = parse_field_number_option(matches.value_of("2"));
+    let keys = parse_field_number_option(matches.value_of("j"))?;
+    let key1 = parse_field_number_option(matches.value_of("1"))?;
+    let key2 = parse_field_number_option(matches.value_of("2"))?;
 
     let mut settings: Settings = Default::default();
 
@@ -459,21 +617,39 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .unwrap_or_default()
         .chain(matches.values_of("a").unwrap_or_default());
     for file_num in unpaired {
-        match parse_file_number(file_num) {
+        match parse_file_number(file_num)? {
             FileNum::File1 => settings.print_unpaired1 = true,
             FileNum::File2 => settings.print_unpaired2 = true,
         }
     }
 
     settings.ignore_case = matches.is_present("i");
-    settings.key1 = get_field_number(keys, key1);
-    settings.key2 = get_field_number(keys, key2);
+    settings.key1 = get_field_number(keys, key1)?;
+    settings.key2 = get_field_number(keys, key2)?;
 
-    if let Some(value) = matches.value_of("t") {
+    if let Some(value_os) = matches.value_of_os("t") {
+        #[cfg(unix)]
+        let value = value_os.as_bytes();
+        #[cfg(not(unix))]
+        let value = match value_os.to_str() {
+            Some(value) => value.as_bytes(),
+            None => {
+                return Err(USimpleError::new(
+                    1,
+                    "unprintable field separators are only supported on unix-like platforms",
+                ))
+            }
+        };
         settings.separator = match value.len() {
             0 => Sep::Line,
-            1 => Sep::Char(value.chars().next().unwrap()),
-            _ => crash!(1, "multi-character tab {}", value),
+            1 => Sep::Char(value[0]),
+            2 if value[0] == b'\\' && value[1] == b'0' => Sep::Char(0),
+            _ => {
+                return Err(USimpleError::new(
+                    1,
+                    format!("multi-character tab {}", value_os.to_string_lossy()),
+                ))
+            }
         };
     }
 
@@ -481,15 +657,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         if format == "auto" {
             settings.autoformat = true;
         } else {
-            settings.format = format
-                .split(|c| c == ' ' || c == ',' || c == '\t')
-                .map(Spec::parse)
-                .collect();
+            let mut specs = vec![];
+            for part in format.split(|c| c == ' ' || c == ',' || c == '\t') {
+                specs.push(Spec::parse(part)?);
+            }
+            settings.format = specs;
         }
     }
 
     if let Some(empty) = matches.value_of("e") {
-        settings.empty = empty.to_string();
+        settings.empty = empty.as_bytes().to_vec();
     }
 
     if matches.is_present("nocheck-order") {
@@ -504,18 +681,25 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         settings.headers = true;
     }
 
+    if matches.is_present("z") {
+        settings.line_ending = LineEnding::Nul;
+    }
+
     let file1 = matches.value_of("file1").unwrap();
     let file2 = matches.value_of("file2").unwrap();
 
     if file1 == "-" && file2 == "-" {
-        crash!(1, "both files cannot be standard input");
+        return Err(USimpleError::new(1, "both files cannot be standard input"));
     }
 
-    exec(file1, file2, settings)
+    match exec(file1, file2, settings) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(USimpleError::new(1, format!("{}", e))),
+    }
 }
 
-pub fn uu_app() -> App<'static, 'static> {
-    App::new(NAME)
+pub fn uu_app<'a>() -> Command<'a> {
+    Command::new(NAME)
         .version(crate_version!())
         .about(
             "For each pair of input lines with identical join fields, write a line to
@@ -523,12 +707,11 @@ standard output. The default join field is the first, delimited by blanks.
 
 When FILE1 or FILE2 (not both) is -, read standard input.",
         )
-        .help_message("display this help and exit")
-        .version_message("display version and exit")
+        .infer_long_args(true)
         .arg(
-            Arg::with_name("a")
-                .short("a")
-                .multiple(true)
+            Arg::new("a")
+                .short('a')
+                .multiple_occurrences(true)
                 .number_of_values(1)
                 .possible_values(&["1", "2"])
                 .value_name("FILENUM")
@@ -538,90 +721,97 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
                 ),
         )
         .arg(
-            Arg::with_name("v")
-                .short("v")
-                .multiple(true)
+            Arg::new("v")
+                .short('v')
+                .multiple_occurrences(true)
                 .number_of_values(1)
                 .possible_values(&["1", "2"])
                 .value_name("FILENUM")
                 .help("like -a FILENUM, but suppress joined output lines"),
         )
         .arg(
-            Arg::with_name("e")
-                .short("e")
+            Arg::new("e")
+                .short('e')
                 .takes_value(true)
                 .value_name("EMPTY")
                 .help("replace missing input fields with EMPTY"),
         )
         .arg(
-            Arg::with_name("i")
-                .short("i")
+            Arg::new("i")
+                .short('i')
                 .long("ignore-case")
                 .help("ignore differences in case when comparing fields"),
         )
         .arg(
-            Arg::with_name("j")
-                .short("j")
+            Arg::new("j")
+                .short('j')
                 .takes_value(true)
                 .value_name("FIELD")
                 .help("equivalent to '-1 FIELD -2 FIELD'"),
         )
         .arg(
-            Arg::with_name("o")
-                .short("o")
+            Arg::new("o")
+                .short('o')
                 .takes_value(true)
                 .value_name("FORMAT")
                 .help("obey FORMAT while constructing output line"),
         )
         .arg(
-            Arg::with_name("t")
-                .short("t")
+            Arg::new("t")
+                .short('t')
                 .takes_value(true)
                 .value_name("CHAR")
+                .allow_invalid_utf8(true)
                 .help("use CHAR as input and output field separator"),
         )
         .arg(
-            Arg::with_name("1")
-                .short("1")
+            Arg::new("1")
+                .short('1')
                 .takes_value(true)
                 .value_name("FIELD")
                 .help("join on this FIELD of file 1"),
         )
         .arg(
-            Arg::with_name("2")
-                .short("2")
+            Arg::new("2")
+                .short('2')
                 .takes_value(true)
                 .value_name("FIELD")
                 .help("join on this FIELD of file 2"),
         )
-        .arg(Arg::with_name("check-order").long("check-order").help(
+        .arg(Arg::new("check-order").long("check-order").help(
             "check that the input is correctly sorted, \
              even if all input lines are pairable",
         ))
         .arg(
-            Arg::with_name("nocheck-order")
+            Arg::new("nocheck-order")
                 .long("nocheck-order")
                 .help("do not check that the input is correctly sorted"),
         )
-        .arg(Arg::with_name("header").long("header").help(
+        .arg(Arg::new("header").long("header").help(
             "treat the first line in each file as field headers, \
              print them without trying to pair them",
         ))
         .arg(
-            Arg::with_name("file1")
-                .required(true)
-                .value_name("FILE1")
-                .hidden(true),
+            Arg::new("z")
+                .short('z')
+                .long("zero-terminated")
+                .help("line delimiter is NUL, not newline"),
         )
         .arg(
-            Arg::with_name("file2")
+            Arg::new("file1")
+                .required(true)
+                .value_name("FILE1")
+                .hide(true),
+        )
+        .arg(
+            Arg::new("file2")
                 .required(true)
                 .value_name("FILE2")
-                .hidden(true),
+                .hide(true),
         )
 }
 
-fn exec(file1: &str, file2: &str, settings: Settings) -> i32 {
+fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), JoinError> {
     let stdin = stdin();
 
     let mut state1 = State::new(
@@ -629,6 +819,7 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> i32 {
         file1,
         &stdin,
         settings.key1,
+        settings.line_ending,
         settings.print_unpaired1,
     );
 
@@ -637,6 +828,7 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> i32 {
         file2,
         &stdin,
         settings.key2,
+        settings.line_ending,
         settings.print_unpaired2,
     );
 
@@ -666,18 +858,22 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> i32 {
     };
 
     let repr = Repr::new(
+        settings.line_ending,
         match settings.separator {
             Sep::Char(sep) => sep,
-            _ => ' ',
+            _ => b' ',
         },
         &format,
         &settings.empty,
     );
 
+    let stdout = stdout();
+    let mut writer = BufWriter::new(stdout.lock());
+
     if settings.headers {
-        state1.print_headers(&state2, &repr);
-        state1.reset_read_line(&input);
-        state2.reset_read_line(&input);
+        state1.print_headers(&mut writer, &state2, &repr)?;
+        state1.reset_read_line(&input)?;
+        state2.reset_read_line(&input)?;
     }
 
     while state1.has_line() && state2.has_line() {
@@ -685,17 +881,39 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> i32 {
 
         match diff {
             Ordering::Less => {
-                state1.skip_line(&input, &repr);
+                if let Err(e) = state1.skip_line(&mut writer, &input, &repr) {
+                    writer.flush()?;
+                    return Err(e);
+                }
+                state1.has_unpaired = true;
+                state2.has_unpaired = true;
             }
             Ordering::Greater => {
-                state2.skip_line(&input, &repr);
+                if let Err(e) = state2.skip_line(&mut writer, &input, &repr) {
+                    writer.flush()?;
+                    return Err(e);
+                }
+                state1.has_unpaired = true;
+                state2.has_unpaired = true;
             }
             Ordering::Equal => {
-                let next_line1 = state1.extend(&input);
-                let next_line2 = state2.extend(&input);
+                let next_line1 = match state1.extend(&input) {
+                    Ok(line) => line,
+                    Err(e) => {
+                        writer.flush()?;
+                        return Err(e);
+                    }
+                };
+                let next_line2 = match state2.extend(&input) {
+                    Ok(line) => line,
+                    Err(e) => {
+                        writer.flush()?;
+                        return Err(e);
+                    }
+                };
 
                 if settings.print_joined {
-                    state1.combine(&state2, &repr);
+                    state1.combine(&mut writer, &state2, &repr)?;
                 }
 
                 state1.reset(next_line1);
@@ -704,46 +922,74 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> i32 {
         }
     }
 
-    state1.finalize(&input, &repr);
-    state2.finalize(&input, &repr);
+    if let Err(e) = state1.finalize(&mut writer, &input, &repr) {
+        writer.flush()?;
+        return Err(e);
+    };
+    if let Err(e) = state2.finalize(&mut writer, &input, &repr) {
+        writer.flush()?;
+        return Err(e);
+    };
 
-    (state1.has_failed || state2.has_failed) as i32
+    writer.flush()?;
+
+    if state1.has_failed || state2.has_failed {
+        eprintln!(
+            "{}: input is not in sorted order",
+            uucore::execution_phrase()
+        );
+        set_exit_code(1);
+    }
+    Ok(())
 }
 
 /// Check that keys for both files and for a particular file are not
 /// contradictory and return the key index.
-fn get_field_number(keys: Option<usize>, key: Option<usize>) -> usize {
+fn get_field_number(keys: Option<usize>, key: Option<usize>) -> UResult<usize> {
     if let Some(keys) = keys {
         if let Some(key) = key {
             if keys != key {
                 // Show zero-based field numbers as one-based.
-                crash!(1, "incompatible join fields {}, {}", keys + 1, key + 1);
+                return Err(USimpleError::new(
+                    1,
+                    format!("incompatible join fields {}, {}", keys + 1, key + 1),
+                ));
             }
         }
 
-        return keys;
+        return Ok(keys);
     }
 
-    key.unwrap_or(0)
+    Ok(key.unwrap_or(0))
 }
 
 /// Parse the specified field string as a natural number and return
 /// the zero-based field number.
-fn parse_field_number(value: &str) -> usize {
+fn parse_field_number(value: &str) -> UResult<usize> {
     match value.parse::<usize>() {
-        Ok(result) if result > 0 => result - 1,
-        _ => crash!(1, "invalid field number: {}", value.quote()),
+        Ok(result) if result > 0 => Ok(result - 1),
+        Err(e) if e.kind() == &IntErrorKind::PosOverflow => Ok(usize::MAX),
+        _ => Err(USimpleError::new(
+            1,
+            format!("invalid field number: {}", value.quote()),
+        )),
     }
 }
 
-fn parse_file_number(value: &str) -> FileNum {
+fn parse_file_number(value: &str) -> UResult<FileNum> {
     match value {
-        "1" => FileNum::File1,
-        "2" => FileNum::File2,
-        value => crash!(1, "invalid file number: {}", value.quote()),
+        "1" => Ok(FileNum::File1),
+        "2" => Ok(FileNum::File2),
+        value => Err(USimpleError::new(
+            1,
+            format!("invalid file number: {}", value.quote()),
+        )),
     }
 }
 
-fn parse_field_number_option(value: Option<&str>) -> Option<usize> {
-    Some(parse_field_number(value?))
+fn parse_field_number_option(value: Option<&str>) -> UResult<Option<usize>> {
+    match value {
+        None => Ok(None),
+        Some(val) => Ok(Some(parse_field_number(val)?)),
+    }
 }

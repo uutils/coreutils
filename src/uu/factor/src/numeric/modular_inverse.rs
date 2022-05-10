@@ -63,13 +63,17 @@ mod tests {
 
     quickcheck! {
         fn random_values_u32(n: u32) -> bool {
-            let n = 2 * n + 1;
-            modular_inverse(n).wrapping_mul(n) == 1
+            match 2_u32.checked_mul(n) {
+                Some(n) => modular_inverse(n + 1).wrapping_mul(n + 1) == 1,
+                _ => true,
+            }
         }
 
         fn random_values_u64(n: u64) -> bool {
-            let n = 2 * n + 1;
-            modular_inverse(n).wrapping_mul(n) == 1
+            match 2_u64.checked_mul(n) {
+                Some(n) => modular_inverse(n + 1).wrapping_mul(n + 1) == 1,
+                _ => true,
+            }
         }
     }
 }

@@ -15,17 +15,13 @@ default_utils="base32 base64 basename cat cksum comm cp cut date dircolors dirna
 
 project_main_dir="${ME_parent_dir_abs}"
 # printf 'project_main_dir="%s"\n' "${project_main_dir}"
-cd "${project_main_dir}"
+cd "${project_main_dir}" &&
 
-# `jq` available?
-unset JQ
-jq --version 1>/dev/null 2>&1
-if [ $? -eq 0 ]; then export JQ="jq"; fi
-
-if [ -z "${JQ}" ]; then
-    echo 'WARN: missing `jq` (install with `sudo apt install jq`); falling back to default (only fully cross-platform) utility list' 1>&2
-    echo $default_utils
-else
-    cargo metadata $* --format-version 1 | jq -r "[.resolve.nodes[] | { id: .id, deps: [.deps[] | { name:.name, pkg:.pkg }] }] | .[] | select(.id|startswith(\"coreutils\")) | [.deps[] | select((.name|startswith(\"uu_\")) or (.pkg|startswith(\"uu_\")))] | [.[].pkg | match(\"^\\\w+\";\"g\")] | [.[].string | sub(\"^uu_\"; \"\")] | sort | join(\" \")"
-    # cargo metadata $* --format-version 1 | jq -r "[.resolve.nodes[] | { id: .id, deps: [.deps[] | { name:.name, pkg:.pkg }] }] | .[] | select(.id|startswith(\"coreutils\")) | [.deps[] | select((.name|startswith(\"uu_\")) or (.pkg|startswith(\"uu_\")))] | [.[].pkg | match(\"^\\\w+\";\"g\")] | [.[].string] | sort | join(\" \")"
-fi
+    # `jq` available?
+    if ! jq --version 1>/dev/null 2>&1; then
+        echo "WARN: missing \`jq\` (install with \`sudo apt install jq\`); falling back to default (only fully cross-platform) utility list" 1>&2
+        echo "$default_utils"
+    else
+        cargo metadata "$*" --format-version 1 | jq -r "[.resolve.nodes[] | { id: .id, deps: [.deps[] | { name:.name, pkg:.pkg }] }] | .[] | select(.id|startswith(\"coreutils\")) | [.deps[] | select((.name|startswith(\"uu_\")) or (.pkg|startswith(\"uu_\")))] | [.[].pkg | match(\"^\\\w+\";\"g\")] | [.[].string | sub(\"^uu_\"; \"\")] | sort | join(\" \")"
+        # cargo metadata "$*" --format-version 1 | jq -r "[.resolve.nodes[] | { id: .id, deps: [.deps[] | { name:.name, pkg:.pkg }] }] | .[] | select(.id|startswith(\"coreutils\")) | [.deps[] | select((.name|startswith(\"uu_\")) or (.pkg|startswith(\"uu_\")))] | [.[].pkg | match(\"^\\\w+\";\"g\")] | [.[].string] | sort | join(\" \")"
+    fi

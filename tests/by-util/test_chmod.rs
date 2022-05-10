@@ -33,7 +33,7 @@ fn make_file(file: &str, mode: u32) {
     set_permissions(file, perms).unwrap();
 }
 
-fn run_single_test(test: &TestCase, at: AtPath, mut ucmd: UCommand) {
+fn run_single_test(test: &TestCase, at: &AtPath, mut ucmd: UCommand) {
     make_file(&at.plus_as_string(TEST_FILE), test.before);
     let perms = at.metadata(TEST_FILE).permissions().mode();
     if perms != test.before {
@@ -64,7 +64,7 @@ fn run_single_test(test: &TestCase, at: AtPath, mut ucmd: UCommand) {
 fn run_tests(tests: Vec<TestCase>) {
     for test in tests {
         let (at, ucmd) = at_and_ucmd!();
-        run_single_test(&test, at, ucmd);
+        run_single_test(&test, &at, ucmd);
     }
 }
 
@@ -295,7 +295,7 @@ fn test_chmod_reference_file() {
     ];
     let (at, ucmd) = at_and_ucmd!();
     make_file(&at.plus_as_string(REFERENCE_FILE), REFERENCE_PERMS);
-    run_single_test(&tests[0], at, ucmd);
+    run_single_test(&tests[0], &at, ucmd);
 }
 
 #[test]
@@ -334,19 +334,20 @@ fn test_chmod_recursive() {
     make_file(&at.plus_as_string("a/b/c/c"), 0o100444);
     make_file(&at.plus_as_string("z/y"), 0o100444);
 
+    // only the permissions of folder `a` and `z` are changed
+    // folder can't be read after read permission is removed
     ucmd.arg("-R")
         .arg("--verbose")
         .arg("-r,a+w")
         .arg("a")
         .arg("z")
-        .succeeds()
-        .stdout_contains(&"to 0333 (-wx-wx-wx)")
-        .stdout_contains(&"to 0222 (-w--w--w-)");
+        .fails()
+        .stderr_is("chmod: Permission denied");
 
-    assert_eq!(at.metadata("z/y").permissions().mode(), 0o100222);
-    assert_eq!(at.metadata("a/a").permissions().mode(), 0o100222);
-    assert_eq!(at.metadata("a/b/b").permissions().mode(), 0o100222);
-    assert_eq!(at.metadata("a/b/c/c").permissions().mode(), 0o100222);
+    assert_eq!(at.metadata("z/y").permissions().mode(), 0o100444);
+    assert_eq!(at.metadata("a/a").permissions().mode(), 0o100444);
+    assert_eq!(at.metadata("a/b/b").permissions().mode(), 0o100444);
+    assert_eq!(at.metadata("a/b/c/c").permissions().mode(), 0o100444);
     println!("mode {:o}", at.metadata("a").permissions().mode());
     assert_eq!(at.metadata("a").permissions().mode(), 0o40333);
     assert_eq!(at.metadata("z").permissions().mode(), 0o40333);
@@ -354,6 +355,23 @@ fn test_chmod_recursive() {
     unsafe {
         umask(original_umask);
     }
+}
+
+#[test]
+#[allow(clippy::unreadable_literal)]
+fn test_chmod_recursive_read_permission() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("a/b");
+    let mut perms = at.metadata("a/b").permissions();
+    perms.set_mode(0o311);
+    set_permissions(at.plus_as_string("a/b"), perms.clone()).unwrap();
+    set_permissions(at.plus_as_string("a"), perms).unwrap();
+
+    ucmd.arg("-R").arg("u+r").arg("a").succeeds();
+
+    assert_eq!(at.metadata("a").permissions().mode(), 0o40711);
+    assert_eq!(at.metadata("a/b").permissions().mode(), 0o40711);
 }
 
 #[test]
@@ -455,8 +473,8 @@ fn test_chmod_symlink_non_existing_file_recursive() {
 
     let expected_stdout = &format!(
         // spell-checker:disable-next-line
-        "mode of '{}' retained as 0755 (rwxr-xr-x)\nneither symbolic link '{}/{}' nor referent has been changed",
-        test_directory, test_directory, test_symlink
+        "mode of '{}' retained as 0755 (rwxr-xr-x)",
+        test_directory
     );
 
     // '-v': this should succeed without stderr
@@ -514,7 +532,7 @@ fn test_chmod_strip_minus_from_mode() {
 
 #[test]
 fn test_chmod_keep_setgid() {
-    for &(from, arg, to) in &[
+    for (from, arg, to) in [
         (0o7777, "777", 0o46777),
         (0o7777, "=777", 0o40777),
         (0o7777, "0777", 0o46777),
@@ -553,7 +571,7 @@ fn test_mode_after_dash_dash() {
             before: 0o100777,
             after: 0o100333,
         },
-        at,
+        &at,
         ucmd,
     );
 }

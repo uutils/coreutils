@@ -42,7 +42,7 @@ impl ExtendedBigInt {
         // We would like to implement `num_traits::One`, but it requires
         // a multiplication implementation, and we don't want to
         // implement that here.
-        ExtendedBigInt::BigInt(BigInt::one())
+        Self::BigInt(BigInt::one())
     }
 }
 
@@ -51,10 +51,10 @@ impl From<ExtendedBigDecimal> for ExtendedBigInt {
         match big_decimal {
             // TODO When can this fail?
             ExtendedBigDecimal::BigDecimal(x) => Self::BigInt(x.to_bigint().unwrap()),
-            ExtendedBigDecimal::Infinity => ExtendedBigInt::Infinity,
-            ExtendedBigDecimal::MinusInfinity => ExtendedBigInt::MinusInfinity,
-            ExtendedBigDecimal::MinusZero => ExtendedBigInt::MinusZero,
-            ExtendedBigDecimal::Nan => ExtendedBigInt::Nan,
+            ExtendedBigDecimal::Infinity => Self::Infinity,
+            ExtendedBigDecimal::MinusInfinity => Self::MinusInfinity,
+            ExtendedBigDecimal::MinusZero => Self::MinusZero,
+            ExtendedBigDecimal::Nan => Self::Nan,
         }
     }
 }
@@ -62,22 +62,22 @@ impl From<ExtendedBigDecimal> for ExtendedBigInt {
 impl Display for ExtendedBigInt {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExtendedBigInt::BigInt(n) => n.fmt(f),
-            ExtendedBigInt::Infinity => f32::INFINITY.fmt(f),
-            ExtendedBigInt::MinusInfinity => f32::NEG_INFINITY.fmt(f),
-            ExtendedBigInt::MinusZero => {
+            Self::BigInt(n) => n.fmt(f),
+            Self::Infinity => f32::INFINITY.fmt(f),
+            Self::MinusInfinity => f32::NEG_INFINITY.fmt(f),
+            Self::MinusZero => {
                 // FIXME Come up with a way of formatting this with a
                 // "-" prefix.
                 0.fmt(f)
             }
-            ExtendedBigInt::Nan => "nan".fmt(f),
+            Self::Nan => "nan".fmt(f),
         }
     }
 }
 
 impl Zero for ExtendedBigInt {
     fn zero() -> Self {
-        ExtendedBigInt::BigInt(BigInt::zero())
+        Self::BigInt(BigInt::zero())
     }
     fn is_zero(&self) -> bool {
         match self {

@@ -1,32 +1,27 @@
 [package]
 name = "uu_pr"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "pr ~ (uutils) convert text files for printing"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/pr"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/pr"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 path = "src/pr.rs"
 
 [dependencies]
-clap = { version = "2.33", features = ["wrap_help"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.7", package="uucore", path="../../uucore", features=["entries"] }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
-getopts = "0.2.21"
 chrono = "0.4.19"
 quick-error = "2.0.1"
-itertools = "0.10"
-regex = "1.0"
+itertools = "0.10.0"
+regex = "1.5"
 
 [[bin]]
 name = "pr"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

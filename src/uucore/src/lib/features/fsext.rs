@@ -9,15 +9,17 @@
 
 //! Set of functions to manage file systems
 
-// spell-checker:ignore (arch) bitrig ; (fs) cifs smbfs
+// spell-checker:ignore DATETIME subsecond (arch) bitrig ; (fs) cifs smbfs
 
 extern crate time;
+use time::macros::format_description;
+use time::UtcOffset;
 
 pub use crate::*; // import macros from `../../macros.rs`
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const LINUX_MTAB: &str = "/etc/mtab";
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
 static MOUNT_OPT_BIND: &str = "bind";
 #[cfg(windows)]
@@ -63,14 +65,22 @@ fn LPWSTR2String(buf: &[u16]) -> String {
     String::from_utf16(&buf[..len]).unwrap()
 }
 
-use self::time::Timespec;
 #[cfg(unix)]
 use libc::{
     mode_t, strerror, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
 };
 use std::borrow::Cow;
 use std::convert::{AsRef, From};
-#[cfg(unix)]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "linux",
+    target_os = "android",
+))]
+use std::ffi::CStr;
+#[cfg(not(windows))]
 use std::ffi::CString;
 use std::io::Error as IOError;
 #[cfg(unix)]
@@ -80,8 +90,8 @@ use std::time::UNIX_EPOCH;
 
 #[cfg(any(
     target_os = "linux",
-    target_vendor = "apple",
     target_os = "android",
+    target_vendor = "apple",
     target_os = "freebsd",
     target_os = "openbsd"
 ))]
@@ -90,23 +100,27 @@ pub use libc::statfs as StatFs;
     target_os = "netbsd",
     target_os = "bitrig",
     target_os = "dragonfly",
+    target_os = "illumos",
+    target_os = "solaris",
     target_os = "redox"
 ))]
 pub use libc::statvfs as StatFs;
 
 #[cfg(any(
     target_os = "linux",
-    target_vendor = "apple",
     target_os = "android",
+    target_vendor = "apple",
     target_os = "freebsd",
     target_os = "openbsd",
+    target_os = "redox"
 ))]
 pub use libc::statfs as statfs_fn;
 #[cfg(any(
     target_os = "netbsd",
     target_os = "bitrig",
-    target_os = "dragonfly",
-    target_os = "redox"
+    target_os = "illumos",
+    target_os = "solaris",
+    target_os = "dragonfly"
 ))]
 pub use libc::statvfs as statfs_fn;
 
@@ -156,7 +170,7 @@ impl MountInfo {
             // but set dev_id
             if let Ok(stat) = std::fs::metadata(&self.mount_dir) {
                 // Why do we cast this to i32?
-                self.dev_id = (stat.dev() as i32).to_string()
+                self.dev_id = (stat.dev() as i32).to_string();
             } else {
                 self.dev_id = "".to_string();
             }
@@ -196,17 +210,21 @@ impl MountInfo {
         }
     }
 
-    #[cfg(target_os = "linux")]
-    fn new(file_name: &str, raw: Vec<&str>) -> Option<MountInfo> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn new(file_name: &str, raw: &[&str]) -> Option<Self> {
         match file_name {
             // spell-checker:ignore (word) noatime
             // Format: 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
             // "man proc" for more details
             LINUX_MOUNTINFO => {
-                let mut m = MountInfo {
+                const FIELDS_OFFSET: usize = 6;
+                let after_fields = raw[FIELDS_OFFSET..].iter().position(|c| *c == "-").unwrap()
+                    + FIELDS_OFFSET
+                    + 1;
+                let mut m = Self {
                     dev_id: "".to_string(),
-                    dev_name: raw[9].to_string(),
-                    fs_type: raw[8].to_string(),
+                    dev_name: raw[after_fields + 1].to_string(),
+                    fs_type: raw[after_fields].to_string(),
                     mount_root: raw[3].to_string(),
                     mount_dir: raw[4].to_string(),
                     mount_option: raw[5].to_string(),
@@ -217,7 +235,7 @@ impl MountInfo {
                 Some(m)
             }
             LINUX_MTAB => {
-                let mut m = MountInfo {
+                let mut m = Self {
                     dev_id: "".to_string(),
                     dev_name: raw[0].to_string(),
                     fs_type: raw[2].to_string(),
@@ -234,7 +252,7 @@ impl MountInfo {
         }
     }
     #[cfg(windows)]
-    fn new(mut volume_name: String) -> Option<MountInfo> {
+    fn new(mut volume_name: String) -> Option<Self> {
         let mut dev_name_buf = [0u16; MAX_PATH];
         volume_name.pop();
         unsafe {
@@ -285,7 +303,7 @@ impl MountInfo {
         } else {
             None
         };
-        let mut mn_info = MountInfo {
+        let mut mn_info = Self {
             dev_id: volume_name,
             dev_name,
             fs_type: fs_type.unwrap_or_else(|| "".to_string()),
@@ -301,13 +319,6 @@ impl MountInfo {
 }
 
 #[cfg(any(
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd"
-))]
-use std::ffi::CStr;
-#[cfg(any(
     target_os = "freebsd",
     target_vendor = "apple",
     target_os = "netbsd",
@@ -315,7 +326,7 @@ use std::ffi::CStr;
 ))]
 impl From<StatFs> for MountInfo {
     fn from(statfs: StatFs) -> Self {
-        let mut info = MountInfo {
+        let mut info = Self {
             dev_id: "".to_string(),
             dev_name: unsafe {
                 // spell-checker:disable-next-line
@@ -373,9 +384,9 @@ extern "C" {
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs::File;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::io::{BufRead, BufReader};
 #[cfg(any(
     target_vendor = "apple",
@@ -394,7 +405,7 @@ use std::ptr;
 use std::slice;
 /// Read file system list.
 pub fn read_fs_list() -> Vec<MountInfo> {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let (file_name, f) = File::open(LINUX_MOUNTINFO)
             .map(|f| (LINUX_MOUNTINFO, f))
@@ -406,7 +417,7 @@ pub fn read_fs_list() -> Vec<MountInfo> {
             .filter_map(|line| line.ok())
             .filter_map(|line| {
                 let raw_data = line.split_whitespace().collect::<Vec<&str>>();
-                MountInfo::new(file_name, raw_data)
+                MountInfo::new(file_name, &raw_data)
             })
             .collect::<Vec<_>>()
     }
@@ -472,7 +483,7 @@ pub fn read_fs_list() -> Vec<MountInfo> {
         }
         mounts
     }
-    #[cfg(target_os = "redox")]
+    #[cfg(any(target_os = "redox", target_os = "illumos", target_os = "solaris"))]
     {
         // No method to read mounts, yet
         Vec::new()
@@ -492,9 +503,9 @@ pub struct FsUsage {
 
 impl FsUsage {
     #[cfg(unix)]
-    pub fn new(statvfs: StatFs) -> FsUsage {
+    pub fn new(statvfs: StatFs) -> Self {
         {
-            FsUsage {
+            Self {
                 blocksize: statvfs.f_bsize as u64, // or `statvfs.f_frsize` ?
                 blocks: statvfs.f_blocks as u64,
                 bfree: statvfs.f_bfree as u64,
@@ -506,7 +517,7 @@ impl FsUsage {
         }
     }
     #[cfg(not(unix))]
-    pub fn new(path: &Path) -> FsUsage {
+    pub fn new(path: &Path) -> Self {
         let mut root_path = [0u16; MAX_PATH];
         let success = unsafe {
             GetVolumePathNamesForVolumeNameW(
@@ -549,7 +560,7 @@ impl FsUsage {
         }
 
         let bytes_per_cluster = sectors_per_cluster as u64 * bytes_per_sector as u64;
-        FsUsage {
+        Self {
             // f_bsize      File system block size.
             blocksize: bytes_per_cluster as u64,
             // f_blocks - Total number of blocks on the file system, in units of f_frsize.
@@ -563,7 +574,7 @@ impl FsUsage {
             // Total number of file nodes (inodes) on the file system.
             files: 0, // Not available on windows
             // Total number of free file nodes (inodes).
-            ffree: 4096, // Meaningless on Windows
+            ffree: 0, // Meaningless on Windows
         }
     }
 }
@@ -602,17 +613,27 @@ impl FsMeta for StatFs {
     fn free_file_nodes(&self) -> u64 {
         self.f_ffree as u64
     }
-    #[cfg(any(target_os = "linux", target_vendor = "apple", target_os = "freebsd"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "android",
+        target_vendor = "apple",
+        target_os = "freebsd"
+    ))]
     fn fs_type(&self) -> i64 {
         self.f_type as i64
     }
-    #[cfg(not(any(target_os = "linux", target_vendor = "apple", target_os = "freebsd")))]
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "android",
+        target_vendor = "apple",
+        target_os = "freebsd"
+    )))]
     fn fs_type(&self) -> i64 {
         // FIXME: statvfs doesn't have an equivalent, so we need to do something else
         unimplemented!()
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     fn io_size(&self) -> u64 {
         self.f_frsize as u64
     }
@@ -625,6 +646,7 @@ impl FsMeta for StatFs {
         target_vendor = "apple",
         target_os = "freebsd",
         target_os = "linux",
+        target_os = "android",
         target_os = "netbsd"
     )))]
     fn io_size(&self) -> u64 {
@@ -641,24 +663,26 @@ impl FsMeta for StatFs {
         target_vendor = "apple",
         target_os = "freebsd",
         target_os = "linux",
+        target_os = "android",
         target_os = "openbsd"
     ))]
     fn fsid(&self) -> u64 {
         let f_fsid: &[u32; 2] =
-            unsafe { &*(&self.f_fsid as *const libc::fsid_t as *const [u32; 2]) };
+            unsafe { &*(&self.f_fsid as *const nix::sys::statfs::fsid_t as *const [u32; 2]) };
         (u64::from(f_fsid[0])) << 32 | u64::from(f_fsid[1])
     }
     #[cfg(not(any(
         target_vendor = "apple",
         target_os = "freebsd",
         target_os = "linux",
+        target_os = "android",
         target_os = "openbsd"
     )))]
     fn fsid(&self) -> u64 {
         self.f_fsid as u64
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     fn namelen(&self) -> u64 {
         self.f_namelen as u64
     }
@@ -675,6 +699,7 @@ impl FsMeta for StatFs {
         target_vendor = "apple",
         target_os = "freebsd",
         target_os = "linux",
+        target_os = "android",
         target_os = "netbsd",
         target_os = "openbsd"
     )))]
@@ -696,9 +721,10 @@ where
                     0 => Ok(buffer),
                     _ => {
                         let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
-                        Err(CString::from_raw(strerror(errno))
-                            .into_string()
-                            .unwrap_or_else(|_| "Unknown Error".to_owned()))
+                        Err(CStr::from_ptr(strerror(errno))
+                            .to_str()
+                            .map_err(|_| "Error message contains invalid UTF-8".to_owned())?
+                            .to_owned())
                     }
                 }
             }
@@ -707,11 +733,42 @@ where
     }
 }
 
+// match strftime "%Y-%m-%d %H:%M:%S.%f %z"
+const PRETTY_DATETIME_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "\
+[year]-[month]-[day padding:zero] \
+[hour]:[minute]:[second].[subsecond digits:9] \
+[offset_hour sign:mandatory][offset_minute]"
+);
+
 pub fn pretty_time(sec: i64, nsec: i64) -> String {
     // sec == seconds since UNIX_EPOCH
     // nsec == nanoseconds since (UNIX_EPOCH + sec)
-    let tm = time::at(Timespec::new(sec, nsec as i32));
-    let res = time::strftime("%Y-%m-%d %H:%M:%S.%f %z", &tm).unwrap();
+    let ts_nanos: i128 = (sec * 1_000_000_000 + nsec).into();
+
+    // Return the date in UTC
+    let tm = match time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos) {
+        Ok(tm) => tm,
+        Err(e) => {
+            panic!("error: {}", e);
+        }
+    };
+
+    // Get the offset to convert to local time
+    // Because of DST (daylight saving), we get the local time back when
+    // the date was set
+    let local_offset = match UtcOffset::local_offset_at(tm) {
+        Ok(lo) => lo,
+        Err(e) => {
+            panic!("error: {}", e);
+        }
+    };
+
+    // Include the conversion to local time
+    let res = tm
+        .to_offset(local_offset)
+        .format(&PRETTY_DATETIME_FORMAT)
+        .unwrap();
     if res.ends_with(" -0000") {
         res.replace(" -0000", " +0000")
     } else {
@@ -890,5 +947,47 @@ mod tests {
         assert_eq!("fat", pretty_fstype(0x4006));
         assert_eq!("UNKNOWN (0x1234)", pretty_fstype(0x1234));
         // spell-checker:enable
+    }
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_mountinfo() {
+        // spell-checker:ignore (word) relatime
+        let info = MountInfo::new(
+            LINUX_MOUNTINFO,
+            &"106 109 253:6 / /mnt rw,relatime - xfs /dev/fs0 rw"
+                .split_ascii_whitespace()
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        assert_eq!(info.mount_root, "/");
+        assert_eq!(info.mount_dir, "/mnt");
+        assert_eq!(info.mount_option, "rw,relatime");
+        assert_eq!(info.fs_type, "xfs");
+        assert_eq!(info.dev_name, "/dev/fs0");
+
+        // Test parsing with different amounts of optional fields.
+        let info = MountInfo::new(
+            LINUX_MOUNTINFO,
+            &"106 109 253:6 / /mnt rw,relatime master:1 - xfs /dev/fs0 rw"
+                .split_ascii_whitespace()
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        assert_eq!(info.fs_type, "xfs");
+        assert_eq!(info.dev_name, "/dev/fs0");
+
+        let info = MountInfo::new(
+            LINUX_MOUNTINFO,
+            &"106 109 253:6 / /mnt rw,relatime master:1 shared:2 - xfs /dev/fs0 rw"
+                .split_ascii_whitespace()
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        assert_eq!(info.fs_type, "xfs");
+        assert_eq!(info.dev_name, "/dev/fs0");
     }
 }

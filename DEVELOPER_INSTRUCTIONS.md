@@ -21,7 +21,7 @@ Running GNU tests
 At the end you should have uutils, gnu and gnulib checked out next to each other.
 
 - Run `cd uutils && ./util/build-gnu.sh && cd ..` to get everything ready (this may take a while)
-- Finally, you can run `tests with bash uutils/util/run-gnu-test.sh <test>`. Instead of `<test>` insert the test you want to run, e.g. `tests/misc/wc-proc`.
+- Finally, you can run tests with `bash uutils/util/run-gnu-test.sh <test>`. Instead of `<test>` insert the test you want to run, e.g. `tests/misc/wc-proc.sh`.
 
 
 Code Coverage Report Generation
@@ -33,7 +33,7 @@ Code coverage report can be generated using [grcov](https://github.com/mozilla/g
 
 ### Using Nightly Rust
 
-To generate [gcov-based](https://github.com/mozilla/grcov#example-how-to-generate-gcda-files-for-cc) coverage report
+To generate [gcov-based](https://github.com/mozilla/grcov#example-how-to-generate-gcda-files-for-a-rust-project) coverage report
 
 ```bash
 $ export CARGO_INCREMENTAL=0

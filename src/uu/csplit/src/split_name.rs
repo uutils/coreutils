@@ -29,7 +29,7 @@ impl SplitName {
         prefix_opt: Option<String>,
         format_opt: Option<String>,
         n_digits_opt: Option<String>,
-    ) -> Result<SplitName, CsplitError> {
+    ) -> Result<Self, CsplitError> {
         // get the prefix
         let prefix = prefix_opt.unwrap_or_else(|| "xx".to_string());
         // the width for the split offset
@@ -231,7 +231,7 @@ impl SplitName {
             }
         };
 
-        Ok(SplitName { fn_split_name })
+        Ok(Self { fn_split_name })
     }
 
     /// Returns the filename of the i-th split.

@@ -1,30 +1,25 @@
 [package]
 name = "uu_od"
-version = "0.0.8"
+version = "0.0.13"
 authors = ["uutils developers"]
 license = "MIT"
 description = "od ~ (uutils) display formatted representation of input"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/od"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/od"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 path = "src/od.rs"
 
 [dependencies]
 byteorder = "1.3.2"
-clap = { version = "2.33", features = ["wrap_help"] }
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 half = "1.6"
-libc = "0.2.42"
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
 
 [[bin]]
 name = "od"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

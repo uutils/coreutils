@@ -62,7 +62,7 @@ pub fn parse_symbolic(
                     // keep the setgid and setuid bits for directories
                     srwx |= fperm & (0o4000 | 0o2000);
                 }
-                fperm = (fperm & !mask) | (srwx & mask)
+                fperm = (fperm & !mask) | (srwx & mask);
             }
             _ => unreachable!(),
         }
@@ -113,7 +113,7 @@ fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
             'x' => srwx |= 0o111,
             'X' => {
                 if considering_dir || (fperm & 0o0111) != 0 {
-                    srwx |= 0o111
+                    srwx |= 0o111;
                 }
             }
             's' => srwx |= 0o4000 | 0o2000,

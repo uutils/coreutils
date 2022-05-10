@@ -14,11 +14,8 @@ pub struct ParsedFormatterItemInfo {
 }
 
 impl ParsedFormatterItemInfo {
-    pub fn new(
-        formatter_item_info: FormatterItemInfo,
-        add_ascii_dump: bool,
-    ) -> ParsedFormatterItemInfo {
-        ParsedFormatterItemInfo {
+    pub fn new(formatter_item_info: FormatterItemInfo, add_ascii_dump: bool) -> Self {
+        Self {
             formatter_item_info,
             add_ascii_dump,
         }
@@ -138,7 +135,7 @@ pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo
                 } else {
                     // not every option is a format
                     if let Some(r) = od_argument_traditional_format(c) {
-                        formats.push(ParsedFormatterItemInfo::new(r, false))
+                        formats.push(ParsedFormatterItemInfo::new(r, false));
                     }
                 }
             }
