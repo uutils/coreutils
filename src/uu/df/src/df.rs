@@ -12,6 +12,7 @@ mod filesystem;
 mod table;
 
 use blocks::{HumanReadable, SizeFormat};
+use table::HeaderMode;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::fsext::{read_fs_list, MountInfo};
@@ -72,6 +73,7 @@ struct Options {
     show_all_fs: bool,
     size_format: SizeFormat,
     block_size: BlockSize,
+    header_mode: HeaderMode,
 
     /// Optional list of filesystem types to include in the output table.
     ///
@@ -99,6 +101,7 @@ impl Default for Options {
             show_all_fs: Default::default(),
             block_size: Default::default(),
             size_format: Default::default(),
+            header_mode: Default::default(),
             include: Default::default(),
             exclude: Default::default(),
             show_total: Default::default(),
@@ -176,6 +179,21 @@ impl Options {
                 ),
                 ParseSizeError::ParseFailure(s) => OptionsError::InvalidBlockSize(s),
             })?,
+            header_mode: {
+                if matches.is_present(OPT_HUMAN_READABLE_BINARY)
+                    || matches.is_present(OPT_HUMAN_READABLE_DECIMAL)
+                {
+                    HeaderMode::HumanReadable
+                } else if matches.is_present(OPT_PORTABILITY) {
+                    HeaderMode::PosixPortability
+                // is_present() doesn't work here, it always returns true because OPT_OUTPUT has
+                // default values and hence is always present
+                } else if matches.occurrences_of(OPT_OUTPUT) > 0 {
+                    HeaderMode::Output
+                } else {
+                    HeaderMode::Default
+                }
+            },
             size_format: {
                 if matches.is_present(OPT_HUMAN_READABLE_BINARY) {
                     SizeFormat::HumanReadable(HumanReadable::Binary)

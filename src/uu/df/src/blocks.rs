@@ -167,6 +167,15 @@ pub(crate) enum BlockSize {
     Bytes(u64),
 }
 
+impl BlockSize {
+    /// Returns the associated value
+    pub(crate) fn as_u64(&self) -> u64 {
+        match *self {
+            Self::Bytes(n) => n,
+        }
+    }
+}
+
 impl Default for BlockSize {
     fn default() -> Self {
         if env::var("POSIXLY_CORRECT").is_ok() {
