@@ -97,8 +97,8 @@ pub fn wrap_chown<P: AsRef<Path>>(
                             "{}\nfailed to change group of {} from {} to {}",
                             out,
                             path.quote(),
-                            entries::gid2grp(gid).unwrap_or(gid.to_string()),
-                            entries::gid2grp(dest_gid).unwrap_or(dest_gid.to_string())
+                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                         )
                     } else {
                         let uid = meta.uid();
@@ -107,10 +107,10 @@ pub fn wrap_chown<P: AsRef<Path>>(
                             "{}\nfailed to change ownership of {} from {}:{} to {}:{}",
                             out,
                             path.quote(),
-                            entries::uid2usr(uid).unwrap_or(uid.to_string()),
-                            entries::gid2grp(gid).unwrap_or(gid.to_string()),
-                            entries::uid2usr(dest_uid).unwrap_or(dest_uid.to_string()),
-                            entries::gid2grp(dest_gid).unwrap_or(dest_gid.to_string())
+                            entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                            entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
+                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                         )
                     };
                 };
@@ -127,8 +127,8 @@ pub fn wrap_chown<P: AsRef<Path>>(
                         format!(
                             "changed group of {} from {} to {}",
                             path.quote(),
-                            entries::gid2grp(gid).unwrap_or(gid.to_string()),
-                            entries::gid2grp(dest_gid).unwrap_or(dest_gid.to_string())
+                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                         )
                     } else {
                         let gid = meta.gid();
@@ -136,10 +136,10 @@ pub fn wrap_chown<P: AsRef<Path>>(
                         format!(
                             "changed ownership of {} from {}:{} to {}:{}",
                             path.quote(),
-                            entries::uid2usr(uid).unwrap_or(uid.to_string()),
-                            entries::gid2grp(gid).unwrap_or(gid.to_string()),
-                            entries::uid2usr(dest_uid).unwrap_or(dest_uid.to_string()),
-                            entries::gid2grp(dest_gid).unwrap_or(dest_gid.to_string())
+                            entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                            entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
+                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                         )
                     };
                 }
@@ -156,8 +156,8 @@ pub fn wrap_chown<P: AsRef<Path>>(
                 format!(
                     "ownership of {} retained as {}:{}",
                     path.quote(),
-                    entries::uid2usr(dest_uid).unwrap_or(dest_uid.to_string()),
-                    entries::gid2grp(dest_gid).unwrap_or(dest_gid.to_string())
+                    entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
+                    entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                 )
             };
         }
