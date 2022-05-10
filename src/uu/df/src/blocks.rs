@@ -7,7 +7,10 @@ use crate::OPT_BLOCKSIZE;
 use clap::ArgMatches;
 use std::{env, fmt};
 
-use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::{
+    display::Quotable,
+    parse_size::{parse_size, ParseSizeError},
+};
 
 /// The first ten powers of 1024.
 const IEC_BASES: [u128; 10] = [
@@ -180,7 +183,13 @@ impl Default for BlockSize {
 pub(crate) fn block_size_from_matches(matches: &ArgMatches) -> Result<BlockSize, ParseSizeError> {
     if matches.is_present(OPT_BLOCKSIZE) {
         let s = matches.value_of(OPT_BLOCKSIZE).unwrap();
-        Ok(BlockSize::Bytes(parse_size(s)?))
+        let bytes = parse_size(s)?;
+
+        if bytes > 0 {
+            Ok(BlockSize::Bytes(bytes))
+        } else {
+            Err(ParseSizeError::ParseFailure(format!("{}", s.quote())))
+        }
     } else {
         Ok(Default::default())
     }
