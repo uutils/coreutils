@@ -20,7 +20,7 @@ use std::fs::File;
 use std::fs::Metadata;
 use std::io::BufRead;
 use std::io::BufReader;
-use std::io::{ErrorKind, Result};
+use std::io::Result;
 use std::iter;
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
@@ -34,7 +34,8 @@ use std::str::FromStr;
 use std::time::{Duration, UNIX_EPOCH};
 use std::{error::Error, fmt::Display};
 use uucore::display::{print_verbatim, Quotable};
-use uucore::error::{set_exit_code, UError, UResult};
+use uucore::error::FromIo;
+use uucore::error::{UError, UResult};
 use uucore::format_usage;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::InvalidEncodingHandling;
@@ -102,7 +103,6 @@ const UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2
 
 struct Options {
     all: bool,
-    util_name: String,
     max_depth: Option<usize>,
     total: bool,
     separate_dirs: bool,
@@ -309,13 +309,9 @@ fn du(
         let read = match fs::read_dir(&my_stat.path) {
             Ok(read) => read,
             Err(e) => {
-                eprintln!(
-                    "{}: cannot read directory {}: {}",
-                    options.util_name,
-                    my_stat.path.quote(),
-                    e
+                show!(
+                    e.map_err_context(|| format!("cannot read directory {}", my_stat.path.quote()))
                 );
-                set_exit_code(1);
                 return Box::new(iter::once(my_stat));
             }
         };
@@ -368,18 +364,9 @@ fn du(
                                 }
                             }
                         }
-                        Err(error) => match error.kind() {
-                            ErrorKind::PermissionDenied => {
-                                let description = format!("cannot access {}", entry.path().quote());
-                                let error_message = "Permission denied";
-                                show_error_custom_description!(description, "{}", error_message);
-                                set_exit_code(1);
-                            }
-                            _ => {
-                                set_exit_code(1);
-                                show_error!("cannot access {}: {}", entry.path().quote(), error);
-                            }
-                        },
+                        Err(e) => show!(
+                            e.map_err_context(|| format!("cannot access {}", entry.path().quote()))
+                        ),
                     }
                 }
                 Err(error) => show_error!("{}", error),
@@ -567,7 +554,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let options = Options {
         all: matches.is_present(options::ALL),
-        util_name: uucore::util_name().to_owned(),
         max_depth,
         total: matches.is_present(options::TOTAL),
         separate_dirs: matches.is_present(options::SEPARATE_DIRS),

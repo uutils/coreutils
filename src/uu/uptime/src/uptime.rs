@@ -111,9 +111,9 @@ fn process_utmpx() -> (Option<time_t>, usize) {
         match line.record_type() {
             USER_PROCESS => nusers += 1,
             BOOT_TIME => {
-                let t = line.login_time().to_timespec();
-                if t.sec > 0 {
-                    boot_time = Some(t.sec as time_t);
+                let dt = line.login_time();
+                if dt.second() > 0 {
+                    boot_time = Some(dt.second() as time_t);
                 }
             }
             _ => continue,

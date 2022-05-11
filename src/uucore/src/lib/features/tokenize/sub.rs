@@ -152,7 +152,11 @@ impl SubParser {
             if parser.min_width_is_asterisk {
                 CanAsterisk::Asterisk
             } else {
-                CanAsterisk::Fixed(parser.min_width_tmp.map(|x| x.parse::<isize>().unwrap()))
+                CanAsterisk::Fixed(
+                    parser
+                        .min_width_tmp
+                        .map(|x| x.parse::<isize>().unwrap_or(1)),
+                )
             },
             if parser.second_field_is_asterisk {
                 CanAsterisk::Asterisk
