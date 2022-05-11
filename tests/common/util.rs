@@ -1370,6 +1370,8 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
 /// To check if i) non-interactive sudo is possible and ii) if sudo works, this runs:
 /// 'sudo -E --non-interactive whoami' first.
 ///
+/// This return an `Err()` if run inside CICD because there's no 'sudo'.
+///
 /// Example:
 ///
 /// ```no_run
@@ -1381,7 +1383,7 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
 ///    if let Ok(result) = run_ucmd_as_root(&ts, &[]) {
 ///        result.stdout_is(expected);
 ///    } else {
-///        print!("TEST SKIPPED");
+///        println!("TEST SKIPPED");
 ///    }
 /// }
 ///```
@@ -1390,29 +1392,37 @@ pub fn run_ucmd_as_root(
     ts: &TestScenario,
     args: &[&str],
 ) -> std::result::Result<CmdResult, String> {
-    // Apparently CICD environment has no `sudo`?
-    if ts
-        .cmd_keepenv("sudo")
-        .env("LC_ALL", "C")
-        .arg("-E")
-        .arg("--non-interactive")
-        .arg("whoami")
-        .run()
-        .stdout_str()
-        .trim()
-        != "root"
-    {
-        Err("\"sudo whoami\" didn't return \"root\"".to_string())
-    } else {
-        Ok(ts
-            .cmd_keepenv("sudo")
+    if !is_ci() {
+        // check if we can run 'sudo'
+        log_info("run", "sudo -E --non-interactive whoami");
+        match Command::new("sudo")
             .env("LC_ALL", "C")
-            .arg("-E")
-            .arg("--non-interactive")
-            .arg(&ts.bin_path)
-            .arg(&ts.util_name)
-            .args(args)
-            .run())
+            .args(&["-E", "--non-interactive", "whoami"])
+            .output()
+        {
+            Ok(output) if String::from_utf8_lossy(&output.stdout).eq("root\n") => {
+                // we can run sudo and we're root
+                // run ucmd as root:
+                Ok(ts
+                    .cmd_keepenv("sudo")
+                    .env("LC_ALL", "C")
+                    .arg("-E")
+                    .arg("--non-interactive")
+                    .arg(&ts.bin_path)
+                    .arg(&ts.util_name)
+                    .args(args)
+                    .run())
+            }
+            Ok(output)
+                if String::from_utf8_lossy(&output.stderr).eq("sudo: a password is required\n") =>
+            {
+                Err("Cannot run non-interactive sudo".to_string())
+            }
+            Ok(_output) => Err("\"sudo whoami\" didn't return \"root\"".to_string()),
+            Err(e) => Err(format!("{}: {}", UUTILS_WARNING, e)),
+        }
+    } else {
+        Err(format!("{}: {}", UUTILS_INFO, "cannot run inside CI"))
     }
 }
 
@@ -1771,18 +1781,27 @@ mod tests {
     #[cfg(unix)]
     #[cfg(feature = "whoami")]
     fn test_run_ucmd_as_root() {
-        // Skip test if we can't guarantee non-interactive `sudo`.
-        if let Ok(_status) = Command::new("sudo")
-            .args(&["-E", "-v", "--non-interactive"])
-            .status()
-        {
-            let ts = TestScenario::new("whoami");
-            std::assert_eq!(
-                run_ucmd_as_root(&ts, &[]).unwrap().stdout_str().trim(),
-                "root"
-            );
+        if !is_ci() {
+            // Skip test if we can't guarantee non-interactive `sudo`, or if we're not "root"
+            if let Ok(output) = Command::new("sudo")
+                .env("LC_ALL", "C")
+                .args(&["-E", "--non-interactive", "whoami"])
+                .output()
+            {
+                if output.status.success() && String::from_utf8_lossy(&output.stdout).eq("root\n") {
+                    let ts = TestScenario::new("whoami");
+                    std::assert_eq!(
+                        run_ucmd_as_root(&ts, &[]).unwrap().stdout_str().trim(),
+                        "root"
+                    );
+                } else {
+                    println!("TEST SKIPPED (we're not root)");
+                }
+            } else {
+                println!("TEST SKIPPED (cannot run sudo)");
+            }
         } else {
-            print!("TEST SKIPPED");
+            println!("TEST SKIPPED (cannot run inside CI)");
         }
     }
 }
