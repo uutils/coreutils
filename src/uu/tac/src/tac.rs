@@ -91,7 +91,8 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
-                .multiple_occurrences(true),
+                .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::FilePath),
         )
 }
 

@@ -372,6 +372,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::FILES)
                 .multiple_occurrences(true)
                 .multiple_values(true)
+                .value_hint(clap::ValueHint::FilePath)
         )
 }
 

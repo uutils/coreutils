@@ -314,6 +314,7 @@ pub fn uu_app<'a>() -> Command<'a> {
              .conflicts_with(options::NO_TARGET_DIRECTORY)
              .long(options::TARGET_DIRECTORY)
              .value_name(options::TARGET_DIRECTORY)
+             .value_hint(clap::ValueHint::DirPath)
              .takes_value(true)
              .validator(|s| {
                  if Path::new(s).is_dir() {
@@ -464,7 +465,8 @@ pub fn uu_app<'a>() -> Command<'a> {
         // END TODO
 
         .arg(Arg::new(options::PATHS)
-             .multiple_occurrences(true))
+             .multiple_occurrences(true)
+             .value_hint(clap::ValueHint::AnyPath))
 }
 
 #[uucore::main]

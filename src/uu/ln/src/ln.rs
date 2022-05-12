@@ -232,6 +232,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::TARGET_DIRECTORY)
                 .help("specify the DIRECTORY in which to create the links")
                 .value_name("DIRECTORY")
+                .value_hint(clap::ValueHint::DirPath)
                 .conflicts_with(options::NO_TARGET_DIRECTORY),
         )
         .arg(
@@ -257,6 +258,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(ARG_FILES)
                 .multiple_occurrences(true)
                 .takes_value(true)
+                .value_hint(clap::ValueHint::AnyPath)
                 .required(true)
                 .min_values(1),
         )

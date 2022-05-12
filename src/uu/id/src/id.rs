@@ -443,7 +443,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::ARG_USERS)
                 .multiple_occurrences(true)
                 .takes_value(true)
-                .value_name(options::ARG_USERS),
+                .value_name(options::ARG_USERS)
+                .value_hint(clap::ValueHint::Username),
         )
 }
 

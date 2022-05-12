@@ -109,7 +109,12 @@ pub fn uu_app<'a>() -> Command<'a> {
         .override_usage(format_usage(USAGE))
         .about(SUMMARY)
         .infer_long_args(true)
-        .arg(Arg::new(options::FILE).hide(true).multiple_occurrences(true))
+        .arg(
+            Arg::new(options::FILE)
+                .hide(true)
+                .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::FilePath)
+        )
         .arg(
             Arg::new(options::ALL)
                 .short('a')

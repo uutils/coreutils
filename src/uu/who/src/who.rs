@@ -250,7 +250,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::FILE)
                 .takes_value(true)
                 .min_values(1)
-                .max_values(2),
+                .max_values(2)
+                .value_hint(clap::ValueHint::FilePath),
         )
 }
 

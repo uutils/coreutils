@@ -227,6 +227,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             .multiple_occurrences(true)
             .takes_value(true)
             .min_values(1)
+            .value_hint(clap::ValueHint::AnyPath)
         )
 }
 

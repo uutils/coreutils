@@ -884,6 +884,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('X')
                 .long("exclude-from")
                 .value_name("FILE")
+                .value_hint(clap::ValueHint::FilePath)
                 .help("exclude files that match any pattern in FILE")
                 .multiple_occurrences(true)
 
@@ -913,6 +914,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
+                .value_hint(clap::ValueHint::AnyPath)
                 .multiple_occurrences(true)
         )
 }

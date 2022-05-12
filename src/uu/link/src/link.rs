@@ -46,6 +46,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .min_values(2)
                 .max_values(2)
                 .takes_value(true)
+                .value_hint(clap::ValueHint::AnyPath)
                 .allow_invalid_utf8(true),
         )
 }

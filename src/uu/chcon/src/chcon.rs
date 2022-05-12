@@ -197,6 +197,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::REFERENCE)
                 .takes_value(true)
                 .value_name("RFILE")
+                .value_hint(clap::ValueHint::FilePath)
                 .conflicts_with_all(&[options::USER, options::ROLE, options::TYPE, options::RANGE])
                 .help(
                     "Use security context of RFILE, rather than specifying \
@@ -210,6 +211,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::USER)
                 .takes_value(true)
                 .value_name("USER")
+                .value_hint(clap::ValueHint::Username)
                 .help("Set user USER in the target security context.")
                 .allow_invalid_utf8(true),
         )
@@ -294,6 +296,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new("FILE")
                 .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::FilePath)
                 .min_values(1)
                 .allow_invalid_utf8(true),
         )

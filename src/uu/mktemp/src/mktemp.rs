@@ -202,7 +202,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                      be an absolute name; unlike with -t, TEMPLATE may contain \
                      slashes, but mktemp creates only the final component",
                 )
-                .value_name("DIR"),
+                .value_name("DIR")
+                .value_hint(clap::ValueHint::DirPath),
         )
         .arg(Arg::new(OPT_T).short('t').help(
             "Generate a template (using the supplied prefix and TMPDIR (TMP on windows) if set) \

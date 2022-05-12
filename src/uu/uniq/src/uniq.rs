@@ -392,7 +392,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(ARG_FILES)
                 .multiple_occurrences(true)
                 .takes_value(true)
-                .max_values(2),
+                .max_values(2)
+                .value_hint(clap::ValueHint::FilePath),
         )
 }
 

@@ -456,6 +456,7 @@ pub fn chown_base<'a>(
     command = command.arg(
         Arg::new(options::ARG_FILES)
             .value_name(options::ARG_FILES)
+            .value_hint(clap::ValueHint::FilePath)
             .multiple_occurrences(true)
             .takes_value(true)
             .required(true)

@@ -137,7 +137,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .multiple_occurrences(true)
                 .takes_value(true)
                 .min_values(1)
-                .allow_invalid_utf8(true),
+                .allow_invalid_utf8(true)
+                .value_hint(clap::ValueHint::DirPath),
         )
 }
 

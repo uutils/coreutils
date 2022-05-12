@@ -423,6 +423,7 @@ pub fn uu_app_common<'a>() -> Command<'a> {
                 .index(1)
                 .multiple_occurrences(true)
                 .value_name("FILE")
+                .value_hint(clap::ValueHint::FilePath)
                 .allow_invalid_utf8(true),
         )
 }

@@ -112,6 +112,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::USERS)
                 .multiple_occurrences(true)
                 .takes_value(true)
-                .value_name(options::USERS),
+                .value_name(options::USERS)
+                .value_hint(clap::ValueHint::Username),
         )
 }

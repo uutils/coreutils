@@ -162,6 +162,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             .required_unless_present(options::SIZE)
             .help("base the size of each file on the size of RFILE")
             .value_name("RFILE")
+            .value_hint(clap::ValueHint::FilePath)
         )
         .arg(
             Arg::new(options::SIZE)
@@ -176,7 +177,8 @@ pub fn uu_app<'a>() -> Command<'a> {
              .multiple_occurrences(true)
              .takes_value(true)
              .required(true)
-             .min_values(1))
+             .min_values(1)
+             .value_hint(clap::ValueHint::FilePath))
 }
 
 /// Truncate the named file to the specified size.

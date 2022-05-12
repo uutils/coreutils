@@ -71,7 +71,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::FILE)
                 .value_name("FILE")
                 .multiple_occurrences(true)
-                .default_value("-"),
+                .default_value("-")
+                .value_hint(clap::ValueHint::FilePath),
         )
 }
 
