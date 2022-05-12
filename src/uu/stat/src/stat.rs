@@ -19,7 +19,9 @@ use uucore::{entries, format_usage};
 use clap::{crate_version, Arg, ArgMatches, Command};
 use std::borrow::Cow;
 use std::convert::AsRef;
+use std::ffi::{OsStr, OsString};
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::{cmp, fs, iter};
 
@@ -221,7 +223,7 @@ pub struct Stater {
     follow: bool,
     show_fs: bool,
     from_user: bool,
-    files: Vec<String>,
+    files: Vec<OsString>,
     mount_list: Option<Vec<String>>,
     default_tokens: Vec<Token>,
     default_dev_tokens: Vec<Token>,
@@ -471,24 +473,10 @@ impl Stater {
     }
 
     fn new(matches: &ArgMatches) -> UResult<Self> {
-        let mut files: Vec<String> = matches
-            .values_of(ARG_FILES)
-            .map(|v| v.map(ToString::to_string).collect())
+        let files = matches
+            .values_of_os(ARG_FILES)
+            .map(|v| v.map(OsString::from).collect())
             .unwrap_or_default();
-        #[cfg(unix)]
-        if files.contains(&String::from("-")) {
-            let redirected_path = Path::new("/dev/stdin")
-                .canonicalize()
-                .expect("unable to canonicalize /dev/stdin")
-                .into_os_string()
-                .into_string()
-                .unwrap();
-            for file in &mut files {
-                if file == "-" {
-                    *file = redirected_path.clone();
-                }
-            }
-        }
         let format_str = if matches.is_present(options::PRINTF) {
             matches
                 .value_of(options::PRINTF)
@@ -550,19 +538,37 @@ impl Stater {
     }
 
     fn exec(&self) -> i32 {
+        let mut stdin_is_fifo = false;
+        if cfg!(unix) {
+            if let Ok(md) = fs::metadata("/dev/stdin") {
+                stdin_is_fifo = md.file_type().is_fifo();
+            }
+        }
+
         let mut ret = 0;
         for f in &self.files {
-            ret |= self.do_stat(f.as_str());
+            ret |= self.do_stat(f, stdin_is_fifo);
         }
         ret
     }
 
-    fn do_stat(&self, file: &str) -> i32 {
-        if !self.show_fs {
-            let result = if self.follow {
-                fs::metadata(file)
+    fn do_stat(&self, file: &OsStr, stdin_is_fifo: bool) -> i32 {
+        let display_name = file.to_string_lossy();
+        let file: OsString = if cfg!(unix) && display_name.eq("-") {
+            if let Ok(p) = Path::new("/dev/stdin").canonicalize() {
+                p.into_os_string()
             } else {
-                fs::symlink_metadata(file)
+                OsString::from("/dev/stdin")
+            }
+        } else {
+            OsString::from(file)
+        };
+
+        if !self.show_fs {
+            let result = if self.follow || stdin_is_fifo && display_name.eq("-") {
+                fs::metadata(&file)
+            } else {
+                fs::symlink_metadata(&file)
             };
             match result {
                 Ok(meta) => {
@@ -658,28 +664,32 @@ impl Stater {
 
                                     // mount point
                                     'm' => {
-                                        arg = self.find_mount_point(file).unwrap();
+                                        arg = self.find_mount_point(&file).unwrap();
                                         output_type = OutputType::Str;
                                     }
 
                                     // file name
                                     'n' => {
-                                        arg = file.to_owned();
+                                        arg = display_name.to_string();
                                         output_type = OutputType::Str;
                                     }
                                     // quoted file name with dereference if symbolic link
                                     'N' => {
                                         if file_type.is_symlink() {
-                                            let dst = match fs::read_link(file) {
+                                            let dst = match fs::read_link(&file) {
                                                 Ok(path) => path,
                                                 Err(e) => {
                                                     println!("{}", e);
                                                     return 1;
                                                 }
                                             };
-                                            arg = format!("{} -> {}", file.quote(), dst.quote());
+                                            arg = format!(
+                                                "{} -> {}",
+                                                display_name.quote(),
+                                                dst.quote()
+                                            );
                                         } else {
-                                            arg = file.to_string();
+                                            arg = display_name.to_string();
                                         }
                                         output_type = OutputType::Str;
                                     }
@@ -771,12 +781,16 @@ impl Stater {
                     }
                 }
                 Err(e) => {
-                    show_error!("cannot stat {}: {}", file.quote(), e);
+                    show_error!("cannot stat {}: {}", display_name.quote(), e);
                     return 1;
                 }
             }
         } else {
-            match statfs(file) {
+            #[cfg(unix)]
+            let p = file.as_bytes();
+            #[cfg(not(unix))]
+            let p = file.into_string().unwrap();
+            match statfs(p) {
                 Ok(meta) => {
                     let tokens = &self.default_tokens;
 
@@ -829,7 +843,7 @@ impl Stater {
                                     }
                                     // file name
                                     'n' => {
-                                        arg = file.to_owned();
+                                        arg = display_name.to_string();
                                         output_type = OutputType::Str;
                                     }
                                     // block size (for faster transfers)
@@ -866,7 +880,7 @@ impl Stater {
                 Err(e) => {
                     show_error!(
                         "cannot read file system information for {}: {}",
-                        file.quote(),
+                        display_name.quote(),
                         e
                     );
                     return 1;
@@ -1028,6 +1042,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(ARG_FILES)
                 .multiple_occurrences(true)
                 .takes_value(true)
+                .allow_invalid_utf8(true)
                 .min_values(1),
         )
 }
