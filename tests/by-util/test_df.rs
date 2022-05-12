@@ -436,6 +436,30 @@ fn test_default_block_size() {
 }
 
 #[test]
+fn test_default_block_size_in_posix_portability_mode() {
+    fn get_header(s: &str) -> String {
+        s.lines()
+            .next()
+            .unwrap()
+            .to_string()
+            .split_whitespace()
+            .nth(1)
+            .unwrap()
+            .to_string()
+    }
+
+    let output = new_ucmd!().arg("-P").succeeds().stdout_move_str();
+    assert_eq!(get_header(&output), "1024-blocks");
+
+    let output = new_ucmd!()
+        .arg("-P")
+        .env("POSIXLY_CORRECT", "1")
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(get_header(&output), "512-blocks");
+}
+
+#[test]
 fn test_block_size_1024() {
     fn get_header(block_size: u64) -> String {
         let output = new_ucmd!()
