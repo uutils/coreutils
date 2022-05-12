@@ -465,6 +465,16 @@ fn test_invalid_block_size() {
         .arg("--block-size=x")
         .fails()
         .stderr_contains("invalid --block-size argument 'x'");
+
+    new_ucmd!()
+        .arg("--block-size=0")
+        .fails()
+        .stderr_contains("invalid --block-size argument '0'");
+
+    new_ucmd!()
+        .arg("--block-size=0K")
+        .fails()
+        .stderr_contains("invalid --block-size argument '0K'");
 }
 
 #[test]
