@@ -41,7 +41,12 @@ enum MkTempError {
     PersistError(PathBuf),
     MustEndInX(String),
     TooFewXs(String),
-    ContainsDirSeparator(String),
+
+    /// The template prefix contains a path separator (e.g. `"a/bXXX"`).
+    PrefixContainsDirSeparator(String),
+
+    /// The template suffix contains a path separator (e.g. `"XXXa/b"`).
+    SuffixContainsDirSeparator(String),
     InvalidTemplate(String),
 }
 
@@ -56,7 +61,14 @@ impl Display for MkTempError {
             PersistError(p) => write!(f, "could not persist file {}", p.quote()),
             MustEndInX(s) => write!(f, "with --suffix, template {} must end in X", s.quote()),
             TooFewXs(s) => write!(f, "too few X's in template {}", s.quote()),
-            ContainsDirSeparator(s) => {
+            PrefixContainsDirSeparator(s) => {
+                write!(
+                    f,
+                    "invalid template, {}, contains directory separator",
+                    s.quote()
+                )
+            }
+            SuffixContainsDirSeparator(s) => {
                 write!(
                     f,
                     "invalid suffix {}, contains directory separator",
@@ -205,20 +217,41 @@ pub fn uu_app<'a>() -> Command<'a> {
         )
 }
 
+/// Parse a template string into prefix, suffix, and random components.
+///
+/// `temp` is the template string, with three or more consecutive `X`s
+/// representing a placeholder for randomly generated characters (for
+/// example, `"abc_XXX.txt"`). If `temp` ends in an `X`, then a suffix
+/// can be specified by `suffix` instead.
+///
+/// # Errors
+///
+/// * If there are fewer than three consecutive `X`s in `temp`.
+/// * If `suffix` is a [`Some`] object but `temp` does not end in `X`.
+/// * If the suffix (specified either way) contains a path separator.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// assert_eq!(parse_template("XXX", None).unwrap(), ("", 3, ""));
+/// assert_eq!(parse_template("abcXXX", None).unwrap(), ("abc", 3, ""));
+/// assert_eq!(parse_template("XXXdef", None).unwrap(), ("", 3, "def"));
+/// assert_eq!(parse_template("abcXXXdef", None).unwrap(), ("abc", 3, "def"));
+/// ```
 fn parse_template<'a>(
     temp: &'a str,
     suffix: Option<&'a str>,
-) -> UResult<(&'a str, usize, &'a str)> {
+) -> Result<(&'a str, usize, &'a str), MkTempError> {
     let right = match temp.rfind('X') {
         Some(r) => r + 1,
-        None => return Err(MkTempError::TooFewXs(temp.into()).into()),
+        None => return Err(MkTempError::TooFewXs(temp.into())),
     };
     let left = temp[..right].rfind(|c| c != 'X').map_or(0, |i| i + 1);
     let prefix = &temp[..left];
     let rand = right - left;
 
     if rand < 3 {
-        return Err(MkTempError::TooFewXs(temp.into()).into());
+        return Err(MkTempError::TooFewXs(temp.into()));
     }
 
     let mut suf = &temp[right..];
@@ -227,12 +260,16 @@ fn parse_template<'a>(
         if suf.is_empty() {
             suf = s;
         } else {
-            return Err(MkTempError::MustEndInX(temp.into()).into());
+            return Err(MkTempError::MustEndInX(temp.into()));
         }
     };
 
+    if prefix.chars().any(is_separator) {
+        return Err(MkTempError::PrefixContainsDirSeparator(temp.into()));
+    }
+
     if suf.chars().any(is_separator) {
-        return Err(MkTempError::ContainsDirSeparator(suf.into()).into());
+        return Err(MkTempError::SuffixContainsDirSeparator(suf.into()));
     }
 
     Ok((prefix, rand, suf))
@@ -303,4 +340,38 @@ fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> 
     path.push(filename);
 
     println_verbatim(path).map_err_context(|| "failed to print directory name".to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parse_template;
+
+    #[test]
+    fn test_parse_template_no_suffix() {
+        assert_eq!(parse_template("XXX", None).unwrap(), ("", 3, ""));
+        assert_eq!(parse_template("abcXXX", None).unwrap(), ("abc", 3, ""));
+        assert_eq!(parse_template("XXXdef", None).unwrap(), ("", 3, "def"));
+        assert_eq!(
+            parse_template("abcXXXdef", None).unwrap(),
+            ("abc", 3, "def")
+        );
+    }
+
+    #[test]
+    fn test_parse_template_suffix() {
+        assert_eq!(parse_template("XXX", Some("def")).unwrap(), ("", 3, "def"));
+        assert_eq!(
+            parse_template("abcXXX", Some("def")).unwrap(),
+            ("abc", 3, "def")
+        );
+    }
+
+    #[test]
+    fn test_parse_template_errors() {
+        assert!(parse_template("a/bXXX", None).is_err());
+        assert!(parse_template("XXXa/b", None).is_err());
+        assert!(parse_template("XX", None).is_err());
+        assert!(parse_template("XXXabc", Some("def")).is_err());
+        assert!(parse_template("XXX", Some("a/b")).is_err());
+    }
 }

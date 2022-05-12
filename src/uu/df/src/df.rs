@@ -12,6 +12,7 @@ mod filesystem;
 mod table;
 
 use blocks::{HumanReadable, SizeFormat};
+use table::HeaderMode;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::fsext::{read_fs_list, MountInfo};
@@ -32,6 +33,13 @@ use crate::table::Table;
 static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
                       or all file systems by default.";
 const USAGE: &str = "{} [OPTION]... [FILE]...";
+const LONG_HELP: &str = "Display values are in units of the first available SIZE from --block-size,
+and the DF_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environment variables.
+Otherwise, units default to 1024 bytes (or 512 if POSIXLY_CORRECT is set).
+
+SIZE is an integer and optional unit (example: 10M is 10*1024*1024).
+Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB,... (powers
+of 1000).";
 
 static OPT_HELP: &str = "help";
 static OPT_ALL: &str = "all";
@@ -65,6 +73,7 @@ struct Options {
     show_all_fs: bool,
     size_format: SizeFormat,
     block_size: BlockSize,
+    header_mode: HeaderMode,
 
     /// Optional list of filesystem types to include in the output table.
     ///
@@ -92,6 +101,7 @@ impl Default for Options {
             show_all_fs: Default::default(),
             block_size: Default::default(),
             size_format: Default::default(),
+            header_mode: Default::default(),
             include: Default::default(),
             exclude: Default::default(),
             show_total: Default::default(),
@@ -169,6 +179,21 @@ impl Options {
                 ),
                 ParseSizeError::ParseFailure(s) => OptionsError::InvalidBlockSize(s),
             })?,
+            header_mode: {
+                if matches.is_present(OPT_HUMAN_READABLE_BINARY)
+                    || matches.is_present(OPT_HUMAN_READABLE_DECIMAL)
+                {
+                    HeaderMode::HumanReadable
+                } else if matches.is_present(OPT_PORTABILITY) {
+                    HeaderMode::PosixPortability
+                // is_present() doesn't work here, it always returns true because OPT_OUTPUT has
+                // default values and hence is always present
+                } else if matches.occurrences_of(OPT_OUTPUT) > 0 {
+                    HeaderMode::Output
+                } else {
+                    HeaderMode::Default
+                }
+            },
             size_format: {
                 if matches.is_present(OPT_HUMAN_READABLE_BINARY) {
                     SizeFormat::HumanReadable(HumanReadable::Binary)
@@ -427,6 +452,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
+        .after_help(LONG_HELP)
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_HELP)
@@ -445,6 +471,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('B')
                 .long("block-size")
                 .takes_value(true)
+                .value_name("SIZE")
                 .overrides_with_all(&[OPT_KILO, OPT_BLOCKSIZE])
                 .help(
                     "scale sizes by SIZE before printing them; e.g.\
@@ -501,6 +528,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_OUTPUT)
                 .long("output")
                 .takes_value(true)
+                .value_name("FIELD_LIST")
                 .min_values(0)
                 .require_equals(true)
                 .use_value_delimiter(true)
@@ -510,7 +538,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .default_values(&["source", "size", "used", "avail", "pcent", "target"])
                 .conflicts_with_all(&[OPT_INODES, OPT_PORTABILITY, OPT_PRINT_TYPE])
                 .help(
-                    "use the output format defined by FIELD_LIST,\
+                    "use the output format defined by FIELD_LIST, \
                      or print all fields if FIELD_LIST is omitted.",
                 ),
         )
@@ -533,6 +561,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long("type")
                 .allow_invalid_utf8(true)
                 .takes_value(true)
+                .value_name("TYPE")
                 .multiple_occurrences(true)
                 .help("limit listing to file systems of type TYPE"),
         )
@@ -549,6 +578,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long("exclude-type")
                 .allow_invalid_utf8(true)
                 .takes_value(true)
+                .value_name("TYPE")
                 .use_value_delimiter(true)
                 .multiple_occurrences(true)
                 .help("limit listing to file systems not of type TYPE"),

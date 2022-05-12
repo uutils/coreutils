@@ -5,9 +5,12 @@
 //! Types for representing and displaying block sizes.
 use crate::OPT_BLOCKSIZE;
 use clap::ArgMatches;
-use std::fmt;
+use std::{env, fmt};
 
-use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::{
+    display::Quotable,
+    parse_size::{parse_size, ParseSizeError},
+};
 
 /// The first ten powers of 1024.
 const IEC_BASES: [u128; 10] = [
@@ -73,7 +76,7 @@ fn to_magnitude_and_suffix_1024(n: u128) -> Result<String, ()> {
     Err(())
 }
 
-/// Convert a number, except multiples of 1024, into a string like "12kB" or "34MB".
+/// Convert a number into a string like "12kB" or "34MB".
 ///
 /// Powers of 1000 become "1kB", "1MB", "1GB", etc.
 ///
@@ -110,7 +113,7 @@ fn to_magnitude_and_suffix_not_powers_of_1024(n: u128) -> Result<String, ()> {
 ///
 /// If the number is too large to represent.
 fn to_magnitude_and_suffix(n: u128) -> Result<String, ()> {
-    if n % 1024 == 0 {
+    if n % 1024 == 0 && n % 1000 != 0 {
         to_magnitude_and_suffix_1024(n)
     } else {
         to_magnitude_and_suffix_not_powers_of_1024(n)
@@ -159,6 +162,7 @@ pub(crate) enum HumanReadable {
 /// size.
 ///
 /// The default variant is `Bytes(1024)`.
+#[derive(Debug, PartialEq)]
 pub(crate) enum BlockSize {
     /// A fixed number of bytes.
     ///
@@ -166,16 +170,35 @@ pub(crate) enum BlockSize {
     Bytes(u64),
 }
 
+impl BlockSize {
+    /// Returns the associated value
+    pub(crate) fn as_u64(&self) -> u64 {
+        match *self {
+            Self::Bytes(n) => n,
+        }
+    }
+}
+
 impl Default for BlockSize {
     fn default() -> Self {
-        Self::Bytes(1024)
+        if env::var("POSIXLY_CORRECT").is_ok() {
+            Self::Bytes(512)
+        } else {
+            Self::Bytes(1024)
+        }
     }
 }
 
 pub(crate) fn block_size_from_matches(matches: &ArgMatches) -> Result<BlockSize, ParseSizeError> {
     if matches.is_present(OPT_BLOCKSIZE) {
         let s = matches.value_of(OPT_BLOCKSIZE).unwrap();
-        Ok(BlockSize::Bytes(parse_size(s)?))
+        let bytes = parse_size(s)?;
+
+        if bytes > 0 {
+            Ok(BlockSize::Bytes(bytes))
+        } else {
+            Err(ParseSizeError::ParseFailure(format!("{}", s.quote())))
+        }
     } else {
         Ok(Default::default())
     }
@@ -194,6 +217,8 @@ impl fmt::Display for BlockSize {
 
 #[cfg(test)]
 mod tests {
+
+    use std::env;
 
     use crate::blocks::{to_magnitude_and_suffix, BlockSize};
 
@@ -240,9 +265,24 @@ mod tests {
     }
 
     #[test]
+    fn test_to_magnitude_and_suffix_multiples_of_1000_and_1024() {
+        assert_eq!(to_magnitude_and_suffix(128_000).unwrap(), "128kB");
+        assert_eq!(to_magnitude_and_suffix(1000 * 1024).unwrap(), "1.1MB");
+        assert_eq!(to_magnitude_and_suffix(1_000_000_000_000).unwrap(), "1TB");
+    }
+
+    #[test]
     fn test_block_size_display() {
         assert_eq!(format!("{}", BlockSize::Bytes(1024)), "1K");
         assert_eq!(format!("{}", BlockSize::Bytes(2 * 1024)), "2K");
         assert_eq!(format!("{}", BlockSize::Bytes(3 * 1024 * 1024)), "3M");
+    }
+
+    #[test]
+    fn test_default_block_size() {
+        assert_eq!(BlockSize::Bytes(1024), BlockSize::default());
+        env::set_var("POSIXLY_CORRECT", "1");
+        assert_eq!(BlockSize::Bytes(512), BlockSize::default());
+        env::remove_var("POSIXLY_CORRECT");
     }
 }

@@ -289,6 +289,23 @@ impl<'a> RowFormatter<'a> {
     }
 }
 
+/// A HeaderMode defines what header labels should be shown.
+pub(crate) enum HeaderMode {
+    Default,
+    // the user used -h or -H
+    HumanReadable,
+    // the user used -P
+    PosixPortability,
+    // the user used --output
+    Output,
+}
+
+impl Default for HeaderMode {
+    fn default() -> Self {
+        Self::Default
+    }
+}
+
 /// The data of the header row.
 struct Header {}
 
@@ -302,15 +319,22 @@ impl Header {
         for column in &options.columns {
             let header = match column {
                 Column::Source => String::from("Filesystem"),
-                Column::Size => match options.size_format {
-                    SizeFormat::HumanReadable(_) => String::from("Size"),
-                    SizeFormat::StaticBlockSize => {
-                        format!("{}-blocks", options.block_size)
+                Column::Size => match options.header_mode {
+                    HeaderMode::HumanReadable => String::from("Size"),
+                    HeaderMode::PosixPortability => {
+                        format!("{}-blocks", options.block_size.as_u64())
                     }
+                    _ => format!("{}-blocks", options.block_size),
                 },
                 Column::Used => String::from("Used"),
-                Column::Avail => String::from("Available"),
-                Column::Pcent => String::from("Use%"),
+                Column::Avail => match options.header_mode {
+                    HeaderMode::HumanReadable | HeaderMode::Output => String::from("Avail"),
+                    _ => String::from("Available"),
+                },
+                Column::Pcent => match options.header_mode {
+                    HeaderMode::PosixPortability => String::from("Capacity"),
+                    _ => String::from("Use%"),
+                },
                 Column::Target => String::from("Mounted on"),
                 Column::Itotal => String::from("Inodes"),
                 Column::Iused => String::from("IUsed"),
@@ -428,7 +452,7 @@ mod tests {
 
     use crate::blocks::{HumanReadable, SizeFormat};
     use crate::columns::Column;
-    use crate::table::{Header, Row, RowFormatter};
+    use crate::table::{Header, HeaderMode, Row, RowFormatter};
     use crate::{BlockSize, Options};
 
     const COLUMNS_WITH_FS_TYPE: [Column; 7] = [
@@ -448,6 +472,30 @@ mod tests {
         Column::Ipcent,
         Column::Target,
     ];
+
+    impl Default for Row {
+        fn default() -> Self {
+            Self {
+                file: Some("/path/to/file".to_string()),
+                fs_device: "my_device".to_string(),
+                fs_type: "my_type".to_string(),
+                fs_mount: "my_mount".to_string(),
+
+                bytes: 100,
+                bytes_used: 25,
+                bytes_avail: 75,
+                bytes_usage: Some(0.25),
+
+                #[cfg(target_os = "macos")]
+                bytes_capacity: Some(0.5),
+
+                inodes: 10,
+                inodes_used: 2,
+                inodes_free: 8,
+                inodes_usage: Some(0.2),
+            }
+        }
+    }
 
     #[test]
     fn test_default_header() {
@@ -524,37 +572,49 @@ mod tests {
     }
 
     #[test]
-    fn test_header_with_human_readable_binary() {
+    fn test_human_readable_header() {
         let options = Options {
-            size_format: SizeFormat::HumanReadable(HumanReadable::Binary),
+            header_mode: HeaderMode::HumanReadable,
+            ..Default::default()
+        };
+        assert_eq!(
+            Header::get_headers(&options),
+            vec!("Filesystem", "Size", "Used", "Avail", "Use%", "Mounted on")
+        );
+    }
+
+    #[test]
+    fn test_posix_portability_header() {
+        let options = Options {
+            header_mode: HeaderMode::PosixPortability,
             ..Default::default()
         };
         assert_eq!(
             Header::get_headers(&options),
             vec!(
                 "Filesystem",
-                "Size",
+                "1024-blocks",
                 "Used",
                 "Available",
-                "Use%",
+                "Capacity",
                 "Mounted on"
             )
         );
     }
 
     #[test]
-    fn test_header_with_human_readable_si() {
+    fn test_output_header() {
         let options = Options {
-            size_format: SizeFormat::HumanReadable(HumanReadable::Decimal),
+            header_mode: HeaderMode::Output,
             ..Default::default()
         };
         assert_eq!(
             Header::get_headers(&options),
             vec!(
                 "Filesystem",
-                "Size",
+                "1K-blocks",
                 "Used",
-                "Available",
+                "Avail",
                 "Use%",
                 "Mounted on"
             )
@@ -568,9 +628,7 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
-            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
-            fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
 
             bytes: 100,
@@ -578,13 +636,7 @@ mod tests {
             bytes_avail: 75,
             bytes_usage: Some(0.25),
 
-            #[cfg(target_os = "macos")]
-            bytes_capacity: Some(0.5),
-
-            inodes: 10,
-            inodes_used: 2,
-            inodes_free: 8,
-            inodes_usage: Some(0.2),
+            ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options);
         assert_eq!(
@@ -601,7 +653,6 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
-            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
@@ -611,13 +662,7 @@ mod tests {
             bytes_avail: 75,
             bytes_usage: Some(0.25),
 
-            #[cfg(target_os = "macos")]
-            bytes_capacity: Some(0.5),
-
-            inodes: 10,
-            inodes_used: 2,
-            inodes_free: 8,
-            inodes_usage: Some(0.2),
+            ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options);
         assert_eq!(
@@ -634,23 +679,15 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
-            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
-            fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
-
-            bytes: 100,
-            bytes_used: 25,
-            bytes_avail: 75,
-            bytes_usage: Some(0.25),
-
-            #[cfg(target_os = "macos")]
-            bytes_capacity: Some(0.5),
 
             inodes: 10,
             inodes_used: 2,
             inodes_free: 8,
             inodes_usage: Some(0.2),
+
+            ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options);
         assert_eq!(
@@ -667,23 +704,9 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
-            file: Some("/path/to/file".to_string()),
-            fs_device: "my_device".to_string(),
-            fs_type: "my_type".to_string(),
-            fs_mount: "my_mount".to_string(),
-
             bytes: 100,
-            bytes_used: 25,
-            bytes_avail: 75,
-            bytes_usage: Some(0.25),
-
-            #[cfg(target_os = "macos")]
-            bytes_capacity: Some(0.5),
-
             inodes: 10,
-            inodes_used: 2,
-            inodes_free: 8,
-            inodes_usage: Some(0.2),
+            ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options);
         assert_eq!(fmt.get_values(), vec!("1", "10"));
@@ -697,7 +720,6 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
-            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
@@ -707,13 +729,7 @@ mod tests {
             bytes_avail: 3000,
             bytes_usage: Some(0.25),
 
-            #[cfg(target_os = "macos")]
-            bytes_capacity: Some(0.5),
-
-            inodes: 10,
-            inodes_used: 2,
-            inodes_free: 8,
-            inodes_usage: Some(0.2),
+            ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options);
         assert_eq!(
@@ -738,7 +754,6 @@ mod tests {
             ..Default::default()
         };
         let row = Row {
-            file: Some("/path/to/file".to_string()),
             fs_device: "my_device".to_string(),
             fs_type: "my_type".to_string(),
             fs_mount: "my_mount".to_string(),
@@ -748,13 +763,7 @@ mod tests {
             bytes_avail: 3072,
             bytes_usage: Some(0.25),
 
-            #[cfg(target_os = "macos")]
-            bytes_capacity: Some(0.5),
-
-            inodes: 10,
-            inodes_used: 2,
-            inodes_free: 8,
-            inodes_usage: Some(0.2),
+            ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options);
         assert_eq!(
@@ -774,32 +783,14 @@ mod tests {
     #[test]
     fn test_row_formatter_with_round_up_usage() {
         let options = Options {
-            block_size: BlockSize::Bytes(1),
+            columns: vec![Column::Pcent],
             ..Default::default()
         };
         let row = Row {
-            file: Some("/path/to/file".to_string()),
-            fs_device: "my_device".to_string(),
-            fs_type: "my_type".to_string(),
-            fs_mount: "my_mount".to_string(),
-
-            bytes: 100,
-            bytes_used: 25,
-            bytes_avail: 75,
             bytes_usage: Some(0.251),
-
-            #[cfg(target_os = "macos")]
-            bytes_capacity: Some(0.5),
-
-            inodes: 10,
-            inodes_used: 2,
-            inodes_free: 8,
-            inodes_usage: Some(0.2),
+            ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options);
-        assert_eq!(
-            fmt.get_values(),
-            vec!("my_device", "100", "25", "75", "26%", "my_mount")
-        );
+        assert_eq!(fmt.get_values(), vec!("26%"));
     }
 }

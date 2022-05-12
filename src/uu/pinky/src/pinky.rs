@@ -221,10 +221,10 @@ impl Capitalize for str {
 
 fn idle_string(when: i64) -> String {
     thread_local! {
-        static NOW: time::Tm = time::now()
+        static NOW: time::OffsetDateTime = time::OffsetDateTime::now_local().unwrap();
     }
     NOW.with(|n| {
-        let duration = n.to_timespec().sec - when;
+        let duration = n.unix_timestamp() - when;
         if duration < 60 {
             // less than 1min
             "     ".to_owned()
@@ -242,7 +242,11 @@ fn idle_string(when: i64) -> String {
 }
 
 fn time_string(ut: &Utmpx) -> String {
-    time::strftime("%b %e %H:%M", &ut.login_time()).unwrap() // LC_ALL=C
+    // "%b %e %H:%M"
+    let time_format: Vec<time::format_description::FormatItem> =
+        time::format_description::parse("[month repr:short] [day padding:space] [hour]:[minute]")
+            .unwrap();
+    ut.login_time().format(&time_format).unwrap() // LC_ALL=C
 }
 
 fn gecos_to_fullname(pw: &Passwd) -> Option<String> {
