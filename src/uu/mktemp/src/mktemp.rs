@@ -139,11 +139,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let dry_run = matches.is_present(OPT_DRY_RUN);
     let suppress_file_err = matches.is_present(OPT_QUIET);
 
-    let (prefix, rand, suffix) = parse_template(template, matches.value_of(OPT_SUFFIX))?;
-
-    if matches.is_present(OPT_TMPDIR) && PathBuf::from(prefix).is_absolute() {
+    // If `--tmpdir` is given, the template cannot be an absolute
+    // path. For example, `mktemp --tmpdir=a /XXX` is not allowed.
+    if matches.is_present(OPT_TMPDIR) && PathBuf::from(template).is_absolute() {
         return Err(MkTempError::InvalidTemplate(template.into()).into());
     }
+
+    let (prefix, rand, suffix) = parse_template(template, matches.value_of(OPT_SUFFIX))?;
 
     let res = if dry_run {
         dry_exec(tmpdir, prefix, rand, suffix)
