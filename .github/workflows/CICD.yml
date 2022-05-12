@@ -534,7 +534,7 @@ jobs:
               --arg size "$SIZE" \
               --arg multisize "$SIZEMULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
-    - uses: actions/upload-artifact@v2
+    - uses: actions/upload-artifact@v3
       with:
         name: size-result
         path: size-result.json
@@ -762,7 +762,7 @@ jobs:
         args: --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
         toolchain: ${{ env.RUST_MIN_SRV }}
     - name: Archive executable artifacts
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: ${{ env.PROJECT_NAME }}-${{ matrix.job.target }}
         path: target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}

@@ -146,22 +146,22 @@ jobs:
           # Compress logs before upload (fails otherwise)
           gzip ${{ steps.vars.outputs.TEST_LOGS_GLOB }}
     - name: Reserve SHA1/ID of 'test-summary'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: "${{ steps.summary.outputs.HASH }}"
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Reserve test results summary
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: test-summary
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Reserve test logs
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: test-logs
         path: "${{ steps.vars.outputs.TEST_LOGS_GLOB }}"
     - name: Upload full json results
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: gnu-full-result.json
         path: ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
