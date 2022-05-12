@@ -24,7 +24,7 @@ jobs:
     name: Style/cargo-deny
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: EmbarkStudios/cargo-deny-action@v1
 
   style_deps:
@@ -43,7 +43,7 @@ jobs:
           - { os: macos-latest   , features: "feat_Tier1,feat_require_unix,feat_require_unix_utmpx" }
           - { os: windows-latest , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v1
     - name: Initialize workflow variables
       id: vars
@@ -101,7 +101,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v1
     - name: Initialize workflow variables
       id: vars
@@ -165,7 +165,7 @@ jobs:
           - { os: macos-latest   , features: feat_os_macos }
           - { os: windows-latest , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v1
     - name: Initialize workflow variables
       id: vars
@@ -223,7 +223,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v1
     - name: Initialize workflow variables
       id: vars
@@ -275,7 +275,7 @@ jobs:
 #          - { os: macos-latest   , features: feat_os_macos }
 #          - { os: windows-latest , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v1
     - name: Initialize workflow variables
       id: vars
@@ -320,7 +320,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v1
     - name: Initialize workflow variables
       id: vars
@@ -397,7 +397,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v1
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
@@ -422,7 +422,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v1
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
@@ -452,7 +452,7 @@ jobs:
           - { os: macos-latest   , features: feat_os_macos }
           - { os: windows-latest , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v1
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
@@ -478,7 +478,7 @@ jobs:
           - { os: macos-latest   , features: feat_os_macos }
           - { os: windows-latest , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v1
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
@@ -502,7 +502,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v1
     - name: Install dependencies
       shell: bash
@@ -568,7 +568,7 @@ jobs:
           - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows } ## note: requires rust >= 1.43.0 to link correctly
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v1
     - name: Initialize workflow variables
       id: vars
@@ -820,7 +820,7 @@ jobs:
         job:
           - { os: ubuntu-latest }
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v1
     - name: Install/setup prerequisites
       shell: bash
@@ -857,7 +857,7 @@ jobs:
     env:
       TERMUX: v0.118.0
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: AVD cache
       uses: actions/cache@v2
       id: avd-cache
@@ -911,7 +911,7 @@ jobs:
     env:
       mem: 2048
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v1
     - name: Prepare, build and test
       ## spell-checker:ignore (ToDO) sshfs usesh vmactions
@@ -979,7 +979,7 @@ jobs:
           - { os: macos-latest   , features: macos }
           - { os: windows-latest , features: windows }
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v1
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
     #   run: git checkout ${{ github.head_ref }}
