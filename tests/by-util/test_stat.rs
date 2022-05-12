@@ -360,12 +360,11 @@ fn test_pipe_fifo() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_stdin_pipe_fifo1() {
     // $ echo | stat -
     // File: -
     // Size: 0               Blocks: 0          IO Block: 4096   fifo
-    // use std::process::{Command, Stdio};
     new_ucmd!()
         .arg("-")
         .set_stdin(std::process::Stdio::piped())
@@ -374,7 +373,6 @@ fn test_stdin_pipe_fifo1() {
         .stdout_contains("fifo")
         .stdout_contains("File: -")
         .succeeded();
-
     new_ucmd!()
         .args(&["-L", "-"])
         .set_stdin(std::process::Stdio::piped())
@@ -386,7 +384,7 @@ fn test_stdin_pipe_fifo1() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_stdin_pipe_fifo2() {
     // $ stat -
     // File: -
@@ -402,16 +400,15 @@ fn test_stdin_pipe_fifo2() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 fn test_stdin_redirect() {
     // $ touch f && stat - < f
     // File: -
     // Size: 0               Blocks: 0          IO Block: 4096   regular empty file
-
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.touch("f");
-    new_ucmd!()
+    ts.ucmd()
         .arg("-")
         .set_stdin(std::fs::File::open(at.plus("f")).unwrap())
         .run()
