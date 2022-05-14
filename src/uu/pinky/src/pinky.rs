@@ -179,7 +179,8 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::USER)
                 .takes_value(true)
-                .multiple_occurrences(true),
+                .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::Username),
         )
         .arg(
             // Redefine the help argument to not include the short flag

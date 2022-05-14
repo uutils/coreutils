@@ -272,6 +272,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('f')
                 .long(OPT_FILE)
                 .takes_value(true)
+                .value_hint(clap::ValueHint::FilePath)
                 .help("like --date; once for each line of DATEFILE"),
         )
         .arg(
@@ -303,6 +304,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('r')
                 .long(OPT_REFERENCE)
                 .takes_value(true)
+                .value_hint(clap::ValueHint::AnyPath)
                 .help("display the last modification time of FILE"),
         )
         .arg(

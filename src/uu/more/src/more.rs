@@ -183,7 +183,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::FILES)
                 .required(false)
                 .multiple_occurrences(true)
-                .help("Path to the files to be read"),
+                .help("Path to the files to be read")
+                .value_hint(clap::ValueHint::FilePath),
         )
 }
 

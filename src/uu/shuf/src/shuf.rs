@@ -158,14 +158,16 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::OUTPUT)
                 .takes_value(true)
                 .value_name("FILE")
-                .help("write result to FILE instead of standard output"),
+                .help("write result to FILE instead of standard output")
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::RANDOM_SOURCE)
                 .long(options::RANDOM_SOURCE)
                 .takes_value(true)
                 .value_name("FILE")
-                .help("get random bytes from FILE"),
+                .help("get random bytes from FILE")
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::REPEAT)
@@ -179,7 +181,11 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::ZERO_TERMINATED)
                 .help("line delimiter is NUL, not newline"),
         )
-        .arg(Arg::new(options::FILE).takes_value(true))
+        .arg(
+            Arg::new(options::FILE)
+                .takes_value(true)
+                .value_hint(clap::ValueHint::FilePath),
+        )
 }
 
 fn read_input_file(filename: &str) -> UResult<Vec<u8>> {

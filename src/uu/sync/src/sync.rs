@@ -217,7 +217,8 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(ARG_FILES)
                 .multiple_occurrences(true)
-                .takes_value(true),
+                .takes_value(true)
+                .value_hint(clap::ValueHint::AnyPath),
         )
 }
 

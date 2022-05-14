@@ -232,6 +232,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .multiple_occurrences(true)
                 .takes_value(true)
                 .hide(true)
-                .required(true),
+                .required(true)
+                .value_hint(clap::ValueHint::CommandName),
         )
 }

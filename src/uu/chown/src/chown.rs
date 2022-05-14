@@ -134,6 +134,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::REFERENCE)
                 .help("use RFILE's owner and group rather than specifying OWNER:GROUP values")
                 .value_name("RFILE")
+                .value_hint(clap::ValueHint::FilePath)
                 .min_values(1),
         )
         .arg(

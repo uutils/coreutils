@@ -210,7 +210,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                     "read input from the files specified by
     NUL-terminated names in file F;
     If F is - then read names from standard input",
-                ),
+                )
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::LINES)
@@ -234,7 +235,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(ARG_FILES)
                 .multiple_occurrences(true)
                 .takes_value(true)
-                .allow_invalid_utf8(true),
+                .allow_invalid_utf8(true)
+                .value_hint(clap::ValueHint::FilePath),
         )
 }
 

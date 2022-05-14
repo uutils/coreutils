@@ -583,7 +583,11 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .multiple_occurrences(true)
                 .help("limit listing to file systems not of type TYPE"),
         )
-        .arg(Arg::new(OPT_PATHS).multiple_occurrences(true))
+        .arg(
+            Arg::new(OPT_PATHS)
+                .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::AnyPath),
+        )
 }
 
 #[cfg(test)]

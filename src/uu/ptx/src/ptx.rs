@@ -754,7 +754,8 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
-                .multiple_occurrences(true),
+                .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::AUTO_REFERENCE)
@@ -826,7 +827,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::BREAK_FILE)
                 .help("word break characters in this FILE")
                 .value_name("FILE")
-                .takes_value(true),
+                .takes_value(true)
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::IGNORE_CASE)
@@ -849,7 +851,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::IGNORE_FILE)
                 .help("read ignore word list from FILE")
                 .value_name("FILE")
-                .takes_value(true),
+                .takes_value(true)
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::ONLY_FILE)
@@ -857,7 +860,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::ONLY_FILE)
                 .help("read only word list from this FILE")
                 .value_name("FILE")
-                .takes_value(true),
+                .takes_value(true)
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::REFERENCES)

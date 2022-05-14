@@ -107,7 +107,11 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help("line delimiter is NUL, not newline")
                 .overrides_with(options::ZERO_NAME),
         )
-        .arg(Arg::new(options::FILES_NAME).multiple_occurrences(true))
+        .arg(
+            Arg::new(options::FILES_NAME)
+                .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::FilePath),
+        )
 }
 
 #[derive(Debug, PartialEq)]
