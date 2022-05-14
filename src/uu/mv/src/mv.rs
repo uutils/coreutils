@@ -13,7 +13,7 @@ mod error;
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgMatches, Command, ErrorKind};
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -70,13 +70,26 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(&*format!(
-            "{}\n{}",
-            LONG_HELP,
-            backup_control::BACKUP_CONTROL_LONG_HELP
-        ))
-        .get_matches_from(args);
+    let help = format!(
+        "{}\n{}",
+        LONG_HELP,
+        backup_control::BACKUP_CONTROL_LONG_HELP
+    );
+    let mut app = uu_app().after_help(&*help);
+    let matches = app
+        .try_get_matches_from_mut(args)
+        .unwrap_or_else(|e| e.exit());
+
+    if !matches.is_present(OPT_TARGET_DIRECTORY) && matches.occurrences_of(ARG_FILES) == 1 {
+        app.error(
+            ErrorKind::TooFewValues,
+            format!(
+                "The argument '<{}>...' requires at least 2 values, but only 1 was provided",
+                ARG_FILES
+            ),
+        )
+        .exit();
+    }
 
     let files: Vec<OsString> = matches
         .values_of_os(ARG_FILES)
@@ -180,7 +193,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         Arg::new(ARG_FILES)
             .multiple_occurrences(true)
             .takes_value(true)
-            .min_values(2)
+            .min_values(1)
             .required(true)
             .allow_invalid_utf8(true)
         )
