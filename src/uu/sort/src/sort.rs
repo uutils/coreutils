@@ -348,9 +348,9 @@ impl GlobalSettings {
         ];
         let mut size_string = input.trim().to_string();
 
-        if size_string.ends_with(|c: char| ALLOW_LIST.contains(&c) || c.is_digit(10)) {
+        if size_string.ends_with(|c: char| ALLOW_LIST.contains(&c) || c.is_ascii_digit()) {
             // b 1, K 1024 (default)
-            if size_string.ends_with(|c: char| c.is_digit(10)) {
+            if size_string.ends_with(|c: char| c.is_ascii_digit()) {
                 size_string.push('K');
             } else if size_string.ends_with('b') {
                 size_string.pop();

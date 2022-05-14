@@ -244,7 +244,7 @@ fn is_format_size_decimal(
         return false;
     }
     match ch {
-        Some(d) if d.is_digit(10) => {
+        Some(d) if d.is_ascii_digit() => {
             decimal_size.push(d);
             true
         }
