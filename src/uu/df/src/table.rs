@@ -233,7 +233,7 @@ impl<'a> RowFormatter<'a> {
             SizeFormat::HumanReadable(h) => self.scaled_human_readable(size, h),
             SizeFormat::StaticBlockSize => {
                 let BlockSize::Bytes(d) = self.options.block_size;
-                (size / d).to_string()
+                (size as f64 / d as f64).ceil().to_string()
             }
         }
     }
@@ -792,5 +792,29 @@ mod tests {
         };
         let fmt = RowFormatter::new(&row, &options);
         assert_eq!(fmt.get_values(), vec!("26%"));
+    }
+
+    #[test]
+    fn test_row_formatter_with_round_up_byte_values() {
+        fn get_formatted_values(bytes: u64, bytes_used: u64, bytes_avail: u64) -> Vec<String> {
+            let options = Options {
+                block_size: BlockSize::Bytes(1000),
+                columns: vec![Column::Size, Column::Used, Column::Avail],
+                ..Default::default()
+            };
+
+            let row = Row {
+                bytes,
+                bytes_used,
+                bytes_avail,
+                ..Default::default()
+            };
+            RowFormatter::new(&row, &options).get_values()
+        }
+
+        assert_eq!(get_formatted_values(100, 100, 0), vec!("1", "1", "0"));
+        assert_eq!(get_formatted_values(100, 99, 1), vec!("1", "1", "1"));
+        assert_eq!(get_formatted_values(1000, 1000, 0), vec!("1", "1", "0"));
+        assert_eq!(get_formatted_values(1001, 1000, 1), vec!("2", "1", "1"));
     }
 }
