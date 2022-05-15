@@ -99,7 +99,7 @@ fn to_magnitude_and_suffix_not_powers_of_1024(n: u128) -> Result<String, ()> {
 
         if rem % (SI_BASES[i] / 10) == 0 {
             Ok(format!("{}.{}{}", quot, tenths_place, suffix))
-        } else if tenths_place + 1 == 10 {
+        } else if tenths_place + 1 == 10 || quot >= 10 {
             Ok(format!("{}{}", quot + 1, suffix))
         } else {
             Ok(format!("{}.{}{}", quot, tenths_place + 1, suffix))
@@ -245,6 +245,7 @@ mod tests {
         assert_eq!(to_magnitude_and_suffix(1001).unwrap(), "1.1kB");
         assert_eq!(to_magnitude_and_suffix(1023).unwrap(), "1.1kB");
         assert_eq!(to_magnitude_and_suffix(1025).unwrap(), "1.1kB");
+        assert_eq!(to_magnitude_and_suffix(10_001).unwrap(), "11kB");
         assert_eq!(to_magnitude_and_suffix(999_000).unwrap(), "999kB");
 
         assert_eq!(to_magnitude_and_suffix(999_001).unwrap(), "1MB");
