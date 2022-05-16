@@ -47,7 +47,7 @@ use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::ringbuffer::RingBuffer;
 
 #[cfg(unix)]
-use crate::platform::stdin_is_pipe_or_fifo;
+use crate::platform::{stdin_is_bad_fd, stdin_is_pipe_or_fifo};
 #[cfg(unix)]
 use std::fs::metadata;
 #[cfg(unix)]
@@ -65,9 +65,13 @@ const ABOUT: &str = "\
 const USAGE: &str = "{} [FLAG]... [FILE]...";
 
 pub mod text {
-    pub static STDIN_STR: &str = "standard input";
+    pub static DASH: &str = "-";
+    pub static DEV_STDIN: &str = "/dev/stdin";
+    pub static STDIN_HEADER: &str = "standard input";
     pub static NO_FILES_REMAINING: &str = "no files remaining";
     pub static NO_SUCH_FILE: &str = "No such file or directory";
+    #[cfg(unix)]
+    pub static BAD_FD: &str = "Bad file descriptor";
     #[cfg(target_os = "linux")]
     pub static BACKEND: &str = "inotify";
     #[cfg(all(unix, not(target_os = "linux")))]
@@ -116,18 +120,18 @@ enum FollowMode {
 
 #[derive(Debug, Default)]
 struct Settings {
-    mode: FilterMode,
-    sleep_sec: Duration,
-    max_unchanged_stats: u32,
     beginning: bool,
     follow: Option<FollowMode>,
+    max_unchanged_stats: u32,
+    mode: FilterMode,
+    paths: VecDeque<PathBuf>,
+    pid: platform::Pid,
+    retry: bool,
+    return_code: i32,
+    sleep_sec: Duration,
     use_polling: bool,
     verbose: bool,
-    retry: bool,
-    pid: platform::Pid,
-    paths: Vec<PathBuf>,
-    presume_input_pipe: bool,
-    return_code: i32,
+    stdin_is_pipe_or_fifo: bool,
 }
 
 impl Settings {
@@ -217,58 +221,15 @@ impl Settings {
             }
         }
 
-        settings.presume_input_pipe = matches.is_present(options::PRESUME_INPUT_PIPE);
+        settings.stdin_is_pipe_or_fifo = matches.is_present(options::PRESUME_INPUT_PIPE);
 
-        let mut paths = matches
+        settings.paths = matches
             .values_of(options::ARG_FILES)
             .map(|v| v.map(PathBuf::from).collect())
-            .unwrap_or_else(|| vec![PathBuf::from("-")]);
-
-        // Filter out non tailable paths depending on `FollowMode`.
-        paths.retain(|path| {
-            if !path.is_stdin() {
-                if !(path.is_tailable()) {
-                    if settings.follow == Some(FollowMode::Descriptor) && settings.retry {
-                        show_warning!("--retry only effective for the initial open");
-                    }
-                    if !path.exists() {
-                        settings.return_code = 1;
-                        show_error!(
-                            "cannot open {} for reading: {}",
-                            path.quote(),
-                            text::NO_SUCH_FILE
-                        );
-                    } else if path.is_dir() {
-                        settings.return_code = 1;
-                        show_error!("error reading {}: Is a directory", path.quote());
-                        if settings.follow.is_some() && settings.retry {
-                            let msg = if !settings.retry {
-                                "; giving up on this name"
-                            } else {
-                                ""
-                            };
-                            show_error!(
-                                "{}: cannot follow end of this type of file{}",
-                                path.display(),
-                                msg
-                            );
-                        }
-                    } else {
-                        // TODO: [2021-10; jhscheer] how to handle block device, socket, fifo?
-                        todo!();
-                    }
-                }
-            } else if settings.follow == Some(FollowMode::Name) {
-                // Mimic GNU's tail; Exit immediately even though there might be other valid files.
-                crash!(1, "cannot follow '-' by name");
-            }
-            if settings.follow == Some(FollowMode::Name) && settings.retry {
-                true
-            } else {
-                !path.is_dir() || path.is_stdin()
-            }
-        });
-        settings.paths = paths.clone();
+            .unwrap_or_default();
+        // .unwrap_or_else(|| {
+        //     vec![PathBuf::from("-")] // always follow stdin
+        // });
 
         settings.verbose = (matches.is_present(options::verbosity::VERBOSE)
             || settings.paths.len() > 1)
@@ -280,16 +241,41 @@ impl Settings {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = match Settings::get_from(args) {
+    let mut args = match Settings::get_from(args) {
         Ok(o) => o,
         Err(s) => {
             return Err(USimpleError::new(1, s));
         }
     };
+
+    // skip expansive fstat check if PRESUME_INPUT_PIPE is selected
+    if !args.stdin_is_pipe_or_fifo {
+        // FIXME windows has GetFileType which can determine if the file is a pipe/FIFO
+        // so this check can also be performed
+        if cfg!(unix) {
+            args.stdin_is_pipe_or_fifo = stdin_is_pipe_or_fifo();
+        }
+    }
+
     uu_tail(args)
 }
 
 fn uu_tail(mut settings: Settings) -> UResult<()> {
+    let dash = PathBuf::from(text::DASH);
+
+    // Mimic GNU's tail for `tail -F` and exit immediately
+    if (settings.paths.is_empty() || settings.paths.contains(&dash))
+        && settings.follow == Some(FollowMode::Name)
+    {
+        crash!(1, "cannot follow {} by name", text::DASH.quote());
+    }
+
+    if !settings.paths.contains(&dash) && settings.stdin_is_pipe_or_fifo
+        || settings.paths.is_empty() && !settings.stdin_is_pipe_or_fifo
+    {
+        settings.paths.push_front(dash);
+    }
+
     let mut first_header = true;
     let mut files = FileHandling {
         map: HashMap::with_capacity(settings.paths.len()),
@@ -299,43 +285,95 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
     // Do an initial tail print of each path's content.
     // Add `path` to `files` map if `--follow` is selected.
     for path in &settings.paths {
+        let mut path = path.to_path_buf();
+        let mut display_name = path.to_path_buf();
+
+        // Workaround to handle redirects, e.g. `touch f && tail -f - < f`
+        if cfg!(unix) && path.is_stdin() {
+            display_name = PathBuf::from(text::STDIN_HEADER);
+            if let Ok(p) = Path::new(text::DEV_STDIN).canonicalize() {
+                path = p.to_owned();
+            } else {
+                path = PathBuf::from(text::DEV_STDIN);
+            }
+        }
+
+        if path.is_stdin() && settings.follow == Some(FollowMode::Name) {
+            // TODO: still needed?
+            // Mimic GNU's tail; Exit immediately even though there might be other valid files.
+            crash!(1, "cannot follow {} by name", text::DASH.quote());
+        } else if !path.is_stdin() && !path.is_tailable() {
+            if settings.follow == Some(FollowMode::Descriptor) && settings.retry {
+                show_warning!("--retry only effective for the initial open");
+            }
+            if !path.exists() {
+                settings.return_code = 1;
+                show_error!(
+                    "cannot open {} for reading: {}",
+                    display_name.quote(),
+                    text::NO_SUCH_FILE
+                );
+            } else if path.is_dir() {
+                settings.return_code = 1;
+                show_error!("error reading {}: Is a directory", display_name.quote());
+                if settings.follow.is_some() {
+                    let msg = if !settings.retry {
+                        "; giving up on this name"
+                    } else {
+                        ""
+                    };
+                    show_error!(
+                        "{}: cannot follow end of this type of file{}",
+                        display_name.display(),
+                        msg
+                    );
+                }
+                if !(settings.follow == Some(FollowMode::Name) && settings.retry) {
+                    // skip directory if not retry
+                    continue;
+                }
+            } else {
+                // TODO: [2021-10; jhscheer] how to handle block device, socket, fifo?
+                todo!();
+            }
+        }
+
         let md = path.metadata().ok();
-        if path.is_stdin() || settings.presume_input_pipe {
+
+        if display_name.is_stdin() {
             if settings.verbose {
                 if !first_header {
                     println!();
                 }
-                Path::new(text::STDIN_STR).print_header();
+                Path::new(text::STDIN_HEADER).print_header();
             }
+
             let mut reader = BufReader::new(stdin());
-            unbounded_tail(&mut reader, &settings)?;
-
-            // Don't follow stdin since there are no checks for pipes/FIFOs
-            //
-            // FIXME windows has GetFileType which can determine if the file is a pipe/FIFO
-            // so this check can also be performed
-
-            #[cfg(unix)]
-            {
-                /*
-                POSIX specification regarding tail -f
-                If the input file is a regular file or if the file operand specifies a FIFO, do not
-                terminate after the last line of the input file has been copied, but read and copy
-                further bytes from the input file when they become available. If no file operand is
-                specified and standard input is a pipe or FIFO, the -f option shall be ignored. If
-                the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
-                not the -f option shall be ignored.
-                */
-
-                if settings.follow == Some(FollowMode::Descriptor) && !stdin_is_pipe_or_fifo() {
+            if !stdin_is_bad_fd() {
+                unbounded_tail(&mut reader, &settings)?;
+                if settings.follow == Some(FollowMode::Descriptor) {
                     // Insert `stdin` into `files.map`.
-                    files.map.insert(
-                        PathBuf::from(text::STDIN_STR),
+                    files.insert(
+                        path.to_path_buf(),
                         PathData {
                             reader: Some(Box::new(reader)),
                             metadata: None,
-                            display_name: PathBuf::from(text::STDIN_STR),
+                            display_name: PathBuf::from(text::STDIN_HEADER),
                         },
+                    );
+                }
+            } else {
+                settings.return_code = 1;
+                show_error!(
+                    "cannot fstat {}: {}",
+                    text::STDIN_HEADER.quote(),
+                    text::BAD_FD
+                );
+                if settings.follow.is_some() {
+                    show_error!(
+                        "error reading {}: {}",
+                        text::STDIN_HEADER.quote(),
+                        text::BAD_FD
                     );
                 }
             }
@@ -359,44 +397,60 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
             }
             if settings.follow.is_some() {
                 // Insert existing/file `path` into `files.map`.
-                files.map.insert(
+                files.insert(
                     path.canonicalize().unwrap(),
                     PathData {
                         reader: Some(Box::new(reader)),
                         metadata: md,
-                        display_name: path.to_owned(),
+                        display_name,
                     },
                 );
-                files.last = Some(path.canonicalize().unwrap());
             }
         } else if settings.retry && settings.follow.is_some() {
+            if path.is_relative() {
+                path = std::env::current_dir().unwrap().join(&path);
+            }
             // Insert non-is_tailable() paths into `files.map`.
-            let key = if path.is_relative() {
-                std::env::current_dir().unwrap().join(path)
-            } else {
-                path.to_path_buf()
-            };
-            files.map.insert(
-                key.to_path_buf(),
+            files.insert(
+                path.to_path_buf(),
                 PathData {
                     reader: None,
                     metadata: md,
-                    display_name: path.to_path_buf(),
+                    display_name,
                 },
             );
-            files.last = Some(key);
         }
     }
 
+    // dbg!(files.map.is_empty(), files.files_remaining(), files.only_stdin_remaining());
+    // for k in files.map.keys() {
+    //     dbg!(k);
+    // }
+
     if settings.follow.is_some() {
+        /*
+        POSIX specification regarding tail -f
+        If the input file is a regular file or if the file operand specifies a FIFO, do not
+        terminate after the last line of the input file has been copied, but read and copy
+        further bytes from the input file when they become available. If no file operand is
+        specified and standard input is a pipe or FIFO, the -f option shall be ignored. If
+        the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
+        not the -f option shall be ignored.
+        */
         if files.map.is_empty() || !files.files_remaining() && !settings.retry {
-            show_error!("{}", text::NO_FILES_REMAINING);
-        } else {
+            if !files.only_stdin_remaining() {
+                show_error!("{}", text::NO_FILES_REMAINING);
+            }
+        } else if !(settings.stdin_is_pipe_or_fifo && settings.paths.len() == 1) {
             follow(&mut files, &mut settings)?;
         }
     }
 
     if settings.return_code > 0 {
+        #[cfg(unix)]
+        if stdin_is_bad_fd() {
+            show_error!("-: {}", text::BAD_FD);
+        }
         return Err(USimpleError::new(settings.return_code, ""));
     }
 
@@ -565,9 +619,9 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
     // Fallback: polling (default delay is 30 seconds!)
 
     // NOTE:
-    // We force the use of kqueue with: features=["macos_kqueue"],
-    // because macOS only `kqueue` is suitable for our use case since `FSEvents` waits until
-    // file close util it delivers a modify event. See:
+    // We force the use of kqueue with: features=["macos_kqueue"].
+    // On macOS only `kqueue` is suitable for our use case because `FSEvents`
+    // waits for file close util it delivers a modify event. See:
     // https://github.com/notify-rs/notify/issues/240
 
     let mut watcher: Box<dyn Watcher>;
@@ -600,7 +654,7 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
     // If there is no parent, add `path` to `orphans`.
     let mut orphans = Vec::new();
     for path in files.map.keys() {
-        if path.is_file() {
+        if path.is_tailable() {
             let path = get_path(path, settings);
             watcher
                 .watch(&path.canonicalize().unwrap(), RecursiveMode::NonRecursive)
@@ -616,7 +670,8 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
                     .unwrap();
             }
         } else {
-            // TODO: [2021-10; jhscheer] does this case need handling?
+            // TODO: [2021-10; jhscheer] do we need to handle non-is_tailable without follow/retry?
+            todo!();
         }
     }
 
@@ -934,7 +989,7 @@ fn handle_event(
                         let new_path = event.paths.last().unwrap().canonicalize().unwrap();
                         // Open new file and seek to End:
                         let mut file = File::open(&new_path).unwrap();
-                        let _ = file.seek(SeekFrom::End(0));
+                        file.seek(SeekFrom::End(0)).unwrap();
                         // Add new reader and remove old reader:
                         files.map.insert(
                             new_path.to_owned(),
@@ -1006,9 +1061,20 @@ struct FileHandling {
 }
 
 impl FileHandling {
+    fn insert(&mut self, k: PathBuf, v: PathData) -> Option<PathData> {
+        self.last = Some(k.to_owned());
+        self.map.insert(k, v)
+    }
+
+    fn only_stdin_remaining(&self) -> bool {
+        self.map.len() == 1
+            && (self.map.contains_key(Path::new(text::DASH))
+                || self.map.contains_key(Path::new(text::DEV_STDIN))) // TODO: still needed?
+    }
+
     fn files_remaining(&self) -> bool {
         for path in self.map.keys() {
-            if path.is_tailable() {
+            if path.is_tailable() || path.is_stdin() {
                 return true;
             }
         }
@@ -1349,7 +1415,9 @@ trait PathExt {
 
 impl PathExt for Path {
     fn is_stdin(&self) -> bool {
-        self.to_str() == Some("-")
+        self.eq(Path::new(text::DASH))
+            || self.eq(Path::new(text::DEV_STDIN))
+            || self.eq(Path::new(text::STDIN_HEADER))
     }
     fn print_header(&self) {
         println!("==> {} <==", self.display());
