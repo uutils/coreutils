@@ -388,7 +388,7 @@ fn parse_bytes_no_x(s: &str) -> Result<u64, ParseError> {
     let (num, multiplier) = match (s.find('c'), s.rfind('w'), s.rfind('b')) {
         (None, None, None) => match uucore::parse_size::parse_size(s) {
             Ok(n) => (n, 1),
-            Err(ParseSizeError::ParseFailure(s)) => {
+            Err(ParseSizeError::InvalidSuffix(s)) | Err(ParseSizeError::ParseFailure(s)) => {
                 return Err(ParseError::MultiplierStringParseFailure(s))
             }
             Err(ParseSizeError::SizeTooBig(s)) => {

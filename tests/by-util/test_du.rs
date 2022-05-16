@@ -94,7 +94,13 @@ fn test_du_invalid_size() {
             .arg("/tmp")
             .fails()
             .code_is(1)
-            .stderr_only(format!("du: invalid --{} argument '1fb4t'", s));
+            .stderr_only(format!("du: invalid suffix in --{} argument '1fb4t'", s));
+        ts.ucmd()
+            .arg(format!("--{}=x", s))
+            .arg("/tmp")
+            .fails()
+            .code_is(1)
+            .stderr_only(format!("du: invalid --{} argument 'x'", s));
         #[cfg(not(target_pointer_width = "128"))]
         ts.ucmd()
             .arg(format!("--{}=1Y", s))

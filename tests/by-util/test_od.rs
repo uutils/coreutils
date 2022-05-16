@@ -827,7 +827,8 @@ fn test_traditional_only_label() {
 
 #[test]
 fn test_od_invalid_bytes() {
-    const INVALID_SIZE: &str = "1fb4t";
+    const INVALID_SIZE: &str = "x";
+    const INVALID_SUFFIX: &str = "1fb4t";
     const BIG_SIZE: &str = "1Y";
 
     // NOTE:
@@ -850,6 +851,16 @@ fn test_od_invalid_bytes() {
             .stderr_only(format!(
                 "od: invalid {} argument '{}'",
                 option, INVALID_SIZE
+            ));
+
+        new_ucmd!()
+            .arg(format!("{}={}", option, INVALID_SUFFIX))
+            .arg("file")
+            .fails()
+            .code_is(1)
+            .stderr_only(format!(
+                "od: invalid suffix in {} argument '{}'",
+                option, INVALID_SUFFIX
             ));
 
         #[cfg(not(target_pointer_width = "128"))]
