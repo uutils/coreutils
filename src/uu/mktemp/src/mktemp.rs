@@ -311,6 +311,7 @@ fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> 
             .1
     };
 
+    #[cfg(not(windows))]
     if make_dir {
         fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
     }
