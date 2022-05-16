@@ -17,7 +17,7 @@ path = "src/tail.rs"
 
 [dependencies]
 clap = { version = "3.1", features = ["wrap_help", "cargo"] }
-libc = "0.2.121"
+libc = "0.2.125"
 # notify = { version = "5.0.0-pre.14", features=["macos_kqueue"]}
 notify = { git = "https://github.com/notify-rs/notify", features=["macos_kqueue"]}
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["ringbuffer", "lines"] }
@@ -26,7 +26,7 @@ uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=[
 winapi = { version="0.3", features=["fileapi", "handleapi", "processthreadsapi", "synchapi", "winbase"] }
 
 [target.'cfg(unix)'.dependencies]
-nix = "0.23.1"
+nix = { version = "0.24.1", default-features = false, features=["fs"] }
 
 [[bin]]
 name = "tail"

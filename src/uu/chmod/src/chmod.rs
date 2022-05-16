@@ -157,6 +157,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::REFERENCE)
                 .long("reference")
                 .takes_value(true)
+                .value_hint(clap::ValueHint::FilePath)
                 .help("use RFILE's mode instead of MODE values"),
         )
         .arg(
@@ -170,7 +171,8 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FILE)
                 .required_unless_present(options::MODE)
-                .multiple_occurrences(true),
+                .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::AnyPath),
         )
 }
 

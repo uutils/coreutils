@@ -1402,7 +1402,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 Arg::new(options::PATHS)
                     .multiple_occurrences(true)
                     .takes_value(true)
-                    .allow_invalid_utf8(true),
+                    .value_hint(clap::ValueHint::AnyPath)
+                    .allow_invalid_utf8(true)
             )
             .after_help(
                 "The TIME_STYLE argument can be full-iso, long-iso, iso. \

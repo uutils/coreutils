@@ -207,6 +207,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .multiple_occurrences(true)
                 .hide(true)
                 .takes_value(true)
+                .value_hint(clap::ValueHint::FilePath)
         )
 }
 

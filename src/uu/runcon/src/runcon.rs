@@ -156,7 +156,8 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new("ARG")
                 .multiple_occurrences(true)
-                .allow_invalid_utf8(true),
+                .allow_invalid_utf8(true)
+                .value_hint(clap::ValueHint::CommandName),
         )
         // Once "ARG" is parsed, everything after that belongs to it.
         //

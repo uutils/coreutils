@@ -28,8 +28,9 @@ pub fn main() {
         if val == "1" && key.starts_with(ENV_FEATURE_PREFIX) {
             let krate = key[ENV_FEATURE_PREFIX.len()..].to_lowercase();
             match krate.as_ref() {
-                "default" | "macos" | "unix" | "windows" | "selinux" => continue, // common/standard feature names
+                "default" | "macos" | "unix" | "windows" | "selinux" | "zip" => continue, // common/standard feature names
                 "nightly" | "test_unimplemented" => continue, // crate-local custom features
+                "uudoc" => continue,                          // is not a utility
                 "test" => continue, // over-ridden with 'uu_test' to avoid collision with rust core crate 'test'
                 s if s.starts_with(FEATURE_PREFIX) => continue, // crate feature sets
                 _ => {}             // util feature name

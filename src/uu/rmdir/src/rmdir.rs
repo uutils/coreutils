@@ -197,6 +197,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .takes_value(true)
                 .min_values(1)
                 .required(true)
-                .allow_invalid_utf8(true),
+                .allow_invalid_utf8(true)
+                .value_hint(clap::ValueHint::DirPath),
         )
 }

@@ -150,7 +150,8 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FILE)
                 .multiple_occurrences(true)
-                .hide(true),
+                .hide(true)
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::BSD_COMPATIBLE)

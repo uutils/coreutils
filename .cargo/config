@@ -9,3 +9,12 @@ rustflags = [
   "-Wclippy::single_char_pattern",
   "-Wclippy::explicit_iter_loop",
 ]
+
+[build]
+# See https://github.com/time-rs/time/issues/293#issuecomment-1005002386. The
+# unsoundness here is not in the `time` library, but in the Rust stdlib, and as
+# such it needs to be fixed there.
+rustflags = "--cfg unsound_local_offset"
+
+[target.'cfg(target_os = "linux")']
+rustflags = ["--cfg", "unsound_local_offset"]

@@ -447,6 +447,14 @@ fn sub_any_specifiers_after_period() {
 }
 
 #[test]
+fn unspecified_left_justify_is_1_width() {
+    new_ucmd!()
+        .args(&["%-o"]) //spell-checker:disable-line
+        .succeeds()
+        .stdout_only("0");
+}
+
+#[test]
 fn sub_any_specifiers_after_second_param() {
     new_ucmd!()
         .args(&["%0.0ztlhLji", "3"]) //spell-checker:disable-line

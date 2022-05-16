@@ -173,6 +173,14 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .default_value(options::DELIMITER_DEFAULT)
                 .hide_default_value(true),
         )
-        .arg(Arg::new(options::FILE_1).required(true))
-        .arg(Arg::new(options::FILE_2).required(true))
+        .arg(
+            Arg::new(options::FILE_1)
+                .required(true)
+                .value_hint(clap::ValueHint::FilePath),
+        )
+        .arg(
+            Arg::new(options::FILE_2)
+                .required(true)
+                .value_hint(clap::ValueHint::FilePath),
+        )
 }

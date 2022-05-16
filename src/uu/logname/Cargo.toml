@@ -15,7 +15,7 @@ edition = "2021"
 path = "src/logname.rs"
 
 [dependencies]
-libc = "0.2.121"
+libc = "0.2.125"
 clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
 

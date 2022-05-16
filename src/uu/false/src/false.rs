@@ -28,7 +28,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if let Ok(matches) = command.try_get_matches_from_mut(args) {
         let error = if matches.index_of("help").is_some() {
-            command.print_long_help()
+            command.print_help()
         } else if matches.index_of("version").is_some() {
             writeln!(std::io::stdout(), "{}", command.render_version())
         } else {

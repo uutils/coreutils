@@ -11,6 +11,8 @@ unmaintained = "warn"
 yanked = "warn"
 notice = "warn"
 ignore = [
+    "RUSTSEC-2020-0159",
+    "RUSTSEC-2020-0071",
     #"RUSTSEC-0000-0000",
 ]
 
@@ -62,7 +64,7 @@ highlight = "all"
 # spell-checker: disable
 skip = [
     # getrandom
-    { name = "wasi", version="0.10.2+wasi-snapshot-preview1" },
+    { name = "wasi", version="0.10.0+wasi-snapshot-preview1" },
     # blake2d_simd
     { name = "arrayvec", version = "=0.7.2" },
     # flimit/unix_socket
@@ -84,8 +86,8 @@ skip = [
     { name = "memchr", version = "=1.0.2" },
     { name = "quote", version = "=0.3.15" },
     { name = "unicode-xid", version = "=0.0.4" },
-    # exacl
-    { name = "nix", version = "=0.21.0" },
+    # chrono
+    { name = "time", version = "=0.1.44" },
 ]
 # spell-checker: enable
 

@@ -8,6 +8,10 @@ on: [push, pull_request]
 
 jobs:
   gnu:
+    permissions:
+      actions: read  # for dawidd6/action-download-artifact to query and download artifacts
+      contents: read  # for actions/checkout to fetch code
+      pull-requests: read  # for dawidd6/action-download-artifact to query commit hash
     name: Run GNU tests
     runs-on: ubuntu-latest
     steps:
@@ -37,11 +41,11 @@ jobs:
         TEST_FULL_SUMMARY_FILE='gnu-full-result.json'
         outputs SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE
     - name: Checkout code (uutil)
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         path: '${{ steps.vars.outputs.path_UUTILS }}'
     - name: Checkout code (GNU coreutils)
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         repository: 'coreutils/coreutils'
         path: '${{ steps.vars.outputs.path_GNU }}'
@@ -142,22 +146,22 @@ jobs:
           # Compress logs before upload (fails otherwise)
           gzip ${{ steps.vars.outputs.TEST_LOGS_GLOB }}
     - name: Reserve SHA1/ID of 'test-summary'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: "${{ steps.summary.outputs.HASH }}"
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Reserve test results summary
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: test-summary
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Reserve test logs
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: test-logs
         path: "${{ steps.vars.outputs.TEST_LOGS_GLOB }}"
     - name: Upload full json results
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: gnu-full-result.json
         path: ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
@@ -170,6 +174,8 @@ jobs:
         REPO_DEFAULT_BRANCH='${{ steps.vars.outputs.repo_default_branch }}'
         if test -f "${REF_LOG_FILE}"; then
           echo "Reference SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
+          REF_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${REF_LOG_FILE}" | sort)
+          NEW_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" '${{ steps.vars.outputs.path_GNU_tests }}/test-suite.log' | sort)
           REF_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${REF_LOG_FILE}" | sort)
           NEW_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" '${{ steps.vars.outputs.path_GNU_tests }}/test-suite.log' | sort)
           for LINE in ${REF_FAILING}
@@ -186,6 +192,21 @@ jobs:
               have_new_failures="true"
             fi
           done
+          for LINE in ${REF_ERROR}
+          do
+            if ! grep -Fxq ${LINE}<<<"${NEW_ERROR}"; then
+              echo "::warning ::Congrats! The gnu test ${LINE} is no longer ERROR!"
+            fi
+          done
+          for LINE in ${NEW_ERROR}
+          do
+            if ! grep -Fxq ${LINE}<<<"${REF_ERROR}"
+            then
+              echo "::error ::GNU test error: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
+              have_new_failures="true"
+            fi
+          done
+
         else
           echo "::warning ::Skipping test failure comparison; no prior reference test logs are available."
         fi
@@ -208,11 +229,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code uutil
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         path: 'uutils'
     - name: Checkout GNU coreutils
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         repository: 'coreutils/coreutils'
         path: 'gnu'
@@ -272,7 +293,7 @@ jobs:
         grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
         echo ::set-output name=report::${COVERAGE_REPORT_FILE}
     - name: Upload coverage results (to Codecov.io)
-      uses: codecov/codecov-action@v2
+      uses: codecov/codecov-action@v3
       with:
         file: ${{ steps.coverage.outputs.report }}
         flags: gnutests

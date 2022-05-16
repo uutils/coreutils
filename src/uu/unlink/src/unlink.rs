@@ -36,6 +36,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_PATH)
                 .required(true)
                 .hide(true)
-                .allow_invalid_utf8(true),
+                .allow_invalid_utf8(true)
+                .value_hint(clap::ValueHint::AnyPath),
         )
 }

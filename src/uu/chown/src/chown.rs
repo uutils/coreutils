@@ -134,6 +134,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::REFERENCE)
                 .help("use RFILE's owner and group rather than specifying OWNER:GROUP values")
                 .value_name("RFILE")
+                .value_hint(clap::ValueHint::FilePath)
                 .min_values(1),
         )
         .arg(
@@ -167,17 +168,18 @@ pub fn uu_app<'a>() -> Command<'a> {
         )
 }
 
-/// Parse the username and groupname
+/// Parse the owner/group specifier string into a user ID and a group ID.
 ///
-/// In theory, it should be username:groupname
-/// but ...
-/// it can user.name:groupname
-/// or username.groupname
+/// The `spec` can be of the form:
 ///
-/// # Arguments
+/// * `"owner:group"`,
+/// * `"owner"`,
+/// * `":group"`,
 ///
-/// * `spec` - The input from the user
-/// * `sep` - Should be ':' or '.'
+/// and the owner or group can be specified either as an ID or a
+/// name. The `sep` argument specifies which character to use as a
+/// separator between the owner and group; calling code should set
+/// this to `':'`.
 fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     assert!(['.', ':'].contains(&sep));
     let mut args = spec.splitn(2, sep);
@@ -197,10 +199,17 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
                     // So, try to parse it this way
                     return parse_spec(spec, '.');
                 } else {
-                    return Err(USimpleError::new(
-                        1,
-                        format!("invalid user: {}", spec.quote()),
-                    ));
+                    // It's possible that the `user` string contains a
+                    // numeric user ID, in which case, we respect that.
+                    match user.parse() {
+                        Ok(uid) => uid,
+                        Err(_) => {
+                            return Err(USimpleError::new(
+                                1,
+                                format!("invalid user: {}", spec.quote()),
+                            ))
+                        }
+                    }
                 }
             }
         })
@@ -208,11 +217,18 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
         None
     };
     let gid = if !group.is_empty() {
-        Some(
-            Group::locate(group)
-                .map_err(|_| USimpleError::new(1, format!("invalid group: {}", spec.quote())))?
-                .gid,
-        )
+        Some(match Group::locate(group) {
+            Ok(g) => g.gid,
+            Err(_) => match group.parse() {
+                Ok(gid) => gid,
+                Err(_) => {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("invalid group: {}", spec.quote()),
+                    ));
+                }
+            },
+        })
     } else {
         None
     };
@@ -230,5 +246,18 @@ mod test {
         assert!(matches!(parse_spec(".", '.'), Ok((None, None))));
         assert!(format!("{}", parse_spec("::", ':').err().unwrap()).starts_with("invalid group: "));
         assert!(format!("{}", parse_spec("..", ':').err().unwrap()).starts_with("invalid group: "));
+    }
+
+    /// Test for parsing IDs that don't correspond to a named user or group.
+    #[test]
+    fn test_parse_spec_nameless_ids() {
+        // This assumes that there is no named user with ID 12345.
+        assert!(matches!(parse_spec("12345", ':'), Ok((Some(12345), None))));
+        // This assumes that there is no named group with ID 54321.
+        assert!(matches!(parse_spec(":54321", ':'), Ok((None, Some(54321)))));
+        assert!(matches!(
+            parse_spec("12345:54321", ':'),
+            Ok((Some(12345), Some(54321)))
+        ));
     }
 }

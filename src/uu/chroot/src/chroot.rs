@@ -102,6 +102,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .infer_long_args(true)
         .arg(
             Arg::new(options::NEWROOT)
+                .value_hint(clap::ValueHint::DirPath)
                 .hide(true)
                 .required(true)
                 .index(1),
@@ -139,6 +140,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         )
         .arg(
             Arg::new(options::COMMAND)
+                .value_hint(clap::ValueHint::CommandName)
                 .hide(true)
                 .multiple_occurrences(true)
                 .index(2),

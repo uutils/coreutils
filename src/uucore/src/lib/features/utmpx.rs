@@ -32,7 +32,6 @@
 //! ```
 
 pub extern crate time;
-use self::time::{Timespec, Tm};
 
 use std::ffi::CString;
 use std::io::Result as IOResult;
@@ -189,11 +188,14 @@ impl Utmpx {
         chars2string!(self.inner.ut_line)
     }
     /// A.K.A. ut.ut_tv
-    pub fn login_time(&self) -> Tm {
-        time::at(Timespec::new(
-            self.inner.ut_tv.tv_sec as i64,
-            self.inner.ut_tv.tv_usec as i32,
-        ))
+    pub fn login_time(&self) -> time::OffsetDateTime {
+        let ts_nanos: i128 = (self.inner.ut_tv.tv_sec as i64 * 1_000_000_000_i64
+            + self.inner.ut_tv.tv_usec as i64 * 1_000_i64)
+            .into();
+        let local_offset = time::OffsetDateTime::now_local().unwrap().offset();
+        time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos)
+            .unwrap()
+            .to_offset(local_offset)
     }
     /// A.K.A. ut.ut_exit
     ///

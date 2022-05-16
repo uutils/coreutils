@@ -73,7 +73,7 @@ fn test_df_output() {
             "Filesystem",
             "Size",
             "Used",
-            "Available",
+            "Avail",
             "Capacity",
             "Use%",
             "Mounted",
@@ -84,7 +84,7 @@ fn test_df_output() {
             "Filesystem",
             "Size",
             "Used",
-            "Available",
+            "Avail",
             "Use%",
             "Mounted",
             "on",
@@ -107,7 +107,7 @@ fn test_df_output_overridden() {
             "Filesystem",
             "Size",
             "Used",
-            "Available",
+            "Avail",
             "Capacity",
             "Use%",
             "Mounted",
@@ -118,7 +118,7 @@ fn test_df_output_overridden() {
             "Filesystem",
             "Size",
             "Used",
-            "Available",
+            "Avail",
             "Use%",
             "Mounted",
             "on",
@@ -132,6 +132,46 @@ fn test_df_output_overridden() {
     let actual = output.lines().take(1).collect::<Vec<&str>>()[0];
     let actual = actual.split_whitespace().collect::<Vec<_>>();
     assert_eq!(actual, expected);
+}
+
+#[test]
+fn test_default_headers() {
+    let expected = if cfg!(target_os = "macos") {
+        vec![
+            "Filesystem",
+            "1K-blocks",
+            "Used",
+            "Available",
+            "Capacity",
+            "Use%",
+            "Mounted",
+            "on",
+        ]
+    } else {
+        vec![
+            "Filesystem",
+            "1K-blocks",
+            "Used",
+            "Available",
+            "Use%",
+            "Mounted",
+            "on",
+        ]
+    };
+    let output = new_ucmd!().succeeds().stdout_move_str();
+    let actual = output.lines().take(1).collect::<Vec<&str>>()[0];
+    let actual = actual.split_whitespace().collect::<Vec<_>>();
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn test_precedence_of_human_readable_header_over_output_header() {
+    let output = new_ucmd!()
+        .args(&["-H", "--output=size"])
+        .succeeds()
+        .stdout_move_str();
+    let header = output.lines().next().unwrap().to_string();
+    assert_eq!(header.trim(), "Size");
 }
 
 #[test]
@@ -199,7 +239,42 @@ fn test_type_option() {
     new_ucmd!()
         .args(&["-t", fs_type, "-t", "nonexisting"])
         .succeeds();
-    new_ucmd!().args(&["-t", "nonexisting"]).fails();
+    new_ucmd!()
+        .args(&["-t", "nonexisting"])
+        .fails()
+        .stderr_contains("no file systems processed");
+}
+
+#[test]
+fn test_type_option_with_file() {
+    let fs_type = new_ucmd!()
+        .args(&["--output=fstype", "."])
+        .succeeds()
+        .stdout_move_str();
+    let fs_type = fs_type.lines().nth(1).unwrap().trim();
+
+    new_ucmd!().args(&["-t", fs_type, "."]).succeeds();
+    new_ucmd!()
+        .args(&["-t", "nonexisting", "."])
+        .fails()
+        .stderr_contains("no file systems processed");
+
+    let fs_types = new_ucmd!()
+        .arg("--output=fstype")
+        .succeeds()
+        .stdout_move_str();
+    let fs_types: Vec<_> = fs_types
+        .lines()
+        .skip(1)
+        .filter(|t| t.trim() != fs_type && t.trim() != "")
+        .collect();
+
+    if !fs_types.is_empty() {
+        new_ucmd!()
+            .args(&["-t", fs_types[0], "."])
+            .fails()
+            .stderr_contains("no file systems processed");
+    }
 }
 
 #[test]
@@ -341,21 +416,57 @@ fn test_iuse_percentage() {
 }
 
 #[test]
+fn test_default_block_size() {
+    let output = new_ucmd!()
+        .arg("--output=size")
+        .succeeds()
+        .stdout_move_str();
+    let header = output.lines().next().unwrap().to_string();
+
+    assert_eq!(header, "1K-blocks");
+
+    let output = new_ucmd!()
+        .arg("--output=size")
+        .env("POSIXLY_CORRECT", "1")
+        .succeeds()
+        .stdout_move_str();
+    let header = output.lines().next().unwrap().to_string();
+
+    assert_eq!(header, "512B-blocks");
+}
+
+#[test]
+fn test_default_block_size_in_posix_portability_mode() {
+    fn get_header(s: &str) -> String {
+        s.lines()
+            .next()
+            .unwrap()
+            .to_string()
+            .split_whitespace()
+            .nth(1)
+            .unwrap()
+            .to_string()
+    }
+
+    let output = new_ucmd!().arg("-P").succeeds().stdout_move_str();
+    assert_eq!(get_header(&output), "1024-blocks");
+
+    let output = new_ucmd!()
+        .arg("-P")
+        .env("POSIXLY_CORRECT", "1")
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(get_header(&output), "512-blocks");
+}
+
+#[test]
 fn test_block_size_1024() {
     fn get_header(block_size: u64) -> String {
-        // TODO When #3057 is resolved, we should just use
-        //
-        //     new_ucmd!().arg("--output=size").succeeds().stdout_move_str();
-        //
-        // instead of parsing the entire `df` table as a string.
         let output = new_ucmd!()
-            .args(&["-B", &format!("{}", block_size)])
+            .args(&["-B", &format!("{}", block_size), "--output=size"])
             .succeeds()
             .stdout_move_str();
-        let first_line = output.lines().next().unwrap();
-        let mut column_labels = first_line.split_whitespace();
-        let size_column_label = column_labels.nth(1).unwrap();
-        size_column_label.into()
+        output.lines().next().unwrap().to_string()
     }
 
     assert_eq!(get_header(1024), "1K-blocks");
@@ -365,6 +476,94 @@ fn test_block_size_1024() {
     assert_eq!(get_header(2 * 1024 * 1024), "2M-blocks");
     assert_eq!(get_header(1024 * 1024 * 1024), "1G-blocks");
     assert_eq!(get_header(34 * 1024 * 1024 * 1024), "34G-blocks");
+
+    // multiples of both 1024 and 1000
+    assert_eq!(get_header(128_000), "128kB-blocks");
+    assert_eq!(get_header(1000 * 1024), "1.1MB-blocks");
+    assert_eq!(get_header(1_000_000_000_000), "1TB-blocks");
+}
+
+#[test]
+fn test_block_size_with_suffix() {
+    fn get_header(block_size: &str) -> String {
+        let output = new_ucmd!()
+            .args(&["-B", block_size, "--output=size"])
+            .succeeds()
+            .stdout_move_str();
+        output.lines().next().unwrap().to_string()
+    }
+
+    assert_eq!(get_header("K"), "1K-blocks");
+    assert_eq!(get_header("M"), "1M-blocks");
+    assert_eq!(get_header("G"), "1G-blocks");
+    assert_eq!(get_header("1K"), "1K-blocks");
+    assert_eq!(get_header("1M"), "1M-blocks");
+    assert_eq!(get_header("1G"), "1G-blocks");
+    assert_eq!(get_header("1KiB"), "1K-blocks");
+    assert_eq!(get_header("1MiB"), "1M-blocks");
+    assert_eq!(get_header("1GiB"), "1G-blocks");
+    assert_eq!(get_header("1KB"), "1kB-blocks");
+    assert_eq!(get_header("1MB"), "1MB-blocks");
+    assert_eq!(get_header("1GB"), "1GB-blocks");
+}
+
+#[test]
+fn test_block_size_in_posix_portability_mode() {
+    fn get_header(block_size: &str) -> String {
+        let output = new_ucmd!()
+            .args(&["-P", "-B", block_size])
+            .succeeds()
+            .stdout_move_str();
+        output
+            .lines()
+            .next()
+            .unwrap()
+            .to_string()
+            .split_whitespace()
+            .nth(1)
+            .unwrap()
+            .to_string()
+    }
+
+    assert_eq!(get_header("1024"), "1024-blocks");
+    assert_eq!(get_header("1K"), "1024-blocks");
+    assert_eq!(get_header("1KB"), "1000-blocks");
+    assert_eq!(get_header("1M"), "1048576-blocks");
+    assert_eq!(get_header("1MB"), "1000000-blocks");
+}
+
+#[test]
+fn test_too_large_block_size() {
+    fn run_command(size: &str) {
+        new_ucmd!()
+            .arg(format!("--block-size={}", size))
+            .fails()
+            .stderr_contains(format!("--block-size argument '{}' too large", size));
+    }
+
+    let too_large_sizes = vec!["1Y", "1Z"];
+
+    for size in too_large_sizes {
+        run_command(size);
+    }
+}
+
+#[test]
+fn test_invalid_block_size() {
+    new_ucmd!()
+        .arg("--block-size=x")
+        .fails()
+        .stderr_contains("invalid --block-size argument 'x'");
+
+    new_ucmd!()
+        .arg("--block-size=0")
+        .fails()
+        .stderr_contains("invalid --block-size argument '0'");
+
+    new_ucmd!()
+        .arg("--block-size=0K")
+        .fails()
+        .stderr_contains("invalid --block-size argument '0K'");
 }
 
 #[test]
@@ -373,7 +572,7 @@ fn test_output_selects_columns() {
         .args(&["--output=source"])
         .succeeds()
         .stdout_move_str();
-    assert_eq!(output.lines().next().unwrap(), "Filesystem");
+    assert_eq!(output.lines().next().unwrap().trim_end(), "Filesystem");
 
     let output = new_ucmd!()
         .args(&["--output=source,target"])
@@ -432,7 +631,7 @@ fn test_output_file_all_filesystems() {
     let mut lines = output.lines();
     assert_eq!(lines.next().unwrap(), "File");
     for line in lines {
-        assert_eq!(line, "-");
+        assert_eq!(line, "-   ");
     }
 }
 
@@ -451,7 +650,7 @@ fn test_output_file_specific_files() {
         .succeeds()
         .stdout_move_str();
     let actual: Vec<&str> = output.lines().collect();
-    assert_eq!(actual, vec!["File", "a", "b", "c"]);
+    assert_eq!(actual, vec!["File", "a   ", "b   ", "c   "]);
 }
 
 #[test]
@@ -486,5 +685,5 @@ fn test_nonexistent_file() {
         .args(&["--output=file", "does-not-exist", "."])
         .fails()
         .stderr_is("df: does-not-exist: No such file or directory\n")
-        .stdout_is("File\n.\n");
+        .stdout_is("File\n.   \n");
 }

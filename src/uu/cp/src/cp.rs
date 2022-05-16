@@ -57,7 +57,7 @@ use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use std::string::ToString;
 use uucore::backup_control::{self, BackupMode};
-use uucore::error::{set_exit_code, ExitCode, UError, UResult};
+use uucore::error::{set_exit_code, ExitCode, UClapError, UError, UResult};
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use walkdir::WalkDir;
 
@@ -314,6 +314,7 @@ pub fn uu_app<'a>() -> Command<'a> {
              .conflicts_with(options::NO_TARGET_DIRECTORY)
              .long(options::TARGET_DIRECTORY)
              .value_name(options::TARGET_DIRECTORY)
+             .value_hint(clap::ValueHint::DirPath)
              .takes_value(true)
              .validator(|s| {
                  if Path::new(s).is_dir() {
@@ -464,42 +465,55 @@ pub fn uu_app<'a>() -> Command<'a> {
         // END TODO
 
         .arg(Arg::new(options::PATHS)
-             .multiple_occurrences(true))
+             .multiple_occurrences(true)
+             .value_hint(clap::ValueHint::AnyPath))
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(&*format!(
-            "{}\n{}",
-            LONG_HELP,
-            backup_control::BACKUP_CONTROL_LONG_HELP
-        ))
-        .try_get_matches_from(args)?;
+    let after_help = &*format!(
+        "{}\n{}",
+        LONG_HELP,
+        backup_control::BACKUP_CONTROL_LONG_HELP
+    );
+    let matches = uu_app().after_help(after_help).try_get_matches_from(args);
 
-    let options = Options::from_matches(&matches)?;
+    // The error is parsed here because we do not want version or help being printed to stderr.
+    if let Err(e) = matches {
+        let mut app = uu_app().after_help(after_help);
 
-    if options.overwrite == OverwriteMode::NoClobber && options.backup != BackupMode::NoBackup {
-        show_usage_error!("options --backup and --no-clobber are mutually exclusive");
-        return Err(ExitCode(EXIT_ERR).into());
-    }
-
-    let paths: Vec<String> = matches
-        .values_of(options::PATHS)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    let (sources, target) = parse_path_args(&paths, &options)?;
-
-    if let Err(error) = copy(&sources, &target, &options) {
-        match error {
-            // Error::NotAllFilesCopied is non-fatal, but the error
-            // code should still be EXIT_ERR as does GNU cp
-            Error::NotAllFilesCopied => {}
-            // Else we caught a fatal bubbled-up error, log it to stderr
-            _ => show_error!("{}", error),
+        match e.kind() {
+            clap::ErrorKind::DisplayHelp => {
+                app.print_help()?;
+            }
+            clap::ErrorKind::DisplayVersion => println!("{}", app.render_version()),
+            _ => return Err(Box::new(e.with_exit_code(1))),
         };
-        set_exit_code(EXIT_ERR);
+    } else if let Ok(matches) = matches {
+        let options = Options::from_matches(&matches)?;
+
+        if options.overwrite == OverwriteMode::NoClobber && options.backup != BackupMode::NoBackup {
+            show_usage_error!("options --backup and --no-clobber are mutually exclusive");
+            return Err(ExitCode(EXIT_ERR).into());
+        }
+
+        let paths: Vec<String> = matches
+            .values_of(options::PATHS)
+            .map(|v| v.map(ToString::to_string).collect())
+            .unwrap_or_default();
+
+        let (sources, target) = parse_path_args(&paths, &options)?;
+
+        if let Err(error) = copy(&sources, &target, &options) {
+            match error {
+                // Error::NotAllFilesCopied is non-fatal, but the error
+                // code should still be EXIT_ERR as does GNU cp
+                Error::NotAllFilesCopied => {}
+                // Else we caught a fatal bubbled-up error, log it to stderr
+                _ => show_error!("{}", error),
+            };
+            set_exit_code(EXIT_ERR);
+        }
     }
 
     Ok(())
@@ -980,7 +994,9 @@ fn copy_directory(
     }
 
     // if no-dereference is enabled and this is a symlink, copy it as a file
-    if !options.dereference && fs::symlink_metadata(root).unwrap().file_type().is_symlink() {
+    if !options.dereference && fs::symlink_metadata(root).unwrap().file_type().is_symlink()
+    // replace by is_symlink in rust>=1.58
+    {
         return copy_file(root, target, options, symlinked_files);
     }
 
@@ -1024,6 +1040,7 @@ fn copy_directory(
     {
         let p = or_continue!(path);
         let is_symlink = fs::symlink_metadata(p.path())?.file_type().is_symlink();
+        // replace by is_symlink in rust >=1.58
         let path = current_dir.join(&p.path());
 
         let local_to_root_parent = match root_parent {
@@ -1276,7 +1293,7 @@ fn copy_file(
 
     // Fail if dest is a dangling symlink or a symlink this program created previously
     if fs::symlink_metadata(dest)
-        .map(|m| m.file_type().is_symlink())
+        .map(|m| m.file_type().is_symlink()) // replace by is_symlink in rust>=1.58
         .unwrap_or(false)
     {
         if FileInformation::from_path(dest, false)
@@ -1289,7 +1306,7 @@ fn copy_file(
                 dest.display()
             )));
         }
-        if !dest.exists() {
+        if options.dereference && !dest.exists() {
             return Err(Error::Error(format!(
                 "not writing through dangling symlink '{}'",
                 dest.display()
@@ -1523,7 +1540,7 @@ fn copy_link(
     } else {
         // we always need to remove the file to be able to create a symlink,
         // even if it is writeable.
-        if dest.exists() {
+        if dest.is_file() {
             fs::remove_file(dest)?;
         }
         dest.into()

@@ -11,9 +11,12 @@ mod columns;
 mod filesystem;
 mod table;
 
+use blocks::{HumanReadable, SizeFormat};
+use table::HeaderMode;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::fsext::{read_fs_list, MountInfo};
+use uucore::parse_size::ParseSizeError;
 use uucore::{format_usage, show};
 
 use clap::{crate_version, Arg, ArgMatches, Command};
@@ -30,6 +33,13 @@ use crate::table::Table;
 static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
                       or all file systems by default.";
 const USAGE: &str = "{} [OPTION]... [FILE]...";
+const LONG_HELP: &str = "Display values are in units of the first available SIZE from --block-size,
+and the DF_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environment variables.
+Otherwise, units default to 1024 bytes (or 512 if POSIXLY_CORRECT is set).
+
+SIZE is an integer and optional unit (example: 10M is 10*1024*1024).
+Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB,... (powers
+of 1000).";
 
 static OPT_HELP: &str = "help";
 static OPT_ALL: &str = "all";
@@ -61,7 +71,9 @@ static OUTPUT_FIELD_LIST: [&str; 12] = [
 struct Options {
     show_local_fs: bool,
     show_all_fs: bool,
+    size_format: SizeFormat,
     block_size: BlockSize,
+    header_mode: HeaderMode,
 
     /// Optional list of filesystem types to include in the output table.
     ///
@@ -88,6 +100,8 @@ impl Default for Options {
             show_local_fs: Default::default(),
             show_all_fs: Default::default(),
             block_size: Default::default(),
+            size_format: Default::default(),
+            header_mode: Default::default(),
             include: Default::default(),
             exclude: Default::default(),
             show_total: Default::default(),
@@ -105,7 +119,8 @@ impl Default for Options {
 
 #[derive(Debug)]
 enum OptionsError {
-    InvalidBlockSize,
+    BlockSizeTooLarge(String),
+    InvalidBlockSize(String),
 
     /// An error getting the columns to display in the output table.
     ColumnError(ColumnError),
@@ -116,11 +131,14 @@ enum OptionsError {
 impl fmt::Display for OptionsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            // TODO This should include the raw string provided as the argument.
-            //
             // TODO This needs to vary based on whether `--block-size`
             // or `-B` were provided.
-            Self::InvalidBlockSize => write!(f, "invalid --block-size argument"),
+            Self::BlockSizeTooLarge(s) => {
+                write!(f, "--block-size argument {} too large", s.quote())
+            }
+            // TODO This needs to vary based on whether `--block-size`
+            // or `-B` were provided.
+            Self::InvalidBlockSize(s) => write!(f, "invalid --block-size argument {}", s),
             Self::ColumnError(ColumnError::MultipleColumns(s)) => write!(
                 f,
                 "option --output: field {} used more than once",
@@ -155,8 +173,36 @@ impl Options {
         Ok(Self {
             show_local_fs: matches.is_present(OPT_LOCAL),
             show_all_fs: matches.is_present(OPT_ALL),
-            block_size: block_size_from_matches(matches)
-                .map_err(|_| OptionsError::InvalidBlockSize)?,
+            block_size: block_size_from_matches(matches).map_err(|e| match e {
+                ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
+                    matches.value_of(OPT_BLOCKSIZE).unwrap().to_string(),
+                ),
+                ParseSizeError::ParseFailure(s) => OptionsError::InvalidBlockSize(s),
+            })?,
+            header_mode: {
+                if matches.is_present(OPT_HUMAN_READABLE_BINARY)
+                    || matches.is_present(OPT_HUMAN_READABLE_DECIMAL)
+                {
+                    HeaderMode::HumanReadable
+                } else if matches.is_present(OPT_PORTABILITY) {
+                    HeaderMode::PosixPortability
+                // is_present() doesn't work here, it always returns true because OPT_OUTPUT has
+                // default values and hence is always present
+                } else if matches.occurrences_of(OPT_OUTPUT) > 0 {
+                    HeaderMode::Output
+                } else {
+                    HeaderMode::Default
+                }
+            },
+            size_format: {
+                if matches.is_present(OPT_HUMAN_READABLE_BINARY) {
+                    SizeFormat::HumanReadable(HumanReadable::Binary)
+                } else if matches.is_present(OPT_HUMAN_READABLE_DECIMAL) {
+                    SizeFormat::HumanReadable(HumanReadable::Decimal)
+                } else {
+                    SizeFormat::StaticBlockSize
+                }
+            },
             include,
             exclude,
             show_total: matches.is_present(OPT_TOTAL),
@@ -292,7 +338,7 @@ fn get_all_filesystems(opt: &Options) -> Vec<Filesystem> {
 }
 
 /// For each path, get the filesystem that contains that path.
-fn get_named_filesystems<P>(paths: &[P]) -> Vec<Filesystem>
+fn get_named_filesystems<P>(paths: &[P], opt: &Options) -> Vec<Filesystem>
 where
     P: AsRef<Path>,
 {
@@ -302,21 +348,35 @@ where
     // considered. The "lofs" filesystem is a loopback
     // filesystem present on Solaris and FreeBSD systems. It
     // is similar to a symbolic link.
-    let mounts: Vec<MountInfo> = read_fs_list()
+    let mounts: Vec<MountInfo> = filter_mount_list(read_fs_list(), opt)
         .into_iter()
         .filter(|mi| mi.fs_type != "lofs" && !mi.dummy)
         .collect();
 
+    let mut result = vec![];
+
+    // this happens if the file system type doesn't exist
+    if mounts.is_empty() {
+        show!(USimpleError::new(1, "no file systems processed"));
+        return result;
+    }
+
     // Convert each path into a `Filesystem`, which contains
     // both the mount information and usage information.
-    let mut result = vec![];
     for path in paths {
         match Filesystem::from_path(&mounts, path) {
             Some(fs) => result.push(fs),
-            None => show!(USimpleError::new(
-                1,
-                format!("{}: No such file or directory", path.as_ref().display())
-            )),
+            None => {
+                // this happens if specified file system type != file system type of the file
+                if path.as_ref().exists() {
+                    show!(USimpleError::new(1, "no file systems processed"));
+                } else {
+                    show!(USimpleError::new(
+                        1,
+                        format!("{}: No such file or directory", path.as_ref().display())
+                    ));
+                }
+            }
         }
     }
     result
@@ -370,7 +430,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         Some(paths) => {
             let paths: Vec<&str> = paths.collect();
-            let filesystems = get_named_filesystems(&paths);
+            let filesystems = get_named_filesystems(&paths, &opt);
 
             // This can happen if paths are given as command-line arguments
             // but none of the paths exist.
@@ -382,12 +442,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    // This can happen if paths are given as command-line arguments
-    // but none of the paths exist.
-    if filesystems.is_empty() {
-        return Ok(());
-    }
-
     println!("{}", Table::new(&opt, filesystems));
 
     Ok(())
@@ -398,6 +452,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
+        .after_help(LONG_HELP)
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_HELP)
@@ -416,6 +471,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('B')
                 .long("block-size")
                 .takes_value(true)
+                .value_name("SIZE")
                 .overrides_with_all(&[OPT_KILO, OPT_BLOCKSIZE])
                 .help(
                     "scale sizes by SIZE before printing them; e.g.\
@@ -472,6 +528,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_OUTPUT)
                 .long("output")
                 .takes_value(true)
+                .value_name("FIELD_LIST")
                 .min_values(0)
                 .require_equals(true)
                 .use_value_delimiter(true)
@@ -481,7 +538,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .default_values(&["source", "size", "used", "avail", "pcent", "target"])
                 .conflicts_with_all(&[OPT_INODES, OPT_PORTABILITY, OPT_PRINT_TYPE])
                 .help(
-                    "use the output format defined by FIELD_LIST,\
+                    "use the output format defined by FIELD_LIST, \
                      or print all fields if FIELD_LIST is omitted.",
                 ),
         )
@@ -504,6 +561,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long("type")
                 .allow_invalid_utf8(true)
                 .takes_value(true)
+                .value_name("TYPE")
                 .multiple_occurrences(true)
                 .help("limit listing to file systems of type TYPE"),
         )
@@ -520,11 +578,16 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long("exclude-type")
                 .allow_invalid_utf8(true)
                 .takes_value(true)
+                .value_name("TYPE")
                 .use_value_delimiter(true)
                 .multiple_occurrences(true)
                 .help("limit listing to file systems not of type TYPE"),
         )
-        .arg(Arg::new(OPT_PATHS).multiple_occurrences(true))
+        .arg(
+            Arg::new(OPT_PATHS)
+                .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::AnyPath),
+        )
 }
 
 #[cfg(test)]

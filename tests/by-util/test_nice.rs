@@ -58,3 +58,8 @@ fn test_command_where_command_takes_n_flag() {
         .run()
         .stdout_is("a");
 }
+
+#[test]
+fn test_invalid_argument() {
+    new_ucmd!().arg("--invalid").fails().code_is(125);
+}

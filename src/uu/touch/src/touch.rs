@@ -6,8 +6,7 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv PWSTR lpszfilepath hresult
-
+// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv PWSTR lpszfilepath hresult mktime YYYYMMDDHHMM YYMMDDHHMM DATETIME YYYYMMDDHHMMS subsecond
 pub extern crate filetime;
 
 #[macro_use]
@@ -17,6 +16,8 @@ use clap::{crate_version, Arg, ArgGroup, Command};
 use filetime::*;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
+use time::macros::{format_description, offset, time};
+use time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::format_usage;
@@ -41,14 +42,27 @@ pub mod options {
 
 static ARG_FILES: &str = "files";
 
-fn to_local(mut tm: time::Tm) -> time::Tm {
-    tm.tm_utcoff = time::now().tm_utcoff;
-    tm
+// Convert a date/time to a date with a TZ offset
+fn to_local(tm: time::PrimitiveDateTime) -> time::OffsetDateTime {
+    let offset = match time::OffsetDateTime::now_local() {
+        Ok(lo) => lo.offset(),
+        Err(e) => {
+            panic!("error: {}", e);
+        }
+    };
+    tm.assume_offset(offset)
 }
 
-fn local_tm_to_filetime(tm: time::Tm) -> FileTime {
-    let ts = tm.to_timespec();
-    FileTime::from_unix_time(ts.sec as i64, ts.nsec as u32)
+// Convert a date/time with a TZ offset into a FileTime
+fn local_dt_to_filetime(dt: time::OffsetDateTime) -> FileTime {
+    FileTime::from_unix_time(dt.unix_timestamp(), dt.nanosecond())
+}
+
+// Convert a date/time, considering that the input is in UTC time
+// Used for touch -d 1970-01-01 18:43:33.023456789 for example
+fn dt_to_filename(tm: time::PrimitiveDateTime) -> FileTime {
+    let dt = tm.assume_offset(offset!(UTC));
+    local_dt_to_filetime(dt)
 }
 
 #[uucore::main]
@@ -62,7 +76,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 Try 'touch --help' for more information."##,
         )
     })?;
-
     let (mut atime, mut mtime) =
         if let Some(reference) = matches.value_of_os(options::sources::REFERENCE) {
             stat(Path::new(reference), !matches.is_present(options::NO_DEREF))?
@@ -72,7 +85,7 @@ Try 'touch --help' for more information."##,
             } else if let Some(current) = matches.value_of(options::sources::CURRENT) {
                 parse_timestamp(current)?
             } else {
-                local_tm_to_filetime(time::now())
+                local_dt_to_filetime(time::OffsetDateTime::now_local().unwrap())
             };
             (timestamp, timestamp)
         };
@@ -206,7 +219,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::sources::REFERENCE)
                 .help("use this file's times instead of the current time")
                 .value_name("FILE")
-                .allow_invalid_utf8(true),
+                .allow_invalid_utf8(true)
+                .value_hint(clap::ValueHint::AnyPath),
         )
         .arg(
             Arg::new(options::TIME)
@@ -225,7 +239,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .multiple_occurrences(true)
                 .takes_value(true)
                 .min_values(1)
-                .allow_invalid_utf8(true),
+                .allow_invalid_utf8(true)
+                .value_hint(clap::ValueHint::AnyPath),
         )
         .group(ArgGroup::new(options::SOURCES).args(&[
             options::sources::CURRENT,
@@ -248,38 +263,129 @@ fn stat(path: &Path, follow: bool) -> UResult<(FileTime, FileTime)> {
     ))
 }
 
-fn parse_date(str: &str) -> UResult<FileTime> {
+const POSIX_LOCALE_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[weekday repr:short] [month repr:short] [day padding:space] \
+    [hour]:[minute]:[second] [year]"
+);
+
+const ISO_8601_FORMAT: &[time::format_description::FormatItem] =
+    format_description!("[year]-[month]-[day]");
+
+// "%Y%m%d%H%M.%S" 15 chars
+const YYYYMMDDHHMM_DOT_SS_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year repr:full][month repr:numerical padding:zero]\
+    [day][hour][minute].[second]"
+);
+
+// "%Y-%m-%d %H:%M:%S.%SS" 12 chars
+const YYYYMMDDHHMMSS_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year repr:full]-[month repr:numerical padding:zero]-\
+    [day] [hour]:[minute]:[second].[subsecond]"
+);
+
+// "%Y-%m-%d %H:%M:%S" 12 chars
+const YYYYMMDDHHMMS_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year repr:full]-[month repr:numerical padding:zero]-\
+    [day] [hour]:[minute]:[second]"
+);
+
+// "%Y-%m-%d %H:%M" 12 chars
+// Used for example in tests/touch/no-rights.sh
+const YYYY_MM_DD_HH_MM_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year repr:full]-[month repr:numerical padding:zero]-\
+    [day] [hour]:[minute]"
+);
+
+// "%Y%m%d%H%M" 12 chars
+const YYYYMMDDHHMM_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year repr:full][month repr:numerical padding:zero]\
+    [day][hour][minute]"
+);
+
+// "%y%m%d%H%M.%S" 13 chars
+const YYMMDDHHMM_DOT_SS_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year repr:last_two padding:none][month][day]\
+    [hour][minute].[second]"
+);
+
+// "%y%m%d%H%M" 10 chars
+const YYMMDDHHMM_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year repr:last_two padding:none][month padding:zero][day padding:zero]\
+    [hour repr:24 padding:zero][minute padding:zero]"
+);
+
+// "%Y-%m-%d %H:%M +offset"
+// Used for example in tests/touch/relative.sh
+const YYYYMMDDHHMM_OFFSET_FORMAT: &[time::format_description::FormatItem] = format_description!(
+    "[year]-[month]-[day] [hour repr:24]:[minute] \
+    [offset_hour sign:mandatory][offset_minute]"
+);
+
+fn parse_date(s: &str) -> UResult<FileTime> {
     // This isn't actually compatible with GNU touch, but there doesn't seem to
     // be any simple specification for what format this parameter allows and I'm
     // not about to implement GNU parse_datetime.
     // http://git.savannah.gnu.org/gitweb/?p=gnulib.git;a=blob_plain;f=lib/parse-datetime.y
-    let formats = vec!["%c", "%F"];
-    for f in formats {
-        if let Ok(tm) = time::strptime(str, f) {
-            return Ok(local_tm_to_filetime(to_local(tm)));
+
+    // TODO: match on char count?
+
+    // "The preferred date and time representation for the current locale."
+    // "(In the POSIX locale this is equivalent to %a %b %e %H:%M:%S %Y.)"
+    // time 0.1.43 parsed this as 'a b e T Y'
+    // which is equivalent to the POSIX locale: %a %b %e %H:%M:%S %Y
+    // Tue Dec  3 ...
+    // ("%c", POSIX_LOCALE_FORMAT),
+    //
+    if let Ok(parsed) = time::PrimitiveDateTime::parse(s, &POSIX_LOCALE_FORMAT) {
+        return Ok(local_dt_to_filetime(to_local(parsed)));
+    }
+
+    // Also support other formats found in the GNU tests like
+    // in tests/misc/stat-nanoseconds.sh
+    // or tests/touch/no-rights.sh
+    for fmt in [
+        YYYYMMDDHHMMS_FORMAT,
+        YYYYMMDDHHMMSS_FORMAT,
+        YYYY_MM_DD_HH_MM_FORMAT,
+        YYYYMMDDHHMM_OFFSET_FORMAT,
+    ] {
+        if let Ok(parsed) = time::PrimitiveDateTime::parse(s, &fmt) {
+            return Ok(dt_to_filename(parsed));
         }
     }
 
-    if let Ok(tm) = time::strptime(str, "@%s") {
-        // Don't convert to local time in this case - seconds since epoch are not time-zone dependent
-        return Ok(local_tm_to_filetime(tm));
+    // "Equivalent to %Y-%m-%d (the ISO 8601 date format). (C99)"
+    // ("%F", ISO_8601_FORMAT),
+    if let Ok(parsed) = time::Date::parse(s, &ISO_8601_FORMAT) {
+        return Ok(local_dt_to_filetime(to_local(
+            time::PrimitiveDateTime::new(parsed, time!(00:00)),
+        )));
     }
 
-    Err(USimpleError::new(
-        1,
-        format!("Unable to parse date: {}", str),
-    ))
+    // "@%s" is "The number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC). (TZ) (Calculated from mktime(tm).)"
+    if s.bytes().next() == Some(b'@') {
+        if let Ok(ts) = &s[1..].parse::<i64>() {
+            // Don't convert to local time in this case - seconds since epoch are not time-zone dependent
+            return Ok(local_dt_to_filetime(
+                time::OffsetDateTime::from_unix_timestamp(*ts).unwrap(),
+            ));
+        }
+    }
+
+    Err(USimpleError::new(1, format!("Unable to parse date: {}", s)))
 }
 
 fn parse_timestamp(s: &str) -> UResult<FileTime> {
-    let now = time::now();
-    let (format, ts) = match s.chars().count() {
-        15 => ("%Y%m%d%H%M.%S", s.to_owned()),
-        12 => ("%Y%m%d%H%M", s.to_owned()),
-        13 => ("%y%m%d%H%M.%S", s.to_owned()),
-        10 => ("%y%m%d%H%M", s.to_owned()),
-        11 => ("%Y%m%d%H%M.%S", format!("{}{}", now.tm_year + 1900, s)),
-        8 => ("%Y%m%d%H%M", format!("{}{}", now.tm_year + 1900, s)),
+    // TODO: handle error
+    let now = time::OffsetDateTime::now_utc();
+
+    let (mut format, mut ts) = match s.chars().count() {
+        15 => (YYYYMMDDHHMM_DOT_SS_FORMAT, s.to_owned()),
+        12 => (YYYYMMDDHHMM_FORMAT, s.to_owned()),
+        13 => (YYMMDDHHMM_DOT_SS_FORMAT, s.to_owned()),
+        10 => (YYMMDDHHMM_FORMAT, s.to_owned()),
+        11 => (YYYYMMDDHHMM_DOT_SS_FORMAT, format!("{}{}", now.year(), s)),
+        8 => (YYYYMMDDHHMM_FORMAT, format!("{}{}", now.year(), s)),
         _ => {
             return Err(USimpleError::new(
                 1,
@@ -287,29 +393,52 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
             ))
         }
     };
-
-    let tm = time::strptime(&ts, format)
-        .map_err(|_| USimpleError::new(1, format!("invalid date format {}", s.quote())))?;
-
-    let mut local = to_local(tm);
-    local.tm_isdst = -1;
-    let ft = local_tm_to_filetime(local);
-
-    // We have to check that ft is valid time. Due to daylight saving
-    // time switch, local time can jump from 1:59 AM to 3:00 AM,
-    // in which case any time between 2:00 AM and 2:59 AM is not valid.
-    // Convert back to local time and see if we got the same value back.
-    let ts = time::Timespec {
-        sec: ft.unix_seconds(),
-        nsec: 0,
-    };
-    let tm2 = time::at(ts);
-    if tm.tm_hour != tm2.tm_hour {
-        return Err(USimpleError::new(
-            1,
-            format!("invalid date format {}", s.quote()),
-        ));
+    // workaround time returning Err(TryFromParsed(InsufficientInformation)) for year w/
+    // repr:last_two
+    // https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=1ccfac7c07c5d1c7887a11decf0e1996
+    if s.chars().count() == 10 {
+        format = YYYYMMDDHHMM_FORMAT;
+        ts = "20".to_owned() + &ts;
+    } else if s.chars().count() == 13 {
+        format = YYYYMMDDHHMM_DOT_SS_FORMAT;
+        ts = "20".to_owned() + &ts;
     }
+
+    let leap_sec = if (format == YYYYMMDDHHMM_DOT_SS_FORMAT || format == YYMMDDHHMM_DOT_SS_FORMAT)
+        && ts.ends_with(".60")
+    {
+        // Work around to disable leap seconds
+        // Used in gnu/tests/touch/60-seconds
+        ts = ts.replace(".60", ".59");
+        true
+    } else {
+        false
+    };
+
+    let tm = time::PrimitiveDateTime::parse(&ts, &format)
+        .map_err(|_| USimpleError::new(1, format!("invalid date ts format {}", ts.quote())))?;
+    let mut local = to_local(tm);
+    if leap_sec {
+        // We are dealing with a leap second, add it
+        local = local.saturating_add(Duration::SECOND);
+    }
+    let ft = local_dt_to_filetime(local);
+
+    // // We have to check that ft is valid time. Due to daylight saving
+    // // time switch, local time can jump from 1:59 AM to 3:00 AM,
+    // // in which case any time between 2:00 AM and 2:59 AM is not valid.
+    // // Convert back to local time and see if we got the same value back.
+    // let ts = time::Timespec {
+    //     sec: ft.unix_seconds(),
+    //     nsec: 0,
+    // };
+    // let tm2 = time::at(ts);
+    // if tm.tm_hour != tm2.tm_hour {
+    //     return Err(USimpleError::new(
+    //         1,
+    //         format!("invalid date format {}", s.quote()),
+    //     ));
+    // }
 
     Ok(ft)
 }

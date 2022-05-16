@@ -99,7 +99,12 @@ pub fn uu_app<'a>() -> Command<'a> {
         .override_usage(format_usage(USAGE))
         .about(SUMMARY)
         .infer_long_args(true)
-        .arg(Arg::new(options::FILE).default_value("-").hide(true))
+        .arg(
+            Arg::new(options::FILE)
+                .default_value("-")
+                .hide(true)
+                .value_hint(clap::ValueHint::FilePath),
+        )
 }
 
 // We use String as a representation of node here

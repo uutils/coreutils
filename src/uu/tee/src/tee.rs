@@ -74,7 +74,11 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('i')
                 .help("ignore interrupt signals (ignored on non-Unix platforms)"),
         )
-        .arg(Arg::new(options::FILE).multiple_occurrences(true))
+        .arg(
+            Arg::new(options::FILE)
+                .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::FilePath),
+        )
 }
 
 #[cfg(unix)]

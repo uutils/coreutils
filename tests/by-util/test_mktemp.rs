@@ -2,6 +2,8 @@
 
 use crate::common::util::*;
 
+use uucore::display::Quotable;
+
 use std::path::PathBuf;
 use tempfile::tempdir;
 
@@ -410,4 +412,87 @@ fn test_mktemp_directory_tmpdir() {
         .succeeds();
     result.no_stderr().stdout_contains("apt-key-gpghome.");
     assert!(PathBuf::from(result.stdout_str().trim()).is_dir());
+}
+
+/// Decide whether a string matches a given template.
+///
+/// In the template, the character `'X'` is treated as a wildcard,
+/// that is, it matches anything. All other characters in `template`
+/// and `s` must match exactly.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// # These all match.
+/// assert!(matches_template("abc", "abc"));
+/// assert!(matches_template("aXc", "abc"));
+/// assert!(matches_template("XXX", "abc"));
+///
+/// # None of these match
+/// assert!(matches_template("abc", "abcd"));
+/// assert!(matches_template("abc", "ab"));
+/// assert!(matches_template("aXc", "abd"));
+/// assert!(matches_template("XXX", "abcd"));
+/// ```
+///
+fn matches_template(template: &str, s: &str) -> bool {
+    if template.len() != s.len() {
+        return false;
+    }
+    for (a, b) in template.chars().zip(s.chars()) {
+        if !(a == 'X' || a == b) {
+            return false;
+        }
+    }
+    true
+}
+
+/// An assertion that uses [`matches_template`] and adds a helpful error message.
+macro_rules! assert_matches_template {
+    ($template:expr, $s:expr) => {{
+        assert!(
+            matches_template($template, $s),
+            "\"{}\" != \"{}\"",
+            $template,
+            $s
+        );
+    }};
+}
+
+/// Test that the file is created in the directory given by the template.
+#[test]
+fn test_respect_template() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let template = "XXX";
+    let result = ucmd.arg(template).succeeds();
+    let filename = result.no_stderr().stdout_str().trim_end();
+    assert_matches_template!(template, filename);
+    assert!(at.file_exists(filename));
+}
+
+/// Test that the file is created in the directory given by the template.
+#[test]
+fn test_respect_template_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    #[cfg(not(windows))]
+    let template = "d/XXX";
+    #[cfg(windows)]
+    let template = r"d\XXX";
+    let result = ucmd.arg(template).succeeds();
+    let filename = result.no_stderr().stdout_str().trim_end();
+    assert_matches_template!(template, filename);
+    assert!(at.file_exists(filename));
+}
+
+/// Test that a template with a path separator is invalid.
+#[test]
+fn test_template_path_separator() {
+    new_ucmd!()
+        .args(&["-t", "a/bXXX"])
+        .fails()
+        .stderr_only(format!(
+            "mktemp: invalid template, {}, contains directory separator\n",
+            "a/bXXX".quote()
+        ));
 }

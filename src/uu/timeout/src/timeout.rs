@@ -170,6 +170,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .index(2)
                 .required(true)
                 .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::CommandName)
         )
         .trailing_var_arg(true)
         .infer_long_args(true)

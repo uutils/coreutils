@@ -372,6 +372,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::FILES)
                 .multiple_occurrences(true)
                 .multiple_values(true)
+                .value_hint(clap::ValueHint::FilePath)
         )
 }
 
@@ -399,7 +400,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     if matches.is_present(options::HELP) {
-        command.print_long_help()?;
+        command.print_help()?;
         return Ok(());
     }
 

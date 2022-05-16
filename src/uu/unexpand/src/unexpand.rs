@@ -109,7 +109,12 @@ pub fn uu_app<'a>() -> Command<'a> {
         .override_usage(format_usage(USAGE))
         .about(SUMMARY)
         .infer_long_args(true)
-        .arg(Arg::new(options::FILE).hide(true).multiple_occurrences(true))
+        .arg(
+            Arg::new(options::FILE)
+                .hide(true)
+                .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::FilePath)
+        )
         .arg(
             Arg::new(options::ALL)
                 .short('a')
@@ -127,7 +132,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::TABS)
                 .short('t')
                 .long(options::TABS)
-                .long_help("use comma separated LIST of tab positions or have tabs N characters apart instead of 8 (enables -a)")
+                .help("use comma separated LIST of tab positions or have tabs N characters apart instead of 8 (enables -a)")
                 .takes_value(true)
         )
         .arg(
