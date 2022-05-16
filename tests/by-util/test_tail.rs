@@ -12,11 +12,11 @@ extern crate tail;
 use crate::common::util::*;
 use std::char::from_digit;
 use std::io::{Read, Write};
+use std::process::Stdio;
 #[cfg(unix)]
 use std::thread::sleep;
 #[cfg(unix)]
 use std::time::Duration;
-use std::process::Stdio;
 
 #[cfg(target_os = "linux")]
 pub static BACKEND: &str = "inotify";
@@ -80,16 +80,18 @@ fn test_stdin_redirect_file() {
         .stdout_is("==> standard input <==\nfoo")
         .succeeded();
 
-        let mut p = ts.ucmd().arg("-f")
+    let mut p = ts
+        .ucmd()
+        .arg("-f")
         .set_stdin(std::fs::File::open(at.plus("f")).unwrap())
         .run_no_wait();
-        sleep(Duration::from_millis(500));
-        p.kill().unwrap();
+    sleep(Duration::from_millis(500));
+    p.kill().unwrap();
 
-        let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+    let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
     dbg!(&buf_stdout);
-        assert!(buf_stdout.eq("foo"));
-        assert!(buf_stderr.is_empty());
+    assert!(buf_stdout.eq("foo"));
+    assert!(buf_stderr.is_empty());
 }
 
 #[test]
@@ -189,14 +191,18 @@ fn test_follow_stdin_explicit_indefinitely() {
 
     let ts = TestScenario::new(util_name!());
 
-        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&["-f", "-", "/dev/null"]).run_no_wait();
-        sleep(Duration::from_millis(500));
-        p.kill().unwrap();
+    let mut p = ts
+        .ucmd()
+        .set_stdin(Stdio::null())
+        .args(&["-f", "-", "/dev/null"])
+        .run_no_wait();
+    sleep(Duration::from_millis(500));
+    p.kill().unwrap();
 
-        let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+    let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
     dbg!(&buf_stdout, &buf_stderr);
-        assert!(buf_stdout.eq("==> standard input <=="));
-        assert!(buf_stderr.eq("tail: warning: following standard input indefinitely is ineffective"));
+    assert!(buf_stdout.eq("==> standard input <=="));
+    assert!(buf_stderr.eq("tail: warning: following standard input indefinitely is ineffective"));
 
     // Also:
     // $ echo bar > foo
@@ -246,7 +252,6 @@ fn test_follow_bad_fd() {
     // tail: cannot fstat 'standard input': Bad file descriptor
     // tail: -: Bad file descriptor
 
-
     // WONT-FIX:
     // see also: https://github.com/uutils/coreutils/issues/2873
 }
@@ -282,7 +287,11 @@ fn test_null_default() {
 fn test_follow_single() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let mut child = ucmd.set_stdin(Stdio::null()).arg("-f").arg(FOOBAR_TXT).run_no_wait();
+    let mut child = ucmd
+        .set_stdin(Stdio::null())
+        .arg("-f")
+        .arg(FOOBAR_TXT)
+        .run_no_wait();
 
     let expected = at.read("foobar_single_default.expected");
     assert_eq!(read_size(&mut child, expected.len()), expected);
@@ -301,7 +310,11 @@ fn test_follow_single() {
 fn test_follow_non_utf8_bytes() {
     // Tail the test file and start following it.
     let (at, mut ucmd) = at_and_ucmd!();
-    let mut child = ucmd.arg("-f").set_stdin(Stdio::null()).arg(FOOBAR_TXT).run_no_wait();
+    let mut child = ucmd
+        .arg("-f")
+        .set_stdin(Stdio::null())
+        .arg(FOOBAR_TXT)
+        .run_no_wait();
     let expected = at.read("foobar_single_default.expected");
     assert_eq!(read_size(&mut child, expected.len()), expected);
 
@@ -327,7 +340,8 @@ fn test_follow_non_utf8_bytes() {
 #[test]
 fn test_follow_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let mut child = ucmd.set_stdin(Stdio::null())
+    let mut child = ucmd
+        .set_stdin(Stdio::null())
         .arg("-f")
         .arg(FOOBAR_TXT)
         .arg(FOOBAR_2_TXT)
@@ -681,7 +695,8 @@ fn test_dir_follow_retry() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkdir("DIR");
-    ts.ucmd().set_stdin(Stdio::null())
+    ts.ucmd()
+        .set_stdin(Stdio::null())
         .arg("--follow=descriptor")
         .arg("--retry")
         .arg("DIR")
@@ -1072,7 +1087,8 @@ fn test_retry6() {
     let expected_stdout = "==> existing <==\nX\n";
 
     let mut p = ts
-        .ucmd().set_stdin(Stdio::null())
+        .ucmd()
+        .set_stdin(Stdio::null())
         .arg("--follow=descriptor")
         .arg("missing")
         .arg("existing")
@@ -1185,7 +1201,8 @@ fn test_retry8() {
     let delay = 1000;
 
     let mut p = ts
-        .ucmd().set_stdin(Stdio::null())
+        .ucmd()
+        .set_stdin(Stdio::null())
         .arg("-F")
         .arg("-s.1")
         .arg("--max-unchanged-stats=1")
@@ -1246,7 +1263,8 @@ fn test_retry9() {
     at.mkdir(parent_dir);
     at.truncate(user_path, "foo\n");
     let mut p = ts
-        .ucmd().set_stdin(Stdio::null())
+        .ucmd()
+        .set_stdin(Stdio::null())
         .arg("-F")
         .arg("-s.1")
         .arg("--max-unchanged-stats=1")
@@ -1625,7 +1643,12 @@ fn test_follow_inotify_only_regular() {
 
     let ts = TestScenario::new(util_name!());
 
-    let mut p = ts.ucmd().set_stdin(Stdio::null()).arg("-f").arg("/dev/null").run_no_wait();
+    let mut p = ts
+        .ucmd()
+        .set_stdin(Stdio::null())
+        .arg("-f")
+        .arg("/dev/null")
+        .run_no_wait();
     sleep(Duration::from_millis(200));
 
     p.kill().unwrap();
@@ -1707,7 +1730,5 @@ fn test_fifo() {
         let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
         assert!(buf_stdout.is_empty());
         assert!(buf_stderr.is_empty());
-
     }
-
 }
