@@ -144,6 +144,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             .takes_value(true)
             .number_of_values(1)
             .value_name("DIR")
+            .value_hint(clap::ValueHint::DirPath)
             .help("change working directory to DIR"))
         .arg(Arg::new("null")
             .short('0')
@@ -156,6 +157,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             .takes_value(true)
             .number_of_values(1)
             .value_name("PATH")
+            .value_hint(clap::ValueHint::FilePath)
             .multiple_occurrences(true)
             .help("read and set variables from a \".env\"-style configuration file (prior to any \
                     unset and/or set)"))

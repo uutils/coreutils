@@ -156,14 +156,15 @@ pub fn uu_app<'a>() -> Command<'a> {
         .help("move all SOURCE arguments into DIRECTORY")
         .takes_value(true)
         .value_name("DIRECTORY")
+        .value_hint(clap::ValueHint::DirPath)
         .conflicts_with(OPT_NO_TARGET_DIRECTORY)
         .allow_invalid_utf8(true)
     )
     .arg(
             Arg::new(OPT_NO_TARGET_DIRECTORY)
             .short('T')
-            .long(OPT_NO_TARGET_DIRECTORY).
-            help("treat DEST as a normal file")
+            .long(OPT_NO_TARGET_DIRECTORY)
+            .help("treat DEST as a normal file")
     )
     .arg(
             Arg::new(OPT_UPDATE)
@@ -183,6 +184,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             .min_values(2)
             .required(true)
             .allow_invalid_utf8(true)
+            .value_hint(clap::ValueHint::AnyPath)
         )
 }
 

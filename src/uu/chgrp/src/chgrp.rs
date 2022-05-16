@@ -113,6 +113,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::REFERENCE)
                 .long(options::REFERENCE)
                 .value_name("RFILE")
+                .value_hint(clap::ValueHint::FilePath)
                 .help("use RFILE's group rather than specifying GROUP values")
                 .takes_value(true)
                 .multiple_occurrences(false),

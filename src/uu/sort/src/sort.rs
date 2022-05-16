@@ -1397,7 +1397,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::OUTPUT)
                 .help("write output to FILENAME instead of stdout")
                 .takes_value(true)
-                .value_name("FILENAME"),
+                .value_name("FILENAME")
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::REVERSE)
@@ -1461,13 +1462,15 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::TMP_DIR)
                 .help("use DIR for temporaries, not $TMPDIR or /tmp")
                 .takes_value(true)
-                .value_name("DIR"),
+                .value_name("DIR")
+                .value_hint(clap::ValueHint::DirPath),
         )
         .arg(
             Arg::new(options::COMPRESS_PROG)
                 .long(options::COMPRESS_PROG)
                 .help("compress temporary files with PROG, decompress with PROG -d; PROG has to take input from stdin and output to stdout")
-                .value_name("PROG"),
+                .value_name("PROG")
+                .value_hint(clap::ValueHint::CommandName),
         )
         .arg(
             Arg::new(options::BATCH_SIZE)
@@ -1482,7 +1485,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .takes_value(true)
                 .value_name("NUL_FILES")
                 .multiple_occurrences(true)
-                .allow_invalid_utf8(true),
+                .allow_invalid_utf8(true)
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::DEBUG)
@@ -1493,7 +1497,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::FILES)
                 .multiple_occurrences(true)
                 .takes_value(true)
-                .allow_invalid_utf8(true),
+                .allow_invalid_utf8(true)
+                .value_hint(clap::ValueHint::FilePath),
         )
 }
 

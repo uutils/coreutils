@@ -105,7 +105,11 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .overrides_with_all(&[OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
                 .help("Display the short hostname (the portion before the first dot) if possible"),
         )
-        .arg(Arg::new(OPT_HOST).allow_invalid_utf8(true))
+        .arg(
+            Arg::new(OPT_HOST)
+                .allow_invalid_utf8(true)
+                .value_hint(clap::ValueHint::Hostname),
+        )
 }
 
 fn display_hostname(matches: &ArgMatches) -> UResult<()> {

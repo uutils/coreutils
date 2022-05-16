@@ -801,12 +801,14 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
             Arg::new("file1")
                 .required(true)
                 .value_name("FILE1")
+                .value_hint(clap::ValueHint::FilePath)
                 .hide(true),
         )
         .arg(
             Arg::new("file2")
                 .required(true)
                 .value_name("FILE2")
+                .value_hint(clap::ValueHint::FilePath)
                 .hide(true),
         )
 }

@@ -248,6 +248,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help("set ownership (super-user only)")
                 .value_name("OWNER")
                 .takes_value(true)
+                .value_hint(clap::ValueHint::Username)
         )
         .arg(
             Arg::new(OPT_PRESERVE_TIMESTAMPS)
@@ -266,6 +267,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(OPT_STRIP_PROGRAM)
                 .help("program used to strip binaries (no action Windows)")
                 .value_name("PROGRAM")
+                .value_hint(clap::ValueHint::CommandName)
         )
         .arg(
             backup_control::arguments::suffix()
@@ -277,6 +279,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(OPT_TARGET_DIRECTORY)
                 .help("move all SOURCE arguments into DIRECTORY")
                 .value_name("DIRECTORY")
+                .value_hint(clap::ValueHint::DirPath)
         )
         .arg(
             // TODO implement flag
@@ -307,7 +310,13 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help("(unimplemented) set security context of files and directories")
                 .value_name("CONTEXT")
         )
-        .arg(Arg::new(ARG_FILES).multiple_occurrences(true).takes_value(true).min_values(1))
+        .arg(
+            Arg::new(ARG_FILES)
+                .multiple_occurrences(true)
+                .takes_value(true)
+                .min_values(1)
+                .value_hint(clap::ValueHint::AnyPath)
+        )
 }
 
 /// Check for unimplemented command line arguments.

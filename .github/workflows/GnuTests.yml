@@ -41,11 +41,11 @@ jobs:
         TEST_FULL_SUMMARY_FILE='gnu-full-result.json'
         outputs SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE
     - name: Checkout code (uutil)
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         path: '${{ steps.vars.outputs.path_UUTILS }}'
     - name: Checkout code (GNU coreutils)
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         repository: 'coreutils/coreutils'
         path: '${{ steps.vars.outputs.path_GNU }}'
@@ -146,22 +146,22 @@ jobs:
           # Compress logs before upload (fails otherwise)
           gzip ${{ steps.vars.outputs.TEST_LOGS_GLOB }}
     - name: Reserve SHA1/ID of 'test-summary'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: "${{ steps.summary.outputs.HASH }}"
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Reserve test results summary
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: test-summary
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Reserve test logs
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: test-logs
         path: "${{ steps.vars.outputs.TEST_LOGS_GLOB }}"
     - name: Upload full json results
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: gnu-full-result.json
         path: ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
@@ -229,11 +229,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code uutil
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         path: 'uutils'
     - name: Checkout GNU coreutils
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         repository: 'coreutils/coreutils'
         path: 'gnu'
@@ -293,7 +293,7 @@ jobs:
         grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
         echo ::set-output name=report::${COVERAGE_REPORT_FILE}
     - name: Upload coverage results (to Codecov.io)
-      uses: codecov/codecov-action@v2
+      uses: codecov/codecov-action@v3
       with:
         file: ${{ steps.coverage.outputs.report }}
         flags: gnutests

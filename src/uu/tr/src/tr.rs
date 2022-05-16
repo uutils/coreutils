@@ -143,7 +143,6 @@ pub fn uu_app<'a>() -> Command<'a> {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
-        .infer_long_args(true)
         .arg(
             Arg::new(options::COMPLEMENT)
                 .visible_short_alias('C')

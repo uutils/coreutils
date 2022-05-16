@@ -2,6 +2,8 @@
 
 use crate::common::util::*;
 
+use uucore::display::Quotable;
+
 use std::path::PathBuf;
 use tempfile::tempdir;
 
@@ -496,4 +498,16 @@ fn test_directory_permissions() {
     let metadata = at.metadata(dirname);
     assert!(metadata.is_dir());
     assert_eq!(metadata.permissions().mode(), 0o40700);
+}
+
+/// Test that a template with a path separator is invalid.
+#[test]
+fn test_template_path_separator() {
+    new_ucmd!()
+        .args(&["-t", "a/bXXX"])
+        .fails()
+        .stderr_only(format!(
+            "mktemp: invalid template, {}, contains directory separator\n",
+            "a/bXXX".quote()
+        ));
 }

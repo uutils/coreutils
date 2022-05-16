@@ -92,22 +92,25 @@ pub fn wrap_chown<P: AsRef<Path>>(
                 );
                 if level == VerbosityLevel::Verbose {
                     out = if verbosity.groups_only {
+                        let gid = meta.gid();
                         format!(
                             "{}\nfailed to change group of {} from {} to {}",
                             out,
                             path.quote(),
-                            entries::gid2grp(meta.gid()).unwrap(),
-                            entries::gid2grp(dest_gid).unwrap()
+                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                         )
                     } else {
+                        let uid = meta.uid();
+                        let gid = meta.gid();
                         format!(
                             "{}\nfailed to change ownership of {} from {}:{} to {}:{}",
                             out,
                             path.quote(),
-                            entries::uid2usr(meta.uid()).unwrap(),
-                            entries::gid2grp(meta.gid()).unwrap(),
-                            entries::uid2usr(dest_uid).unwrap(),
-                            entries::gid2grp(dest_gid).unwrap()
+                            entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                            entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
+                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                         )
                     };
                 };
@@ -119,21 +122,24 @@ pub fn wrap_chown<P: AsRef<Path>>(
         if changed {
             match verbosity.level {
                 VerbosityLevel::Changes | VerbosityLevel::Verbose => {
+                    let gid = meta.gid();
                     out = if verbosity.groups_only {
                         format!(
                             "changed group of {} from {} to {}",
                             path.quote(),
-                            entries::gid2grp(meta.gid()).unwrap(),
-                            entries::gid2grp(dest_gid).unwrap()
+                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                         )
                     } else {
+                        let gid = meta.gid();
+                        let uid = meta.uid();
                         format!(
                             "changed ownership of {} from {}:{} to {}:{}",
                             path.quote(),
-                            entries::uid2usr(meta.uid()).unwrap(),
-                            entries::gid2grp(meta.gid()).unwrap(),
-                            entries::uid2usr(dest_uid).unwrap(),
-                            entries::gid2grp(dest_gid).unwrap()
+                            entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                            entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
+                            entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                         )
                     };
                 }
@@ -150,8 +156,8 @@ pub fn wrap_chown<P: AsRef<Path>>(
                 format!(
                     "ownership of {} retained as {}:{}",
                     path.quote(),
-                    entries::uid2usr(dest_uid).unwrap(),
-                    entries::gid2grp(dest_gid).unwrap()
+                    entries::uid2usr(dest_uid).unwrap_or_else(|_| dest_uid.to_string()),
+                    entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                 )
             };
         }
@@ -456,6 +462,7 @@ pub fn chown_base<'a>(
     command = command.arg(
         Arg::new(options::ARG_FILES)
             .value_name(options::ARG_FILES)
+            .value_hint(clap::ValueHint::FilePath)
             .multiple_occurrences(true)
             .takes_value(true)
             .required(true)

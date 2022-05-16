@@ -233,7 +233,7 @@ impl<'a> RowFormatter<'a> {
             SizeFormat::HumanReadable(h) => self.scaled_human_readable(size, h),
             SizeFormat::StaticBlockSize => {
                 let BlockSize::Bytes(d) = self.options.block_size;
-                (size / d).to_string()
+                (size as f64 / d as f64).ceil().to_string()
             }
         }
     }
@@ -289,6 +289,23 @@ impl<'a> RowFormatter<'a> {
     }
 }
 
+/// A HeaderMode defines what header labels should be shown.
+pub(crate) enum HeaderMode {
+    Default,
+    // the user used -h or -H
+    HumanReadable,
+    // the user used -P
+    PosixPortability,
+    // the user used --output
+    Output,
+}
+
+impl Default for HeaderMode {
+    fn default() -> Self {
+        Self::Default
+    }
+}
+
 /// The data of the header row.
 struct Header {}
 
@@ -302,15 +319,22 @@ impl Header {
         for column in &options.columns {
             let header = match column {
                 Column::Source => String::from("Filesystem"),
-                Column::Size => match options.size_format {
-                    SizeFormat::HumanReadable(_) => String::from("Size"),
-                    SizeFormat::StaticBlockSize => {
-                        format!("{}-blocks", options.block_size)
+                Column::Size => match options.header_mode {
+                    HeaderMode::HumanReadable => String::from("Size"),
+                    HeaderMode::PosixPortability => {
+                        format!("{}-blocks", options.block_size.as_u64())
                     }
+                    _ => format!("{}-blocks", options.block_size),
                 },
                 Column::Used => String::from("Used"),
-                Column::Avail => String::from("Available"),
-                Column::Pcent => String::from("Use%"),
+                Column::Avail => match options.header_mode {
+                    HeaderMode::HumanReadable | HeaderMode::Output => String::from("Avail"),
+                    _ => String::from("Available"),
+                },
+                Column::Pcent => match options.header_mode {
+                    HeaderMode::PosixPortability => String::from("Capacity"),
+                    _ => String::from("Use%"),
+                },
                 Column::Target => String::from("Mounted on"),
                 Column::Itotal => String::from("Inodes"),
                 Column::Iused => String::from("IUsed"),
@@ -428,7 +452,7 @@ mod tests {
 
     use crate::blocks::{HumanReadable, SizeFormat};
     use crate::columns::Column;
-    use crate::table::{Header, Row, RowFormatter};
+    use crate::table::{Header, HeaderMode, Row, RowFormatter};
     use crate::{BlockSize, Options};
 
     const COLUMNS_WITH_FS_TYPE: [Column; 7] = [
@@ -548,37 +572,49 @@ mod tests {
     }
 
     #[test]
-    fn test_header_with_human_readable_binary() {
+    fn test_human_readable_header() {
         let options = Options {
-            size_format: SizeFormat::HumanReadable(HumanReadable::Binary),
+            header_mode: HeaderMode::HumanReadable,
+            ..Default::default()
+        };
+        assert_eq!(
+            Header::get_headers(&options),
+            vec!("Filesystem", "Size", "Used", "Avail", "Use%", "Mounted on")
+        );
+    }
+
+    #[test]
+    fn test_posix_portability_header() {
+        let options = Options {
+            header_mode: HeaderMode::PosixPortability,
             ..Default::default()
         };
         assert_eq!(
             Header::get_headers(&options),
             vec!(
                 "Filesystem",
-                "Size",
+                "1024-blocks",
                 "Used",
                 "Available",
-                "Use%",
+                "Capacity",
                 "Mounted on"
             )
         );
     }
 
     #[test]
-    fn test_header_with_human_readable_si() {
+    fn test_output_header() {
         let options = Options {
-            size_format: SizeFormat::HumanReadable(HumanReadable::Decimal),
+            header_mode: HeaderMode::Output,
             ..Default::default()
         };
         assert_eq!(
             Header::get_headers(&options),
             vec!(
                 "Filesystem",
-                "Size",
+                "1K-blocks",
                 "Used",
-                "Available",
+                "Avail",
                 "Use%",
                 "Mounted on"
             )
@@ -756,5 +792,29 @@ mod tests {
         };
         let fmt = RowFormatter::new(&row, &options);
         assert_eq!(fmt.get_values(), vec!("26%"));
+    }
+
+    #[test]
+    fn test_row_formatter_with_round_up_byte_values() {
+        fn get_formatted_values(bytes: u64, bytes_used: u64, bytes_avail: u64) -> Vec<String> {
+            let options = Options {
+                block_size: BlockSize::Bytes(1000),
+                columns: vec![Column::Size, Column::Used, Column::Avail],
+                ..Default::default()
+            };
+
+            let row = Row {
+                bytes,
+                bytes_used,
+                bytes_avail,
+                ..Default::default()
+            };
+            RowFormatter::new(&row, &options).get_values()
+        }
+
+        assert_eq!(get_formatted_values(100, 100, 0), vec!("1", "1", "0"));
+        assert_eq!(get_formatted_values(100, 99, 1), vec!("1", "1", "1"));
+        assert_eq!(get_formatted_values(1000, 1000, 0), vec!("1", "1", "0"));
+        assert_eq!(get_formatted_values(1001, 1000, 1), vec!("2", "1", "1"));
     }
 }

@@ -13,12 +13,16 @@ use uucore::display::{println_verbatim, Quotable};
 use uucore::error::{FromIo, UError, UResult};
 use uucore::format_usage;
 
+use std::env;
 use std::error::Error;
 use std::fmt::Display;
 use std::iter;
-use std::os::unix::prelude::PermissionsExt;
 use std::path::{is_separator, Path, PathBuf};
-use std::{env, fs};
+
+#[cfg(unix)]
+use std::fs;
+#[cfg(unix)]
+use std::os::unix::prelude::PermissionsExt;
 
 use rand::Rng;
 use tempfile::Builder;
@@ -42,7 +46,12 @@ enum MkTempError {
     PersistError(PathBuf),
     MustEndInX(String),
     TooFewXs(String),
-    ContainsDirSeparator(String),
+
+    /// The template prefix contains a path separator (e.g. `"a/bXXX"`).
+    PrefixContainsDirSeparator(String),
+
+    /// The template suffix contains a path separator (e.g. `"XXXa/b"`).
+    SuffixContainsDirSeparator(String),
     InvalidTemplate(String),
 }
 
@@ -57,7 +66,14 @@ impl Display for MkTempError {
             PersistError(p) => write!(f, "could not persist file {}", p.quote()),
             MustEndInX(s) => write!(f, "with --suffix, template {} must end in X", s.quote()),
             TooFewXs(s) => write!(f, "too few X's in template {}", s.quote()),
-            ContainsDirSeparator(s) => {
+            PrefixContainsDirSeparator(s) => {
+                write!(
+                    f,
+                    "invalid template, {}, contains directory separator",
+                    s.quote()
+                )
+            }
+            SuffixContainsDirSeparator(s) => {
                 write!(
                     f,
                     "invalid suffix {}, contains directory separator",
@@ -191,7 +207,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                      be an absolute name; unlike with -t, TEMPLATE may contain \
                      slashes, but mktemp creates only the final component",
                 )
-                .value_name("DIR"),
+                .value_name("DIR")
+                .value_hint(clap::ValueHint::DirPath),
         )
         .arg(Arg::new(OPT_T).short('t').help(
             "Generate a template (using the supplied prefix and TMPDIR (TMP on windows) if set) \
@@ -253,8 +270,12 @@ fn parse_template<'a>(
         }
     };
 
+    if prefix.chars().any(is_separator) {
+        return Err(MkTempError::PrefixContainsDirSeparator(temp.into()));
+    }
+
     if suf.chars().any(is_separator) {
-        return Err(MkTempError::ContainsDirSeparator(suf.into()));
+        return Err(MkTempError::SuffixContainsDirSeparator(suf.into()));
     }
 
     Ok((prefix, rand, suf))
@@ -358,11 +379,7 @@ mod tests {
 
     #[test]
     fn test_parse_template_errors() {
-        // TODO This should be an error as well, but we are not
-        // catching it just yet. A future commit will correct this.
-        //
-        //     assert!(parse_template("a/bXXX", None).is_err());
-        //
+        assert!(parse_template("a/bXXX", None).is_err());
         assert!(parse_template("XXXa/b", None).is_err());
         assert!(parse_template("XX", None).is_err());
         assert!(parse_template("XXXabc", Some("def")).is_err());

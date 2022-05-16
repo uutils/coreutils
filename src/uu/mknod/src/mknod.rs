@@ -162,7 +162,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .value_name("NAME")
                 .help("name of the new file")
                 .required(true)
-                .index(1),
+                .index(1)
+                .value_hint(clap::ValueHint::AnyPath),
         )
         .arg(
             Arg::new("type")
