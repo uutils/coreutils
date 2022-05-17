@@ -90,34 +90,41 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         output.push_str(&uname.nodename());
         output.push(' ');
     }
+
     if kernelrelease || all {
         output.push_str(&uname.release());
         output.push(' ');
     }
+
     if kernelversion || all {
         output.push_str(&uname.version());
         output.push(' ');
     }
+
     if machine || all {
         output.push_str(&uname.machine());
         output.push(' ');
     }
-    if processor || all {
-        // According to https://stackoverflow.com/posts/394271/revisions
-        // Most of the time, it returns unknown
-        output.push_str("unknown");
-        output.push(' ');
-    }
-    if hwplatform || all {
-        // According to https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
-        // Most of the time, it returns unknown
-        output.push_str("unknown");
-        output.push(' ');
-    }
+
     if os || all {
         output.push_str(HOST_OS);
         output.push(' ');
     }
+
+    // This option is unsupported on modern Linux systems
+    // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
+    if processor {
+        output.push_str("unknown");
+        output.push(' ');
+    }
+
+    // This option is unsupported on modern Linux systems
+    // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
+    if hwplatform {
+        output.push_str("unknown");
+        output.push(' ');
+    }
+
     println!("{}", output.trim_end());
 
     Ok(())
@@ -151,20 +158,22 @@ pub fn uu_app<'a>() -> Command<'a> {
             .short('v')
             .long(options::KERNELVERSION)
             .help("print the operating system version."))
-        .arg(Arg::new(options::HWPLATFORM)
-            .short('i')
-            .long(options::HWPLATFORM)
-            .help("print the hardware platform (non-portable)"))
         .arg(Arg::new(options::MACHINE)
             .short('m')
             .long(options::MACHINE)
             .help("print the machine hardware name."))
-        .arg(Arg::new(options::PROCESSOR)
-            .short('p')
-            .long(options::PROCESSOR)
-            .help("print the processor type (non-portable)"))
         .arg(Arg::new(options::OS)
             .short('o')
             .long(options::OS)
             .help("print the operating system name."))
+        .arg(Arg::new(options::PROCESSOR)
+            .short('p')
+            .long(options::PROCESSOR)
+            .help("print the processor type (non-portable)")
+            .hide(true))
+        .arg(Arg::new(options::HWPLATFORM)
+            .short('i')
+            .long(options::HWPLATFORM)
+            .help("print the hardware platform (non-portable)")
+            .hide(true))
 }
