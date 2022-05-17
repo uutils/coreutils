@@ -1055,9 +1055,9 @@ dependencies = [
 
 [[package]]
 name = "lscolors"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e9323b3525d4efad2dead1837a105e313253bfdbad1d470994038eededa4d62"
+checksum = "88e4434edeec6cd16a7e8e13569af4568a66fcd6d79abd8696db22dd95f920e6"
 dependencies = [
  "ansi_term",
 ]
