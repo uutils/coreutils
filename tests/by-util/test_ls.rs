@@ -2840,7 +2840,7 @@ fn test_ls_context2() {
     let ts = TestScenario::new(util_name!());
     for c_flag in ["-Z", "--context"] {
         ts.ucmd()
-            .args(&[c_flag, &"/"])
+            .args(&[c_flag, "/"])
             .succeeds()
             .stdout_only(unwrap_or_return!(expected_result(&ts, &[c_flag, "/"])).stdout_str());
     }

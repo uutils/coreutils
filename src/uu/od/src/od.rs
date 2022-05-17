@@ -29,6 +29,7 @@ mod prn_float;
 mod prn_int;
 
 use std::cmp;
+use std::fmt::Write;
 
 use crate::byteorder_io::*;
 use crate::formatteriteminfo::*;
@@ -600,11 +601,13 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
 
         let mut b = 0;
         while b < input_decoder.length() {
-            output_text.push_str(&format!(
+            write!(
+                output_text,
                 "{:>width$}",
                 "",
                 width = f.spacing[b % output_info.byte_size_block]
-            ));
+            )
+            .unwrap();
 
             match f.formatter_item_info.formatter {
                 FormatWriter::IntWriter(func) => {
@@ -627,12 +630,14 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
             let missing_spacing = output_info
                 .print_width_line
                 .saturating_sub(output_text.chars().count());
-            output_text.push_str(&format!(
+            write!(
+                output_text,
                 "{:>width$}  {}",
                 "",
                 format_ascii_dump(input_decoder.get_buffer(0)),
                 width = missing_spacing
-            ));
+            )
+            .unwrap();
         }
 
         if first {

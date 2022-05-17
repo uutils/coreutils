@@ -38,7 +38,7 @@ pub fn parse_size(size: &str) -> Result<u64, ParseSizeError> {
     }
     // Get the numeric part of the size argument. For example, if the
     // argument is "123K", then the numeric part is "123".
-    let numeric_string: String = size.chars().take_while(|c| c.is_digit(10)).collect();
+    let numeric_string: String = size.chars().take_while(|c| c.is_ascii_digit()).collect();
     let number: u64 = if !numeric_string.is_empty() {
         match numeric_string.parse() {
             Ok(n) => n,
