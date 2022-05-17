@@ -62,7 +62,7 @@ struct ProgramOptions {
     stderr: BufferType,
 }
 
-impl<'a> TryFrom<&ArgMatches> for ProgramOptions {
+impl TryFrom<&ArgMatches> for ProgramOptions {
     type Error = ProgramOptionsError;
 
     fn try_from(matches: &ArgMatches) -> Result<Self, Self::Error> {

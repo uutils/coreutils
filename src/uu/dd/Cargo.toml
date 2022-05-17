@@ -22,7 +22,7 @@ libc = "0.2"
 uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-signal-hook = "0.3.9"
+signal-hook = "0.3.14"
 
 [[bin]]
 name = "dd"
