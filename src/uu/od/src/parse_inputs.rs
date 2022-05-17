@@ -10,7 +10,7 @@ pub trait CommandLineOpts {
 }
 
 /// Implementation for `getopts`
-impl<'a> CommandLineOpts for ArgMatches {
+impl CommandLineOpts for ArgMatches {
     fn inputs(&self) -> Vec<&str> {
         self.values_of(options::FILENAME)
             .map(|values| values.collect())
