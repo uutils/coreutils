@@ -496,3 +496,18 @@ fn test_template_path_separator() {
             "a/bXXX".quote()
         ));
 }
+
+/// Test that a suffix with a path separator is invalid.
+#[test]
+fn test_suffix_path_separator() {
+    #[cfg(not(windows))]
+    new_ucmd!()
+        .arg("aXXX/b")
+        .fails()
+        .stderr_only("mktemp: invalid suffix '/b', contains directory separator\n");
+    #[cfg(windows)]
+    new_ucmd!()
+        .arg(r"aXXX\b")
+        .fails()
+        .stderr_only("mktemp: invalid suffix '\\b', contains directory separator\n");
+}
