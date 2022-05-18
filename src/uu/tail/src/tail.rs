@@ -7,7 +7,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf unwatch
+// spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf unwatch Uncategorized
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (acronyms)
 // spell-checker:ignore (env/flags)
@@ -47,8 +47,6 @@ use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::ringbuffer::RingBuffer;
 
 #[cfg(unix)]
-use crate::platform::{stdin_is_bad_fd, stdin_is_pipe_or_fifo};
-#[cfg(unix)]
 use std::fs::metadata;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
@@ -70,7 +68,6 @@ pub mod text {
     pub static STDIN_HEADER: &str = "standard input";
     pub static NO_FILES_REMAINING: &str = "no files remaining";
     pub static NO_SUCH_FILE: &str = "No such file or directory";
-    #[cfg(unix)]
     pub static BAD_FD: &str = "Bad file descriptor";
     #[cfg(target_os = "linux")]
     pub static BACKEND: &str = "inotify";
@@ -250,12 +247,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // skip expansive fstat check if PRESUME_INPUT_PIPE is selected
     if !args.stdin_is_pipe_or_fifo {
-        // FIXME windows has GetFileType which can determine if the file is a pipe/FIFO
-        // so this check can also be performed
-        if cfg!(unix) {
-            args.stdin_is_pipe_or_fifo = stdin_is_pipe_or_fifo();
-        }
+        args.stdin_is_pipe_or_fifo = stdin_is_pipe_or_fifo();
     }
+
+    // dbg!(args.stdin_is_pipe_or_fifo);
 
     uu_tail(args)
 }
@@ -298,6 +293,9 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
             }
         }
 
+        let mut buf = [0; 0]; // empty buffer to check if stdin().read().is_err()
+        let stdin_read_possible = settings.stdin_is_pipe_or_fifo && stdin().read(&mut buf).is_ok();
+
         if path.is_stdin() && settings.follow == Some(FollowMode::Name) {
             // TODO: still needed?
             // Mimic GNU's tail; Exit immediately even though there might be other valid files.
@@ -306,16 +304,30 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
             if settings.follow == Some(FollowMode::Descriptor) && settings.retry {
                 show_warning!("--retry only effective for the initial open");
             }
-            if !path.exists() {
+            if !path.exists() && !settings.stdin_is_pipe_or_fifo {
                 settings.return_code = 1;
                 show_error!(
                     "cannot open {} for reading: {}",
                     display_name.quote(),
                     text::NO_SUCH_FILE
                 );
-            } else if path.is_dir() {
+            } else if path.is_dir() || display_name.is_stdin() && !stdin_read_possible {
+                let err_msg = "Is a directory".to_string();
+
+                // NOTE: On macOS path.is_dir() can be false for directories
+                // if it was a redirect, e.g. ` tail < DIR`
+                if !path.is_dir() {
+                    // TODO: match against ErrorKind
+                    // if unstable library feature "io_error_more" becomes stable
+                    // if let Err(e) = stdin().read(&mut buf) {
+                    //     if e.kind() != std::io::ErrorKind::IsADirectory {
+                    //         err_msg = e.message.to_string();
+                    //     }
+                    // }
+                }
+
                 settings.return_code = 1;
-                show_error!("error reading {}: Is a directory", display_name.quote());
+                show_error!("error reading {}: {}", display_name.quote(), err_msg);
                 if settings.follow.is_some() {
                     let msg = if !settings.retry {
                         "; giving up on this name"
@@ -333,14 +345,25 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                     continue;
                 }
             } else {
-                // TODO: [2021-10; jhscheer] how to handle block device, socket, fifo?
+                // TODO: [2021-10; jhscheer] how to handle block device or socket?
+                // dbg!(path.is_tailable());
+                // dbg!(path.is_stdin());
+                // dbg!(path.is_dir());
+                // dbg!(path.exists());
+                // if let Ok(md) = path.metadata() {
+                //     let ft = md.file_type();
+                //     dbg!(ft.is_fifo());
+                //     dbg!(ft.is_socket());
+                //     dbg!(ft.is_block_device());
+                //     dbg!(ft.is_char_device());
+                // }
                 todo!();
             }
         }
 
         let md = path.metadata().ok();
 
-        if display_name.is_stdin() {
+        if display_name.is_stdin() && path.is_tailable() {
             if settings.verbose {
                 if !first_header {
                     println!();
@@ -725,10 +748,10 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
                     paths.push(path.to_path_buf());
                 }
             }
-            for path in paths.iter_mut() {
+            for path in &mut paths {
                 if let Ok(new_md) = path.metadata() {
                     if let Some(old_md) = &files.map.get(path).unwrap().metadata {
-                        // TODO: [2021-10; jhscheer] reduce dublicate code
+                        // TODO: [2021-10; jhscheer] reduce duplicate code
                         let display_name = files.map.get(path).unwrap().display_name.to_path_buf();
                         if new_md.len() <= old_md.len()
                             && new_md.modified().unwrap() != old_md.modified().unwrap()
@@ -1407,6 +1430,26 @@ fn get_block_size(md: &Metadata) -> u64 {
     }
 }
 
+pub fn stdin_is_pipe_or_fifo() -> bool {
+    #[cfg(unix)]
+    {
+        platform::stdin_is_pipe_or_fifo()
+    }
+    // FIXME windows has GetFileType which can determine if the file is a pipe/FIFO
+    // so this check can also be performed
+    #[cfg(not(unix))]
+    false
+}
+
+pub fn stdin_is_bad_fd() -> bool {
+    #[cfg(unix)]
+    {
+        platform::stdin_is_bad_fd()
+    }
+    #[cfg(not(unix))]
+    false
+}
+
 trait PathExt {
     fn is_stdin(&self) -> bool;
     fn print_header(&self);
@@ -1416,9 +1459,9 @@ trait PathExt {
 
 impl PathExt for Path {
     fn is_stdin(&self) -> bool {
-        self.eq(Path::new(text::DASH))
-            || self.eq(Path::new(text::DEV_STDIN))
-            || self.eq(Path::new(text::STDIN_HEADER))
+        self.eq(Self::new(text::DASH))
+            || self.eq(Self::new(text::DEV_STDIN))
+            || self.eq(Self::new(text::STDIN_HEADER))
     }
     fn print_header(&self) {
         println!("==> {} <==", self.display());
@@ -1431,7 +1474,10 @@ impl PathExt for Path {
         {
             // TODO: [2021-10; jhscheer] what about fifos?
             self.is_file()
-                || (self.exists() && metadata(self).unwrap().file_type().is_char_device())
+                || self.exists() && {
+                    let ft = metadata(self).unwrap().file_type();
+                    ft.is_char_device() || ft.is_fifo()
+                }
         }
         #[cfg(not(unix))]
         {

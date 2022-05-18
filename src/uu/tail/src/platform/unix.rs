@@ -9,6 +9,7 @@
  */
 
 // spell-checker:ignore (ToDO) errno EPERM ENOSYS
+// spell-checker:ignore (options) GETFD
 
 use std::io::{stdin, Error};
 

@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile logfile bogusfile siette ocho nueve diez
+// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile logfile file siette ocho nueve diez
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (jargon) tailable untailable
 
@@ -89,7 +89,6 @@ fn test_stdin_redirect_file() {
     p.kill().unwrap();
 
     let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
-    dbg!(&buf_stdout);
     assert!(buf_stdout.eq("foo"));
     assert!(buf_stderr.is_empty());
 }
@@ -200,7 +199,6 @@ fn test_follow_stdin_explicit_indefinitely() {
     p.kill().unwrap();
 
     let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
-    dbg!(&buf_stdout, &buf_stderr);
     assert!(buf_stdout.eq("==> standard input <=="));
     assert!(buf_stderr.eq("tail: warning: following standard input indefinitely is ineffective"));
 
@@ -495,9 +493,9 @@ fn test_bytes_single() {
 #[test]
 fn test_bytes_stdin() {
     new_ucmd!()
+        .pipe_in_fixture(FOOBAR_TXT)
         .arg("-c")
         .arg("13")
-        .pipe_in_fixture(FOOBAR_TXT)
         .run()
         .stdout_is_fixture("foobar_bytes_stdin.expected")
         .no_stderr();
@@ -945,7 +943,12 @@ fn test_retry2() {
     let ts = TestScenario::new(util_name!());
     let missing = "missing";
 
-    let result = ts.ucmd().arg(missing).arg("--retry").run();
+    let result = ts
+        .ucmd()
+        .set_stdin(Stdio::null())
+        .arg(missing)
+        .arg("--retry")
+        .run();
     result
         .stderr_is(
             "tail: warning: --retry ignored; --retry is useful only when following\n\
@@ -1300,7 +1303,6 @@ fn test_retry9() {
     p.kill().unwrap();
 
     let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
-    // println!("stdout:\n{}\nstderr:\n{}", buf_stdout, buf_stderr); // dbg
     assert_eq!(buf_stdout, expected_stdout);
     assert_eq!(buf_stderr, expected_stderr);
 }
@@ -1672,10 +1674,12 @@ fn take_stdout_stderr(p: &mut std::process::Child) -> (String, String) {
 #[test]
 fn test_no_such_file() {
     new_ucmd!()
-        .arg("bogusfile")
+        .set_stdin(Stdio::null())
+        .arg("missing")
         .fails()
+        .stderr_is("tail: cannot open 'missing' for reading: No such file or directory")
         .no_stdout()
-        .stderr_contains("cannot open 'bogusfile' for reading: No such file or directory");
+        .code_is(1);
 }
 
 #[test]
@@ -1708,8 +1712,7 @@ fn test_presume_input_pipe_default() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
-#[cfg(disable_until_fixed)]
+#[cfg(unix)]
 fn test_fifo() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
