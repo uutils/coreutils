@@ -29,6 +29,7 @@ mod prn_float;
 mod prn_int;
 
 use std::cmp;
+use std::fmt::Write;
 
 use crate::byteorder_io::*;
 use crate::formatteriteminfo::*;
@@ -512,7 +513,8 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FILENAME)
                 .hide(true)
-                .multiple_occurrences(true),
+                .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::FilePath),
         )
 }
 
@@ -599,11 +601,13 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
 
         let mut b = 0;
         while b < input_decoder.length() {
-            output_text.push_str(&format!(
+            write!(
+                output_text,
                 "{:>width$}",
                 "",
                 width = f.spacing[b % output_info.byte_size_block]
-            ));
+            )
+            .unwrap();
 
             match f.formatter_item_info.formatter {
                 FormatWriter::IntWriter(func) => {
@@ -626,12 +630,14 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
             let missing_spacing = output_info
                 .print_width_line
                 .saturating_sub(output_text.chars().count());
-            output_text.push_str(&format!(
+            write!(
+                output_text,
                 "{:>width$}  {}",
                 "",
                 format_ascii_dump(input_decoder.get_buffer(0)),
                 width = missing_spacing
-            ));
+            )
+            .unwrap();
         }
 
         if first {
@@ -673,8 +679,10 @@ fn open_input_peek_reader(
 fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
     // GNU's od echos affected flag, -N or --read-bytes (-j or --skip-bytes, etc.), depending user's selection
-    // GNU's od does distinguish between "invalid (suffix in) argument"
     match error {
+        ParseSizeError::InvalidSuffix(_) => {
+            format!("invalid suffix in --{} argument {}", option, s.quote())
+        }
         ParseSizeError::ParseFailure(_) => format!("invalid --{} argument {}", option, s.quote()),
         ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
     }

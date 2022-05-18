@@ -123,7 +123,12 @@ pub fn base_app<'a>(about: &'a str, usage: &'a str) -> Command<'a> {
         )
         // "multiple" arguments are used to check whether there is more than one
         // file passed in.
-        .arg(Arg::new(options::FILE).index(1).multiple_occurrences(true))
+        .arg(
+            Arg::new(options::FILE)
+                .index(1)
+                .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::FilePath),
+        )
 }
 
 pub fn get_input<'a>(config: &Config, stdin_ref: &'a Stdin) -> UResult<Box<dyn Read + 'a>> {

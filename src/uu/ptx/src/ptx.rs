@@ -13,7 +13,7 @@ use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::default::Default;
 use std::error::Error;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter, Write as FmtWrite};
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::num::ParseIntError;
@@ -572,7 +572,7 @@ fn format_tex_line(
     reference: &str,
 ) -> String {
     let mut output = String::new();
-    output.push_str(&format!("\\{} ", config.macro_name));
+    write!(output, "\\{} ", config.macro_name).unwrap();
     let all_before = if config.input_ref {
         let before = &line[0..word_ref.position];
         let before_start_trim_offset =
@@ -587,18 +587,18 @@ fn format_tex_line(
     let after_chars_trim_idx = (word_ref.position_end, chars_line.len());
     let all_after = &chars_line[after_chars_trim_idx.0..after_chars_trim_idx.1];
     let (tail, before, after, head) = get_output_chunks(all_before, keyword, all_after, config);
-    output.push_str(&format!(
-        "{5}{0}{6}{5}{1}{6}{5}{2}{6}{5}{3}{6}{5}{4}{6}",
+    write!(
+        output,
+        "{{{0}}}{{{1}}}{{{2}}}{{{3}}}{{{4}}}",
         format_tex_field(&tail),
         format_tex_field(&before),
         format_tex_field(keyword),
         format_tex_field(&after),
         format_tex_field(&head),
-        "{",
-        "}"
-    ));
+    )
+    .unwrap();
     if config.auto_ref || config.input_ref {
-        output.push_str(&format!("{}{}{}", "{", format_tex_field(reference), "}"));
+        write!(output, "{{{}}}", format_tex_field(reference)).unwrap();
     }
     output
 }
@@ -615,7 +615,7 @@ fn format_roff_line(
     reference: &str,
 ) -> String {
     let mut output = String::new();
-    output.push_str(&format!(".{}", config.macro_name));
+    write!(output, ".{}", config.macro_name).unwrap();
     let all_before = if config.input_ref {
         let before = &line[0..word_ref.position];
         let before_start_trim_offset =
@@ -630,16 +630,18 @@ fn format_roff_line(
     let after_chars_trim_idx = (word_ref.position_end, chars_line.len());
     let all_after = &chars_line[after_chars_trim_idx.0..after_chars_trim_idx.1];
     let (tail, before, after, head) = get_output_chunks(all_before, keyword, all_after, config);
-    output.push_str(&format!(
+    write!(
+        output,
         " \"{}\" \"{}\" \"{}{}\" \"{}\"",
         format_roff_field(&tail),
         format_roff_field(&before),
         format_roff_field(keyword),
         format_roff_field(&after),
         format_roff_field(&head)
-    ));
+    )
+    .unwrap();
     if config.auto_ref || config.input_ref {
-        output.push_str(&format!(" \"{}\"", format_roff_field(reference)));
+        write!(output, " \"{}\"", format_roff_field(reference)).unwrap();
     }
     output
 }
@@ -754,7 +756,8 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
-                .multiple_occurrences(true),
+                .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::AUTO_REFERENCE)
@@ -826,7 +829,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::BREAK_FILE)
                 .help("word break characters in this FILE")
                 .value_name("FILE")
-                .takes_value(true),
+                .takes_value(true)
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::IGNORE_CASE)
@@ -849,7 +853,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::IGNORE_FILE)
                 .help("read ignore word list from FILE")
                 .value_name("FILE")
-                .takes_value(true),
+                .takes_value(true)
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::ONLY_FILE)
@@ -857,7 +862,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::ONLY_FILE)
                 .help("read only word list from this FILE")
                 .value_name("FILE")
-                .takes_value(true),
+                .takes_value(true)
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::REFERENCES)

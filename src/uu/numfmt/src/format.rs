@@ -244,7 +244,7 @@ fn format_string(
         p => format!(
             "{:<padding$}",
             number_with_suffix,
-            padding = p.abs() as usize
+            padding = p.unsigned_abs()
         ),
     })
 }

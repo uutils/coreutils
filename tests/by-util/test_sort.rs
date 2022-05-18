@@ -56,18 +56,20 @@ fn test_buffer_sizes() {
 
 #[test]
 fn test_invalid_buffer_size() {
-    let buffer_sizes = ["asd", "100f"];
-    for invalid_buffer_size in &buffer_sizes {
-        new_ucmd!()
-            .arg("-S")
-            .arg(invalid_buffer_size)
-            .fails()
-            .code_is(2)
-            .stderr_only(format!(
-                "sort: invalid --buffer-size argument '{}'",
-                invalid_buffer_size
-            ));
-    }
+    new_ucmd!()
+        .arg("-S")
+        .arg("asd")
+        .fails()
+        .code_is(2)
+        .stderr_only("sort: invalid --buffer-size argument 'asd'");
+
+    new_ucmd!()
+        .arg("-S")
+        .arg("100f")
+        .fails()
+        .code_is(2)
+        .stderr_only("sort: invalid suffix in --buffer-size argument '100f'");
+
     #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .arg("-n")

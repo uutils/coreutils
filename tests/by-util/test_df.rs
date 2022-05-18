@@ -73,7 +73,7 @@ fn test_df_output() {
             "Filesystem",
             "Size",
             "Used",
-            "Available",
+            "Avail",
             "Capacity",
             "Use%",
             "Mounted",
@@ -84,7 +84,7 @@ fn test_df_output() {
             "Filesystem",
             "Size",
             "Used",
-            "Available",
+            "Avail",
             "Use%",
             "Mounted",
             "on",
@@ -107,7 +107,7 @@ fn test_df_output_overridden() {
             "Filesystem",
             "Size",
             "Used",
-            "Available",
+            "Avail",
             "Capacity",
             "Use%",
             "Mounted",
@@ -118,7 +118,7 @@ fn test_df_output_overridden() {
             "Filesystem",
             "Size",
             "Used",
-            "Available",
+            "Avail",
             "Use%",
             "Mounted",
             "on",
@@ -132,6 +132,46 @@ fn test_df_output_overridden() {
     let actual = output.lines().take(1).collect::<Vec<&str>>()[0];
     let actual = actual.split_whitespace().collect::<Vec<_>>();
     assert_eq!(actual, expected);
+}
+
+#[test]
+fn test_default_headers() {
+    let expected = if cfg!(target_os = "macos") {
+        vec![
+            "Filesystem",
+            "1K-blocks",
+            "Used",
+            "Available",
+            "Capacity",
+            "Use%",
+            "Mounted",
+            "on",
+        ]
+    } else {
+        vec![
+            "Filesystem",
+            "1K-blocks",
+            "Used",
+            "Available",
+            "Use%",
+            "Mounted",
+            "on",
+        ]
+    };
+    let output = new_ucmd!().succeeds().stdout_move_str();
+    let actual = output.lines().take(1).collect::<Vec<&str>>()[0];
+    let actual = actual.split_whitespace().collect::<Vec<_>>();
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn test_precedence_of_human_readable_header_over_output_header() {
+    let output = new_ucmd!()
+        .args(&["-H", "--output=size"])
+        .succeeds()
+        .stdout_move_str();
+    let header = output.lines().next().unwrap().to_string();
+    assert_eq!(header.trim(), "Size");
 }
 
 #[test]
@@ -396,6 +436,30 @@ fn test_default_block_size() {
 }
 
 #[test]
+fn test_default_block_size_in_posix_portability_mode() {
+    fn get_header(s: &str) -> String {
+        s.lines()
+            .next()
+            .unwrap()
+            .to_string()
+            .split_whitespace()
+            .nth(1)
+            .unwrap()
+            .to_string()
+    }
+
+    let output = new_ucmd!().arg("-P").succeeds().stdout_move_str();
+    assert_eq!(get_header(&output), "1024-blocks");
+
+    let output = new_ucmd!()
+        .arg("-P")
+        .env("POSIXLY_CORRECT", "1")
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(get_header(&output), "512-blocks");
+}
+
+#[test]
 fn test_block_size_1024() {
     fn get_header(block_size: u64) -> String {
         let output = new_ucmd!()
@@ -444,6 +508,31 @@ fn test_block_size_with_suffix() {
 }
 
 #[test]
+fn test_block_size_in_posix_portability_mode() {
+    fn get_header(block_size: &str) -> String {
+        let output = new_ucmd!()
+            .args(&["-P", "-B", block_size])
+            .succeeds()
+            .stdout_move_str();
+        output
+            .lines()
+            .next()
+            .unwrap()
+            .to_string()
+            .split_whitespace()
+            .nth(1)
+            .unwrap()
+            .to_string()
+    }
+
+    assert_eq!(get_header("1024"), "1024-blocks");
+    assert_eq!(get_header("1K"), "1024-blocks");
+    assert_eq!(get_header("1KB"), "1000-blocks");
+    assert_eq!(get_header("1M"), "1048576-blocks");
+    assert_eq!(get_header("1MB"), "1000000-blocks");
+}
+
+#[test]
 fn test_too_large_block_size() {
     fn run_command(size: &str) {
         new_ucmd!()
@@ -465,6 +554,29 @@ fn test_invalid_block_size() {
         .arg("--block-size=x")
         .fails()
         .stderr_contains("invalid --block-size argument 'x'");
+
+    new_ucmd!()
+        .arg("--block-size=0")
+        .fails()
+        .stderr_contains("invalid --block-size argument '0'");
+
+    new_ucmd!()
+        .arg("--block-size=0K")
+        .fails()
+        .stderr_contains("invalid --block-size argument '0K'");
+}
+
+#[test]
+fn test_invalid_block_size_suffix() {
+    new_ucmd!()
+        .arg("--block-size=1H")
+        .fails()
+        .stderr_contains("invalid suffix in --block-size argument '1H'");
+
+    new_ucmd!()
+        .arg("--block-size=1.2")
+        .fails()
+        .stderr_contains("invalid suffix in --block-size argument '1.2'");
 }
 
 #[test]

@@ -15,6 +15,7 @@ use uucore::utmpx::{self, time, Utmpx};
 use clap::{crate_version, Arg, Command};
 use std::borrow::Cow;
 use std::ffi::CStr;
+use std::fmt::Write;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use uucore::{format_usage, InvalidEncodingHandling};
@@ -250,7 +251,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::FILE)
                 .takes_value(true)
                 .min_values(1)
-                .max_values(2),
+                .max_values(2)
+                .value_hint(clap::ValueHint::FilePath),
         )
 }
 
@@ -528,24 +530,24 @@ impl Who {
         let mut buf = String::with_capacity(64);
         let msg = vec![' ', state].into_iter().collect::<String>();
 
-        buf.push_str(&format!("{:<8}", user));
+        write!(buf, "{:<8}", user).unwrap();
         if self.include_mesg {
             buf.push_str(&msg);
         }
-        buf.push_str(&format!(" {:<12}", line));
+        write!(buf, " {:<12}", line).unwrap();
         // "%b %e %H:%M" (LC_ALL=C)
         let time_size = 3 + 2 + 2 + 1 + 2;
-        buf.push_str(&format!(" {:<1$}", time, time_size));
+        write!(buf, " {:<1$}", time, time_size).unwrap();
 
         if !self.short_output {
             if self.include_idle {
-                buf.push_str(&format!(" {:<6}", idle));
+                write!(buf, " {:<6}", idle).unwrap();
             }
-            buf.push_str(&format!(" {:>10}", pid));
+            write!(buf, " {:>10}", pid).unwrap();
         }
-        buf.push_str(&format!(" {:<8}", comment));
+        write!(buf, " {:<8}", comment).unwrap();
         if self.include_exit {
-            buf.push_str(&format!(" {:<12}", exit));
+            write!(buf, " {:<12}", exit).unwrap();
         }
         println!("{}", buf.trim_end());
     }

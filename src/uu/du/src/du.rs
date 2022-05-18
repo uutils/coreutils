@@ -884,6 +884,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('X')
                 .long("exclude-from")
                 .value_name("FILE")
+                .value_hint(clap::ValueHint::FilePath)
                 .help("exclude files that match any pattern in FILE")
                 .multiple_occurrences(true)
 
@@ -913,6 +914,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
+                .value_hint(clap::ValueHint::AnyPath)
                 .multiple_occurrences(true)
         )
 }
@@ -951,8 +953,10 @@ impl Threshold {
 fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
     // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
-    // GNU's du does distinguish between "invalid (suffix in) argument"
     match error {
+        ParseSizeError::InvalidSuffix(_) => {
+            format!("invalid suffix in --{} argument {}", option, s.quote())
+        }
         ParseSizeError::ParseFailure(_) => format!("invalid --{} argument {}", option, s.quote()),
         ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
     }

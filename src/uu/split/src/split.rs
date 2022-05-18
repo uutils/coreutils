@@ -111,9 +111,11 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_FILTER)
                 .long(OPT_FILTER)
                 .takes_value(true)
+                .value_name("COMMAND")
+                .value_hint(clap::ValueHint::CommandName)
                 .help(
-                "write to shell COMMAND file name is $FILE (Currently not implemented for Windows)",
-            ),
+                    "write to shell COMMAND; file name is $FILE (Currently not implemented for Windows)",
+                ),
         )
         .arg(
             Arg::new(OPT_ELIDE_EMPTY_FILES)
@@ -162,7 +164,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(ARG_INPUT)
                 .takes_value(true)
                 .default_value("-")
-                .index(1),
+                .index(1)
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(ARG_PREFIX)

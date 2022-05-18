@@ -348,9 +348,9 @@ impl GlobalSettings {
         ];
         let mut size_string = input.trim().to_string();
 
-        if size_string.ends_with(|c: char| ALLOW_LIST.contains(&c) || c.is_digit(10)) {
+        if size_string.ends_with(|c: char| ALLOW_LIST.contains(&c) || c.is_ascii_digit()) {
             // b 1, K 1024 (default)
-            if size_string.ends_with(|c: char| c.is_digit(10)) {
+            if size_string.ends_with(|c: char| c.is_ascii_digit()) {
                 size_string.push('K');
             } else if size_string.ends_with('b') {
                 size_string.pop();
@@ -362,8 +362,10 @@ impl GlobalSettings {
                     size
                 ))
             })
+        } else if size_string.starts_with(|c: char| c.is_ascii_digit()) {
+            Err(ParseSizeError::InvalidSuffix("invalid suffix".to_string()))
         } else {
-            Err(ParseSizeError::ParseFailure("invalid suffix".to_string()))
+            Err(ParseSizeError::ParseFailure("parse failure".to_string()))
         }
     }
 
@@ -1397,7 +1399,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::OUTPUT)
                 .help("write output to FILENAME instead of stdout")
                 .takes_value(true)
-                .value_name("FILENAME"),
+                .value_name("FILENAME")
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::REVERSE)
@@ -1461,13 +1464,15 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::TMP_DIR)
                 .help("use DIR for temporaries, not $TMPDIR or /tmp")
                 .takes_value(true)
-                .value_name("DIR"),
+                .value_name("DIR")
+                .value_hint(clap::ValueHint::DirPath),
         )
         .arg(
             Arg::new(options::COMPRESS_PROG)
                 .long(options::COMPRESS_PROG)
                 .help("compress temporary files with PROG, decompress with PROG -d; PROG has to take input from stdin and output to stdout")
-                .value_name("PROG"),
+                .value_name("PROG")
+                .value_hint(clap::ValueHint::CommandName),
         )
         .arg(
             Arg::new(options::BATCH_SIZE)
@@ -1482,7 +1487,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .takes_value(true)
                 .value_name("NUL_FILES")
                 .multiple_occurrences(true)
-                .allow_invalid_utf8(true),
+                .allow_invalid_utf8(true)
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::DEBUG)
@@ -1493,7 +1499,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::FILES)
                 .multiple_occurrences(true)
                 .takes_value(true)
-                .allow_invalid_utf8(true),
+                .allow_invalid_utf8(true)
+                .value_hint(clap::ValueHint::FilePath),
         )
 }
 
@@ -1828,8 +1835,10 @@ fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
 fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
     // GNU's sort echos affected flag, -S or --buffer-size, depending user's selection
-    // GNU's sort does distinguish between "invalid (suffix in) argument"
     match error {
+        ParseSizeError::InvalidSuffix(_) => {
+            format!("invalid suffix in --{} argument {}", option, s.quote())
+        }
         ParseSizeError::ParseFailure(_) => format!("invalid --{} argument {}", option, s.quote()),
         ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
     }

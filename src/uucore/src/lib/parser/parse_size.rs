@@ -38,7 +38,7 @@ pub fn parse_size(size: &str) -> Result<u64, ParseSizeError> {
     }
     // Get the numeric part of the size argument. For example, if the
     // argument is "123K", then the numeric part is "123".
-    let numeric_string: String = size.chars().take_while(|c| c.is_digit(10)).collect();
+    let numeric_string: String = size.chars().take_while(|c| c.is_ascii_digit()).collect();
     let number: u64 = if !numeric_string.is_empty() {
         match numeric_string.parse() {
             Ok(n) => n,
@@ -72,7 +72,8 @@ pub fn parse_size(size: &str) -> Result<u64, ParseSizeError> {
         "EB" | "eB" => (1000, 6),
         "ZB" | "zB" => (1000, 7),
         "YB" | "yB" => (1000, 8),
-        _ => return Err(ParseSizeError::parse_failure(size)),
+        _ if numeric_string.is_empty() => return Err(ParseSizeError::parse_failure(size)),
+        _ => return Err(ParseSizeError::invalid_suffix(size)),
     };
     let factor = match u64::try_from(base.pow(exponent)) {
         Ok(n) => n,
@@ -85,13 +86,15 @@ pub fn parse_size(size: &str) -> Result<u64, ParseSizeError> {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ParseSizeError {
-    ParseFailure(String), // Syntax
-    SizeTooBig(String),   // Overflow
+    InvalidSuffix(String), // Suffix
+    ParseFailure(String),  // Syntax
+    SizeTooBig(String),    // Overflow
 }
 
 impl Error for ParseSizeError {
     fn description(&self) -> &str {
         match *self {
+            ParseSizeError::InvalidSuffix(ref s) => &*s,
             ParseSizeError::ParseFailure(ref s) => &*s,
             ParseSizeError::SizeTooBig(ref s) => &*s,
         }
@@ -101,7 +104,9 @@ impl Error for ParseSizeError {
 impl fmt::Display for ParseSizeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         let s = match self {
-            ParseSizeError::ParseFailure(s) | ParseSizeError::SizeTooBig(s) => s,
+            ParseSizeError::InvalidSuffix(s)
+            | ParseSizeError::ParseFailure(s)
+            | ParseSizeError::SizeTooBig(s) => s,
         };
         write!(f, "{}", s)
     }
@@ -111,6 +116,10 @@ impl fmt::Display for ParseSizeError {
 // but there's a lot of downstream code that constructs these errors manually
 // that would be affected
 impl ParseSizeError {
+    fn invalid_suffix(s: &str) -> Self {
+        Self::InvalidSuffix(format!("{}", s.quote()))
+    }
+
     fn parse_failure(s: &str) -> Self {
         // stderr on linux (GNU coreutils 8.32) (LC_ALL=C)
         // has to be handled in the respective uutils because strings differ, e.g.:
@@ -238,19 +247,19 @@ mod tests {
     }
 
     #[test]
+    fn invalid_suffix() {
+        let test_strings = ["328hdsf3290", "5mib", "1e2", "1H", "1.2"];
+        for &test_string in &test_strings {
+            assert_eq!(
+                parse_size(test_string).unwrap_err(),
+                ParseSizeError::InvalidSuffix(format!("{}", test_string.quote()))
+            );
+        }
+    }
+
+    #[test]
     fn invalid_syntax() {
-        let test_strings = [
-            "328hdsf3290",
-            "5MiB nonsense",
-            "5mib",
-            "biB",
-            "-",
-            "+",
-            "",
-            "-1",
-            "1e2",
-            "∞",
-        ];
+        let test_strings = ["biB", "-", "+", "", "-1", "∞"];
         for &test_string in &test_strings {
             assert_eq!(
                 parse_size(test_string).unwrap_err(),

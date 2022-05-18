@@ -102,6 +102,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::NAME)
                 .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::AnyPath)
                 .hide(true),
         )
         .arg(

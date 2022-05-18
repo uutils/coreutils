@@ -797,7 +797,12 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::ELIDE_EMPTY_FILES)
                 .help("remove empty output files"),
         )
-        .arg(Arg::new(options::FILE).hide(true).required(true))
+        .arg(
+            Arg::new(options::FILE)
+                .hide(true)
+                .required(true)
+                .value_hint(clap::ValueHint::FilePath),
+        )
         .arg(
             Arg::new(options::PATTERN)
                 .hide(true)

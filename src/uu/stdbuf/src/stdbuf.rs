@@ -62,7 +62,7 @@ struct ProgramOptions {
     stderr: BufferType,
 }
 
-impl<'a> TryFrom<&ArgMatches> for ProgramOptions {
+impl TryFrom<&ArgMatches> for ProgramOptions {
     type Error = ProgramOptionsError;
 
     fn try_from(matches: &ArgMatches) -> Result<Self, Self::Error> {
@@ -232,6 +232,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .multiple_occurrences(true)
                 .takes_value(true)
                 .hide(true)
-                .required(true),
+                .required(true)
+                .value_hint(clap::ValueHint::CommandName),
         )
 }

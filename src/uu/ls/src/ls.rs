@@ -28,7 +28,7 @@ use std::{
     cmp::Reverse,
     error::Error,
     ffi::{OsStr, OsString},
-    fmt::Display,
+    fmt::{Display, Write as FmtWrite},
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{stdout, BufWriter, ErrorKind, Stdout, Write},
     path::{Path, PathBuf},
@@ -1402,7 +1402,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 Arg::new(options::PATHS)
                     .multiple_occurrences(true)
                     .takes_value(true)
-                    .allow_invalid_utf8(true),
+                    .value_hint(clap::ValueHint::AnyPath)
+                    .allow_invalid_utf8(true)
             )
             .after_help(
                 "The TIME_STYLE argument can be full-iso, long-iso, iso. \
@@ -1825,7 +1826,7 @@ fn display_additional_leading_info(
             } else {
                 "?".to_owned()
             };
-            result.push_str(&format!("{} ", pad_left(&i, padding.inode)));
+            write!(result, "{} ", pad_left(&i, padding.inode)).unwrap();
         }
     }
 
@@ -1835,7 +1836,7 @@ fn display_additional_leading_info(
         } else {
             "?".to_owned()
         };
-        result.push_str(&format!("{} ", pad_left(&s, padding.block_size),));
+        write!(result, "{} ", pad_left(&s, padding.block_size)).unwrap();
     }
     Ok(result)
 }

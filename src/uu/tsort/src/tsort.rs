@@ -50,11 +50,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let mut line = String::new();
         match reader.read_line(&mut line) {
             Ok(_) => {
-                let tokens: Vec<String> = line
-                    .trim_end()
-                    .split_whitespace()
-                    .map(|s| s.to_owned())
-                    .collect();
+                let tokens: Vec<String> = line.split_whitespace().map(|s| s.to_owned()).collect();
                 if tokens.is_empty() {
                     break;
                 }
@@ -99,7 +95,12 @@ pub fn uu_app<'a>() -> Command<'a> {
         .override_usage(format_usage(USAGE))
         .about(SUMMARY)
         .infer_long_args(true)
-        .arg(Arg::new(options::FILE).default_value("-").hide(true))
+        .arg(
+            Arg::new(options::FILE)
+                .default_value("-")
+                .hide(true)
+                .value_hint(clap::ValueHint::FilePath),
+        )
 }
 
 // We use String as a representation of node here

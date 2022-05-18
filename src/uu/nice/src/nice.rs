@@ -117,5 +117,9 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .takes_value(true)
                 .allow_hyphen_values(true),
         )
-        .arg(Arg::new(options::COMMAND).multiple_occurrences(true))
+        .arg(
+            Arg::new(options::COMMAND)
+                .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::CommandName),
+        )
 }

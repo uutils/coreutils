@@ -126,7 +126,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::CMD)
                 .hide(true)
                 .required(true)
-                .multiple_occurrences(true),
+                .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::CommandName),
         )
         .trailing_var_arg(true)
         .infer_long_args(true)

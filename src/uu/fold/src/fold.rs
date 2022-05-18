@@ -99,14 +99,15 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
-                .multiple_occurrences(true),
+                .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::FilePath),
         )
 }
 
 fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     for (i, arg) in args.iter().enumerate() {
         let slice = &arg;
-        if slice.starts_with('-') && slice.chars().nth(1).map_or(false, |c| c.is_digit(10)) {
+        if slice.starts_with('-') && slice.chars().nth(1).map_or(false, |c| c.is_ascii_digit()) {
             let mut v = args.to_vec();
             v.remove(i);
             return (v, Some(slice[1..].to_owned()));
