@@ -121,6 +121,7 @@ impl Default for Options {
 enum OptionsError {
     BlockSizeTooLarge(String),
     InvalidBlockSize(String),
+    InvalidSuffix(String),
 
     /// An error getting the columns to display in the output table.
     ColumnError(ColumnError),
@@ -139,6 +140,9 @@ impl fmt::Display for OptionsError {
             // TODO This needs to vary based on whether `--block-size`
             // or `-B` were provided.
             Self::InvalidBlockSize(s) => write!(f, "invalid --block-size argument {}", s),
+            // TODO This needs to vary based on whether `--block-size`
+            // or `-B` were provided.
+            Self::InvalidSuffix(s) => write!(f, "invalid suffix in --block-size argument {}", s),
             Self::ColumnError(ColumnError::MultipleColumns(s)) => write!(
                 f,
                 "option --output: field {} used more than once",
@@ -174,6 +178,7 @@ impl Options {
             show_local_fs: matches.is_present(OPT_LOCAL),
             show_all_fs: matches.is_present(OPT_ALL),
             block_size: block_size_from_matches(matches).map_err(|e| match e {
+                ParseSizeError::InvalidSuffix(s) => OptionsError::InvalidSuffix(s),
                 ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
                     matches.value_of(OPT_BLOCKSIZE).unwrap().to_string(),
                 ),
