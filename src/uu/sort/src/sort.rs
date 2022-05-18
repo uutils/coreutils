@@ -362,8 +362,10 @@ impl GlobalSettings {
                     size
                 ))
             })
+        } else if size_string.starts_with(|c: char| c.is_ascii_digit()) {
+            Err(ParseSizeError::InvalidSuffix("invalid suffix".to_string()))
         } else {
-            Err(ParseSizeError::ParseFailure("invalid suffix".to_string()))
+            Err(ParseSizeError::ParseFailure("parse failure".to_string()))
         }
     }
 
@@ -1833,8 +1835,10 @@ fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
 fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
     // GNU's sort echos affected flag, -S or --buffer-size, depending user's selection
-    // GNU's sort does distinguish between "invalid (suffix in) argument"
     match error {
+        ParseSizeError::InvalidSuffix(_) => {
+            format!("invalid suffix in --{} argument {}", option, s.quote())
+        }
         ParseSizeError::ParseFailure(_) => format!("invalid --{} argument {}", option, s.quote()),
         ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
     }

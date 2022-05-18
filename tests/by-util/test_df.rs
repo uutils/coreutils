@@ -567,6 +567,19 @@ fn test_invalid_block_size() {
 }
 
 #[test]
+fn test_invalid_block_size_suffix() {
+    new_ucmd!()
+        .arg("--block-size=1H")
+        .fails()
+        .stderr_contains("invalid suffix in --block-size argument '1H'");
+
+    new_ucmd!()
+        .arg("--block-size=1.2")
+        .fails()
+        .stderr_contains("invalid suffix in --block-size argument '1.2'");
+}
+
+#[test]
 fn test_output_selects_columns() {
     let output = new_ucmd!()
         .args(&["--output=source"])
