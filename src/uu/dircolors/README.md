@@ -4,6 +4,7 @@ Create the test fixtures by writing the output of the GNU dircolors commands to 
 
 ```
 $ dircolors --print-database > /PATH_TO_COREUTILS/tests/fixtures/dircolors/internal.expected
+$ dircolors --print-ls-colors > /PATH_TO_COREUTILS/tests/fixtures/dircolors/ls_colors.expected
 $ dircolors -b > /PATH_TO_COREUTILS/tests/fixtures/dircolors/bash_def.expected
 $ dircolors -c > /PATH_TO_COREUTILS/tests/fixtures/dircolors/csh_def.expected
 ```
