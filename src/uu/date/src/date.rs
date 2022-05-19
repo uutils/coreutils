@@ -265,6 +265,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('d')
                 .long(OPT_DATE)
                 .takes_value(true)
+                .value_name("STRING")
                 .help("display time described by STRING, not 'now'"),
         )
         .arg(
@@ -272,6 +273,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('f')
                 .long(OPT_FILE)
                 .takes_value(true)
+                .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
                 .help("like --date; once for each line of DATEFILE"),
         )
@@ -280,6 +282,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('I')
                 .long(OPT_ISO_8601)
                 .takes_value(true)
+                .value_name("FMT")
                 .help(ISO_8601_HELP_STRING),
         )
         .arg(
@@ -292,6 +295,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_RFC_3339)
                 .long(OPT_RFC_3339)
                 .takes_value(true)
+                .value_name("FMT")
                 .help(RFC_3339_HELP_STRING),
         )
         .arg(
@@ -304,6 +308,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('r')
                 .long(OPT_REFERENCE)
                 .takes_value(true)
+                .value_name("FILE")
                 .value_hint(clap::ValueHint::AnyPath)
                 .help("display the last modification time of FILE"),
         )
@@ -312,6 +317,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('s')
                 .long(OPT_SET)
                 .takes_value(true)
+                .value_name("STRING")
                 .help(OPT_SET_HELP_STRING),
         )
         .arg(
