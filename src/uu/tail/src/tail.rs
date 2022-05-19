@@ -1435,10 +1435,13 @@ pub fn stdin_is_pipe_or_fifo() -> bool {
     {
         platform::stdin_is_pipe_or_fifo()
     }
-    // FIXME windows has GetFileType which can determine if the file is a pipe/FIFO
-    // so this check can also be performed
-    #[cfg(not(unix))]
-    false
+    #[cfg(windows)]
+    {
+        use winapi_util;
+        winapi_util::file::typ(winapi_util::HandleRef::stdin())
+            .map(|t| t.is_disk() || t.is_pipe())
+            .unwrap_or(false)
+    }
 }
 
 pub fn stdin_is_bad_fd() -> bool {

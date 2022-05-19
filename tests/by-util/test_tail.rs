@@ -11,7 +11,9 @@ extern crate tail;
 
 use crate::common::util::*;
 use std::char::from_digit;
-use std::io::{Read, Write};
+#[cfg(unix)]
+use std::io::Read;
+use std::io::Write;
 use std::process::Stdio;
 #[cfg(unix)]
 use std::thread::sleep;
