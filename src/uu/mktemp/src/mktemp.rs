@@ -17,7 +17,7 @@ use std::env;
 use std::error::Error;
 use std::fmt::Display;
 use std::iter;
-use std::path::{is_separator, Path, PathBuf};
+use std::path::{is_separator, Path, PathBuf, MAIN_SEPARATOR};
 
 use rand::Rng;
 use tempfile::Builder;
@@ -129,6 +129,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             };
             let filename = path.file_name();
             let template = filename.unwrap().to_str().unwrap();
+            // If the command line was `mktemp aXXX/b`, then we will
+            // find that `tmp`, which is the result of getting the
+            // parent when treating the argument as a path, contains
+            // at least three consecutive Xs. This means that there
+            // was a path separator in the suffix, which is not
+            // allowed.
+            if tmp.display().to_string().contains("XXX") {
+                return Err(MkTempError::SuffixContainsDirSeparator(format!(
+                    "{}{}",
+                    MAIN_SEPARATOR, template
+                ))
+                .into());
+            }
             (template, tmp)
         }
     } else {
