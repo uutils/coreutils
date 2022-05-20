@@ -701,3 +701,16 @@ fn test_touch_leap_second() {
     assert_eq!(atime.unix_seconds() - epoch.unix_seconds(), 60);
     assert_eq!(mtime.unix_seconds() - epoch.unix_seconds(), 60);
 }
+
+// https://github.com/uutils/coreutils/issues/3505
+#[test]
+fn test_touch_date_parsing_issue_3505() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_date_parsing_issue_3505";
+
+    ucmd.args(&["-d", "2022-05-15 +01 month", file])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+}
