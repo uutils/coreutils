@@ -1732,8 +1732,6 @@ fn enter_directory(
     };
 
     // Convert those entries to the PathData struct
-    let mut vec_path_data = Vec::new();
-
     for raw_entry in read_dir {
         let dir_entry = match raw_entry {
             Ok(path) => path,
@@ -1747,12 +1745,11 @@ fn enter_directory(
         if should_display(&dir_entry, config) {
             let entry_path_data =
                 PathData::new(dir_entry.path(), Some(Ok(dir_entry)), None, config, false);
-            vec_path_data.push(entry_path_data);
+            entries.push(entry_path_data);
         };
     }
 
-    sort_entries(&mut vec_path_data, config, out);
-    entries.append(&mut vec_path_data);
+    sort_entries(&mut entries, config, out);
 
     // Print total after any error display
     if config.format == Format::Long || config.alloc_size {
