@@ -414,6 +414,22 @@ fn test_mktemp_directory_tmpdir() {
     assert!(PathBuf::from(result.stdout_str().trim()).is_dir());
 }
 
+/// Test that an absolute path is disallowed when --tmpdir is provided.
+#[test]
+fn test_tmpdir_absolute_path() {
+    #[cfg(windows)]
+    let path = r"C:\XXX";
+    #[cfg(not(windows))]
+    let path = "/XXX";
+    new_ucmd!()
+        .args(&["--tmpdir=a", path])
+        .fails()
+        .stderr_only(format!(
+            "mktemp: invalid template, '{}'; with --tmpdir, it may not be absolute\n",
+            path
+        ));
+}
+
 /// Decide whether a string matches a given template.
 ///
 /// In the template, the character `'X'` is treated as a wildcard,
@@ -495,4 +511,19 @@ fn test_template_path_separator() {
             "mktemp: invalid template, {}, contains directory separator\n",
             "a/bXXX".quote()
         ));
+}
+
+/// Test that a suffix with a path separator is invalid.
+#[test]
+fn test_suffix_path_separator() {
+    #[cfg(not(windows))]
+    new_ucmd!()
+        .arg("aXXX/b")
+        .fails()
+        .stderr_only("mktemp: invalid suffix '/b', contains directory separator\n");
+    #[cfg(windows)]
+    new_ucmd!()
+        .arg(r"aXXX\b")
+        .fails()
+        .stderr_only("mktemp: invalid suffix '\\b', contains directory separator\n");
 }
