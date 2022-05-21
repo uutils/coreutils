@@ -6,7 +6,7 @@
 // "streetsidesoftware.code-spell-checker" ~ `cspell` spell-checker support
 {
 	"recommendations": [
-		"matklad.rust-analyzer",
+		"rust-lang.rust-analyzer",
 		"streetsidesoftware.code-spell-checker",
 		"foxundermoon.shell-format"
 	]
