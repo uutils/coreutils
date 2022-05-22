@@ -1302,6 +1302,59 @@ fn test_ls_deref() {
 }
 
 #[test]
+fn test_ls_group_directories_first() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let mut filenames = ["file1", "file2", "anotherFile", "abc", "xxx", "zzz"];
+    for filename in filenames {
+        at.touch(filename);
+    }
+    filenames.sort_unstable();
+
+    let dirnames = ["aaa", "bbb", "ccc", "yyy"];
+    for dirname in dirnames {
+        at.mkdir(dirname);
+    }
+
+    let dots = [".", ".."];
+
+    let result = scene
+        .ucmd()
+        .arg("-1a")
+        .arg("--group-directories-first")
+        .run();
+    assert_eq!(
+        result.stdout_str().split('\n').collect::<Vec<_>>(),
+        dots.into_iter()
+            .chain(dirnames.into_iter())
+            .chain(filenames.into_iter())
+            .chain([""].into_iter())
+            .collect::<Vec<_>>(),
+    );
+
+    let result = scene
+        .ucmd()
+        .arg("-1ar")
+        .arg("--group-directories-first")
+        .run();
+    assert_eq!(
+        result.stdout_str().split('\n').collect::<Vec<_>>(),
+        (dirnames.into_iter().rev())
+            .chain(dots.into_iter().rev())
+            .chain(filenames.into_iter().rev())
+            .chain([""].into_iter())
+            .collect::<Vec<_>>(),
+    );
+
+    let result = scene
+        .ucmd()
+        .arg("-1aU")
+        .arg("--group-directories-first")
+        .run();
+    let result2 = scene.ucmd().arg("-1aU").run();
+    assert_eq!(result.stdout_str(), result2.stdout_str());
+}
+#[test]
 fn test_ls_sort_none() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2107,7 +2160,7 @@ fn test_ls_version_sort() {
     );
 
     let result = scene.ucmd().arg("-a1v").succeeds();
-    expected.insert(0, "..");
+    expected.insert(expected.len() - 1, "..");
     expected.insert(0, ".");
     assert_eq!(
         result.stdout_str().split('\n').collect::<Vec<_>>(),

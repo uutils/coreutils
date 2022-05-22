@@ -140,6 +140,7 @@ pub mod options {
     pub static HIDE: &str = "hide";
     pub static IGNORE: &str = "ignore";
     pub static CONTEXT: &str = "context";
+    pub static GROUP_DIRECTORIES_FIRST: &str = "group-directories-first";
 }
 
 const DEFAULT_TERM_WIDTH: u16 = 80;
@@ -330,6 +331,7 @@ pub struct Config {
     time_style: TimeStyle,
     context: bool,
     selinux_supported: bool,
+    group_directories_first: bool,
 }
 
 // Fields that can be removed or added to the long format
@@ -780,6 +782,7 @@ impl Config {
                     false
                 }
             },
+            group_directories_first: options.is_present(options::GROUP_DIRECTORIES_FIRST),
         })
     }
 }
@@ -1397,6 +1400,12 @@ pub fn uu_app<'a>() -> Command<'a> {
                     .long(options::CONTEXT)
                     .help(CONTEXT_HELP_TEXT),
             )
+            .arg(
+                Arg::new(options::GROUP_DIRECTORIES_FIRST)
+                    .long(options::GROUP_DIRECTORIES_FIRST)
+                    .help("group directories before files; can be augmented with \
+                           a --sort option, but any use of --sort=none (-U) disables grouping"),
+            )
             // Positional arguments
             .arg(
                 Arg::new(options::PATHS)
@@ -1635,6 +1644,28 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
     if config.reverse {
         entries.reverse();
     }
+
+    if config.group_directories_first && config.sort != Sort::None {
+        entries.sort_by_key(|p| {
+            let md = {
+                // We will always try to deref symlinks to group directories, so PathData.md
+                // is not always useful.
+                if p.must_dereference {
+                    p.md.get()
+                } else {
+                    None
+                }
+            };
+
+            !match md {
+                None | Some(None) => {
+                    // If it metadata cannot be determined, treat as a file.
+                    get_metadata(p.p_buf.as_path(), true).map_or_else(|_| false, |m| m.is_dir())
+                }
+                Some(Some(m)) => m.is_dir(),
+            }
+        });
+    }
 }
 
 fn is_hidden(file_path: &DirEntry) -> bool {
@@ -1701,8 +1732,6 @@ fn enter_directory(
     };
 
     // Convert those entries to the PathData struct
-    let mut vec_path_data = Vec::new();
-
     for raw_entry in read_dir {
         let dir_entry = match raw_entry {
             Ok(path) => path,
@@ -1716,12 +1745,11 @@ fn enter_directory(
         if should_display(&dir_entry, config) {
             let entry_path_data =
                 PathData::new(dir_entry.path(), Some(Ok(dir_entry)), None, config, false);
-            vec_path_data.push(entry_path_data);
+            entries.push(entry_path_data);
         };
     }
 
-    sort_entries(&mut vec_path_data, config, out);
-    entries.append(&mut vec_path_data);
+    sort_entries(&mut entries, config, out);
 
     // Print total after any error display
     if config.format == Format::Long || config.alloc_size {
