@@ -2219,7 +2219,6 @@ name = "uu_df"
 version = "0.0.14"
 dependencies = [
  "clap 3.1.18",
- "number_prefix",
  "unicode-width",
  "uucore",
 ]

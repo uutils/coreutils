@@ -11,7 +11,7 @@ mod columns;
 mod filesystem;
 mod table;
 
-use blocks::{HumanReadable, SizeFormat};
+use blocks::HumanReadable;
 use table::HeaderMode;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError};
@@ -71,7 +71,7 @@ static OUTPUT_FIELD_LIST: [&str; 12] = [
 struct Options {
     show_local_fs: bool,
     show_all_fs: bool,
-    size_format: SizeFormat,
+    human_readable: Option<HumanReadable>,
     block_size: BlockSize,
     header_mode: HeaderMode,
 
@@ -100,7 +100,7 @@ impl Default for Options {
             show_local_fs: Default::default(),
             show_all_fs: Default::default(),
             block_size: Default::default(),
-            size_format: Default::default(),
+            human_readable: Default::default(),
             header_mode: Default::default(),
             include: Default::default(),
             exclude: Default::default(),
@@ -200,13 +200,13 @@ impl Options {
                     HeaderMode::Default
                 }
             },
-            size_format: {
+            human_readable: {
                 if matches.is_present(OPT_HUMAN_READABLE_BINARY) {
-                    SizeFormat::HumanReadable(HumanReadable::Binary)
+                    Some(HumanReadable::Binary)
                 } else if matches.is_present(OPT_HUMAN_READABLE_DECIMAL) {
-                    SizeFormat::HumanReadable(HumanReadable::Decimal)
+                    Some(HumanReadable::Decimal)
                 } else {
-                    SizeFormat::StaticBlockSize
+                    None
                 }
             },
             include,
