@@ -527,3 +527,19 @@ fn test_suffix_path_separator() {
         .fails()
         .stderr_only("mktemp: invalid suffix '\\b', contains directory separator\n");
 }
+
+#[test]
+fn test_too_few_xs_suffix() {
+    new_ucmd!()
+        .args(&["--suffix=X", "aXX"])
+        .fails()
+        .stderr_only("mktemp: too few X's in template 'aXXX'\n");
+}
+
+#[test]
+fn test_too_few_xs_suffix_directory() {
+    new_ucmd!()
+        .args(&["-d", "--suffix=X", "aXX"])
+        .fails()
+        .stderr_only("mktemp: too few X's in template 'aXXX'\n");
+}
