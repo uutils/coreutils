@@ -170,12 +170,21 @@ impl Options {
             let template = matches.value_of(OPT_TMPDIR).unwrap().to_string();
             (tmpdir, template)
         } else {
-            let tmpdir = matches.value_of(OPT_TMPDIR).map(String::from);
-            let template = matches
-                .value_of(ARG_TEMPLATE)
-                .unwrap_or(DEFAULT_TEMPLATE)
-                .to_string();
-            (tmpdir, template)
+            // If no template argument is given, `--tmpdir` is implied.
+            match matches.value_of(ARG_TEMPLATE) {
+                None => {
+                    let tmpdir = match matches.value_of(OPT_TMPDIR) {
+                        None => Some(env::temp_dir().display().to_string()),
+                        Some(tmpdir) => Some(tmpdir.to_string()),
+                    };
+                    let template = DEFAULT_TEMPLATE;
+                    (tmpdir, template.to_string())
+                }
+                Some(template) => {
+                    let tmpdir = matches.value_of(OPT_TMPDIR).map(String::from);
+                    (tmpdir, template.to_string())
+                }
+            }
         };
         Self {
             directory: matches.contains_id(OPT_DIRECTORY),
