@@ -445,7 +445,11 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
         }
     }
 
-    // dbg!(files.map.is_empty(), files.files_remaining(), files.only_stdin_remaining());
+    // dbg!(
+    //     files.map.is_empty(),
+    //     files.files_remaining(),
+    //     files.only_stdin_remaining()
+    // );
     // for k in files.map.keys() {
     //     dbg!(k);
     // }
@@ -650,7 +654,11 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
 
     let mut watcher: Box<dyn Watcher>;
     if settings.use_polling || RecommendedWatcher::kind() == WatcherKind::PollWatcher {
-        watcher = Box::new(notify::PollWatcher::with_delay(tx, settings.sleep_sec).unwrap());
+        let config = notify::poll::PollWatcherConfig {
+            poll_interval: settings.sleep_sec,
+            ..Default::default()
+        };
+        watcher = Box::new(notify::PollWatcher::with_config(tx, config).unwrap());
     } else {
         let tx_clone = tx.clone();
         match notify::RecommendedWatcher::new(tx) {
@@ -664,9 +672,11 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
                     text::BACKEND
                 );
                 settings.return_code = 1;
-                watcher = Box::new(
-                    notify::PollWatcher::with_delay(tx_clone, settings.sleep_sec).unwrap(),
-                );
+                let config = notify::poll::PollWatcherConfig {
+                    poll_interval: settings.sleep_sec,
+                    ..Default::default()
+                };
+                watcher = Box::new(notify::PollWatcher::with_config(tx_clone, config).unwrap());
             }
             Err(e) => panic!("called `Result::unwrap()` on an `Err` value: {:?}", &e),
         };
@@ -679,6 +689,8 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
     let mut orphans = Vec::new();
     for path in files.map.keys() {
         if path.is_tailable() {
+            // TODO: [2021-10; jhscheer] also add `file` to please inotify-rotate-resourced.sh
+            // because it is looking for 2x inotify_add_watch and 1x inotify_rm_watch
             let path = get_path(path, settings);
             watcher
                 .watch(&path.canonicalize().unwrap(), RecursiveMode::NonRecursive)
@@ -686,7 +698,6 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
         } else if settings.follow.is_some() && settings.retry {
             if path.is_orphan() {
                 orphans.push(path.to_path_buf());
-                // TODO: [2021-10; jhscheer] add test for this
             } else {
                 let parent = path.parent().unwrap();
                 watcher
@@ -715,7 +726,6 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
                 if new_path.exists() {
                     let display_name = files.map.get(new_path).unwrap().display_name.to_path_buf();
                     if new_path.is_file() && files.map.get(new_path).unwrap().metadata.is_none() {
-                        // TODO: [2021-10; jhscheer] add test for this
                         show_error!("{} has appeared;  following new file", display_name.quote());
                         if let Ok(new_path_canonical) = new_path.canonicalize() {
                             files.update_metadata(&new_path_canonical, None);
@@ -775,31 +785,29 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
         }
         match rx_result {
             Ok(Ok(event)) => {
-                // eprintln!("=={:=>3}===========================", _event_counter);
+                // eprintln!("=={:=>3}=====================dbg===", _event_counter);
                 // dbg!(&event);
                 // dbg!(files.map.keys());
-                // eprintln!("=={:=>3}===========================", _event_counter);
+                // eprintln!("=={:=>3}=====================dbg===", _event_counter);
                 handle_event(&event, files, settings, &mut watcher, &mut orphans);
             }
             Ok(Err(notify::Error {
                 kind: notify::ErrorKind::Io(ref e),
                 paths,
             })) if e.kind() == std::io::ErrorKind::NotFound => {
-                // TODO: [2021-10; jhscheer] is this case still needed ?
                 if let Some(event_path) = paths.first() {
                     if files.map.contains_key(event_path) {
-                        // TODO: [2021-10; jhscheer] handle this case for --follow=name --retry
                         let _ = watcher.unwatch(event_path);
-                        // TODO: [2021-10; jhscheer] add test for this
-                        show_error!(
-                            "{}: {}",
-                            files.map.get(event_path).unwrap().display_name.display(),
-                            text::NO_SUCH_FILE
-                        );
-                        if !files.files_remaining() && !settings.retry {
-                            // TODO: [2021-10; jhscheer] add test for this
-                            crash!(1, "{}", text::NO_FILES_REMAINING);
-                        }
+                        // TODO: [2021-10; jhscheer] still needed? if yes, add test for this:
+                        // show_error!(
+                        //     "{}: {}",
+                        //     files.map.get(event_path).unwrap().display_name.display(),
+                        //     text::NO_SUCH_FILE
+                        // );
+                        // TODO: [2021-10; jhscheer] still needed? if yes, add test for this:
+                        // if !files.files_remaining() && !settings.retry {
+                        //     crash!(1, "{}", text::NO_FILES_REMAINING);
+                        // }
                     }
                 }
             }
@@ -944,7 +952,9 @@ fn handle_event(
                         }
                     }
                 }
-                EventKind::Remove(RemoveKind::File) | EventKind::Remove(RemoveKind::Any) => {
+                EventKind::Remove(RemoveKind::File) | EventKind::Remove(RemoveKind::Any)
+                    // | EventKind::Modify(ModifyKind::Name(RenameMode::Any))
+                    | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
                     if settings.follow == Some(FollowMode::Name) {
                         if settings.retry {
                             if let Some(old_md) = &files.map.get(event_path).unwrap().metadata {
@@ -979,7 +989,7 @@ fn handle_event(
                             );
                         } else {
                             show_error!("{}: {}", display_name.display(), text::NO_SUCH_FILE);
-                            if !files.files_remaining() {
+                            if !files.files_remaining() && settings.use_polling {
                                 crash!(1, "{}", text::NO_FILES_REMAINING);
                             }
                         }
@@ -989,12 +999,9 @@ fn handle_event(
                         files.map.remove(event_path).unwrap();
                     }
                 }
-                EventKind::Modify(ModifyKind::Name(RenameMode::Any))
-                | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
-                    if settings.follow == Some(FollowMode::Name) {
-                        show_error!("{}: {}", display_name.display(), text::NO_SUCH_FILE);
-                    }
-                }
+                // EventKind::Modify(ModifyKind::Name(RenameMode::Any))
+                //     | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
+                //     }
                 EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
                     // NOTE: For `tail -f a`, keep tracking additions to b after `mv a b`
                     // (gnu/tests/tail-2/descriptor-vs-rename.sh)
@@ -1437,7 +1444,6 @@ pub fn stdin_is_pipe_or_fifo() -> bool {
     }
     #[cfg(windows)]
     {
-        use winapi_util;
         winapi_util::file::typ(winapi_util::HandleRef::stdin())
             .map(|t| t.is_disk() || t.is_pipe())
             .unwrap_or(false)

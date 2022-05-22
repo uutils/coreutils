@@ -8,8 +8,8 @@
  * file that was distributed with this source code.
  */
 
-// spell-checker:ignore (ToDO) errno EPERM ENOSYS
-// spell-checker:ignore (options) GETFD
+// spell-checker:ignore (ToDO) stdlib
+// spell-checker:ignore (options) GETFD EPERM ENOSYS
 
 use std::io::{stdin, Error};
 
@@ -67,7 +67,7 @@ pub fn stdin_is_pipe_or_fifo() -> bool {
 // FIXME: Detect a closed file descriptor, e.g.: `tail <&-`
 pub fn stdin_is_bad_fd() -> bool {
     let fd = stdin().as_raw_fd();
-    // this is never `true`, even with `<&-` because stdlib is reopening fds as /dev/null
+    // this is never `true`, even with `<&-` because Rust's stdlib is reopening fds as /dev/null
     // see also: https://github.com/uutils/coreutils/issues/2873
     // (gnu/tests/tail-2/follow-stdin.sh fails because of this)
     unsafe { libc::fcntl(fd, libc::F_GETFD) == -1 && get_errno() == libc::EBADF }
