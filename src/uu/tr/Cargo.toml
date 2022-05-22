@@ -1,6 +1,6 @@
 [package]
 name = "uu_tr"
-version = "0.0.13"
+version = "0.0.14"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tr ~ (uutils) translate characters within input and display"

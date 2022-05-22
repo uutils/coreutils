@@ -1,6 +1,6 @@
 [package]
 name = "uu_kill"
-version = "0.0.13"
+version = "0.0.14"
 authors = ["uutils developers"]
 license = "MIT"
 description = "kill ~ (uutils) send a signal to a process"
@@ -16,7 +16,7 @@ path = "src/kill.rs"
 
 [dependencies]
 clap = { version = "3.1", features = ["wrap_help", "cargo"] }
-libc = "0.2.126"
+nix = { version = "0.24.1", features = ["signal"] }
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["signals"] }
 
 [[bin]]

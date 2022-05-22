@@ -1,6 +1,6 @@
 [package]
 name = "uu_timeout"
-version = "0.0.13"
+version = "0.0.14"
 authors = ["uutils developers"]
 license = "MIT"
 description = "timeout ~ (uutils) run COMMAND with a DURATION time limit"

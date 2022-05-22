@@ -1,6 +1,6 @@
 [package]
 name = "uu_base32"
-version = "0.0.13"
+version = "0.0.14"
 authors = ["uutils developers"]
 license = "MIT"
 description = "base32 ~ (uutils) decode/encode input (base32-encoding)"

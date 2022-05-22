@@ -642,6 +642,20 @@ fn test_mv_target_dir() {
 }
 
 #[test]
+fn test_mv_target_dir_single_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_mv_target_dir_single_source_dir";
+    let file = "test_mv_target_dir_single_source_file";
+
+    at.touch(file);
+    at.mkdir(dir);
+    ucmd.arg("-t").arg(dir).arg(file).succeeds().no_stderr();
+
+    assert!(!at.file_exists(file));
+    assert!(at.file_exists(&format!("{}/{}", dir, file)));
+}
+
+#[test]
 fn test_mv_overwrite_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir_a = "test_mv_overwrite_dir_a";

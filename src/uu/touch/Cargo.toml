@@ -1,6 +1,6 @@
 [package]
 name = "uu_touch"
-version = "0.0.13"
+version = "0.0.14"
 authors = ["uutils developers"]
 license = "MIT"
 description = "touch ~ (uutils) change FILE timestamps"

@@ -148,6 +148,7 @@ impl fmt::Display for OptionsError {
                 "option --output: field {} used more than once",
                 s.quote()
             ),
+            #[allow(clippy::print_in_format_impl)]
             Self::FilesystemTypeBothSelectedAndExcluded(types) => {
                 for t in types {
                     eprintln!(

@@ -1,6 +1,6 @@
 [package]
 name = "uu_tee"
-version = "0.0.13"
+version = "0.0.14"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tee ~ (uutils) display input and copy to FILE"
