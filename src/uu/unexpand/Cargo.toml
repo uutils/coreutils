@@ -1,6 +1,6 @@
 [package]
 name = "uu_unexpand"
-version = "0.0.13"
+version = "0.0.14"
 authors = ["uutils developers"]
 license = "MIT"
 description = "unexpand ~ (uutils) convert input spaces to tabs"
