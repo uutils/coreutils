@@ -1,6 +1,6 @@
 [package]
 name = "uu_false"
-version = "0.0.13"
+version = "0.0.14"
 authors = ["uutils developers"]
 license = "MIT"
 description = "false ~ (uutils) do nothing and fail"

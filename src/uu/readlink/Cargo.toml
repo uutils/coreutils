@@ -1,6 +1,6 @@
 [package]
 name = "uu_readlink"
-version = "0.0.13"
+version = "0.0.14"
 authors = ["uutils developers"]
 license = "MIT"
 description = "readlink ~ (uutils) display resolved path of PATHNAME"
