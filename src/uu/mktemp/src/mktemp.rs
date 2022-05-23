@@ -267,7 +267,11 @@ fn parse_template<'a>(
     let rand = right - left;
 
     if rand < 3 {
-        return Err(MkTempError::TooFewXs(temp.into()));
+        let s = match suffix {
+            None => temp.into(),
+            Some(s) => format!("{}{}", temp, s),
+        };
+        return Err(MkTempError::TooFewXs(s));
     }
 
     let mut suf = &temp[right..];
