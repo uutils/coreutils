@@ -198,3 +198,4 @@ sed -i -e "s/provoked error./provoked error\ncat pat |sort -u > pat/" tests/misc
 
 # Update the GNU error message to match ours
 sed -i -e "s/ln: 'f' and 'f' are the same file/ln: failed to link 'f' to 'f': Same file/g" tests/ln/hard-backup.sh
+sed -i -e "s/failed to access 'no-such-dir'\":/failed to link 'no-such-dir'\"/" -e "s/link-to-dir: hard link not allowed for directory/failed to link 'link-to-dir' to/" -e "s|link-to-dir/: hard link not allowed for directory|failed to link 'link-to-dir/' to|" tests/ln/hard-to-sym.sh
