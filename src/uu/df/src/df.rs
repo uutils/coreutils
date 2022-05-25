@@ -11,7 +11,7 @@ mod columns;
 mod filesystem;
 mod table;
 
-use blocks::{HumanReadable, SizeFormat};
+use blocks::HumanReadable;
 use table::HeaderMode;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError};
@@ -25,7 +25,7 @@ use std::error::Error;
 use std::fmt;
 use std::path::Path;
 
-use crate::blocks::{block_size_from_matches, BlockSize};
+use crate::blocks::{read_block_size, BlockSize};
 use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
 use crate::table::Table;
@@ -71,7 +71,7 @@ static OUTPUT_FIELD_LIST: [&str; 12] = [
 struct Options {
     show_local_fs: bool,
     show_all_fs: bool,
-    size_format: SizeFormat,
+    human_readable: Option<HumanReadable>,
     block_size: BlockSize,
     header_mode: HeaderMode,
 
@@ -100,7 +100,7 @@ impl Default for Options {
             show_local_fs: Default::default(),
             show_all_fs: Default::default(),
             block_size: Default::default(),
-            size_format: Default::default(),
+            human_readable: Default::default(),
             header_mode: Default::default(),
             include: Default::default(),
             exclude: Default::default(),
@@ -178,7 +178,7 @@ impl Options {
         Ok(Self {
             show_local_fs: matches.is_present(OPT_LOCAL),
             show_all_fs: matches.is_present(OPT_ALL),
-            block_size: block_size_from_matches(matches).map_err(|e| match e {
+            block_size: read_block_size(matches).map_err(|e| match e {
                 ParseSizeError::InvalidSuffix(s) => OptionsError::InvalidSuffix(s),
                 ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
                     matches.value_of(OPT_BLOCKSIZE).unwrap().to_string(),
@@ -200,13 +200,13 @@ impl Options {
                     HeaderMode::Default
                 }
             },
-            size_format: {
+            human_readable: {
                 if matches.is_present(OPT_HUMAN_READABLE_BINARY) {
-                    SizeFormat::HumanReadable(HumanReadable::Binary)
+                    Some(HumanReadable::Binary)
                 } else if matches.is_present(OPT_HUMAN_READABLE_DECIMAL) {
-                    SizeFormat::HumanReadable(HumanReadable::Decimal)
+                    Some(HumanReadable::Decimal)
                 } else {
-                    SizeFormat::StaticBlockSize
+                    None
                 }
             },
             include,
