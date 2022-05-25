@@ -87,7 +87,14 @@ fn test_no_env() {
 
 #[test]
 fn test_exclusive_option() {
-    new_ucmd!().arg("-cp").fails();
+    new_ucmd!()
+        .arg("-bp")
+        .fails()
+        .stderr_contains("mutually exclusive");
+    new_ucmd!()
+        .arg("-cp")
+        .fails()
+        .stderr_contains("mutually exclusive");
 }
 
 fn test_helper(file_name: &str, term: &str) {
