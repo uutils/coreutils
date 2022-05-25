@@ -19,6 +19,11 @@ use std::fmt::Display;
 use std::iter;
 use std::path::{is_separator, Path, PathBuf, MAIN_SEPARATOR};
 
+#[cfg(unix)]
+use std::fs;
+#[cfg(unix)]
+use std::os::unix::prelude::PermissionsExt;
+
 use rand::Rng;
 use tempfile::Builder;
 
@@ -345,6 +350,11 @@ fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> 
             .map_err(|e| MkTempError::PersistError(e.file.path().to_path_buf()))?
             .1
     };
+
+    #[cfg(not(windows))]
+    if make_dir {
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
+    }
 
     // Get just the last component of the path to the created
     // temporary file or directory.

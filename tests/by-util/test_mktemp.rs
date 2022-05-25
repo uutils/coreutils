@@ -7,6 +7,9 @@ use uucore::display::Quotable;
 use std::path::PathBuf;
 use tempfile::tempdir;
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 static TEST_TEMPLATE1: &str = "tempXXXXXX";
 static TEST_TEMPLATE2: &str = "temp";
 static TEST_TEMPLATE3: &str = "tempX";
@@ -499,6 +502,18 @@ fn test_respect_template_directory() {
     let filename = result.no_stderr().stdout_str().trim_end();
     assert_matches_template!(template, filename);
     assert!(at.file_exists(filename));
+}
+
+#[cfg(unix)]
+#[test]
+fn test_directory_permissions() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd.args(&["-d", "XXX"]).succeeds();
+    let dirname = result.no_stderr().stdout_str().trim_end();
+    assert_matches_template!("XXX", dirname);
+    let metadata = at.metadata(dirname);
+    assert!(metadata.is_dir());
+    assert_eq!(metadata.permissions().mode(), 0o40700);
 }
 
 /// Test that a template with a path separator is invalid.
