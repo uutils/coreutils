@@ -35,7 +35,6 @@ use std::ffi::OsString;
 use std::fmt;
 use std::fs::{File, Metadata};
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
-use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, channel};
 use std::time::Duration;
@@ -109,7 +108,7 @@ impl Default for FilterMode {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 enum FollowMode {
     Descriptor,
     Name,
@@ -157,7 +156,7 @@ impl Settings {
                 Err(_) => return Err(format!("invalid number of seconds: {}", s.quote())),
             }
         }
-        settings.sleep_sec /= 100; // NOTE: decrease to pass timing sensitive GNU tests
+        settings.sleep_sec /= 100; // NOTE: value decreased to pass timing sensitive GNU tests
 
         if let Some(s) = matches.value_of(options::MAX_UNCHANGED_STATS) {
             settings.max_unchanged_stats = match s.parse::<u32>() {
@@ -224,9 +223,6 @@ impl Settings {
             .values_of(options::ARG_FILES)
             .map(|v| v.map(PathBuf::from).collect())
             .unwrap_or_default();
-        // .unwrap_or_else(|| {
-        //     vec![PathBuf::from("-")] // always follow stdin
-        // });
 
         settings.verbose = (matches.is_present(options::verbosity::VERBOSE)
             || settings.paths.len() > 1)
@@ -249,8 +245,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if !args.stdin_is_pipe_or_fifo {
         args.stdin_is_pipe_or_fifo = stdin_is_pipe_or_fifo();
     }
-
-    // dbg!(args.stdin_is_pipe_or_fifo);
 
     uu_tail(args)
 }
@@ -296,14 +290,11 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
         let mut buf = [0; 0]; // empty buffer to check if stdin().read().is_err()
         let stdin_read_possible = settings.stdin_is_pipe_or_fifo && stdin().read(&mut buf).is_ok();
 
-        if path.is_stdin() && settings.follow == Some(FollowMode::Name) {
-            // TODO: still needed?
-            // Mimic GNU's tail; Exit immediately even though there might be other valid files.
-            crash!(1, "cannot follow {} by name", text::DASH.quote());
-        } else if !path.is_stdin() && !path.is_tailable() {
+        if !path.is_stdin() && !path.is_tailable() {
             if settings.follow == Some(FollowMode::Descriptor) && settings.retry {
                 show_warning!("--retry only effective for the initial open");
             }
+
             if !path.exists() && !settings.stdin_is_pipe_or_fifo {
                 settings.return_code = 1;
                 show_error!(
@@ -312,6 +303,10 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                     text::NO_SUCH_FILE
                 );
             } else if path.is_dir() || display_name.is_stdin() && !stdin_read_possible {
+                if settings.verbose {
+                    files.print_header(&display_name, !first_header);
+                    first_header = false;
+                }
                 let err_msg = "Is a directory".to_string();
 
                 // NOTE: On macOS path.is_dir() can be false for directories
@@ -346,17 +341,6 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                 }
             } else {
                 // TODO: [2021-10; jhscheer] how to handle block device or socket?
-                // dbg!(path.is_tailable());
-                // dbg!(path.is_stdin());
-                // dbg!(path.is_dir());
-                // dbg!(path.exists());
-                // if let Ok(md) = path.metadata() {
-                //     let ft = md.file_type();
-                //     dbg!(ft.is_fifo());
-                //     dbg!(ft.is_socket());
-                //     dbg!(ft.is_block_device());
-                //     dbg!(ft.is_char_device());
-                // }
                 todo!();
             }
         }
@@ -365,10 +349,8 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
 
         if display_name.is_stdin() && path.is_tailable() {
             if settings.verbose {
-                if !first_header {
-                    println!();
-                }
-                Path::new(text::STDIN_HEADER).print_header();
+                files.print_header(Path::new(text::STDIN_HEADER), !first_header);
+                first_header = false;
             }
 
             let mut reader = BufReader::new(stdin());
@@ -402,12 +384,9 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
             }
         } else if path.is_tailable() {
             if settings.verbose {
-                if !first_header {
-                    println!();
-                }
-                path.print_header();
+                files.print_header(&path, !first_header);
+                first_header = false;
             }
-            first_header = false;
             let mut file = File::open(&path).unwrap();
             let mut reader;
 
@@ -444,15 +423,6 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
             );
         }
     }
-
-    // dbg!(
-    //     files.map.is_empty(),
-    //     files.files_remaining(),
-    //     files.only_stdin_remaining()
-    // );
-    // for k in files.map.keys() {
-    //     dbg!(k);
-    // }
 
     if settings.follow.is_some() {
         /*
@@ -689,8 +659,9 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
     let mut orphans = Vec::new();
     for path in files.map.keys() {
         if path.is_tailable() {
-            // TODO: [2021-10; jhscheer] also add `file` to please inotify-rotate-resourced.sh
-            // because it is looking for 2x inotify_add_watch and 1x inotify_rm_watch
+            // TODO: [2022-05; jhscheer] also add `file` (not just parent) to please
+            // "gnu/tests/tail-2/inotify-rotate-resourced.sh" because it is looking for
+            // 2x "inotify_add_watch" and 1x "inotify_rm_watch"
             let path = get_path(path, settings);
             watcher
                 .watch(&path.canonicalize().unwrap(), RecursiveMode::NonRecursive)
@@ -729,8 +700,8 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
                         show_error!("{} has appeared;  following new file", display_name.quote());
                         if let Ok(new_path_canonical) = new_path.canonicalize() {
                             files.update_metadata(&new_path_canonical, None);
-                            files.reopen_file(&new_path_canonical).unwrap();
-                            read_some = files.print_file(&new_path_canonical, settings)?;
+                            files.update_reader(&new_path_canonical).unwrap();
+                            read_some = files.tail_file(&new_path_canonical, settings.verbose)?;
                             let new_path = get_path(&new_path_canonical, settings);
                             watcher
                                 .watch(&new_path, RecursiveMode::NonRecursive)
@@ -751,6 +722,7 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
         // e.g. `echo "X1" > missing ; sleep 0.1 ; echo "X" > missing ;`
         // this is relevant to pass:
         // https://github.com/coreutils/coreutils/blob/e087525091b8f0a15eb2354f71032597d5271599/tests/tail-2/retry.sh#L92
+        // TODO: [2022-05; jhscheer] still necessary?
         if settings.use_polling {
             let mut paths = Vec::new();
             for path in files.map.keys() {
@@ -770,7 +742,7 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
                         {
                             show_error!("{}: file truncated", display_name.display());
                             files.update_metadata(path, None);
-                            files.reopen_file(path).unwrap();
+                            files.update_reader(path).unwrap();
                         }
                     }
                 }
@@ -788,6 +760,7 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
                 // eprintln!("=={:=>3}=====================dbg===", _event_counter);
                 // dbg!(&event);
                 // dbg!(files.map.keys());
+                // dbg!(&files.last);
                 // eprintln!("=={:=>3}=====================dbg===", _event_counter);
                 handle_event(&event, files, settings, &mut watcher, &mut orphans);
             }
@@ -798,16 +771,6 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
                 if let Some(event_path) = paths.first() {
                     if files.map.contains_key(event_path) {
                         let _ = watcher.unwatch(event_path);
-                        // TODO: [2021-10; jhscheer] still needed? if yes, add test for this:
-                        // show_error!(
-                        //     "{}: {}",
-                        //     files.map.get(event_path).unwrap().display_name.display(),
-                        //     text::NO_SUCH_FILE
-                        // );
-                        // TODO: [2021-10; jhscheer] still needed? if yes, add test for this:
-                        // if !files.files_remaining() && !settings.retry {
-                        //     crash!(1, "{}", text::NO_FILES_REMAINING);
-                        // }
                     }
                 }
             }
@@ -822,8 +785,9 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
             Err(e) => crash!(1, "RecvError: {:?}", e),
         }
 
+        // main print loop
         for path in files.map.keys().cloned().collect::<Vec<_>>() {
-            read_some = files.print_file(&path, settings)?;
+            read_some = files.tail_file(&path, settings.verbose)?;
         }
 
         if !read_some && settings.pid != 0 && process.is_dead() {
@@ -878,7 +842,7 @@ fn handle_event(
                                     display_name.quote()
                                 );
                                 files.update_metadata(event_path, None);
-                                files.reopen_file(event_path).unwrap();
+                                files.update_reader(event_path).unwrap();
                             } else if !new_md.is_file() && old_md.is_file() {
                                 show_error!(
                                     "{} has been replaced with an untailable file",
@@ -898,7 +862,7 @@ fn handle_event(
                             {
                                 show_error!("{}: file truncated", display_name.display());
                                 files.update_metadata(event_path, None);
-                                files.reopen_file(event_path).unwrap();
+                                files.update_reader(event_path).unwrap();
                             }
                         }
                     }
@@ -909,11 +873,11 @@ fn handle_event(
                 | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
                     if event_path.is_file() {
                         if settings.follow.is_some() {
-                            // TODO: [2021-10; jhscheer] add test for this
-                            let msg = if settings.use_polling && !settings.retry {
-                                format!("{} has been replaced", display_name.quote())
-                            } else {
+                            let msg = if (files.map.get(event_path).unwrap().metadata.is_none())
+                                || (!settings.use_polling && settings.retry) {
                                 format!("{} has appeared", display_name.quote())
+                            } else {
+                                format!("{} has been replaced", display_name.quote())
                             };
                             show_error!("{};  following new file", msg);
                         }
@@ -922,7 +886,8 @@ fn handle_event(
                         // scope, we resume tracking from the start of the file,
                         // assuming it has been truncated to 0. This mimics GNU's `tail`
                         // behavior and is the usual truncation operation for log files.
-                        files.reopen_file(event_path).unwrap();
+                        // files.update_metadata(event_path, None);
+                        files.update_reader(event_path).unwrap();
                         if settings.follow == Some(FollowMode::Name) && settings.retry {
                             // TODO: [2021-10; jhscheer] add test for this
                             // Path has appeared, it's not an orphan any more.
@@ -975,8 +940,14 @@ fn handle_event(
                                     );
                                     orphans.push(event_path.to_path_buf());
                                 }
-                                let _ = watcher.unwatch(event_path);
                             }
+                            let _ = watcher.unwatch(event_path);
+                        } else {
+                            show_error!("{}: {}", display_name.display(), text::NO_SUCH_FILE);
+                            if !files.files_remaining() && settings.use_polling {
+                                crash!(1, "{}", text::NO_FILES_REMAINING);
+                            }
+                        }
                             // Update `files.map` to indicate that `event_path`
                             // is not an existing file anymore.
                             files.map.insert(
@@ -987,12 +958,6 @@ fn handle_event(
                                     display_name,
                                 },
                             );
-                        } else {
-                            show_error!("{}: {}", display_name.display(), text::NO_SUCH_FILE);
-                            if !files.files_remaining() && settings.use_polling {
-                                crash!(1, "{}", text::NO_FILES_REMAINING);
-                            }
-                        }
                     } else if settings.follow == Some(FollowMode::Descriptor) && settings.retry {
                         // --retry only effective for the initial open
                         let _ = watcher.unwatch(event_path);
@@ -1112,18 +1077,13 @@ impl FileHandling {
         false
     }
 
-    // TODO: [2021-10; jhscheer] change to update_reader() without error return
-    fn reopen_file(&mut self, path: &Path) -> Result<(), Error> {
+    fn update_reader(&mut self, path: &Path) -> UResult<()> {
         assert!(self.map.contains_key(path));
         if let Some(pd) = self.map.get_mut(path) {
             let new_reader = BufReader::new(File::open(&path)?);
             pd.reader = Some(Box::new(new_reader));
-            return Ok(());
         }
-        Err(Error::new(
-            ErrorKind::Other,
-            "Entry should have been there, but wasn't!",
-        ))
+        Ok(())
     }
 
     fn update_metadata(&mut self, path: &Path, md: Option<Metadata>) {
@@ -1137,48 +1097,73 @@ impl FileHandling {
         }
     }
 
-    // This prints from the current seek position forward.
-    fn print_file(&mut self, path: &Path, settings: &Settings) -> UResult<bool> {
+    // This reads from the current seek position forward.
+    fn read_file(&mut self, path: &Path, buffer: &mut Vec<u8>) -> UResult<bool> {
         assert!(self.map.contains_key(path));
-        let mut last_display_name = self
-            .map
-            .get(self.last.as_ref().unwrap())
-            .unwrap()
-            .display_name
-            .to_path_buf();
         let mut read_some = false;
-        let mut stdout = stdout();
-        let pd = self.map.get_mut(path).unwrap();
-        if let Some(reader) = pd.reader.as_mut() {
+        let pd = self.map.get_mut(path).unwrap().reader.as_mut();
+        if let Some(reader) = pd {
             loop {
-                let mut datum = vec![];
-                match reader.read_until(b'\n', &mut datum) {
+                match reader.read_until(b'\n', buffer) {
                     Ok(0) => break,
                     Ok(_) => {
                         read_some = true;
-                        if last_display_name != pd.display_name {
-                            self.last = Some(path.to_path_buf());
-                            last_display_name = pd.display_name.to_path_buf();
-                            if settings.verbose {
-                                println!();
-                                pd.display_name.print_header();
-                            }
-                        }
-                        stdout
-                            .write_all(&datum)
-                            .map_err_context(|| String::from("write error"))?;
                     }
                     Err(err) => return Err(USimpleError::new(1, err.to_string())),
                 }
             }
-        } else {
-            return Ok(read_some);
-        }
-        if read_some {
-            self.update_metadata(path, None);
-            // TODO: [2021-10; jhscheer] add test for this
         }
         Ok(read_some)
+    }
+
+    fn print_file(&self, buffer: &[u8]) -> UResult<()> {
+        let mut stdout = stdout();
+        stdout
+            .write_all(buffer)
+            .map_err_context(|| String::from("write error"))?;
+        Ok(())
+    }
+
+    fn tail_file(&mut self, path: &Path, verbose: bool) -> UResult<bool> {
+        let mut buffer = vec![];
+        let read_some = self.read_file(path, &mut buffer)?;
+        if read_some {
+            if self.needs_header(path, verbose) {
+                self.print_header(path, true);
+            }
+            self.print_file(&buffer)?;
+
+            self.last = Some(path.to_path_buf()); // TODO: [2022-05; jhscheer] add test for this
+            self.update_metadata(path, None);
+        }
+        Ok(read_some)
+    }
+
+    fn needs_header(&self, path: &Path, verbose: bool) -> bool {
+        if verbose {
+            if let Some(ref last) = self.last {
+                if let Ok(path) = path.canonicalize() {
+                    return !last.eq(&path);
+                }
+            }
+        }
+        false
+    }
+
+    fn print_header(&self, path: &Path, needs_newline: bool) {
+        println!(
+            "{}==> {} <==",
+            if needs_newline { "\n" } else { "" },
+            self.display_name(path)
+        );
+    }
+
+    fn display_name(&self, path: &Path) -> String {
+        if let Some(path) = self.map.get(path) {
+            path.display_name.display().to_string()
+        } else {
+            path.display().to_string()
+        }
     }
 }
 
@@ -1461,7 +1446,6 @@ pub fn stdin_is_bad_fd() -> bool {
 
 trait PathExt {
     fn is_stdin(&self) -> bool;
-    fn print_header(&self);
     fn is_orphan(&self) -> bool;
     fn is_tailable(&self) -> bool;
 }
@@ -1471,9 +1455,6 @@ impl PathExt for Path {
         self.eq(Self::new(text::DASH))
             || self.eq(Self::new(text::DEV_STDIN))
             || self.eq(Self::new(text::STDIN_HEADER))
-    }
-    fn print_header(&self) {
-        println!("==> {} <==", self.display());
     }
     fn is_orphan(&self) -> bool {
         !matches!(self.parent(), Some(parent) if parent.is_dir())
