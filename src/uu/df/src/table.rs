@@ -7,10 +7,9 @@
 //!
 //! A table ([`Table`]) comprises a header row ([`Header`]) and a
 //! collection of data rows ([`Row`]), one per filesystem.
-use number_prefix::NumberPrefix;
 use unicode_width::UnicodeWidthStr;
 
-use crate::blocks::{HumanReadable, SizeFormat};
+use crate::blocks::{to_magnitude_and_suffix, SuffixType};
 use crate::columns::{Alignment, Column};
 use crate::filesystem::Filesystem;
 use crate::{BlockSize, Options};
@@ -213,28 +212,15 @@ impl<'a> RowFormatter<'a> {
         Self { row, options }
     }
 
-    /// Get a human readable string giving the scaled version of the input number.
-    fn scaled_human_readable(&self, size: u64, human_readable: HumanReadable) -> String {
-        let number_prefix = match human_readable {
-            HumanReadable::Decimal => NumberPrefix::decimal(size as f64),
-            HumanReadable::Binary => NumberPrefix::binary(size as f64),
-        };
-        match number_prefix {
-            NumberPrefix::Standalone(bytes) => bytes.to_string(),
-            NumberPrefix::Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix.symbol()),
-        }
-    }
-
     /// Get a string giving the scaled version of the input number.
     ///
     /// The scaling factor is defined in the `options` field.
     fn scaled_bytes(&self, size: u64) -> String {
-        match self.options.size_format {
-            SizeFormat::HumanReadable(h) => self.scaled_human_readable(size, h),
-            SizeFormat::StaticBlockSize => {
-                let BlockSize::Bytes(d) = self.options.block_size;
-                (size as f64 / d as f64).ceil().to_string()
-            }
+        if let Some(h) = self.options.human_readable {
+            to_magnitude_and_suffix(size.into(), SuffixType::HumanReadable(h))
+        } else {
+            let BlockSize::Bytes(d) = self.options.block_size;
+            (size as f64 / d as f64).ceil().to_string()
         }
     }
 
@@ -242,9 +228,10 @@ impl<'a> RowFormatter<'a> {
     ///
     /// The scaling factor is defined in the `options` field.
     fn scaled_inodes(&self, size: u64) -> String {
-        match self.options.size_format {
-            SizeFormat::HumanReadable(h) => self.scaled_human_readable(size, h),
-            SizeFormat::StaticBlockSize => size.to_string(),
+        if let Some(h) = self.options.human_readable {
+            to_magnitude_and_suffix(size.into(), SuffixType::HumanReadable(h))
+        } else {
+            size.to_string()
         }
     }
 
@@ -450,7 +437,7 @@ impl fmt::Display for Table {
 #[cfg(test)]
 mod tests {
 
-    use crate::blocks::{HumanReadable, SizeFormat};
+    use crate::blocks::HumanReadable;
     use crate::columns::Column;
     use crate::table::{Header, HeaderMode, Row, RowFormatter};
     use crate::{BlockSize, Options};
@@ -715,7 +702,7 @@ mod tests {
     #[test]
     fn test_row_formatter_with_human_readable_si() {
         let options = Options {
-            size_format: SizeFormat::HumanReadable(HumanReadable::Decimal),
+            human_readable: Some(HumanReadable::Decimal),
             columns: COLUMNS_WITH_FS_TYPE.to_vec(),
             ..Default::default()
         };
@@ -734,22 +721,14 @@ mod tests {
         let fmt = RowFormatter::new(&row, &options);
         assert_eq!(
             fmt.get_values(),
-            vec!(
-                "my_device",
-                "my_type",
-                "4.0k",
-                "1.0k",
-                "3.0k",
-                "25%",
-                "my_mount"
-            )
+            vec!("my_device", "my_type", "4k", "1k", "3k", "25%", "my_mount")
         );
     }
 
     #[test]
     fn test_row_formatter_with_human_readable_binary() {
         let options = Options {
-            size_format: SizeFormat::HumanReadable(HumanReadable::Binary),
+            human_readable: Some(HumanReadable::Binary),
             columns: COLUMNS_WITH_FS_TYPE.to_vec(),
             ..Default::default()
         };
@@ -768,15 +747,7 @@ mod tests {
         let fmt = RowFormatter::new(&row, &options);
         assert_eq!(
             fmt.get_values(),
-            vec!(
-                "my_device",
-                "my_type",
-                "4.0Ki",
-                "1.0Ki",
-                "3.0Ki",
-                "25%",
-                "my_mount"
-            )
+            vec!("my_device", "my_type", "4K", "1K", "3K", "25%", "my_mount")
         );
     }
 
