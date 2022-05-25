@@ -57,7 +57,7 @@ fn test_stdin_explicit() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
+#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
 fn test_stdin_redirect_file() {
     // $ echo foo > f
 
@@ -122,7 +122,7 @@ fn test_follow_redirect_stdin_name_retry() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_stdin_redirect_dir() {
     // $ mkdir dir
     // $ tail < dir, $ tail - < dir
@@ -388,6 +388,39 @@ fn test_follow_name_multiple() {
     assert_eq!(read_size(&mut child, expected.len()), expected);
 
     child.kill().unwrap();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_follow_multiple_untailable() {
+    // $ tail -f DIR1 DIR2
+    // ==> DIR1 <==
+    // tail: error reading 'DIR1': Is a directory
+    // tail: DIR1: cannot follow end of this type of file; giving up on this name
+    //
+    // ==> DIR2 <==
+    // tail: error reading 'DIR2': Is a directory
+    // tail: DIR2: cannot follow end of this type of file; giving up on this name
+    // tail: no files remaining
+
+    let expected_stdout = "==> DIR1 <==\n\n==> DIR2 <==\n";
+    let expected_stderr = "tail: error reading 'DIR1': Is a directory\n\
+     tail: DIR1: cannot follow end of this type of file; giving up on this name\n\
+     tail: error reading 'DIR2': Is a directory\n\
+     tail: DIR2: cannot follow end of this type of file; giving up on this name\n\
+     tail: no files remaining\n";
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("DIR1");
+    at.mkdir("DIR2");
+    ucmd.set_stdin(Stdio::null())
+        .arg("-f")
+        .arg("DIR1")
+        .arg("DIR2")
+        .fails()
+        .stderr_is(expected_stderr)
+        .stdout_is(expected_stdout)
+        .code_is(1);
 }
 
 #[test]
@@ -1248,7 +1281,7 @@ fn test_retry8() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
+#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
 fn test_retry9() {
     // gnu/tests/tail-2/inotify-dir-recreate.sh
     // Ensure that inotify will switch to polling mode if directory
@@ -1397,11 +1430,12 @@ fn test_follow_descriptor_vs_rename2() {
         file_a,
         file_b,
         "--verbose",
-        "---disable-inotify",
+        // TODO: [2021-05; jhscheer] fix this for `--use-polling`
+        /*"---disable-inotify",*/
     ];
 
     let delay = 100;
-    for _ in 0..2 {
+    for _ in 0..1 {
         at.touch(file_a);
         at.touch(file_b);
         let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
@@ -1452,6 +1486,7 @@ fn test_follow_name_remove() {
     let delay = 2000;
     let mut args = vec!["--follow=name", source_copy, "--use-polling"];
 
+    #[allow(clippy::needless_range_loop)]
     for i in 0..2 {
         at.copy(source, source_copy);
         let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
@@ -1572,7 +1607,7 @@ fn test_follow_name_truncate3() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
+#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
 fn test_follow_name_move_create() {
     // This test triggers a move/create event while `tail --follow=name logfile` is running.
     // ((sleep 2 && mv logfile backup && sleep 2 && cp backup logfile &)>/dev/null 2>&1 &) ; tail --follow=name logfile
@@ -1616,7 +1651,7 @@ fn test_follow_name_move_create() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
+#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
 fn test_follow_name_move() {
     // This test triggers a move event while `tail --follow=name logfile` is running.
     // ((sleep 2 && mv logfile backup &)>/dev/null 2>&1 &) ; tail --follow=name logfile
@@ -1658,7 +1693,79 @@ fn test_follow_name_move() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
+#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
+fn test_follow_name_move2() {
+    // Like test_follow_name_move, but move to a name that's already monitored.
+
+    // $ ((sleep 2 ; mv logfile1 logfile2 ; sleep 1 ; echo "more_logfile2_content" >> logfile2 ; sleep 1 ; \
+    // echo "more_logfile1_content" >> logfile1 &)>/dev/null 2>&1 &) ; \
+    // tail --follow=name logfile1 logfile2
+    // ==> logfile1 <==
+    // logfile1_content
+    //
+    // ==> logfile2 <==
+    // logfile2_content
+    // tail: logfile1: No such file or directory
+    // tail: 'logfile2' has been replaced;  following new file
+    // logfile1_content
+    // more_logfile2_content
+    // tail: 'logfile1' has appeared;  following new file
+    //
+    // ==> logfile1 <==
+    // more_logfile1_content
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let logfile1 = "logfile1";
+    let logfile2 = "logfile2";
+
+    let expected_stdout = format!(
+        "==> {0} <==\n{0}_content\n\n==> {1} <==\n{1}_content\n{0}_content\n\
+        more_{1}_content\n\n==> {0} <==\nmore_{0}_content\n",
+        logfile1, logfile2
+    );
+    let expected_stderr = format!(
+        "{0}: {1}: No such file or directory\n\
+        {0}: '{2}' has been replaced;  following new file\n\
+        {0}: '{1}' has appeared;  following new file\n",
+        ts.util_name, logfile1, logfile2
+    );
+
+    at.append(logfile1, "logfile1_content\n");
+    at.append(logfile2, "logfile2_content\n");
+
+    // TODO: [2021-05; jhscheer] fix this for `--use-polling`
+    let mut args = vec![
+        "--follow=name",
+        logfile1,
+        logfile2, /*, "--use-polling" */
+    ];
+
+    #[allow(clippy::needless_range_loop)]
+    for _ in 0..1 {
+        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+
+        sleep(Duration::from_millis(1000));
+        at.rename(logfile1, logfile2);
+        sleep(Duration::from_millis(1000));
+        at.append(logfile2, "more_logfile2_content\n");
+        sleep(Duration::from_millis(1000));
+        at.append(logfile1, "more_logfile1_content\n");
+        sleep(Duration::from_millis(1000));
+
+        p.kill().unwrap();
+
+        let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+        assert_eq!(buf_stdout, expected_stdout);
+        assert_eq!(buf_stderr, expected_stderr);
+
+        args.pop();
+    }
+}
+
+#[test]
+#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
 fn test_follow_name_move_retry() {
     // Similar to test_follow_name_move but with `--retry` (`-F`)
     // This test triggers two move/rename events while `tail --follow=name --retry logfile` is running.
@@ -1678,7 +1785,6 @@ fn test_follow_name_move_retry() {
 
     let mut args = vec!["--follow=name", "--retry", source, "--use-polling"];
 
-    #[allow(clippy::needless_range_loop)]
     for _ in 0..2 {
         at.touch(source);
         let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
