@@ -98,6 +98,46 @@ fn test_stdin_redirect_file() {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
+#[cfg(feature = "chmod")]
+fn test_permission_denied() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.touch("unreadable");
+    ts.ccmd("chmod").arg("0").arg("unreadable").succeeds();
+
+    ts.ucmd()
+        .set_stdin(Stdio::null())
+        .arg("unreadable")
+        .fails()
+        .stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n")
+        .no_stdout()
+        .code_is(1);
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+#[cfg(feature = "chmod")]
+fn test_permission_denied_multiple() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.touch("file1");
+    at.touch("file2");
+    at.touch("unreadable");
+    ts.ccmd("chmod").arg("0").arg("unreadable").succeeds();
+
+    ts.ucmd()
+        .set_stdin(Stdio::null())
+        .args(&["file1", "unreadable", "file2"])
+        .fails()
+        .stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n")
+        .stdout_is("==> file1 <==\n\n==> file2 <==\n")
+        .code_is(1);
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_follow_redirect_stdin_name_retry() {
     // $ touch f && tail -F - < f

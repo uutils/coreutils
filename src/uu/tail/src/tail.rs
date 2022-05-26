@@ -383,30 +383,46 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                 }
             }
         } else if path.is_tailable() {
-            if settings.verbose {
-                files.print_header(&path, !first_header);
-                first_header = false;
-            }
-            let mut file = File::open(&path).unwrap();
-            let mut reader;
+            match File::open(&path) {
+                Ok(mut file) => {
+                    if settings.verbose {
+                        files.print_header(&path, !first_header);
+                        first_header = false;
+                    }
+                    let mut reader;
 
-            if is_seekable(&mut file) && get_block_size(md.as_ref().unwrap()) > 0 {
-                bounded_tail(&mut file, &settings);
-                reader = BufReader::new(file);
-            } else {
-                reader = BufReader::new(file);
-                unbounded_tail(&mut reader, &settings)?;
-            }
-            if settings.follow.is_some() {
-                // Insert existing/file `path` into `files.map`.
-                files.insert(
-                    path.canonicalize().unwrap(),
-                    PathData {
-                        reader: Some(Box::new(reader)),
-                        metadata: md,
-                        display_name,
-                    },
-                );
+                    if is_seekable(&mut file) && get_block_size(md.as_ref().unwrap()) > 0 {
+                        bounded_tail(&mut file, &settings);
+                        reader = BufReader::new(file);
+                    } else {
+                        reader = BufReader::new(file);
+                        unbounded_tail(&mut reader, &settings)?;
+                    }
+                    if settings.follow.is_some() {
+                        // Insert existing/file `path` into `files.map`.
+                        files.insert(
+                            path.canonicalize().unwrap(),
+                            PathData {
+                                reader: Some(Box::new(reader)),
+                                metadata: md,
+                                display_name,
+                            },
+                        );
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                    settings.return_code = 1;
+                    show_error!(
+                        "cannot open {} for reading: Permission denied",
+                        display_name.quote()
+                    );
+                }
+                Err(e) => {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("{}: {}", display_name.quote(), e),
+                    ));
+                }
             }
         } else if settings.retry && settings.follow.is_some() {
             if path.is_relative() {
@@ -931,15 +947,13 @@ fn handle_event(
                                     );
                                 }
                             }
-                            if event_path.is_orphan() {
-                                if !orphans.contains(event_path) {
-                                    show_error!("directory containing watched file was removed");
-                                    show_error!(
-                                        "{} cannot be used, reverting to polling",
-                                        text::BACKEND
-                                    );
-                                    orphans.push(event_path.to_path_buf());
-                                }
+                            if event_path.is_orphan() && !orphans.contains(event_path) {
+                                show_error!("directory containing watched file was removed");
+                                show_error!(
+                                    "{} cannot be used, reverting to polling",
+                                    text::BACKEND
+                                );
+                                orphans.push(event_path.to_path_buf());
                             }
                             let _ = watcher.unwatch(event_path);
                         } else {
