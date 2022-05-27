@@ -96,7 +96,7 @@ pub mod options {
     pub static PRESUME_INPUT_PIPE: &str = "-presume-input-pipe";
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum FilterMode {
     Bytes(u64),
     Lines(u64, u8), // (number of lines, delimiter)
@@ -123,7 +123,7 @@ struct Settings {
     paths: VecDeque<PathBuf>,
     pid: platform::Pid,
     retry: bool,
-    return_code: i32,
+    exit_code: i32,
     sleep_sec: Duration,
     use_polling: bool,
     verbose: bool,
@@ -187,12 +187,15 @@ impl Settings {
             }
         }
 
+        let mut starts_with_plus = false;
         let mode_and_beginning = if let Some(arg) = matches.value_of(options::BYTES) {
+            starts_with_plus = arg.starts_with("+");
             match parse_num(arg) {
                 Ok((n, beginning)) => (FilterMode::Bytes(n), beginning),
                 Err(e) => return Err(format!("invalid number of bytes: {}", e)),
             }
         } else if let Some(arg) = matches.value_of(options::LINES) {
+            starts_with_plus = arg.starts_with("+");
             match parse_num(arg) {
                 Ok((n, beginning)) => (FilterMode::Lines(n, b'\n'), beginning),
                 Err(e) => return Err(format!("invalid number of lines: {}", e)),
@@ -202,6 +205,17 @@ impl Settings {
         };
         settings.mode = mode_and_beginning.0;
         settings.beginning = mode_and_beginning.1;
+
+        // Mimic GNU's tail for -[nc]0 without -f and exit immediately
+        if settings.follow.is_none() && !starts_with_plus && {
+            if let FilterMode::Lines(l, _) = settings.mode {
+                l == 0
+            } else {
+                settings.mode == FilterMode::Bytes(0)
+            }
+        } {
+            std::process::exit(0)
+        }
 
         settings.use_polling = matches.is_present(options::USE_POLLING);
         settings.retry =
@@ -296,7 +310,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
             }
 
             if !path.exists() && !settings.stdin_is_pipe_or_fifo {
-                settings.return_code = 1;
+                settings.exit_code = 1;
                 show_error!(
                     "cannot open {} for reading: {}",
                     display_name.quote(),
@@ -321,7 +335,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                     // }
                 }
 
-                settings.return_code = 1;
+                settings.exit_code = 1;
                 show_error!("error reading {}: {}", display_name.quote(), err_msg);
                 if settings.follow.is_some() {
                     let msg = if !settings.retry {
@@ -368,7 +382,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                     );
                 }
             } else {
-                settings.return_code = 1;
+                settings.exit_code = 1;
                 show_error!(
                     "cannot fstat {}: {}",
                     text::STDIN_HEADER.quote(),
@@ -401,7 +415,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                     if settings.follow.is_some() {
                         // Insert existing/file `path` into `files.map`.
                         files.insert(
-                            path.canonicalize().unwrap(),
+                            path.canonicalize()?,
                             PathData {
                                 reader: Some(Box::new(reader)),
                                 metadata: md,
@@ -411,7 +425,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                     }
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
-                    settings.return_code = 1;
+                    settings.exit_code = 1;
                     show_error!(
                         "cannot open {} for reading: Permission denied",
                         display_name.quote()
@@ -426,7 +440,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
             }
         } else if settings.retry && settings.follow.is_some() {
             if path.is_relative() {
-                path = std::env::current_dir().unwrap().join(&path);
+                path = std::env::current_dir()?.join(&path);
             }
             // Insert non-is_tailable() paths into `files.map`.
             files.insert(
@@ -459,12 +473,12 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
         }
     }
 
-    if settings.return_code > 0 {
+    if settings.exit_code > 0 {
         #[cfg(unix)]
         if stdin_is_bad_fd() {
             show_error!("-: {}", text::BAD_FD);
         }
-        return Err(USimpleError::new(settings.return_code, ""));
+        return Err(USimpleError::new(settings.exit_code, ""));
     }
 
     Ok(())
@@ -657,7 +671,7 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
                     "{} cannot be used, reverting to polling: Too many open files",
                     text::BACKEND
                 );
-                settings.return_code = 1;
+                settings.exit_code = 1;
                 let config = notify::poll::PollWatcherConfig {
                     poll_interval: settings.sleep_sec,
                     ..Default::default()
@@ -680,7 +694,7 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
             // 2x "inotify_add_watch" and 1x "inotify_rm_watch"
             let path = get_path(path, settings);
             watcher
-                .watch(&path.canonicalize().unwrap(), RecursiveMode::NonRecursive)
+                .watch(&path.canonicalize()?, RecursiveMode::NonRecursive)
                 .unwrap();
         } else if settings.follow.is_some() && settings.retry {
             if path.is_orphan() {
@@ -688,7 +702,7 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
             } else {
                 let parent = path.parent().unwrap();
                 watcher
-                    .watch(&parent.canonicalize().unwrap(), RecursiveMode::NonRecursive)
+                    .watch(&parent.canonicalize()?, RecursiveMode::NonRecursive)
                     .unwrap();
             }
         } else {
@@ -716,7 +730,7 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
                         show_error!("{} has appeared;  following new file", display_name.quote());
                         if let Ok(new_path_canonical) = new_path.canonicalize() {
                             files.update_metadata(&new_path_canonical, None);
-                            files.update_reader(&new_path_canonical).unwrap();
+                            files.update_reader(&new_path_canonical)?;
                             read_some = files.tail_file(&new_path_canonical, settings.verbose)?;
                             let new_path = get_path(&new_path_canonical, settings);
                             watcher
@@ -752,13 +766,13 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
                         // TODO: [2021-10; jhscheer] reduce duplicate code
                         let display_name = files.map.get(path).unwrap().display_name.to_path_buf();
                         if new_md.len() <= old_md.len()
-                            && new_md.modified().unwrap() != old_md.modified().unwrap()
+                            && new_md.modified()? != old_md.modified()?
                             && new_md.is_file()
                             && old_md.is_file()
                         {
                             show_error!("{}: file truncated", display_name.display());
                             files.update_metadata(path, None);
-                            files.update_reader(path).unwrap();
+                            files.update_reader(path)?;
                         }
                     }
                 }
@@ -778,7 +792,7 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
                 // dbg!(files.map.keys());
                 // dbg!(&files.last);
                 // eprintln!("=={:=>3}=====================dbg===", _event_counter);
-                handle_event(&event, files, settings, &mut watcher, &mut orphans);
+                handle_event(&event, files, settings, &mut watcher, &mut orphans)?;
             }
             Ok(Err(notify::Error {
                 kind: notify::ErrorKind::Io(ref e),
@@ -834,7 +848,7 @@ fn handle_event(
     settings: &Settings,
     watcher: &mut Box<dyn Watcher>,
     orphans: &mut Vec<PathBuf>,
-) {
+) -> UResult<()> {
     use notify::event::*;
 
     if let Some(event_path) = event.paths.first() {
@@ -858,7 +872,7 @@ fn handle_event(
                                     display_name.quote()
                                 );
                                 files.update_metadata(event_path, None);
-                                files.update_reader(event_path).unwrap();
+                                files.update_reader(event_path)?;
                             } else if !new_md.is_file() && old_md.is_file() {
                                 show_error!(
                                     "{} has been replaced with an untailable file",
@@ -874,11 +888,11 @@ fn handle_event(
                                 );
                                 files.update_metadata(event_path, None);
                             } else if new_md.len() <= old_md.len()
-                                && new_md.modified().unwrap() != old_md.modified().unwrap()
+                                && new_md.modified()? != old_md.modified()?
                             {
                                 show_error!("{}: file truncated", display_name.display());
                                 files.update_metadata(event_path, None);
-                                files.update_reader(event_path).unwrap();
+                                files.update_reader(event_path)?;
                             }
                         }
                     }
@@ -903,7 +917,7 @@ fn handle_event(
                         // assuming it has been truncated to 0. This mimics GNU's `tail`
                         // behavior and is the usual truncation operation for log files.
                         // files.update_metadata(event_path, None);
-                        files.update_reader(event_path).unwrap();
+                        files.update_reader(event_path)?;
                         if settings.follow == Some(FollowMode::Name) && settings.retry {
                             // TODO: [2021-10; jhscheer] add test for this
                             // Path has appeared, it's not an orphan any more.
@@ -996,10 +1010,10 @@ fn handle_event(
                     // after the "mv" tail should only follow "file_b".
 
                     if settings.follow == Some(FollowMode::Descriptor) {
-                        let new_path = event.paths.last().unwrap().canonicalize().unwrap();
+                        let new_path = event.paths.last().unwrap().canonicalize()?;
                         // Open new file and seek to End:
-                        let mut file = File::open(&new_path).unwrap();
-                        file.seek(SeekFrom::End(0)).unwrap();
+                        let mut file = File::open(&new_path)?;
+                        file.seek(SeekFrom::End(0))?;
                         // Add new reader and remove old reader:
                         files.map.insert(
                             new_path.to_owned(),
@@ -1018,7 +1032,7 @@ fn handle_event(
                         let new_path = get_path(&new_path, settings);
                         watcher
                             .watch(
-                                &new_path.canonicalize().unwrap(),
+                                &new_path.canonicalize()?,
                                 RecursiveMode::NonRecursive,
                             )
                             .unwrap();
@@ -1028,6 +1042,7 @@ fn handle_event(
             }
         }
     }
+    Ok(())
 }
 
 fn get_path(path: &Path, settings: &Settings) -> PathBuf {

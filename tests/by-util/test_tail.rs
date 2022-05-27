@@ -98,6 +98,55 @@ fn test_stdin_redirect_file() {
 }
 
 #[test]
+fn test_nc_0_wo_follow() {
+    // verify that -[nc]0 without -f, exit without reading
+
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .set_stdin(Stdio::null())
+        .args(&["-n0", "missing"])
+        .run()
+        .no_stderr()
+        .no_stdout()
+        .succeeded();
+    ts.ucmd()
+        .set_stdin(Stdio::null())
+        .args(&["-c0", "missing"])
+        .run()
+        .no_stderr()
+        .no_stdout()
+        .succeeded();
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+#[cfg(feature = "chmod")]
+fn test_nc_0_wo_follow2() {
+    // verify that -[nc]0 without -f, exit without reading
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.touch("unreadable");
+    ts.ccmd("chmod").arg("0").arg("unreadable").succeeds();
+
+    ts.ucmd()
+        .set_stdin(Stdio::null())
+        .args(&["-n0", "unreadable"])
+        .run()
+        .no_stderr()
+        .no_stdout()
+        .succeeded();
+    ts.ucmd()
+        .set_stdin(Stdio::null())
+        .args(&["-c0", "unreadable"])
+        .run()
+        .no_stderr()
+        .no_stdout()
+        .succeeded();
+}
+
+#[test]
 #[cfg(not(target_os = "windows"))]
 #[cfg(feature = "chmod")]
 fn test_permission_denied() {
@@ -831,11 +880,18 @@ fn test_positive_bytes() {
 #[test]
 #[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_positive_zero_bytes() {
-    new_ucmd!()
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
         .args(&["-c", "+0"])
         .pipe_in("abcde")
         .succeeds()
         .stdout_is("abcde");
+    ts.ucmd()
+        .args(&["-c", "0"])
+        .pipe_in("abcde")
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
 }
 
 /// Test for reading all but the first NUM lines: `tail -n +3`.
@@ -917,11 +973,18 @@ fn test_obsolete_syntax_small_file() {
 #[test]
 #[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_positive_zero_lines() {
-    new_ucmd!()
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
         .args(&["-n", "+0"])
         .pipe_in("a\nb\nc\nd\ne\n")
         .succeeds()
         .stdout_is("a\nb\nc\nd\ne\n");
+    ts.ucmd()
+        .args(&["-n", "0"])
+        .pipe_in("a\nb\nc\nd\ne\n")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
 }
 
 #[test]
