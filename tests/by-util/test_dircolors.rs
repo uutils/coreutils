@@ -1,3 +1,4 @@
+// spell-checker:ignore overridable
 use crate::common::util::*;
 
 extern crate dircolors;
@@ -77,6 +78,19 @@ fn test_csh_default() {
         .arg("-c")
         .run()
         .stdout_is_fixture("csh_def.expected");
+}
+#[test]
+fn test_overridable_args() {
+    new_ucmd!()
+        .env("TERM", "screen")
+        .arg("-bc")
+        .run()
+        .stdout_is_fixture("csh_def.expected");
+    new_ucmd!()
+        .env("TERM", "screen")
+        .arg("-cb")
+        .run()
+        .stdout_is_fixture("bash_def.expected");
 }
 
 #[test]
