@@ -765,6 +765,7 @@ fn test_output_file_specific_files() {
     assert_eq!(actual, vec!["File", "a   ", "b   ", "c   "]);
 }
 
+#[cfg(not(windows))]
 #[test]
 fn test_file_column_width_if_filename_contains_unicode_chars() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -777,6 +778,21 @@ fn test_file_column_width_if_filename_contains_unicode_chars() {
     let actual = output.lines().next().unwrap();
     // expected width: 7 chars (length of äöü.txt) + 1 char (column separator)
     assert_eq!(actual, "File    Mounted on");
+}
+
+#[cfg(windows)]
+#[test]
+fn test_file_column_width_if_filename_contains_unicode_chars() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("äöü.txt");
+
+    let output = ucmd
+        .args(&["--output=file,target", "äöü.txt"])
+        .succeeds()
+        .stdout_move_str();
+    let actual = output.lines().next().unwrap();
+    // expected width: 7 chars (length of äöü.txt) + 1 char (column separator)
+    assert_eq!(actual, "File Mounted on");
 }
 
 #[test]
