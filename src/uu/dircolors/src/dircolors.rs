@@ -166,6 +166,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long("sh")
                 .short('b')
                 .visible_alias("bourne-shell")
+                .overrides_with(options::C_SHELL)
                 .help("output Bourne shell code to set LS_COLORS")
                 .display_order(1),
         )
@@ -174,6 +175,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long("csh")
                 .short('c')
                 .visible_alias("c-shell")
+                .overrides_with(options::BOURNE_SHELL)
                 .help("output C shell code to set LS_COLORS")
                 .display_order(2),
         )
