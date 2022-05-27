@@ -189,13 +189,13 @@ impl Settings {
 
         let mut starts_with_plus = false;
         let mode_and_beginning = if let Some(arg) = matches.value_of(options::BYTES) {
-            starts_with_plus = arg.starts_with("+");
+            starts_with_plus = arg.starts_with('+');
             match parse_num(arg) {
                 Ok((n, beginning)) => (FilterMode::Bytes(n), beginning),
                 Err(e) => return Err(format!("invalid number of bytes: {}", e)),
             }
         } else if let Some(arg) = matches.value_of(options::LINES) {
-            starts_with_plus = arg.starts_with("+");
+            starts_with_plus = arg.starts_with('+');
             match parse_num(arg) {
                 Ok((n, beginning)) => (FilterMode::Lines(n, b'\n'), beginning),
                 Err(e) => return Err(format!("invalid number of lines: {}", e)),
