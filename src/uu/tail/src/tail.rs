@@ -573,7 +573,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('s')
                 .takes_value(true)
                 .long(options::SLEEP_INT)
-                .help("Number or seconds to sleep between polling the file when running with -f"),
+                .help("Number of seconds to sleep between polling the file when running with -f"),
         )
         .arg(
             Arg::new(options::MAX_UNCHANGED_STATS)

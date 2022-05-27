@@ -21,7 +21,7 @@ mod options {
 
 fn get_long_usage() -> String {
     String::from(
-        "Output each NAME with its last non-slash component and trailing slashes
+        "Output each NAME with its last non-slash component and trailing slashes \n\
         removed; if NAME contains no /'s, output '.' (meaning the current directory).",
     )
 }
