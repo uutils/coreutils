@@ -558,3 +558,8 @@ fn test_too_few_xs_suffix_directory() {
         .fails()
         .stderr_only("mktemp: too few X's in template 'aXXX'\n");
 }
+
+#[test]
+fn test_too_many_arguments() {
+    new_ucmd!().args(&["-q", "a", "b"]).fails().code_is(1);
+}
