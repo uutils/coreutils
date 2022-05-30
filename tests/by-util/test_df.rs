@@ -360,6 +360,47 @@ fn test_total() {
     assert_eq!(computed_total_avail, reported_total_avail);
 }
 
+/// Test that the "total" label appears in the correct column.
+///
+/// The "total" label should appear in the "source" column, or in the
+/// "target" column if "source" is not visible.
+#[test]
+fn test_total_label_in_correct_column() {
+    let output = new_ucmd!()
+        .args(&["--output=source", "--total", "."])
+        .succeeds()
+        .stdout_move_str();
+    let last_line = output.lines().last().unwrap();
+    assert_eq!(last_line.trim(), "total");
+
+    let output = new_ucmd!()
+        .args(&["--output=target", "--total", "."])
+        .succeeds()
+        .stdout_move_str();
+    let last_line = output.lines().last().unwrap();
+    assert_eq!(last_line.trim(), "total");
+
+    let output = new_ucmd!()
+        .args(&["--output=source,target", "--total", "."])
+        .succeeds()
+        .stdout_move_str();
+    let last_line = output.lines().last().unwrap();
+    assert_eq!(
+        last_line.split_whitespace().collect::<Vec<&str>>(),
+        vec!["total", "-"]
+    );
+
+    let output = new_ucmd!()
+        .args(&["--output=target,source", "--total", "."])
+        .succeeds()
+        .stdout_move_str();
+    let last_line = output.lines().last().unwrap();
+    assert_eq!(
+        last_line.split_whitespace().collect::<Vec<&str>>(),
+        vec!["-", "total"]
+    );
+}
+
 #[test]
 fn test_use_percentage() {
     let output = new_ucmd!()
