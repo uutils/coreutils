@@ -93,7 +93,7 @@ fn tabstops_parse(s: &str) -> (RemainingMode, Vec<usize>) {
 
                     // Tab size must be positive.
                     if num == 0 {
-                        crash!(1, "{}\n", "tab size cannot be 0");
+                        crash!(1, "tab size cannot be 0");
                     }
 
                     // Tab sizes must be ascending.
