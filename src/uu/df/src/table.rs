@@ -204,12 +204,18 @@ pub(crate) struct RowFormatter<'a> {
     // numbers. We could split the options up into those groups to
     // reduce the coupling between this `table.rs` module and the main
     // `df.rs` module.
+    /// Whether to use the special rules for displaying the total row.
+    is_total_row: bool,
 }
 
 impl<'a> RowFormatter<'a> {
     /// Instantiate this struct.
-    pub(crate) fn new(row: &'a Row, options: &'a Options) -> Self {
-        Self { row, options }
+    pub(crate) fn new(row: &'a Row, options: &'a Options, is_total_row: bool) -> Self {
+        Self {
+            row,
+            options,
+            is_total_row,
+        }
     }
 
     /// Get a string giving the scaled version of the input number.
@@ -251,13 +257,25 @@ impl<'a> RowFormatter<'a> {
 
         for column in &self.options.columns {
             let string = match column {
-                Column::Source => self.row.fs_device.to_string(),
+                Column::Source => {
+                    if self.is_total_row {
+                        "total".to_string()
+                    } else {
+                        self.row.fs_device.to_string()
+                    }
+                }
                 Column::Size => self.scaled_bytes(self.row.bytes),
                 Column::Used => self.scaled_bytes(self.row.bytes_used),
                 Column::Avail => self.scaled_bytes(self.row.bytes_avail),
                 Column::Pcent => Self::percentage(self.row.bytes_usage),
 
-                Column::Target => self.row.fs_mount.to_string(),
+                Column::Target => {
+                    if self.is_total_row && !self.options.columns.contains(&Column::Source) {
+                        "total".to_string()
+                    } else {
+                        self.row.fs_mount.to_string()
+                    }
+                }
                 Column::Itotal => self.scaled_inodes(self.row.inodes),
                 Column::Iused => self.scaled_inodes(self.row.inodes_used),
                 Column::Iavail => self.scaled_inodes(self.row.inodes_free),
@@ -371,7 +389,7 @@ impl Table {
             // the output table.
             if options.show_all_fs || filesystem.usage.blocks > 0 {
                 let row = Row::from(filesystem);
-                let fmt = RowFormatter::new(&row, options);
+                let fmt = RowFormatter::new(&row, options, false);
                 let values = fmt.get_values();
                 total += row;
 
@@ -386,7 +404,7 @@ impl Table {
         }
 
         if options.show_total {
-            let total_row = RowFormatter::new(&total, options);
+            let total_row = RowFormatter::new(&total, options, true);
             rows.push(total_row.get_values());
         }
 
@@ -625,7 +643,7 @@ mod tests {
 
             ..Default::default()
         };
-        let fmt = RowFormatter::new(&row, &options);
+        let fmt = RowFormatter::new(&row, &options, false);
         assert_eq!(
             fmt.get_values(),
             vec!("my_device", "100", "25", "75", "25%", "my_mount")
@@ -651,7 +669,7 @@ mod tests {
 
             ..Default::default()
         };
-        let fmt = RowFormatter::new(&row, &options);
+        let fmt = RowFormatter::new(&row, &options, false);
         assert_eq!(
             fmt.get_values(),
             vec!("my_device", "my_type", "100", "25", "75", "25%", "my_mount")
@@ -676,7 +694,7 @@ mod tests {
 
             ..Default::default()
         };
-        let fmt = RowFormatter::new(&row, &options);
+        let fmt = RowFormatter::new(&row, &options, false);
         assert_eq!(
             fmt.get_values(),
             vec!("my_device", "10", "2", "8", "20%", "my_mount")
@@ -695,7 +713,7 @@ mod tests {
             inodes: 10,
             ..Default::default()
         };
-        let fmt = RowFormatter::new(&row, &options);
+        let fmt = RowFormatter::new(&row, &options, false);
         assert_eq!(fmt.get_values(), vec!("1", "10"));
     }
 
@@ -718,7 +736,7 @@ mod tests {
 
             ..Default::default()
         };
-        let fmt = RowFormatter::new(&row, &options);
+        let fmt = RowFormatter::new(&row, &options, false);
         assert_eq!(
             fmt.get_values(),
             vec!("my_device", "my_type", "4k", "1k", "3k", "25%", "my_mount")
@@ -744,7 +762,7 @@ mod tests {
 
             ..Default::default()
         };
-        let fmt = RowFormatter::new(&row, &options);
+        let fmt = RowFormatter::new(&row, &options, false);
         assert_eq!(
             fmt.get_values(),
             vec!("my_device", "my_type", "4K", "1K", "3K", "25%", "my_mount")
@@ -761,7 +779,7 @@ mod tests {
             bytes_usage: Some(0.251),
             ..Default::default()
         };
-        let fmt = RowFormatter::new(&row, &options);
+        let fmt = RowFormatter::new(&row, &options, false);
         assert_eq!(fmt.get_values(), vec!("26%"));
     }
 
@@ -780,7 +798,7 @@ mod tests {
                 bytes_avail,
                 ..Default::default()
             };
-            RowFormatter::new(&row, &options).get_values()
+            RowFormatter::new(&row, &options, false).get_values()
         }
 
         assert_eq!(get_formatted_values(100, 100, 0), vec!("1", "1", "0"));
