@@ -205,12 +205,29 @@ struct Params {
     suffix: String,
 }
 
+/// Find the start and end indices of the last contiguous block of Xs.
+///
+/// If no contiguous block of at least three Xs could be found, this
+/// function returns `None`.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// assert_eq!(find_last_contiguous_block_of_xs("XXX_XXX"), Some((4, 7)));
+/// assert_eq!(find_last_contiguous_block_of_xs("aXbXcX"), None);
+/// ```
+fn find_last_contiguous_block_of_xs(s: &str) -> Option<(usize, usize)> {
+    let j = s.rfind("XXX")? + 3;
+    let i = s[..j].rfind(|c| c != 'X').map_or(0, |i| i + 1);
+    Some((i, j))
+}
+
 impl Params {
     fn from(options: Options) -> Result<Self, MkTempError> {
         // Get the start and end indices of the randomized part of the template.
         //
         // For example, if the template is "abcXXXXyz", then `i` is 3 and `j` is 7.
-        let i = match options.template.find("XXX") {
+        let (i, j) = match find_last_contiguous_block_of_xs(&options.template) {
             None => {
                 let s = match options.suffix {
                     None => options.template,
@@ -218,9 +235,8 @@ impl Params {
                 };
                 return Err(MkTempError::TooFewXs(s));
             }
-            Some(i) => i,
+            Some(indices) => indices,
         };
-        let j = options.template.rfind("XXX").unwrap() + 3;
 
         // Combine the directory given as an option and the prefix of the template.
         //
@@ -449,4 +465,22 @@ fn exec(dir: &str, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> U
     let path = Path::new(dir).join(filename);
 
     println_verbatim(path).map_err_context(|| "failed to print directory name".to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::find_last_contiguous_block_of_xs as findxs;
+
+    #[test]
+    fn test_find_last_contiguous_block_of_xs() {
+        assert_eq!(findxs("XXX"), Some((0, 3)));
+        assert_eq!(findxs("XXX_XXX"), Some((4, 7)));
+        assert_eq!(findxs("XXX_XXX_XXX"), Some((8, 11)));
+        assert_eq!(findxs("aaXXXbb"), Some((2, 5)));
+        assert_eq!(findxs(""), None);
+        assert_eq!(findxs("X"), None);
+        assert_eq!(findxs("XX"), None);
+        assert_eq!(findxs("aXbXcX"), None);
+        assert_eq!(findxs("aXXbXXcXX"), None);
+    }
 }
