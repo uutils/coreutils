@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) PREFIXaa nbbbb ncccc
+// spell-checker:ignore (ToDO) PREFIXaa PREFIXab nbbbb ncccc
 
 mod filenames;
 mod number;
@@ -47,7 +47,7 @@ static ARG_PREFIX: &str = "prefix";
 
 const USAGE: &str = "{} [OPTION]... [INPUT [PREFIX]]";
 const AFTER_HELP: &str = "\
-    Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default \
+    Output fixed-size pieces of INPUT to PREFIXaa, PREFIXab, ...; default \
     size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is \
     -, read standard input.";
 
@@ -74,6 +74,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('b')
                 .long(OPT_BYTES)
                 .takes_value(true)
+                .value_name("SIZE")
                 .help("put SIZE bytes per output file"),
         )
         .arg(
@@ -81,6 +82,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('C')
                 .long(OPT_LINE_BYTES)
                 .takes_value(true)
+                .value_name("SIZE")
                 .default_value("2")
                 .help("put at most SIZE bytes of lines per output file"),
         )
@@ -89,6 +91,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('l')
                 .long(OPT_LINES)
                 .takes_value(true)
+                .value_name("NUMBER")
                 .default_value("1000")
                 .help("put NUMBER lines/records per output file"),
         )
@@ -97,6 +100,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('n')
                 .long(OPT_NUMBER)
                 .takes_value(true)
+                .value_name("CHUNKS")
                 .help("generate CHUNKS output files; see explanation below"),
         )
         // rest of the arguments
@@ -104,8 +108,9 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_ADDITIONAL_SUFFIX)
                 .long(OPT_ADDITIONAL_SUFFIX)
                 .takes_value(true)
+                .value_name("SUFFIX")
                 .default_value("")
-                .help("additional suffix to append to output file names"),
+                .help("additional SUFFIX to append to output file names"),
         )
         .arg(
             Arg::new(OPT_FILTER)
@@ -137,6 +142,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('a')
                 .long(OPT_SUFFIX_LENGTH)
                 .takes_value(true)
+                .value_name("N")
                 .default_value(OPT_DEFAULT_SUFFIX_LENGTH)
                 .help("use suffixes of length N (default 2)"),
         )
