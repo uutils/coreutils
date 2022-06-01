@@ -63,6 +63,14 @@ fn test_internal_db() {
 }
 
 #[test]
+fn test_ls_colors() {
+    new_ucmd!()
+        .arg("--print-ls-colors")
+        .run()
+        .stdout_is_fixture("ls_colors.expected");
+}
+
+#[test]
 fn test_bash_default() {
     new_ucmd!()
         .env("TERM", "screen")
@@ -107,6 +115,18 @@ fn test_exclusive_option() {
         .stderr_contains("mutually exclusive");
     new_ucmd!()
         .arg("-cp")
+        .fails()
+        .stderr_contains("mutually exclusive");
+    new_ucmd!()
+        .args(&["-b", "--print-ls-colors"])
+        .fails()
+        .stderr_contains("mutually exclusive");
+    new_ucmd!()
+        .args(&["-c", "--print-ls-colors"])
+        .fails()
+        .stderr_contains("mutually exclusive");
+    new_ucmd!()
+        .args(&["-p", "--print-ls-colors"])
         .fails()
         .stderr_contains("mutually exclusive");
 }
