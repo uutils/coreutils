@@ -519,12 +519,21 @@ fn test_directory_permissions() {
 /// Test that a template with a path separator is invalid.
 #[test]
 fn test_template_path_separator() {
+    #[cfg(not(windows))]
     new_ucmd!()
         .args(&["-t", "a/bXXX"])
         .fails()
         .stderr_only(format!(
             "mktemp: invalid template, {}, contains directory separator\n",
             "a/bXXX".quote()
+        ));
+    #[cfg(windows)]
+    new_ucmd!()
+        .args(&["-t", r"a\bXXX"])
+        .fails()
+        .stderr_only(format!(
+            "mktemp: invalid template, {}, contains directory separator\n",
+            r"a\bXXX".quote()
         ));
 }
 
