@@ -1741,6 +1741,54 @@ fn test_follow_name_truncate4() {
 }
 
 #[test]
+fn test_follow_truncate_fast() {
+    // inspired by: "gnu/tests/tail-2/truncate.sh"
+    // Ensure all logs are output upon file truncation
+
+    // This is similar to `test_follow_name_truncate1-3` but uses very short delays
+    // to better mimic the tight timings used in the "truncate.sh" test.
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let mut args = vec![
+        "-s.1",
+        "--max-unchanged-stats=1",
+        "f",
+        "---disable-inotify",
+    ];
+    let follow = vec!["-f", "-F"];
+
+    let delay = 100;
+    for _ in 0..2 {
+        for mode in &follow {
+            args.push(mode);
+
+            at.truncate("f", "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n");
+
+            let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+            sleep(Duration::from_millis(delay));
+
+            at.truncate("f", "11\n12\n13\n14\n15\n");
+            sleep(Duration::from_millis(delay));
+
+            p.kill().unwrap();
+            sleep(Duration::from_millis(delay));
+
+            let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+            assert_eq!(
+                buf_stdout,
+                "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n"
+            );
+            assert_eq!(buf_stderr, "tail: f: file truncated\n");
+
+            args.pop();
+        }
+        args.pop();
+    }
+}
+
+#[test]
 #[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
 fn test_follow_name_move_create() {
     // This test triggers a move/create event while `tail --follow=name logfile` is running.
