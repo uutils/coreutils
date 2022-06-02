@@ -36,6 +36,7 @@ pub struct Settings {
     suffix: String,
     symbolic: bool,
     relative: bool,
+    logical: bool,
     target_dir: Option<String>,
     no_target_dir: bool,
     no_dereference: bool,
@@ -121,9 +122,12 @@ const USAGE: &str = "\
 
 mod options {
     pub const FORCE: &str = "force";
+    //pub const DIRECTORY: &str = "directory";
     pub const INTERACTIVE: &str = "interactive";
     pub const NO_DEREFERENCE: &str = "no-dereference";
     pub const SYMBOLIC: &str = "symbolic";
+    pub const LOGICAL: &str = "logical";
+    pub const PHYSICAL: &str = "physical";
     pub const TARGET_DIRECTORY: &str = "target-directory";
     pub const NO_TARGET_DIRECTORY: &str = "no-target-directory";
     pub const RELATIVE: &str = "relative";
@@ -152,6 +156,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(PathBuf::from)
         .collect();
 
+    let symbolic = matches.is_present(options::SYMBOLIC);
+
     let overwrite_mode = if matches.is_present(options::FORCE) {
         OverwriteMode::Force
     } else if matches.is_present(options::INTERACTIVE) {
@@ -163,11 +169,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let backup_mode = backup_control::determine_backup_mode(&matches)?;
     let backup_suffix = backup_control::determine_backup_suffix(&matches);
 
+    // When we have "-L" or "-L -P", false otherwise
+    let logical = matches.is_present(options::LOGICAL);
+
     let settings = Settings {
         overwrite: overwrite_mode,
         backup: backup_mode,
         suffix: backup_suffix,
-        symbolic: matches.is_present(options::SYMBOLIC),
+        symbolic,
+        logical,
         relative: matches.is_present(options::RELATIVE),
         target_dir: matches
             .value_of(options::TARGET_DIRECTORY)
@@ -188,9 +198,12 @@ pub fn uu_app<'a>() -> Command<'a> {
         .infer_long_args(true)
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
-        // TODO: opts.arg(
-        //    Arg::new(("d", "directory", "allow users with appropriate privileges to attempt \
-        //                                       to make hard links to directories");
+        /*.arg(
+            Arg::new(options::DIRECTORY)
+                .short('d')
+                .long(options::DIRECTORY)
+                .help("allow users with appropriate privileges to attempt to make hard links to directories")
+        )*/
         .arg(
             Arg::new(options::FORCE)
                 .short('f')
@@ -212,15 +225,24 @@ pub fn uu_app<'a>() -> Command<'a> {
                      symbolic link to a directory",
                 ),
         )
-        // TODO: opts.arg(
-        //    Arg::new(("L", "logical", "dereference TARGETs that are symbolic links");
-        //
-        // TODO: opts.arg(
-        //    Arg::new(("P", "physical", "make hard links directly to symbolic links");
+        .arg(
+            Arg::new(options::LOGICAL)
+                .short('L')
+                .long(options::LOGICAL)
+                .help("dereference TARGETs that are symbolic links")
+                .overrides_with(options::PHYSICAL),
+        )
+        .arg(
+            // Not implemented yet
+            Arg::new(options::PHYSICAL)
+                .short('P')
+                .long(options::PHYSICAL)
+                .help("make hard links directly to symbolic links"),
+        )
         .arg(
             Arg::new(options::SYMBOLIC)
                 .short('s')
-                .long("symbolic")
+                .long(options::SYMBOLIC)
                 .help("make symbolic links instead of hard links")
                 // override added for https://github.com/uutils/coreutils/issues/2359
                 .overrides_with(options::SYMBOLIC),
@@ -446,7 +468,15 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     if settings.symbolic {
         symlink(&source, dst)?;
     } else {
-        fs::hard_link(&source, dst)?;
+        let p = if settings.logical && is_symlink(&source) {
+            // if we want to have an hard link,
+            // source is a symlink and -L is passed
+            // we want to resolve the symlink to create the hardlink
+            std::fs::canonicalize(&source)?
+        } else {
+            source.to_path_buf()
+        };
+        fs::hard_link(&p, dst)?;
     }
 
     if settings.verbose {

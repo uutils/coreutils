@@ -8,7 +8,7 @@
 
 // spell-checker:ignore (paths) GPGHome
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgMatches, Command};
 use uucore::display::{println_verbatim, Quotable};
 use uucore::error::{FromIo, UError, UResult};
 use uucore::format_usage;
@@ -17,7 +17,7 @@ use std::env;
 use std::error::Error;
 use std::fmt::Display;
 use std::iter;
-use std::path::{is_separator, Path, PathBuf, MAIN_SEPARATOR};
+use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 
 #[cfg(unix)]
 use std::fs;
@@ -89,86 +89,229 @@ impl Display for MkTempError {
     }
 }
 
-#[uucore::main]
-pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+/// Options parsed from the command-line.
+///
+/// This provides a layer of indirection between the application logic
+/// and the argument parsing library `clap`, allowing each to vary
+/// independently.
+struct Options {
+    /// Whether to create a temporary directory instead of a file.
+    directory: bool,
 
-    let template = matches.value_of(ARG_TEMPLATE).unwrap();
-    let tmpdir = matches.value_of(OPT_TMPDIR).unwrap_or_default();
+    /// Whether to just print the name of a file that would have been created.
+    dry_run: bool,
 
-    // Treat the template string as a path to get the directory
-    // containing the last component.
-    let path = PathBuf::from(template);
+    /// Whether to suppress file creation error messages.
+    quiet: bool,
 
-    let (template, tmpdir) = if matches.is_present(OPT_TMPDIR)
-        && !PathBuf::from(tmpdir).is_dir() // if a temp dir is provided, it must be an actual path
-        && tmpdir.contains("XXX")
-    // If this is a template, it has to contain at least 3 X
-        && template == DEFAULT_TEMPLATE
-    // That means that clap does not think we provided a template
-    {
-        // Special case to workaround a limitation of clap when doing
-        // mktemp --tmpdir apt-key-gpghome.XXX
-        // The behavior should be
-        // mktemp --tmpdir $TMPDIR apt-key-gpghome.XX
-        // As --tmpdir is empty
+    /// The directory in which to create the temporary file.
+    ///
+    /// If `None`, the file will be created in the current directory.
+    tmpdir: Option<String>,
+
+    /// The suffix to append to the temporary file, if any.
+    suffix: Option<String>,
+
+    /// Whether to treat the template argument as a single file path component.
+    treat_as_template: bool,
+
+    /// The template to use for the name of the temporary file.
+    template: String,
+}
+
+/// Decide whether the argument to `--tmpdir` should actually be the template.
+///
+/// This function is required to work around a limitation of `clap`,
+/// the command-line argument parsing library. In case the command
+/// line is
+///
+/// ```sh
+/// mktemp --tmpdir XXX
+/// ```
+///
+/// the program should behave like
+///
+/// ```sh
+/// mktemp --tmpdir=${TMPDIR:-/tmp} XXX
+/// ```
+///
+/// However, `clap` thinks that `XXX` is the value of the `--tmpdir`
+/// option. This function returns `true` in this case and `false`
+/// in all other cases.
+fn is_tmpdir_argument_actually_the_template(matches: &ArgMatches) -> bool {
+    if !matches.is_present(ARG_TEMPLATE) {
+        if let Some(tmpdir) = matches.value_of(OPT_TMPDIR) {
+            if !Path::new(tmpdir).is_dir() && tmpdir.contains("XXX") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+impl Options {
+    fn from(matches: &ArgMatches) -> Self {
+        // Special case to work around a limitation of `clap`; see
+        // `is_tmpdir_argument_actually_the_template()` for more
+        // information.
         //
         // Fixed in clap 3
         // See https://github.com/clap-rs/clap/pull/1587
-        let tmp = env::temp_dir();
-        (tmpdir, tmp)
-    } else if !matches.is_present(OPT_TMPDIR) {
-        // In this case, the command line was `mktemp -t XXX`, so we
-        // treat the argument `XXX` as though it were a filename
-        // regardless of whether it has path separators in it.
-        if matches.is_present(OPT_T) {
-            let tmp = env::temp_dir();
-            (template, tmp)
-        // In this case, the command line was `mktemp XXX`, so we need
-        // to parse out the parent directory and the filename from the
-        // argument `XXX`, since it may be include path separators.
+        let (tmpdir, template) = if is_tmpdir_argument_actually_the_template(matches) {
+            let tmpdir = Some(env::temp_dir().display().to_string());
+            let template = matches.value_of(OPT_TMPDIR).unwrap().to_string();
+            (tmpdir, template)
         } else {
-            let tmp = match path.parent() {
-                None => PathBuf::from("."),
-                Some(d) => PathBuf::from(d),
-            };
-            let filename = path.file_name();
-            let template = filename.unwrap().to_str().unwrap();
-            // If the command line was `mktemp aXXX/b`, then we will
-            // find that `tmp`, which is the result of getting the
-            // parent when treating the argument as a path, contains
-            // at least three consecutive Xs. This means that there
-            // was a path separator in the suffix, which is not
-            // allowed.
-            if tmp.display().to_string().contains("XXX") {
-                return Err(MkTempError::SuffixContainsDirSeparator(format!(
-                    "{}{}",
-                    MAIN_SEPARATOR, template
-                ))
-                .into());
-            }
-            (template, tmp)
+            let tmpdir = matches.value_of(OPT_TMPDIR).map(String::from);
+            let template = matches
+                .value_of(ARG_TEMPLATE)
+                .unwrap_or(DEFAULT_TEMPLATE)
+                .to_string();
+            (tmpdir, template)
+        };
+        Self {
+            directory: matches.is_present(OPT_DIRECTORY),
+            dry_run: matches.is_present(OPT_DRY_RUN),
+            quiet: matches.is_present(OPT_QUIET),
+            tmpdir,
+            suffix: matches.value_of(OPT_SUFFIX).map(String::from),
+            treat_as_template: matches.is_present(OPT_T),
+            template,
         }
-    } else {
-        (template, PathBuf::from(tmpdir))
-    };
-
-    let make_dir = matches.is_present(OPT_DIRECTORY);
-    let dry_run = matches.is_present(OPT_DRY_RUN);
-    let suppress_file_err = matches.is_present(OPT_QUIET);
-
-    // If `--tmpdir` is given, the template cannot be an absolute
-    // path. For example, `mktemp --tmpdir=a /XXX` is not allowed.
-    if matches.is_present(OPT_TMPDIR) && PathBuf::from(template).is_absolute() {
-        return Err(MkTempError::InvalidTemplate(template.into()).into());
     }
+}
 
-    let (prefix, rand, suffix) = parse_template(template, matches.value_of(OPT_SUFFIX))?;
+/// Parameters that control the path to and name of the temporary file.
+///
+/// The temporary file will be created at
+///
+/// ```text
+/// {directory}/{prefix}{XXX}{suffix}
+/// ```
+///
+/// where `{XXX}` is a sequence of random characters whose length is
+/// `num_rand_chars`.
+struct Params {
+    /// The directory that will contain the temporary file.
+    directory: String,
 
+    /// The (non-random) prefix of the temporary file.
+    prefix: String,
+
+    /// The number of random characters in the name of the temporary file.
+    num_rand_chars: usize,
+
+    /// The (non-random) suffix of the temporary file.
+    suffix: String,
+}
+
+impl Params {
+    fn from(options: Options) -> Result<Self, MkTempError> {
+        // Get the start and end indices of the randomized part of the template.
+        //
+        // For example, if the template is "abcXXXXyz", then `i` is 3 and `j` is 7.
+        let i = match options.template.find("XXX") {
+            None => {
+                let s = match options.suffix {
+                    None => options.template,
+                    Some(s) => format!("{}{}", options.template, s),
+                };
+                return Err(MkTempError::TooFewXs(s));
+            }
+            Some(i) => i,
+        };
+        let j = options.template.rfind("XXX").unwrap() + 3;
+
+        // Combine the directory given as an option and the prefix of the template.
+        //
+        // For example, if `tmpdir` is "a/b" and the template is "c/dXXX",
+        // then `prefix` is "a/b/c/d".
+        let tmpdir = options.tmpdir;
+        let prefix_from_option = tmpdir.clone().unwrap_or_else(|| "".to_string());
+        let prefix_from_template = &options.template[..i];
+        let prefix = Path::new(&prefix_from_option)
+            .join(prefix_from_template)
+            .display()
+            .to_string();
+        if options.treat_as_template && prefix.contains(MAIN_SEPARATOR) {
+            return Err(MkTempError::PrefixContainsDirSeparator(options.template));
+        }
+        if tmpdir.is_some() && Path::new(prefix_from_template).is_absolute() {
+            return Err(MkTempError::InvalidTemplate(options.template));
+        }
+
+        // Split the parent directory from the file part of the prefix.
+        //
+        // For example, if `prefix` is "a/b/c/d", then `directory` is
+        // "a/b/c" is `prefix` gets reassigned to "d".
+        let (directory, prefix) = if prefix.ends_with(MAIN_SEPARATOR) {
+            (prefix, "".to_string())
+        } else {
+            let path = Path::new(&prefix);
+            let directory = match path.parent() {
+                None => String::new(),
+                Some(d) => d.display().to_string(),
+            };
+            let prefix = match path.file_name() {
+                None => String::new(),
+                Some(f) => f.to_str().unwrap().to_string(),
+            };
+            (directory, prefix)
+        };
+
+        // Combine the suffix from the template with the suffix given as an option.
+        //
+        // For example, if the suffix command-line argument is ".txt" and
+        // the template is "XXXabc", then `suffix` is "abc.txt".
+        let suffix_from_option = options.suffix.unwrap_or_else(|| "".to_string());
+        let suffix_from_template = &options.template[j..];
+        let suffix = format!("{}{}", suffix_from_template, suffix_from_option);
+        if suffix.contains(MAIN_SEPARATOR) {
+            return Err(MkTempError::SuffixContainsDirSeparator(suffix));
+        }
+        if !suffix_from_template.is_empty() && !suffix_from_option.is_empty() {
+            return Err(MkTempError::MustEndInX(options.template));
+        }
+
+        // The number of random characters in the template.
+        //
+        // For example, if the template is "abcXXXXyz", then the number of
+        // random characters is four.
+        let num_rand_chars = j - i;
+
+        Ok(Self {
+            directory,
+            prefix,
+            num_rand_chars,
+            suffix,
+        })
+    }
+}
+
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uu_app().try_get_matches_from(args)?;
+
+    // Parse command-line options into a format suitable for the
+    // application logic.
+    let options = Options::from(&matches);
+    let dry_run = options.dry_run;
+    let suppress_file_err = options.quiet;
+    let make_dir = options.directory;
+
+    // Parse file path parameters from the command-line options.
+    let Params {
+        directory: tmpdir,
+        prefix,
+        num_rand_chars: rand,
+        suffix,
+    } = Params::from(options)?;
+
+    // Create the temporary file or directory, or simulate creating it.
     let res = if dry_run {
-        dry_exec(tmpdir, prefix, rand, suffix)
+        dry_exec(&tmpdir, &prefix, rand, &suffix)
     } else {
-        exec(&tmpdir, prefix, rand, suffix, make_dir)
+        exec(&tmpdir, &prefix, rand, &suffix, make_dir)
     };
 
     if suppress_file_err {
@@ -234,73 +377,10 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .multiple_occurrences(false)
                 .takes_value(true)
                 .max_values(1)
-                .default_value(DEFAULT_TEMPLATE),
         )
 }
 
-/// Parse a template string into prefix, suffix, and random components.
-///
-/// `temp` is the template string, with three or more consecutive `X`s
-/// representing a placeholder for randomly generated characters (for
-/// example, `"abc_XXX.txt"`). If `temp` ends in an `X`, then a suffix
-/// can be specified by `suffix` instead.
-///
-/// # Errors
-///
-/// * If there are fewer than three consecutive `X`s in `temp`.
-/// * If `suffix` is a [`Some`] object but `temp` does not end in `X`.
-/// * If the suffix (specified either way) contains a path separator.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// assert_eq!(parse_template("XXX", None).unwrap(), ("", 3, ""));
-/// assert_eq!(parse_template("abcXXX", None).unwrap(), ("abc", 3, ""));
-/// assert_eq!(parse_template("XXXdef", None).unwrap(), ("", 3, "def"));
-/// assert_eq!(parse_template("abcXXXdef", None).unwrap(), ("abc", 3, "def"));
-/// ```
-fn parse_template<'a>(
-    temp: &'a str,
-    suffix: Option<&'a str>,
-) -> Result<(&'a str, usize, &'a str), MkTempError> {
-    let right = match temp.rfind('X') {
-        Some(r) => r + 1,
-        None => return Err(MkTempError::TooFewXs(temp.into())),
-    };
-    let left = temp[..right].rfind(|c| c != 'X').map_or(0, |i| i + 1);
-    let prefix = &temp[..left];
-    let rand = right - left;
-
-    if rand < 3 {
-        let s = match suffix {
-            None => temp.into(),
-            Some(s) => format!("{}{}", temp, s),
-        };
-        return Err(MkTempError::TooFewXs(s));
-    }
-
-    let mut suf = &temp[right..];
-
-    if let Some(s) = suffix {
-        if suf.is_empty() {
-            suf = s;
-        } else {
-            return Err(MkTempError::MustEndInX(temp.into()));
-        }
-    };
-
-    if prefix.chars().any(is_separator) {
-        return Err(MkTempError::PrefixContainsDirSeparator(temp.into()));
-    }
-
-    if suf.chars().any(is_separator) {
-        return Err(MkTempError::SuffixContainsDirSeparator(suf.into()));
-    }
-
-    Ok((prefix, rand, suf))
-}
-
-pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) -> UResult<()> {
+pub fn dry_exec(tmpdir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<()> {
     let len = prefix.len() + suffix.len() + rand;
     let mut buf = Vec::with_capacity(len);
     buf.extend(prefix.as_bytes());
@@ -320,11 +400,11 @@ pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) ->
     }
     // We guarantee utf8.
     let buf = String::from_utf8(buf).unwrap();
-    tmpdir.push(buf);
+    let tmpdir = Path::new(tmpdir).join(buf);
     println_verbatim(tmpdir).map_err_context(|| "failed to print directory name".to_owned())
 }
 
-fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> UResult<()> {
+fn exec(dir: &str, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> UResult<()> {
     let context = || {
         format!(
             "failed to create file via template '{}{}{}'",
@@ -366,42 +446,7 @@ fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> 
     // the absolute path and we need to return a filename that matches
     // the template given on the command-line which might be a
     // relative path.
-    let mut path = dir.to_path_buf();
-    path.push(filename);
+    let path = Path::new(dir).join(filename);
 
     println_verbatim(path).map_err_context(|| "failed to print directory name".to_owned())
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::parse_template;
-
-    #[test]
-    fn test_parse_template_no_suffix() {
-        assert_eq!(parse_template("XXX", None).unwrap(), ("", 3, ""));
-        assert_eq!(parse_template("abcXXX", None).unwrap(), ("abc", 3, ""));
-        assert_eq!(parse_template("XXXdef", None).unwrap(), ("", 3, "def"));
-        assert_eq!(
-            parse_template("abcXXXdef", None).unwrap(),
-            ("abc", 3, "def")
-        );
-    }
-
-    #[test]
-    fn test_parse_template_suffix() {
-        assert_eq!(parse_template("XXX", Some("def")).unwrap(), ("", 3, "def"));
-        assert_eq!(
-            parse_template("abcXXX", Some("def")).unwrap(),
-            ("abc", 3, "def")
-        );
-    }
-
-    #[test]
-    fn test_parse_template_errors() {
-        assert!(parse_template("a/bXXX", None).is_err());
-        assert!(parse_template("XXXa/b", None).is_err());
-        assert!(parse_template("XX", None).is_err());
-        assert!(parse_template("XXXabc", Some("def")).is_err());
-        assert!(parse_template("XXX", Some("a/b")).is_err());
-    }
 }

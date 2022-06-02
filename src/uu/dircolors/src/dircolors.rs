@@ -21,6 +21,7 @@ mod options {
     pub const BOURNE_SHELL: &str = "bourne-shell";
     pub const C_SHELL: &str = "c-shell";
     pub const PRINT_DATABASE: &str = "print-database";
+    pub const PRINT_LS_COLORS: &str = "print-ls-colors";
     pub const FILE: &str = "FILE";
 }
 
@@ -39,6 +40,7 @@ use self::colors::INTERNAL_DB;
 pub enum OutputFmt {
     Shell,
     CShell,
+    Display,
     Unknown,
 }
 
@@ -76,12 +78,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // clap provides .conflicts_with / .conflicts_with_all, but we want to
     // manually handle conflicts so we can match the output of GNU coreutils
     if (matches.is_present(options::C_SHELL) || matches.is_present(options::BOURNE_SHELL))
-        && matches.is_present(options::PRINT_DATABASE)
+        && (matches.is_present(options::PRINT_DATABASE)
+            || matches.is_present(options::PRINT_LS_COLORS))
     {
         return Err(UUsageError::new(
             1,
             "the options to output dircolors' internal database and\nto select a shell \
              syntax are mutually exclusive",
+        ));
+    }
+
+    if matches.is_present(options::PRINT_DATABASE) && matches.is_present(options::PRINT_LS_COLORS) {
+        return Err(UUsageError::new(
+            1,
+            "options --print-database and --print-ls-colors are mutually exclusive",
         ));
     }
 
@@ -100,12 +110,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Ok(());
     }
 
-    let mut out_format = OutputFmt::Unknown;
-    if matches.is_present(options::C_SHELL) {
-        out_format = OutputFmt::CShell;
+    let mut out_format = if matches.is_present(options::C_SHELL) {
+        OutputFmt::CShell
     } else if matches.is_present(options::BOURNE_SHELL) {
-        out_format = OutputFmt::Shell;
-    }
+        OutputFmt::Shell
+    } else if matches.is_present(options::PRINT_LS_COLORS) {
+        OutputFmt::Display
+    } else {
+        OutputFmt::Unknown
+    };
 
     if out_format == OutputFmt::Unknown {
         match guess_syntax() {
@@ -187,6 +200,12 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .display_order(3),
         )
         .arg(
+            Arg::new(options::PRINT_LS_COLORS)
+                .long("print-ls-colors")
+                .help("output fully escaped colors for display")
+                .display_order(4),
+        )
+        .arg(
             Arg::new(options::FILE)
                 .hide(true)
                 .value_hint(clap::ValueHint::FilePath)
@@ -254,6 +273,7 @@ enum ParseState {
     Continue,
     Pass,
 }
+
 use std::collections::HashMap;
 use uucore::{format_usage, InvalidEncodingHandling};
 
@@ -262,11 +282,12 @@ where
     T: IntoIterator,
     T::Item: Borrow<str>,
 {
-    // 1440 > $(dircolors | wc -m)
-    let mut result = String::with_capacity(1440);
+    // 1790 > $(dircolors | wc -m)
+    let mut result = String::with_capacity(1790);
     match fmt {
         OutputFmt::Shell => result.push_str("LS_COLORS='"),
         OutputFmt::CShell => result.push_str("setenv LS_COLORS '"),
+        OutputFmt::Display => (),
         _ => unreachable!(),
     }
 
@@ -345,13 +366,25 @@ where
             }
             if state != ParseState::Pass {
                 if key.starts_with('.') {
-                    result.push_str(format!("*{}={}:", key, val).as_str());
+                    if *fmt == OutputFmt::Display {
+                        result.push_str(format!("\x1b[{1}m*{0}\t{1}\x1b[0m\n", key, val).as_str());
+                    } else {
+                        result.push_str(format!("*{}={}:", key, val).as_str());
+                    }
                 } else if key.starts_with('*') {
-                    result.push_str(format!("{}={}:", key, val).as_str());
+                    if *fmt == OutputFmt::Display {
+                        result.push_str(format!("\x1b[{1}m{0}\t{1}\x1b[0m\n", key, val).as_str());
+                    } else {
+                        result.push_str(format!("{}={}:", key, val).as_str());
+                    }
                 } else if lower == "options" || lower == "color" || lower == "eightbit" {
                     // Slackware only. Ignore
                 } else if let Some(s) = table.get(lower.as_str()) {
-                    result.push_str(format!("{}={}:", s, val).as_str());
+                    if *fmt == OutputFmt::Display {
+                        result.push_str(format!("\x1b[{1}m{0}\t{1}\x1b[0m\n", s, val).as_str());
+                    } else {
+                        result.push_str(format!("{}={}:", s, val).as_str());
+                    }
                 } else {
                     return Err(format!(
                         "{}:{}: unrecognized keyword {}",
@@ -367,6 +400,10 @@ where
     match fmt {
         OutputFmt::Shell => result.push_str("';\nexport LS_COLORS"),
         OutputFmt::CShell => result.push('\''),
+        OutputFmt::Display => {
+            // remove latest "\n"
+            result.pop();
+        }
         _ => unreachable!(),
     }
 

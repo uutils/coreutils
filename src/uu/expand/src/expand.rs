@@ -93,7 +93,7 @@ fn tabstops_parse(s: &str) -> (RemainingMode, Vec<usize>) {
 
                     // Tab size must be positive.
                     if num == 0 {
-                        crash!(1, "{}\n", "tab size cannot be 0");
+                        crash!(1, "tab size cannot be 0");
                     }
 
                     // Tab sizes must be ascending.
@@ -132,8 +132,8 @@ struct Options {
 
 impl Options {
     fn new(matches: &ArgMatches) -> Self {
-        let (remaining_mode, tabstops) = match matches.value_of(options::TABS) {
-            Some(s) => tabstops_parse(s),
+        let (remaining_mode, tabstops) = match matches.values_of(options::TABS) {
+            Some(s) => tabstops_parse(&s.collect::<Vec<&str>>().join(",")),
             None => (RemainingMode::None, vec![DEFAULT_TABSTOP]),
         };
 
@@ -195,6 +195,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('t')
                 .value_name("N, LIST")
                 .takes_value(true)
+                .multiple_occurrences(true)
                 .help("have tabs N characters apart, not 8 or use comma separated list of explicit tab positions"),
         )
         .arg(

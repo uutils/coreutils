@@ -650,3 +650,55 @@ fn test_backup_force() {
     // we should have the same content as b as we had time to do a backup
     assert_eq!(at.read("b~"), "b2\n");
 }
+
+#[test]
+fn test_hard_logical() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "file1";
+    let link = "symlink1";
+    let target = "hard-to-a";
+    let target2 = "hard-to-a2";
+    at.touch(file_a);
+    at.symlink_file(file_a, link);
+
+    ucmd.args(&["-P", "-L", link, target]);
+    assert!(!at.is_symlink(target));
+
+    ucmd.args(&["-P", "-L", "-s", link, target2]);
+    assert!(!at.is_symlink(target2));
+}
+
+#[test]
+fn test_hard_logical_non_exit_fail() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "/no-such-dir";
+    let link = "hard-to-dangle";
+
+    scene.ucmd().args(&["-s", file_a]);
+    assert!(!at.is_symlink("no-such-dir"));
+
+    scene
+        .ucmd()
+        .args(&["-L", "no-such-dir", link])
+        .fails()
+        .stderr_contains("failed to link 'no-such-dir'");
+}
+
+#[test]
+fn test_hard_logical_dir_fail() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir = "d";
+    at.mkdir(dir);
+    let target = "link-to-dir";
+
+    scene.ucmd().args(&["-s", dir, target]);
+
+    scene
+        .ucmd()
+        .args(&["-L", target, "hard-to-dir-link"])
+        .fails()
+        .stderr_contains("failed to link 'link-to-dir'");
+}

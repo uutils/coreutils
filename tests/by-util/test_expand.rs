@@ -74,6 +74,15 @@ fn test_tabs_mixed_style_list() {
 }
 
 #[test]
+fn test_multiple_tabs_args() {
+    new_ucmd!()
+        .args(&["--tabs=3", "--tabs=6", "--tabs=9"])
+        .pipe_in("a\tb\tc\td\te")
+        .succeeds()
+        .stdout_is("a  b  c  d e");
+}
+
+#[test]
 fn test_tabs_empty_string() {
     new_ucmd!()
         .args(&["--tabs", ""])
