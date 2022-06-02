@@ -605,7 +605,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         )
         .arg(
             Arg::new(options::USE_POLLING)
-                .visible_alias(options::DISABLE_INOTIFY_TERM) // NOTE: Used by GNU's test suite
+                .alias(options::DISABLE_INOTIFY_TERM) // NOTE: Used by GNU's test suite
                 .alias("dis") // NOTE: Used by GNU's test suite
                 .long(options::USE_POLLING)
                 .help(POLLING_HELP),
@@ -761,6 +761,7 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
         // e.g. `echo "X1" > missing ; sleep 0.1 ; echo "X" > missing ;` should trigger a
         // truncation event, but PollWatcher doesn't recognize it.
         // This is relevant to pass, e.g.: "gnu/tests/tail-2/truncate.sh"
+        // TODO: [2022-06; jhscheer] maybe use `--max-unchanged-stats` here to reduce fstat calls?
         if settings.use_polling && settings.follow.is_some() {
             for path in &files
                 .map
@@ -1059,9 +1060,8 @@ impl FileHandling {
 
     /// Return true if there is only stdin remaining
     fn only_stdin_remaining(&self) -> bool {
-        self.map.len() == 1
-            && (self.map.contains_key(Path::new(text::DASH)))
-                // || self.map.contains_key(Path::new(text::DEV_STDIN))) // TODO: still needed?
+        self.map.len() == 1 && (self.map.contains_key(Path::new(text::DASH)))
+        // || self.map.contains_key(Path::new(text::DEV_STDIN))) // TODO: still needed?
     }
 
     /// Return true if there is at least one "tailable" path (or stdin) remaining
@@ -1436,6 +1436,8 @@ pub fn stdin_is_bad_fd() -> bool {
 }
 
 trait FileExtTail {
+    // clippy complains, but it looks like a false positive
+    #[allow(clippy::wrong_self_convention)]
     fn is_seekable(&mut self) -> bool;
 }
 

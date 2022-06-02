@@ -195,7 +195,7 @@ fn test_permission_denied_multiple() {
 fn test_follow_redirect_stdin_name_retry() {
     // $ touch f && tail -F - < f
     // tail: cannot follow '-' by name
-    // NOTE: Note sure why GNU's tail doesn't just follow `f` in this case.
+    // NOTE: Not sure why GNU's tail doesn't just follow `f` in this case.
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1276,9 +1276,6 @@ fn test_retry7() {
     let at = &ts.fixtures;
     let untailable = "untailable";
 
-    // tail: 'untailable' has appeared;  following new file\n\
-    // tail: 'untailable' has become inaccessible: No such file or directory\n\
-    // tail: 'untailable' has appeared;  following new file\n";
     let expected_stderr = "tail: error reading 'untailable': Is a directory\n\
                            tail: untailable: cannot follow end of this type of file\n\
                            tail: 'untailable' has become accessible\n\
@@ -1336,7 +1333,7 @@ fn test_retry7() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
+#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
 fn test_retry8() {
     // Ensure that inotify will switch to polling mode if directory
     // of the watched file was initially missing and later created.
@@ -1466,6 +1463,7 @@ fn test_retry9() {
     sleep(Duration::from_millis(delay));
 
     p.kill().unwrap();
+    sleep(Duration::from_millis(delay));
 
     let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
     assert_eq!(buf_stdout, expected_stdout);
@@ -1576,7 +1574,7 @@ fn test_follow_descriptor_vs_rename2() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))] // FIXME: make this work not just on Linux
 fn test_follow_name_remove() {
     // This test triggers a remove event while `tail --follow=name file` is running.
     // ((sleep 2 && rm file &)>/dev/null 2>&1 &) ; tail --follow=name file
@@ -1696,7 +1694,8 @@ fn test_follow_name_truncate2() {
 #[test]
 #[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
 fn test_follow_name_truncate3() {
-    // Opening an empty file in truncate mode should not trigger a truncate event while.
+    // Opening an empty file in truncate mode should not trigger a truncate event while
+    // `tail --follow=name file` is running.
     // $ rm -f file && touch file
     // $ ((sleep 1 && echo -n "x\n" > file &)>/dev/null 2>&1 &) ; tail --follow=name file
 
@@ -1724,6 +1723,7 @@ fn test_follow_name_truncate3() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_follow_name_truncate4() {
     // Truncating a file with the same content it already has should not trigger a truncate event
 
@@ -1755,6 +1755,7 @@ fn test_follow_name_truncate4() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_follow_truncate_fast() {
     // inspired by: "gnu/tests/tail-2/truncate.sh"
     // Ensure all logs are output upon file truncation
@@ -1765,12 +1766,7 @@ fn test_follow_truncate_fast() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    let mut args = vec![
-        "-s.1",
-        "--max-unchanged-stats=1",
-        "f",
-        "---disable-inotify",
-    ];
+    let mut args = vec!["-s.1", "--max-unchanged-stats=1", "f", "---disable-inotify"];
     let follow = vec!["-f", "-F"];
 
     let delay = 100;
@@ -1847,6 +1843,7 @@ fn test_follow_name_move_create() {
 }
 
 #[test]
+#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
 fn test_follow_name_move_create2() {
     // inspired by: "gnu/tests/tail-2/inotify-hash-abuse.sh"
     // Exercise an abort-inducing flaw in inotify-enabled tail -F
@@ -1859,12 +1856,22 @@ fn test_follow_name_move_create2() {
     }
 
     let mut args = vec![
-        "-s.1", "--max-unchanged-stats=1",
-        "-q", "-F",
-        "1", "2", "3", "4", "5", "6", "7", "8", "9",
+        "-s.1",
+        "--max-unchanged-stats=1",
+        "-q",
+        "-F",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
     ];
 
-    let delay = 100;
+    let delay = 300;
     for _ in 0..2 {
         let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
         sleep(Duration::from_millis(100));
@@ -1882,11 +1889,14 @@ fn test_follow_name_move_create2() {
         sleep(Duration::from_millis(delay));
 
         let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
-        assert_eq!(buf_stderr, "tail: '1' has become inaccessible: No such file or directory\n\
-                                tail: '1' has appeared;  following new file\n");
+        assert_eq!(
+            buf_stderr,
+            "tail: '1' has become inaccessible: No such file or directory\n\
+                                tail: '1' has appeared;  following new file\n"
+        );
 
-        // NOTE: Because "gnu/tests/tail-2/inotify-hash-abuse.sh" forgets to clear the files used
-        // during the first loop iteration, we also won't clear them to get the same side-effects.
+        // NOTE: Because "gnu/tests/tail-2/inotify-hash-abuse.sh" 'forgets' to clear the files used
+        // during the first loop iteration, we also don't clear them to get the same side-effects.
         // Side-effects are truncating a file with the same content, see: test_follow_name_truncate4
         // at.remove("1");
         // at.touch("1");

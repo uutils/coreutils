@@ -5,7 +5,7 @@
 
 use std::ffi::OsString;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum ParseError {
     Syntax,
     Overflow,
