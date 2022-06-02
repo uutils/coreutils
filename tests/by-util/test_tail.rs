@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile logfile file siette ocho nueve diez
+// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile file siette ocho nueve diez
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (jargon) tailable untailable
 
@@ -22,8 +22,8 @@ use std::time::Duration;
 
 #[cfg(target_os = "linux")]
 pub static BACKEND: &str = "inotify";
-#[cfg(all(unix, not(target_os = "linux")))]
-pub static BACKEND: &str = "kqueue";
+// #[cfg(all(unix, not(target_os = "linux")))]
+// pub static BACKEND: &str = "kqueue";
 
 static FOOBAR_TXT: &str = "foobar.txt";
 static FOOBAR_2_TXT: &str = "foobar2.txt";
@@ -1707,6 +1707,37 @@ fn test_follow_name_truncate3() {
     let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
     assert_eq!(buf_stdout, expected_stdout);
     assert!(buf_stderr.is_empty());
+}
+
+#[test]
+fn test_follow_name_truncate4() {
+    // Truncating a file with the same content it already has should not trigger a truncate event
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let mut args = vec!["-s.1", "--max-unchanged-stats=1", "-F", "file"];
+
+    let delay = 100;
+    for _ in 0..2 {
+        at.append("file", "foobar\n");
+
+        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+        sleep(Duration::from_millis(100));
+
+        at.truncate("file", "foobar\n");
+        sleep(Duration::from_millis(delay));
+
+        p.kill().unwrap();
+        sleep(Duration::from_millis(delay));
+
+        let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+        assert!(buf_stderr.is_empty());
+        assert_eq!(buf_stdout, "foobar\n");
+
+        at.remove("file");
+        args.push("---disable-inotify");
+    }
 }
 
 #[test]
