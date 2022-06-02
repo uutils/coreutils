@@ -1833,6 +1833,63 @@ fn test_follow_name_move_create() {
 }
 
 #[test]
+fn test_follow_name_move_create2() {
+    // inspired by: "gnu/tests/tail-2/inotify-hash-abuse.sh"
+    // Exercise an abort-inducing flaw in inotify-enabled tail -F
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    for n in ["1", "2", "3", "4", "5", "6", "7", "8", "9"] {
+        at.touch(n);
+    }
+
+    let mut args = vec![
+        "-s.1", "--max-unchanged-stats=1",
+        "-q", "-F",
+        "1", "2", "3", "4", "5", "6", "7", "8", "9",
+    ];
+
+    let delay = 100;
+    for _ in 0..2 {
+        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+        sleep(Duration::from_millis(100));
+
+        at.truncate("9", "x\n");
+        sleep(Duration::from_millis(delay));
+
+        at.rename("1", "f");
+        sleep(Duration::from_millis(delay));
+
+        at.truncate("1", "a\n");
+        sleep(Duration::from_millis(delay));
+
+        p.kill().unwrap();
+        sleep(Duration::from_millis(delay));
+
+        let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+        assert_eq!(buf_stderr, "tail: '1' has become inaccessible: No such file or directory\n\
+                                tail: '1' has appeared;  following new file\n");
+
+        // NOTE: Because "gnu/tests/tail-2/inotify-hash-abuse.sh" forgets to clear the files used
+        // during the first loop iteration, we also won't clear them to get the same side-effects.
+        // Side-effects are truncating a file with the same content, see: test_follow_name_truncate4
+        // at.remove("1");
+        // at.touch("1");
+        // at.remove("9");
+        // at.touch("9");
+        if args.len() == 14 {
+            assert_eq!(buf_stdout, "a\nx\na\n");
+        } else {
+            assert_eq!(buf_stdout, "x\na\n");
+        }
+
+        at.remove("f");
+        args.push("---disable-inotify");
+    }
+}
+
+#[test]
 #[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
 fn test_follow_name_move() {
     // This test triggers a move event while `tail --follow=name logfile` is running.
