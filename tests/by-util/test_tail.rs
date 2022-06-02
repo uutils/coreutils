@@ -119,16 +119,17 @@ fn test_nc_0_wo_follow() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
-#[cfg(feature = "chmod")]
+#[cfg(all(unix, not(target_os = "freebsd")))]
 fn test_nc_0_wo_follow2() {
     // verify that -[nc]0 without -f, exit without reading
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    at.touch("unreadable");
-    ts.ccmd("chmod").arg("0").arg("unreadable").succeeds();
+    use std::os::unix::fs::PermissionsExt;
+    at.make_file("unreadable")
+        .set_permissions(PermissionsExt::from_mode(0o000))
+        .unwrap();
 
     ts.ucmd()
         .set_stdin(Stdio::null())
@@ -147,14 +148,15 @@ fn test_nc_0_wo_follow2() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
-#[cfg(feature = "chmod")]
+#[cfg(all(unix, not(target_os = "freebsd")))]
 fn test_permission_denied() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    at.touch("unreadable");
-    ts.ccmd("chmod").arg("0").arg("unreadable").succeeds();
+    use std::os::unix::fs::PermissionsExt;
+    at.make_file("unreadable")
+        .set_permissions(PermissionsExt::from_mode(0o000))
+        .unwrap();
 
     ts.ucmd()
         .set_stdin(Stdio::null())
@@ -166,16 +168,18 @@ fn test_permission_denied() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
-#[cfg(feature = "chmod")]
+#[cfg(all(unix, not(target_os = "freebsd")))]
 fn test_permission_denied_multiple() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
     at.touch("file1");
     at.touch("file2");
-    at.touch("unreadable");
-    ts.ccmd("chmod").arg("0").arg("unreadable").succeeds();
+
+    use std::os::unix::fs::PermissionsExt;
+    at.make_file("unreadable")
+        .set_permissions(PermissionsExt::from_mode(0o000))
+        .unwrap();
 
     ts.ucmd()
         .set_stdin(Stdio::null())
@@ -276,7 +280,7 @@ fn test_follow_stdin_name_retry() {
 #[cfg(target_os = "linux")]
 #[cfg(disable_until_fixed)]
 fn test_follow_stdin_explicit_indefinitely() {
-    // see: "gnu/tests/tail-2/follow-stdin.sh"
+    // inspired by: "gnu/tests/tail-2/follow-stdin.sh"
     // tail -f - /dev/null </dev/tty
     // tail: warning: following standard input indefinitely is ineffective
     // ==> standard input <==
@@ -331,7 +335,7 @@ fn test_follow_stdin_explicit_indefinitely() {
 #[cfg(disable_until_fixed)]
 fn test_follow_bad_fd() {
     // Provoke a "bad file descriptor" error by closing the fd
-    // see: "gnu/tests/tail-2/follow-stdin.sh"
+    // inspired by: "gnu/tests/tail-2/follow-stdin.sh"
 
     // `$ tail -f <&-` OR `$ tail -f - <&-`
     // tail: cannot fstat 'standard input': Bad file descriptor
@@ -1051,7 +1055,7 @@ fn test_num_with_undocumented_sign_bytes() {
 #[test]
 #[cfg(unix)]
 fn test_bytes_for_funny_files() {
-    // gnu/tests/tail-2/tail-c.sh
+    // inspired by: gnu/tests/tail-2/tail-c.sh
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     for file in ["/proc/version", "/sys/kernel/profiling"] {
@@ -1071,7 +1075,7 @@ fn test_bytes_for_funny_files() {
 #[test]
 #[cfg(unix)]
 fn test_retry1() {
-    // gnu/tests/tail-2/retry.sh
+    // inspired by: gnu/tests/tail-2/retry.sh
     // Ensure --retry without --follow results in a warning.
 
     let ts = TestScenario::new(util_name!());
@@ -1088,7 +1092,7 @@ fn test_retry1() {
 #[test]
 #[cfg(unix)]
 fn test_retry2() {
-    // gnu/tests/tail-2/retry.sh
+    // inspired by: gnu/tests/tail-2/retry.sh
     // The same as test_retry2 with a missing file: expect error message and exit 1.
 
     let ts = TestScenario::new(util_name!());
@@ -1111,7 +1115,7 @@ fn test_retry2() {
 #[test]
 #[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
 fn test_retry3() {
-    // gnu/tests/tail-2/retry.sh
+    // inspired by: gnu/tests/tail-2/retry.sh
     // Ensure that `tail --retry --follow=name` waits for the file to appear.
 
     let ts = TestScenario::new(util_name!());
@@ -1146,7 +1150,7 @@ fn test_retry3() {
 #[test]
 #[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
 fn test_retry4() {
-    // gnu/tests/tail-2/retry.sh
+    // inspired by: gnu/tests/tail-2/retry.sh
     // Ensure that `tail --retry --follow=descriptor` waits for the file to appear.
     // Ensure truncation is detected.
 
@@ -1159,7 +1163,7 @@ fn test_retry4() {
                            tail: 'missing' has appeared;  following new file\n\
                            tail: missing: file truncated\n";
     let expected_stdout = "X1\nX\n";
-    let delay = 100;
+    let delay = 1000;
     let mut args = vec![
         "-s.1",
         "--max-unchanged-stats=1",
@@ -1193,7 +1197,7 @@ fn test_retry4() {
 #[test]
 #[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
 fn test_retry5() {
-    // gnu/tests/tail-2/retry.sh
+    // inspired by: gnu/tests/tail-2/retry.sh
     // Ensure that `tail --follow=descriptor --retry` exits when the file appears untailable.
 
     let ts = TestScenario::new(util_name!());
@@ -1227,7 +1231,7 @@ fn test_retry5() {
 #[test]
 #[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
 fn test_retry6() {
-    // gnu/tests/tail-2/retry.sh
+    // inspired by: gnu/tests/tail-2/retry.sh
     // Ensure that --follow=descriptor (without --retry) does *not* try
     // to open a file after an initial fail, even when there are other tailable files.
 
@@ -1265,19 +1269,22 @@ fn test_retry6() {
 #[test]
 #[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
 fn test_retry7() {
-    // gnu/tests/tail-2/retry.sh
+    // inspired by: gnu/tests/tail-2/retry.sh
     // Ensure that `tail -F` retries when the file is initially untailable.
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     let untailable = "untailable";
 
+    // tail: 'untailable' has appeared;  following new file\n\
+    // tail: 'untailable' has become inaccessible: No such file or directory\n\
+    // tail: 'untailable' has appeared;  following new file\n";
     let expected_stderr = "tail: error reading 'untailable': Is a directory\n\
                            tail: untailable: cannot follow end of this type of file\n\
-                           tail: 'untailable' has appeared;  following new file\n\
+                           tail: 'untailable' has become accessible\n\
                            tail: 'untailable' has become inaccessible: No such file or directory\n\
                            tail: 'untailable' has been replaced with an untailable file\n\
-                           tail: 'untailable' has appeared;  following new file\n";
+                           tail: 'untailable' has become accessible\n";
     let expected_stdout = "foo\nbar\n";
 
     let delay = 1000;
@@ -1364,15 +1371,22 @@ fn test_retry8() {
         .run_no_wait();
     sleep(Duration::from_millis(delay));
 
-    at.mkdir(parent_dir);
+    // 'parent_dir/watched_file' is orphan
+    // tail: cannot open 'parent_dir/watched_file' for reading: No such file or directory\n\
+
+    // tail: 'parent_dir/watched_file' has appeared;  following new file\n\
+    at.mkdir(parent_dir); // not an orphan anymore
     at.append(user_path, "foo\n");
     sleep(Duration::from_millis(delay));
 
+    // tail: 'parent_dir/watched_file' has become inaccessible: No such file or directory\n\
     at.remove(user_path);
-    at.rmdir(parent_dir);
+    at.rmdir(parent_dir); // 'parent_dir/watched_file' is orphan *again*
     sleep(Duration::from_millis(delay));
 
-    at.mkdir(parent_dir);
+    // Since 'parent_dir/watched_file' is orphan, this needs to be picked up by polling
+    // tail: 'parent_dir/watched_file' has appeared;  following new file\n";
+    at.mkdir(parent_dir); // not an orphan anymore
     at.append(user_path, "bar\n");
     sleep(Duration::from_millis(delay));
 
@@ -1386,7 +1400,7 @@ fn test_retry8() {
 #[test]
 #[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
 fn test_retry9() {
-    // gnu/tests/tail-2/inotify-dir-recreate.sh
+    // inspired by: gnu/tests/tail-2/inotify-dir-recreate.sh
     // Ensure that inotify will switch to polling mode if directory
     // of the watched file was removed and recreated.
 
@@ -1461,7 +1475,7 @@ fn test_retry9() {
 #[test]
 #[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
 fn test_follow_descriptor_vs_rename1() {
-    // gnu/tests/tail-2/descriptor-vs-rename.sh
+    // inspired by: gnu/tests/tail-2/descriptor-vs-rename.sh
     // $ ((rm -f A && touch A && sleep 1 && echo -n "A\n" >> A && sleep 1 && \
     // mv A B && sleep 1 && echo -n "B\n" >> B &)>/dev/null 2>&1 &) ; \
     // sleep 1 && target/debug/tail --follow=descriptor A ---disable-inotify
@@ -1519,6 +1533,7 @@ fn test_follow_descriptor_vs_rename1() {
 #[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
 fn test_follow_descriptor_vs_rename2() {
     // Ensure the headers are correct for --verbose.
+    // NOTE: GNU's tail does not update the header from FILE_A to FILE_C after `mv FILE_A FILE_C`
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1533,19 +1548,18 @@ fn test_follow_descriptor_vs_rename2() {
         file_a,
         file_b,
         "--verbose",
-        // TODO: [2021-05; jhscheer] fix this for `--use-polling`
-        /*"---disable-inotify",*/
+        "---disable-inotify",
     ];
 
     let delay = 100;
-    for _ in 0..1 {
+    for _ in 0..2 {
         at.touch(file_a);
         at.touch(file_b);
         let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
         sleep(Duration::from_millis(delay));
         at.rename(file_a, file_c);
         sleep(Duration::from_millis(1000));
-        at.append(file_c, "x\n");
+        at.append(file_c, "X\n");
         sleep(Duration::from_millis(delay));
         p.kill().unwrap();
         sleep(Duration::from_millis(delay));
@@ -1553,7 +1567,7 @@ fn test_follow_descriptor_vs_rename2() {
         let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
         assert_eq!(
             buf_stdout,
-            "==> FILE_A <==\n\n==> FILE_B <==\n\n==> FILE_A <==\nx\n"
+            "==> FILE_A <==\n\n==> FILE_B <==\n\n==> FILE_A <==\nX\n"
         );
         assert!(buf_stderr.is_empty());
 
@@ -1564,8 +1578,8 @@ fn test_follow_descriptor_vs_rename2() {
 #[test]
 #[cfg(unix)]
 fn test_follow_name_remove() {
-    // This test triggers a remove event while `tail --follow=name logfile` is running.
-    // ((sleep 2 && rm logfile &)>/dev/null 2>&1 &) ; tail --follow=name logfile
+    // This test triggers a remove event while `tail --follow=name file` is running.
+    // ((sleep 2 && rm file &)>/dev/null 2>&1 &) ; tail --follow=name file
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1611,8 +1625,8 @@ fn test_follow_name_remove() {
 #[test]
 #[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
 fn test_follow_name_truncate1() {
-    // This test triggers a truncate event while `tail --follow=name logfile` is running.
-    // $ cp logfile backup && head logfile > logfile && sleep 1 && cp backup logfile
+    // This test triggers a truncate event while `tail --follow=name file` is running.
+    // $ cp file backup && head file > file && sleep 1 && cp backup file
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1645,14 +1659,14 @@ fn test_follow_name_truncate1() {
 #[test]
 #[cfg(unix)]
 fn test_follow_name_truncate2() {
-    // This test triggers a truncate event while `tail --follow=name logfile` is running.
-    // $ ((sleep 1 && echo -n "x\nx\nx\n" >> logfile && sleep 1 && \
-    // echo -n "x\n" > logfile &)>/dev/null 2>&1 &) ; tail --follow=name logfile
+    // This test triggers a truncate event while `tail --follow=name file` is running.
+    // $ ((sleep 1 && echo -n "x\nx\nx\n" >> file && sleep 1 && \
+    // echo -n "x\n" > file &)>/dev/null 2>&1 &) ; tail --follow=name file
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    let source = "logfile";
+    let source = "file";
     at.touch(source);
 
     let expected_stdout = "x\nx\nx\nx\n";
@@ -1683,13 +1697,13 @@ fn test_follow_name_truncate2() {
 #[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
 fn test_follow_name_truncate3() {
     // Opening an empty file in truncate mode should not trigger a truncate event while.
-    // $ rm -f logfile && touch logfile
-    // $ ((sleep 1 && echo -n "x\n" > logfile &)>/dev/null 2>&1 &) ; tail --follow=name logfile
+    // $ rm -f file && touch file
+    // $ ((sleep 1 && echo -n "x\n" > file &)>/dev/null 2>&1 &) ; tail --follow=name file
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    let source = "logfile";
+    let source = "file";
     at.touch(source);
 
     let expected_stdout = "x\n";
@@ -1791,8 +1805,8 @@ fn test_follow_truncate_fast() {
 #[test]
 #[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
 fn test_follow_name_move_create() {
-    // This test triggers a move/create event while `tail --follow=name logfile` is running.
-    // ((sleep 2 && mv logfile backup && sleep 2 && cp backup logfile &)>/dev/null 2>&1 &) ; tail --follow=name logfile
+    // This test triggers a move/create event while `tail --follow=name file` is running.
+    // ((sleep 2 && mv file backup && sleep 2 && cp backup file &)>/dev/null 2>&1 &) ; tail --follow=name file
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1892,8 +1906,8 @@ fn test_follow_name_move_create2() {
 #[test]
 #[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
 fn test_follow_name_move() {
-    // This test triggers a move event while `tail --follow=name logfile` is running.
-    // ((sleep 2 && mv logfile backup &)>/dev/null 2>&1 &) ; tail --follow=name logfile
+    // This test triggers a move event while `tail --follow=name file` is running.
+    // ((sleep 2 && mv file backup &)>/dev/null 2>&1 &) ; tail --follow=name file
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1936,61 +1950,58 @@ fn test_follow_name_move() {
 fn test_follow_name_move2() {
     // Like test_follow_name_move, but move to a name that's already monitored.
 
-    // $ ((sleep 2 ; mv logfile1 logfile2 ; sleep 1 ; echo "more_logfile2_content" >> logfile2 ; sleep 1 ; \
-    // echo "more_logfile1_content" >> logfile1 &)>/dev/null 2>&1 &) ; \
-    // tail --follow=name logfile1 logfile2
-    // ==> logfile1 <==
-    // logfile1_content
+    // $ echo file1_content > file1; echo file2_content > file2; \
+    // ((sleep 2 ; mv file1 file2 ; sleep 1 ; echo "more_file2_content" >> file2 ; sleep 1 ; \
+    // echo "more_file1_content" >> file1 &)>/dev/null 2>&1 &) ; \
+    // tail --follow=name file1 file2
+    // ==> file1 <==
+    // file1_content
     //
-    // ==> logfile2 <==
-    // logfile2_content
-    // tail: logfile1: No such file or directory
-    // tail: 'logfile2' has been replaced;  following new file
-    // logfile1_content
-    // more_logfile2_content
-    // tail: 'logfile1' has appeared;  following new file
+    // ==> file2 <==
+    // file2_content
+    // tail: file1: No such file or directory
+    // tail: 'file2' has been replaced;  following new file
+    // file1_content
+    // more_file2_content
+    // tail: 'file1' has appeared;  following new file
     //
-    // ==> logfile1 <==
-    // more_logfile1_content
+    // ==> file1 <==
+    // more_file1_content
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    let logfile1 = "logfile1";
-    let logfile2 = "logfile2";
+    let file1 = "file1";
+    let file2 = "file2";
 
     let expected_stdout = format!(
         "==> {0} <==\n{0}_content\n\n==> {1} <==\n{1}_content\n{0}_content\n\
         more_{1}_content\n\n==> {0} <==\nmore_{0}_content\n",
-        logfile1, logfile2
+        file1, file2
     );
     let expected_stderr = format!(
         "{0}: {1}: No such file or directory\n\
         {0}: '{2}' has been replaced;  following new file\n\
         {0}: '{1}' has appeared;  following new file\n",
-        ts.util_name, logfile1, logfile2
+        ts.util_name, file1, file2
     );
 
-    at.append(logfile1, "logfile1_content\n");
-    at.append(logfile2, "logfile2_content\n");
+    at.append(file1, "file1_content\n");
+    at.append(file2, "file2_content\n");
 
     // TODO: [2021-05; jhscheer] fix this for `--use-polling`
-    let mut args = vec![
-        "--follow=name",
-        logfile1,
-        logfile2, /*, "--use-polling" */
-    ];
+    let mut args = vec!["--follow=name", file1, file2 /*, "--use-polling" */];
 
     #[allow(clippy::needless_range_loop)]
     for _ in 0..1 {
         let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
 
         sleep(Duration::from_millis(1000));
-        at.rename(logfile1, logfile2);
+        at.rename(file1, file2);
         sleep(Duration::from_millis(1000));
-        at.append(logfile2, "more_logfile2_content\n");
+        at.append(file2, "more_file2_content\n");
         sleep(Duration::from_millis(1000));
-        at.append(logfile1, "more_logfile1_content\n");
+        at.append(file1, "more_file1_content\n");
         sleep(Duration::from_millis(1000));
 
         p.kill().unwrap();
@@ -2007,7 +2018,7 @@ fn test_follow_name_move2() {
 #[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
 fn test_follow_name_move_retry() {
     // Similar to test_follow_name_move but with `--retry` (`-F`)
-    // This test triggers two move/rename events while `tail --follow=name --retry logfile` is running.
+    // This test triggers two move/rename events while `tail --follow=name --retry file` is running.
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -2156,4 +2167,34 @@ fn test_fifo() {
         assert!(buf_stdout.is_empty());
         assert!(buf_stderr.is_empty());
     }
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg(disable_until_fixed)]
+fn test_illegal_seek() {
+    // This is here for reference only.
+    // We don't call seek on fifos, so we don't hit this error case.
+    // (Also see: https://github.com/coreutils/coreutils/pull/36)
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.append("FILE", "foo\n");
+    at.mkfifo("FIFO");
+
+    let mut p = ts.ucmd().arg("FILE").run_no_wait();
+    sleep(Duration::from_millis(500));
+    at.rename("FILE", "FIFO");
+    sleep(Duration::from_millis(500));
+
+    p.kill().unwrap();
+    let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+    dbg!(&buf_stdout, &buf_stderr);
+    assert_eq!(buf_stdout, "foo\n");
+    assert_eq!(
+        buf_stderr,
+        "tail: 'FILE' has been replaced;  following new file\n\
+        tail: FILE: cannot seek to offset 0: Illegal seek\n"
+    );
+    assert_eq!(p.wait().unwrap().code().unwrap(), 1);
 }
