@@ -131,6 +131,16 @@ fn test_exclusive_option() {
         .stderr_contains("mutually exclusive");
 }
 
+#[test]
+fn test_stdin() {
+    new_ucmd!()
+        .pipe_in("owt 40;33\n")
+        .args(&["-b", "-"])
+        .succeeds()
+        .stdout_is("LS_COLORS='tw=40;33:';\nexport LS_COLORS\n")
+        .no_stderr();
+}
+
 fn test_helper(file_name: &str, term: &str) {
     new_ucmd!()
         .env("TERM", term)
