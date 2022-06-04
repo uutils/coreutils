@@ -87,6 +87,9 @@ struct Options {
     /// types will *not* be listed.
     exclude: Option<Vec<String>>,
 
+    /// Whether to sync before operating.
+    sync: bool,
+
     /// Whether to show a final row comprising the totals for each column.
     show_total: bool,
 
@@ -104,6 +107,7 @@ impl Default for Options {
             header_mode: Default::default(),
             include: Default::default(),
             exclude: Default::default(),
+            sync: Default::default(),
             show_total: Default::default(),
             columns: vec![
                 Column::Source,
@@ -178,6 +182,7 @@ impl Options {
         Ok(Self {
             show_local_fs: matches.is_present(OPT_LOCAL),
             show_all_fs: matches.is_present(OPT_ALL),
+            sync: matches.is_present(OPT_SYNC),
             block_size: read_block_size(matches).map_err(|e| match e {
                 ParseSizeError::InvalidSuffix(s) => OptionsError::InvalidSuffix(s),
                 ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
@@ -325,9 +330,21 @@ fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
 
 /// Get all currently mounted filesystems.
 ///
-/// `opt` excludes certain filesystems from consideration; see
+/// `opt` excludes certain filesystems from consideration and allows for the synchronization of filesystems before running; see
 /// [`Options`] for more information.
+
 fn get_all_filesystems(opt: &Options) -> Vec<Filesystem> {
+    // Run a sync call before any operation if so instructed.
+    if opt.sync {
+        #[cfg(not(windows))]
+        unsafe {
+            #[cfg(not(target_os = "android"))]
+            uucore::libc::sync();
+            #[cfg(target_os = "android")]
+            uucore::libc::syscall(uucore::libc::SYS_sync);
+        }
+    }
+
     // The list of all mounted filesystems.
     //
     // Filesystems excluded by the command-line options are
@@ -559,7 +576,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_SYNC)
                 .long("sync")
                 .overrides_with_all(&[OPT_NO_SYNC, OPT_SYNC])
-                .help("invoke sync before getting usage info"),
+                .help("invoke sync before getting usage info (non-windows only)"),
         )
         .arg(
             Arg::new(OPT_TYPE)
