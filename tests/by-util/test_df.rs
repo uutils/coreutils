@@ -29,6 +29,11 @@ fn test_df_compatible_si() {
 }
 
 #[test]
+fn test_df_compatible_sync() {
+    new_ucmd!().arg("--sync").succeeds();
+}
+
+#[test]
 fn test_df_arguments_override_themselves() {
     new_ucmd!().args(&["--help", "--help"]).succeeds();
     new_ucmd!().arg("-aa").succeeds();
