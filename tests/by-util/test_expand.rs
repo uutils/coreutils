@@ -237,3 +237,11 @@ fn test_tabs_with_invalid_chars() {
         .fails()
         .stderr_contains("tab size contains invalid character(s): 'x2'");
 }
+
+#[test]
+fn test_tabs_with_too_large_size() {
+    let arg = format!("--tabs={}", u128::MAX);
+    let expected_error = format!("tab stop is too large '{}'", u128::MAX);
+
+    new_ucmd!().arg(arg).fails().stderr_contains(expected_error);
+}

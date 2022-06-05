@@ -17,6 +17,7 @@ use std::error::Error;
 use std::fmt;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::num::IntErrorKind;
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
@@ -65,6 +66,7 @@ enum ParseError {
     InvalidCharacter(String),
     SpecifierNotAtStartOfNumber(String, String),
     TabSizeCannotBeZero,
+    TabSizeTooLarge(String),
     TabSizesMustBeAscending,
 }
 
@@ -84,6 +86,7 @@ impl fmt::Display for ParseError {
                 s.quote(),
             ),
             Self::TabSizeCannotBeZero => write!(f, "tab size cannot be 0"),
+            Self::TabSizeTooLarge(s) => write!(f, "tab stop is too large {}", s.quote()),
             Self::TabSizesMustBeAscending => write!(f, "tab sizes must be ascending"),
         }
     }
@@ -122,31 +125,38 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
                 _ => {
                     // Parse a number from the byte sequence.
                     let s = from_utf8(&bytes[i..]).unwrap();
-                    if let Ok(num) = s.parse::<usize>() {
-                        // Tab size must be positive.
-                        if num == 0 {
-                            return Err(ParseError::TabSizeCannotBeZero);
-                        }
-
-                        // Tab sizes must be ascending.
-                        if let Some(last_stop) = nums.last() {
-                            if *last_stop >= num {
-                                return Err(ParseError::TabSizesMustBeAscending);
+                    match s.parse::<usize>() {
+                        Ok(num) => {
+                            // Tab size must be positive.
+                            if num == 0 {
+                                return Err(ParseError::TabSizeCannotBeZero);
                             }
-                        }
 
-                        // Append this tab stop to the list of all tabstops.
-                        nums.push(num);
-                        break;
-                    } else {
-                        let s = s.trim_start_matches(char::is_numeric);
-                        if s.starts_with('/') || s.starts_with('+') {
-                            return Err(ParseError::SpecifierNotAtStartOfNumber(
-                                s[0..1].to_string(),
-                                s.to_string(),
-                            ));
-                        } else {
-                            return Err(ParseError::InvalidCharacter(s.to_string()));
+                            // Tab sizes must be ascending.
+                            if let Some(last_stop) = nums.last() {
+                                if *last_stop >= num {
+                                    return Err(ParseError::TabSizesMustBeAscending);
+                                }
+                            }
+
+                            // Append this tab stop to the list of all tabstops.
+                            nums.push(num);
+                            break;
+                        }
+                        Err(e) => {
+                            if *e.kind() == IntErrorKind::PosOverflow {
+                                return Err(ParseError::TabSizeTooLarge(s.to_string()));
+                            }
+
+                            let s = s.trim_start_matches(char::is_numeric);
+                            if s.starts_with('/') || s.starts_with('+') {
+                                return Err(ParseError::SpecifierNotAtStartOfNumber(
+                                    s[0..1].to_string(),
+                                    s.to_string(),
+                                ));
+                            } else {
+                                return Err(ParseError::InvalidCharacter(s.to_string()));
+                            }
                         }
                     }
                 }
