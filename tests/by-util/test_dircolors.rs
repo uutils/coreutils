@@ -141,6 +141,15 @@ fn test_stdin() {
         .no_stderr();
 }
 
+#[test]
+fn test_extra_operand() {
+    new_ucmd!()
+        .args(&["-c", "file1", "file2"])
+        .fails()
+        .stderr_contains("dircolors: extra operand 'file2'\n")
+        .no_stdout();
+}
+
 fn test_helper(file_name: &str, term: &str) {
     new_ucmd!()
         .env("TERM", term)
