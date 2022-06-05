@@ -41,6 +41,7 @@ static DEFAULT_TABSTOP: usize = 8;
 
 /// The mode to use when replacing tabs beyond the last one specified in
 /// the `--tabs` argument.
+#[derive(PartialEq)]
 enum RemainingMode {
     None,
     Slash,
@@ -65,6 +66,7 @@ fn is_space_or_comma(c: char) -> bool {
 enum ParseError {
     InvalidCharacter(String),
     SpecifierNotAtStartOfNumber(String, String),
+    SpecifierOnlyAllowedWithLastValue(String),
     TabSizeCannotBeZero,
     TabSizeTooLarge(String),
     TabSizesMustBeAscending,
@@ -84,6 +86,11 @@ impl fmt::Display for ParseError {
                 "{} specifier not at start of number: {}",
                 specifier.quote(),
                 s.quote(),
+            ),
+            Self::SpecifierOnlyAllowedWithLastValue(specifier) => write!(
+                f,
+                "{} specifier only allowed with the last value",
+                specifier.quote()
             ),
             Self::TabSizeCannotBeZero => write!(f, "tab size cannot be 0"),
             Self::TabSizeTooLarge(s) => write!(f, "tab stop is too large {}", s.quote()),
@@ -112,6 +119,7 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
 
     let mut nums = vec![];
     let mut remaining_mode = RemainingMode::None;
+    let mut is_specifier_already_used = false;
     for word in s.split(is_space_or_comma) {
         let bytes = word.as_bytes();
         for i in 0..bytes.len() {
@@ -137,6 +145,19 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
                                 if *last_stop >= num {
                                     return Err(ParseError::TabSizesMustBeAscending);
                                 }
+                            }
+
+                            if is_specifier_already_used {
+                                let specifier = if remaining_mode == RemainingMode::Slash {
+                                    "/".to_string()
+                                } else {
+                                    "+".to_string()
+                                };
+                                return Err(ParseError::SpecifierOnlyAllowedWithLastValue(
+                                    specifier,
+                                ));
+                            } else if remaining_mode != RemainingMode::None {
+                                is_specifier_already_used = true;
                             }
 
                             // Append this tab stop to the list of all tabstops.
