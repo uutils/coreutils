@@ -2325,6 +2325,20 @@ fn test_ls_quoting_style() {
 }
 
 #[test]
+fn test_ls_quoting_and_color() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("one two");
+    scene
+        .ucmd()
+        .arg("--color")
+        .arg("one two")
+        .succeeds()
+        .stdout_only("'one two'\n");
+}
+
+#[test]
 fn test_ls_ignore_hide() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
