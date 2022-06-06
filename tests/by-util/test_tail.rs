@@ -1738,7 +1738,7 @@ fn test_follow_name_truncate4() {
 
     let mut args = vec!["-s.1", "--max-unchanged-stats=1", "-F", "file"];
 
-    let delay = 100;
+    let delay = 300;
     for _ in 0..2 {
         at.append("file", "foobar\n");
 
@@ -1761,7 +1761,7 @@ fn test_follow_name_truncate4() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))] // NOTE: Should work on Android but CI VM is too slow.
 fn test_follow_truncate_fast() {
     // inspired by: "gnu/tests/tail-2/truncate.sh"
     // Ensure all logs are output upon file truncation
@@ -1775,7 +1775,7 @@ fn test_follow_truncate_fast() {
     let mut args = vec!["-s.1", "--max-unchanged-stats=1", "f", "---disable-inotify"];
     let follow = vec!["-f", "-F"];
 
-    let delay = 100;
+    let delay = 150;
     for _ in 0..2 {
         for mode in &follow {
             args.push(mode);

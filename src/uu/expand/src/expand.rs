@@ -13,12 +13,15 @@
 extern crate uucore;
 
 use clap::{crate_version, Arg, ArgMatches, Command};
+use std::error::Error;
+use std::fmt;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::num::IntErrorKind;
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult};
+use uucore::error::{FromIo, UError, UResult};
 use uucore::format_usage;
 
 static ABOUT: &str = "Convert tabs in each FILE to spaces, writing to standard output.
@@ -57,6 +60,38 @@ fn is_space_or_comma(c: char) -> bool {
     c == ' ' || c == ','
 }
 
+/// Errors that can occur when parsing a `--tabs` argument.
+#[derive(Debug)]
+enum ParseError {
+    InvalidCharacter(String),
+    SpecifierNotAtStartOfNumber(String, String),
+    TabSizeCannotBeZero,
+    TabSizeTooLarge(String),
+    TabSizesMustBeAscending,
+}
+
+impl Error for ParseError {}
+impl UError for ParseError {}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::InvalidCharacter(s) => {
+                write!(f, "tab size contains invalid character(s): {}", s.quote())
+            }
+            Self::SpecifierNotAtStartOfNumber(specifier, s) => write!(
+                f,
+                "{} specifier not at start of number: {}",
+                specifier.quote(),
+                s.quote(),
+            ),
+            Self::TabSizeCannotBeZero => write!(f, "tab size cannot be 0"),
+            Self::TabSizeTooLarge(s) => write!(f, "tab stop is too large {}", s.quote()),
+            Self::TabSizesMustBeAscending => write!(f, "tab sizes must be ascending"),
+        }
+    }
+}
+
 /// Parse a list of tabstops from a `--tabs` argument.
 ///
 /// This function returns both the vector of numbers appearing in the
@@ -65,14 +100,14 @@ fn is_space_or_comma(c: char) -> bool {
 /// in the list. This mode defines the strategy to use for computing the
 /// number of spaces to use for columns beyond the end of the tab stop
 /// list specified here.
-fn tabstops_parse(s: &str) -> (RemainingMode, Vec<usize>) {
+fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
     // Leading commas and spaces are ignored.
     let s = s.trim_start_matches(is_space_or_comma);
 
     // If there were only commas and spaces in the string, just use the
     // default tabstops.
     if s.is_empty() {
-        return (RemainingMode::None, vec![DEFAULT_TABSTOP]);
+        return Ok((RemainingMode::None, vec![DEFAULT_TABSTOP]));
     }
 
     let mut nums = vec![];
@@ -89,23 +124,41 @@ fn tabstops_parse(s: &str) -> (RemainingMode, Vec<usize>) {
                 }
                 _ => {
                     // Parse a number from the byte sequence.
-                    let num = from_utf8(&bytes[i..]).unwrap().parse::<usize>().unwrap();
+                    let s = from_utf8(&bytes[i..]).unwrap();
+                    match s.parse::<usize>() {
+                        Ok(num) => {
+                            // Tab size must be positive.
+                            if num == 0 {
+                                return Err(ParseError::TabSizeCannotBeZero);
+                            }
 
-                    // Tab size must be positive.
-                    if num == 0 {
-                        crash!(1, "tab size cannot be 0");
-                    }
+                            // Tab sizes must be ascending.
+                            if let Some(last_stop) = nums.last() {
+                                if *last_stop >= num {
+                                    return Err(ParseError::TabSizesMustBeAscending);
+                                }
+                            }
 
-                    // Tab sizes must be ascending.
-                    if let Some(last_stop) = nums.last() {
-                        if *last_stop >= num {
-                            crash!(1, "tab sizes must be ascending");
+                            // Append this tab stop to the list of all tabstops.
+                            nums.push(num);
+                            break;
+                        }
+                        Err(e) => {
+                            if *e.kind() == IntErrorKind::PosOverflow {
+                                return Err(ParseError::TabSizeTooLarge(s.to_string()));
+                            }
+
+                            let s = s.trim_start_matches(char::is_numeric);
+                            if s.starts_with('/') || s.starts_with('+') {
+                                return Err(ParseError::SpecifierNotAtStartOfNumber(
+                                    s[0..1].to_string(),
+                                    s.to_string(),
+                                ));
+                            } else {
+                                return Err(ParseError::InvalidCharacter(s.to_string()));
+                            }
                         }
                     }
-
-                    // Append this tab stop to the list of all tabstops.
-                    nums.push(num);
-                    break;
                 }
             }
         }
@@ -115,7 +168,7 @@ fn tabstops_parse(s: &str) -> (RemainingMode, Vec<usize>) {
     if nums.is_empty() {
         nums = vec![DEFAULT_TABSTOP];
     }
-    (remaining_mode, nums)
+    Ok((remaining_mode, nums))
 }
 
 struct Options {
@@ -131,9 +184,9 @@ struct Options {
 }
 
 impl Options {
-    fn new(matches: &ArgMatches) -> Self {
+    fn new(matches: &ArgMatches) -> Result<Self, ParseError> {
         let (remaining_mode, tabstops) = match matches.values_of(options::TABS) {
-            Some(s) => tabstops_parse(&s.collect::<Vec<&str>>().join(",")),
+            Some(s) => tabstops_parse(&s.collect::<Vec<&str>>().join(","))?,
             None => (RemainingMode::None, vec![DEFAULT_TABSTOP]),
         };
 
@@ -158,14 +211,14 @@ impl Options {
             None => vec!["-".to_owned()],
         };
 
-        Self {
+        Ok(Self {
             files,
             tabstops,
             tspaces,
             iflag,
             uflag,
             remaining_mode,
-        }
+        })
     }
 }
 
@@ -173,7 +226,7 @@ impl Options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
-    expand(&Options::new(&matches)).map_err_context(|| "failed to write output".to_string())
+    expand(&Options::new(&matches)?).map_err_context(|| "failed to write output".to_string())
 }
 
 pub fn uu_app<'a>() -> Command<'a> {
