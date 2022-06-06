@@ -619,3 +619,25 @@ fn test_three_contiguous_wildcard_blocks() {
     assert_matches_template!(template, filename);
     assert!(at.file_exists(filename));
 }
+
+/// Test that template must end in X even if `--suffix` is the empty string.
+#[test]
+fn test_suffix_must_end_in_x() {
+    new_ucmd!()
+        .args(&["--suffix=", "aXXXb"])
+        .fails()
+        .stderr_is("mktemp: with --suffix, template 'aXXXb' must end in X\n");
+}
+
+#[test]
+fn test_suffix_empty_template() {
+    new_ucmd!()
+        .args(&["--suffix=aXXXb", ""])
+        .fails()
+        .stderr_is("mktemp: with --suffix, template '' must end in X\n");
+
+    new_ucmd!()
+        .args(&["-d", "--suffix=aXXXb", ""])
+        .fails()
+        .stderr_is("mktemp: with --suffix, template '' must end in X\n");
+}
