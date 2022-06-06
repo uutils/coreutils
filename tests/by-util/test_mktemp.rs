@@ -597,3 +597,25 @@ fn test_too_few_xs_suffix_directory() {
 fn test_too_many_arguments() {
     new_ucmd!().args(&["-q", "a", "b"]).fails().code_is(1);
 }
+
+#[test]
+fn test_two_contiguous_wildcard_blocks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let template = "XXX_XXX";
+    let result = ucmd.arg(template).succeeds();
+    let filename = result.no_stderr().stdout_str().trim_end();
+    assert_eq!(&filename[..4], "XXX_");
+    assert_matches_template!(template, filename);
+    assert!(at.file_exists(filename));
+}
+
+#[test]
+fn test_three_contiguous_wildcard_blocks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let template = "XXX_XXX_XXX";
+    let result = ucmd.arg(template).succeeds();
+    let filename = result.no_stderr().stdout_str().trim_end();
+    assert_eq!(&filename[..8], "XXX_XXX_");
+    assert_matches_template!(template, filename);
+    assert!(at.file_exists(filename));
+}
