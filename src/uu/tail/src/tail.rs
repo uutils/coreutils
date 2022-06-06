@@ -29,8 +29,7 @@ use chunks::ReverseChunks;
 
 use clap::{Arg, Command};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
-use std::collections::HashMap;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
 use std::fmt;
 use std::fs::{File, Metadata};
@@ -39,7 +38,9 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, channel};
 use std::time::Duration;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{
+    get_exit_code, set_exit_code, FromIo, UError, UResult, USimpleError, UUsageError,
+};
 use uucore::format_usage;
 use uucore::lines::lines;
 use uucore::parse_size::{parse_size, ParseSizeError};
@@ -121,7 +122,6 @@ struct Settings {
     paths: VecDeque<PathBuf>,
     pid: platform::Pid,
     retry: bool,
-    exit_code: i32,
     sleep_sec: Duration,
     use_polling: bool,
     verbose: bool,
@@ -129,9 +129,7 @@ struct Settings {
 }
 
 impl Settings {
-    pub fn get_from(args: impl uucore::Args) -> Result<Self, String> {
-        let matches = uu_app().get_matches_from(arg_iterate(args)?);
-
+    pub fn from(matches: &clap::ArgMatches) -> UResult<Self> {
         let mut settings: Self = Self {
             sleep_sec: Duration::from_secs_f32(1.0),
             max_unchanged_stats: 5,
@@ -151,21 +149,36 @@ impl Settings {
         if let Some(s) = matches.value_of(options::SLEEP_INT) {
             settings.sleep_sec = match s.parse::<f32>() {
                 Ok(s) => Duration::from_secs_f32(s),
-                Err(_) => return Err(format!("invalid number of seconds: {}", s.quote())),
+                Err(_) => {
+                    return Err(UUsageError::new(
+                        1,
+                        format!("invalid number of seconds: {}", s.quote()),
+                    ))
+                }
             }
         }
-        // NOTE: Value decreased to accommodate for discrepancies. Divisor chosen
-        // empirically in order to pass timing sensitive GNU test-suite checks.
-        settings.sleep_sec /= 100;
+
+        settings.use_polling = matches.is_present(options::USE_POLLING);
+
+        if settings.use_polling {
+            // NOTE: Value decreased to accommodate for discrepancies. Divisor chosen
+            // empirically in order to pass timing sensitive GNU test-suite checks.
+            // Without this adjustment and when polling, i.e. `---disable-inotify`,
+            // we're too slow to pick up every event that GNU's tail is picking up.
+            settings.sleep_sec /= 100;
+        }
 
         if let Some(s) = matches.value_of(options::MAX_UNCHANGED_STATS) {
             settings.max_unchanged_stats = match s.parse::<u32>() {
                 Ok(s) => s,
                 Err(_) => {
                     // TODO: [2021-10; jhscheer] add test for this
-                    return Err(format!(
-                        "invalid maximum number of unchanged stats between opens: {}",
-                        s.quote()
+                    return Err(UUsageError::new(
+                        1,
+                        format!(
+                            "invalid maximum number of unchanged stats between opens: {}",
+                            s.quote()
+                        ),
                     ));
                 }
             }
@@ -192,13 +205,23 @@ impl Settings {
             starts_with_plus = arg.starts_with('+');
             match parse_num(arg) {
                 Ok((n, beginning)) => (FilterMode::Bytes(n), beginning),
-                Err(e) => return Err(format!("invalid number of bytes: {}", e)),
+                Err(e) => {
+                    return Err(UUsageError::new(
+                        1,
+                        format!("invalid number of bytes: {}", e),
+                    ))
+                }
             }
         } else if let Some(arg) = matches.value_of(options::LINES) {
             starts_with_plus = arg.starts_with('+');
             match parse_num(arg) {
                 Ok((n, beginning)) => (FilterMode::Lines(n, b'\n'), beginning),
-                Err(e) => return Err(format!("invalid number of lines: {}", e)),
+                Err(e) => {
+                    return Err(UUsageError::new(
+                        1,
+                        format!("invalid number of lines: {}", e),
+                    ))
+                }
             }
         } else {
             (FilterMode::default(), false)
@@ -217,7 +240,6 @@ impl Settings {
             std::process::exit(0)
         }
 
-        settings.use_polling = matches.is_present(options::USE_POLLING);
         settings.retry =
             matches.is_present(options::RETRY) || matches.is_present(options::FOLLOW_RETRY);
 
@@ -248,19 +270,15 @@ impl Settings {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut args = match Settings::get_from(args) {
-        Ok(o) => o,
-        Err(s) => {
-            return Err(USimpleError::new(1, s));
-        }
-    };
+    let matches = uu_app().get_matches_from(arg_iterate(args)?);
+    let mut settings = Settings::from(&matches)?;
 
     // skip expensive call to fstat if PRESUME_INPUT_PIPE is selected
-    if !args.stdin_is_pipe_or_fifo {
-        args.stdin_is_pipe_or_fifo = stdin_is_pipe_or_fifo();
+    if !settings.stdin_is_pipe_or_fifo {
+        settings.stdin_is_pipe_or_fifo = stdin_is_pipe_or_fifo();
     }
 
-    uu_tail(args)
+    uu_tail(settings)
 }
 
 fn uu_tail(mut settings: Settings) -> UResult<()> {
@@ -270,7 +288,10 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
     if (settings.paths.is_empty() || settings.paths.contains(&dash))
         && settings.follow == Some(FollowMode::Name)
     {
-        crash!(1, "cannot follow {} by name", text::DASH.quote());
+        return Err(USimpleError::new(
+            1,
+            format!("cannot follow {} by name", text::DASH.quote()),
+        ));
     }
 
     // add '-' to paths
@@ -314,7 +335,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
             }
 
             if !path.exists() && !settings.stdin_is_pipe_or_fifo {
-                settings.exit_code = 1;
+                set_exit_code(1);
                 show_error!(
                     "cannot open {} for reading: {}",
                     display_name.quote(),
@@ -329,17 +350,17 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
 
                 // NOTE: On macOS path.is_dir() can be false for directories
                 // if it was a redirect, e.g. `$ tail < DIR`
-                if !path.is_dir() {
-                    // TODO: match against ErrorKind if unstable
-                    // library feature "io_error_more" becomes stable
-                    // if let Err(e) = stdin().read(&mut buf) {
-                    //     if e.kind() != std::io::ErrorKind::IsADirectory {
-                    //         err_msg = e.message.to_string();
-                    //     }
-                    // }
-                }
+                // if !path.is_dir() {
+                // TODO: match against ErrorKind if unstable
+                // library feature "io_error_more" becomes stable
+                // if let Err(e) = stdin().read(&mut buf) {
+                //     if e.kind() != std::io::ErrorKind::IsADirectory {
+                //         err_msg = e.message.to_string();
+                //     }
+                // }
+                // }
 
-                settings.exit_code = 1;
+                set_exit_code(1);
                 show_error!("error reading {}: {}", display_name.quote(), err_msg);
                 if settings.follow.is_some() {
                     let msg = if !settings.retry {
@@ -386,7 +407,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                     );
                 }
             } else {
-                settings.exit_code = 1;
+                set_exit_code(1);
                 show_error!(
                     "cannot fstat {}: {}",
                     text::STDIN_HEADER.quote(),
@@ -429,17 +450,14 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                     }
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
-                    settings.exit_code = 1;
-                    show_error!(
-                        "cannot open {} for reading: Permission denied",
-                        display_name.quote()
-                    );
+                    show!(e.map_err_context(|| {
+                        format!("cannot open {} for reading", display_name.quote())
+                    }));
                 }
                 Err(e) => {
-                    return Err(USimpleError::new(
-                        1,
-                        format!("{}: {}", display_name.quote(), e),
-                    ));
+                    return Err(e.map_err_context(|| {
+                        format!("cannot open {} for reading", display_name.quote())
+                    }));
                 }
             }
         } else if settings.retry && settings.follow.is_some() {
@@ -477,12 +495,8 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
         }
     }
 
-    if settings.exit_code > 0 {
-        #[cfg(unix)]
-        if stdin_is_bad_fd() {
-            show_error!("-: {}", text::BAD_FD);
-        }
-        return Err(USimpleError::new(settings.exit_code, ""));
+    if get_exit_code() > 0 && stdin_is_bad_fd() {
+        show_error!("-: {}", text::BAD_FD);
     }
 
     Ok(())
@@ -490,24 +504,27 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
 
 fn arg_iterate<'a>(
     mut args: impl uucore::Args + 'a,
-) -> Result<Box<dyn Iterator<Item = OsString> + 'a>, String> {
+) -> Result<Box<dyn Iterator<Item = OsString> + 'a>, Box<(dyn UError + 'static)>> {
     // argv[0] is always present
     let first = args.next().unwrap();
     if let Some(second) = args.next() {
         if let Some(s) = second.to_str() {
             match parse::parse_obsolete(s) {
                 Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
-                Some(Err(e)) => match e {
-                    parse::ParseError::Syntax => Err(format!("bad argument format: {}", s.quote())),
-                    parse::ParseError::Overflow => Err(format!(
-                        "invalid argument: {} Value too large for defined datatype",
-                        s.quote()
-                    )),
-                },
+                Some(Err(e)) => Err(UUsageError::new(
+                    1,
+                    match e {
+                        parse::ParseError::Syntax => format!("bad argument format: {}", s.quote()),
+                        parse::ParseError::Overflow => format!(
+                            "invalid argument: {} Value too large for defined datatype",
+                            s.quote()
+                        ),
+                    },
+                )),
                 None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
             }
         } else {
-            Err("bad argument encoding".to_owned())
+            Err(UUsageError::new(1, "bad argument encoding".to_owned()))
         }
     } else {
         Ok(Box::new(vec![first].into_iter()))
@@ -676,7 +693,7 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
                     "{} cannot be used, reverting to polling: Too many open files",
                     text::BACKEND
                 );
-                settings.exit_code = 1;
+                set_exit_code(1);
                 settings.use_polling = true;
                 let config = notify::poll::PollWatcherConfig {
                     poll_interval: settings.sleep_sec,
@@ -684,7 +701,7 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
                 };
                 watcher = Box::new(notify::PollWatcher::with_config(tx_clone, config).unwrap());
             }
-            Err(e) => panic!("called `Result::unwrap()` on an `Err` value: {:?}", &e),
+            Err(e) => return Err(USimpleError::new(1, e.to_string())),
         };
     }
 
@@ -795,12 +812,6 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
 
         match rx_result {
             Ok(Ok(event)) => {
-                // eprintln!("=={:=>3}=====================dbg===", _event_counter);
-                // dbg!(&event);
-                // dbg!(files.map.keys());
-                // dbg!(&files.last);
-                // dbg!(&orphans);
-                // eprintln!("=={:=>3}=====================dbg===", _event_counter);
                 handle_event(&event, files, settings, &mut watcher, &mut orphans)?;
             }
             Ok(Err(notify::Error {
@@ -870,12 +881,9 @@ fn handle_event(
                 .to_path_buf();
 
             match event.kind {
-                EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any))
+                EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any | MetadataKind::WriteTime))
                 // | EventKind::Access(AccessKind::Close(AccessMode::Write))
-                | EventKind::Modify(ModifyKind::Metadata(MetadataKind::WriteTime))
-                | EventKind::Create(CreateKind::File)
-                | EventKind::Create(CreateKind::Folder)
-                | EventKind::Create(CreateKind::Any)
+                | EventKind::Create(CreateKind::File | CreateKind::Folder | CreateKind::Any)
                 | EventKind::Modify(ModifyKind::Data(DataChange::Any))
                 | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
                     if let Ok(new_md) = event_path.metadata() {
@@ -933,8 +941,7 @@ fn handle_event(
                         files.update_metadata(event_path, Some(new_md));
                     }
                 }
-                EventKind::Remove(RemoveKind::File)
-                | EventKind::Remove(RemoveKind::Any)
+                EventKind::Remove(RemoveKind::File | RemoveKind::Any)
                 // | EventKind::Modify(ModifyKind::Name(RenameMode::Any))
                 | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
                     if settings.follow == Some(FollowMode::Name) {
@@ -1061,7 +1068,6 @@ impl FileHandling {
     /// Return true if there is only stdin remaining
     fn only_stdin_remaining(&self) -> bool {
         self.map.len() == 1 && (self.map.contains_key(Path::new(text::DASH)))
-        // || self.map.contains_key(Path::new(text::DEV_STDIN))) // TODO: still needed?
     }
 
     /// Return true if there is at least one "tailable" path (or stdin) remaining

@@ -26,7 +26,7 @@ Because of this, `disable-inotify` is now an alias to the new and more versatile
 * Reduce number of system calls to e.g. `fstat`
 * Improve resource management by adding more system calls to `inotify_rm_watch` when appropriate.
 
-# GNU test-suite results
+# GNU test-suite results (9.1.8-e08752)
 
 The functionality for the test "gnu/tests/tail-2/follow-stdin.sh" is implemented.
 It fails because it is provoking closing a file descriptor with `tail -f <&-` and as part of a workaround, Rust's stdlib reopens closed FDs as `/dev/null` which means uu_tail cannot detect this.
@@ -37,47 +37,11 @@ It fails with an error because it is using `strace` to look for calls to `inotif
 however in uu_tail these system calls are invoked from a separate thread.
 If the GNU test would follow threads, i.e. use `strace -f`, this issue could be resolved.
 
-## Testsuite summary for GNU coreutils 9.1.8-e08752:
-
-### PASS:
-- [x] `tail-2/F-headers.sh`
-- [x] `tail-2/F-vs-missing.sh`
+There are 5 tests which are fixed but do not (always) pass the test suite if it's run inside the CI.
+The reason for this is probably related to load/scheduling on the CI test VM.
+The tests in question are:
 - [x] `tail-2/F-vs-rename.sh`
-- [x] `tail-2/append-only.sh # skipped test: must be run as root`
-- [x] `tail-2/assert-2.sh`
-- [x] `tail-2/assert.sh`
-- [x] `tail-2/big-4gb.sh`
-- [x] `tail-2/descriptor-vs-rename.sh`
-- [x] `tail-2/end-of-device.sh # skipped test: must be run as root`
-- [x] `tail-2/flush-initial.sh`
 - [x] `tail-2/follow-name.sh`
-- [x] `tail-2/inotify-dir-recreate.sh`
-- [x] `tail-2/inotify-hash-abuse.sh`
-- [x] `tail-2/inotify-hash-abuse2.sh`
-- [x] `tail-2/inotify-only-regular.sh`
 - [x] `tail-2/inotify-rotate.sh`
 - [x] `tail-2/overlay-headers.sh`
-- [x] `tail-2/pid.sh`
-- [x] `tail-2/pipe-f2.sh`
-- [x] `tail-2/proc-ksyms.sh`
 - [x] `tail-2/retry.sh`
-- [x] `tail-2/start-middle.sh`
-- [x] `tail-2/tail-c.sh`
-- [x] `tail-2/tail-n0f.sh`
-- [x] `tail-2/truncate.sh`
-
-
-### SKIP:
-- [ ] `tail-2/inotify-race.sh # skipped test: breakpoint not hit`
-- [ ] `tail-2/inotify-race2.sh # skipped test: breakpoint not hit`
-- [ ] `tail-2/pipe-f.sh # skipped test: trapping SIGPIPE is not supported`
-
-### FAIL:
-- [ ] `misc/tail.pl`
-- [ ] `tail-2/follow-stdin.sh`
-- [ ] `tail-2/symlink.sh`
-- [ ] `tail-2/wait.sh`
-
-
-### ERROR:
-- [ ] `tail-2/inotify-rotate-resources.sh`

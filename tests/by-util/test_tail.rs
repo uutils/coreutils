@@ -997,21 +997,25 @@ fn test_invalid_num() {
     new_ucmd!()
         .args(&["-c", "1024R", "emptyfile.txt"])
         .fails()
-        .stderr_is("tail: invalid number of bytes: '1024R'");
+        .stderr_str()
+        .starts_with("tail: invalid number of bytes: '1024R'");
     new_ucmd!()
         .args(&["-n", "1024R", "emptyfile.txt"])
         .fails()
-        .stderr_is("tail: invalid number of lines: '1024R'");
+        .stderr_str()
+        .starts_with("tail: invalid number of lines: '1024R'");
     #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-c", "1Y", "emptyfile.txt"])
         .fails()
-        .stderr_is("tail: invalid number of bytes: '1Y': Value too large for defined data type");
+        .stderr_str()
+        .starts_with("tail: invalid number of bytes: '1Y': Value too large for defined data type");
     #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-n", "1Y", "emptyfile.txt"])
         .fails()
-        .stderr_is("tail: invalid number of lines: '1Y': Value too large for defined data type");
+        .stderr_str()
+        .starts_with("tail: invalid number of lines: '1Y': Value too large for defined data type");
     #[cfg(target_pointer_width = "32")]
     {
         let sizes = ["1000G", "10T"];
@@ -1020,13 +1024,15 @@ fn test_invalid_num() {
                 .args(&["-c", size])
                 .fails()
                 .code_is(1)
-                .stderr_only("tail: Insufficient addressable memory");
+                .stderr_str()
+                .starts_with("tail: Insufficient addressable memory");
         }
     }
     new_ucmd!()
         .args(&["-c", "-³"])
         .fails()
-        .stderr_is("tail: invalid number of bytes: '³'");
+        .stderr_str()
+        .starts_with("tail: invalid number of bytes: '³'");
 }
 
 #[test]
