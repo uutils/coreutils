@@ -69,8 +69,8 @@ skip = [
     { name = "arrayvec", version = "=0.7.2" },
     # flimit/unix_socket
     { name = "cfg-if", version = "=0.1.10" },
-    # ordered-multimap
-    { name = "hashbrown", version = "=0.9.1" },
+    # indexmap
+    { name = "hashbrown", version = "=0.11.2" },
     # kernel32-sys
     { name = "winapi", version = "=0.2.8" },
     # bindgen 0.59.2
