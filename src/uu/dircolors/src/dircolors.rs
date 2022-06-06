@@ -83,8 +83,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     {
         return Err(UUsageError::new(
             1,
-            "the options to output dircolors' internal database and\nto select a shell \
-             syntax are mutually exclusive",
+            "the options to output non shell syntax,\n\
+             and to select a shell syntax are mutually exclusive",
         ));
     }
 
