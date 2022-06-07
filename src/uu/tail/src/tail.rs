@@ -7,7 +7,14 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf
+// spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf unwatch Uncategorized
+// spell-checker:ignore (libs) kqueue
+// spell-checker:ignore (acronyms)
+// spell-checker:ignore (env/flags)
+// spell-checker:ignore (jargon) tailable untailable
+// spell-checker:ignore (names)
+// spell-checker:ignore (shell/tools)
+// spell-checker:ignore (misc)
 
 #[macro_use]
 extern crate clap;
@@ -21,25 +28,28 @@ mod platform;
 use chunks::ReverseChunks;
 
 use clap::{Arg, Command};
-use std::collections::VecDeque;
+use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
+use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
 use std::fmt;
 use std::fs::{File, Metadata};
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
-use std::path::Path;
-use std::thread::sleep;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc::{self, channel};
 use std::time::Duration;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{
+    get_exit_code, set_exit_code, FromIo, UError, UResult, USimpleError, UUsageError,
+};
 use uucore::format_usage;
 use uucore::lines::lines;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::ringbuffer::RingBuffer;
 
 #[cfg(unix)]
-use crate::platform::stdin_is_pipe_or_fifo;
-#[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
+use std::os::unix::prelude::FileTypeExt;
 
 const ABOUT: &str = "\
                      Print the last 10 lines of each FILE to standard output.\n\
@@ -49,6 +59,21 @@ const ABOUT: &str = "\
                      Mandatory arguments to long flags are mandatory for short flags too.\
                      ";
 const USAGE: &str = "{} [FLAG]... [FILE]...";
+
+pub mod text {
+    pub static DASH: &str = "-";
+    pub static DEV_STDIN: &str = "/dev/stdin";
+    pub static STDIN_HEADER: &str = "standard input";
+    pub static NO_FILES_REMAINING: &str = "no files remaining";
+    pub static NO_SUCH_FILE: &str = "No such file or directory";
+    pub static BAD_FD: &str = "Bad file descriptor";
+    #[cfg(target_os = "linux")]
+    pub static BACKEND: &str = "inotify";
+    #[cfg(all(unix, not(target_os = "linux")))]
+    pub static BACKEND: &str = "kqueue";
+    #[cfg(target_os = "windows")]
+    pub static BACKEND: &str = "ReadDirectoryChanges";
+}
 
 pub mod options {
     pub mod verbosity {
@@ -61,11 +86,16 @@ pub mod options {
     pub static PID: &str = "pid";
     pub static SLEEP_INT: &str = "sleep-interval";
     pub static ZERO_TERM: &str = "zero-terminated";
+    pub static DISABLE_INOTIFY_TERM: &str = "-disable-inotify"; // NOTE: three hyphens is correct
+    pub static USE_POLLING: &str = "use-polling";
+    pub static RETRY: &str = "retry";
+    pub static FOLLOW_RETRY: &str = "F";
+    pub static MAX_UNCHANGED_STATS: &str = "max-unchanged-stats";
     pub static ARG_FILES: &str = "files";
-    pub static PRESUME_INPUT_PIPE: &str = "-presume-input-pipe";
+    pub static PRESUME_INPUT_PIPE: &str = "-presume-input-pipe"; // NOTE: three hyphens is correct
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum FilterMode {
     Bytes(u64),
     Lines(u64, u8), // (number of lines, delimiter)
@@ -77,34 +107,79 @@ impl Default for FilterMode {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum FollowMode {
+    Descriptor,
+    Name,
+}
+
 #[derive(Debug, Default)]
 struct Settings {
-    quiet: bool,
-    verbose: bool,
-    mode: FilterMode,
-    sleep_msec: u32,
     beginning: bool,
-    follow: bool,
+    follow: Option<FollowMode>,
+    max_unchanged_stats: u32,
+    mode: FilterMode,
+    paths: VecDeque<PathBuf>,
     pid: platform::Pid,
-    files: Vec<String>,
-    presume_input_pipe: bool,
+    retry: bool,
+    sleep_sec: Duration,
+    use_polling: bool,
+    verbose: bool,
+    stdin_is_pipe_or_fifo: bool,
 }
 
 impl Settings {
-    pub fn get_from(args: impl uucore::Args) -> Result<Self, String> {
-        let matches = uu_app().get_matches_from(arg_iterate(args)?);
-
+    pub fn from(matches: &clap::ArgMatches) -> UResult<Self> {
         let mut settings: Self = Self {
-            sleep_msec: 1000,
-            follow: matches.is_present(options::FOLLOW),
+            sleep_sec: Duration::from_secs_f32(1.0),
+            max_unchanged_stats: 5,
             ..Default::default()
         };
 
-        if settings.follow {
-            if let Some(n) = matches.value_of(options::SLEEP_INT) {
-                let parsed: Option<u32> = n.parse().ok();
-                if let Some(m) = parsed {
-                    settings.sleep_msec = m * 1000;
+        settings.follow = if matches.is_present(options::FOLLOW_RETRY) {
+            Some(FollowMode::Name)
+        } else if matches.occurrences_of(options::FOLLOW) == 0 {
+            None
+        } else if matches.value_of(options::FOLLOW) == Some("name") {
+            Some(FollowMode::Name)
+        } else {
+            Some(FollowMode::Descriptor)
+        };
+
+        if let Some(s) = matches.value_of(options::SLEEP_INT) {
+            settings.sleep_sec = match s.parse::<f32>() {
+                Ok(s) => Duration::from_secs_f32(s),
+                Err(_) => {
+                    return Err(UUsageError::new(
+                        1,
+                        format!("invalid number of seconds: {}", s.quote()),
+                    ))
+                }
+            }
+        }
+
+        settings.use_polling = matches.is_present(options::USE_POLLING);
+
+        if settings.use_polling {
+            // NOTE: Value decreased to accommodate for discrepancies. Divisor chosen
+            // empirically in order to pass timing sensitive GNU test-suite checks.
+            // Without this adjustment and when polling, i.e. `---disable-inotify`,
+            // we're too slow to pick up every event that GNU's tail is picking up.
+            settings.sleep_sec /= 100;
+        }
+
+        if let Some(s) = matches.value_of(options::MAX_UNCHANGED_STATS) {
+            settings.max_unchanged_stats = match s.parse::<u32>() {
+                Ok(s) => s,
+                Err(_) => {
+                    // TODO: [2021-10; jhscheer] add test for this
+                    return Err(UUsageError::new(
+                        1,
+                        format!(
+                            "invalid maximum number of unchanged stats between opens: {}",
+                            s.quote()
+                        ),
+                    ));
                 }
             }
         }
@@ -113,7 +188,7 @@ impl Settings {
             if let Ok(pid) = pid_str.parse() {
                 settings.pid = pid;
                 if pid != 0 {
-                    if !settings.follow {
+                    if settings.follow.is_none() {
                         show_warning!("PID ignored; --pid=PID is useful only when following");
                     }
 
@@ -125,21 +200,52 @@ impl Settings {
             }
         }
 
+        let mut starts_with_plus = false; // support for legacy format (+0)
         let mode_and_beginning = if let Some(arg) = matches.value_of(options::BYTES) {
+            starts_with_plus = arg.starts_with('+');
             match parse_num(arg) {
                 Ok((n, beginning)) => (FilterMode::Bytes(n), beginning),
-                Err(e) => return Err(format!("invalid number of bytes: {}", e)),
+                Err(e) => {
+                    return Err(UUsageError::new(
+                        1,
+                        format!("invalid number of bytes: {}", e),
+                    ))
+                }
             }
         } else if let Some(arg) = matches.value_of(options::LINES) {
+            starts_with_plus = arg.starts_with('+');
             match parse_num(arg) {
                 Ok((n, beginning)) => (FilterMode::Lines(n, b'\n'), beginning),
-                Err(e) => return Err(format!("invalid number of lines: {}", e)),
+                Err(e) => {
+                    return Err(UUsageError::new(
+                        1,
+                        format!("invalid number of lines: {}", e),
+                    ))
+                }
             }
         } else {
-            (FilterMode::Lines(10, b'\n'), false)
+            (FilterMode::default(), false)
         };
         settings.mode = mode_and_beginning.0;
         settings.beginning = mode_and_beginning.1;
+
+        // Mimic GNU's tail for -[nc]0 without -f and exit immediately
+        if settings.follow.is_none() && !starts_with_plus && {
+            if let FilterMode::Lines(l, _) = settings.mode {
+                l == 0
+            } else {
+                settings.mode == FilterMode::Bytes(0)
+            }
+        } {
+            std::process::exit(0)
+        }
+
+        settings.retry =
+            matches.is_present(options::RETRY) || matches.is_present(options::FOLLOW_RETRY);
+
+        if settings.retry && settings.follow.is_none() {
+            show_warning!("--retry ignored; --retry is useful only when following");
+        }
 
         if matches.is_present(options::ZERO_TERM) {
             if let FilterMode::Lines(count, _) = settings.mode {
@@ -147,105 +253,250 @@ impl Settings {
             }
         }
 
-        settings.verbose = matches.is_present(options::verbosity::VERBOSE);
-        settings.quiet = matches.is_present(options::verbosity::QUIET);
-        settings.presume_input_pipe = matches.is_present(options::PRESUME_INPUT_PIPE);
+        settings.stdin_is_pipe_or_fifo = matches.is_present(options::PRESUME_INPUT_PIPE);
 
-        settings.files = match matches.values_of(options::ARG_FILES) {
-            Some(v) => v.map(|s| s.to_owned()).collect(),
-            None => vec!["-".to_owned()],
-        };
+        settings.paths = matches
+            .values_of(options::ARG_FILES)
+            .map(|v| v.map(PathBuf::from).collect())
+            .unwrap_or_default();
+
+        settings.verbose = (matches.is_present(options::verbosity::VERBOSE)
+            || settings.paths.len() > 1)
+            && !matches.is_present(options::verbosity::QUIET);
 
         Ok(settings)
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = match Settings::get_from(args) {
-        Ok(o) => o,
-        Err(s) => {
-            return Err(USimpleError::new(1, s));
-        }
-    };
-    uu_tail(&args)
+    let matches = uu_app().get_matches_from(arg_iterate(args)?);
+    let mut settings = Settings::from(&matches)?;
+
+    // skip expensive call to fstat if PRESUME_INPUT_PIPE is selected
+    if !settings.stdin_is_pipe_or_fifo {
+        settings.stdin_is_pipe_or_fifo = stdin_is_pipe_or_fifo();
+    }
+
+    uu_tail(settings)
 }
 
-fn uu_tail(settings: &Settings) -> UResult<()> {
-    let multiple = settings.files.len() > 1;
+fn uu_tail(mut settings: Settings) -> UResult<()> {
+    let dash = PathBuf::from(text::DASH);
+
+    // Mimic GNU's tail for `tail -F` and exit immediately
+    if (settings.paths.is_empty() || settings.paths.contains(&dash))
+        && settings.follow == Some(FollowMode::Name)
+    {
+        return Err(USimpleError::new(
+            1,
+            format!("cannot follow {} by name", text::DASH.quote()),
+        ));
+    }
+
+    // add '-' to paths
+    if !settings.paths.contains(&dash) && settings.stdin_is_pipe_or_fifo
+        || settings.paths.is_empty() && !settings.stdin_is_pipe_or_fifo
+    {
+        settings.paths.push_front(dash);
+    }
+
     let mut first_header = true;
-    let mut readers: Vec<(Box<dyn BufRead>, &String)> = Vec::new();
+    let mut files = FileHandling {
+        map: HashMap::with_capacity(settings.paths.len()),
+        last: None,
+    };
 
-    #[cfg(unix)]
-    let stdin_string = String::from("standard input");
+    // Do an initial tail print of each path's content.
+    // Add `path` to `files` map if `--follow` is selected.
+    for path in &settings.paths {
+        let mut path = path.to_path_buf();
+        let mut display_name = path.to_path_buf();
 
-    for filename in &settings.files {
-        let use_stdin = filename.as_str() == "-";
-        if (multiple || settings.verbose) && !settings.quiet {
-            if !first_header {
-                println!();
-            }
-            if use_stdin {
-                println!("==> standard input <==");
+        // Workaround to handle redirects, e.g. `touch f && tail -f - < f`
+        if cfg!(unix) && path.is_stdin() {
+            display_name = PathBuf::from(text::STDIN_HEADER);
+            if let Ok(p) = Path::new(text::DEV_STDIN).canonicalize() {
+                path = p.to_owned();
             } else {
-                println!("==> {} <==", filename);
+                path = PathBuf::from(text::DEV_STDIN);
             }
         }
-        first_header = false;
 
-        if use_stdin || settings.presume_input_pipe {
-            let mut reader = BufReader::new(stdin());
-            unbounded_tail(&mut reader, settings)?;
+        // TODO: is there a better way to check for a readable stdin?
+        let mut buf = [0; 0]; // empty buffer to check if stdin().read().is_err()
+        let stdin_read_possible = settings.stdin_is_pipe_or_fifo && stdin().read(&mut buf).is_ok();
 
-            // Don't follow stdin since there are no checks for pipes/FIFOs
-            //
-            // FIXME windows has GetFileType which can determine if the file is a pipe/FIFO
-            // so this check can also be performed
+        let path_is_tailable = path.is_tailable();
 
-            #[cfg(unix)]
-            {
-                /*
-                POSIX specification regarding tail -f
+        if !path.is_stdin() && !path_is_tailable {
+            if settings.follow == Some(FollowMode::Descriptor) && settings.retry {
+                show_warning!("--retry only effective for the initial open");
+            }
 
-                If the input file is a regular file or if the file operand specifies a FIFO, do not
-                terminate after the last line of the input file has been copied, but read and copy
-                further bytes from the input file when they become available. If no file operand is
-                specified and standard input is a pipe or FIFO, the -f option shall be ignored. If
-                the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
-                not the -f option shall be ignored.
-                */
-
-                if settings.follow && !stdin_is_pipe_or_fifo() {
-                    readers.push((Box::new(reader), &stdin_string));
+            if !path.exists() && !settings.stdin_is_pipe_or_fifo {
+                set_exit_code(1);
+                show_error!(
+                    "cannot open {} for reading: {}",
+                    display_name.quote(),
+                    text::NO_SUCH_FILE
+                );
+            } else if path.is_dir() || display_name.is_stdin() && !stdin_read_possible {
+                if settings.verbose {
+                    files.print_header(&display_name, !first_header);
+                    first_header = false;
                 }
-            }
-        } else {
-            let path = Path::new(filename);
-            if path.is_dir() {
-                continue;
-            }
-            let mut file = File::open(&path)
-                .map_err_context(|| format!("cannot open {} for reading", filename.quote()))?;
-            let md = file.metadata().unwrap();
-            if is_seekable(&mut file) && get_block_size(&md) > 0 {
-                bounded_tail(&mut file, &settings.mode, settings.beginning);
-                if settings.follow {
-                    let reader = BufReader::new(file);
-                    readers.push((Box::new(reader), filename));
+                let err_msg = "Is a directory".to_string();
+
+                // NOTE: On macOS path.is_dir() can be false for directories
+                // if it was a redirect, e.g. `$ tail < DIR`
+                // if !path.is_dir() {
+                // TODO: match against ErrorKind if unstable
+                // library feature "io_error_more" becomes stable
+                // if let Err(e) = stdin().read(&mut buf) {
+                //     if e.kind() != std::io::ErrorKind::IsADirectory {
+                //         err_msg = e.message.to_string();
+                //     }
+                // }
+                // }
+
+                set_exit_code(1);
+                show_error!("error reading {}: {}", display_name.quote(), err_msg);
+                if settings.follow.is_some() {
+                    let msg = if !settings.retry {
+                        "; giving up on this name"
+                    } else {
+                        ""
+                    };
+                    show_error!(
+                        "{}: cannot follow end of this type of file{}",
+                        display_name.display(),
+                        msg
+                    );
+                }
+                if !(settings.follow == Some(FollowMode::Name) && settings.retry) {
+                    // skip directory if not retry
+                    continue;
                 }
             } else {
-                let mut reader = BufReader::new(file);
-                unbounded_tail(&mut reader, settings)?;
-                if settings.follow {
-                    readers.push((Box::new(reader), filename));
+                // TODO: [2021-10; jhscheer] how to handle block device or socket?
+                todo!();
+            }
+        }
+
+        let metadata = path.metadata().ok();
+
+        if display_name.is_stdin() && path_is_tailable {
+            if settings.verbose {
+                files.print_header(Path::new(text::STDIN_HEADER), !first_header);
+                first_header = false;
+            }
+
+            let mut reader = BufReader::new(stdin());
+            if !stdin_is_bad_fd() {
+                unbounded_tail(&mut reader, &settings)?;
+                if settings.follow == Some(FollowMode::Descriptor) {
+                    // Insert `stdin` into `files.map`
+                    files.insert(
+                        path.to_path_buf(),
+                        PathData {
+                            reader: Some(Box::new(reader)),
+                            metadata: None,
+                            display_name: PathBuf::from(text::STDIN_HEADER),
+                        },
+                    );
+                }
+            } else {
+                set_exit_code(1);
+                show_error!(
+                    "cannot fstat {}: {}",
+                    text::STDIN_HEADER.quote(),
+                    text::BAD_FD
+                );
+                if settings.follow.is_some() {
+                    show_error!(
+                        "error reading {}: {}",
+                        text::STDIN_HEADER.quote(),
+                        text::BAD_FD
+                    );
                 }
             }
+        } else if path_is_tailable {
+            match File::open(&path) {
+                Ok(mut file) => {
+                    if settings.verbose {
+                        files.print_header(&path, !first_header);
+                        first_header = false;
+                    }
+                    let mut reader;
+
+                    if file.is_seekable() && metadata.as_ref().unwrap().get_block_size() > 0 {
+                        bounded_tail(&mut file, &settings);
+                        reader = BufReader::new(file);
+                    } else {
+                        reader = BufReader::new(file);
+                        unbounded_tail(&mut reader, &settings)?;
+                    }
+                    if settings.follow.is_some() {
+                        // Insert existing/file `path` into `files.map`
+                        files.insert(
+                            path.canonicalize()?,
+                            PathData {
+                                reader: Some(Box::new(reader)),
+                                metadata,
+                                display_name,
+                            },
+                        );
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                    show!(e.map_err_context(|| {
+                        format!("cannot open {} for reading", display_name.quote())
+                    }));
+                }
+                Err(e) => {
+                    return Err(e.map_err_context(|| {
+                        format!("cannot open {} for reading", display_name.quote())
+                    }));
+                }
+            }
+        } else if settings.retry && settings.follow.is_some() {
+            if path.is_relative() {
+                path = std::env::current_dir()?.join(&path);
+            }
+            // Insert non-is_tailable() paths into `files.map`
+            files.insert(
+                path.to_path_buf(),
+                PathData {
+                    reader: None,
+                    metadata,
+                    display_name,
+                },
+            );
         }
     }
 
-    if settings.follow {
-        follow(&mut readers[..], settings)?;
+    if settings.follow.is_some() {
+        /*
+        POSIX specification regarding tail -f
+        If the input file is a regular file or if the file operand specifies a FIFO, do not
+        terminate after the last line of the input file has been copied, but read and copy
+        further bytes from the input file when they become available. If no file operand is
+        specified and standard input is a pipe or FIFO, the -f option shall be ignored. If
+        the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
+        not the -f option shall be ignored.
+        */
+        if files.map.is_empty() || !files.files_remaining() && !settings.retry {
+            if !files.only_stdin_remaining() {
+                show_error!("{}", text::NO_FILES_REMAINING);
+            }
+        } else if !(settings.stdin_is_pipe_or_fifo && settings.paths.len() == 1) {
+            follow(&mut files, &mut settings)?;
+        }
+    }
+
+    if get_exit_code() > 0 && stdin_is_bad_fd() {
+        show_error!("-: {}", text::BAD_FD);
     }
 
     Ok(())
@@ -253,24 +504,27 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
 
 fn arg_iterate<'a>(
     mut args: impl uucore::Args + 'a,
-) -> Result<Box<dyn Iterator<Item = OsString> + 'a>, String> {
+) -> Result<Box<dyn Iterator<Item = OsString> + 'a>, Box<(dyn UError + 'static)>> {
     // argv[0] is always present
     let first = args.next().unwrap();
     if let Some(second) = args.next() {
         if let Some(s) = second.to_str() {
             match parse::parse_obsolete(s) {
                 Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
-                Some(Err(e)) => match e {
-                    parse::ParseError::Syntax => Err(format!("bad argument format: {}", s.quote())),
-                    parse::ParseError::Overflow => Err(format!(
-                        "invalid argument: {} Value too large for defined datatype",
-                        s.quote()
-                    )),
-                },
+                Some(Err(e)) => Err(UUsageError::new(
+                    1,
+                    match e {
+                        parse::ParseError::Syntax => format!("bad argument format: {}", s.quote()),
+                        parse::ParseError::Overflow => format!(
+                            "invalid argument: {} Value too large for defined datatype",
+                            s.quote()
+                        ),
+                    },
+                )),
                 None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
             }
         } else {
-            Err("bad argument encoding".to_owned())
+            Err(UUsageError::new(1, "bad argument encoding".to_owned()))
         }
     } else {
         Ok(Box::new(vec![first].into_iter()))
@@ -278,6 +532,14 @@ fn arg_iterate<'a>(
 }
 
 pub fn uu_app<'a>() -> Command<'a> {
+    #[cfg(target_os = "linux")]
+    pub static POLLING_HELP: &str = "Disable 'inotify' support and use polling instead";
+    #[cfg(all(unix, not(target_os = "linux")))]
+    pub static POLLING_HELP: &str = "Disable 'kqueue' support and use polling instead";
+    #[cfg(target_os = "windows")]
+    pub static POLLING_HELP: &str =
+        "Disable 'ReadDirectoryChanges' support and use polling instead";
+
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -296,6 +558,12 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::FOLLOW)
                 .short('f')
                 .long(options::FOLLOW)
+                .default_value("descriptor")
+                .takes_value(true)
+                .min_values(0)
+                .max_values(1)
+                .require_equals(true)
+                .possible_values(&["descriptor", "name"])
                 .help("Print the file as it grows"),
         )
         .arg(
@@ -311,7 +579,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::PID)
                 .long(options::PID)
                 .takes_value(true)
-                .help("with -f, terminate after process ID, PID dies"),
+                .help("With -f, terminate after process ID, PID dies"),
         )
         .arg(
             Arg::new(options::verbosity::QUIET)
@@ -319,7 +587,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::verbosity::QUIET)
                 .visible_alias("silent")
                 .overrides_with_all(&[options::verbosity::QUIET, options::verbosity::VERBOSE])
-                .help("never output headers giving file names"),
+                .help("Never output headers giving file names"),
         )
         .arg(
             Arg::new(options::SLEEP_INT)
@@ -329,17 +597,46 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help("Number of seconds to sleep between polling the file when running with -f"),
         )
         .arg(
+            Arg::new(options::MAX_UNCHANGED_STATS)
+                .takes_value(true)
+                .long(options::MAX_UNCHANGED_STATS)
+                .help(
+                    "Reopen a FILE which has not changed size after N (default 5) iterations \
+                    to see if it has been unlinked or renamed (this is the usual case of rotated \
+                    log files); This option is meaningful only when polling \
+                    (i.e., with --use-polling) and when --follow=name",
+                ),
+        )
+        .arg(
             Arg::new(options::verbosity::VERBOSE)
                 .short('v')
                 .long(options::verbosity::VERBOSE)
                 .overrides_with_all(&[options::verbosity::QUIET, options::verbosity::VERBOSE])
-                .help("always output headers giving file names"),
+                .help("Always output headers giving file names"),
         )
         .arg(
             Arg::new(options::ZERO_TERM)
                 .short('z')
                 .long(options::ZERO_TERM)
                 .help("Line delimiter is NUL, not newline"),
+        )
+        .arg(
+            Arg::new(options::USE_POLLING)
+                .alias(options::DISABLE_INOTIFY_TERM) // NOTE: Used by GNU's test suite
+                .alias("dis") // NOTE: Used by GNU's test suite
+                .long(options::USE_POLLING)
+                .help(POLLING_HELP),
+        )
+        .arg(
+            Arg::new(options::RETRY)
+                .long(options::RETRY)
+                .help("Keep trying to open a file if it is inaccessible"),
+        )
+        .arg(
+            Arg::new(options::FOLLOW_RETRY)
+                .short('F')
+                .help("Same as --follow=name --retry")
+                .overrides_with_all(&[options::RETRY, options::FOLLOW]),
         )
         .arg(
             Arg::new(options::PRESUME_INPUT_PIPE)
@@ -356,49 +653,532 @@ pub fn uu_app<'a>() -> Command<'a> {
         )
 }
 
-/// Continually check for new data in the given readers, writing any to stdout.
-fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) -> UResult<()> {
-    if readers.is_empty() || !settings.follow {
-        return Ok(());
+fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
+    let mut process = platform::ProcessChecker::new(settings.pid);
+
+    let (tx, rx) = channel();
+
+    // Watcher is implemented per platform using the best implementation available on that
+    // platform. In addition to such event driven implementations, a polling implementation
+    // is also provided that should work on any platform.
+    // Linux / Android: inotify
+    // macOS: FSEvents / kqueue
+    // Windows: ReadDirectoryChangesWatcher
+    // FreeBSD / NetBSD / OpenBSD / DragonflyBSD: kqueue
+    // Fallback: polling every n seconds
+
+    // NOTE:
+    // We force the use of kqueue with: features=["macos_kqueue"].
+    // On macOS only `kqueue` is suitable for our use case because `FSEvents`
+    // waits for file close util it delivers a modify event. See:
+    // https://github.com/notify-rs/notify/issues/240
+
+    let mut watcher: Box<dyn Watcher>;
+    if settings.use_polling || RecommendedWatcher::kind() == WatcherKind::PollWatcher {
+        settings.use_polling = true; // We have to use polling because there's no supported backend
+        let config = notify::poll::PollWatcherConfig {
+            poll_interval: settings.sleep_sec,
+            ..Default::default()
+        };
+        watcher = Box::new(notify::PollWatcher::with_config(tx, config).unwrap());
+    } else {
+        let tx_clone = tx.clone();
+        match notify::RecommendedWatcher::new(tx) {
+            Ok(w) => watcher = Box::new(w),
+            Err(e) if e.to_string().starts_with("Too many open files") => {
+                // NOTE: This ErrorKind is `Uncategorized`, but it is not recommended to match an error against `Uncategorized`
+                // NOTE: Could be tested with decreasing `max_user_instances`, e.g.:
+                // `sudo sysctl fs.inotify.max_user_instances=64`
+                show_error!(
+                    "{} cannot be used, reverting to polling: Too many open files",
+                    text::BACKEND
+                );
+                set_exit_code(1);
+                settings.use_polling = true;
+                let config = notify::poll::PollWatcherConfig {
+                    poll_interval: settings.sleep_sec,
+                    ..Default::default()
+                };
+                watcher = Box::new(notify::PollWatcher::with_config(tx_clone, config).unwrap());
+            }
+            Err(e) => return Err(USimpleError::new(1, e.to_string())),
+        };
     }
 
-    let mut last = readers.len() - 1;
-    let mut read_some = false;
-    let mut process = platform::ProcessChecker::new(settings.pid);
-    let mut stdout = stdout();
+    // Iterate user provided `paths`.
+    // Add existing regular files to `Watcher` (InotifyWatcher).
+    // If `path` is not an existing file, add its parent to `Watcher`.
+    // If there is no parent, add `path` to `orphans`.
+    let mut orphans = Vec::new();
+    for path in files.map.keys() {
+        if path.is_tailable() {
+            // TODO: [2022-05; jhscheer] also add `file` (not just parent) to please
+            // "gnu/tests/tail-2/inotify-rotate-resourced.sh" because it is looking for
+            // for syscalls: 2x "inotify_add_watch" and 1x "inotify_rm_watch"
+            let path = path.watchable(settings);
+            watcher
+                .watch(&path.canonicalize()?, RecursiveMode::NonRecursive)
+                .unwrap();
+        } else if settings.follow.is_some() && settings.retry {
+            if path.is_orphan() {
+                orphans.push(path.to_path_buf());
+            } else {
+                let parent = path.parent().unwrap();
+                watcher
+                    .watch(&parent.canonicalize()?, RecursiveMode::NonRecursive)
+                    .unwrap();
+            }
+        } else {
+            // TODO: [2022-05; jhscheer] do we need to handle this case?
+            unimplemented!();
+        }
+    }
 
+    // TODO: [2021-10; jhscheer]
+    let mut _event_counter = 0;
+    let mut _timeout_counter = 0;
+
+    // main follow loop
     loop {
-        sleep(Duration::new(0, settings.sleep_msec * 1000));
+        let mut read_some = false;
 
-        let pid_is_dead = !read_some && settings.pid != 0 && process.is_dead();
-        read_some = false;
+        // For `-F` we need to poll if an orphan path becomes available during runtime.
+        // If a path becomes an orphan during runtime, it will be added to orphans.
+        // To be able to differentiate between the cases of test_retry8 and test_retry9,
+        // here paths will not be removed from orphans if the path becomes available.
+        if settings.retry && settings.follow == Some(FollowMode::Name) {
+            for new_path in &orphans {
+                if new_path.exists() {
+                    let pd = files.map.get(new_path).unwrap();
+                    let md = new_path.metadata().unwrap();
+                    if md.is_tailable() && pd.reader.is_none() {
+                        show_error!(
+                            "{} has appeared;  following new file",
+                            pd.display_name.quote()
+                        );
+                        if let Ok(new_path_canonical) = new_path.canonicalize() {
+                            files.update_metadata(&new_path_canonical, Some(md));
+                            files.update_reader(&new_path_canonical)?;
+                            read_some = files.tail_file(&new_path_canonical, settings.verbose)?;
+                            let new_path = new_path_canonical.watchable(settings);
+                            watcher
+                                .watch(&new_path, RecursiveMode::NonRecursive)
+                                .unwrap();
+                        } else {
+                            unreachable!();
+                        }
+                    }
+                }
+            }
+        }
 
-        for (i, (reader, filename)) in readers.iter_mut().enumerate() {
-            // Print all new content since the last pass
+        // Poll all watched files manually to not miss changes due to timing
+        // conflicts with `Notify::PollWatcher`.
+        // NOTE: This is a workaround because PollWatcher tends to miss events.
+        // e.g. `echo "X1" > missing ; sleep 0.1 ; echo "X" > missing ;` should trigger a
+        // truncation event, but PollWatcher doesn't recognize it.
+        // This is relevant to pass, e.g.: "gnu/tests/tail-2/truncate.sh"
+        // TODO: [2022-06; jhscheer] maybe use `--max-unchanged-stats` here to reduce fstat calls?
+        if settings.use_polling && settings.follow.is_some() {
+            for path in &files
+                .map
+                .keys()
+                .filter(|p| p.is_tailable())
+                .map(|p| p.to_path_buf())
+                .collect::<Vec<PathBuf>>()
+            {
+                if let Ok(new_md) = path.metadata() {
+                    let pd = files.map.get(path).unwrap();
+                    if let Some(old_md) = &pd.metadata {
+                        if old_md.is_tailable()
+                            && new_md.is_tailable()
+                            && old_md.got_truncated(&new_md)?
+                        {
+                            show_error!("{}: file truncated", pd.display_name.display());
+                            files.update_metadata(path, Some(new_md));
+                            files.update_reader(path)?;
+                        }
+                    }
+                }
+            }
+        }
+
+        // with  -f, sleep for approximately N seconds (default 1.0) between iterations;
+        let rx_result = rx.recv_timeout(settings.sleep_sec);
+        if rx_result.is_ok() {
+            _event_counter += 1;
+            _timeout_counter = 0;
+        }
+
+        match rx_result {
+            Ok(Ok(event)) => {
+                handle_event(&event, files, settings, &mut watcher, &mut orphans)?;
+            }
+            Ok(Err(notify::Error {
+                kind: notify::ErrorKind::Io(ref e),
+                paths,
+            })) if e.kind() == std::io::ErrorKind::NotFound => {
+                if let Some(event_path) = paths.first() {
+                    if files.map.contains_key(event_path) {
+                        let _ = watcher.unwatch(event_path);
+                    }
+                }
+            }
+            Ok(Err(notify::Error {
+                kind: notify::ErrorKind::MaxFilesWatch,
+                ..
+            })) => crash!(1, "{} resources exhausted", text::BACKEND),
+            Ok(Err(e)) => crash!(1, "{:?}", e),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                _timeout_counter += 1;
+            }
+            Err(e) => crash!(1, "RecvError: {:?}", e),
+        }
+
+        // main print loop
+        for path in files.map.keys().cloned().collect::<Vec<_>>() {
+            read_some = files.tail_file(&path, settings.verbose)?;
+        }
+
+        if !read_some && settings.pid != 0 && process.is_dead() {
+            // pid is dead
+            break;
+        }
+
+        if _timeout_counter == settings.max_unchanged_stats {
+            // TODO: [2021-10; jhscheer] implement timeout_counter for each file.
+            // ‘--max-unchanged-stats=n’
+            // When tailing a file by name, if there have been n (default n=5) consecutive iterations
+            // for which the file has not changed, then open/fstat the file to determine if that file
+            // name is still associated with the same device/inode-number pair as before. When
+            // following a log file that is rotated, this is approximately the number of seconds
+            // between when tail prints the last pre-rotation lines and when it prints the lines that
+            // have accumulated in the new log file. This option is meaningful only when polling
+            // (i.e., without inotify) and when following by name.
+            // TODO: [2021-10; jhscheer] `--sleep-interval=N`: implement: if `--pid=p`,
+            // tail checks whether process p is alive at least every N seconds
+        }
+    }
+    Ok(())
+}
+
+fn handle_event(
+    event: &notify::Event,
+    files: &mut FileHandling,
+    settings: &Settings,
+    watcher: &mut Box<dyn Watcher>,
+    orphans: &mut Vec<PathBuf>,
+) -> UResult<()> {
+    use notify::event::*;
+
+    if let Some(event_path) = event.paths.first() {
+        if files.map.contains_key(event_path) {
+            let display_name = files
+                .map
+                .get(event_path)
+                .unwrap()
+                .display_name
+                .to_path_buf();
+
+            match event.kind {
+                EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any | MetadataKind::WriteTime))
+                // | EventKind::Access(AccessKind::Close(AccessMode::Write))
+                | EventKind::Create(CreateKind::File | CreateKind::Folder | CreateKind::Any)
+                | EventKind::Modify(ModifyKind::Data(DataChange::Any))
+                | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
+                    if let Ok(new_md) = event_path.metadata() {
+                        let is_tailable = new_md.is_tailable();
+                        let pd = files.map.get(event_path).unwrap();
+                        if let Some(old_md) = &pd.metadata {
+                            if is_tailable {
+                                // We resume tracking from the start of the file,
+                                // assuming it has been truncated to 0. This mimics GNU's `tail`
+                                // behavior and is the usual truncation operation for log files.
+                                if !old_md.is_tailable() {
+                                    show_error!( "{} has become accessible", display_name.quote());
+                                    files.update_reader(event_path)?;
+                                } else if pd.reader.is_none() {
+                                    show_error!( "{} has appeared;  following new file", display_name.quote());
+                                    files.update_reader(event_path)?;
+                                } else if event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To)) {
+                                    show_error!( "{} has been replaced;  following new file", display_name.quote());
+                                    files.update_reader(event_path)?;
+                                } else if old_md.got_truncated(&new_md)? {
+                                    show_error!("{}: file truncated", display_name.display());
+                                    files.update_reader(event_path)?;
+                                }
+                            } else if !is_tailable && old_md.is_tailable() {
+                                if pd.reader.is_some() {
+                                    files.reset_reader(event_path);
+                                } else {
+                                    show_error!(
+                                        "{} has been replaced with an untailable file",
+                                        display_name.quote()
+                                    );
+                                }
+                            }
+                        } else if is_tailable {
+                            show_error!( "{} has appeared;  following new file", display_name.quote());
+                            files.update_reader(event_path)?;
+                        } else if settings.retry {
+                            if settings.follow == Some(FollowMode::Descriptor) {
+                                show_error!(
+                                    "{} has been replaced with an untailable file; giving up on this name",
+                                    display_name.quote()
+                                );
+                                let _ = watcher.unwatch(event_path);
+                                files.map.remove(event_path).unwrap();
+                                if files.map.is_empty() {
+                                    crash!(1, "{}", text::NO_FILES_REMAINING);
+                                }
+                            } else {
+                                show_error!(
+                                    "{} has been replaced with an untailable file",
+                                    display_name.quote()
+                                );
+                            }
+                        }
+                        files.update_metadata(event_path, Some(new_md));
+                    }
+                }
+                EventKind::Remove(RemoveKind::File | RemoveKind::Any)
+                // | EventKind::Modify(ModifyKind::Name(RenameMode::Any))
+                | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
+                    if settings.follow == Some(FollowMode::Name) {
+                        if settings.retry {
+                            if let Some(old_md) = &files.map.get_mut(event_path).unwrap().metadata {
+                                if old_md.is_tailable() {
+                                    show_error!(
+                                        "{} has become inaccessible: {}",
+                                        display_name.quote(),
+                                        text::NO_SUCH_FILE
+                                    );
+                                }
+                            }
+                            if event_path.is_orphan() && !orphans.contains(event_path) {
+                                show_error!("directory containing watched file was removed");
+                                show_error!(
+                                    "{} cannot be used, reverting to polling",
+                                    text::BACKEND
+                                );
+                                orphans.push(event_path.to_path_buf());
+                                let _ = watcher.unwatch(event_path);
+                            }
+                        } else {
+                            show_error!("{}: {}", display_name.display(), text::NO_SUCH_FILE);
+                            if !files.files_remaining() && settings.use_polling {
+                                crash!(1, "{}", text::NO_FILES_REMAINING);
+                            }
+                        }
+                        files.reset_reader(event_path);
+                    } else if settings.follow == Some(FollowMode::Descriptor) && settings.retry {
+                        // --retry only effective for the initial open
+                        let _ = watcher.unwatch(event_path);
+                        files.map.remove(event_path).unwrap();
+                    } else if settings.use_polling && event.kind == EventKind::Remove(RemoveKind::Any) {
+                        // BUG:
+                        // The watched file was removed. Since we're using Polling, this
+                        // could be a rename. We can't tell because `notify::PollWatcher` doesn't
+                        // recognize renames properly.
+                        // Ideally we want to call seek to offset 0 on the file handle.
+                        // But because we only have access to `PathData::reader` as `BufRead`,
+                        // we cannot seek to 0 with `BufReader::seek_relative`.
+                        // Also because we don't have the new name, we cannot work around this
+                        // by simply reopening the file.
+                    }
+                }
+                EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
+                    // NOTE: For `tail -f a`, keep tracking additions to b after `mv a b`
+                    // (gnu/tests/tail-2/descriptor-vs-rename.sh)
+                    // NOTE: The File/BufReader doesn't need to be updated.
+                    // However, we need to update our `files.map`.
+                    // This can only be done for inotify, because this EventKind does not
+                    // trigger for the PollWatcher.
+                    // BUG: As a result, there's a bug if polling is used:
+                    // $ tail -f file_a ---disable-inotify
+                    // $ mv file_a file_b
+                    // $ echo A >> file_b
+                    // $ echo A >> file_a
+                    // The last append to file_a is printed, however this shouldn't be because
+                    // after the "mv" tail should only follow "file_b".
+                    // TODO: [2022-05; jhscheer] add test for this bug
+
+                    if settings.follow == Some(FollowMode::Descriptor) {
+                        let new_path = event.paths.last().unwrap().canonicalize()?;
+                        // Open new file and seek to End:
+                        let mut file = File::open(&new_path)?;
+                        file.seek(SeekFrom::End(0))?;
+                        // Add new reader but keep old display name
+                        files.map.insert(
+                            new_path.to_owned(),
+                            PathData {
+                                metadata: file.metadata().ok(),
+                                reader: Some(Box::new(BufReader::new(file))),
+                                display_name, // mimic GNU's tail and show old name in header
+                            },
+                        );
+                        // Remove old reader
+                        files.map.remove(event_path).unwrap();
+                        if files.last.as_ref().unwrap() == event_path {
+                            files.last = Some(new_path.to_owned());
+                        }
+                        // Unwatch old path and watch new path
+                        let _ = watcher.unwatch(event_path);
+                        let new_path = new_path.watchable(settings);
+                        watcher
+                            .watch(
+                                &new_path.canonicalize()?,
+                                RecursiveMode::NonRecursive,
+                            )
+                            .unwrap();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Data structure to keep a handle on the BufReader, Metadata
+/// and the display_name (header_name) of files that are being followed.
+struct PathData {
+    reader: Option<Box<dyn BufRead>>,
+    metadata: Option<Metadata>,
+    display_name: PathBuf, // the path as provided by user input, used for headers
+}
+
+/// Data structure to keep a handle on files to follow.
+/// `last` always holds the path/key of the last file that was printed from.
+/// The keys of the HashMap can point to an existing file path (normal case),
+/// or stdin ("-"), or to a non existing path (--retry).
+/// With the exception of stdin, all keys in the HashMap are absolute Paths.
+struct FileHandling {
+    map: HashMap<PathBuf, PathData>,
+    last: Option<PathBuf>,
+}
+
+impl FileHandling {
+    /// Insert new `PathData` into the HashMap
+    fn insert(&mut self, k: PathBuf, v: PathData) -> Option<PathData> {
+        self.last = Some(k.to_owned());
+        self.map.insert(k, v)
+    }
+
+    /// Return true if there is only stdin remaining
+    fn only_stdin_remaining(&self) -> bool {
+        self.map.len() == 1 && (self.map.contains_key(Path::new(text::DASH)))
+    }
+
+    /// Return true if there is at least one "tailable" path (or stdin) remaining
+    fn files_remaining(&self) -> bool {
+        for path in self.map.keys() {
+            if path.is_tailable() || path.is_stdin() {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Set `reader` to None to indicate that `path` is not an existing file anymore.
+    fn reset_reader(&mut self, path: &Path) {
+        assert!(self.map.contains_key(path));
+        self.map.get_mut(path).unwrap().reader = None;
+    }
+
+    /// Reopen the file at the monitored `path`
+    fn update_reader(&mut self, path: &Path) -> UResult<()> {
+        assert!(self.map.contains_key(path));
+        // BUG:
+        // If it's not necessary to reopen a file, GNU's tail calls seek to offset 0.
+        // However we can't call seek here because `BufRead` does not implement `Seek`.
+        // As a workaround we always reopen the file even though this might not always
+        // be necessary.
+        self.map.get_mut(path).unwrap().reader = Some(Box::new(BufReader::new(File::open(&path)?)));
+        Ok(())
+    }
+
+    /// Reload metadata from `path`, or `metadata`
+    fn update_metadata(&mut self, path: &Path, metadata: Option<Metadata>) {
+        assert!(self.map.contains_key(path));
+        self.map.get_mut(path).unwrap().metadata = if metadata.is_some() {
+            metadata
+        } else {
+            path.metadata().ok()
+        };
+    }
+
+    /// Read `path` from the current seek position forward
+    fn read_file(&mut self, path: &Path, buffer: &mut Vec<u8>) -> UResult<bool> {
+        assert!(self.map.contains_key(path));
+        let mut read_some = false;
+        let pd = self.map.get_mut(path).unwrap().reader.as_mut();
+        if let Some(reader) = pd {
             loop {
-                let mut datum = vec![];
-                match reader.read_until(b'\n', &mut datum) {
+                match reader.read_until(b'\n', buffer) {
                     Ok(0) => break,
                     Ok(_) => {
                         read_some = true;
-                        if i != last {
-                            println!("\n==> {} <==", filename);
-                            last = i;
-                        }
-                        stdout
-                            .write_all(&datum)
-                            .map_err_context(|| String::from("write error"))?;
                     }
                     Err(err) => return Err(USimpleError::new(1, err.to_string())),
                 }
             }
         }
+        Ok(read_some)
+    }
 
-        if pid_is_dead {
-            break;
+    /// Print `buffer` to stdout
+    fn print_file(&self, buffer: &[u8]) -> UResult<()> {
+        let mut stdout = stdout();
+        stdout
+            .write_all(buffer)
+            .map_err_context(|| String::from("write error"))?;
+        Ok(())
+    }
+
+    /// Read new data from `path` and print it to stdout
+    fn tail_file(&mut self, path: &Path, verbose: bool) -> UResult<bool> {
+        let mut buffer = vec![];
+        let read_some = self.read_file(path, &mut buffer)?;
+        if read_some {
+            if self.needs_header(path, verbose) {
+                self.print_header(path, true);
+            }
+            self.print_file(&buffer)?;
+
+            self.last = Some(path.to_path_buf()); // TODO: [2022-05; jhscheer] add test for this
+            self.update_metadata(path, None);
+        }
+        Ok(read_some)
+    }
+
+    /// Decide if printing `path` needs a header based on when it was last printed
+    fn needs_header(&self, path: &Path, verbose: bool) -> bool {
+        if verbose {
+            if let Some(ref last) = self.last {
+                return !last.eq(&path);
+            }
+        }
+        false
+    }
+
+    /// Print header for `path` to stdout
+    fn print_header(&self, path: &Path, needs_newline: bool) {
+        println!(
+            "{}==> {} <==",
+            if needs_newline { "\n" } else { "" },
+            self.display_name(path)
+        );
+    }
+
+    /// Wrapper for `PathData::display_name`
+    fn display_name(&self, path: &Path) -> String {
+        if let Some(path) = self.map.get(path) {
+            path.display_name.display().to_string()
+        } else {
+            path.display().to_string()
         }
     }
-    Ok(())
 }
 
 /// Find the index after the given number of instances of a given byte.
@@ -524,9 +1304,9 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
 /// end of the file, and then read the file "backwards" in blocks of size
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
-fn bounded_tail(file: &mut File, mode: &FilterMode, beginning: bool) {
+fn bounded_tail(file: &mut File, settings: &Settings) {
     // Find the position in the file to start printing from.
-    match (mode, beginning) {
+    match (&settings.mode, settings.beginning) {
         (FilterMode::Lines(count, delimiter), false) => {
             backwards_thru_file(file, *count, *delimiter);
         }
@@ -620,12 +1400,6 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
     Ok(())
 }
 
-fn is_seekable<T: Seek>(file: &mut T) -> bool {
-    file.seek(SeekFrom::Current(0)).is_ok()
-        && file.seek(SeekFrom::End(0)).is_ok()
-        && file.seek(SeekFrom::Start(0)).is_ok()
-}
-
 fn parse_num(src: &str) -> Result<(u64, bool), ParseSizeError> {
     let mut size_string = src.trim();
     let mut starting_with = false;
@@ -645,14 +1419,131 @@ fn parse_num(src: &str) -> Result<(u64, bool), ParseSizeError> {
     parse_size(size_string).map(|n| (n, starting_with))
 }
 
-fn get_block_size(md: &Metadata) -> u64 {
+pub fn stdin_is_pipe_or_fifo() -> bool {
     #[cfg(unix)]
     {
-        md.blocks()
+        platform::stdin_is_pipe_or_fifo()
+    }
+    #[cfg(windows)]
+    {
+        winapi_util::file::typ(winapi_util::HandleRef::stdin())
+            .map(|t| t.is_disk() || t.is_pipe())
+            .unwrap_or(false)
+    }
+}
+
+pub fn stdin_is_bad_fd() -> bool {
+    #[cfg(unix)]
+    {
+        platform::stdin_is_bad_fd()
     }
     #[cfg(not(unix))]
-    {
-        md.len()
+    false
+}
+
+trait FileExtTail {
+    // clippy complains, but it looks like a false positive
+    #[allow(clippy::wrong_self_convention)]
+    fn is_seekable(&mut self) -> bool;
+}
+
+impl FileExtTail for File {
+    fn is_seekable(&mut self) -> bool {
+        self.seek(SeekFrom::Current(0)).is_ok()
+            && self.seek(SeekFrom::End(0)).is_ok()
+            && self.seek(SeekFrom::Start(0)).is_ok()
+    }
+}
+
+trait MetadataExtTail {
+    fn is_tailable(&self) -> bool;
+    fn got_truncated(
+        &self,
+        other: &Metadata,
+    ) -> Result<bool, Box<(dyn uucore::error::UError + 'static)>>;
+    fn get_block_size(&self) -> u64;
+}
+
+impl MetadataExtTail for Metadata {
+    fn is_tailable(&self) -> bool {
+        let ft = self.file_type();
+        #[cfg(unix)]
+        {
+            ft.is_file() || ft.is_char_device() || ft.is_fifo()
+        }
+        #[cfg(not(unix))]
+        {
+            ft.is_file()
+        }
+    }
+
+    /// Return true if the file was modified and is now shorter
+    fn got_truncated(
+        &self,
+        other: &Metadata,
+    ) -> Result<bool, Box<(dyn uucore::error::UError + 'static)>> {
+        Ok(other.len() < self.len() && other.modified()? != self.modified()?)
+    }
+
+    fn get_block_size(&self) -> u64 {
+        #[cfg(unix)]
+        {
+            self.blocks()
+        }
+        #[cfg(not(unix))]
+        {
+            self.len()
+        }
+    }
+}
+
+trait PathExtTail {
+    fn is_stdin(&self) -> bool;
+    fn is_orphan(&self) -> bool;
+    fn is_tailable(&self) -> bool;
+    fn watchable(&self, settings: &Settings) -> PathBuf;
+}
+
+impl PathExtTail for Path {
+    fn is_stdin(&self) -> bool {
+        self.eq(Self::new(text::DASH))
+            || self.eq(Self::new(text::DEV_STDIN))
+            || self.eq(Self::new(text::STDIN_HEADER))
+    }
+
+    /// Return true if `path` does not have an existing parent directory
+    fn is_orphan(&self) -> bool {
+        !matches!(self.parent(), Some(parent) if parent.is_dir())
+    }
+
+    /// Return true if `path` is is a file type that can be tailed
+    fn is_tailable(&self) -> bool {
+        self.is_file() || self.exists() && self.metadata().unwrap().is_tailable()
+    }
+
+    /// Wrapper for `path` to use for `notify::Watcher::watch`.
+    /// Will return a "watchable" parent directory if necessary.
+    /// Will panic if parent directory cannot be watched.
+    fn watchable(&self, settings: &Settings) -> PathBuf {
+        if cfg!(target_os = "linux") || settings.use_polling {
+            // NOTE: Using the parent directory here instead of the file is a workaround.
+            // On Linux the watcher can crash for rename/delete/move operations if a file is watched directly.
+            // This workaround follows the recommendation of the notify crate authors:
+            // > On some platforms, if the `path` is renamed or removed while being watched, behavior may
+            // > be unexpected. See discussions in [#165] and [#166]. If less surprising behavior is wanted
+            // > one may non-recursively watch the _parent_ directory as well and manage related events.
+            let parent = self.parent().unwrap_or_else(|| {
+                crash!(1, "cannot watch parent directory of {}", self.display())
+            });
+            // TODO: [2021-10; jhscheer] add test for this - "cannot watch parent directory"
+            if parent.is_dir() {
+                parent.to_path_buf()
+            } else {
+                PathBuf::from(".")
+            }
+        } else {
+            self.to_path_buf()
+        }
     }
 }
 

@@ -8,7 +8,8 @@
  * file that was distributed with this source code.
  */
 
-// spell-checker:ignore (ToDO) errno EPERM ENOSYS
+// spell-checker:ignore (ToDO) stdlib
+// spell-checker:ignore (options) GETFD EPERM ENOSYS
 
 use std::io::{stdin, Error};
 
@@ -51,13 +52,23 @@ fn get_errno() -> i32 {
 
 pub fn stdin_is_pipe_or_fifo() -> bool {
     let fd = stdin().lock().as_raw_fd();
-    fd >= 0 // GNU tail checks fd >= 0
-                            && match fstat(fd) {
-                                Ok(stat) => {
-                                    let mode = stat.st_mode as libc::mode_t;
-                                    // NOTE: This is probably not the most correct way to check this
-                                    (mode & S_IFIFO != 0) || (mode & S_IFSOCK != 0)
-                                }
-                                Err(err) => panic!("{}", err),
-                            }
+    // GNU tail checks fd >= 0
+    fd >= 0
+        && match fstat(fd) {
+            Ok(stat) => {
+                let mode = stat.st_mode as libc::mode_t;
+                // NOTE: This is probably not the most correct way to check this
+                (mode & S_IFIFO != 0) || (mode & S_IFSOCK != 0)
+            }
+            Err(err) => panic!("{}", err),
+        }
+}
+
+// FIXME: Detect a closed file descriptor, e.g.: `tail <&-`
+pub fn stdin_is_bad_fd() -> bool {
+    let fd = stdin().as_raw_fd();
+    // this is never `true`, even with `<&-` because Rust's stdlib is reopening fds as /dev/null
+    // see also: https://github.com/uutils/coreutils/issues/2873
+    // (gnu/tests/tail-2/follow-stdin.sh fails because of this)
+    unsafe { libc::fcntl(fd, libc::F_GETFD) == -1 && get_errno() == libc::EBADF }
 }
