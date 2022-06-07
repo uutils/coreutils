@@ -227,6 +227,24 @@ fn test_tabs_with_specifier_not_at_start() {
 }
 
 #[test]
+fn test_tabs_with_specifier_only_allowed_with_last_value() {
+    fn run_cmd(arg: &str, specifier: &str) {
+        let expected_msg = format!(
+            "{} specifier only allowed with the last value",
+            specifier.quote()
+        );
+        new_ucmd!().arg(arg).fails().stderr_contains(expected_msg);
+    }
+    run_cmd("--tabs=/1,2,3", "/");
+    run_cmd("--tabs=1,/2,3", "/");
+    new_ucmd!().arg("--tabs=1,2,/3").succeeds();
+
+    run_cmd("--tabs=+1,2,3", "+");
+    run_cmd("--tabs=1,+2,3", "+");
+    new_ucmd!().arg("--tabs=1,2,+3").succeeds();
+}
+
+#[test]
 fn test_tabs_with_invalid_chars() {
     new_ucmd!()
         .arg("--tabs=x")
