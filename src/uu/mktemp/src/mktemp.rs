@@ -224,6 +224,11 @@ fn find_last_contiguous_block_of_xs(s: &str) -> Option<(usize, usize)> {
 
 impl Params {
     fn from(options: Options) -> Result<Self, MkTempError> {
+        // The template argument must end in 'X' if a suffix option is given.
+        if options.suffix.is_some() && !options.template.ends_with('X') {
+            return Err(MkTempError::MustEndInX(options.template));
+        }
+
         // Get the start and end indices of the randomized part of the template.
         //
         // For example, if the template is "abcXXXXyz", then `i` is 3 and `j` is 7.
@@ -284,9 +289,6 @@ impl Params {
         let suffix = format!("{}{}", suffix_from_template, suffix_from_option);
         if suffix.contains(MAIN_SEPARATOR) {
             return Err(MkTempError::SuffixContainsDirSeparator(suffix));
-        }
-        if !suffix_from_template.is_empty() && !suffix_from_option.is_empty() {
-            return Err(MkTempError::MustEndInX(options.template));
         }
 
         // The number of random characters in the template.
