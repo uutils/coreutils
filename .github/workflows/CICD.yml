@@ -972,7 +972,7 @@ jobs:
     needs: build
     runs-on: ${{ matrix.job.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         job:
           - { os: ubuntu-latest  , features: unix }
