@@ -414,6 +414,10 @@ where
         let (prog_tx, rx) = mpsc::channel();
         thread::spawn(gen_prog_updater(rx, i.print_level));
 
+        // Create a common buffer with a capacity of the block size.
+        // This is the max size needed.
+        let mut buf = vec![BUF_INIT_BYTE; bsize];
+
         // The main read/write loop.
         //
         // Each iteration reads blocks from the input and writes
@@ -427,7 +431,7 @@ where
             // best buffer size for reading based on the number of
             // blocks already read and the number of blocks remaining.
             let loop_bsize = calc_loop_bsize(&i.count, &rstat, &wstat, i.ibs, bsize);
-            let (rstat_update, buf) = read_helper(&mut i, loop_bsize)?;
+            let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
             if rstat_update.is_empty() {
                 break;
             }
@@ -600,7 +604,11 @@ impl Write for Output<io::Stdout> {
 }
 
 /// Read helper performs read operations common to all dd reads, and dispatches the buffer to relevant helper functions as dictated by the operations requested by the user.
-fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> std::io::Result<(ReadStat, Vec<u8>)> {
+fn read_helper<R: Read>(
+    i: &mut Input<R>,
+    mut buf: &mut Vec<u8>,
+    bsize: usize,
+) -> std::io::Result<ReadStat> {
     // Local Helper Fns -------------------------------------------------
     fn perform_swab(buf: &mut [u8]) {
         for base in (1..buf.len()).step_by(2) {
@@ -609,14 +617,16 @@ fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> std::io::Result<(Read
     }
     // ------------------------------------------------------------------
     // Read
-    let mut buf = vec![BUF_INIT_BYTE; bsize];
+    // Resize the buffer to the bsize. Any garbage data in the buffer is overwritten or truncated, so there is no need to fill with BUF_INIT_BYTE first.
+    buf.resize(bsize, BUF_INIT_BYTE);
+
     let mut rstat = match i.cflags.sync {
         Some(ch) => i.fill_blocks(&mut buf, ch)?,
         _ => i.fill_consecutive(&mut buf)?,
     };
     // Return early if no data
     if rstat.reads_complete == 0 && rstat.reads_partial == 0 {
-        return Ok((rstat, buf));
+        return Ok(rstat);
     }
 
     // Perform any conv=x[,x...] options
@@ -626,10 +636,10 @@ fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> std::io::Result<(Read
 
     match i.cflags.mode {
         Some(ref mode) => {
-            let buf = conv_block_unblock_helper(buf, mode, &mut rstat);
-            Ok((rstat, buf))
+            *buf = conv_block_unblock_helper(buf.clone(), mode, &mut rstat);
+            Ok(rstat)
         }
-        None => Ok((rstat, buf)),
+        None => Ok(rstat),
     }
 }
 
