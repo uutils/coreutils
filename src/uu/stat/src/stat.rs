@@ -501,7 +501,7 @@ impl Stater {
             // mount points aren't displayed when showing filesystem information
             None
         } else {
-            let mut mount_list = read_fs_list()
+            let mut mount_list = read_fs_list()?
                 .iter()
                 .map(|mi| mi.mount_dir.clone())
                 .collect::<Vec<String>>();
