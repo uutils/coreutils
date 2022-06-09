@@ -606,7 +606,7 @@ impl Write for Output<io::Stdout> {
 /// Read helper performs read operations common to all dd reads, and dispatches the buffer to relevant helper functions as dictated by the operations requested by the user.
 fn read_helper<R: Read>(
     i: &mut Input<R>,
-    mut buf: &mut Vec<u8>,
+    buf: &mut Vec<u8>,
     bsize: usize,
 ) -> std::io::Result<ReadStat> {
     // Local Helper Fns -------------------------------------------------
@@ -621,8 +621,8 @@ fn read_helper<R: Read>(
     buf.resize(bsize, BUF_INIT_BYTE);
 
     let mut rstat = match i.cflags.sync {
-        Some(ch) => i.fill_blocks(&mut buf, ch)?,
-        _ => i.fill_consecutive(&mut buf)?,
+        Some(ch) => i.fill_blocks(buf, ch)?,
+        _ => i.fill_consecutive(buf)?,
     };
     // Return early if no data
     if rstat.reads_complete == 0 && rstat.reads_partial == 0 {
@@ -631,7 +631,7 @@ fn read_helper<R: Read>(
 
     // Perform any conv=x[,x...] options
     if i.cflags.swab {
-        perform_swab(&mut buf);
+        perform_swab(buf);
     }
 
     match i.cflags.mode {
