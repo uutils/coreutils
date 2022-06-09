@@ -346,15 +346,6 @@ where
         })
     }
 
-    /// Print the read/write statistics.
-    fn print_stats<R: Read>(&self, i: &Input<R>, prog_update: &ProgUpdate) {
-        match i.print_level {
-            Some(StatusLevel::None) => {}
-            Some(StatusLevel::Noxfer) => prog_update.print_io_lines(),
-            Some(StatusLevel::Progress) | None => prog_update.print_transfer_stats(),
-        }
-    }
-
     /// Flush the output to disk, if configured to do so.
     fn sync(&mut self) -> std::io::Result<()> {
         if self.cflags.fsync {
@@ -404,15 +395,17 @@ where
 
         // Start a thread that reports transfer progress.
         //
-        // When `status=progress` is given on the command-line, the
-        // `dd` program reports its progress every second or so. We
+        // The `dd` program reports its progress after every block is written,
+        // at most every 1 second, and only if `status=progress` is given on
+        // the command-line or a SIGUSR1 signal is received. We
         // perform this reporting in a new thread so as not to take
         // any CPU time away from the actual reading and writing of
         // data. We send a `ProgUpdate` from the transmitter `prog_tx`
         // to the receives `rx`, and the receiver prints the transfer
         // information.
         let (prog_tx, rx) = mpsc::channel();
-        thread::spawn(gen_prog_updater(rx, i.print_level));
+        let output_thread = thread::spawn(gen_prog_updater(rx, i.print_level));
+        let mut progress_as_secs = 0;
 
         // Create a common buffer with a capacity of the block size.
         // This is the max size needed.
@@ -437,7 +430,7 @@ where
             }
             let wstat_update = self.write_blocks(&buf)?;
 
-            // Update the read/write stats and inform the progress thread.
+            // Update the read/write stats and inform the progress thread once per second.
             //
             // If the receiver is disconnected, `send()` returns an
             // error. Since it is just reporting progress and is not
@@ -445,16 +438,23 @@ where
             // error.
             rstat += rstat_update;
             wstat += wstat_update;
-            let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed());
-            prog_tx.send(prog_update).unwrap_or(());
+            let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), false);
+            if prog_update.duration.as_secs() >= progress_as_secs {
+                progress_as_secs = prog_update.duration.as_secs() + 1;
+                prog_tx.send(prog_update).unwrap_or(());
+            }
         }
 
         // Flush the output, if configured to do so.
         self.sync()?;
 
         // Print the final read/write statistics.
-        let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed());
-        self.print_stats(&i, &prog_update);
+        let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), true);
+        prog_tx.send(prog_update).unwrap_or(());
+        // Wait for the output thread to finish
+        output_thread
+            .join()
+            .expect("Failed to join with the output thread.");
         Ok(())
     }
 }
