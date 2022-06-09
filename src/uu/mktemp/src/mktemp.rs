@@ -53,9 +53,14 @@ enum MkTempError {
     /// The template suffix contains a path separator (e.g. `"XXXa/b"`).
     SuffixContainsDirSeparator(String),
     InvalidTemplate(String),
+    TooManyTemplates,
 }
 
-impl UError for MkTempError {}
+impl UError for MkTempError {
+    fn usage(&self) -> bool {
+        matches!(self, Self::TooManyTemplates)
+    }
+}
 
 impl Error for MkTempError {}
 
@@ -85,6 +90,9 @@ impl Display for MkTempError {
                 "invalid template, {}; with --tmpdir, it may not be absolute",
                 s.quote()
             ),
+            TooManyTemplates => {
+                write!(f, "too many templates")
+            }
         }
     }
 }
@@ -308,11 +316,24 @@ impl Params {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let args = args.collect_str_lossy().accept_any();
+
+    let matches = uu_app().try_get_matches_from(&args)?;
 
     // Parse command-line options into a format suitable for the
     // application logic.
     let options = Options::from(&matches);
+
+    if env::var("POSIXLY_CORRECT").is_ok() {
+        // If POSIXLY_CORRECT was set, template MUST be the last argument.
+        if is_tmpdir_argument_actually_the_template(&matches) || matches.is_present(ARG_TEMPLATE) {
+            // Template argument was provided, check if was the last one.
+            if args.last().unwrap() != &options.template {
+                return Err(Box::new(MkTempError::TooManyTemplates));
+            }
+        }
+    }
+
     let dry_run = options.dry_run;
     let suppress_file_err = options.quiet;
     let make_dir = options.directory;
