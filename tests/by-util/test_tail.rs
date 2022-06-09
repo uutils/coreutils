@@ -1877,10 +1877,10 @@ fn test_follow_name_move_create2() {
         "9",
     ];
 
-    let delay = 300;
+    let mut delay = 500;
     for _ in 0..2 {
         let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
-        sleep(Duration::from_millis(100));
+        sleep(Duration::from_millis(delay));
 
         at.truncate("9", "x\n");
         sleep(Duration::from_millis(delay));
@@ -1916,6 +1916,7 @@ fn test_follow_name_move_create2() {
 
         at.remove("f");
         args.push("---disable-inotify");
+        delay = 2000;
     }
 }
 
