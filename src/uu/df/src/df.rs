@@ -15,7 +15,7 @@ use blocks::HumanReadable;
 use table::HeaderMode;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
-use uucore::error::{UError, UIoError, UResult, USimpleError};
+use uucore::error::{UError, UResult, USimpleError};
 use uucore::fsext::{read_fs_list, MountInfo};
 use uucore::parse_size::ParseSizeError;
 use uucore::{format_usage, show};
