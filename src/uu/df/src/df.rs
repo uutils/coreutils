@@ -448,7 +448,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err(error) => {
                     return Err(UIoError::new(
                         error.kind(),
-                        format!("cannot read table of mounted file systems"),
+                        "cannot read table of mounted file systems",
                     ));
                 }
             };
@@ -466,7 +466,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err(error) => {
                     return Err(UIoError::new(
                         error.kind(),
-                        format!("cannot read table of mounted file systems"),
+                        "cannot read table of mounted file systems",
                     ));
                 }
             };
