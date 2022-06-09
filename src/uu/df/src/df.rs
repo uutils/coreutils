@@ -14,6 +14,7 @@ mod table;
 use blocks::HumanReadable;
 use table::HeaderMode;
 use uucore::display::Quotable;
+use uucore::error::FromIo;
 use uucore::error::{UError, UIoError, UResult, USimpleError};
 use uucore::fsext::{read_fs_list, MountInfo};
 use uucore::parse_size::ParseSizeError;
@@ -443,15 +444,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Get the list of filesystems to display in the output table.
     let filesystems: Vec<Filesystem> = match matches.values_of(OPT_PATHS) {
         None => {
-            let filesystems = match get_all_filesystems(&opt) {
-                Ok(filesystems) => filesystems,
-                Err(error) => {
-                    return Err(UIoError::new(
-                        error.kind(),
-                        "cannot read table of mounted file systems",
-                    ));
-                }
-            };
+            let filesystems = get_all_filesystems(&opt)
+                .map_err_context(|| "cannot read table of mounted file systems".into())?;
 
             if filesystems.is_empty() {
                 return Err(USimpleError::new(1, "no file systems processed"));
@@ -461,15 +455,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         Some(paths) => {
             let paths: Vec<&str> = paths.collect();
-            let filesystems = match get_named_filesystems(&paths, &opt) {
-                Ok(filesystems) => filesystems,
-                Err(error) => {
-                    return Err(UIoError::new(
-                        error.kind(),
-                        "cannot read table of mounted file systems",
-                    ));
-                }
-            };
+            let filesystems = get_named_filesystems(&paths, &opt)
+                .map_err_context(|| "cannot read table of mounted file systems".into())?;
 
             // This can happen if paths are given as command-line arguments
             // but none of the paths exist.
