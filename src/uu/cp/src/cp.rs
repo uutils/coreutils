@@ -10,9 +10,6 @@
 
 // spell-checker:ignore (ToDO) ficlone linkgs lstat nlink nlinks pathbuf reflink strs xattrs symlinked
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-#[macro_use]
-extern crate ioctl_sys;
 #[macro_use]
 extern crate quick_error;
 #[macro_use]
@@ -60,9 +57,6 @@ use uucore::backup_control::{self, BackupMode};
 use uucore::error::{set_exit_code, ExitCode, UClapError, UError, UResult};
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use walkdir::WalkDir;
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-ioctl!(write ficlone with 0x94, 9; std::os::raw::c_int);
 
 quick_error! {
     #[derive(Debug)]
@@ -228,6 +222,16 @@ pub struct Options {
     target_dir: Option<String>,
     update: bool,
     verbose: bool,
+}
+
+// From /usr/include/linux/fs.h:
+// #define FICLONE		_IOW(0x94, 9, int)
+#[cfg(any(target_os = "linux", target_os = "android"))]
+// Use a macro as libc::ioctl expects u32 or u64 depending on the arch
+macro_rules! FICLONE {
+    () => {
+        0x40049409
+    };
 }
 
 static ABOUT: &str = "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
@@ -1567,7 +1571,8 @@ fn copy_on_write_linux(
         .context(context)?;
     match mode {
         ReflinkMode::Always => unsafe {
-            let result = ficlone(dst_file.as_raw_fd(), src_file.as_raw_fd() as *const i32);
+            let result = libc::ioctl(dst_file.as_raw_fd(), FICLONE!(), src_file.as_raw_fd());
+
             if result != 0 {
                 Err(format!(
                     "failed to clone {:?} from {:?}: {}",
@@ -1581,7 +1586,8 @@ fn copy_on_write_linux(
             }
         },
         ReflinkMode::Auto => unsafe {
-            let result = ficlone(dst_file.as_raw_fd(), src_file.as_raw_fd() as *const i32);
+            let result = libc::ioctl(dst_file.as_raw_fd(), FICLONE!(), src_file.as_raw_fd());
+
             if result != 0 {
                 fs::copy(source, dest).context(context)?;
             }
