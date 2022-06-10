@@ -570,7 +570,13 @@ impl Config {
 
         let width = match options.value_of(options::WIDTH) {
             Some(x) => match x.parse::<u16>() {
-                Ok(u) => u,
+                Ok(u) => {
+                    if u != 0 && x.starts_with('0') {
+                        return Err(LsError::InvalidLineWidth(x.into()).into());
+                    } else {
+                        u
+                    }
+                }
                 Err(_) => return Err(LsError::InvalidLineWidth(x.into()).into()),
             },
             None => match termsize::get() {
