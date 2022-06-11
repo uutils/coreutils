@@ -650,6 +650,15 @@ fn test_ls_width() {
             .stdout_only("test-width-1  test-width-2  test-width-3  test-width-4\n");
     }
 
+    for option in ["-w 06", "-w=06", "--width=06", "--width 06", "--wid=06"] {
+        scene
+            .ucmd()
+            .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
+            .fails()
+            .stderr_contains("invalid line width");
+    }
+
     scene
         .ucmd()
         .arg("-w=bad")
