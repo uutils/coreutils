@@ -118,10 +118,7 @@ impl ProgUpdate {
     /// let mut cursor = Cursor::new(vec![]);
     /// let rewrite = false;
     /// prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
-    /// assert_eq!(
-    ///     cursor.get_ref(),
-    ///     b"0 bytes (0 B, 0 B) copied, 1.0 s, 0 B/s\n"
-    /// );
+    /// assert_eq!(cursor.get_ref(), b"0 bytes copied, 1.0 s, 0 B/s\n");
     /// ```
     fn write_prog_line(&self, w: &mut impl Write, rewrite: bool) -> std::io::Result<()> {
         let btotal_metric = Byte::from_bytes(self.write_stat.bytes_total)
@@ -137,17 +134,38 @@ impl ProgUpdate {
 
         let btotal = self.write_stat.bytes_total;
         let duration = self.duration.as_secs_f64();
-        if rewrite {
+
+        // If we are rewriting the progress line, do write a carriage
+        // return (`\r`) at the beginning and don't write a newline
+        // (`\n`) at the end.
+        let (carriage_return, newline) = if rewrite { ("\r", "") } else { ("", "\n") };
+
+        // If the number of bytes written is sufficiently large, then
+        // print a more concise representation of the number, like
+        // "1.2 kB" and "1.0 KiB".
+        if btotal < 1000 {
             write!(
                 w,
-                "\r{} bytes ({}, {}) copied, {:.1} s, {}/s",
-                btotal, btotal_metric, btotal_bin, duration, transfer_rate
+                "{}{} bytes copied, {:.1} s, {}/s{}",
+                carriage_return, btotal, duration, transfer_rate, newline,
+            )
+        } else if btotal < 1024 {
+            write!(
+                w,
+                "{}{} bytes ({}) copied, {:.1} s, {}/s{}",
+                carriage_return, btotal, btotal_metric, duration, transfer_rate, newline,
             )
         } else {
-            writeln!(
+            write!(
                 w,
-                "{} bytes ({}, {}) copied, {:.1} s, {}/s",
-                btotal, btotal_metric, btotal_bin, duration, transfer_rate
+                "{}{} bytes ({}, {}) copied, {:.1} s, {}/s{}",
+                carriage_return,
+                btotal,
+                btotal_metric,
+                btotal_bin,
+                duration,
+                transfer_rate,
+                newline,
             )
         }
     }
@@ -176,10 +194,7 @@ impl ProgUpdate {
     /// let mut iter = cursor.get_ref().split(|v| *v == b'\n');
     /// assert_eq!(iter.next().unwrap(), b"0+0 records in");
     /// assert_eq!(iter.next().unwrap(), b"0+0 records out");
-    /// assert_eq!(
-    ///     iter.next().unwrap(),
-    ///     b"0 bytes (0 B, 0 B) copied, 1.0 s, 0 B/s"
-    /// );
+    /// assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1.0 s, 0 B/s");
     /// assert_eq!(iter.next().unwrap(), b"");
     /// assert!(iter.next().is_none());
     /// ```
@@ -437,6 +452,17 @@ mod tests {
 
     use super::{ProgUpdate, ReadStat, WriteStat};
 
+    fn prog_update_write(n: u128) -> ProgUpdate {
+        ProgUpdate {
+            read_stat: Default::default(),
+            write_stat: WriteStat {
+                bytes_total: n,
+                ..Default::default()
+            },
+            duration: Duration::new(1, 0), // one second
+        }
+    }
+
     #[test]
     fn test_read_stat_report() {
         let read_stat = ReadStat::new(1, 2, 3);
@@ -474,12 +500,7 @@ mod tests {
 
     #[test]
     fn test_prog_update_write_prog_line() {
-        let prog_update = ProgUpdate {
-            read_stat: Default::default(),
-            write_stat: Default::default(),
-            duration: Duration::new(1, 0), // one second
-        };
-
+        let prog_update = prog_update_write(0);
         let mut cursor = Cursor::new(vec![]);
         let rewrite = false;
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
@@ -489,9 +510,38 @@ mod tests {
         //     $ : | dd
         //     0 bytes copied, 7.9151e-05 s, 0.0 kB/s
         //
+        // The throughput still does not match GNU dd. For the ones
+        // that include the concise byte counts, the format is also
+        // not right.
+        assert_eq!(cursor.get_ref(), b"0 bytes copied, 1.0 s, 0 B/s\n");
+
+        let prog_update = prog_update_write(999);
+        let mut cursor = Cursor::new(vec![]);
+        prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
+        assert_eq!(cursor.get_ref(), b"999 bytes copied, 1.0 s, 0 B/s\n");
+
+        let prog_update = prog_update_write(1000);
+        let mut cursor = Cursor::new(vec![]);
+        prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
         assert_eq!(
             cursor.get_ref(),
-            b"0 bytes (0 B, 0 B) copied, 1.0 s, 0 B/s\n"
+            b"1000 bytes (1000 B) copied, 1.0 s, 1000 B/s\n"
+        );
+
+        let prog_update = prog_update_write(1023);
+        let mut cursor = Cursor::new(vec![]);
+        prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
+        assert_eq!(
+            cursor.get_ref(),
+            b"1023 bytes (1 KB) copied, 1.0 s, 1000 B/s\n"
+        );
+
+        let prog_update = prog_update_write(1024);
+        let mut cursor = Cursor::new(vec![]);
+        prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
+        assert_eq!(
+            std::str::from_utf8(cursor.get_ref()).unwrap(),
+            "1024 bytes (1 KB, 1024 B) copied, 1.0 s, 1000 B/s\n"
         );
     }
 
@@ -507,10 +557,7 @@ mod tests {
         let mut iter = cursor.get_ref().split(|v| *v == b'\n');
         assert_eq!(iter.next().unwrap(), b"0+0 records in");
         assert_eq!(iter.next().unwrap(), b"0+0 records out");
-        assert_eq!(
-            iter.next().unwrap(),
-            b"0 bytes (0 B, 0 B) copied, 1.0 s, 0 B/s"
-        );
+        assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1.0 s, 0 B/s");
         assert_eq!(iter.next().unwrap(), b"");
         assert!(iter.next().is_none());
     }
