@@ -163,6 +163,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::TABS)
                 .help("use comma separated LIST of tab positions or have tabs N characters apart instead of 8 (enables -a)")
                 .takes_value(true)
+                .value_name("N, LIST")
         )
         .arg(
             Arg::new(options::NO_UTF8)
