@@ -54,27 +54,6 @@ struct Options {
     output_bits: usize,
 }
 
-fn is_custom_binary(program: &str) -> bool {
-    matches!(
-        program,
-        "md5sum"
-            | "sha1sum"
-            | "sha224sum"
-            | "sha256sum"
-            | "sha384sum"
-            | "sha512sum"
-            | "sha3sum"
-            | "sha3-224sum"
-            | "sha3-256sum"
-            | "sha3-384sum"
-            | "sha3-512sum"
-            | "shake128sum"
-            | "shake256sum"
-            | "b2sum"
-            | "b3sum"
-    )
-}
-
 #[allow(clippy::cognitive_complexity)]
 fn detect_algo(
     program: &str,
@@ -374,11 +353,6 @@ pub fn uu_app_common<'a>() -> Command<'a> {
                 .help("create a BSD-style checksum"),
         )
         .arg(
-            Arg::new("no-names")
-                .long("no-names")
-                .help("Omits filenames in the output (option not present in GNU/Coreutils)"),
-        )
-        .arg(
             Arg::new("text")
                 .short('t')
                 .long("text")
@@ -408,16 +382,6 @@ pub fn uu_app_common<'a>() -> Command<'a> {
                 .long("warn")
                 .help("warn about improperly formatted checksum lines"),
         )
-        // Needed for variable-length output sums (e.g. SHAKE)
-        .arg(
-            Arg::new("bits")
-                .long("bits")
-                .help("set the size of the output (only for SHAKE)")
-                .takes_value(true)
-                .value_name("BITS")
-                // XXX: should we actually use validators?  they're not particularly efficient
-                .validator(is_valid_bit_num),
-        )
         .arg(
             Arg::new("FILE")
                 .index(1)
@@ -428,8 +392,37 @@ pub fn uu_app_common<'a>() -> Command<'a> {
         )
 }
 
+pub fn uu_app_b3sum<'a>() -> Command<'a> {
+    uu_app_b3sum_opts(uu_app_common())
+}
+
+fn uu_app_b3sum_opts(command: Command) -> Command {
+    command.arg(
+        Arg::new("no-names")
+            .long("no-names")
+            .help("Omits filenames in the output (option not present in GNU/Coreutils)"),
+    )
+}
+
+pub fn uu_app_bits<'a>() -> Command<'a> {
+    uu_app_opt_bits(uu_app_common())
+}
+
+fn uu_app_opt_bits(command: Command) -> Command {
+    // Needed for variable-length output sums (e.g. SHAKE)
+    command.arg(
+        Arg::new("bits")
+            .long("bits")
+            .help("set the size of the output (only for SHAKE)")
+            .takes_value(true)
+            .value_name("BITS")
+            // XXX: should we actually use validators?  they're not particularly efficient
+            .validator(is_valid_bit_num),
+    )
+}
+
 pub fn uu_app_custom<'a>() -> Command<'a> {
-    let mut command = uu_app_common();
+    let mut command = uu_app_b3sum_opts(uu_app_opt_bits(uu_app_common()));
     let algorithms = &[
         ("md5", "work with MD5"),
         ("sha1", "work with SHA1"),
@@ -463,10 +456,24 @@ pub fn uu_app_custom<'a>() -> Command<'a> {
 // hashsum is handled differently in build.rs, therefore this is not the same
 // as in other utilities.
 fn uu_app<'a>(binary_name: &str) -> Command<'a> {
-    if !is_custom_binary(binary_name) {
-        uu_app_custom()
-    } else {
-        uu_app_common()
+    match binary_name {
+        // These all support the same options.
+        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" => {
+            uu_app_common()
+        }
+        // b2sum supports the md5sum options plus -l/--length.
+        "b2sum" => uu_app_common(), // TODO: Implement -l/--length
+        // These have never been part of GNU Coreutils, but can function with the same
+        // options as md5sum.
+        "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum" => uu_app_common(),
+        // These have never been part of GNU Coreutils, and require an additional --bits
+        // option to specify their output size.
+        "sha3sum" | "shake128sum" | "shake256sum" => uu_app_bits(),
+        // b3sum has never been part of GNU Coreutils, and has a --no-names option in
+        // addition to the b2sum options.
+        "b3sum" => uu_app_b3sum(),
+        // We're probably just being called as `hashsum`, so give them everything.
+        _ => uu_app_custom(),
     }
 }
 

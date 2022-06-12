@@ -104,21 +104,25 @@ pub fn main() {
                 );
 
                 let map_value = format!("({krate}::uumain, {krate}::uu_app_common)", krate = krate);
+                let map_value_bits =
+                    format!("({krate}::uumain, {krate}::uu_app_bits)", krate = krate);
+                let map_value_b3sum =
+                    format!("({krate}::uumain, {krate}::uu_app_b3sum)", krate = krate);
                 phf_map.entry("md5sum", &map_value);
                 phf_map.entry("sha1sum", &map_value);
                 phf_map.entry("sha224sum", &map_value);
                 phf_map.entry("sha256sum", &map_value);
                 phf_map.entry("sha384sum", &map_value);
                 phf_map.entry("sha512sum", &map_value);
-                phf_map.entry("sha3sum", &map_value);
+                phf_map.entry("sha3sum", &map_value_bits);
                 phf_map.entry("sha3-224sum", &map_value);
                 phf_map.entry("sha3-256sum", &map_value);
                 phf_map.entry("sha3-384sum", &map_value);
                 phf_map.entry("sha3-512sum", &map_value);
-                phf_map.entry("shake128sum", &map_value);
-                phf_map.entry("shake256sum", &map_value);
+                phf_map.entry("shake128sum", &map_value_bits);
+                phf_map.entry("shake256sum", &map_value_bits);
                 phf_map.entry("b2sum", &map_value);
-                phf_map.entry("b3sum", &map_value);
+                phf_map.entry("b3sum", &map_value_b3sum);
                 tf.write_all(
                     format!(
                         "#[path=\"{dir}/test_{krate}.rs\"]\nmod test_{krate};\n",
