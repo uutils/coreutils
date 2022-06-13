@@ -31,7 +31,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     if let Some(values) = matches.values_of(options::NUMBER) {
         let numbers = values.collect::<Vec<_>>();
