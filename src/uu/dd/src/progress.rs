@@ -168,7 +168,8 @@ impl ProgUpdate {
     /// This is a convenience method that calls
     /// [`ProgUpdate::write_io_lines`] and
     /// [`ProgUpdate::write_prog_line`] in that order. The information
-    /// is written to `w`.
+    /// is written to `w`. It optionally begins by writing a new line,
+    /// intended to handle the case of an existing progress line.
     ///
     /// # Examples
     ///
@@ -183,7 +184,7 @@ impl ProgUpdate {
     ///     duration: Duration::new(1, 0), // one second
     /// };
     /// let mut cursor = Cursor::new(vec![]);
-    /// prog_update.write_transfer_stats(&mut cursor).unwrap();
+    /// prog_update.write_transfer_stats(&mut cursor, false).unwrap();
     /// let mut iter = cursor.get_ref().split(|v| *v == b'\n');
     /// assert_eq!(iter.next().unwrap(), b"0+0 records in");
     /// assert_eq!(iter.next().unwrap(), b"0+0 records out");
