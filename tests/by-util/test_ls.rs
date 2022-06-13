@@ -804,6 +804,30 @@ fn test_ls_commas() {
 }
 
 #[test]
+fn test_ls_commas_trailing() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(&at.plus_as_string("test-commas-trailing-2"));
+
+    at.touch(&at.plus_as_string("test-commas-trailing-1"));
+    at.append(
+        "test-commas-trailing-1",
+        &(0..2000)
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+
+    scene
+        .ucmd()
+        .arg("-sm")
+        .arg("./test-commas-trailing-1")
+        .arg("./test-commas-trailing-2")
+        .succeeds()
+        .stdout_matches(&Regex::new(r"\S$").unwrap()); // matches if there is no whitespace at the end of stdout.
+}
+
+#[test]
 fn test_ls_long() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
