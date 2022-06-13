@@ -1,3 +1,5 @@
+<!-- spell-checker:ignore maximises -->
+
 # Benchmarking dd
 
 `dd` is a utility used for copying and converting files. It is often used for
