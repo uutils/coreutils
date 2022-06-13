@@ -66,7 +66,6 @@ if test -f gnu-built; then
     echo "GNU build already found. Skip"
     echo "'rm -f $(pwd)/gnu-built' to force the build"
     echo "Note: the customization of the tests will still happen"
-    exit 0
 else
     ./bootstrap
     ./configure --quiet --disable-gcc-warnings
