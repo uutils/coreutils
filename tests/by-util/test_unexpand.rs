@@ -155,3 +155,31 @@ fn unexpand_read_from_two_file() {
         .run()
         .success();
 }
+
+#[test]
+fn test_tabs_cannot_be_zero() {
+    new_ucmd!()
+        .arg("--tabs=0")
+        .fails()
+        .stderr_contains("tab size cannot be 0");
+}
+
+#[test]
+fn test_tabs_must_be_ascending() {
+    new_ucmd!()
+        .arg("--tabs=1,1")
+        .fails()
+        .stderr_contains("tab sizes must be ascending");
+}
+
+#[test]
+fn test_tabs_with_invalid_chars() {
+    new_ucmd!()
+        .arg("--tabs=x")
+        .fails()
+        .stderr_contains("tab size contains invalid character(s): 'x'");
+    new_ucmd!()
+        .arg("--tabs=1x2")
+        .fails()
+        .stderr_contains("tab size contains invalid character(s): 'x2'");
+}

@@ -402,6 +402,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
+    let delimiter_is_equal = args.contains(&"-d=".to_string()); // special case
     let matches = uu_app().get_matches_from(args);
 
     let complement = matches.is_present(options::COMPLEMENT);
@@ -460,11 +461,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         // GNU's `cut` supports `-d=` to set the delimiter to `=`.
                         // Clap parsing is limited in this situation, see:
                         // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
-                        // Since clap parsing handles `-d=` as delimiter explicitly set to "" and
-                        // an empty delimiter is not accepted by GNU's `cut` (and makes no sense),
-                        // we can use this as basis for a simple workaround:
-                        if delim.is_empty() {
+                        if delimiter_is_equal {
                             delim = "=";
+                        } else if delim == "''" {
+                            // treat `''` as empty delimiter
+                            delim = "";
                         }
                         if delim.chars().count() > 1 {
                             Err("invalid input: The '--delimiter' ('-d') option expects empty or 1 character long, but was provided a value 2 characters or longer".into())

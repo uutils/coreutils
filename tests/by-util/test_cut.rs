@@ -172,10 +172,28 @@ fn test_directory_and_no_such_file() {
 }
 
 #[test]
-fn test_equal_as_delimiter() {
+fn test_equal_as_delimiter1() {
     new_ucmd!()
         .args(&["-f", "2", "-d="])
         .pipe_in("--dir=./out/lib")
         .succeeds()
         .stdout_only("./out/lib\n");
+}
+
+#[test]
+fn test_equal_as_delimiter2() {
+    new_ucmd!()
+        .args(&["-f2", "--delimiter="])
+        .pipe_in("a=b\n")
+        .succeeds()
+        .stdout_only("a=b\n");
+}
+
+#[test]
+fn test_equal_as_delimiter3() {
+    new_ucmd!()
+        .args(&["-f", "1,2", "-d", "''", "--output-delimiter=Z"])
+        .pipe_in("ab\0cd\n")
+        .succeeds()
+        .stdout_only_bytes("abZcd\n");
 }
