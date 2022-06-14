@@ -569,10 +569,20 @@ impl Config {
         };
 
         let width = match options.value_of(options::WIDTH) {
-            Some(x) => match x.parse::<u16>() {
-                Ok(u) => u,
-                Err(_) => return Err(LsError::InvalidLineWidth(x.into()).into()),
-            },
+            Some(x) => {
+                if x.starts_with('0') && x.len() > 1 {
+                    // Read number as octal
+                    match u16::from_str_radix(x, 8) {
+                        Ok(v) => v,
+                        Err(_) => return Err(LsError::InvalidLineWidth(x.into()).into()),
+                    }
+                } else {
+                    match x.parse::<u16>() {
+                        Ok(u) => u,
+                        Err(_) => return Err(LsError::InvalidLineWidth(x.into()).into()),
+                    }
+                }
+            }
             None => match termsize::get() {
                 Some(size) => size.cols,
                 None => match std::env::var_os("COLUMNS") {
