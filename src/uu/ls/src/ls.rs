@@ -1874,7 +1874,12 @@ fn display_additional_leading_info(
         } else {
             "?".to_owned()
         };
-        write!(result, "{} ", pad_left(&s, padding.block_size)).unwrap();
+        // extra space is insert to align the sizes, as needed for all formats, except for the comma format.
+        if config.format == Format::Commas {
+            write!(result, "{} ", s).unwrap();
+        } else {
+            write!(result, "{} ", pad_left(&s, padding.block_size)).unwrap();
+        };
     }
     Ok(result)
 }
