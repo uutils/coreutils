@@ -1889,7 +1889,7 @@ fn test_follow_truncate_fast() {
 
 #[test]
 #[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
-fn test_follow_name_move_create() {
+fn test_follow_name_move_create1() {
     // This test triggers a move/create event while `tail --follow=name file` is running.
     // ((sleep 2 && mv file backup && sleep 2 && cp backup file &)>/dev/null 2>&1 &) ; tail --follow=name file
 
@@ -2115,17 +2115,13 @@ fn test_follow_name_move2() {
 
         args.push("--use-polling");
         delay *= 3;
-        // TODO: [2022-06; jhscheer] remove break when `Notify::PollWatcher` supports renaming
-        if delay == 1500 {
-            break;
-        }
     }
 }
 
 #[test]
 #[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
-fn test_follow_name_move_retry() {
-    // Similar to test_follow_name_move but with `--retry` (`-F`)
+fn test_follow_name_move_retry1() {
+    // Similar to test_follow_name_move1 but with `--retry` (`-F`)
     // This test triggers two move/rename events while `tail --follow=name --retry file` is running.
 
     let ts = TestScenario::new(util_name!());
@@ -2171,6 +2167,94 @@ fn test_follow_name_move_retry() {
         at.remove(source);
         args.pop();
         delay /= 3;
+    }
+}
+#[test]
+#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
+fn test_follow_name_move_retry2() {
+    // inspired by: "gnu/tests/tail-2/F-vs-rename.sh"
+    // Similar to test_follow_name_move2 (move to a name that's already monitored)
+    // but with `--retry` (`-F`)
+
+    /*
+    $ touch a b
+    $ ((sleep 1; echo x > a; mv a b; echo x2 > a; echo y >> b; echo z >> a  &)>/dev/null 2>&1 &) ; tail -F a b
+    ==> a <==
+
+    ==> b <==
+
+    ==> a <==
+    x
+    tail: 'a' has become inaccessible: No such file or directory
+    tail: 'b' has been replaced;  following new file
+
+    ==> b <==
+    x
+    tail: 'a' has appeared;  following new file
+
+    ==> a <==
+    x2
+
+    ==> b <==
+    y
+
+    ==> a <==
+    z
+    */
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let file1 = "a";
+    let file2 = "b";
+
+    let expected_stdout = format!(
+        "==> {0} <==\n\n==> {1} <==\n\n==> {0} <==\nx\n\n==> {1} <==\
+            \nx\n\n==> {0} <==\nx2\n\n==> {1} <==\ny\n\n==> {0} <==\nz\n",
+        file1, file2
+    );
+    let expected_stderr = format!(
+        "{0}: '{1}' has become inaccessible: No such file or directory\n\
+            {0}: '{2}' has been replaced;  following new file\n\
+            {0}: '{1}' has appeared;  following new file\n",
+        ts.util_name, file1, file2
+    );
+
+    let mut args = vec!["-s.1", "--max-unchanged-stats=1", "-F", file1, file2];
+
+    let mut delay = 500;
+    for _ in 0..2 {
+        at.touch(file1);
+        at.touch(file2);
+
+        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+        sleep(Duration::from_millis(delay));
+
+        at.truncate(file1, "x\n");
+        sleep(Duration::from_millis(delay));
+
+        at.rename(file1, file2);
+        sleep(Duration::from_millis(delay));
+
+        at.truncate(file1, "x2\n");
+        sleep(Duration::from_millis(delay));
+
+        at.append(file2, "y\n");
+        sleep(Duration::from_millis(delay));
+
+        at.append(file1, "z\n");
+        sleep(Duration::from_millis(delay));
+
+        p.kill().unwrap();
+
+        let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+        assert_eq!(buf_stdout, expected_stdout);
+        assert_eq!(buf_stderr, expected_stderr);
+
+        at.remove(file1);
+        at.remove(file2);
+        args.push("--use-polling");
+        delay *= 3;
     }
 }
 
