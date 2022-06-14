@@ -67,6 +67,7 @@ pub mod text {
     pub static STDIN_HEADER: &str = "standard input";
     pub static NO_FILES_REMAINING: &str = "no files remaining";
     pub static NO_SUCH_FILE: &str = "No such file or directory";
+    pub static BECOME_INACCESSIBLE: &str = "has become inaccessible";
     pub static BAD_FD: &str = "Bad file descriptor";
     #[cfg(target_os = "linux")]
     pub static BACKEND: &str = "inotify";
@@ -259,6 +260,22 @@ impl Settings {
 
         Ok(settings)
     }
+
+    fn follow_descriptor(&self) -> bool {
+        self.follow == Some(FollowMode::Descriptor)
+    }
+
+    fn follow_name(&self) -> bool {
+        self.follow == Some(FollowMode::Name)
+    }
+
+    fn follow_descriptor_retry(&self) -> bool {
+        self.follow_descriptor() && self.retry
+    }
+
+    fn follow_name_retry(&self) -> bool {
+        self.follow_name() && self.retry
+    }
 }
 
 #[uucore::main]
@@ -278,9 +295,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
     let dash = PathBuf::from(text::DASH);
 
     // Mimic GNU's tail for `tail -F` and exit immediately
-    if (settings.paths.is_empty() || settings.paths.contains(&dash))
-        && settings.follow == Some(FollowMode::Name)
-    {
+    if (settings.paths.is_empty() || settings.paths.contains(&dash)) && settings.follow_name() {
         return Err(USimpleError::new(
             1,
             format!("cannot follow {} by name", text::DASH.quote()),
@@ -320,7 +335,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
         let path_is_tailable = path.is_tailable();
 
         if !path.is_stdin() && !path_is_tailable {
-            if settings.follow == Some(FollowMode::Descriptor) && settings.retry {
+            if settings.follow_descriptor_retry() {
                 show_warning!("--retry only effective for the initial open");
             }
 
@@ -364,7 +379,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                         msg
                     );
                 }
-                if !(settings.follow == Some(FollowMode::Name) && settings.retry) {
+                if !(settings.follow_name_retry()) {
                     // skip directory if not retry
                     continue;
                 }
@@ -385,7 +400,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
             let mut reader = BufReader::new(stdin());
             if !stdin_is_bad_fd() {
                 unbounded_tail(&mut reader, &settings)?;
-                if settings.follow == Some(FollowMode::Descriptor) {
+                if settings.follow_descriptor() {
                     // Insert `stdin` into `files.map`
                     files.insert(
                         &path,
@@ -651,27 +666,31 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
 
     let (tx, rx) = channel();
 
-    // Watcher is implemented per platform using the best implementation available on that
-    // platform. In addition to such event driven implementations, a polling implementation
-    // is also provided that should work on any platform.
-    // Linux / Android: inotify
-    // macOS: FSEvents / kqueue
-    // Windows: ReadDirectoryChangesWatcher
-    // FreeBSD / NetBSD / OpenBSD / DragonflyBSD: kqueue
-    // Fallback: polling every n seconds
+    /*
+    Watcher is implemented per platform using the best implementation available on that
+    platform. In addition to such event driven implementations, a polling implementation
+    is also provided that should work on any platform.
+    Linux / Android: inotify
+    macOS: FSEvents / kqueue
+    Windows: ReadDirectoryChangesWatcher
+    FreeBSD / NetBSD / OpenBSD / DragonflyBSD: kqueue
+    Fallback: polling every n seconds
 
-    // NOTE:
-    // We force the use of kqueue with: features=["macos_kqueue"].
-    // On macOS only `kqueue` is suitable for our use case because `FSEvents`
-    // waits for file close util it delivers a modify event. See:
-    // https://github.com/notify-rs/notify/issues/240
+    NOTE:
+    We force the use of kqueue with: features=["macos_kqueue"].
+    On macOS only `kqueue` is suitable for our use case because `FSEvents`
+    waits for file close util it delivers a modify event. See:
+    https://github.com/notify-rs/notify/issues/240
+    */
 
     let mut watcher: Box<dyn Watcher>;
     let watcher_config = notify::poll::PollWatcherConfig {
-        // NOTE: Value decreased to accommodate for discrepancies. Divisor chosen
-        // empirically in order to pass timing sensitive GNU test-suite checks.
-        // Without this adjustment and when polling, i.e. `---disable-inotify`,
-        // we're too slow to pick up every event that GNU's tail is picking up.
+        /*
+        NOTE: Value decreased to accommodate for discrepancies. Divisor chosen
+        empirically in order to pass timing sensitive GNU test-suite checks.
+        Without this adjustment and when polling, i.e. `---disable-inotify`,
+        we're too slow to pick up every event that GNU's tail is picking up.
+        */
         poll_interval: settings.sleep_sec / 10,
         ..Default::default()
     };
@@ -683,9 +702,12 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
         match notify::RecommendedWatcher::new(tx) {
             Ok(w) => watcher = Box::new(w),
             Err(e) if e.to_string().starts_with("Too many open files") => {
-                // NOTE: This ErrorKind is `Uncategorized`, but it is not recommended to match an error against `Uncategorized`
-                // NOTE: Could be tested with decreasing `max_user_instances`, e.g.:
-                // `sudo sysctl fs.inotify.max_user_instances=64`
+                /*
+                NOTE: This ErrorKind is `Uncategorized`, but it is not recommended
+                to match an error against `Uncategorized`
+                NOTE: Could be tested with decreasing `max_user_instances`, e.g.:
+                `sudo sysctl fs.inotify.max_user_instances=64`
+                */
                 show_error!(
                     "{} cannot be used, reverting to polling: Too many open files",
                     text::BACKEND
@@ -706,21 +728,12 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
     let mut orphans = Vec::new();
     for path in files.keys() {
         if path.is_tailable() {
-            // TODO: [2022-05; jhscheer] also add `file` (not just parent) to please
-            // "gnu/tests/tail-2/inotify-rotate-resourced.sh" because it is looking
-            // for syscalls: 2x "inotify_add_watch" and 1x "inotify_rm_watch"
-            let path = path.watchable(settings);
-            watcher
-                .watch(&path.canonicalize()?, RecursiveMode::NonRecursive)
-                .unwrap();
+            watcher.watch_with_parent(path)?;
         } else if settings.follow.is_some() && settings.retry {
             if path.is_orphan() {
                 orphans.push(path.to_owned());
             } else {
-                let parent = path.parent().unwrap();
-                watcher
-                    .watch(&parent.canonicalize()?, RecursiveMode::NonRecursive)
-                    .unwrap();
+                watcher.watch_with_parent(path.parent().unwrap())?;
             }
         } else {
             // TODO: [2022-05; jhscheer] do we need to handle this case?
@@ -740,7 +753,7 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
         // If a path becomes an orphan during runtime, it will be added to orphans.
         // To be able to differentiate between the cases of test_retry8 and test_retry9,
         // here paths will not be removed from orphans if the path becomes available.
-        if settings.retry && settings.follow == Some(FollowMode::Name) {
+        if settings.follow_name_retry() {
             for new_path in &orphans {
                 if new_path.exists() {
                     let pd = files.get(new_path);
@@ -750,45 +763,10 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
                             "{} has appeared;  following new file",
                             pd.display_name.quote()
                         );
-                        if let Ok(new_path_canonical) = new_path.canonicalize() {
-                            files.update_metadata(&new_path_canonical, Some(md));
-                            files.update_reader(&new_path_canonical)?;
-                            read_some = files.tail_file(&new_path_canonical, settings.verbose)?;
-                            let new_path = new_path_canonical.watchable(settings);
-                            watcher
-                                .watch(&new_path, RecursiveMode::NonRecursive)
-                                .unwrap();
-                        } else {
-                            unreachable!();
-                        }
-                    }
-                }
-            }
-        }
-
-        // NOTE: This is a workaround because PollWatcher tends to miss events.
-        // e.g. `echo "X1" > missing ; sleep 0.1 ; echo "X" > missing ;` should trigger a
-        // truncation event, but PollWatcher doesn't recognize it.
-        // This is relevant to pass, e.g.: "gnu/tests/tail-2/truncate.sh"
-        // TODO: [2022-06; jhscheer] maybe use `--max-unchanged-stats` here to reduce fstat calls?
-        if settings.use_polling && settings.follow.is_some() {
-            for path in &files
-                .keys()
-                .filter(|p| p.is_tailable())
-                .map(|p| p.to_path_buf())
-                .collect::<Vec<PathBuf>>()
-            {
-                if let Ok(new_md) = path.metadata() {
-                    let pd = files.get(path);
-                    if let Some(old_md) = &pd.metadata {
-                        if old_md.is_tailable()
-                            && new_md.is_tailable()
-                            && old_md.got_truncated(&new_md)?
-                        {
-                            show_error!("{}: file truncated", pd.display_name.display());
-                            files.update_metadata(path, Some(new_md));
-                            files.update_reader(path)?;
-                        }
+                        files.update_metadata(new_path, Some(md));
+                        files.update_reader(new_path)?;
+                        read_some = files.tail_file(new_path, settings.verbose)?;
+                        watcher.watch_with_parent(new_path)?;
                     }
                 }
             }
@@ -801,13 +779,16 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
             _event_counter += 1;
             _timeout_counter = 0;
         }
+        if settings.use_polling {
+            manual_polling(files, &settings);
+        }
 
         let mut paths = vec![]; // Paths worth checking for new content to print
         match rx_result {
             Ok(Ok(event)) => {
                 if let Some(event_path) = event.paths.first() {
-                    assert!(event_path.is_absolute());
                     if files.contains_key(event_path) {
+
                         // Handle Event if it is about a path that we are monitoring
                         paths = handle_event(&event, files, settings, &mut watcher, &mut orphans)?;
                     }
@@ -857,20 +838,56 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
         }
 
         if _timeout_counter == settings.max_unchanged_stats {
-            // TODO: [2021-10; jhscheer] implement timeout_counter for each file.
-            // ‘--max-unchanged-stats=n’
-            // When tailing a file by name, if there have been n (default n=5) consecutive iterations
-            // for which the file has not changed, then open/fstat the file to determine if that file
-            // name is still associated with the same device/inode-number pair as before. When
-            // following a log file that is rotated, this is approximately the number of seconds
-            // between when tail prints the last pre-rotation lines and when it prints the lines that
-            // have accumulated in the new log file. This option is meaningful only when polling
-            // (i.e., without inotify) and when following by name.
-            // TODO: [2021-10; jhscheer] `--sleep-interval=N`: implement: if `--pid=p`,
-            // tail checks whether process p is alive at least every N seconds
+            /*
+            TODO: [2021-10; jhscheer] implement timeout_counter for each file.
+            ‘--max-unchanged-stats=n’
+            When tailing a file by name, if there have been n (default n=5) consecutive iterations
+            for which the file has not changed, then open/fstat the file to determine if that file
+            name is still associated with the same device/inode-number pair as before. When
+            following a log file that is rotated, this is approximately the number of seconds
+            between when tail prints the last pre-rotation lines and when it prints the lines that
+            have accumulated in the new log file. This option is meaningful only when polling
+            (i.e., without inotify) and when following by name.
+            TODO: [2021-10; jhscheer] `--sleep-interval=N`: implement: if `--pid=p`,
+            tail checks whether process p is alive at least every N seconds
+            */
         }
     }
     Ok(())
+}
+
+fn manual_polling(files: &mut FileHandling, settings: &Settings) {
+    if settings.follow.is_some() {
+        for path in &files
+            .keys()
+            .map(|p| p.to_path_buf())
+            .collect::<Vec<PathBuf>>()
+        {
+            if !path.exists() && settings.retry {
+                let pd = files.get(path);
+                if let Some(old_md) = &pd.metadata {
+                    if old_md.is_tailable() && pd.reader.is_some() {
+                        /*
+                        NOTE: This is a workaround to pass: "gnu/tests/tail-2/F-vs-rename.sh"
+                        For `mv a b` `notify::PollWatcher` handles events for b first, then a.
+                        However, `F-vs-rename` requires the handling of events vice versa,
+                        i.e. this test requires that "has [..] replaced/inaccessible" is
+                        shown before new content is printed.
+                        Without this `mv a b` would result in the contents of b being
+                        printed before the "a has become inaccessible" message is shown.
+                        */
+                        show_error!(
+                            "{} {}: {}",
+                            pd.display_name.quote(),
+                            text::BECOME_INACCESSIBLE,
+                            text::NO_SUCH_FILE
+                        );
+                        files.reset_reader(path);
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn handle_event(
@@ -906,7 +923,9 @@ fn handle_event(
                             } else if pd.reader.is_none() {
                                 show_error!( "{} has appeared;  following new file", display_name.quote());
                                 files.update_reader(event_path)?;
-                            } else if event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To)) {
+                            } else if event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To))
+                            || (settings.use_polling
+                            && !old_md.ino().eq(&new_md.ino())) {
                                 show_error!( "{} has been replaced;  following new file", display_name.quote());
                                 files.update_reader(event_path)?;
                             } else if old_md.got_truncated(&new_md)? {
@@ -929,7 +948,7 @@ fn handle_event(
                             files.update_reader(event_path)?;
                             paths.push(event_path.to_owned());
                         } else if settings.retry {
-                            if settings.follow == Some(FollowMode::Descriptor) {
+                            if settings.follow_descriptor() {
                                 show_error!(
                                     "{} has been replaced with an untailable file; giving up on this name",
                                     display_name.quote()
@@ -952,13 +971,14 @@ fn handle_event(
         EventKind::Remove(RemoveKind::File | RemoveKind::Any)
             // | EventKind::Modify(ModifyKind::Name(RenameMode::Any))
             | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
-                if settings.follow == Some(FollowMode::Name) {
+                if settings.follow_name() {
                     if settings.retry {
                         if let Some(old_md) = files.get_mut_metadata(event_path) {
-                            if old_md.is_tailable() {
+                            if old_md.is_tailable() && files.get(event_path).reader.is_some() {
                                 show_error!(
-                                    "{} has become inaccessible: {}",
+                                    "{} {}: {}",
                                     display_name.quote(),
+                                    text::BECOME_INACCESSIBLE,
                                     text::NO_SUCH_FILE
                                 );
                             }
@@ -980,41 +1000,43 @@ fn handle_event(
                         }
                     }
                     files.reset_reader(event_path);
-                } else if settings.follow == Some(FollowMode::Descriptor) && settings.retry {
+                } else if settings.follow_descriptor_retry() {
                     // --retry only effective for the initial open
                     let _ = watcher.unwatch(event_path);
                     files.remove(event_path);
                 } else if settings.use_polling && event.kind == EventKind::Remove(RemoveKind::Any) {
-                    // BUG:
-                    // The watched file was removed. Since we're using Polling, this
-                    // could be a rename. We can't tell because `notify::PollWatcher` doesn't
-                    // recognize renames properly.
-                    // Ideally we want to call seek to offset 0 on the file handle.
-                    // But because we only have access to `PathData::reader` as `BufRead`,
-                    // we cannot seek to 0 with `BufReader::seek_relative`.
-                    // Also because we don't have the new name, we cannot work around this
-                    // by simply reopening the file.
+                    /*
+                    BUG: The watched file was removed. Since we're using Polling, this
+                    could be a rename. We can't tell because `notify::PollWatcher` doesn't
+                    recognize renames properly.
+                    Ideally we want to call seek to offset 0 on the file handle.
+                    But because we only have access to `PathData::reader` as `BufRead`,
+                    we cannot seek to 0 with `BufReader::seek_relative`.
+                    Also because we don't have the new name, we cannot work around this
+                    by simply reopening the file.
+                    */
                 }
             }
         EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
-            // NOTE: For `tail -f a`, keep tracking additions to b after `mv a b`
-            // (gnu/tests/tail-2/descriptor-vs-rename.sh)
-            // NOTE: The File/BufReader doesn't need to be updated.
-            // However, we need to update our `files.map`.
-            // This can only be done for inotify, because this EventKind does not
-            // trigger for the PollWatcher.
-            // BUG: As a result, there's a bug if polling is used:
-            // $ tail -f file_a ---disable-inotify
-            // $ mv file_a file_b
-            // $ echo A >> file_b
-            // $ echo A >> file_a
-            // The last append to file_a is printed, however this shouldn't be because
-            // after the "mv" tail should only follow "file_b".
-            // TODO: [2022-05; jhscheer] add test for this bug
+            /*
+            NOTE: For `tail -f a`, keep tracking additions to b after `mv a b`
+            (gnu/tests/tail-2/descriptor-vs-rename.sh)
+            NOTE: The File/BufReader doesn't need to be updated.
+            However, we need to update our `files.map`.
+            This can only be done for inotify, because this EventKind does not
+            trigger for the PollWatcher.
+            BUG: As a result, there's a bug if polling is used:
+            $ tail -f file_a ---disable-inotify
+            $ mv file_a file_b
+            $ echo A >> file_b
+            $ echo A >> file_a
+            The last append to file_a is printed, however this shouldn't be because
+            after the "mv" tail should only follow "file_b".
+            TODO: [2022-05; jhscheer] add test for this bug
+            */
 
-            if settings.follow == Some(FollowMode::Descriptor) {
+            if settings.follow_descriptor() {
                 let new_path = event.paths.last().unwrap();
-                assert!(new_path.is_absolute());
                 paths.push(new_path.to_owned()); // TODO: [2022-06; jhscheer] still necessary?
                 // Open new file and seek to End:
                 let mut file = File::open(&new_path)?;
@@ -1033,13 +1055,7 @@ fn handle_event(
                 files.remove(event_path);
                 // Unwatch old path and watch new path
                 let _ = watcher.unwatch(event_path);
-                let new_path = new_path.watchable(settings);
-                watcher
-                    .watch(
-                        &new_path.canonicalize()?,
-                        RecursiveMode::NonRecursive,
-                    )
-                    .unwrap();
+                watcher.watch_with_parent(new_path)?;
             }
         }
         _ => {}
@@ -1097,7 +1113,12 @@ mod files {
             self.map.get(&Self::canonicalize_path(k)).unwrap()
         }
 
-        // Canonicalize `path` if it is not already an absolute path
+        /// Wrapper for HashMap::get_mut using Path::canonicalize
+        pub fn get_mut(&mut self, k: &Path) -> &mut PathData {
+            self.map.get_mut(&Self::canonicalize_path(k)).unwrap()
+        }
+
+        /// Canonicalize `path` if it is not already an absolute path
         fn canonicalize_path(path: &Path) -> PathBuf {
             if path.is_relative() && !path.is_stdin() {
                 if let Ok(p) = path.canonicalize() {
@@ -1108,11 +1129,11 @@ mod files {
         }
 
         pub fn get_display_name(&self, path: &Path) -> PathBuf {
-            self.map.get(path).unwrap().display_name.to_owned()
+            self.get(path).display_name.to_owned()
         }
 
         pub fn get_mut_metadata(&mut self, path: &Path) -> Option<&Metadata> {
-            self.map.get_mut(path).unwrap().metadata.as_ref()
+            self.get_mut(path).metadata.as_ref()
         }
 
         pub fn keys(&self) -> Keys<PathBuf, PathData> {
@@ -1149,27 +1170,26 @@ mod files {
 
         /// Set `reader` to None to indicate that `path` is not an existing file anymore.
         pub fn reset_reader(&mut self, path: &Path) {
-            assert!(self.map.contains_key(path));
-            self.map.get_mut(path).unwrap().reader = None;
+            self.get_mut(path).reader = None;
         }
 
         /// Reopen the file at the monitored `path`
         pub fn update_reader(&mut self, path: &Path) -> UResult<()> {
-            assert!(self.map.contains_key(path));
-            // BUG:
-            // If it's not necessary to reopen a file, GNU's tail calls seek to offset 0.
-            // However we can't call seek here because `BufRead` does not implement `Seek`.
-            // As a workaround we always reopen the file even though this might not always
-            // be necessary.
-            self.map.get_mut(path).unwrap().reader =
-                Some(Box::new(BufReader::new(File::open(&path)?)));
+            /*
+            BUG: If it's not necessary to reopen a file, GNU's tail calls seek to offset 0.
+            However we can't call seek here because `BufRead` does not implement `Seek`.
+            As a workaround we always reopen the file even though this might not always
+            be necessary.
+            */
+            self.get_mut(path)
+                .reader
+                .replace(Box::new(BufReader::new(File::open(&path)?)));
             Ok(())
         }
 
         /// Reload metadata from `path`, or `metadata`
         pub fn update_metadata(&mut self, path: &Path, metadata: Option<Metadata>) {
-            assert!(self.map.contains_key(path));
-            self.map.get_mut(path).unwrap().metadata = if metadata.is_some() {
+            self.get_mut(path).metadata = if metadata.is_some() {
                 metadata
             } else {
                 path.metadata().ok()
@@ -1178,9 +1198,8 @@ mod files {
 
         /// Read `path` from the current seek position forward
         pub fn read_file(&mut self, path: &Path, buffer: &mut Vec<u8>) -> UResult<bool> {
-            assert!(self.map.contains_key(path));
             let mut read_some = false;
-            let pd = self.map.get_mut(path).unwrap().reader.as_mut();
+            let pd = self.get_mut(path).reader.as_mut();
             if let Some(reader) = pd {
                 loop {
                     match reader.read_until(b'\n', buffer) {
@@ -1214,7 +1233,7 @@ mod files {
                 }
                 self.print_file(&buffer)?;
 
-                self.last = Some(path.to_owned());
+                self.last.replace(path.to_owned());
                 self.update_metadata(path, None);
             }
             Ok(read_some)
@@ -1243,7 +1262,7 @@ mod files {
 
         /// Wrapper for `PathData::display_name`
         pub fn display_name(&self, path: &Path) -> String {
-            if let Some(path) = self.map.get(path) {
+            if let Some(path) = self.map.get(&Self::canonicalize_path(path)) {
                 path.display_name.display().to_string()
             } else {
                 path.display().to_string()
@@ -1571,7 +1590,6 @@ trait PathExtTail {
     fn is_stdin(&self) -> bool;
     fn is_orphan(&self) -> bool;
     fn is_tailable(&self) -> bool;
-    fn watchable(&self, settings: &Settings) -> PathBuf;
 }
 
 impl PathExtTail for Path {
@@ -1590,30 +1608,47 @@ impl PathExtTail for Path {
     fn is_tailable(&self) -> bool {
         self.is_file() || self.exists() && self.metadata().unwrap().is_tailable()
     }
+}
 
-    /// Wrapper for `path` to use for `notify::Watcher::watch`.
-    /// Will return a "watchable" parent directory if necessary.
-    /// Will panic if parent directory cannot be watched.
-    fn watchable(&self, settings: &Settings) -> PathBuf {
-        if cfg!(target_os = "linux") || settings.use_polling {
-            // NOTE: Using the parent directory here instead of the file is a workaround.
-            // On Linux the watcher can crash for rename/delete/move operations if a file is watched directly.
-            // This workaround follows the recommendation of the notify crate authors:
-            // > On some platforms, if the `path` is renamed or removed while being watched, behavior may
-            // > be unexpected. See discussions in [#165] and [#166]. If less surprising behavior is wanted
-            // > one may non-recursively watch the _parent_ directory as well and manage related events.
-            let parent = self.parent().unwrap_or_else(|| {
-                crash!(1, "cannot watch parent directory of {}", self.display())
-            });
-            // TODO: [2021-10; jhscheer] add test for this - "cannot watch parent directory"
-            if parent.is_dir() {
-                parent.to_owned()
+trait WatcherExtTail {
+    fn watch_with_parent(&mut self, path: &Path) -> UResult<()>;
+}
+
+impl WatcherExtTail for dyn Watcher {
+    /// Wrapper for `notify::Watcher::watch` to also add the parent directory of `path` if necessary.
+    fn watch_with_parent(&mut self, path: &Path) -> UResult<()> {
+        let mut path = path.to_owned();
+        if path.is_file() {
+            /*
+            NOTE: Using the parent directory instead of the file is a workaround.
+            This workaround follows the recommendation of the notify crate authors:
+            > On some platforms, if the `path` is renamed or removed while being watched, behavior may
+            > be unexpected. See discussions in [#165] and [#166]. If less surprising behavior is wanted
+            > one may non-recursively watch the _parent_ directory as well and manage related events.
+            NOTE: Adding both: file and parent results in duplicate/wrong events.
+            Tested for notify::InotifyWatcher and for notify::PollWatcher.
+            */
+            if let Some(parent) = path.parent() {
+                if parent.is_dir() {
+                    path = parent.to_owned();
+                } else {
+                    path = PathBuf::from(".");
+                }
             } else {
-                PathBuf::from(".")
-            }
-        } else {
-            self.to_owned()
+                // TODO: [2021-10; jhscheer] add test for this - "cannot watch parent directory"
+                return Err(USimpleError::new(
+                    1,
+                    format!("cannot watch parent directory of {}", path.display()),
+                ));
+            };
         }
+        if path.is_relative() {
+            path = path.canonicalize()?;
+        }
+        // TODO: [2022-05; jhscheer] "gnu/tests/tail-2/inotify-rotate-resource.sh" is looking
+        // for syscalls: 2x "inotify_add_watch" ("filename" and ".") and 1x "inotify_rm_watch"
+        self.watch(&path, RecursiveMode::NonRecursive).unwrap();
+        Ok(())
     }
 }
 
