@@ -248,17 +248,10 @@ fn test_final_stats_noxfer() {
 
 #[test]
 fn test_final_stats_unspec() {
-    let output = vec![
-        "0+0 records in",
-        "0+0 records out",
-        "0 bytes (0 B, 0 B) copied, 0.0 s, 0 B/s",
-    ];
-    let output = output.into_iter().fold(String::new(), |mut acc, s| {
-        acc.push_str(s);
-        acc.push('\n');
-        acc
-    });
-    new_ucmd!().run().stderr_only(&output).success();
+    new_ucmd!()
+        .run()
+        .stderr_only("0+0 records in\n0+0 records out\n0 bytes copied, 0.0 s, 0 B/s\n")
+        .success();
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -370,20 +363,10 @@ fn test_existing_file_truncated() {
 
 #[test]
 fn test_null_stats() {
-    let stats = vec![
-        "0+0 records in\n",
-        "0+0 records out\n",
-        "0 bytes (0 B, 0 B) copied, 0.0 s, 0 B/s\n",
-    ];
-    let stats = stats.into_iter().fold(String::new(), |mut acc, s| {
-        acc.push_str(s);
-        acc
-    });
-
     new_ucmd!()
         .args(&["if=null.txt"])
         .run()
-        .stderr_only(stats)
+        .stderr_only("0+0 records in\n0+0 records out\n0 bytes copied, 0.0 s, 0 B/s\n")
         .success();
 }
 
@@ -1183,4 +1166,23 @@ fn test_bytes_oseek_seek_additive() {
         .pipe_in("abcdefghijklm")
         .succeeds()
         .stdout_is_fixture_bytes("dd-bytes-alphabet-null.spec");
+}
+
+#[test]
+fn test_final_stats_si_iec() {
+    let result = new_ucmd!().pipe_in("0".repeat(999)).succeeds();
+    let s = result.stderr_str();
+    assert!(s.starts_with("1+1 records in\n1+1 records out\n999 bytes copied,"));
+
+    let result = new_ucmd!().pipe_in("0".repeat(1000)).succeeds();
+    let s = result.stderr_str();
+    assert!(s.starts_with("1+1 records in\n1+1 records out\n1000 bytes (1000 B) copied,"));
+
+    let result = new_ucmd!().pipe_in("0".repeat(1023)).succeeds();
+    let s = result.stderr_str();
+    assert!(s.starts_with("1+1 records in\n1+1 records out\n1023 bytes (1 KB) copied,"));
+
+    let result = new_ucmd!().pipe_in("0".repeat(1024)).succeeds();
+    let s = result.stderr_str();
+    assert!(s.starts_with("2+0 records in\n2+0 records out\n1024 bytes (1 KB, 1024 B) copied,"));
 }
