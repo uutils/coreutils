@@ -820,7 +820,7 @@ fn test_ls_commas_trailing() {
 
     scene
         .ucmd()
-        .arg("-sm")
+        .arg("-m")
         .arg("./test-commas-trailing-1")
         .arg("./test-commas-trailing-2")
         .succeeds()
