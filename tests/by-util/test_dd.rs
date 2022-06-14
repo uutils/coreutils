@@ -259,7 +259,7 @@ fn test_final_stats_noxfer() {
 fn test_final_stats_unspec() {
     new_ucmd!()
         .run()
-        .stderr_only("0+0 records in\n0+0 records out\n0 bytes copied, 0.0 s, 0 B/s\n")
+        .stderr_only("0+0 records in\n0+0 records out\n0 bytes copied, 0.0 s, 0.0 B/s\n")
         .success();
 }
 
@@ -375,7 +375,7 @@ fn test_null_stats() {
     new_ucmd!()
         .args(&["if=null.txt"])
         .run()
-        .stderr_only("0+0 records in\n0+0 records out\n0 bytes copied, 0.0 s, 0 B/s\n")
+        .stderr_only("0+0 records in\n0+0 records out\n0 bytes copied, 0.0 s, 0.0 B/s\n")
         .success();
 }
 
@@ -1239,22 +1239,43 @@ fn test_bytes_oseek_seek_not_additive() {
 }
 
 #[test]
-fn test_final_stats_si_iec() {
+fn test_final_stats_less_than_one_kb_si() {
     let result = new_ucmd!().pipe_in("0".repeat(999)).succeeds();
     let s = result.stderr_str();
     assert!(s.starts_with("1+1 records in\n1+1 records out\n999 bytes copied,"));
+}
 
+#[test]
+fn test_final_stats_less_than_one_kb_iec() {
     let result = new_ucmd!().pipe_in("0".repeat(1000)).succeeds();
     let s = result.stderr_str();
-    assert!(s.starts_with("1+1 records in\n1+1 records out\n1000 bytes (1000 B) copied,"));
+    assert!(s.starts_with("1+1 records in\n1+1 records out\n1000 bytes (1.0 kB) copied,"));
 
     let result = new_ucmd!().pipe_in("0".repeat(1023)).succeeds();
     let s = result.stderr_str();
-    assert!(s.starts_with("1+1 records in\n1+1 records out\n1023 bytes (1 KB) copied,"));
+    assert!(s.starts_with("1+1 records in\n1+1 records out\n1023 bytes (1.0 kB) copied,"));
+}
 
+#[test]
+fn test_final_stats_more_than_one_kb() {
     let result = new_ucmd!().pipe_in("0".repeat(1024)).succeeds();
     let s = result.stderr_str();
-    assert!(s.starts_with("2+0 records in\n2+0 records out\n1024 bytes (1 KB, 1024 B) copied,"));
+    assert!(s.starts_with("2+0 records in\n2+0 records out\n1024 bytes (1.0 kB, 1.0 KiB) copied,"));
+}
+
+#[test]
+fn test_final_stats_three_char_limit() {
+    let result = new_ucmd!().pipe_in("0".repeat(10_000)).succeeds();
+    let s = result.stderr_str();
+    assert!(
+        s.starts_with("19+1 records in\n19+1 records out\n10000 bytes (10 kB, 9.8 KiB) copied,")
+    );
+
+    let result = new_ucmd!().pipe_in("0".repeat(100_000)).succeeds();
+    let s = result.stderr_str();
+    assert!(
+        s.starts_with("195+1 records in\n195+1 records out\n100000 bytes (100 kB, 98 KiB) copied,")
+    );
 }
 
 #[test]
