@@ -569,10 +569,20 @@ impl Config {
         };
 
         let width = match options.value_of(options::WIDTH) {
-            Some(x) => match x.parse::<u16>() {
-                Ok(u) => u,
-                Err(_) => return Err(LsError::InvalidLineWidth(x.into()).into()),
-            },
+            Some(x) => {
+                if x.starts_with('0') && x.len() > 1 {
+                    // Read number as octal
+                    match u16::from_str_radix(x, 8) {
+                        Ok(v) => v,
+                        Err(_) => return Err(LsError::InvalidLineWidth(x.into()).into()),
+                    }
+                } else {
+                    match x.parse::<u16>() {
+                        Ok(u) => u,
+                        Err(_) => return Err(LsError::InvalidLineWidth(x.into()).into()),
+                    }
+                }
+            }
             None => match termsize::get() {
                 Some(size) => size.cols,
                 None => match std::env::var_os("COLUMNS") {
@@ -1864,7 +1874,12 @@ fn display_additional_leading_info(
         } else {
             "?".to_owned()
         };
-        write!(result, "{} ", pad_left(&s, padding.block_size)).unwrap();
+        // extra space is insert to align the sizes, as needed for all formats, except for the comma format.
+        if config.format == Format::Commas {
+            write!(result, "{} ", s).unwrap();
+        } else {
+            write!(result, "{} ", pad_left(&s, padding.block_size)).unwrap();
+        };
     }
     Ok(result)
 }

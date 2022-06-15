@@ -650,6 +650,21 @@ fn test_ls_width() {
             .stdout_only("test-width-1  test-width-2  test-width-3  test-width-4\n");
     }
 
+    for option in [
+        "-w 062",
+        "-w=062",
+        "--width=062",
+        "--width 062",
+        "--wid=062",
+    ] {
+        scene
+            .ucmd()
+            .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
+            .succeeds()
+            .stdout_only("test-width-1  test-width-3\ntest-width-2  test-width-4\n");
+    }
+
     scene
         .ucmd()
         .arg("-w=bad")
@@ -786,6 +801,30 @@ fn test_ls_commas() {
             .succeeds()
             .stdout_only("test-commas-1, test-commas-2, test-commas-3,\ntest-commas-4\n");
     }
+}
+
+#[test]
+fn test_ls_commas_trailing() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(&at.plus_as_string("test-commas-trailing-2"));
+
+    at.touch(&at.plus_as_string("test-commas-trailing-1"));
+    at.append(
+        "test-commas-trailing-1",
+        &(0..2000)
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+
+    scene
+        .ucmd()
+        .arg("-sm")
+        .arg("./test-commas-trailing-1")
+        .arg("./test-commas-trailing-2")
+        .succeeds()
+        .stdout_matches(&Regex::new(r"\S$").unwrap()); // matches if there is no whitespace at the end of stdout.
 }
 
 #[test]
