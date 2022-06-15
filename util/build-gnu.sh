@@ -165,6 +165,8 @@ sed -i -e "s|rm: cannot remove 'a/1'|rm: cannot remove 'a'|g" tests/rm/rm2.sh
 
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
+sed -i -e "s|---dis ||g" tests/tail-2/overlay-headers.sh
+
 test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
 
 # When decoding an invalid base32/64 string, gnu writes everything it was able to decode until
