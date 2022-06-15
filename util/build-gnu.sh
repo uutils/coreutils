@@ -201,5 +201,5 @@ sed -i -e "s/ln: 'f' and 'f' are the same file/ln: failed to link 'f' to 'f': Sa
 sed -i -e "s/failed to access 'no-such-dir'\":/failed to link 'no-such-dir'\"/" -e "s/link-to-dir: hard link not allowed for directory/failed to link 'link-to-dir' to/" -e "s|link-to-dir/: hard link not allowed for directory|failed to link 'link-to-dir/' to|" tests/ln/hard-to-sym.sh
 
 # sleep without arg returns 2 on our side, 1 on GNU's
-# GNU sleep accepts some crazy string, not sure we should match this behavoir
+# GNU sleep accepts some crazy string, not sure we should match this behavior
 sed -i -e "s/timeout 10 sleep 0x.002p1/#timeout 10 sleep 0x.002p1/" tests/misc/sleep.sh
