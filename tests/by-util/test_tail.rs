@@ -1913,14 +1913,15 @@ fn test_follow_name_move_create1() {
     #[cfg(not(target_os = "linux"))]
     let expected_stderr = format!("{}: {}: No such file or directory\n", ts.util_name, source);
 
+    let delay = 500;
     let args = ["--follow=name", source];
+
     let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
-
-    let delay = 2000;
-
     sleep(Duration::from_millis(delay));
+
     at.rename(source, backup);
     sleep(Duration::from_millis(delay));
+
     at.copy(backup, source);
     sleep(Duration::from_millis(delay));
 
@@ -2081,7 +2082,7 @@ fn test_follow_name_move2() {
             more_{1}_content\n\n==> {0} <==\nmore_{0}_content\n",
         file1, file2
     );
-    let expected_stderr = format!(
+    let mut expected_stderr = format!(
         "{0}: {1}: No such file or directory\n\
             {0}: '{2}' has been replaced;  following new file\n\
             {0}: '{1}' has appeared;  following new file\n",
@@ -2110,11 +2111,21 @@ fn test_follow_name_move2() {
         p.kill().unwrap();
 
         let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+        println!("out:\n{}\nerr:\n{}", buf_stdout, buf_stderr);
         assert_eq!(buf_stdout, expected_stdout);
         assert_eq!(buf_stderr, expected_stderr);
 
         args.push("--use-polling");
         delay *= 3;
+        // NOTE: Switch the first and second line because the events come in this order from
+        //  `notify::PollWatcher`. However, for GNU's tail, the order between polling and not
+        //  polling does not change.
+        expected_stderr = format!(
+            "{0}: '{2}' has been replaced;  following new file\n\
+                {0}: {1}: No such file or directory\n\
+                {0}: '{1}' has appeared;  following new file\n",
+            ts.util_name, file1, file2
+        );
     }
 }
 
@@ -2213,7 +2224,7 @@ fn test_follow_name_move_retry2() {
             \nx\n\n==> {0} <==\nx2\n\n==> {1} <==\ny\n\n==> {0} <==\nz\n",
         file1, file2
     );
-    let expected_stderr = format!(
+    let mut expected_stderr = format!(
         "{0}: '{1}' has become inaccessible: No such file or directory\n\
             {0}: '{2}' has been replaced;  following new file\n\
             {0}: '{1}' has appeared;  following new file\n",
@@ -2255,6 +2266,15 @@ fn test_follow_name_move_retry2() {
         at.remove(file2);
         args.push("--use-polling");
         delay *= 3;
+        // NOTE: Switch the first and second line because the events come in this order from
+        //  `notify::PollWatcher`. However, for GNU's tail, the order between polling and not
+        //  polling does not change.
+        expected_stderr = format!(
+            "{0}: '{2}' has been replaced;  following new file\n\
+                {0}: '{1}' has become inaccessible: No such file or directory\n\
+                {0}: '{1}' has appeared;  following new file\n",
+            ts.util_name, file1, file2
+        );
     }
 }
 
