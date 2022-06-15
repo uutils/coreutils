@@ -746,7 +746,7 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
 
     // main follow loop
     loop {
-        let mut read_some = false;
+        let mut _read_some = false;
 
         // For `-F` we need to poll if an orphan path becomes available during runtime.
         // If a path becomes an orphan during runtime, it will be added to orphans.
@@ -764,7 +764,7 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
                         );
                         files.update_metadata(new_path, Some(md));
                         files.update_reader(new_path)?;
-                        read_some = files.tail_file(new_path, settings.verbose)?;
+                        _read_some = files.tail_file(new_path, settings.verbose)?;
                         watcher.watch_with_parent(new_path)?;
                     }
                 }
@@ -779,10 +779,11 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
             _timeout_counter = 0;
         }
 
-        // Workarounds for limitations of `notify::PollWatcher`
-        if settings.use_polling {
-            // TODO: not necessary anymore since compare_contents: true ?
-            // manual_polling(files, settings)?;
+        // If `--pid=p`, tail checks whether process p
+        // is alive at least every `--sleep-interval=N` seconds
+        if settings.follow.is_some() && settings.pid != 0 && process.is_dead() {
+            // p is dead, tail will also terminate
+            break;
         }
 
         let mut paths = vec![]; // Paths worth checking for new content to print
@@ -830,12 +831,7 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
 
         // main print loop
         for path in &paths {
-            read_some = files.tail_file(path, settings.verbose)?;
-        }
-
-        if !read_some && settings.pid != 0 && process.is_dead() {
-            // pid is dead
-            break;
+            _read_some = files.tail_file(path, settings.verbose)?;
         }
 
         if _timeout_counter == settings.max_unchanged_stats {
@@ -849,65 +845,7 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
             between when tail prints the last pre-rotation lines and when it prints the lines that
             have accumulated in the new log file. This option is meaningful only when polling
             (i.e., without inotify) and when following by name.
-            TODO: [2021-10; jhscheer] `--sleep-interval=N`: implement: if `--pid=p`,
-            tail checks whether process p is alive at least every N seconds
             */
-        }
-    }
-    Ok(())
-}
-
-/// Poll all watched files manually and check for events that
-/// `Notify::PollWatcher` does not handle suitable to our use case
-fn manual_polling(files: &mut FileHandling, settings: &Settings) -> UResult<()> {
-    if settings.follow.is_some() {
-        for path in &files
-            .keys()
-            .map(|p| p.to_path_buf())
-            .collect::<Vec<PathBuf>>()
-        {
-            if !path.exists() && settings.retry {
-                let pd = files.get(path);
-                if let Some(old_md) = &pd.metadata {
-                    if old_md.is_tailable() && pd.reader.is_some() {
-                        /*
-                        NOTE: This is a workaround to pass: "gnu/tests/tail-2/F-vs-rename.sh"
-                        For `mv a b` `notify::PollWatcher` handles events for b first, then a.
-                        However, `F-vs-rename` requires the handling of events vice versa,
-                        i.e. this test requires that "has [..] replaced/inaccessible" is
-                        shown before new content is printed.
-                        Without this `mv a b` would result in the contents of b being
-                        printed before the "a has become inaccessible" message is shown.
-                        */
-                        // show_error!(
-                        //     "{} {}: {}",
-                        //     pd.display_name.quote(),
-                        //     text::BECOME_INACCESSIBLE,
-                        //     text::NO_SUCH_FILE
-                        // );
-                        // files.reset_reader(path);
-                    }
-                }
-            }
-            if let Ok(new_md) = path.metadata() {
-                let pd = files.get(path);
-                if let Some(old_md) = &pd.metadata {
-                    if old_md.is_tailable()
-                        && new_md.is_tailable()
-                        && old_md.got_truncated(&new_md)?
-                    {
-                        /*
-                        NOTE: This is a workaround because PollWatcher tends to miss events.
-                        e.g. `echo "X1" > missing ; sleep 0.1 ; echo "X" > missing ;`
-                        should trigger an event, but PollWatcher doesn't recognize it.
-                        This is relevant to pass, e.g.: "gnu/tests/tail-2/truncate.sh"
-                        */
-                        // show_error!("{}: file truncated", pd.display_name.display());
-                        // files.update_metadata(path, Some(new_md));
-                        // files.update_reader(path)?;
-                    }
-                }
-            }
         }
     }
     Ok(())
@@ -1616,12 +1554,14 @@ impl MetadataExtTail for Metadata {
         }
         #[cfg(windows)]
         {
-            use std::os::windows::prelude::*;
-            if let Some(self_id) = self.file_index() {
-                if let Some(other_id) = other.file_index() {
-                    return self_id.eq(other_id);
-                }
-            }
+            // TODO: `file_index` requires unstable library feature `windows_by_handle`
+            // use std::os::windows::prelude::*;
+            // if let Some(self_id) = self.file_index() {
+            //     if let Some(other_id) = other.file_index() {
+            //         // TODO: not sure this is the equivalent of comparing inode numbers
+            //         return self_id.eq(&other_id);
+            //     }
+            // }
             false
         }
     }
