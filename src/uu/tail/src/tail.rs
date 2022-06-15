@@ -685,14 +685,13 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
 
     let mut watcher: Box<dyn Watcher>;
     let watcher_config = notify::poll::PollWatcherConfig {
+        poll_interval: settings.sleep_sec,
         /*
-        NOTE: Value decreased to accommodate for discrepancies. Divisor chosen
-        empirically in order to pass timing sensitive GNU test-suite checks.
-        Without this adjustment and when polling, i.e. `---disable-inotify`,
-        we're too slow to pick up every event that GNU's tail is picking up.
+        NOTE: By enabling compare_contents, performance will be significantly impacted
+        as all files will need to be read and hashed at each `poll_interval`.
+        However, this is necessary to pass: "gnu/tests/tail-2/F-vs-rename.sh"
         */
-        poll_interval: settings.sleep_sec / 10,
-        ..Default::default()
+        compare_contents: true,
     };
     if settings.use_polling || RecommendedWatcher::kind() == WatcherKind::PollWatcher {
         settings.use_polling = true; // We have to use polling because there's no supported backend
@@ -779,8 +778,11 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
             _event_counter += 1;
             _timeout_counter = 0;
         }
+
+        // Workarounds for limitations of `notify::PollWatcher`
         if settings.use_polling {
-            manual_polling(files, &settings);
+            // TODO: not necessary anymore since compare_contents: true ?
+            // manual_polling(files, settings)?;
         }
 
         let mut paths = vec![]; // Paths worth checking for new content to print
@@ -788,7 +790,6 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
             Ok(Ok(event)) => {
                 if let Some(event_path) = event.paths.first() {
                     if files.contains_key(event_path) {
-
                         // Handle Event if it is about a path that we are monitoring
                         paths = handle_event(&event, files, settings, &mut watcher, &mut orphans)?;
                     }
@@ -856,7 +857,9 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
     Ok(())
 }
 
-fn manual_polling(files: &mut FileHandling, settings: &Settings) {
+/// Poll all watched files manually and check for events that
+/// `Notify::PollWatcher` does not handle suitable to our use case
+fn manual_polling(files: &mut FileHandling, settings: &Settings) -> UResult<()> {
     if settings.follow.is_some() {
         for path in &files
             .keys()
@@ -876,18 +879,38 @@ fn manual_polling(files: &mut FileHandling, settings: &Settings) {
                         Without this `mv a b` would result in the contents of b being
                         printed before the "a has become inaccessible" message is shown.
                         */
-                        show_error!(
-                            "{} {}: {}",
-                            pd.display_name.quote(),
-                            text::BECOME_INACCESSIBLE,
-                            text::NO_SUCH_FILE
-                        );
-                        files.reset_reader(path);
+                        // show_error!(
+                        //     "{} {}: {}",
+                        //     pd.display_name.quote(),
+                        //     text::BECOME_INACCESSIBLE,
+                        //     text::NO_SUCH_FILE
+                        // );
+                        // files.reset_reader(path);
+                    }
+                }
+            }
+            if let Ok(new_md) = path.metadata() {
+                let pd = files.get(path);
+                if let Some(old_md) = &pd.metadata {
+                    if old_md.is_tailable()
+                        && new_md.is_tailable()
+                        && old_md.got_truncated(&new_md)?
+                    {
+                        /*
+                        NOTE: This is a workaround because PollWatcher tends to miss events.
+                        e.g. `echo "X1" > missing ; sleep 0.1 ; echo "X" > missing ;`
+                        should trigger an event, but PollWatcher doesn't recognize it.
+                        This is relevant to pass, e.g.: "gnu/tests/tail-2/truncate.sh"
+                        */
+                        // show_error!("{}: file truncated", pd.display_name.display());
+                        // files.update_metadata(path, Some(new_md));
+                        // files.update_reader(path)?;
                     }
                 }
             }
         }
     }
+    Ok(())
 }
 
 fn handle_event(
@@ -925,7 +948,7 @@ fn handle_event(
                                 files.update_reader(event_path)?;
                             } else if event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To))
                             || (settings.use_polling
-                            && !old_md.ino().eq(&new_md.ino())) {
+                            && !old_md.file_id_eq(&new_md)) {
                                 show_error!( "{} has been replaced;  following new file", display_name.quote());
                                 files.update_reader(event_path)?;
                             } else if old_md.got_truncated(&new_md)? {
@@ -1037,7 +1060,7 @@ fn handle_event(
 
             if settings.follow_descriptor() {
                 let new_path = event.paths.last().unwrap();
-                paths.push(new_path.to_owned()); // TODO: [2022-06; jhscheer] still necessary?
+                paths.push(new_path.to_owned());
                 // Open new file and seek to End:
                 let mut file = File::open(&new_path)?;
                 file.seek(SeekFrom::End(0))?;
@@ -1551,6 +1574,7 @@ trait MetadataExtTail {
         other: &Metadata,
     ) -> Result<bool, Box<(dyn uucore::error::UError + 'static)>>;
     fn get_block_size(&self) -> u64;
+    fn file_id_eq(&self, other: &Metadata) -> bool;
 }
 
 impl MetadataExtTail for Metadata {
@@ -1582,6 +1606,23 @@ impl MetadataExtTail for Metadata {
         #[cfg(not(unix))]
         {
             self.len()
+        }
+    }
+
+    fn file_id_eq(&self, other: &Metadata) -> bool {
+        #[cfg(unix)]
+        {
+            self.ino().eq(&other.ino())
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::prelude::*;
+            if let Some(self_id) = self.file_index() {
+                if let Some(other_id) = other.file_index() {
+                    return self_id.eq(other_id);
+                }
+            }
+            false
         }
     }
 }
