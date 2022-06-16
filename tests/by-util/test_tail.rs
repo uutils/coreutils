@@ -1738,7 +1738,7 @@ fn test_follow_name_truncate1() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
 fn test_follow_name_truncate2() {
     // This test triggers a truncate event while `tail --follow=name file` is running.
     // $ ((sleep 1 && echo -n "x\nx\nx\n" >> file && sleep 1 && \
