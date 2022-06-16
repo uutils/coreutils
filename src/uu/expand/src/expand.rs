@@ -14,7 +14,6 @@ extern crate uucore;
 
 use clap::{crate_version, Arg, ArgMatches, Command};
 use std::error::Error;
-use std::ffi::OsString;
 use std::fmt;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
@@ -22,8 +21,8 @@ use std::num::IntErrorKind;
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, UUsageError};
-use uucore::format_usage;
+use uucore::error::{FromIo, UError, UResult};
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static ABOUT: &str = "Convert tabs in each FILE to spaces, writing to standard output.
  With no FILE, or when FILE is -, read standard input.";
@@ -251,33 +250,30 @@ impl Options {
 
 /// Preprocess command line arguments and expand shortcuts. For example, "-7" is expanded to
 /// "--tabs=7" and "-1,3" to "--tabs=1 --tabs=3".
-fn expand_shortcuts<'a>(
-    mut args: impl uucore::Args + 'a,
-) -> Result<Box<dyn Iterator<Item = OsString> + 'a>, Box<(dyn UError + 'static)>> {
-    // argv[0] is always present
-    let mut processed_args = vec![args.next().unwrap()];
+fn expand_shortcuts(args: &[String]) -> Vec<String> {
+    let mut processed_args = Vec::with_capacity(args.len());
 
     for arg in args {
-        if let Some(s) = arg.to_str() {
-            if s.starts_with('-') && s[1..].chars().all(is_digit_or_comma) {
-                s[1..]
-                    .split(',')
-                    .filter(|s| !s.is_empty())
-                    .for_each(|s| processed_args.push(format!("--tabs={}", s).into()));
-            } else {
-                processed_args.push(arg);
-            }
+        if arg.starts_with('-') && arg[1..].chars().all(is_digit_or_comma) {
+            arg[1..]
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .for_each(|s| processed_args.push(format!("--tabs={}", s)));
         } else {
-            return Err(UUsageError::new(1, "bad argument encoding".to_owned()));
+            processed_args.push(arg.to_string());
         }
     }
 
-    Ok(Box::new(processed_args.into_iter()))
+    processed_args
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(expand_shortcuts(args)?);
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
+
+    let matches = uu_app().get_matches_from(expand_shortcuts(&args));
 
     expand(&Options::new(&matches)?).map_err_context(|| "failed to write output".to_string())
 }
