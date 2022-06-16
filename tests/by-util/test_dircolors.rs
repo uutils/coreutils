@@ -142,6 +142,16 @@ fn test_stdin() {
 }
 
 #[test]
+fn test_quoting() {
+    new_ucmd!()
+        .pipe_in("exec 'echo Hello;:'\n")
+        .args(&["-b", "-"])
+        .succeeds()
+        .stdout_is("LS_COLORS='ex='\\''echo Hello;\\:'\\'':';\nexport LS_COLORS\n")
+        .no_stderr();
+}
+
+#[test]
 fn test_extra_operand() {
     new_ucmd!()
         .args(&["-c", "file1", "file2"])

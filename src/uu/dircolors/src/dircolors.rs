@@ -344,6 +344,8 @@ where
             continue;
         }
 
+        let line = escape(line);
+
         let (key, val) = line.split_two();
         if val.is_empty() {
             return Err(format!(
@@ -410,4 +412,38 @@ where
     }
 
     Ok(result)
+}
+
+/// Escape single quotes because they are not allowed between single quotes in shell code, and code
+/// enclosed by single quotes is what is returned by `parse()`.
+///
+/// We also escape ":" to make the "quote" test pass in the GNU test suite:
+/// <https://github.com/coreutils/coreutils/blob/master/tests/misc/dircolors.pl>
+fn escape(s: &str) -> String {
+    let mut result = String::new();
+    let mut previous = ' ';
+
+    for c in s.chars() {
+        match c {
+            '\'' => result.push_str("'\\''"),
+            ':' if previous != '\\' => result.push_str("\\:"),
+            _ => result.push_str(&c.to_string()),
+        }
+        previous = c;
+    }
+
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::escape;
+
+    #[test]
+    fn test_escape() {
+        assert_eq!("", escape(""));
+        assert_eq!("'\\''", escape("'"));
+        assert_eq!("\\:", escape(":"));
+        assert_eq!("\\:", escape("\\:"));
+    }
 }
