@@ -1547,10 +1547,10 @@ impl MetadataExtTail for Metadata {
         }
     }
 
-    fn file_id_eq(&self, _other: &Metadata) -> bool {
+    fn file_id_eq(&self, other: &Metadata) -> bool {
         #[cfg(unix)]
         {
-            self.ino().eq(&_other.ino())
+            self.ino().eq(&other.ino())
         }
         #[cfg(windows)]
         {
