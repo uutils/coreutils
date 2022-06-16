@@ -263,3 +263,33 @@ fn test_tabs_with_too_large_size() {
 
     new_ucmd!().arg(arg).fails().stderr_contains(expected_error);
 }
+
+#[test]
+fn test_tabs_shortcut() {
+    new_ucmd!()
+        .args(&["-2", "-5", "-7"])
+        .pipe_in("\ta\tb\tc")
+        .succeeds()
+        //          01234567890
+        .stdout_is("  a  b c");
+}
+
+#[test]
+fn test_comma_separated_tabs_shortcut() {
+    new_ucmd!()
+        .args(&["-2,5", "-7"])
+        .pipe_in("\ta\tb\tc")
+        .succeeds()
+        //          01234567890
+        .stdout_is("  a  b c");
+}
+
+#[test]
+fn test_tabs_and_tabs_shortcut_mixed() {
+    new_ucmd!()
+        .args(&["-2", "--tabs=5", "-7"])
+        .pipe_in("\ta\tb\tc")
+        .succeeds()
+        //          01234567890
+        .stdout_is("  a  b c");
+}
