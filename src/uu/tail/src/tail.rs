@@ -180,8 +180,15 @@ impl Settings {
 
         if let Some(pid_str) = matches.value_of(options::PID) {
             if let Ok(pid) = pid_str.parse::<u16>() {
-                // NOTE: tail only accepts an unsigned pid, but libc::pid_t is i32
-                settings.pid = i32::from(pid);
+                #[cfg(unix)]
+                {
+                    // NOTE: tail only accepts an unsigned pid, but libc::pid_t is i32
+                    settings.pid = i32::from(pid);
+                }
+                #[cfg(target_os = "windows")]
+                {
+                    settings.pid = u32::from(pid);
+                }
                 if settings.pid != 0 {
                     if settings.follow.is_none() {
                         show_warning!("PID ignored; --pid=PID is useful only when following");
