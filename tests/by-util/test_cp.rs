@@ -38,6 +38,8 @@ static TEST_COPY_FROM_FOLDER: &str = "hello_dir_with_file/";
 static TEST_COPY_FROM_FOLDER_FILE: &str = "hello_dir_with_file/hello_world.txt";
 static TEST_COPY_TO_FOLDER_NEW: &str = "hello_dir_new";
 static TEST_COPY_TO_FOLDER_NEW_FILE: &str = "hello_dir_new/hello_world.txt";
+static TEST_PROTECT_BACKUP_SRC: &str = "protected.txt.bak";
+static TEST_PROTECT_BACKUP_DEST: &str = "protected.txt";
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 static TEST_MOUNT_COPY_FROM_FOLDER: &str = "dir_with_mount";
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
@@ -556,6 +558,25 @@ fn test_cp_backup_simple() {
         at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
+}
+
+#[test]
+fn test_cp_backup_simple_protect_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("--backup=simple")
+        .arg("--suffix")
+        .arg(".bak")
+        .arg(TEST_PROTECT_BACKUP_SRC)
+        .arg(TEST_PROTECT_BACKUP_DEST)
+        .fails()
+        .stderr_only(format!(
+            "cp: backing up '{}' might destroy source;  '{}' not copied",
+            TEST_PROTECT_BACKUP_DEST,
+            TEST_PROTECT_BACKUP_SRC,
+        ));
+
+    assert_eq!(at.read(TEST_PROTECT_BACKUP_SRC), "original text\n");
+    assert_eq!(at.read(TEST_PROTECT_BACKUP_DEST), "new text\n");
 }
 
 #[test]

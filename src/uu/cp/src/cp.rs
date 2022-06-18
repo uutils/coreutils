@@ -1256,7 +1256,16 @@ fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyRe
 
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
     if let Some(backup_path) = backup_path {
-        backup_dest(dest, &backup_path)?;
+        if paths_refer_to_same_file(source, &backup_path)? {
+            return Err(format!(
+                "backing up {} might destroy source;  {} not copied",
+                dest.quote(),
+                source.quote()
+            )
+            .into());
+        } else {
+            backup_dest(dest, &backup_path)?;
+        }
     }
 
     match options.overwrite {
