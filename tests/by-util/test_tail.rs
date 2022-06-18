@@ -530,6 +530,20 @@ fn test_follow_stdin_pipe() {
         .no_stderr();
 }
 
+#[test]
+fn test_follow_invalid_pid() {
+    new_ucmd!()
+        .args(&["-f", "--pid=abc"])
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: invalid PID: 'abc'\n");
+    new_ucmd!()
+        .args(&["-f", "--pid=-1234"])
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: invalid PID: '-1234'\n");
+}
+
 // FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort')  This test also breaks tty settings under bash requiring a 'stty sane' or reset. // spell-checker:disable-line
 #[cfg(disable_until_fixed)]
 #[test]
