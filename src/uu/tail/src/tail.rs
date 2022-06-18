@@ -179,18 +179,23 @@ impl Settings {
         }
 
         if let Some(pid_str) = matches.value_of(options::PID) {
-            if let Ok(pid) = pid_str.parse() {
-                settings.pid = pid;
-                if pid != 0 {
+            if let Ok(pid) = pid_str.parse::<u16>() {
+                // NOTE: tail only accepts an unsigned pid, but libc::pid_t is i32
+                settings.pid = i32::from(pid);
+                if settings.pid != 0 {
                     if settings.follow.is_none() {
                         show_warning!("PID ignored; --pid=PID is useful only when following");
                     }
-
-                    if !platform::supports_pid_checks(pid) {
+                    if !platform::supports_pid_checks(settings.pid) {
                         show_warning!("--pid=PID is not supported on this system");
                         settings.pid = 0;
                     }
                 }
+            } else {
+                return Err(USimpleError::new(
+                    1,
+                    format!("invalid PID: {}", pid_str.quote()),
+                ));
             }
         }
 
@@ -748,6 +753,13 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
     loop {
         let mut _read_some = false;
 
+        // If `--pid=p`, tail checks whether process p
+        // is alive at least every `--sleep-interval=N` seconds
+        if settings.follow.is_some() && settings.pid != 0 && process.is_dead() {
+            // p is dead, tail will also terminate
+            break;
+        }
+
         // For `-F` we need to poll if an orphan path becomes available during runtime.
         // If a path becomes an orphan during runtime, it will be added to orphans.
         // To be able to differentiate between the cases of test_retry8 and test_retry9,
@@ -777,13 +789,6 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
         if rx_result.is_ok() {
             _event_counter += 1;
             _timeout_counter = 0;
-        }
-
-        // If `--pid=p`, tail checks whether process p
-        // is alive at least every `--sleep-interval=N` seconds
-        if settings.follow.is_some() && settings.pid != 0 && process.is_dead() {
-            // p is dead, tail will also terminate
-            break;
         }
 
         let mut paths = vec![]; // Paths worth checking for new content to print
