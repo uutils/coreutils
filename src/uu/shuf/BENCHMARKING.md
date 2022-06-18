@@ -1,3 +1,5 @@
+<!-- spell-checker:ignore tmpfs -->
+
 # Benchmarking shuf
 
 `shuf` is a simple utility, but there are at least two important cases
