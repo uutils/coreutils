@@ -181,23 +181,22 @@ impl Settings {
         if let Some(pid_str) = matches.value_of(options::PID) {
             match pid_str.parse() {
                 Ok(pid) => {
-                    #[allow(clippy::absurd_extreme_comparisons)]
-                    if pid >= 0 {
-                        // NOTE: on unix platform::Pid is i32, on windows platform::Pid is u32
-                        settings.pid = pid;
-                        if settings.follow.is_none() {
-                            show_warning!("PID ignored; --pid=PID is useful only when following");
-                        }
-                        if !platform::supports_pid_checks(settings.pid) {
-                            show_warning!("--pid=PID is not supported on this system");
-                            settings.pid = 0;
-                        }
-                    } else {
+                    // NOTE: on unix platform::Pid is i32, on windows platform::Pid is u32
+                    #[cfg(unix)]
+                    if pid < 0 {
                         // NOTE: tail only accepts an unsigned pid
                         return Err(USimpleError::new(
                             1,
                             format!("invalid PID: {}", pid_str.quote()),
                         ));
+                    }
+                    settings.pid = pid;
+                    if settings.follow.is_none() {
+                        show_warning!("PID ignored; --pid=PID is useful only when following");
+                    }
+                    if !platform::supports_pid_checks(settings.pid) {
+                        show_warning!("--pid=PID is not supported on this system");
+                        settings.pid = 0;
                     }
                 }
                 Err(e) => {
