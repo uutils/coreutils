@@ -8,6 +8,7 @@
 // spell-checker:ignore (ToDO) cmdline evec seps rvec fdata
 
 use clap::{crate_version, Arg, Command, Values};
+use memchr::memchr_iter;
 use rand::prelude::SliceRandom;
 use rand::RngCore;
 use std::fs::File;
@@ -218,20 +219,12 @@ fn find_seps(data: &mut Vec<&[u8]>, sep: u8) {
         if data[i].contains(&sep) {
             let this = data.swap_remove(i);
             let mut p = 0;
-            let mut i = 1;
-            loop {
-                if i == this.len() {
-                    break;
-                }
-
-                if this[i] == sep {
-                    data.push(&this[p..i]);
-                    p = i + 1;
-                }
-                i += 1;
+            for i in memchr_iter(sep, this) {
+                data.push(&this[p..i]);
+                p = i + 1;
             }
             if p < this.len() {
-                data.push(&this[p..i]);
+                data.push(&this[p..]);
             }
         }
     }
