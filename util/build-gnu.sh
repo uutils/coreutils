@@ -205,3 +205,6 @@ sed -i -e "s/failed to access 'no-such-dir'\":/failed to link 'no-such-dir'\"/" 
 
 # GNU sleep accepts some crazy string, not sure we should match this behavior
 sed -i -e "s/timeout 10 sleep 0x.002p1/#timeout 10 sleep 0x.002p1/" tests/misc/sleep.sh
+
+# install verbose messages shows ginstall as command
+sed -i -e "s/ginstall: creating directory/install: creating directory/g" tests/install/basic-1.sh
