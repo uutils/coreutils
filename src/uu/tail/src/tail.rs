@@ -179,9 +179,9 @@ impl Settings {
         }
 
         if let Some(pid_str) = matches.value_of(options::PID) {
-            match pid_str.parse::<i32>() {
+            match pid_str.parse() {
                 Ok(pid) => {
-                    if pid > 0 {
+                    if pid >= 0 {
                         // NOTE: on unix platform::Pid is i32, on windows platform::Pid is u32
                         settings.pid = pid;
                         if settings.follow.is_none() {
