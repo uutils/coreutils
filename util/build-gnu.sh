@@ -164,6 +164,8 @@ sed -i -e "s|rm: cannot remove 'a/1'|rm: cannot remove 'a'|g" tests/rm/rm2.sh
 
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
+# overlay-headers.sh test intends to check for inotify events,
+# however there's a bug because `---dis` is an alias for: `---disable-inotify`
 sed -i -e "s|---dis ||g" tests/tail-2/overlay-headers.sh
 
 test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
