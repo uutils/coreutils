@@ -179,30 +179,32 @@ impl Settings {
         }
 
         if let Some(pid_str) = matches.value_of(options::PID) {
-            if let Ok(pid) = pid_str.parse::<u16>() {
-                #[cfg(unix)]
-                {
-                    // NOTE: tail only accepts an unsigned pid, but libc::pid_t is i32
-                    settings.pid = i32::from(pid);
-                }
-                #[cfg(target_os = "windows")]
-                {
-                    settings.pid = u32::from(pid);
-                }
-                if settings.pid != 0 {
-                    if settings.follow.is_none() {
-                        show_warning!("PID ignored; --pid=PID is useful only when following");
+            match pid_str.parse::<i32>() {
+                Ok(pid) => {
+                    if pid > 0 {
+                        // NOTE: on unix platform::Pid is i32, on windows platform::Pid is u32
+                        settings.pid = pid;
+                        if settings.follow.is_none() {
+                            show_warning!("PID ignored; --pid=PID is useful only when following");
+                        }
+                        if !platform::supports_pid_checks(settings.pid) {
+                            show_warning!("--pid=PID is not supported on this system");
+                            settings.pid = 0;
+                        }
+                    } else {
+                        // NOTE: tail only accepts an unsigned pid
+                        return Err(USimpleError::new(
+                            1,
+                            format!("invalid PID: {}", pid_str.quote()),
+                        ));
                     }
-                    if !platform::supports_pid_checks(settings.pid) {
-                        show_warning!("--pid=PID is not supported on this system");
-                        settings.pid = 0;
-                    }
                 }
-            } else {
-                return Err(USimpleError::new(
-                    1,
-                    format!("invalid PID: {}", pid_str.quote()),
-                ));
+                Err(e) => {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("invalid PID: {}: {}", pid_str.quote(), e.to_string()),
+                    ));
+                }
             }
         }
 

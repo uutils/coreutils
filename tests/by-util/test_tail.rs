@@ -531,17 +531,24 @@ fn test_follow_stdin_pipe() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_follow_invalid_pid() {
-    new_ucmd!()
-        .args(&["-f", "--pid=abc"])
-        .fails()
-        .no_stdout()
-        .stderr_is("tail: invalid PID: 'abc'\n");
     new_ucmd!()
         .args(&["-f", "--pid=-1234"])
         .fails()
         .no_stdout()
         .stderr_is("tail: invalid PID: '-1234'\n");
+    new_ucmd!()
+        .args(&["-f", "--pid=abc"])
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: invalid PID: 'abc': invalid digit found in string\n");
+    let max_pid = (i32::MAX as i64 + 1).to_string();
+    new_ucmd!()
+        .args(&["-f", "--pid", &max_pid])
+        .fails()
+        .no_stdout()
+        .stderr_is(format!("tail: invalid PID: '{}': number too large to fit in target type\n", max_pid));
 }
 
 // FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort')  This test also breaks tty settings under bash requiring a 'stty sane' or reset. // spell-checker:disable-line
