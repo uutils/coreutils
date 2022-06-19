@@ -5,7 +5,6 @@
 ## Missing features
 
 * `--max-unchanged-stats`
-* check whether process p is alive at least every number of seconds (relevant for `--pid`)
 
 Note:
 There's a stub for `--max-unchanged-stats` so GNU test-suite checks using it can run, however this flag has no functionality yet.

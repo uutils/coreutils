@@ -548,7 +548,10 @@ fn test_follow_invalid_pid() {
         .args(&["-f", "--pid", &max_pid])
         .fails()
         .no_stdout()
-        .stderr_is(format!("tail: invalid PID: '{}': number too large to fit in target type\n", max_pid));
+        .stderr_is(format!(
+            "tail: invalid PID: '{}': number too large to fit in target type\n",
+            max_pid
+        ));
 }
 
 // FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort')  This test also breaks tty settings under bash requiring a 'stty sane' or reset. // spell-checker:disable-line

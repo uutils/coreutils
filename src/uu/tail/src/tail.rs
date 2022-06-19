@@ -179,9 +179,10 @@ impl Settings {
         }
 
         if let Some(pid_str) = matches.value_of(options::PID) {
-            match pid_str.parse::<i32>() {
+            match pid_str.parse() {
                 Ok(pid) => {
-                    if pid > 0 {
+                    #[allow(clippy::absurd_extreme_comparisons)]
+                    if pid >= 0 {
                         // NOTE: on unix platform::Pid is i32, on windows platform::Pid is u32
                         settings.pid = pid;
                         if settings.follow.is_none() {
@@ -202,7 +203,7 @@ impl Settings {
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        format!("invalid PID: {}: {}", pid_str.quote(), e.to_string()),
+                        format!("invalid PID: {}: {}", pid_str.quote(), e),
                     ));
                 }
             }
