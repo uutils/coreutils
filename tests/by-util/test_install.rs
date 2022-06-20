@@ -1187,7 +1187,6 @@ fn test_install_dir_req_verbose() {
     let at = &scene.fixtures;
 
     let file_1 = "source_file1";
-    let dest_dir = "sub4";
     at.touch(file_1);
     scene
         .ucmd()
@@ -1199,13 +1198,14 @@ fn test_install_dir_req_verbose() {
 
     scene
         .ucmd()
-        .arg("-t sub4/a")
+        .arg("-t")
+        .arg("sub4/a")
         .arg("-Dv")
         .arg(file_1)
         .succeeds()
         .stdout_contains("install: creating directory 'sub4'\ninstall: creating directory 'sub4/a'\n'source_file1' -> 'sub4/a/source_file1'");
 
-    at.mkdir(dest_dir);
+    at.mkdir("sub5");
     scene
         .ucmd()
         .arg("-Dv")
