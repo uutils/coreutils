@@ -7,7 +7,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ctype cwidth iflag nbytes nspaces nums tspaces uflag
+// spell-checker:ignore (ToDO) ctype cwidth iflag nbytes nspaces nums tspaces uflag Preprocess
 
 #[macro_use]
 extern crate uucore;
@@ -22,7 +22,7 @@ use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
-use uucore::format_usage;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 static ABOUT: &str = "Convert tabs in each FILE to spaces, writing to standard output.
  With no FILE, or when FILE is -, read standard input.";
@@ -59,6 +59,11 @@ enum RemainingMode {
 /// ```
 fn is_space_or_comma(c: char) -> bool {
     c == ' ' || c == ','
+}
+
+/// Decide whether the character is either a digit or a comma.
+fn is_digit_or_comma(c: char) -> bool {
+    c.is_ascii_digit() || c == ','
 }
 
 /// Errors that can occur when parsing a `--tabs` argument.
@@ -243,9 +248,32 @@ impl Options {
     }
 }
 
+/// Preprocess command line arguments and expand shortcuts. For example, "-7" is expanded to
+/// "--tabs=7" and "-1,3" to "--tabs=1 --tabs=3".
+fn expand_shortcuts(args: &[String]) -> Vec<String> {
+    let mut processed_args = Vec::with_capacity(args.len());
+
+    for arg in args {
+        if arg.starts_with('-') && arg[1..].chars().all(is_digit_or_comma) {
+            arg[1..]
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .for_each(|s| processed_args.push(format!("--tabs={}", s)));
+        } else {
+            processed_args.push(arg.to_string());
+        }
+    }
+
+    processed_args
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
+
+    let matches = uu_app().get_matches_from(expand_shortcuts(&args));
 
     expand(&Options::new(&matches)?).map_err_context(|| "failed to write output".to_string())
 }
@@ -445,6 +473,8 @@ fn expand(options: &Options) -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use crate::is_digit_or_comma;
+
     use super::next_tabstop;
     use super::RemainingMode;
 
@@ -467,5 +497,12 @@ mod tests {
         assert_eq!(next_tabstop(&[1, 5], 0, &RemainingMode::Slash), 1);
         assert_eq!(next_tabstop(&[1, 5], 3, &RemainingMode::Slash), 2);
         assert_eq!(next_tabstop(&[1, 5], 6, &RemainingMode::Slash), 4);
+    }
+
+    #[test]
+    fn test_is_digit_or_comma() {
+        assert!(is_digit_or_comma('1'));
+        assert!(is_digit_or_comma(','));
+        assert!(!is_digit_or_comma('a'));
     }
 }
