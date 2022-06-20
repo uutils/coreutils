@@ -1197,12 +1197,20 @@ fn test_install_dir_req_verbose() {
         .succeeds()
         .stdout_contains("install: creating directory 'sub3'\ninstall: creating directory 'sub3/a'\ninstall: creating directory 'sub3/a/b'\ninstall: creating directory 'sub3/a/b/c'\n'source_file1' -> 'sub3/a/b/c/file'");
 
+    scene
+        .ucmd()
+        .arg("-t sub4/a")
+        .arg("-Dv")
+        .arg(file_1)
+        .succeeds()
+        .stdout_contains("install: creating directory 'sub4'\ninstall: creating directory 'sub4/a'\n'source_file1' -> 'sub4/a/source_file1'");
+
     at.mkdir(dest_dir);
     scene
         .ucmd()
         .arg("-Dv")
         .arg(file_1)
-        .arg("sub4/a/b/c/file")
+        .arg("sub5/a/b/c/file")
         .succeeds()
-        .stdout_contains("install: creating directory 'sub4/a'\ninstall: creating directory 'sub4/a/b'\ninstall: creating directory 'sub4/a/b/c'\n'source_file1' -> 'sub4/a/b/c/file'");
+        .stdout_contains("install: creating directory 'sub5/a'\ninstall: creating directory 'sub5/a/b'\ninstall: creating directory 'sub5/a/b/c'\n'source_file1' -> 'sub5/a/b/c/file'");
 }
