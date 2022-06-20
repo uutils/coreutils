@@ -559,6 +559,24 @@ fn test_cp_backup_simple() {
 }
 
 #[test]
+fn test_cp_backup_simple_protect_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = format!("{}~", TEST_HELLO_WORLD_SOURCE);
+    at.touch(&source);
+    ucmd.arg("--backup=simple")
+        .arg(&source)
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .fails()
+        .stderr_only(format!(
+            "cp: backing up '{}' might destroy source;  '{}' not copied",
+            TEST_HELLO_WORLD_SOURCE, source,
+        ));
+
+    assert_eq!(at.read(TEST_HELLO_WORLD_SOURCE), "Hello, World!\n");
+    assert_eq!(at.read(&source), "");
+}
+
+#[test]
 fn test_cp_backup_never() {
     let (at, mut ucmd) = at_and_ucmd!();
 
