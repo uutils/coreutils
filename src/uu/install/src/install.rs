@@ -471,13 +471,19 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
     if sources.len() > 1 || (target.exists() && target.is_dir()) {
         copy_files_into_dir(sources, &target, b)
     } else {
-        if let Some(parent) = target.parent() {
-            if !parent.exists() && b.create_leading {
+        // if -t is used in combination with -D, create whole target because it does not include filename
+        let to_create: Option<&Path> = if b.target_dir.is_some() && b.create_leading {
+            Some(target.as_path())
+        } else {
+            target.parent()
+        };
+
+        if let Some(to_create) = to_create {
+            if !to_create.exists() && b.create_leading {
                 if b.verbose {
                     let mut result = PathBuf::new();
-                    // When creating directories with -Dv, show directory creations step
-                    // by step
-                    for part in parent.components() {
+                    // When creating directories with -Dv, show directory creations step by step
+                    for part in to_create.components() {
                         result.push(part.as_os_str());
                         if !Path::new(part.as_os_str()).is_dir() {
                             // Don't display when the directory already exists
@@ -486,32 +492,39 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
                     }
                 }
 
-                if let Err(e) = fs::create_dir_all(parent) {
-                    return Err(InstallError::CreateDirFailed(parent.to_path_buf(), e).into());
+                if let Err(e) = fs::create_dir_all(to_create) {
+                    return Err(InstallError::CreateDirFailed(to_create.to_path_buf(), e).into());
                 }
 
                 // Silent the warning as we want to the error message
                 #[allow(clippy::question_mark)]
-                if mode::chmod(parent, b.mode()).is_err() {
-                    return Err(InstallError::ChmodFailed(parent.to_path_buf()).into());
+                if mode::chmod(to_create, b.mode()).is_err() {
+                    return Err(InstallError::ChmodFailed(to_create.to_path_buf()).into());
                 }
             }
         }
 
-        if target.is_file() || is_new_file_path(&target) {
-            copy(
-                sources.get(0).ok_or_else(|| {
-                    UUsageError::new(
-                        1,
-                        format!(
-                            "missing destination file operand after '{}'",
-                            target.to_str().unwrap()
-                        ),
-                    )
-                })?,
-                &target,
-                b,
+        let source = sources.first().ok_or_else(|| {
+            UUsageError::new(
+                1,
+                format!(
+                    "missing destination file operand after '{}'",
+                    target.to_str().unwrap()
+                ),
             )
+        })?;
+
+        // If the -D flag was passed (target does not include filename),
+        // we need to add the source name to the target_dir
+        // because `copy` expects `to` to be a file, not a directory
+        let target = if target.is_dir() && b.create_leading {
+            target.join(source)
+        } else {
+            target // already includes dest filename
+        };
+
+        if target.is_file() || is_new_file_path(&target) {
+            copy(source, &target, b)
         } else {
             Err(InstallError::InvalidTarget(target).into())
         }
