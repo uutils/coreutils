@@ -8,7 +8,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, Command, PossibleValue};
 use retain_mut::RetainMut;
 use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
@@ -16,6 +16,8 @@ use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::format_usage;
+
+// spell-checker:ignore nopipe
 
 #[cfg(unix)]
 use uucore::libc;
@@ -27,6 +29,8 @@ mod options {
     pub const APPEND: &str = "append";
     pub const IGNORE_INTERRUPTS: &str = "ignore-interrupts";
     pub const FILE: &str = "file";
+    pub const IGNORE_PIPE_ERRORS: &str = "ignore-pipe-errors";
+    pub const OUTPUT_ERROR: &str = "output-error";
 }
 
 #[allow(dead_code)]
@@ -34,6 +38,15 @@ struct Options {
     append: bool,
     ignore_interrupts: bool,
     files: Vec<String>,
+    output_error: Option<OutputErrorMode>,
+}
+
+#[derive(Clone, Debug)]
+enum OutputErrorMode {
+    Warn,
+    WarnNoPipe,
+    Exit,
+    ExitNoPipe,
 }
 
 #[uucore::main]
@@ -47,6 +60,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .values_of(options::FILE)
             .map(|v| v.map(ToString::to_string).collect())
             .unwrap_or_default(),
+        output_error: {
+            if matches.is_present(options::IGNORE_PIPE_ERRORS) {
+                Some(OutputErrorMode::WarnNoPipe)
+            } else if matches.is_present(options::OUTPUT_ERROR) {
+                if let Some(v) = matches.value_of(options::OUTPUT_ERROR) {
+                    match v {
+                        "warn" => Some(OutputErrorMode::Warn),
+                        "warn-nopipe" => Some(OutputErrorMode::WarnNoPipe),
+                        "exit" => Some(OutputErrorMode::Exit),
+                        "exit-nopipe" => Some(OutputErrorMode::ExitNoPipe),
+                        _ => unreachable!(),
+                    }
+                } else {
+                    Some(OutputErrorMode::WarnNoPipe)
+                }
+            } else {
+                None
+            }
+        },
     };
 
     match tee(&options) {
@@ -79,6 +111,29 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .multiple_occurrences(true)
                 .value_hint(clap::ValueHint::FilePath),
         )
+        .arg(
+            Arg::new(options::IGNORE_PIPE_ERRORS)
+                .short('p')
+                .help("set write error behavior (ignored on non-Unix platforms)"),
+        )
+        .arg(
+            Arg::new(options::OUTPUT_ERROR)
+                .long(options::OUTPUT_ERROR)
+                .require_equals(true)
+                .min_values(0)
+                .max_values(1)
+                .possible_values([
+                    PossibleValue::new("warn")
+                        .help("produce warnings for errors writing to any output"),
+                    PossibleValue::new("warn-nopipe")
+                        .help("produce warnings for errors that are not pipe errors (ignored on non-unix platforms)"),
+                    PossibleValue::new("exit").help("exit on write errors to any output"),
+                    PossibleValue::new("exit-nopipe")
+                        .help("exit on write errors to any output that are not pipe errors (equivalent to exit on non-unix platforms)"),
+                ])
+                .help("set write error behavior")
+                .conflicts_with(options::IGNORE_PIPE_ERRORS),
+        )
 }
 
 #[cfg(unix)]
@@ -96,19 +151,40 @@ fn ignore_interrupts() -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+fn enable_pipe_errors() -> Result<()> {
+    let ret = unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
+    if ret == libc::SIG_ERR {
+        return Err(Error::new(ErrorKind::Other, ""));
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn enable_pipe_errors() -> Result<()> {
+    // Do nothing.
+    Ok(())
+}
+
 fn tee(options: &Options) -> Result<()> {
     if options.ignore_interrupts {
         ignore_interrupts()?;
     }
+    if options.output_error.is_none() {
+        enable_pipe_errors()?;
+    }
+
     let mut writers: Vec<NamedWriter> = options
         .files
         .clone()
         .into_iter()
-        .map(|file| NamedWriter {
-            name: file.clone(),
-            inner: open(file, options.append),
+        .map(|file| {
+            Ok(NamedWriter {
+                name: file.clone(),
+                inner: open(file, options.append, options.output_error.as_ref())?,
+            })
         })
-        .collect();
+        .collect::<Result<Vec<NamedWriter>>>()?;
 
     writers.insert(
         0,
@@ -118,7 +194,7 @@ fn tee(options: &Options) -> Result<()> {
         },
     );
 
-    let mut output = MultiWriter::new(writers);
+    let mut output = MultiWriter::new(writers, options.output_error.clone());
     let input = &mut NamedReader {
         inner: Box::new(stdin()) as Box<dyn Read>,
     };
@@ -132,7 +208,11 @@ fn tee(options: &Options) -> Result<()> {
     }
 }
 
-fn open(name: String, append: bool) -> Box<dyn Write> {
+fn open(
+    name: String,
+    append: bool,
+    output_error: Option<&OutputErrorMode>,
+) -> Result<Box<dyn Write>> {
     let path = PathBuf::from(name.clone());
     let inner: Box<dyn Write> = {
         let mut options = OpenOptions::new();
@@ -143,56 +223,125 @@ fn open(name: String, append: bool) -> Box<dyn Write> {
         };
         match mode.write(true).create(true).open(path.as_path()) {
             Ok(file) => Box::new(file),
-            Err(_) => Box::new(sink()),
+            Err(f) => {
+                show_error!("{}: {}", name.maybe_quote(), f);
+                match output_error {
+                    Some(OutputErrorMode::Exit) | Some(OutputErrorMode::ExitNoPipe) => {
+                        return Err(f)
+                    }
+                    _ => Box::new(sink()),
+                }
+            }
         }
     };
-    Box::new(NamedWriter { inner, name }) as Box<dyn Write>
+    Ok(Box::new(NamedWriter { inner, name }) as Box<dyn Write>)
 }
 
 struct MultiWriter {
     writers: Vec<NamedWriter>,
-    initial_len: usize,
+    output_error_mode: Option<OutputErrorMode>,
+    ignored_errors: usize,
 }
 
 impl MultiWriter {
-    fn new(writers: Vec<NamedWriter>) -> Self {
+    fn new(writers: Vec<NamedWriter>, output_error_mode: Option<OutputErrorMode>) -> Self {
         Self {
-            initial_len: writers.len(),
             writers,
+            output_error_mode,
+            ignored_errors: 0,
         }
     }
+
     fn error_occurred(&self) -> bool {
-        self.writers.len() != self.initial_len
+        self.ignored_errors != 0
+    }
+}
+
+fn process_error(
+    mode: Option<&OutputErrorMode>,
+    f: Error,
+    writer: &NamedWriter,
+    ignored_errors: &mut usize,
+) -> Result<()> {
+    match mode {
+        Some(OutputErrorMode::Warn) => {
+            show_error!("{}: {}", writer.name.maybe_quote(), f);
+            *ignored_errors += 1;
+            Ok(())
+        }
+        Some(OutputErrorMode::WarnNoPipe) | None => {
+            if f.kind() != ErrorKind::BrokenPipe {
+                show_error!("{}: {}", writer.name.maybe_quote(), f);
+                *ignored_errors += 1;
+            }
+            Ok(())
+        }
+        Some(OutputErrorMode::Exit) => {
+            show_error!("{}: {}", writer.name.maybe_quote(), f);
+            Err(f)
+        }
+        Some(OutputErrorMode::ExitNoPipe) => {
+            if f.kind() != ErrorKind::BrokenPipe {
+                show_error!("{}: {}", writer.name.maybe_quote(), f);
+                Err(f)
+            } else {
+                Ok(())
+            }
+        }
     }
 }
 
 impl Write for MultiWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        let mut aborted = None;
+        let mode = self.output_error_mode.clone();
+        let mut errors = 0;
         RetainMut::retain_mut(&mut self.writers, |writer| {
             let result = writer.write_all(buf);
             match result {
                 Err(f) => {
-                    show_error!("{}: {}", writer.name.maybe_quote(), f);
+                    if let Err(e) = process_error(mode.as_ref(), f, writer, &mut errors) {
+                        if aborted.is_none() {
+                            aborted = Some(e);
+                        }
+                    }
                     false
                 }
                 _ => true,
             }
         });
-        Ok(buf.len())
+        self.ignored_errors += errors;
+        if let Some(e) = aborted {
+            Err(e)
+        } else {
+            Ok(buf.len())
+        }
     }
 
     fn flush(&mut self) -> Result<()> {
+        let mut aborted = None;
+        let mode = self.output_error_mode.clone();
+        let mut errors = 0;
         RetainMut::retain_mut(&mut self.writers, |writer| {
             let result = writer.flush();
             match result {
                 Err(f) => {
-                    show_error!("{}: {}", writer.name.maybe_quote(), f);
+                    if let Err(e) = process_error(mode.as_ref(), f, writer, &mut errors) {
+                        if aborted.is_none() {
+                            aborted = Some(e);
+                        }
+                    }
                     false
                 }
                 _ => true,
             }
         });
-        Ok(())
+        self.ignored_errors += errors;
+        if let Some(e) = aborted {
+            Err(e)
+        } else {
+            Ok(())
+        }
     }
 }
 
