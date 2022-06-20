@@ -61,8 +61,8 @@ impl Input<io::Stdin> {
         let iseek =
             parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::ISEEK)?;
         let count = parseargs::parse_count(&iflags, matches)?;
-
-        let mut i = Self {
+        #[cfg(any(target_family = "unix", target_family = "wasi"))]
+        let i = Self {
             src: io::stdin(),
             ibs,
             print_level,
@@ -71,17 +71,23 @@ impl Input<io::Stdin> {
             iflags,
         };
 
-        // The --skip and --iseek flags are additive. On a stream, they discard bytes.
+        // there is way to seek stdin, so we interpret stdin as a File
+        // to make it seekable
+        #[cfg(any(target_family = "unix", target_family = "wasi"))]
+        let mut seekable_src = unsafe {
+            use std::os::unix::io::{AsRawFd, FromRawFd};
+            std::fs::File::from_raw_fd(std::io::stdin().as_raw_fd())
+        };
+        #[cfg(target_family = "windows")]
+        let mut seekable_src = unsafe {
+            use std::os::windows::io::{AsRawHandle, FromRawHandle};
+            std::fs::File::from_raw_handle(std::io::stdin().as_raw_handle())
+        };
         let amt = skip.unwrap_or(0) + iseek.unwrap_or(0);
         if amt > 0 {
-            if let Err(e) = i.read_skip(amt) {
-                if let io::ErrorKind::UnexpectedEof = e.kind() {
-                    show_error!("'standard input': cannot skip to specified offset");
-                } else {
-                    return io::Result::Err(e)
-                        .map_err_context(|| "I/O error while skipping".to_string());
-                }
-            }
+            seekable_src
+                .seek(io::SeekFrom::Start(amt))
+                .map_err_context(|| "failed to seek in input file".to_string())?;
         }
 
         Ok(i)
