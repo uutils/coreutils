@@ -2,6 +2,8 @@
 
 use crate::common::util::*;
 
+use regex::Regex;
+
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
@@ -259,7 +261,9 @@ fn test_final_stats_noxfer() {
 fn test_final_stats_unspec() {
     new_ucmd!()
         .run()
-        .stderr_only("0+0 records in\n0+0 records out\n0 bytes copied, 0.0 s, 0 B/s\n")
+        .stderr_matches(&Regex::new(r"0\+0 records in").unwrap())
+        .stderr_matches(&Regex::new(r"0\+0 records out").unwrap())
+        .stderr_matches(&Regex::new(r"0 bytes copied, 0\.\d+ s, 0 B/s").unwrap())
         .success();
 }
 
@@ -375,7 +379,9 @@ fn test_null_stats() {
     new_ucmd!()
         .args(&["if=null.txt"])
         .run()
-        .stderr_only("0+0 records in\n0+0 records out\n0 bytes copied, 0.0 s, 0 B/s\n")
+        .stderr_matches(&Regex::new(r"0\+0 records in").unwrap())
+        .stderr_matches(&Regex::new(r"0\+0 records out").unwrap())
+        .stderr_matches(&Regex::new(r"0 bytes copied, 0\.\d+ s, 0 B/s").unwrap())
         .success();
 }
 

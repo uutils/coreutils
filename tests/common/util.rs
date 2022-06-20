@@ -454,6 +454,13 @@ impl CmdResult {
         }
         self
     }
+
+    pub fn stderr_matches(&self, regex: &regex::Regex) -> &Self {
+        if !regex.is_match(self.stderr_str().trim()) {
+            panic!("Stderr does not match regex:\n{}", self.stderr_str());
+        }
+        self
+    }
 }
 
 pub fn log_info<T: AsRef<str>, U: AsRef<str>>(msg: T, par: U) {

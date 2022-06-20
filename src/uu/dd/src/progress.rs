@@ -51,6 +51,76 @@ pub(crate) struct ProgUpdate {
     pub(crate) complete: bool,
 }
 
+/// Get the precision to use for displaying a given time duration.
+///
+/// This function returns a number of digits to display after the
+/// decimal. It is calibrated to match the behavior of GNU `dd`. For
+/// example, here are some samples of durations presented by `dd`:
+///
+/// ```text
+/// 1566.68 s
+///  144.31 s
+///   14.4933 s
+///    1.5546 s
+///    0.251168 s
+///    0.0485443 s
+///    0.00701855 s
+///    0.000415484 s
+/// ```
+///
+/// # Examples
+///
+/// The returned precision depends on the magnitude of the input duration:
+///
+/// ```rust,ignore
+/// use std::time::Duration;
+///
+/// assert_eq!(get_precision(Duration::from_nanos(1_234_567_890)), 4);
+/// assert_eq!(get_precision(Duration::from_nanos(123_456_789)), 6);
+/// assert_eq!(get_precision(Duration::from_nanos(12_345_678)), 7);
+/// ```
+///
+/// The precision can be used in a format string like this:
+///
+/// ```rust,ignore
+/// use std::time::Duration;
+///
+/// let duration = Duration::from_nanos(1_234_567_890);
+/// let precision = get_precision(duration);
+/// let secs = duration.as_secs_f64();
+/// assert_eq!(format!("{:.precision$} s", secs), "1.2346 s".to_string());
+/// ```
+fn get_precision(duration: Duration) -> usize {
+    // Sample outputs for durations of various orders of magnitude:
+    //
+    // 1566.68
+    //  144.31
+    //   14.4933
+    //    1.5546
+    //    0.251168
+    //    0.0485443
+    //    0.00701855
+    //    0.000415484
+    //
+    // TODO Need to implement 7.9151e-05 instead of 0.000079151.
+    let nanos = duration.as_nanos();
+    if nanos < 1_000_000 {
+        9
+    } else if nanos < 10_000_000 {
+        8
+    } else if nanos < 100_000_000 {
+        7
+    } else if nanos < 1_000_000_000 {
+        6
+    } else if nanos < 100_000_000_000 {
+        // also if nanos < 10_000_000_000
+        4
+    } else {
+        // if nanos < 1_000_000_000_000 {
+        2
+    }
+}
+
 impl ProgUpdate {
     /// Instantiate this struct.
     pub(crate) fn new(
@@ -129,7 +199,7 @@ impl ProgUpdate {
     /// let mut cursor = Cursor::new(vec![]);
     /// let rewrite = false;
     /// prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
-    /// assert_eq!(cursor.get_ref(), b"0 bytes copied, 1.0 s, 0 B/s\n");
+    /// assert_eq!(cursor.get_ref(), b"0 bytes copied, 1.0000 s, 0 B/s\n");
     /// ```
     fn write_prog_line(&self, w: &mut impl Write, rewrite: bool) -> std::io::Result<()> {
         let btotal_metric = Byte::from_bytes(self.write_stat.bytes_total)
@@ -145,6 +215,7 @@ impl ProgUpdate {
 
         let btotal = self.write_stat.bytes_total;
         let duration = self.duration.as_secs_f64();
+        let precision = get_precision(self.duration);
 
         // If we are rewriting the progress line, do write a carriage
         // return (`\r`) at the beginning and don't write a newline
@@ -157,19 +228,19 @@ impl ProgUpdate {
         if btotal < 1000 {
             write!(
                 w,
-                "{}{} bytes copied, {:.1} s, {}/s{}",
+                "{}{} bytes copied, {:.precision$} s, {}/s{}",
                 carriage_return, btotal, duration, transfer_rate, newline,
             )
         } else if btotal < 1024 {
             write!(
                 w,
-                "{}{} bytes ({}) copied, {:.1} s, {}/s{}",
+                "{}{} bytes ({}) copied, {:.precision$} s, {}/s{}",
                 carriage_return, btotal, btotal_metric, duration, transfer_rate, newline,
             )
         } else {
             write!(
                 w,
-                "{}{} bytes ({}, {}) copied, {:.1} s, {}/s{}",
+                "{}{} bytes ({}, {}) copied, {:.precision$} s, {}/s{}",
                 carriage_return,
                 btotal,
                 btotal_metric,
@@ -206,7 +277,7 @@ impl ProgUpdate {
     /// let mut iter = cursor.get_ref().split(|v| *v == b'\n');
     /// assert_eq!(iter.next().unwrap(), b"0+0 records in");
     /// assert_eq!(iter.next().unwrap(), b"0+0 records out");
-    /// assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1.0 s, 0 B/s");
+    /// assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1.0000 s, 0 B/s");
     /// assert_eq!(iter.next().unwrap(), b"");
     /// assert!(iter.next().is_none());
     /// ```
@@ -509,6 +580,15 @@ mod tests {
         }
     }
 
+    fn prog_update_duration(duration: Duration) -> ProgUpdate {
+        ProgUpdate {
+            read_stat: Default::default(),
+            write_stat: Default::default(),
+            duration: duration,
+            complete: false,
+        }
+    }
+
     #[test]
     fn test_read_stat_report() {
         let read_stat = ReadStat::new(1, 2, 3);
@@ -564,22 +644,20 @@ mod tests {
         //     $ : | dd
         //     0 bytes copied, 7.9151e-05 s, 0.0 kB/s
         //
-        // The throughput still does not match GNU dd. For the ones
-        // that include the concise byte counts, the format is also
-        // not right.
-        assert_eq!(cursor.get_ref(), b"0 bytes copied, 1.0 s, 0 B/s\n");
+        // The format of the concise byte counts is not right.
+        assert_eq!(cursor.get_ref(), b"0 bytes copied, 1.0000 s, 0 B/s\n");
 
         let prog_update = prog_update_write(999);
         let mut cursor = Cursor::new(vec![]);
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
-        assert_eq!(cursor.get_ref(), b"999 bytes copied, 1.0 s, 0 B/s\n");
+        assert_eq!(cursor.get_ref(), b"999 bytes copied, 1.0000 s, 0 B/s\n");
 
         let prog_update = prog_update_write(1000);
         let mut cursor = Cursor::new(vec![]);
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
         assert_eq!(
             cursor.get_ref(),
-            b"1000 bytes (1000 B) copied, 1.0 s, 1000 B/s\n"
+            b"1000 bytes (1000 B) copied, 1.0000 s, 1000 B/s\n"
         );
 
         let prog_update = prog_update_write(1023);
@@ -587,7 +665,7 @@ mod tests {
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
         assert_eq!(
             cursor.get_ref(),
-            b"1023 bytes (1 KB) copied, 1.0 s, 1000 B/s\n"
+            b"1023 bytes (1 KB) copied, 1.0000 s, 1000 B/s\n"
         );
 
         let prog_update = prog_update_write(1024);
@@ -595,7 +673,7 @@ mod tests {
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
         assert_eq!(
             std::str::from_utf8(cursor.get_ref()).unwrap(),
-            "1024 bytes (1 KB, 1024 B) copied, 1.0 s, 1000 B/s\n"
+            "1024 bytes (1 KB, 1024 B) copied, 1.0000 s, 1000 B/s\n"
         );
     }
 
@@ -614,7 +692,7 @@ mod tests {
         let mut iter = cursor.get_ref().split(|v| *v == b'\n');
         assert_eq!(iter.next().unwrap(), b"0+0 records in");
         assert_eq!(iter.next().unwrap(), b"0+0 records out");
-        assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1.0 s, 0 B/s");
+        assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1.0000 s, 0 B/s");
         assert_eq!(iter.next().unwrap(), b"");
         assert!(iter.next().is_none());
     }
@@ -633,11 +711,20 @@ mod tests {
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
         prog_update.write_transfer_stats(&mut cursor, true).unwrap();
         let mut iter = cursor.get_ref().split(|v| *v == b'\n');
-        assert_eq!(iter.next().unwrap(), b"\r0 bytes copied, 1.0 s, 0 B/s");
+        assert_eq!(iter.next().unwrap(), b"\r0 bytes copied, 1.0000 s, 0 B/s");
         assert_eq!(iter.next().unwrap(), b"0+0 records in");
         assert_eq!(iter.next().unwrap(), b"0+0 records out");
-        assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1.0 s, 0 B/s");
+        assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1.0000 s, 0 B/s");
         assert_eq!(iter.next().unwrap(), b"");
         assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn test_duration_precision() {
+        let prog_update = prog_update_duration(Duration::from_nanos(123));
+        let mut cursor = Cursor::new(vec![]);
+        let rewrite = false;
+        prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
+        assert_eq!(cursor.get_ref(), b"0 bytes copied, 0.000000123 s, 0 B/s\n");
     }
 }
