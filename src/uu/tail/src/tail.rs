@@ -1613,6 +1613,7 @@ impl WatcherExtTail for dyn Watcher {
     /// Wrapper for `notify::Watcher::watch` to also add the parent directory of `path` if necessary.
     fn watch_with_parent(&mut self, path: &Path) -> UResult<()> {
         let mut path = path.to_owned();
+        #[cfg(target_os = "linux")]
         if path.is_file() {
             /*
             NOTE: Using the parent directory instead of the file is a workaround.

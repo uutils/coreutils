@@ -382,6 +382,7 @@ fn test_null_default() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_follow_single() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -405,6 +406,7 @@ fn test_follow_single() {
 
 /// Test for following when bytes are written that are not valid UTF-8.
 #[test]
+#[cfg(unix)]
 fn test_follow_non_utf8_bytes() {
     // Tail the test file and start following it.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -436,6 +438,7 @@ fn test_follow_non_utf8_bytes() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_follow_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut child = ucmd
