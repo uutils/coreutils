@@ -18,7 +18,7 @@ path = "src/tail.rs"
 [dependencies]
 clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 libc = "0.2.126"
-notify = { version = "5.0.0-pre.15", features=["macos_kqueue"]}
+notify = { version = "=5.0.0-pre.15", features=["macos_kqueue"]}
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["ringbuffer", "lines"] }
 
 [target.'cfg(windows)'.dependencies]
