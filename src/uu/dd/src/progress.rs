@@ -505,6 +505,7 @@ mod tests {
                 ..Default::default()
             },
             duration: Duration::new(1, 0), // one second
+            complete: false,
         }
     }
 
@@ -613,10 +614,7 @@ mod tests {
         let mut iter = cursor.get_ref().split(|v| *v == b'\n');
         assert_eq!(iter.next().unwrap(), b"0+0 records in");
         assert_eq!(iter.next().unwrap(), b"0+0 records out");
-        assert_eq!(
-            iter.next().unwrap(),
-            b"0 bytes (0 B, 0 B) copied, 1.0 s, 0 B/s"
-        );
+        assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1.0 s, 0 B/s");
         assert_eq!(iter.next().unwrap(), b"");
         assert!(iter.next().is_none());
     }
@@ -635,10 +633,7 @@ mod tests {
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
         prog_update.write_transfer_stats(&mut cursor, true).unwrap();
         let mut iter = cursor.get_ref().split(|v| *v == b'\n');
-        assert_eq!(
-            iter.next().unwrap(),
-            b"\r0 bytes (0 B, 0 B) copied, 1.0 s, 0 B/s"
-        );
+        assert_eq!(iter.next().unwrap(), b"\r0 bytes copied, 1.0 s, 0 B/s");
         assert_eq!(iter.next().unwrap(), b"0+0 records in");
         assert_eq!(iter.next().unwrap(), b"0+0 records out");
         assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1.0 s, 0 B/s");
