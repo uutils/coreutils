@@ -370,6 +370,17 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let backup_mode = backup_control::determine_backup_mode(matches)?;
     let target_dir = matches.value_of(OPT_TARGET_DIRECTORY).map(|d| d.to_owned());
 
+    let preserve_timestamps = matches.is_present(OPT_PRESERVE_TIMESTAMPS);
+    let compare = matches.is_present(OPT_COMPARE);
+    let strip = matches.is_present(OPT_STRIP);
+    if preserve_timestamps && compare {
+        show_error!("Options --compare and --preserve-timestamps are mutually exclusive");
+        return Err(1.into());
+    }
+    if compare && strip {
+        show_error!("Options --compare and --strip are mutually exclusive");
+        return Err(1.into());
+    }
     Ok(Behavior {
         main_function,
         specified_mode,
@@ -378,9 +389,9 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         owner: matches.value_of(OPT_OWNER).unwrap_or("").to_string(),
         group: matches.value_of(OPT_GROUP).unwrap_or("").to_string(),
         verbose: matches.is_present(OPT_VERBOSE),
-        preserve_timestamps: matches.is_present(OPT_PRESERVE_TIMESTAMPS),
-        compare: matches.is_present(OPT_COMPARE),
-        strip: matches.is_present(OPT_STRIP),
+        preserve_timestamps,
+        compare,
+        strip,
         strip_program: String::from(
             matches
                 .value_of(OPT_STRIP_PROGRAM)
