@@ -37,7 +37,7 @@ use clap::{crate_version, Arg, ArgMatches, Command};
 use gcd::Gcd;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::{show_error, InvalidEncodingHandling};
+use uucore::InvalidEncodingHandling;
 
 const ABOUT: &str = "copy, and optionally convert, a file system resource";
 const BUF_INIT_BYTE: u8 = 0xDD;
@@ -266,20 +266,6 @@ impl<R: Read> Input<R> {
             reads_partial,
             records_truncated: 0,
         })
-    }
-
-    /// Skips amount_to_read bytes from the Input by copying into a sink
-    fn read_skip(&mut self, amount_to_read: u64) -> std::io::Result<()> {
-        let copy_result = io::copy(&mut self.src.by_ref().take(amount_to_read), &mut io::sink());
-        if let Ok(n) = copy_result {
-            if n != amount_to_read {
-                io::Result::Err(io::Error::new(io::ErrorKind::UnexpectedEof, ""))
-            } else {
-                Ok(())
-            }
-        } else {
-            io::Result::Err(copy_result.unwrap_err())
-        }
     }
 }
 
