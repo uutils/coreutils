@@ -340,7 +340,7 @@ dependencies = [
  "sha1",
  "tempfile",
  "textwrap 0.15.0",
- "time 0.3.9",
+ "time 0.3.11",
  "unindent",
  "unix_socket",
  "users",
@@ -2001,9 +2001,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.9"
+version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2702e08a7a860f005826c6815dcac101b19b5eb330c27fe4a5928fec1d20ddd"
+checksum = "72c91f41dcb2f096c05f0873d667dceec1087ce5bcf984ec8ffb19acddbb3217"
 dependencies = [
  "itoa",
  "libc",
@@ -2463,7 +2463,7 @@ dependencies = [
  "file_diff",
  "filetime",
  "libc",
- "time 0.3.9",
+ "time 0.3.11",
  "uucore",
 ]
 
@@ -2941,7 +2941,7 @@ version = "0.0.14"
 dependencies = [
  "clap 3.2.15",
  "filetime",
- "time 0.3.9",
+ "time 0.3.11",
  "uucore",
  "winapi 0.3.9",
 ]
@@ -3109,7 +3109,7 @@ dependencies = [
  "once_cell",
  "os_display",
  "thiserror",
- "time 0.3.9",
+ "time 0.3.11",
  "uucore_procs",
  "walkdir",
  "wild",
