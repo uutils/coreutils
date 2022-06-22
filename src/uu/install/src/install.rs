@@ -585,6 +585,9 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     // The codes actually making use of the backup process don't seem to agree
     // on how best to approach the issue. (mv and ln, for example)
     if to.exists() {
+        if b.verbose {
+            println!("removed {}", to.quote());
+        }
         backup_path = backup_control::get_backup_path(b.backup_mode, to, &b.suffix);
         if let Some(ref backup_path) = backup_path {
             // TODO!!
