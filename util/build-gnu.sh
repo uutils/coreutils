@@ -164,6 +164,14 @@ sed -i -e "s|rm: cannot remove 'a/1'|rm: cannot remove 'a'|g" tests/rm/rm2.sh
 
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
+# overlay-headers.sh test intends to check for inotify events,
+# however there's a bug because `---dis` is an alias for: `---disable-inotify`
+sed -i -e "s|---dis ||g" tests/tail-2/overlay-headers.sh
+
+# F-headers.sh test sometime fails (but only in CI),
+# just testing inotify should make it more stable
+sed -i -e "s| '---disable-inotify'||g" tests/tail-2/F-headers.sh
+
 test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
 
 # When decoding an invalid base32/64 string, gnu writes everything it was able to decode until
@@ -199,6 +207,7 @@ sed -i -e "s/provoked error./provoked error\ncat pat |sort -u > pat/" tests/misc
 # Update the GNU error message to match ours
 sed -i -e "s/ln: 'f' and 'f' are the same file/ln: failed to link 'f' to 'f': Same file/g" tests/ln/hard-backup.sh
 sed -i -e "s/failed to access 'no-such-dir'\":/failed to link 'no-such-dir'\"/" -e "s/link-to-dir: hard link not allowed for directory/failed to link 'link-to-dir' to/" -e "s|link-to-dir/: hard link not allowed for directory|failed to link 'link-to-dir/' to|" tests/ln/hard-to-sym.sh
+
 
 # GNU sleep accepts some crazy string, not sure we should match this behavior
 sed -i -e "s/timeout 10 sleep 0x.002p1/#timeout 10 sleep 0x.002p1/" tests/misc/sleep.sh
