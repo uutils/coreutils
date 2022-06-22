@@ -757,11 +757,16 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
 
     // setuid || setgid || sticky
     let extra_mode: u32 = 0o7000;
+    // setuid || setgid || sticky || permissions
+    let all_modes: u32 = 0o7777;
 
     if b.specified_mode.unwrap_or(0) & extra_mode != 0
         || from_meta.mode() & extra_mode != 0
         || to_meta.mode() & extra_mode != 0
     {
+        return Ok(true);
+    }
+    if b.mode() != to_meta.mode() & all_modes {
         return Ok(true);
     }
 
