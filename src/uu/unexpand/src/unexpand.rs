@@ -16,6 +16,7 @@ use std::error::Error;
 use std::fmt;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Stdout, Write};
+use std::num::IntErrorKind;
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
@@ -33,6 +34,7 @@ const DEFAULT_TABSTOP: usize = 8;
 enum ParseError {
     InvalidCharacter(String),
     TabSizeCannotBeZero,
+    TabSizeTooLarge,
     TabSizesMustBeAscending,
 }
 
@@ -46,6 +48,7 @@ impl fmt::Display for ParseError {
                 write!(f, "tab size contains invalid character(s): {}", s.quote())
             }
             Self::TabSizeCannotBeZero => write!(f, "tab size cannot be 0"),
+            Self::TabSizeTooLarge => write!(f, "tab stop value is too large"),
             Self::TabSizesMustBeAscending => write!(f, "tab sizes must be ascending"),
         }
     }
@@ -57,12 +60,16 @@ fn tabstops_parse(s: &str) -> Result<Vec<usize>, ParseError> {
     let mut nums = Vec::new();
 
     for word in words {
-        if let Ok(num) = word.parse() {
-            nums.push(num);
-        } else {
-            return Err(ParseError::InvalidCharacter(
-                word.trim_start_matches(char::is_numeric).to_string(),
-            ));
+        match word.parse::<usize>() {
+            Ok(num) => nums.push(num),
+            Err(e) => match e.kind() {
+                IntErrorKind::PosOverflow => return Err(ParseError::TabSizeTooLarge),
+                _ => {
+                    return Err(ParseError::InvalidCharacter(
+                        word.trim_start_matches(char::is_numeric).to_string(),
+                    ))
+                }
+            },
         }
     }
 
