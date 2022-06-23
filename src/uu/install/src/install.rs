@@ -370,6 +370,17 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let backup_mode = backup_control::determine_backup_mode(matches)?;
     let target_dir = matches.value_of(OPT_TARGET_DIRECTORY).map(|d| d.to_owned());
 
+    let preserve_timestamps = matches.is_present(OPT_PRESERVE_TIMESTAMPS);
+    let compare = matches.is_present(OPT_COMPARE);
+    let strip = matches.is_present(OPT_STRIP);
+    if preserve_timestamps && compare {
+        show_error!("Options --compare and --preserve-timestamps are mutually exclusive");
+        return Err(1.into());
+    }
+    if compare && strip {
+        show_error!("Options --compare and --strip are mutually exclusive");
+        return Err(1.into());
+    }
     Ok(Behavior {
         main_function,
         specified_mode,
@@ -378,9 +389,9 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         owner: matches.value_of(OPT_OWNER).unwrap_or("").to_string(),
         group: matches.value_of(OPT_GROUP).unwrap_or("").to_string(),
         verbose: matches.is_present(OPT_VERBOSE),
-        preserve_timestamps: matches.is_present(OPT_PRESERVE_TIMESTAMPS),
-        compare: matches.is_present(OPT_COMPARE),
-        strip: matches.is_present(OPT_STRIP),
+        preserve_timestamps,
+        compare,
+        strip,
         strip_program: String::from(
             matches
                 .value_of(OPT_STRIP_PROGRAM)
@@ -598,6 +609,9 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     // The codes actually making use of the backup process don't seem to agree
     // on how best to approach the issue. (mv and ln, for example)
     if to.exists() {
+        if b.verbose {
+            println!("removed {}", to.quote());
+        }
         backup_path = backup_control::get_backup_path(b.backup_mode, to, &b.suffix);
         if let Some(ref backup_path) = backup_path {
             // TODO!!
@@ -767,11 +781,16 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
 
     // setuid || setgid || sticky
     let extra_mode: u32 = 0o7000;
+    // setuid || setgid || sticky || permissions
+    let all_modes: u32 = 0o7777;
 
     if b.specified_mode.unwrap_or(0) & extra_mode != 0
         || from_meta.mode() & extra_mode != 0
         || to_meta.mode() & extra_mode != 0
     {
+        return Ok(true);
+    }
+    if b.mode() != to_meta.mode() & all_modes {
         return Ok(true);
     }
 

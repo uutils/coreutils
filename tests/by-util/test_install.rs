@@ -1214,3 +1214,44 @@ fn test_install_dir_req_verbose() {
         .succeeds()
         .stdout_contains("install: creating directory 'sub5/a'\ninstall: creating directory 'sub5/a/b'\ninstall: creating directory 'sub5/a/b/c'\n'source_file1' -> 'sub5/a/b/c/file'");
 }
+
+#[test]
+fn test_install_compare_option() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let first = "a";
+    let second = "b";
+    at.touch(first);
+    scene
+        .ucmd()
+        .args(&["-Cv", first, second])
+        .succeeds()
+        .stdout_contains(format!("'{}' -> '{}'", first, second));
+    scene
+        .ucmd()
+        .args(&["-Cv", first, second])
+        .succeeds()
+        .no_stdout();
+    scene
+        .ucmd()
+        .args(&["-Cv", "-m0644", first, second])
+        .succeeds()
+        .stdout_contains(format!("removed '{}'\n'{}' -> '{}'", second, first, second));
+    scene
+        .ucmd()
+        .args(&["-Cv", first, second])
+        .succeeds()
+        .stdout_contains(format!("removed '{}'\n'{}' -> '{}'", second, first, second));
+    scene
+        .ucmd()
+        .args(&["-C", "--preserve-timestamps", first, second])
+        .fails()
+        .code_is(1)
+        .stderr_contains("Options --compare and --preserve-timestamps are mutually exclusive");
+    scene
+        .ucmd()
+        .args(&["-C", "--strip", "--strip-program=echo", first, second])
+        .fails()
+        .code_is(1)
+        .stderr_contains("Options --compare and --strip are mutually exclusive");
+}
