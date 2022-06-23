@@ -1186,3 +1186,16 @@ fn test_final_stats_si_iec() {
     let s = result.stderr_str();
     assert!(s.starts_with("2+0 records in\n2+0 records out\n1024 bytes (1 KB, 1024 B) copied,"));
 }
+
+#[test]
+fn test_partial_skip_stdin() {
+    let input = "abc\ndef\n";
+    // build_test_file!("infile.txt", input.as_bytes());
+    new_ucmd!()
+        .args(&["status=none", "bs=1", "skip=1", "count=0"])
+        .pipe_in(input)
+        .succeeds()
+        .no_stderr()
+        .stdout_is("bc")
+        .success();
+}
