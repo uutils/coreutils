@@ -969,7 +969,6 @@ jobs:
 
   coverage:
     name: Code Coverage
-    needs: build
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
