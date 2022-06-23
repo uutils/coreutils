@@ -33,6 +33,30 @@ static EXAMPLE_DATA: &[TestData] = &[
         ins: &["a\n", "b\n"],
         out: "a\tb\n",
     },
+    TestData {
+        name: "zno-nl-1",
+        args: &["-z"],
+        ins: &["a", "b"],
+        out: "a\tb\0",
+    },
+    TestData {
+        name: "zno-nl-2",
+        args: &["-z"],
+        ins: &["a\0", "b"],
+        out: "a\tb\0",
+    },
+    TestData {
+        name: "zno-nl-3",
+        args: &["-z"],
+        ins: &["a", "b\0"],
+        out: "a\tb\0",
+    },
+    TestData {
+        name: "zno-nl-4",
+        args: &["-z"],
+        ins: &["a\0", "b\0"],
+        out: "a\tb\0",
+    },
     // Same as above, but with a two lines in each input file and the
     // addition of the -d option to make SPACE be the output
     // delimiter.
@@ -59,6 +83,30 @@ static EXAMPLE_DATA: &[TestData] = &[
         args: &["-d", " "],
         ins: &["1\na\n", "2\nb\n"],
         out: "1 2\na b\n",
+    },
+    TestData {
+        name: "zno-nla1",
+        args: &["-zd", " "],
+        ins: &["1\0a", "2\0b"],
+        out: "1 2\0a b\0",
+    },
+    TestData {
+        name: "zno-nla2",
+        args: &["-zd", " "],
+        ins: &["1\0a\0", "2\0b"],
+        out: "1 2\0a b\0",
+    },
+    TestData {
+        name: "zno-nla3",
+        args: &["-zd", " "],
+        ins: &["1\0a", "2\0b\0"],
+        out: "1 2\0a b\0",
+    },
+    TestData {
+        name: "zno-nla4",
+        args: &["-zd", " "],
+        ins: &["1\0a\0", "2\0b\0"],
+        out: "1 2\0a b\0",
     },
     TestData {
         name: "multibyte-delim",
