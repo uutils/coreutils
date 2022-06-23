@@ -980,7 +980,7 @@ jobs:
           - { os: windows-latest , features: windows }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v1
+    # - uses: Swatinem/rust-cache@v1
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
     #   run: git checkout ${{ github.head_ref }}
     - name: Initialize workflow variables
