@@ -1395,11 +1395,13 @@ fn test_copy_dir_symlink() {
 }
 
 #[test]
+#[cfg(not(target_os = "macos"))]
 fn test_copy_dir_with_symlinks() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
     at.make_file("dir/file");
 
+    at.relative_symlink_file("dir/file", "dir/file-link");
     TestScenario::new("ln")
         .ucmd()
         .arg("-sr")
@@ -1658,3 +1660,33 @@ fn test_cp_overriding_arguments() {
         s.fixtures.remove("file2");
     }
 }
+
+#[test]
+fn test_trailing_slash_cp_to_nonexistent_dir() {
+    let s = TestScenario::new(util_name!()); 
+    s.fixtures.touch("source_file_1");
+    s.fixtures.touch("source_file_2");
+    s.cmd("ls")
+        .arg("nonexistent_target").fails();
+    s.ucmd()
+        .arg("source_file_1")
+        .arg("nonexistent_target/")
+        .fails()
+        .stderr_contains("does not exist");
+}
+
+#[test]
+fn test_cp_trailing_slash_copy_to_symlinked_file() {
+    let s = TestScenario::new(util_name!()); 
+    let at = &s.fixtures;
+    s.fixtures.touch("source_file_1");
+    s.fixtures.touch("symlink_target"); 
+    at.symlink_file("symlink_target", "symlink");
+    s.ucmd()
+        .arg("source_file_1")
+        .arg("symlink/")
+        .fails()
+        .stderr_is("cp: target: 'symlink/' is not a directory");
+}
+
+ 

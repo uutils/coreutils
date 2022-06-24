@@ -733,17 +733,43 @@ impl Options {
 }
 
 impl TargetType {
-    /// Return TargetType required for `target`.
-    ///
-    /// Treat target as a dir if we have multiple sources or the target
-    /// exists and already is a directory
-    fn determine(sources: &[Source], target: &TargetSlice) -> Self {
-        if sources.len() > 1 || target.is_dir() {
-            Self::Directory
-        } else {
-            Self::File
-        }
-    }
+    // / Return TargetType required for `target`.
+    // /
+    // / Determines only looking at the path string, without testing on disk.
+    // / Treats as directory if path has trailing slash there are multiple sources
+    // fn determine(sources: &[Source], target: &TargetSlice) -> CopyResult<()>  {
+
+    //     let has_trailing_slash = target.to_string_lossy().ends_with('/');
+    //     match (
+    //         has_trailing_slash,
+    //         target.exists(),
+    //         target.is_dir(),
+    //         target.is_symlink(),
+    //     ) {
+    //         (true, false, ..) => {
+    //             Err(format!("directory {} does not exist", target.quote()).into())
+    //         }
+    //         (true, true, false) => {
+    //             Err(format!("target: {} is not a directory", target.quote()).into())
+    //         }
+    //         (true, .. true) => Err(format!(
+    //             "destination {} is a symlink to a regular file",
+    //             target.quote()
+    //         )
+    //         .into()),
+    //         (&TargetType::File, _, true, ..) => Err(format!(
+    //             "cannot overwrite directory {} with non-directory",
+    //             target.quote()
+    //         )
+    //         .into()),
+    //         _ => Ok(()),
+    //     }
+    //     if sources.len() > 1 || target.ends_with("/") {
+    //         Self::Directory
+    //     } else {
+    //         Self::File
+    //     }
+    // }
 }
 
 /// Returns tuple of (Source paths, Target)
@@ -860,8 +886,7 @@ fn preserve_hardlinks(
 ///
 /// [`Options`]: ./struct.Options.html
 fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResult<()> {
-    let target_type = TargetType::determine(sources, target);
-    verify_target_type(target, &target_type)?;
+    let target_type = verify_target_type(sources, target)?;
 
     let mut preserve_hard_links = false;
     for attribute in &options.preserve_attributes {
@@ -1655,17 +1680,41 @@ fn copy_on_write_macos(
 }
 
 /// Generate an error message if `target` is not the correct `target_type`
-pub fn verify_target_type(target: &Path, target_type: &TargetType) -> CopyResult<()> {
-    match (target_type, target.is_dir()) {
-        (&TargetType::Directory, false) => {
-            Err(format!("target: {} is not a directory", target.quote()).into())
+pub fn verify_target_type(sources: &[Source], target: &TargetSlice) -> CopyResult<TargetType> {
+    let target_path_string = target.to_string_lossy();
+    let seems_like_dir = target_path_string.ends_with("/")
+        || target_path_string == "."
+        || target_path_string == ".."
+        || sources.len() > 1;
+    match (
+        seems_like_dir,
+        target.exists(),
+        target.is_dir(),
+        target.is_symlink(),
+    ) {
+        (true, false, ..) => {
+            return Err(format!("directory {} does not exist", target.quote()).into())
         }
-        (&TargetType::File, true) => Err(format!(
-            "cannot overwrite directory {} with non-directory",
-            target.quote()
-        )
-        .into()),
-        _ => Ok(()),
+        (true, true, false, false) => {
+            return Err(format!("target: {} is not a directory", target.quote()).into())
+        }
+        (true, true, false, true) => {
+            return Err(format!(
+                "destination {} is a symlink to a regular file",
+                target.quote()
+            )
+            .into())
+        }
+        // (false, _, true, ..) => return Err(format!(
+        //     "cannot overwrite directory {} with non-directory",
+        //     target.quote()
+        // )
+        // .into()),
+        // correct cases
+        (true, true, true, _) => return Ok(TargetType::Directory),
+        (false, _, false, _) => return Ok(TargetType::File),
+        (false, true, true, _) => return Ok(TargetType::Directory),
+        _ => return Err("cannot determine target type".into()),
     }
 }
 
