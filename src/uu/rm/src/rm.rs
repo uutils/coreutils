@@ -155,7 +155,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(OPT_PROMPT)
             .short('i')
-            .long("prompt before every removal")
+            .help("prompt before every removal")
         )
         .arg(
             Arg::new(OPT_PROMPT_MORE)
