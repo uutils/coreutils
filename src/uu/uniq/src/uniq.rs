@@ -319,7 +319,9 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help("print all duplicate lines. Delimiting is done with blank lines. [default: none]")
                 .value_name("delimit-method")
                 .min_values(0)
-                .max_values(1),
+                .max_values(1)
+                .default_missing_value("none")
+                .require_equals(true),
         )
         .arg(
             Arg::new(options::GROUP)
@@ -334,6 +336,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .value_name("group-method")
                 .min_values(0)
                 .max_values(1)
+                .default_missing_value("separate")
+                .require_equals(true)
                 .conflicts_with_all(&[
                     options::REPEATED,
                     options::ALL_REPEATED,
