@@ -1377,7 +1377,7 @@ fn test_cp_reflink_insufficient_permission() {
 #[test]
 fn test_closes_file_descriptors() {
     let (at, mut ucmd) = at_and_ucmd!(); 
-    at.mkdir("dir_with_10_file_new/");
+    at.mkdir("dir_with_10_files_new/");
     ucmd.arg("-r")
         .arg("--reflink=auto")
         .arg("dir_with_10_files/")
@@ -1397,6 +1397,7 @@ fn test_copy_dir_symlink() {
 
 #[test]
 #[cfg(not(target_os = "macos"))]
+#[cfg(all(feature = "ln"))]
 fn test_copy_dir_with_symlinks() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
