@@ -732,46 +732,6 @@ impl Options {
     }
 }
 
-impl TargetType {
-    // / Return TargetType required for `target`.
-    // /
-    // / Determines only looking at the path string, without testing on disk.
-    // / Treats as directory if path has trailing slash there are multiple sources
-    // fn determine(sources: &[Source], target: &TargetSlice) -> CopyResult<()>  {
-
-    //     let has_trailing_slash = target.to_string_lossy().ends_with('/');
-    //     match (
-    //         has_trailing_slash,
-    //         target.exists(),
-    //         target.is_dir(),
-    //         target.is_symlink(),
-    //     ) {
-    //         (true, false, ..) => {
-    //             Err(format!("directory {} does not exist", target.quote()).into())
-    //         }
-    //         (true, true, false) => {
-    //             Err(format!("target: {} is not a directory", target.quote()).into())
-    //         }
-    //         (true, .. true) => Err(format!(
-    //             "destination {} is a symlink to a regular file",
-    //             target.quote()
-    //         )
-    //         .into()),
-    //         (&TargetType::File, _, true, ..) => Err(format!(
-    //             "cannot overwrite directory {} with non-directory",
-    //             target.quote()
-    //         )
-    //         .into()),
-    //         _ => Ok(()),
-    //     }
-    //     if sources.len() > 1 || target.ends_with("/") {
-    //         Self::Directory
-    //     } else {
-    //         Self::File
-    //     }
-    // }
-}
-
 /// Returns tuple of (Source paths, Target)
 fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<Source>, Target)> {
     let mut paths = path_args.iter().map(PathBuf::from).collect::<Vec<_>>();
@@ -1705,12 +1665,6 @@ pub fn verify_target_type(sources: &[Source], target: &TargetSlice) -> CopyResul
             )
             .into())
         }
-        // (false, _, true, ..) => return Err(format!(
-        //     "cannot overwrite directory {} with non-directory",
-        //     target.quote()
-        // )
-        // .into()),
-        // correct cases
         (true, true, true, _) => return Ok(TargetType::Directory),
         (false, _, false, _) => return Ok(TargetType::File),
         (false, true, true, _) => return Ok(TargetType::Directory),

@@ -1376,8 +1376,9 @@ fn test_cp_reflink_insufficient_permission() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_closes_file_descriptors() {
-    new_ucmd!()
-        .arg("-r")
+    let (at, mut ucmd) = at_and_ucmd!(); 
+    at.mkdir("dir_with_10_file_new/");
+    ucmd.arg("-r")
         .arg("--reflink=auto")
         .arg("dir_with_10_files/")
         .arg("dir_with_10_files_new/")
@@ -1401,7 +1402,6 @@ fn test_copy_dir_with_symlinks() {
     at.mkdir("dir");
     at.make_file("dir/file");
 
-    at.relative_symlink_file("dir/file", "dir/file-link");
     TestScenario::new("ln")
         .ucmd()
         .arg("-sr")
@@ -1685,8 +1685,7 @@ fn test_cp_trailing_slash_copy_to_symlinked_file() {
     s.ucmd()
         .arg("source_file_1")
         .arg("symlink/")
-        .fails()
-        .stderr_is("cp: target: 'symlink/' is not a directory");
+        .fails();
 }
 
  
