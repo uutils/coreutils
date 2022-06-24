@@ -1642,7 +1642,7 @@ fn copy_on_write_macos(
 /// Generate an error message if `target` is not the correct `target_type`
 pub fn verify_target_type(sources: &[Source], target: &TargetSlice) -> CopyResult<TargetType> {
     let target_path_string = target.to_string_lossy();
-    let seems_like_dir = target_path_string.ends_with("/")
+    let seems_like_dir = target_path_string.ends_with('/')
         || target_path_string == "."
         || target_path_string == ".."
         || sources.len() > 1;
@@ -1650,7 +1650,13 @@ pub fn verify_target_type(sources: &[Source], target: &TargetSlice) -> CopyResul
         seems_like_dir,
         target.exists(),
         target.is_dir(),
-        target.is_symlink(),
+        // replace with target.is_symlink() in rust >= 1.58
+        if let Ok(metadata) = fs::symlink_metadata(target) {
+            metadata.file_type().is_symlink()
+        } else {
+            false
+        }
+        // target.is_symlink(),
     ) {
         (true, false, ..) => {
             return Err(format!("directory {} does not exist", target.quote()).into())
@@ -1665,10 +1671,10 @@ pub fn verify_target_type(sources: &[Source], target: &TargetSlice) -> CopyResul
             )
             .into())
         }
-        (true, true, true, _) => return Ok(TargetType::Directory),
-        (false, _, false, _) => return Ok(TargetType::File),
-        (false, true, true, _) => return Ok(TargetType::Directory),
-        _ => return Err("cannot determine target type".into()),
+        (true, true, true, _) => Ok(TargetType::Directory),
+        (false, _, false, _) => Ok(TargetType::File),
+        (false, true, true, _) => Ok(TargetType::Directory),
+        _ => Err("cannot determine target type".into()),
     }
 }
 
