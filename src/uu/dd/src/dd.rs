@@ -61,7 +61,6 @@ impl Input<io::Stdin> {
         let iseek =
             parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::ISEEK)?;
         let count = parseargs::parse_count(&iflags, matches)?;
-        #[cfg(any(target_family = "unix", target_family = "wasi"))]
         let i = Self {
             src: io::stdin(),
             ibs,
