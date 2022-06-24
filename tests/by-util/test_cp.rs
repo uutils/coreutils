@@ -1376,7 +1376,7 @@ fn test_cp_reflink_insufficient_permission() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_closes_file_descriptors() {
-    let (at, mut ucmd) = at_and_ucmd!(); 
+    let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir_with_10_files_new/");
     ucmd.arg("-r")
         .arg("--reflink=auto")
@@ -1664,11 +1664,10 @@ fn test_cp_overriding_arguments() {
 
 #[test]
 fn test_trailing_slash_cp_to_nonexistent_dir() {
-    let s = TestScenario::new(util_name!()); 
+    let s = TestScenario::new(util_name!());
     s.fixtures.touch("source_file_1");
     s.fixtures.touch("source_file_2");
-    s.cmd("ls")
-        .arg("nonexistent_target").fails();
+    s.cmd("ls").arg("nonexistent_target").fails();
     s.ucmd()
         .arg("source_file_1")
         .arg("nonexistent_target/")
@@ -1678,15 +1677,10 @@ fn test_trailing_slash_cp_to_nonexistent_dir() {
 
 #[test]
 fn test_cp_trailing_slash_copy_to_symlinked_file() {
-    let s = TestScenario::new(util_name!()); 
+    let s = TestScenario::new(util_name!());
     let at = &s.fixtures;
     s.fixtures.touch("source_file_1");
-    s.fixtures.touch("symlink_target"); 
+    s.fixtures.touch("symlink_target");
     at.symlink_file("symlink_target", "symlink");
-    s.ucmd()
-        .arg("source_file_1")
-        .arg("symlink/")
-        .fails();
+    s.ucmd().arg("source_file_1").arg("symlink/").fails();
 }
-
- 
