@@ -190,6 +190,7 @@ feat_require_unix = [
     "nohup",
     "pathchk",
     "stat",
+    "stty",
     "timeout",
     "tty",
     "uname",
@@ -348,6 +349,7 @@ sort     = { optional=true, version="0.0.14", package="uu_sort", path="src/uu/so
 split    = { optional=true, version="0.0.14", package="uu_split", path="src/uu/split" }
 stat     = { optional=true, version="0.0.14", package="uu_stat", path="src/uu/stat" }
 stdbuf   = { optional=true, version="0.0.14", package="uu_stdbuf", path="src/uu/stdbuf" }
+stty     = { optional=true, version="0.0.14", package="uu_stty", path="src/uu/stty" }
 sum      = { optional=true, version="0.0.14", package="uu_sum", path="src/uu/sum" }
 sync     = { optional=true, version="0.0.14", package="uu_sync", path="src/uu/sync" }
 tac      = { optional=true, version="0.0.14", package="uu_tac", path="src/uu/tac" }

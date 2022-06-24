@@ -445,6 +445,7 @@ dependencies = [
  "uu_split",
  "uu_stat",
  "uu_stdbuf",
+ "uu_stty",
  "uu_sum",
  "uu_sync",
  "uu_tac",
@@ -2905,6 +2906,15 @@ dependencies = [
  "cpp",
  "cpp_build",
  "libc",
+ "uucore",
+]
+
+[[package]]
+name = "uu_stty"
+version = "0.0.14"
+dependencies = [
+ "clap 3.1.18",
+ "nix",
  "uucore",
 ]
 
