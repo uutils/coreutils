@@ -8,7 +8,7 @@
 /* last synced with: yes (GNU coreutils) 8.13 */
 
 use std::borrow::Cow;
-use std::io::{self, Write};
+use std::io::{self, Result, Write};
 
 #[macro_use]
 extern crate clap;
@@ -70,9 +70,26 @@ fn prepare_buffer<'a>(input: &'a str, buffer: &'a mut [u8; BUF_SIZE]) -> &'a [u8
     }
 }
 
+#[cfg(unix)]
+fn enable_pipe_errors() -> Result<()> {
+    let ret = unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
+    if ret == libc::SIG_ERR {
+        return Err(io::Error::new(io::ErrorKind::Other, ""));
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn enable_pipe_errors() -> Result<()> {
+    // Do nothing.
+    Ok(())
+}
+
 pub fn exec(bytes: &[u8]) -> io::Result<()> {
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
+
+    enable_pipe_errors()?;
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {

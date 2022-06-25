@@ -1,6 +1,20 @@
 use std::io::Read;
+use std::process::ExitStatus;
+
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
 
 use crate::common::util::*;
+
+#[cfg(unix)]
+fn check_termination(result: &ExitStatus) {
+    assert_eq!(result.signal(), Some(libc::SIGPIPE as i32));
+}
+
+#[cfg(not(unix))]
+fn check_termination(result: &ExitStatus) {
+    assert!(result.success(), "yes did not exit successfully");
+}
 
 /// Run `yes`, capture some of the output, close the pipe, and verify it.
 fn run(args: &[&str], expected: &[u8]) {
@@ -10,7 +24,7 @@ fn run(args: &[&str], expected: &[u8]) {
     let mut buf = vec![0; expected.len()];
     stdout.read_exact(&mut buf).unwrap();
     drop(stdout);
-    assert!(child.wait().unwrap().success());
+    check_termination(&child.wait().unwrap());
     assert_eq!(buf.as_slice(), expected);
 }
 

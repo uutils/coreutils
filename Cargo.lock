@@ -3096,6 +3096,7 @@ name = "uu_yes"
 version = "0.0.14"
 dependencies = [
  "clap 3.1.18",
+ "libc",
  "nix",
  "uucore",
 ]
