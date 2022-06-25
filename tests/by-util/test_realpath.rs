@@ -220,11 +220,8 @@ fn test_realpath_when_symlink_is_absolute_and_enoent() {
         .arg("dir1/foo2")
         .arg("dir1/foo3")
         .run()
-        .stdout_is(format!(
-            "{}\n{}\n",
-            at.plus_as_string("dir2/bar"),
-            at.plus_as_string("dir2/baz")
-        ))
+        .stdout_contains("/dir2/bar\n")
+        .stdout_contains("/dir2/baz\n")
         .stderr_is("realpath: dir1/foo2: No such file or directory\n");
 
     #[cfg(windows)]
