@@ -199,10 +199,18 @@ fn tee(options: &Options) -> Result<()> {
         inner: Box::new(stdin()) as Box<dyn Read>,
     };
 
-    // TODO: replaced generic 'copy' call to be able to stop copying
-    // if all outputs are closed (due to errors)
-    if copy(input, &mut output).is_err() || output.flush().is_err() || output.error_occurred() {
-        Err(Error::new(ErrorKind::Other, ""))
+    let res = match copy(input, &mut output) {
+        // ErrorKind::Other is raised by MultiWriter when all writers
+        // have exited, so that copy will abort. It's equivalent to
+        // success of this part (if there was an error that should
+        // cause a failure from any writer, that error would have been
+        // returned instead).
+        Err(e) if e.kind() != ErrorKind::Other => Err(e),
+        _ => Ok(()),
+    };
+
+    if res.is_err() || output.flush().is_err() || output.error_occurred() {
+        Err(Error::from(ErrorKind::Other))
     } else {
         Ok(())
     }
@@ -313,6 +321,11 @@ impl Write for MultiWriter {
         self.ignored_errors += errors;
         if let Some(e) = aborted {
             Err(e)
+        } else if self.writers.is_empty() {
+            // This error kind will never be raised by the standard
+            // library, so we can use it for early termination of
+            // `copy`
+            Err(Error::from(ErrorKind::Other))
         } else {
             Ok(buf.len())
         }
