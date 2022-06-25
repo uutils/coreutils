@@ -702,8 +702,8 @@ impl AtPath {
     }
 
     pub fn relative_symlink_file(&self, original: &str, link: &str) {
-        log_info("symlink", &format!("{},{}", original, link));
-        symlink_file(original, link).unwrap();
+        log_info("symlink", &format!("{},{}", original, &self.plus_as_string(link)));
+        symlink_file(original, &self.plus(link)).unwrap();
     }
 
     pub fn symlink_dir(&self, original: &str, link: &str) {
@@ -716,6 +716,11 @@ impl AtPath {
             ),
         );
         symlink_dir(&self.plus(original), &self.plus(link)).unwrap();
+    }
+
+    pub fn relative_symlink_dir(&self, original: &str, link: &str) {
+        log_info("symlink", &format!("{},{}", original, &self.plus_as_string(link)));
+        symlink_dir(original, &self.plus(link)).unwrap();
     }
 
     pub fn is_symlink(&self, path: &str) -> bool {

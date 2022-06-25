@@ -213,16 +213,18 @@ fn test_realpath_when_symlink_is_absolute_and_enoent() {
     at.mkdir("dir1");
     at.symlink_file("dir2/bar", "dir1/foo1");
     at.symlink_file("/dir2/bar", "dir1/foo2");
-    at.relative_symlink_file("dir2/baz", at.plus("dir1/foo3").to_str().unwrap());
+    at.relative_symlink_file("../dir2/baz", "dir1/foo3");
 
     #[cfg(unix)]
     ucmd.arg("dir1/foo1")
         .arg("dir1/foo2")
         .arg("dir1/foo3")
         .run()
-        .stdout_contains("/dir2/bar\n")
-        .stdout_contains("/dir2/baz\n")
-        .stderr_is("realpath: dir1/foo2: No such file or directory");
+        .stdout_is(format!("{}\n{}\n",
+                           at.plus_as_string("dir2/bar"),
+                           at.plus_as_string("dir2/baz"))
+        )
+        .stderr_is("realpath: dir1/foo2: No such file or directory\n");
 
     #[cfg(windows)]
     ucmd.arg("dir1/foo1")
@@ -232,4 +234,26 @@ fn test_realpath_when_symlink_is_absolute_and_enoent() {
         .stdout_contains("\\dir2\\bar\n")
         .stdout_contains("\\dir2\\baz\n")
         .stderr_is("realpath: dir1/foo2: No such file or directory");
+}
+
+#[test]
+#[ignore]
+fn test_realpath_when_symlink_part_is_missing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("dir2");
+    at.touch("dir2/bar");
+
+    at.mkdir("dir1");
+    at.relative_symlink_file("../dir2/bar", "dir1/foo1");
+    at.relative_symlink_file("dir2/bar", "dir1/foo2");
+    at.relative_symlink_file("../dir2/baz", "dir1/foo3");
+    at.symlink_file("dir3/bar", "dir1/foo4");
+
+    ucmd.args(&["dir1/foo1", "dir1/foo2", "dir1/foo3", "dir1/foo4"])
+        .run()
+        .stdout_contains(at.plus_as_string("dir2/bar") + "\n")
+        .stdout_contains(at.plus_as_string("dir2/baz") + "\n")
+        .stderr_contains("realpath: dir1/foo2: No such file or directory\n")
+        .stderr_contains("realpath: dir1/foo4: No such file or directory\n");
 }
