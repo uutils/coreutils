@@ -1,6 +1,5 @@
 use std::cmp::max;
 use std::ops::{Add, AddAssign};
-use std::path::Path;
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct WordCount {
@@ -32,7 +31,7 @@ impl AddAssign for WordCount {
 }
 
 impl WordCount {
-    pub fn with_title(self, title: Option<&Path>) -> TitledWordCount {
+    pub fn with_title(self, title: Option<String>) -> TitledWordCount {
         TitledWordCount { title, count: self }
     }
 }
@@ -42,7 +41,7 @@ impl WordCount {
 /// The reason we don't simply include title in the `WordCount` struct is that
 /// it would result in unnecessary copying of `String`.
 #[derive(Debug, Default, Clone)]
-pub struct TitledWordCount<'a> {
-    pub title: Option<&'a Path>,
+pub struct TitledWordCount {
+    pub title: Option<String>,
     pub count: WordCount,
 }
