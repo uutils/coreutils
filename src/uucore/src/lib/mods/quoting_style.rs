@@ -256,7 +256,7 @@ fn shell_with_escape(name: &str, quotes: Quotes) -> (String, bool) {
     (escaped_str, must_quote)
 }
 
-pub(super) fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
+pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
     match style {
         QuotingStyle::Literal { show_control } => {
             if !show_control {
@@ -316,7 +316,7 @@ pub(super) fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
 mod tests {
     // spell-checker:ignore (tests/words) one\'two one'two
 
-    use crate::quoting_style::{escape_name, Quotes, QuotingStyle};
+    use uucore::mods::quoting_style::{escape_name, Quotes, QuotingStyle};
     fn get_style(s: &str) -> QuotingStyle {
         match s {
             "literal" => QuotingStyle::Literal {
