@@ -3,330 +3,95 @@
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
 
-// spell-checker:ignore parenb parodd cmspar hupcl cstopb cread clocal crtscts
+// spell-checker:ignore parenb parodd cmspar hupcl cstopb cread clocal crtscts CSIZE
 // spell-checker:ignore ignbrk brkint ignpar parmrk inpck istrip inlcr igncr icrnl ixoff ixon iuclc ixany imaxbel iutf
-// spell-checker:ignore opost olcuc ocrnl onlcr onocr onlret ofill ofdel
+// spell-checker:ignore opost olcuc ocrnl onlcr onocr onlret ofill ofdel nldly crdly tabdly bsdly vtdly ffdly
 // spell-checker:ignore isig icanon iexten echoe crterase echok echonl noflsh xcase tostop echoprt prterase echoctl ctlecho echoke crtkill flusho extproc
 
 use crate::Flag;
-use nix::sys::termios::{ControlFlags, InputFlags, LocalFlags, OutputFlags};
+use nix::sys::termios::{ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O};
 
-pub const CONTROL_FLAGS: [Flag<ControlFlags>; 8] = [
-    Flag {
-        name: "parenb",
-        flag: ControlFlags::PARENB,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "parodd",
-        flag: ControlFlags::PARODD,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "cmspar",
-        flag: ControlFlags::CMSPAR,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "hupcl",
-        flag: ControlFlags::HUPCL,
-        show: true,
-        sane: true,
-    },
-    Flag {
-        name: "cstopb",
-        flag: ControlFlags::CSTOPB,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "cread",
-        flag: ControlFlags::CREAD,
-        show: true,
-        sane: true,
-    },
-    Flag {
-        name: "clocal",
-        flag: ControlFlags::CLOCAL,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "crtscts",
-        flag: ControlFlags::CRTSCTS,
-        show: true,
-        sane: false,
-    },
+pub const CONTROL_FLAGS: [Flag<C>; 12] = [
+    Flag::new("parenb", C::PARENB),
+    Flag::new("parodd", C::PARODD),
+    Flag::new("cmspar", C::CMSPAR),
+    Flag::new("cs5", C::CS5).group(C::CSIZE),
+    Flag::new("cs6", C::CS6).group(C::CSIZE),
+    Flag::new("cs7", C::CS7).group(C::CSIZE),
+    Flag::new("cs8", C::CS8).group(C::CSIZE).sane(),
+    Flag::new("hupcl", C::HUPCL).sane(),
+    Flag::new("cstopb", C::CSTOPB),
+    Flag::new("cread", C::CREAD).sane(),
+    Flag::new("clocal", C::CLOCAL),
+    Flag::new("crtscts", C::CRTSCTS),
 ];
 
-pub const INPUT_FLAGS: [Flag<InputFlags>; 15] = [
-    Flag {
-        name: "ignbrk",
-        flag: InputFlags::IGNBRK,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "brkint",
-        flag: InputFlags::BRKINT,
-        show: true,
-        sane: true,
-    },
-    Flag {
-        name: "ignpar",
-        flag: InputFlags::IGNPAR,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "parmrk",
-        flag: InputFlags::PARMRK,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "inpck",
-        flag: InputFlags::INPCK,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "istrip",
-        flag: InputFlags::ISTRIP,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "inlcr",
-        flag: InputFlags::INLCR,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "igncr",
-        flag: InputFlags::IGNCR,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "icrnl",
-        flag: InputFlags::ICRNL,
-        show: true,
-        sane: true,
-    },
-    Flag {
-        name: "ixoff",
-        flag: InputFlags::IXOFF,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "tandem",
-        flag: InputFlags::IXOFF,
-        show: false,
-        sane: false,
-    },
-    Flag {
-        name: "ixon",
-        flag: InputFlags::IXON,
-        show: true,
-        sane: false,
-    },
+pub const INPUT_FLAGS: [Flag<I>; 15] = [
+    Flag::new("ignbrk", I::IGNBRK),
+    Flag::new("brkint", I::BRKINT).sane(),
+    Flag::new("ignpar", I::IGNPAR),
+    Flag::new("parmrk", I::PARMRK),
+    Flag::new("inpck", I::INPCK),
+    Flag::new("istrip", I::ISTRIP),
+    Flag::new("inlcr", I::INLCR),
+    Flag::new("igncr", I::IGNCR),
+    Flag::new("icrnl", I::ICRNL).sane(),
+    Flag::new("ixoff", I::IXOFF),
+    Flag::new("tandem", I::IXOFF),
+    Flag::new("ixon", I::IXON),
     // not supported by nix
-    // Flag {
-    //     name: "iuclc",
-    //     flag: InputFlags::IUCLC,
-    //     show: true,
-    //     default: false,
-    // },
-    Flag {
-        name: "ixany",
-        flag: InputFlags::IXANY,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "imaxbel",
-        flag: InputFlags::IMAXBEL,
-        show: true,
-        sane: true,
-    },
-    Flag {
-        name: "iutf8",
-        flag: InputFlags::IUTF8,
-        show: true,
-        sane: false,
-    },
+    // Flag::new("iuclc", I::IUCLC),
+    Flag::new("ixany", I::IXANY).sane(),
+    Flag::new("imaxbel", I::IMAXBEL).sane(),
+    Flag::new("iutf8", I::IUTF8).sane(),
 ];
 
-pub const OUTPUT_FLAGS: [Flag<OutputFlags>; 8] = [
-    Flag {
-        name: "opost",
-        flag: OutputFlags::OPOST,
-        show: true,
-        sane: true,
-    },
-    Flag {
-        name: "olcuc",
-        flag: OutputFlags::OLCUC,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "ocrnl",
-        flag: OutputFlags::OCRNL,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "onlcr",
-        flag: OutputFlags::ONLCR,
-        show: true,
-        sane: true,
-    },
-    Flag {
-        name: "onocr",
-        flag: OutputFlags::ONOCR,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "onlret",
-        flag: OutputFlags::ONLRET,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "ofill",
-        flag: OutputFlags::OFILL,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "ofdel",
-        flag: OutputFlags::OFDEL,
-        show: true,
-        sane: false,
-    },
+pub const OUTPUT_FLAGS: [Flag<O>; 24] = [
+    Flag::new("opost", O::OPOST).sane(),
+    Flag::new("olcuc", O::OLCUC),
+    Flag::new("ocrnl", O::OCRNL),
+    Flag::new("onlcr", O::ONLCR).sane(),
+    Flag::new("onocr", O::ONOCR),
+    Flag::new("onlret", O::ONLRET),
+    Flag::new("ofill", O::OFILL),
+    Flag::new("ofdel", O::OFDEL),
+    Flag::new("nl0", O::NL0).group(O::NLDLY).sane(),
+    Flag::new("nl1", O::NL1).group(O::NLDLY),
+    Flag::new("cr0", O::CR0).group(O::CRDLY).sane(),
+    Flag::new("cr1", O::CR1).group(O::CRDLY),
+    Flag::new("cr2", O::CR2).group(O::CRDLY),
+    Flag::new("cr3", O::CR3).group(O::CRDLY),
+    Flag::new("tab0", O::TAB0).group(O::TABDLY).sane(),
+    Flag::new("tab1", O::TAB1).group(O::TABDLY),
+    Flag::new("tab2", O::TAB2).group(O::TABDLY),
+    Flag::new("tab3", O::TAB3).group(O::TABDLY),
+    Flag::new("bs0", O::BS0).group(O::BSDLY).sane(),
+    Flag::new("bs1", O::BS1).group(O::BSDLY),
+    Flag::new("vt0", O::VT0).group(O::VTDLY).sane(),
+    Flag::new("vt1", O::VT1).group(O::VTDLY),
+    Flag::new("ff0", O::FF0).group(O::FFDLY).sane(),
+    Flag::new("ff1", O::FF1).group(O::FFDLY),
 ];
 
-pub const LOCAL_FLAGS: [Flag<LocalFlags>; 18] = [
-    Flag {
-        name: "isig",
-        flag: LocalFlags::ISIG,
-        show: true,
-        sane: true,
-    },
-    Flag {
-        name: "icanon",
-        flag: LocalFlags::ICANON,
-        show: true,
-        sane: true,
-    },
-    Flag {
-        name: "iexten",
-        flag: LocalFlags::IEXTEN,
-        show: true,
-        sane: true,
-    },
-    Flag {
-        name: "echo",
-        flag: LocalFlags::ECHO,
-        show: true,
-        sane: true,
-    },
-    Flag {
-        name: "echoe",
-        flag: LocalFlags::ECHOE,
-        show: true,
-        sane: true,
-    },
-    Flag {
-        name: "crterase",
-        flag: LocalFlags::ECHOE,
-        show: false,
-        sane: true,
-    },
-    Flag {
-        name: "echok",
-        flag: LocalFlags::ECHOK,
-        show: true,
-        sane: true,
-    },
-    Flag {
-        name: "echonl",
-        flag: LocalFlags::ECHONL,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "noflsh",
-        flag: LocalFlags::NOFLSH,
-        show: true,
-        sane: false,
-    },
+pub const LOCAL_FLAGS: [Flag<L>; 18] = [
+    Flag::new("isig", L::ISIG).sane(),
+    Flag::new("icanon", L::ICANON).sane(),
+    Flag::new("iexten", L::IEXTEN).sane(),
+    Flag::new("echo", L::ECHO).sane(),
+    Flag::new("echoe", L::ECHOE).sane(),
+    Flag::new("crterase", L::ECHOE).hidden().sane(),
+    Flag::new("echok", L::ECHOK).sane(),
+    Flag::new("echonl", L::ECHONL),
+    Flag::new("noflsh", L::NOFLSH),
     // Not supported by nix
-    // Flag {
-    //     name: "xcase",
-    //     flag: LocalFlags::XCASE,
-    //     show: true,
-    //     sane: false,
-    // },
-    Flag {
-        name: "tostop",
-        flag: LocalFlags::TOSTOP,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "echoprt",
-        flag: LocalFlags::ECHOPRT,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "prterase",
-        flag: LocalFlags::ECHOPRT,
-        show: false,
-        sane: false,
-    },
-    Flag {
-        name: "echoctl",
-        flag: LocalFlags::ECHOCTL,
-        show: true,
-        sane: true,
-    },
-    Flag {
-        name: "ctlecho",
-        flag: LocalFlags::ECHOCTL,
-        show: false,
-        sane: true,
-    },
-    Flag {
-        name: "echoke",
-        flag: LocalFlags::ECHOKE,
-        show: true,
-        sane: true,
-    },
-    Flag {
-        name: "crtkill",
-        flag: LocalFlags::ECHOKE,
-        show: false,
-        sane: true,
-    },
-    Flag {
-        name: "flusho",
-        flag: LocalFlags::FLUSHO,
-        show: true,
-        sane: false,
-    },
-    Flag {
-        name: "extproc",
-        flag: LocalFlags::EXTPROC,
-        show: true,
-        sane: false,
-    },
+    // Flag::new("xcase", L::XCASE),
+    Flag::new("tostop", L::TOSTOP),
+    Flag::new("echoprt", L::ECHOPRT),
+    Flag::new("prterase", L::ECHOPRT).hidden(),
+    Flag::new("echoctl", L::ECHOCTL).sane(),
+    Flag::new("ctlecho", L::ECHOCTL).sane().hidden(),
+    Flag::new("echoke", L::ECHOKE).sane(),
+    Flag::new("crtkill", L::ECHOKE).sane().hidden(),
+    Flag::new("flusho", L::FLUSHO),
+    Flag::new("extproc", L::EXTPROC),
 ];
