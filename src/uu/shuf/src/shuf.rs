@@ -31,8 +31,8 @@ static USAGE: &str = "\
     {} -e [OPTION]... [ARG]...
     {} -i LO-HI [OPTION]...";
 static ABOUT: &str = "\
-    Shuffle the input by outputting a random permutation of input lines.\
-    Each output permutation is equally likely.\
+    Shuffle the input by outputting a random permutation of input lines. \
+    Each output permutation is equally likely. \
     With no FILE, or when FILE is -, read standard input.";
 
 struct Options {
