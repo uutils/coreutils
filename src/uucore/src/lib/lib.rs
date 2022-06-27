@@ -24,6 +24,7 @@ pub use crate::mods::display;
 pub use crate::mods::error;
 pub use crate::mods::os;
 pub use crate::mods::panic;
+pub use crate::mods::quoting_style;
 pub use crate::mods::ranges;
 pub use crate::mods::version_cmp;
 
