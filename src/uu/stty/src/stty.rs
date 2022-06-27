@@ -21,9 +21,9 @@ use flags::{CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
 
 const NAME: &str = "stty";
 const USAGE: &str = "\
-{} [-F DEVICE | --file=DEVICE] [SETTING]...
-{} [-F DEVICE | --file=DEVICE] [-a|--all]
-{} [-F DEVICE | --file=DEVICE] [-g|--save]";
+    {} [-F DEVICE | --file=DEVICE] [SETTING]...
+    {} [-F DEVICE | --file=DEVICE] [-a|--all]
+    {} [-F DEVICE | --file=DEVICE] [-g|--save]";
 const SUMMARY: &str = "Print or change terminal characteristics.";
 
 #[derive(Clone, Copy, Debug)]
@@ -239,19 +239,32 @@ pub fn uu_app<'a>() -> Command<'a> {
         .override_usage(format_usage(USAGE))
         .about(SUMMARY)
         .infer_long_args(true)
-        .arg(Arg::new(options::ALL).short('a').long(options::ALL))
-        .arg(Arg::new(options::SAVE).short('g').long(options::SAVE))
+        .arg(
+            Arg::new(options::ALL)
+                .short('a')
+                .long(options::ALL)
+                .help("print all current settings in human-readable form"),
+        )
+        .arg(
+            Arg::new(options::SAVE)
+                .short('g')
+                .long(options::SAVE)
+                .help("print all current settings in a stty-readable form"),
+        )
         .arg(
             Arg::new(options::FILE)
                 .short('F')
                 .long(options::FILE)
                 .takes_value(true)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(clap::ValueHint::FilePath)
+                .value_name("DEVICE")
+                .help("open and use the specified DEVICE instead of stdin")
         )
         .arg(
             Arg::new(options::SETTINGS)
                 .takes_value(true)
-                .multiple_values(true),
+                .multiple_values(true)
+                .help("settings to change"),
         )
 }
 
