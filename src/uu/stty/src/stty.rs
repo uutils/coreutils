@@ -210,7 +210,7 @@ fn apply_flag<T: TermiosFlag>(
         if input == *name {
             // Flags with groups cannot be removed
             // Since the name matches, we can short circuit and don't have to check the other flags.
-            if remove || group.is_some() {
+            if remove && group.is_some() {
                 return ControlFlow::Break(false);
             }
             // If there is a group, the bits for that group should be cleared before applying the flag
