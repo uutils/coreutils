@@ -85,7 +85,7 @@ mod options {
 
 struct Options<'a> {
     all: bool,
-    _save: bool,
+    save: bool,
     file: RawFd,
     settings: Option<Vec<&'a str>>,
 }
@@ -94,7 +94,7 @@ impl<'a> Options<'a> {
     fn from(matches: &'a ArgMatches) -> io::Result<Self> {
         Ok(Self {
             all: matches.is_present(options::ALL),
-            _save: matches.is_present(options::SAVE),
+            save: matches.is_present(options::SAVE),
             file: match matches.value_of(options::FILE) {
                 Some(_f) => todo!(),
                 None => stdout().as_raw_fd(),
@@ -120,7 +120,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 fn stty(opts: &Options) -> UResult<()> {
     // TODO: Figure out the right error message
     let mut termios = tcgetattr(opts.file).expect("Could not get terminal attributes");
+
     if let Some(settings) = &opts.settings {
+        if opts.save || opts.all {
+            return Err(USimpleError::new(
+                1,
+                "when specifying an output style, modes may not be set",
+            ));
+        }
+
         for setting in settings {
             if let ControlFlow::Break(false) = apply_setting(&mut termios, setting) {
                 return Err(USimpleError::new(
