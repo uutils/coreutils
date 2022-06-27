@@ -41,9 +41,9 @@ pub const INPUT_FLAGS: [Flag<I>; 15] = [
     Flag::new("ixon", I::IXON),
     // not supported by nix
     // Flag::new("iuclc", I::IUCLC),
-    Flag::new("ixany", I::IXANY).sane(),
+    Flag::new("ixany", I::IXANY),
     Flag::new("imaxbel", I::IMAXBEL).sane(),
-    Flag::new("iutf8", I::IUTF8).sane(),
+    Flag::new("iutf8", I::IUTF8),
 ];
 
 pub const OUTPUT_FLAGS: [Flag<O>; 24] = [
