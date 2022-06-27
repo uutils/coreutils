@@ -1,3 +1,5 @@
+// spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh
+
 use crate::common::util::*;
 
 #[test]
