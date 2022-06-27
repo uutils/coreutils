@@ -12,8 +12,9 @@ use nix::sys::termios::{
     tcgetattr, tcsetattr, ControlFlags, InputFlags, LocalFlags, OutputFlags, Termios,
 };
 use std::io::{self, stdout};
+use std::ops::ControlFlow;
 use std::os::unix::io::{AsRawFd, RawFd};
-use uucore::error::UResult;
+use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, InvalidEncodingHandling};
 
 use flags::{CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
@@ -25,15 +26,53 @@ const USAGE: &str = "\
 {} [-F DEVICE | --file=DEVICE] [-g|--save]";
 const SUMMARY: &str = "Print or change terminal characteristics.";
 
+#[derive(Clone, Copy, Debug)]
 pub struct Flag<T> {
     name: &'static str,
     flag: T,
     show: bool,
     sane: bool,
+    group: Option<T>,
 }
 
-trait TermiosFlag {
-    fn is_in(&self, termios: &Termios) -> bool;
+impl<T> Flag<T>
+where
+    T: Copy,
+{
+    pub const fn new(name: &'static str, flag: T) -> Self {
+        Flag {
+            name,
+            flag,
+            show: true,
+            sane: false,
+            group: None,
+        }
+    }
+
+    pub const fn hidden(&self) -> Self {
+        Self {
+            show: false,
+            ..*self
+        }
+    }
+
+    pub const fn sane(&self) -> Self {
+        Self {
+            sane: true,
+            ..*self
+        }
+    }
+
+    pub const fn group(&self, group: T) -> Self {
+        Self {
+            group: Some(group),
+            ..*self
+        }
+    }
+}
+
+trait TermiosFlag: Copy {
+    fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool;
     fn apply(&self, termios: &mut Termios, val: bool);
 }
 
@@ -83,7 +122,12 @@ fn stty(opts: &Options) -> UResult<()> {
     let mut termios = tcgetattr(opts.file).expect("Could not get terminal attributes");
     if let Some(settings) = &opts.settings {
         for setting in settings {
-            apply_setting(&mut termios, setting);
+            if let ControlFlow::Break(false) = apply_setting(&mut termios, setting) {
+                return Err(USimpleError::new(
+                    1,
+                    format!("invalid argument '{}'", setting),
+                ));
+            }
         }
 
         tcsetattr(opts.file, nix::sys::termios::SetArg::TCSANOW, &termios)
@@ -95,72 +139,91 @@ fn stty(opts: &Options) -> UResult<()> {
 }
 
 fn print_settings(termios: &Termios, opts: &Options) {
-    if print_flags(termios, opts, &CONTROL_FLAGS) {
-        println!();
-    }
-    if print_flags(termios, opts, &INPUT_FLAGS) {
-        println!();
-    }
-    if print_flags(termios, opts, &OUTPUT_FLAGS) {
-        println!();
-    }
-    if print_flags(termios, opts, &LOCAL_FLAGS) {
-        println!();
-    }
+    print_flags(termios, opts, &CONTROL_FLAGS);
+    print_flags(termios, opts, &INPUT_FLAGS);
+    print_flags(termios, opts, &OUTPUT_FLAGS);
+    print_flags(termios, opts, &LOCAL_FLAGS);
 }
 
-fn print_flags<T>(termios: &Termios, opts: &Options, flags: &[Flag<T>]) -> bool
-where
-    Flag<T>: TermiosFlag,
-{
+fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<T>]) {
     let mut printed = false;
-    for flag in flags {
-        if !flag.show {
+    for &Flag {
+        name,
+        flag,
+        show,
+        sane,
+        group,
+    } in flags
+    {
+        if !show {
             continue;
         }
-        let val = flag.is_in(termios);
-        if opts.all || val != flag.sane {
-            if !val {
-                print!("-");
+        let val = flag.is_in(termios, group);
+        if group.is_some() {
+            if val && (!sane || opts.all) {
+                print!("{name} ");
+                printed = true;
             }
-            print!("{} ", flag.name);
-            printed = true;
+        } else {
+            if opts.all || val != sane {
+                if !val {
+                    print!("-");
+                }
+                print!("{name} ");
+                printed = true;
+            }
         }
     }
-    printed
+    if printed {
+        println!();
+    }
 }
 
-fn apply_setting(termios: &mut Termios, s: &str) -> Option<()> {
-    if let Some(()) = apply_flag(termios, &CONTROL_FLAGS, s) {
-        return Some(());
-    }
-    if let Some(()) = apply_flag(termios, &INPUT_FLAGS, s) {
-        return Some(());
-    }
-    if let Some(()) = apply_flag(termios, &OUTPUT_FLAGS, s) {
-        return Some(());
-    }
-    if let Some(()) = apply_flag(termios, &LOCAL_FLAGS, s) {
-        return Some(());
-    }
-    None
-}
-
-fn apply_flag<T>(termios: &mut Termios, flags: &[Flag<T>], name: &str) -> Option<()>
-where
-    T: Copy,
-    Flag<T>: TermiosFlag,
-{
-    let (remove, name) = strip_hyphen(name);
-    find(flags, name)?.apply(termios, !remove);
-    Some(())
-}
-
-fn strip_hyphen(s: &str) -> (bool, &str) {
-    match s.strip_prefix('-') {
+/// Apply a single setting
+///
+/// The value inside the `Break` variant of the `ControlFlow` indicates whether
+/// the setting has been applied.
+fn apply_setting(termios: &mut Termios, s: &str) -> ControlFlow<bool> {
+    let (remove, name) = match s.strip_prefix('-') {
         Some(s) => (true, s),
         None => (false, s),
+    };
+    apply_flag(termios, &CONTROL_FLAGS, name, remove)?;
+    apply_flag(termios, &INPUT_FLAGS, name, remove)?;
+    apply_flag(termios, &OUTPUT_FLAGS, name, remove)?;
+    apply_flag(termios, &LOCAL_FLAGS, name, remove)?;
+    ControlFlow::Break(false)
+}
+
+/// Apply a flag to a slice of flags
+///
+/// The value inside the `Break` variant of the `ControlFlow` indicates whether
+/// the setting has been applied.
+fn apply_flag<T: TermiosFlag>(
+    termios: &mut Termios,
+    flags: &[Flag<T>],
+    input: &str,
+    remove: bool,
+) -> ControlFlow<bool> {
+    for Flag {
+        name, flag, group, ..
+    } in flags
+    {
+        if input == *name {
+            // Flags with groups cannot be removed
+            // Since the name matches, we can short circuit and don't have to check the other flags.
+            if remove || group.is_some() {
+                return ControlFlow::Break(false);
+            }
+            // If there is a group, the bits for that group should be cleared before applying the flag
+            if let Some(group) = group {
+                group.apply(termios, false);
+            }
+            flag.apply(termios, !remove);
+            return ControlFlow::Break(true);
+        }
     }
+    ControlFlow::Continue(())
 }
 
 pub fn uu_app<'a>() -> Command<'a> {
@@ -186,55 +249,46 @@ pub fn uu_app<'a>() -> Command<'a> {
         )
 }
 
-impl TermiosFlag for Flag<ControlFlags> {
-    fn is_in(&self, termios: &Termios) -> bool {
-        termios.control_flags.contains(self.flag)
+impl TermiosFlag for ControlFlags {
+    fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
+        termios.control_flags.contains(*self)
+            && group.map_or(true, |g| !termios.control_flags.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
-        termios.control_flags.set(self.flag, val)
+        termios.control_flags.set(*self, val)
     }
 }
 
-impl TermiosFlag for Flag<InputFlags> {
-    fn is_in(&self, termios: &Termios) -> bool {
-        termios.input_flags.contains(self.flag)
+impl TermiosFlag for InputFlags {
+    fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
+        termios.input_flags.contains(*self)
+            && group.map_or(true, |g| !termios.input_flags.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
-        termios.input_flags.set(self.flag, val)
+        termios.input_flags.set(*self, val)
     }
 }
 
-impl TermiosFlag for Flag<OutputFlags> {
-    fn is_in(&self, termios: &Termios) -> bool {
-        termios.output_flags.contains(self.flag)
+impl TermiosFlag for OutputFlags {
+    fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
+        termios.output_flags.contains(*self)
+            && group.map_or(true, |g| !termios.output_flags.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
-        termios.output_flags.set(self.flag, val)
+        termios.output_flags.set(*self, val)
     }
 }
 
-impl TermiosFlag for Flag<LocalFlags> {
-    fn is_in(&self, termios: &Termios) -> bool {
-        termios.local_flags.contains(self.flag)
+impl TermiosFlag for LocalFlags {
+    fn is_in(&self, termios: &Termios, group: Option<Self>) -> bool {
+        termios.local_flags.contains(*self)
+            && group.map_or(true, |g| !termios.local_flags.intersects(g - *self))
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
-        termios.local_flags.set(self.flag, val)
+        termios.local_flags.set(*self, val)
     }
-}
-
-fn find<'a, T>(flags: &'a [Flag<T>], flag_name: &str) -> Option<&'a Flag<T>>
-where
-    T: Copy,
-{
-    flags.iter().find_map(|flag| {
-        if flag.name == flag_name {
-            Some(flag)
-        } else {
-            None
-        }
-    })
 }
