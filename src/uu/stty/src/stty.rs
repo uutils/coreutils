@@ -40,7 +40,7 @@ where
     T: Copy,
 {
     pub const fn new(name: &'static str, flag: T) -> Self {
-        Flag {
+        Self {
             name,
             flag,
             show: true,
@@ -164,14 +164,12 @@ fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<
                 print!("{name} ");
                 printed = true;
             }
-        } else {
-            if opts.all || val != sane {
-                if !val {
-                    print!("-");
-                }
-                print!("{name} ");
-                printed = true;
+        } else if opts.all || val != sane {
+            if !val {
+                print!("-");
             }
+            print!("{name} ");
+            printed = true;
         }
     }
     if printed {
@@ -256,7 +254,7 @@ impl TermiosFlag for ControlFlags {
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
-        termios.control_flags.set(*self, val)
+        termios.control_flags.set(*self, val);
     }
 }
 
@@ -267,7 +265,7 @@ impl TermiosFlag for InputFlags {
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
-        termios.input_flags.set(*self, val)
+        termios.input_flags.set(*self, val);
     }
 }
 
@@ -278,7 +276,7 @@ impl TermiosFlag for OutputFlags {
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
-        termios.output_flags.set(*self, val)
+        termios.output_flags.set(*self, val);
     }
 }
 
@@ -289,6 +287,6 @@ impl TermiosFlag for LocalFlags {
     }
 
     fn apply(&self, termios: &mut Termios, val: bool) {
-        termios.local_flags.set(*self, val)
+        termios.local_flags.set(*self, val);
     }
 }
