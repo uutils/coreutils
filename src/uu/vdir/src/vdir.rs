@@ -7,9 +7,9 @@
 
 use clap::Command;
 use std::path::Path;
-use uu_ls::quoting_style::{Quotes, QuotingStyle};
 use uu_ls::{options, Config, Format};
 use uucore::error::UResult;
+use uucore::quoting_style::{Quotes, QuotingStyle};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
