@@ -41,7 +41,7 @@ struct Settings {
     show_words: bool,
     show_max_line_length: bool,
     files0_from_stdin_mode: bool,
-    title_quoting_style: QuotingStyle
+    title_quoting_style: QuotingStyle,
 }
 
 impl Settings {
@@ -49,14 +49,13 @@ impl Settings {
         let title_quoting_style = QuotingStyle::Shell {
             escape: true,
             always_quote: false,
-            show_control: false
+            show_control: false,
         };
 
         let files0_from_stdin_mode = match matches.value_of(options::FILES0_FROM) {
             Some(files_0_from) => files_0_from == STDIN_REPR,
-            None => false
+            None => false,
         };
-
 
         let settings = Self {
             show_bytes: matches.is_present(options::BYTES),
@@ -147,7 +146,9 @@ impl Input {
     fn to_title(&self, quoting_style: &QuotingStyle) -> Option<String> {
         match self {
             Input::Path(path) => Some(escape_name(&path.clone().into_os_string(), quoting_style)),
-            Input::Stdin(StdinKind::Explicit) => Some(escape_name(OsStr::new(STDIN_REPR), quoting_style)),
+            Input::Stdin(StdinKind::Explicit) => {
+                Some(escape_name(OsStr::new(STDIN_REPR), quoting_style))
+            }
             Input::Stdin(StdinKind::Implicit) => None,
         }
     }
@@ -443,7 +444,8 @@ fn word_count_from_input(input: &Input, settings: &Settings) -> CountResult {
 fn compute_number_width(inputs: &[Input], settings: &Settings) -> usize {
     if inputs.is_empty()
         || (inputs.len() == 1 && settings.number_enabled() == 1)
-        || (settings.files0_from_stdin_mode && settings.number_enabled() == 1) {
+        || (settings.files0_from_stdin_mode && settings.number_enabled() == 1)
+    {
         return 1;
     }
 
@@ -483,14 +485,22 @@ fn wc(inputs: &[Input], settings: &Settings) -> UResult<()> {
             CountResult::Interrupted(word_count, error) => {
                 show!(USimpleError::new(
                     1,
-                    format!("{}: {}", input.path_display(&settings.title_quoting_style), error)
+                    format!(
+                        "{}: {}",
+                        input.path_display(&settings.title_quoting_style),
+                        error
+                    )
                 ));
                 word_count
             }
             CountResult::Failure(error) => {
                 show!(USimpleError::new(
                     1,
-                    format!("{}: {}", input.path_display(&settings.title_quoting_style), error)
+                    format!(
+                        "{}: {}",
+                        input.path_display(&settings.title_quoting_style),
+                        error
+                    )
                 ));
                 continue;
             }

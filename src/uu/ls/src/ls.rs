@@ -13,12 +13,11 @@ extern crate uucore;
 #[macro_use]
 extern crate lazy_static;
 
-use clap::{Arg, Command, crate_version};
+use clap::{crate_version, Arg, Command};
 use glob::Pattern;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
-use uucore::quoting_style::{escape_name, QuotingStyle};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -27,7 +26,7 @@ use std::{
     ffi::{OsStr, OsString},
     fmt::{Display, Write as FmtWrite},
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
-    io::{BufWriter, ErrorKind, stdout, Stdout, Write},
+    io::{stdout, BufWriter, ErrorKind, Stdout, Write},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -41,6 +40,7 @@ use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
+use uucore::quoting_style::{escape_name, QuotingStyle};
 use uucore::{
     display::Quotable,
     error::{set_exit_code, UError, UResult},
