@@ -86,6 +86,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_STRIP)
                 .short('s')
                 .long(OPT_STRIP)
+                .visible_alias("no-symlinks")
                 .help("Only strip '.' and '..' components, but don't resolve symbolic links"),
         )
         .arg(
