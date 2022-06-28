@@ -316,7 +316,7 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
 mod tests {
     // spell-checker:ignore (tests/words) one\'two one'two
 
-    use uucore::mods::quoting_style::{escape_name, Quotes, QuotingStyle};
+    use escape_name, Quotes, QuotingStyle;
     fn get_style(s: &str) -> QuotingStyle {
         match s {
             "literal" => QuotingStyle::Literal {
