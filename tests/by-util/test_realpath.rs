@@ -65,50 +65,56 @@ fn test_realpath_file_and_links_zero() {
 
 #[test]
 fn test_realpath_file_and_links_strip() {
+    let strip_args = ["-s", "--strip", "--no-symlinks"];
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
     at.touch("foo");
     at.symlink_file("foo", "bar");
 
-    scene
-        .ucmd()
-        .arg("foo")
-        .arg("-s")
-        .succeeds()
-        .stdout_contains("foo\n");
+    for strip_arg in strip_args {
+        scene
+            .ucmd()
+            .arg("foo")
+            .arg(strip_arg)
+            .succeeds()
+            .stdout_contains("foo\n");
 
-    scene
-        .ucmd()
-        .arg("bar")
-        .arg("-s")
-        .succeeds()
-        .stdout_contains("bar\n");
+        scene
+            .ucmd()
+            .arg("bar")
+            .arg(strip_arg)
+            .succeeds()
+            .stdout_contains("bar\n");
+    }
 }
 
 #[test]
 fn test_realpath_file_and_links_strip_zero() {
+    let strip_args = ["-s", "--strip", "--no-symlinks"];
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
     at.touch("foo");
     at.symlink_file("foo", "bar");
 
-    scene
-        .ucmd()
-        .arg("foo")
-        .arg("-s")
-        .arg("-z")
-        .succeeds()
-        .stdout_contains("foo\u{0}");
+    for strip_arg in strip_args {
+        scene
+            .ucmd()
+            .arg("foo")
+            .arg(strip_arg)
+            .arg("-z")
+            .succeeds()
+            .stdout_contains("foo\u{0}");
 
-    scene
-        .ucmd()
-        .arg("bar")
-        .arg("-s")
-        .arg("-z")
-        .succeeds()
-        .stdout_contains("bar\u{0}");
+        scene
+            .ucmd()
+            .arg("bar")
+            .arg(strip_arg)
+            .arg("-z")
+            .succeeds()
+            .stdout_contains("bar\u{0}");
+    }
 }
 
 #[test]
