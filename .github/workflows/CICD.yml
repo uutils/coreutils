@@ -645,6 +645,7 @@ jobs:
         outputs CARGO_USE_CROSS
         # ** pass needed environment into `cross` container (iff `cross` not already configured via "Cross.toml")
         if [ -n "${CARGO_USE_CROSS}" ] && [ ! -e "Cross.toml" ] ; then
+          cargo install --version 0.2.1 cross
           printf "[build.env]\npassthrough = [\"CI\"]\n" > Cross.toml
         fi
         # * test only library and/or binaries for arm-type targets
