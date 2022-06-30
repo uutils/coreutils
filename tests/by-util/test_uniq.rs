@@ -1,3 +1,5 @@
+use std::io::Write;
+
 // spell-checker:ignore nabcd
 use crate::common::util::*;
 
@@ -87,6 +89,20 @@ fn test_stdin_all_repeated() {
 }
 
 #[test]
+fn test_all_repeated_followed_by_filename() {
+    let filename = "test.txt";
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let mut file = at.make_file(filename);
+    file.write_all(b"a\na\n").unwrap();
+
+    ucmd.args(&["--all-repeated", filename])
+        .run()
+        .success()
+        .stdout_is("a\na\n");
+}
+
+#[test]
 fn test_stdin_all_repeated_separate() {
     new_ucmd!()
         .args(&["--all-repeated=separate"])
@@ -158,6 +174,20 @@ fn test_group() {
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("group.expected");
+}
+
+#[test]
+fn test_group_followed_by_filename() {
+    let filename = "test.txt";
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let mut file = at.make_file(filename);
+    file.write_all(b"a\na\n").unwrap();
+
+    ucmd.args(&["--group", filename])
+        .run()
+        .success()
+        .stdout_is("a\na\n");
 }
 
 #[test]
