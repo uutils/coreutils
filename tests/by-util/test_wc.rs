@@ -134,15 +134,6 @@ fn test_gnu_compatible_quotation() {
 }
 
 #[test]
-fn test_gnu_compatible_quotation() {
-    new_ucmd!()
-        .args(&["12\n34.txt"])
-        .run()
-        .stdout_is("0 0 0 '12'$'\\n''34.txt'\n");
-}
-
-
-#[test]
 fn test_multiple_default() {
     new_ucmd!()
         .args(&[
