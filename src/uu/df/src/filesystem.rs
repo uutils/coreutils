@@ -67,8 +67,17 @@ where
     } else {
         path.as_ref().to_path_buf()
     };
-    let matches = mounts.iter().filter(|mi| path.starts_with(&mi.mount_dir));
-    matches.max_by_key(|mi| mi.mount_dir.len())
+
+    let maybe_mount_point = mounts
+        .iter()
+        .find(|mi| mi.dev_name.eq(&path.to_string_lossy()));
+
+    maybe_mount_point.or_else(|| {
+        mounts
+            .iter()
+            .filter(|mi| path.starts_with(&mi.mount_dir))
+            .max_by_key(|mi| mi.mount_dir.len())
+    })
 }
 
 impl Filesystem {
@@ -198,6 +207,15 @@ mod tests {
         fn test_partial_match() {
             let mounts = [mount_info("/foo/bar")];
             assert!(mount_info_from_path(&mounts, "/foo/baz", false).is_none());
+        }
+
+        #[test]
+        fn test_dev_name_match() {
+            let mut mount_info = mount_info("/foo");
+            mount_info.dev_name = "/dev/sda2".to_string();
+            let mounts = [mount_info];
+            let actual = mount_info_from_path(&mounts, "/dev/sda2", false).unwrap();
+            assert!(mount_info_eq(actual, &mounts[0]));
         }
     }
 }

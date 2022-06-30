@@ -19,7 +19,7 @@ clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 coz = { version = "0.1.3", optional = true }
 num-traits = "0.2.15" # Needs at least version 0.2.15 for "OverflowingAdd"
 rand = { version = "0.8", features = ["small_rng"] }
-smallvec = "1.7"  # TODO(nicoo): Use `union` feature, requires Rust 1.49 or later.
+smallvec = "1.9"  # TODO(nicoo): Use `union` feature, requires Rust 1.49 or later.
 uucore = { version = ">=0.0.8", package = "uucore", path = "../../uucore" }
 
 [dev-dependencies]
