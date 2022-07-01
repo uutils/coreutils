@@ -3,21 +3,23 @@
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
 
-// spell-checker:ignore tcgetattr tcsetattr tcsanow
+// spell-checker:ignore tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed ushort
 
 mod flags;
 
 use clap::{crate_version, Arg, ArgMatches, Command};
+use nix::libc::{c_ushort, TIOCGWINSZ, TIOCSWINSZ};
 use nix::sys::termios::{
-    tcgetattr, tcsetattr, ControlFlags, InputFlags, LocalFlags, OutputFlags, Termios,
+    cfgetospeed, tcgetattr, tcsetattr, ControlFlags, InputFlags, LocalFlags, OutputFlags, Termios,
 };
+use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::io::{self, stdout};
 use std::ops::ControlFlow;
 use std::os::unix::io::{AsRawFd, RawFd};
 use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, InvalidEncodingHandling};
 
-use flags::{CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
+use flags::{BAUD_RATES, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
 
 const NAME: &str = "stty";
 const USAGE: &str = "\
@@ -104,6 +106,30 @@ impl<'a> Options<'a> {
     }
 }
 
+// Needs to be repr(C) because we pass it to the ioctl calls.
+#[repr(C)]
+#[derive(Default, Debug)]
+pub struct TermSize {
+    rows: c_ushort,
+    columns: c_ushort,
+    x: c_ushort,
+    y: c_ushort,
+}
+
+ioctl_read_bad!(
+    /// Get terminal window size
+    tiocgwinsz,
+    TIOCGWINSZ,
+    TermSize
+);
+
+ioctl_write_ptr_bad!(
+    /// Set terminal window size
+    tiocswinsz,
+    TIOCSWINSZ,
+    TermSize
+);
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
@@ -118,17 +144,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 fn stty(opts: &Options) -> UResult<()> {
-    // TODO: Figure out the right error message
+    if opts.save && opts.all {
+        return Err(USimpleError::new(
+            1,
+            "the options for verbose and stty-readable output styles are mutually exclusive",
+        ));
+    }
+
+    if opts.settings.is_some() && (opts.save || opts.all) {
+        return Err(USimpleError::new(
+            1,
+            "when specifying an output style, modes may not be set",
+        ));
+    }
+
+    // TODO: Figure out the right error message for when tcgetattr fails
     let mut termios = tcgetattr(opts.file).expect("Could not get terminal attributes");
 
     if let Some(settings) = &opts.settings {
-        if opts.save || opts.all {
-            return Err(USimpleError::new(
-                1,
-                "when specifying an output style, modes may not be set",
-            ));
-        }
-
         for setting in settings {
             if let ControlFlow::Break(false) = apply_setting(&mut termios, setting) {
                 return Err(USimpleError::new(
@@ -141,16 +174,42 @@ fn stty(opts: &Options) -> UResult<()> {
         tcsetattr(opts.file, nix::sys::termios::SetArg::TCSANOW, &termios)
             .expect("Could not write terminal attributes");
     } else {
-        print_settings(&termios, opts);
+        print_settings(&termios, opts).expect("TODO: make proper error here from nix error");
     }
     Ok(())
 }
 
-fn print_settings(termios: &Termios, opts: &Options) {
+fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
+    let speed = cfgetospeed(termios);
+    for (text, baud_rate) in BAUD_RATES {
+        if *baud_rate == speed {
+            print!("speed {} baud; ", text);
+            break;
+        }
+    }
+
+    if opts.all {
+        let mut size = TermSize::default();
+        unsafe { tiocgwinsz(opts.file, &mut size as *mut _)? };
+        print!("rows {}; columns {}; ", size.rows, size.columns);
+    }
+
+    // For some reason the normal nix Termios struct does not expose the line,
+    // so we get the underlying libc::termios struct to get that information.
+    let libc_termios: nix::libc::termios = termios.clone().into();
+    let line = libc_termios.c_line;
+    print!("line = {};", line);
+    println!();
+    Ok(())
+}
+
+fn print_settings(termios: &Termios, opts: &Options) -> nix::Result<()> {
+    print_terminal_size(termios, opts)?;
     print_flags(termios, opts, &CONTROL_FLAGS);
     print_flags(termios, opts, &INPUT_FLAGS);
     print_flags(termios, opts, &OUTPUT_FLAGS);
     print_flags(termios, opts, &LOCAL_FLAGS);
+    Ok(())
 }
 
 fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<T>]) {
@@ -169,14 +228,14 @@ fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<
         let val = flag.is_in(termios, group);
         if group.is_some() {
             if val && (!sane || opts.all) {
-                print!("{name} ");
+                print!("{} ", name);
                 printed = true;
             }
         } else if opts.all || val != sane {
             if !val {
                 print!("-");
             }
-            print!("{name} ");
+            print!("{} ", name);
             printed = true;
         }
     }
@@ -258,7 +317,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .takes_value(true)
                 .value_hint(clap::ValueHint::FilePath)
                 .value_name("DEVICE")
-                .help("open and use the specified DEVICE instead of stdin")
+                .help("open and use the specified DEVICE instead of stdin"),
         )
         .arg(
             Arg::new(options::SETTINGS)

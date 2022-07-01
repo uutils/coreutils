@@ -3,11 +3,13 @@
 use crate::common::util::*;
 
 #[test]
+#[ignore = "Fails because cargo test does not run in a tty"]
 fn runs() {
     new_ucmd!().succeeds();
 }
 
 #[test]
+#[ignore = "Fails because cargo test does not run in a tty"]
 fn print_all() {
     let res = new_ucmd!().succeeds();
 
@@ -17,4 +19,37 @@ fn print_all() {
     ] {
         res.stdout_contains(flag);
     }
+}
+
+#[test]
+fn save_and_setting() {
+    new_ucmd!()
+        .args(&["--save", "nl0"])
+        .fails()
+        .stderr_contains("when specifying an output style, modes may not be set");
+}
+
+#[test]
+fn all_and_setting() {
+    new_ucmd!()
+        .args(&["--all", "nl0"])
+        .fails()
+        .stderr_contains("when specifying an output style, modes may not be set");
+}
+
+#[test]
+fn save_and_all() {
+    new_ucmd!()
+        .args(&["--save", "--all"])
+        .fails()
+        .stderr_contains(
+            "the options for verbose and stty-readable output styles are mutually exclusive",
+        );
+
+    new_ucmd!()
+        .args(&["--all", "--save"])
+        .fails()
+        .stderr_contains(
+            "the options for verbose and stty-readable output styles are mutually exclusive",
+        );
 }

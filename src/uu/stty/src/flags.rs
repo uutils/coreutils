@@ -9,7 +9,9 @@
 // spell-checker:ignore isig icanon iexten echoe crterase echok echonl noflsh xcase tostop echoprt prterase echoctl ctlecho echoke crtkill flusho extproc
 
 use crate::Flag;
-use nix::sys::termios::{ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O};
+use nix::sys::termios::{
+    BaudRate, ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O,
+};
 
 pub const CONTROL_FLAGS: [Flag<C>; 12] = [
     Flag::new("parenb", C::PARENB),
@@ -19,7 +21,7 @@ pub const CONTROL_FLAGS: [Flag<C>; 12] = [
     Flag::new("cs6", C::CS6).group(C::CSIZE),
     Flag::new("cs7", C::CS7).group(C::CSIZE),
     Flag::new("cs8", C::CS8).group(C::CSIZE).sane(),
-    Flag::new("hupcl", C::HUPCL).sane(),
+    Flag::new("hupcl", C::HUPCL),
     Flag::new("cstopb", C::CSTOPB),
     Flag::new("cread", C::CREAD).sane(),
     Flag::new("clocal", C::CLOCAL),
@@ -94,4 +96,104 @@ pub const LOCAL_FLAGS: [Flag<L>; 18] = [
     Flag::new("crtkill", L::ECHOKE).sane().hidden(),
     Flag::new("flusho", L::FLUSHO),
     Flag::new("extproc", L::EXTPROC),
+];
+
+pub const BAUD_RATES: &[(&str, BaudRate)] = &[
+    ("0", BaudRate::B0),
+    ("50", BaudRate::B50),
+    ("75", BaudRate::B75),
+    ("110", BaudRate::B110),
+    ("134", BaudRate::B134),
+    ("150", BaudRate::B150),
+    ("200", BaudRate::B200),
+    ("300", BaudRate::B300),
+    ("600", BaudRate::B600),
+    ("1200", BaudRate::B1200),
+    ("1800", BaudRate::B1800),
+    ("2400", BaudRate::B2400),
+    #[cfg(any(
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    ("4800", BaudRate::B4800),
+    ("9600", BaudRate::B9600),
+    #[cfg(any(
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    ("14400", BaudRate::B14400),
+    ("19200", BaudRate::B19200),
+    #[cfg(any(
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    ("28800", BaudRate::B28800),
+    ("38400", BaudRate::B38400),
+    ("57600", BaudRate::B57600),
+    #[cfg(any(
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    ("76800", BaudRate::B76800),
+    ("115200", BaudRate::B115200),
+    ("230400", BaudRate::B230400),
+    #[cfg(any(
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    ("460800", BaudRate::B460800),
+    #[cfg(any(target_os = "android", target_os = "linux"))]
+    ("500000", BaudRate::B500000),
+    #[cfg(any(target_os = "android", target_os = "linux"))]
+    ("576000", BaudRate::B576000),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "netbsd"
+    ))]
+    ("921600", BaudRate::B921600),
+    #[cfg(any(target_os = "android", target_os = "linux"))]
+    ("1000000", BaudRate::B1000000),
+    #[cfg(any(target_os = "android", target_os = "linux"))]
+    ("1152000", BaudRate::B1152000),
+    #[cfg(any(target_os = "android", target_os = "linux"))]
+    ("1500000", BaudRate::B1500000),
+    #[cfg(any(target_os = "android", target_os = "linux"))]
+    ("2000000", BaudRate::B2000000),
+    #[cfg(any(
+        target_os = "android",
+        all(target_os = "linux", not(target_arch = "sparc64"))
+    ))]
+    ("2500000", BaudRate::B2500000),
+    #[cfg(any(
+        target_os = "android",
+        all(target_os = "linux", not(target_arch = "sparc64"))
+    ))]
+    ("3000000", BaudRate::B3000000),
+    #[cfg(any(
+        target_os = "android",
+        all(target_os = "linux", not(target_arch = "sparc64"))
+    ))]
+    ("3500000", BaudRate::B3500000),
+    #[cfg(any(
+        target_os = "android",
+        all(target_os = "linux", not(target_arch = "sparc64"))
+    ))]
+    ("4000000", BaudRate::B4000000),
 ];
