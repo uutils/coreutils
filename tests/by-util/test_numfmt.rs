@@ -593,3 +593,17 @@ fn test_invalid_argument_returns_status_1() {
         .fails()
         .code_is(1);
 }
+
+#[test]
+fn test_invalid_padding_value() {
+    let padding_values = vec!["A", "0"];
+
+    for padding_value in padding_values {
+        new_ucmd!()
+            .arg(format!("--padding={}", padding_value))
+            .arg("5")
+            .fails()
+            .code_is(1)
+            .stderr_contains(format!("invalid padding value '{}'", padding_value));
+    }
+}
