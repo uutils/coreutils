@@ -1,4 +1,5 @@
 #![allow(clippy::missing_safety_doc)]
+#![allow(clippy::extra_unused_lifetimes)]
 
 // This file is part of the uutils coreutils package.
 //
