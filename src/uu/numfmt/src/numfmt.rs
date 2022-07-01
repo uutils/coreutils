@@ -103,7 +103,14 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     let transform = TransformOptions { from, to };
 
     let padding = match args.value_of(options::PADDING) {
-        Some(s) => s.parse::<isize>().map_err(|err| err.to_string()),
+        Some(s) => s
+            .parse::<isize>()
+            .map_err(|_| s)
+            .and_then(|n| match n {
+                0 => Err(s),
+                _ => Ok(n),
+            })
+            .map_err(|s| format!("invalid padding value {}", s.quote())),
         None => Ok(0),
     }?;
 
