@@ -5,6 +5,8 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
+// cSpell:ignore wc wc's
+
 #[macro_use]
 extern crate uucore;
 
@@ -26,10 +28,10 @@ use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use uucore::display::{Quotable, Quoted};
 use uucore::error::{UError, UResult, USimpleError};
+use uucore::quoting_style::{escape_name, QuotingStyle};
 
 /// The minimum character width for formatting counts when reading from stdin.
 const MINIMUM_WIDTH: usize = 7;
@@ -40,16 +42,31 @@ struct Settings {
     show_lines: bool,
     show_words: bool,
     show_max_line_length: bool,
+    files0_from_stdin_mode: bool,
+    title_quoting_style: QuotingStyle,
 }
 
 impl Settings {
     fn new(matches: &ArgMatches) -> Self {
+        let title_quoting_style = QuotingStyle::Shell {
+            escape: true,
+            always_quote: false,
+            show_control: false,
+        };
+
+        let files0_from_stdin_mode = match matches.value_of(options::FILES0_FROM) {
+            Some(files_0_from) => files_0_from == STDIN_REPR,
+            None => false,
+        };
+
         let settings = Self {
             show_bytes: matches.is_present(options::BYTES),
             show_chars: matches.is_present(options::CHAR),
             show_lines: matches.is_present(options::LINES),
             show_words: matches.is_present(options::WORDS),
             show_max_line_length: matches.is_present(options::MAX_LINE_LENGTH),
+            files0_from_stdin_mode,
+            title_quoting_style,
         };
 
         if settings.show_bytes
@@ -67,6 +84,8 @@ impl Settings {
             show_lines: true,
             show_words: true,
             show_max_line_length: false,
+            files0_from_stdin_mode,
+            title_quoting_style: settings.title_quoting_style,
         }
     }
 
@@ -126,18 +145,20 @@ impl From<&OsStr> for Input {
 
 impl Input {
     /// Converts input to title that appears in stats.
-    fn to_title(&self) -> Option<&Path> {
+    fn to_title(&self, quoting_style: &QuotingStyle) -> Option<String> {
         match self {
-            Input::Path(path) => Some(path),
-            Input::Stdin(StdinKind::Explicit) => Some(STDIN_REPR.as_ref()),
+            Input::Path(path) => Some(escape_name(&path.clone().into_os_string(), quoting_style)),
+            Input::Stdin(StdinKind::Explicit) => {
+                Some(escape_name(OsStr::new(STDIN_REPR), quoting_style))
+            }
             Input::Stdin(StdinKind::Implicit) => None,
         }
     }
 
-    fn path_display(&self) -> Quoted<'_> {
+    fn path_display(&self, quoting_style: &QuotingStyle) -> String {
         match self {
-            Input::Path(path) => path.maybe_quote(),
-            Input::Stdin(_) => "standard input".maybe_quote(),
+            Input::Path(path) => escape_name(&path.clone().into_os_string(), quoting_style),
+            Input::Stdin(_) => escape_name(OsStr::new("standard input"), quoting_style),
         }
     }
 }
@@ -417,8 +438,16 @@ fn word_count_from_input(input: &Input, settings: &Settings) -> CountResult {
 ///
 /// Otherwise, the file sizes in the file metadata are summed and the number of
 /// digits in that total size is returned as the number width
+///
+/// To mirror GNU wc's behavior a special case is added. If --files0-from is
+/// used and input is read from stdin and there is only one calculation enabled
+/// columns will not be aligned. This is not exactly GNU wc's behavior, but it
+/// is close enough to pass the GNU test suite.
 fn compute_number_width(inputs: &[Input], settings: &Settings) -> usize {
-    if inputs.is_empty() || (inputs.len() == 1 && settings.number_enabled() == 1) {
+    if inputs.is_empty()
+        || (inputs.len() == 1 && settings.number_enabled() == 1)
+        || (settings.files0_from_stdin_mode && settings.number_enabled() == 1)
+    {
         return 1;
     }
 
@@ -458,29 +487,34 @@ fn wc(inputs: &[Input], settings: &Settings) -> UResult<()> {
             CountResult::Interrupted(word_count, error) => {
                 show!(USimpleError::new(
                     1,
-                    format!("{}: {}", input.path_display(), error)
+                    format!(
+                        "{}: {}",
+                        input.path_display(&settings.title_quoting_style),
+                        error
+                    )
                 ));
                 word_count
             }
             CountResult::Failure(error) => {
                 show!(USimpleError::new(
                     1,
-                    format!("{}: {}", input.path_display(), error)
+                    format!(
+                        "{}: {}",
+                        input.path_display(&settings.title_quoting_style),
+                        error
+                    )
                 ));
                 continue;
             }
         };
         total_word_count += word_count;
-        let result = word_count.with_title(input.to_title());
+        let result = word_count.with_title(input.to_title(&settings.title_quoting_style));
         if let Err(err) = print_stats(settings, &result, number_width) {
             show!(USimpleError::new(
                 1,
                 format!(
                     "failed to print result for {}: {}",
-                    result
-                        .title
-                        .unwrap_or_else(|| "<stdin>".as_ref())
-                        .maybe_quote(),
+                    &result.title.unwrap_or_else(|| String::from("<stdin>")),
                     err,
                 ),
             ));
@@ -488,7 +522,7 @@ fn wc(inputs: &[Input], settings: &Settings) -> UResult<()> {
     }
 
     if num_inputs > 1 {
-        let total_result = total_word_count.with_title(Some("total".as_ref()));
+        let total_result = total_word_count.with_title(Some(String::from("total")));
         if let Err(err) = print_stats(settings, &total_result, number_width) {
             show!(USimpleError::new(
                 1,
@@ -524,9 +558,8 @@ fn print_stats(
     if settings.show_max_line_length {
         columns.push(format!("{:1$}", result.count.max_line_length, number_width));
     }
-
-    if let Some(title) = result.title {
-        columns.push(title.maybe_quote().to_string());
+    if let Some(title) = &result.title {
+        columns.push(title.clone());
     }
 
     writeln!(io::stdout().lock(), "{}", columns.join(" "))

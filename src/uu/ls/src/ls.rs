@@ -13,15 +13,11 @@ extern crate uucore;
 #[macro_use]
 extern crate lazy_static;
 
-// dir and vdir also need access to the quoting_style module
-pub mod quoting_style;
-
 use clap::{crate_version, Arg, Command};
 use glob::Pattern;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
-use quoting_style::{escape_name, QuotingStyle};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -44,6 +40,7 @@ use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
+use uucore::quoting_style::{escape_name, QuotingStyle};
 use uucore::{
     display::Quotable,
     error::{set_exit_code, UError, UResult},
@@ -2257,6 +2254,7 @@ fn get_inode(metadata: &Metadata) -> String {
 use std::sync::Mutex;
 #[cfg(unix)]
 use uucore::entries;
+use uucore::quoting_style;
 
 #[cfg(unix)]
 fn cached_uid2usr(uid: u32) -> String {

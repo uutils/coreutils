@@ -119,6 +119,20 @@ fn test_single_all_counts() {
         .stdout_is("  5  57 302 302  66 alice_in_wonderland.txt\n");
 }
 
+#[cfg(unix)]
+#[test]
+fn test_gnu_compatible_quotation() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("some-dir1");
+    at.touch("some-dir1/12\n34.txt");
+    scene
+        .ucmd()
+        .args(&["some-dir1/12\n34.txt"])
+        .run()
+        .stdout_is("0 0 0 'some-dir1/12'$'\\n''34.txt'\n");
+}
+
 #[test]
 fn test_multiple_default() {
     new_ucmd!()
