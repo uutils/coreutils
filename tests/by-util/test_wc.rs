@@ -439,7 +439,7 @@ fn test_files0_from_with_stdin() {
         .args(&["--files0-from=-"])
         .pipe_in("lorem_ipsum.txt")
         .run()
-        .stdout_is(" 13 109 772 lorem_ipsum.txt\n");
+        .stdout_is("13 109 772 lorem_ipsum.txt\n");
 }
 
 #[test]

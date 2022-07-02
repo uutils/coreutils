@@ -29,8 +29,9 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
 use std::path::PathBuf;
-
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::quoting_style::{escape_name, QuotingStyle};
 
@@ -54,12 +55,14 @@ impl Settings {
             always_quote: false,
             show_control: false,
         };
-
+        #[cfg(unix)]
         let files0_from_stdin_mode = match matches.value_of(options::FILES0_FROM) {
             Some(files_0_from) => files_0_from == STDIN_REPR,
             None => false,
         };
-
+        #[cfg(not(unix))]
+        let files0_from_stdin_mode = false;
+        //println!("{}", files0_from_stdin_mode);
         let settings = Self {
             show_bytes: matches.contains_id(options::BYTES),
             show_chars: matches.contains_id(options::CHAR),
@@ -507,16 +510,9 @@ fn word_count_from_input(input: &Input, settings: &Settings) -> CountResult {
 ///
 /// Otherwise, the file sizes in the file metadata are summed and the number of
 /// digits in that total size is returned as the number width
-///
-/// To mirror GNU wc's behavior a special case is added. If --files0-from is
-/// used and input is read from stdin and there is only one calculation enabled
-/// columns will not be aligned. This is not exactly GNU wc's behavior, but it
-/// is close enough to pass the GNU test suite.
+
 fn compute_number_width(inputs: &[Input], settings: &Settings) -> usize {
-    if inputs.is_empty()
-        || (inputs.len() == 1 && settings.number_enabled() == 1)
-        || (settings.files0_from_stdin_mode && settings.number_enabled() == 1)
-    {
+    if inputs.is_empty() || (inputs.len() == 1 && settings.number_enabled() == 1) {
         return 1;
     }
 
@@ -630,6 +626,10 @@ fn print_stats(
     if let Some(title) = &result.title {
         columns.push(title.clone());
     }
-
+    #[cfg(unix)]
+    if settings.files0_from_stdin_mode && fs::metadata("/dev/stdin").unwrap().file_type().is_fifo()
+    {
+        columns[0] = columns[0].trim_start().to_string();
+    }
     writeln!(io::stdout().lock(), "{}", columns.join(" "))
 }
