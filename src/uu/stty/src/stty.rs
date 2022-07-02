@@ -37,10 +37,7 @@ pub struct Flag<T> {
     group: Option<T>,
 }
 
-impl<T> Flag<T>
-where
-    T: Copy,
-{
+impl<T> Flag<T> {
     pub const fn new(name: &'static str, flag: T) -> Self {
         Self {
             name,
@@ -51,25 +48,24 @@ where
         }
     }
 
-    pub const fn hidden(&self) -> Self {
+    pub const fn new_grouped(name: &'static str, flag: T, group: T) -> Self {
         Self {
-            show: false,
-            ..*self
-        }
-    }
-
-    pub const fn sane(&self) -> Self {
-        Self {
-            sane: true,
-            ..*self
-        }
-    }
-
-    pub const fn group(&self, group: T) -> Self {
-        Self {
+            name,
+            flag,
+            show: true,
+            sane: false,
             group: Some(group),
-            ..*self
         }
+    }
+
+    pub const fn hidden(mut self) -> Self {
+        self.show = false;
+        self
+    }
+
+    pub const fn sane(mut self) -> Self {
+        self.sane = true;
+        self
     }
 }
 
