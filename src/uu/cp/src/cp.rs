@@ -458,7 +458,7 @@ pub fn uu_app<'a>() -> Command<'a> {
              .long(options::SPARSE)
              .takes_value(true)
              .value_name("WHEN")
-             .help("NotImplemented: control creation of sparse files. See below"))
+             .help("control creation of sparse files. This option is currently ignored"))
         .arg(Arg::new(options::CONTEXT)
              .long(options::CONTEXT)
              .takes_value(true)
@@ -610,7 +610,6 @@ impl Options {
     fn from_matches(matches: &ArgMatches) -> CopyResult<Self> {
         let not_implemented_opts = vec![
             options::COPY_CONTENTS,
-            options::SPARSE,
             #[cfg(not(any(windows, unix)))]
             options::ONE_FILE_SYSTEM,
             options::CONTEXT,
@@ -1399,7 +1398,7 @@ fn copy_file(
 
             fs::hard_link(&source, &dest).context(context)?;
         }
-        CopyMode::Copy => {
+        CopyMode::Copy | CopyMode::Sparse => {
             copy_helper(
                 &source,
                 &dest,
@@ -1413,7 +1412,6 @@ fn copy_file(
         CopyMode::SymLink => {
             symlink_file(&source, &dest, context, symlinked_files)?;
         }
-        CopyMode::Sparse => return Err(Error::NotImplemented(options::SPARSE.to_string())),
         CopyMode::Update => {
             if dest.exists() {
                 let src_metadata = fs::symlink_metadata(&source)?;
