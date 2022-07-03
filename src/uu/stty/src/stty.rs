@@ -178,7 +178,7 @@ fn stty(opts: &Options) -> UResult<()> {
 fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
     let speed = cfgetospeed(termios);
     for (text, baud_rate) in BAUD_RATES {
-        if *baud_rate == speed {
+        if *baud_rate as u32 == speed as u32 {
             print!("speed {} baud; ", text);
             break;
         }
