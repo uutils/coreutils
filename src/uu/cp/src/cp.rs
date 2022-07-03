@@ -983,6 +983,16 @@ fn adjust_canonicalization(p: &Path) -> Cow<Path> {
     }
 }
 
+/// Decide whether the given path is a symbolic link.
+fn is_symlink(path: &Path) -> bool {
+    // TODO Replace this convenience function with `Path::is_symlink()`
+    // when the minimum supported version of Rust is 1.58 or greater.
+    match fs::symlink_metadata(path) {
+        Err(_) => false,
+        Ok(m) => m.file_type().is_symlink(),
+    }
+}
+
 /// Read the contents of the directory `root` and recursively copy the
 /// contents to `target`.
 ///
@@ -999,9 +1009,7 @@ fn copy_directory(
     }
 
     // if no-dereference is enabled and this is a symlink, copy it as a file
-    if !options.dereference && fs::symlink_metadata(root).unwrap().file_type().is_symlink()
-    // replace by is_symlink in rust>=1.58
-    {
+    if !options.dereference && is_symlink(root) {
         return copy_file(root, target, options, symlinked_files);
     }
 
@@ -1044,8 +1052,6 @@ fn copy_directory(
         .follow_links(options.dereference)
     {
         let p = or_continue!(path);
-        let is_symlink = fs::symlink_metadata(p.path())?.file_type().is_symlink();
-        // replace by is_symlink in rust >=1.58
         let path = current_dir.join(&p.path());
 
         let local_to_root_parent = match root_parent {
@@ -1069,7 +1075,7 @@ fn copy_directory(
         };
 
         let local_to_target = target.join(&local_to_root_parent);
-        if is_symlink && !options.dereference {
+        if is_symlink(&path) && !options.dereference {
             copy_link(&path, &local_to_target, symlinked_files)?;
         } else if path.is_dir() && !local_to_target.exists() {
             if target.is_file() {
@@ -1091,7 +1097,7 @@ fn copy_directory(
                     ) {
                         Ok(_) => Ok(()),
                         Err(err) => {
-                            if fs::symlink_metadata(&source)?.file_type().is_symlink() {
+                            if is_symlink(&source) {
                                 // silent the error with a symlink
                                 // In case we do --archive, we might copy the symlink
                                 // before the file itself
@@ -1306,10 +1312,7 @@ fn copy_file(
     }
 
     // Fail if dest is a dangling symlink or a symlink this program created previously
-    if fs::symlink_metadata(dest)
-        .map(|m| m.file_type().is_symlink()) // replace by is_symlink in rust>=1.58
-        .unwrap_or(false)
-    {
+    if is_symlink(dest) {
         if FileInformation::from_path(dest, false)
             .map(|info| symlinked_files.contains(&info))
             .unwrap_or(false)
@@ -1351,9 +1354,7 @@ fn copy_file(
     #[cfg(not(unix))]
     let source_is_fifo = false;
 
-    let dest_already_exists_as_symlink = fs::symlink_metadata(&dest)
-        .map(|meta| meta.file_type().is_symlink())
-        .unwrap_or(false);
+    let dest_already_exists_as_symlink = is_symlink(dest);
 
     let dest = if !(source_is_symlink && dest_already_exists_as_symlink) {
         canonicalize(dest, MissingHandling::Missing, ResolveMode::Physical).unwrap()
@@ -1457,10 +1458,7 @@ fn copy_file(
     };
 
     // TODO: implement something similar to gnu's lchown
-    if fs::symlink_metadata(&dest)
-        .map(|meta| !meta.file_type().is_symlink())
-        .unwrap_or(false)
-    {
+    if !is_symlink(&dest) {
         // Here, to match GNU semantics, we quietly ignore an error
         // if a user does not have the correct ownership to modify
         // the permissions of a file.
