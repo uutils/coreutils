@@ -16,8 +16,8 @@ use std::io::{BufRead, Write};
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::format_usage;
 use uucore::ranges::Range;
+use uucore::{format_usage, InvalidEncodingHandling};
 
 pub mod errors;
 pub mod format;
@@ -51,6 +51,12 @@ FIELDS supports cut(1) style field ranges:
   -M   from first to M'th field (inclusive)
   -    all fields
 Multiple fields/ranges can be separated with commas
+
+FORMAT must be suitable for printing one floating-point argument '%f'.
+Optional quote (%'f) will enable --grouping (if supported by current locale).
+Optional width value (%10f) will pad output. Optional zero (%010f) width
+will zero pad the number. Optional negative values (%-10f) will left align.
+Optional precision (%.1f) will override the input determined precision.
 ";
 const USAGE: &str = "{} [OPTION]... [NUMBER]...";
 
@@ -194,6 +200,15 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         v => Range::from_list(v)?,
     };
 
+    let format = match args.value_of(options::FORMAT) {
+        Some(s) => s.parse()?,
+        None => FormatOptions::default(),
+    };
+
+    if format.grouping && to != Unit::None {
+        return Err("grouping cannot be combined with --to".to_string());
+    }
+
     let delimiter = args.value_of(options::DELIMITER).map_or(Ok(None), |arg| {
         if arg.len() == 1 {
             Ok(Some(arg.to_string()))
@@ -222,12 +237,35 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         delimiter,
         round,
         suffix,
+        format,
     })
+}
+
+// If the --format argument and its value are provided separately, they are concatenated to avoid a
+// potential clap error. For example: "--format --%f--" is changed to "--format=--%f--".
+fn concat_format_arg_and_value(args: &[String]) -> Vec<String> {
+    let mut processed_args: Vec<String> = Vec::with_capacity(args.len());
+    let mut iter = args.iter().peekable();
+
+    while let Some(arg) = iter.next() {
+        if arg == "--format" && iter.peek().is_some() {
+            processed_args.push(format!("--format={}", iter.peek().unwrap()));
+            iter.next();
+        } else {
+            processed_args.push(arg.to_string());
+        }
+    }
+
+    processed_args
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
+
+    let matches = uu_app().get_matches_from(concat_format_arg_and_value(&args));
 
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
 
@@ -270,6 +308,13 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help("replace the numbers in these input fields; see FIELDS below")
                 .value_name("FIELDS")
                 .default_value(options::FIELD_DEFAULT),
+        )
+        .arg(
+            Arg::new(options::FORMAT)
+                .long(options::FORMAT)
+                .help("use printf style floating-point FORMAT; see FORMAT below for details")
+                .takes_value(true)
+                .value_name("FORMAT"),
         )
         .arg(
             Arg::new(options::FROM)
@@ -351,8 +396,8 @@ pub fn uu_app<'a>() -> Command<'a> {
 #[cfg(test)]
 mod tests {
     use super::{
-        handle_buffer, parse_unit_size, parse_unit_size_suffix, NumfmtOptions, Range, RoundMethod,
-        TransformOptions, Unit,
+        handle_buffer, parse_unit_size, parse_unit_size_suffix, FormatOptions, NumfmtOptions,
+        Range, RoundMethod, TransformOptions, Unit,
     };
     use std::io::{BufReader, Error, ErrorKind, Read};
     struct MockBuffer {}
@@ -377,6 +422,7 @@ mod tests {
             delimiter: None,
             round: RoundMethod::Nearest,
             suffix: None,
+            format: FormatOptions::default(),
         }
     }
 
