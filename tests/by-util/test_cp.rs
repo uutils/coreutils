@@ -9,6 +9,8 @@ use std::os::unix::fs;
 
 #[cfg(unix)]
 use std::os::unix::fs::symlink as symlink_file;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 #[cfg(all(unix, not(target_os = "freebsd")))]
 use std::os::unix::fs::PermissionsExt;
 #[cfg(windows)]
@@ -1534,6 +1536,37 @@ fn test_copy_through_dangling_symlink_no_dereference() {
         .succeeds()
         .no_stderr()
         .no_stdout();
+}
+
+/// Test for copying a dangling symbolic link and its permissions.
+#[test]
+fn test_copy_through_dangling_symlink_no_dereference_permissions() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    //               target name    link name
+    at.symlink_file("no-such-file", "dangle");
+    //          don't dereference the link
+    //           |    copy permissions, too
+    //           |      |    from the link
+    //           |      |      |     to new file d2
+    //           |      |      |        |
+    //           V      V      V        V
+    ucmd.args(&["-P", "-p", "dangle", "d2"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert!(at.symlink_exists("d2"));
+
+    // `-p` means `--preserve=mode,ownership,timestamps`
+    #[cfg(unix)]
+    {
+        let metadata1 = at.symlink_metadata("dangle");
+        let metadata2 = at.symlink_metadata("d2");
+        assert_eq!(metadata1.mode(), metadata2.mode());
+        assert_eq!(metadata1.uid(), metadata2.uid());
+        assert_eq!(metadata1.atime(), metadata2.atime());
+        assert_eq!(metadata1.mtime(), metadata2.mtime());
+        assert_eq!(metadata1.ctime(), metadata2.ctime());
+    }
 }
 
 #[test]
