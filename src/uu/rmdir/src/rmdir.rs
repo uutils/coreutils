@@ -16,6 +16,7 @@ use std::io;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UResult};
+use uucore::fs::is_symlink;
 use uucore::{format_usage, util_name};
 
 static ABOUT: &str = "Remove the DIRECTORY(ies), if they are empty.";
@@ -65,10 +66,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 use std::ffi::OsStr;
                 use std::os::unix::ffi::OsStrExt;
 
-                fn is_symlink(path: &Path) -> io::Result<bool> {
-                    Ok(path.symlink_metadata()?.file_type().is_symlink())
-                }
-
                 fn points_to_directory(path: &Path) -> io::Result<bool> {
                     Ok(path.metadata()?.file_type().is_dir())
                 }
@@ -77,9 +74,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 if error.raw_os_error() == Some(libc::ENOTDIR) && bytes.ends_with(b"/") {
                     // Strip the trailing slash or .symlink_metadata() will follow the symlink
                     let no_slash: &Path = OsStr::from_bytes(&bytes[..bytes.len() - 1]).as_ref();
-                    if is_symlink(no_slash).unwrap_or(false)
-                        && points_to_directory(no_slash).unwrap_or(true)
-                    {
+                    if is_symlink(no_slash) && points_to_directory(no_slash).unwrap_or(true) {
                         show_error!(
                             "failed to remove {}: Symbolic link not followed",
                             path.quote()

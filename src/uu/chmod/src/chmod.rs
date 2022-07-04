@@ -14,6 +14,7 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{ExitCode, UResult, USimpleError, UUsageError};
 use uucore::fs::display_permissions_unix;
+use uucore::fs::is_symlink;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
@@ -378,12 +379,5 @@ impl Chmoder {
             }
             Ok(())
         }
-    }
-}
-
-pub fn is_symlink<P: AsRef<Path>>(path: P) -> bool {
-    match fs::symlink_metadata(path) {
-        Ok(m) => m.file_type().is_symlink(),
-        Err(_) => false,
     }
 }
