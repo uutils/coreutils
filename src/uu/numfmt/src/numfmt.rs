@@ -211,7 +211,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FIELD)
                 .long(options::FIELD)
-                .help("replace the numbers in these input fields (default=1) see FIELDS below")
+                .help("replace the numbers in these input fields; see FIELDS below")
                 .value_name("FIELDS")
                 .default_value(options::FIELD_DEFAULT),
         )
@@ -256,7 +256,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::ROUND)
                 .help(
                     "use METHOD for rounding when scaling; METHOD can be: up,\
-                    down, from-zero (default), towards-zero, nearest",
+                    down, from-zero, towards-zero, nearest",
                 )
                 .value_name("METHOD")
                 .default_value("from-zero")
