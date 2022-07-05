@@ -8,6 +8,8 @@
 
 //! Set of functions to manage files and symlinks
 
+// spell-checker:ignore backport
+
 #[cfg(unix)]
 use libc::{
     mode_t, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, S_IRGRP,
