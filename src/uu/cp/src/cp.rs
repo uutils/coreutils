@@ -56,7 +56,7 @@ use std::str::FromStr;
 use std::string::ToString;
 use uucore::backup_control::{self, BackupMode};
 use uucore::error::{set_exit_code, ExitCode, UClapError, UError, UResult};
-use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
+use uucore::fs::{canonicalize, is_symlink, MissingHandling, ResolveMode};
 use walkdir::WalkDir;
 
 quick_error! {
@@ -1075,7 +1075,7 @@ fn copy_directory(
         };
 
         let local_to_target = target.join(&local_to_root_parent);
-        if is_symlink(&path) && !options.dereference {
+        if is_symlink(p.path()) && !options.dereference {
             copy_link(&path, &local_to_target, symlinked_files)?;
         } else if path.is_dir() && !local_to_target.exists() {
             if target.is_file() {
@@ -1097,7 +1097,7 @@ fn copy_directory(
                     ) {
                         Ok(_) => Ok(()),
                         Err(err) => {
-                            if is_symlink(&source) {
+                            if is_symlink(source) {
                                 // silent the error with a symlink
                                 // In case we do --archive, we might copy the symlink
                                 // before the file itself
