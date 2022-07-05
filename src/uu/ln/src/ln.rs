@@ -14,6 +14,7 @@ use clap::{crate_version, Arg, Command};
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
 use uucore::format_usage;
+use uucore::fs::is_symlink;
 
 use std::borrow::Cow;
 use std::error::Error;
@@ -531,12 +532,5 @@ pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> Result<()>
         symlink_dir(src, dst)
     } else {
         symlink_file(src, dst)
-    }
-}
-
-pub fn is_symlink<P: AsRef<Path>>(path: P) -> bool {
-    match fs::symlink_metadata(path) {
-        Ok(m) => m.file_type().is_symlink(),
-        Err(_) => false,
     }
 }
