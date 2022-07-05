@@ -16,6 +16,8 @@ use std::io;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UResult};
+
+#[cfg(unix)]
 use uucore::fs::is_symlink;
 use uucore::{format_usage, util_name};
 
