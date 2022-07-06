@@ -983,16 +983,6 @@ fn adjust_canonicalization(p: &Path) -> Cow<Path> {
     }
 }
 
-/// Decide whether the given path is a symbolic link.
-fn is_symlink(path: &Path) -> bool {
-    // TODO Replace this convenience function with `Path::is_symlink()`
-    // when the minimum supported version of Rust is 1.58 or greater.
-    match fs::symlink_metadata(path) {
-        Err(_) => false,
-        Ok(m) => m.file_type().is_symlink(),
-    }
-}
-
 /// Read the contents of the directory `root` and recursively copy the
 /// contents to `target`.
 ///
