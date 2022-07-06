@@ -33,7 +33,10 @@ mod options {
 
 fn mkdelim(col: usize, opts: &ArgMatches) -> String {
     let mut s = String::new();
-    let delim = opts.value_of(options::DELIMITER).unwrap();
+    let delim = match opts.value_of(options::DELIMITER).unwrap() {
+        "" => "\0",
+        delim => delim,
+    };
 
     if col > 1 && !opts.is_present(options::COLUMN_1) {
         s.push_str(delim.as_ref());
