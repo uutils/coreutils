@@ -16,7 +16,7 @@ path = "src/nl.rs"
 
 [dependencies]
 clap = { version = "3.1", features = ["wrap_help", "cargo"] }
-regex = "1.5.5"
+regex = "1.6.0"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
 
 [[bin]]

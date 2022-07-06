@@ -388,7 +388,7 @@ glob = "0.3.0"
 libc = "0.2"
 pretty_assertions = "1"
 rand = "0.8"
-regex = "1.5"
+regex = "1.6"
 sha1 = { version="0.10", features=["std"] }
 tempfile = "3"
 time = {version="0.3", features=["local-offset"]}
