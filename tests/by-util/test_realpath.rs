@@ -156,7 +156,7 @@ fn test_realpath_dangling() {
     at.symlink_file("nonexistent-file", "link");
     ucmd.arg("link")
         .succeeds()
-        .stdout_only(at.plus_as_string("nonexistent-file\n"));
+        .stdout_contains(at.plus_as_string("nonexistent-file\n"));
 }
 
 #[test]
