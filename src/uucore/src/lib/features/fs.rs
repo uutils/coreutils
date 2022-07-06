@@ -253,28 +253,24 @@ enum OwningComponent {
 impl OwningComponent {
     fn as_os_str(&self) -> &OsStr {
         match self {
-            OwningComponent::Prefix(s) => s.as_os_str(),
-            OwningComponent::RootDir => Component::RootDir.as_os_str(),
-            OwningComponent::CurDir => Component::CurDir.as_os_str(),
-            OwningComponent::ParentDir => Component::ParentDir.as_os_str(),
-            OwningComponent::Normal(s) => s.as_os_str(),
-        }
-    }
-
-    fn from(comp: &Component) -> Self {
-        match comp {
-            Component::Prefix(_) => OwningComponent::Prefix(comp.as_os_str().to_os_string()),
-            Component::RootDir => OwningComponent::RootDir,
-            Component::CurDir => OwningComponent::CurDir,
-            Component::ParentDir => OwningComponent::ParentDir,
-            Component::Normal(s) => OwningComponent::Normal(s.to_os_string()),
+            Self::Prefix(s) => s.as_os_str(),
+            Self::RootDir => Component::RootDir.as_os_str(),
+            Self::CurDir => Component::CurDir.as_os_str(),
+            Self::ParentDir => Component::ParentDir.as_os_str(),
+            Self::Normal(s) => s.as_os_str(),
         }
     }
 }
 
-impl<'a> Into<OwningComponent> for Component<'a> {
-    fn into(self) -> OwningComponent {
-        OwningComponent::from(&self)
+impl<'a> From<Component<'a>> for OwningComponent {
+    fn from(comp: Component<'a>) -> Self {
+        match comp {
+            Component::Prefix(_) => Self::Prefix(comp.as_os_str().to_os_string()),
+            Component::RootDir => Self::RootDir,
+            Component::CurDir => Self::CurDir,
+            Component::ParentDir => Self::ParentDir,
+            Component::Normal(s) => Self::Normal(s.to_os_string()),
+        }
     }
 }
 
@@ -354,7 +350,7 @@ pub fn canonicalize<P: AsRef<Path>>(
                     let file_info =
                         FileInformation::from_path(&result.parent().unwrap(), false).unwrap();
                     let mut path_to_follow = PathBuf::new();
-                    for part in parts.iter() {
+                    for part in &parts {
                         path_to_follow.push(part.as_os_str());
                     }
                     if !visited_files.insert((file_info, path_to_follow)) {
