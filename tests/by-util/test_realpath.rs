@@ -166,8 +166,8 @@ fn test_realpath_loop() {
     at.symlink_file("3", "2");
     at.symlink_file("1", "3");
     ucmd.arg("1")
-        .succeeds()
-        .stdout_only(at.plus_as_string("2\n"));
+        .fails()
+        .stderr_contains("realpath: 1: Too many levels of symbolic links");
 }
 
 #[test]
