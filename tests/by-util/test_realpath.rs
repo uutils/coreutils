@@ -241,7 +241,6 @@ fn test_realpath_when_symlink_is_absolute_and_enoent() {
 }
 
 #[test]
-#[ignore = "issue #3669"]
 fn test_realpath_when_symlink_part_is_missing() {
     let (at, mut ucmd) = at_and_ucmd!();
 
