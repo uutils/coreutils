@@ -354,7 +354,7 @@ pub fn canonicalize<P: AsRef<Path>>(
                         path_to_follow.push(part.as_os_str());
                     }
                     if !visited_files.insert((file_info, path_to_follow)) {
-                        result.metadata()?; // try to make ELOOP like error, TODO use ErrorKind::FilesystemLoop when stable
+                        result.metadata()?; // try to raise symlink loop error, TODO use ErrorKind::FilesystemLoop when stable
                         return Err(Error::new(
                             ErrorKind::InvalidInput,
                             "Too many levels of symbolic links",
