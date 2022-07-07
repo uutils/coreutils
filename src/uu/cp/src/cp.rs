@@ -787,11 +787,7 @@ fn preserve_hardlinks(
             let info = match FileInformation::from_path(source, false) {
                 Ok(info) => info,
                 Err(e) => {
-                    return Err(format!(
-                        "cannot stat {}: {}",
-                        source.quote(),
-                        e,
-                    ).into());
+                    return Err(format!("cannot stat {}: {}", source.quote(), e,).into());
                 }
             };
 

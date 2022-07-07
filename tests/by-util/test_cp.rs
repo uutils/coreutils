@@ -1696,7 +1696,10 @@ fn test_abuse_existing() {
     at.write("t", "i");
     ucmd.args(&["-dR", "a/1", "b/1", "c"])
         .fails()
-        .stderr_contains(format!("will not copy 'b/1' through just-created symlink 'c{}1'", if cfg!(windows) { "\\" } else { "/" }));
+        .stderr_contains(format!(
+            "will not copy 'b/1' through just-created symlink 'c{}1'",
+            if cfg!(windows) { "\\" } else { "/" }
+        ));
     assert_eq!(at.read("t"), "i");
 }
 
