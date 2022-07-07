@@ -1539,6 +1539,16 @@ fn test_copy_through_dangling_symlink_no_dereference() {
 }
 
 #[test]
+fn test_copy_through_dangling_symlink_no_dereference_2() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.symlink_file("nonexistent", "target");
+    ucmd.args(&["-P", "file", "target"])
+        .fails()
+        .stderr_only("cp: not writing through dangling symlink 'target'");
+}
+
+#[test]
 #[cfg(unix)]
 fn test_cp_archive_on_nonexistent_file() {
     new_ucmd!()
@@ -1659,4 +1669,50 @@ fn test_cp_overriding_arguments() {
             .succeeds();
         s.fixtures.remove("file2");
     }
+}
+
+#[test]
+fn test_copy_no_dereference_1() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+    at.touch("a/foo");
+    at.write("a/foo", "bar");
+    at.relative_symlink_file("../a/foo", "b/foo");
+    ucmd.args(&["-P", "a/foo", "b"]).fails();
+}
+
+#[test]
+fn test_abuse_existing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.relative_symlink_file("../t", "a/1");
+    at.touch("b/1");
+    at.write("b/1", "hello");
+    at.relative_symlink_file("../t", "c/1");
+    at.touch("t");
+    at.write("t", "i");
+    ucmd.args(&["-dR", "a/1", "b/1", "c"])
+        .fails()
+        .stderr_contains(format!("will not copy 'b/1' through just-created symlink 'c{}1'", if cfg!(windows) { "\\" } else { "/" }));
+    assert_eq!(at.read("t"), "i");
+}
+
+#[test]
+fn test_copy_same_symlink_no_dereference() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.relative_symlink_file("t", "a");
+    at.relative_symlink_file("t", "b");
+    at.touch("t");
+    ucmd.args(&["-d", "a", "b"]).succeeds();
+}
+
+#[test]
+fn test_copy_same_symlink_no_dereference_dangling() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.relative_symlink_file("t", "a");
+    at.relative_symlink_file("t", "b");
+    ucmd.args(&["-d", "a", "b"]).succeeds();
 }
