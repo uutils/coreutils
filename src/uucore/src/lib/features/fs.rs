@@ -70,7 +70,7 @@ impl FileInformation {
     ///
     /// If `path` points to a symlink and `dereference` is true, information about
     /// the link's target will be returned.
-    pub fn from_path(path: impl AsRef<Path>, dereference: bool) -> Option<Self> {
+    pub fn from_path(path: impl AsRef<Path>, dereference: bool) -> IOResult<Self> {
         #[cfg(unix)]
         {
             let stat = if dereference {
@@ -78,11 +78,7 @@ impl FileInformation {
             } else {
                 nix::sys::stat::lstat(path.as_ref())
             };
-            if let Ok(stat) = stat {
-                Some(Self(stat))
-            } else {
-                None
-            }
+            Ok(Self(stat?))
         }
         #[cfg(target_os = "windows")]
         {
@@ -92,11 +88,7 @@ impl FileInformation {
             if !dereference {
                 open_options.custom_flags(winapi::um::winbase::FILE_FLAG_OPEN_REPARSE_POINT);
             }
-            open_options
-                .read(true)
-                .open(path.as_ref())
-                .ok()
-                .and_then(|file| Self::from_file(&file))
+            Self::from_file(open_options.read(true).open(path.as_ref())?)
         }
     }
 

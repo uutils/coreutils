@@ -1227,7 +1227,7 @@ fn symlink_file(
     {
         std::os::windows::fs::symlink_file(source, dest).context(context)?;
     }
-    if let Some(file_info) = FileInformation::from_path(dest, false) {
+    if let Ok(file_info) = FileInformation::from_path(dest, false) {
         symlinked_files.insert(file_info);
     }
     Ok(())
