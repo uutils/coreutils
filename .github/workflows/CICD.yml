@@ -1086,7 +1086,7 @@ jobs:
         cd ~/grcov
         # Hardcode the version of crossbeam-epoch. See
         # https://github.com/uutils/coreutils/issues/3680
-        sed -i -e "s|tempfile =|crossbeam-epoch = \"0.8.8\"\ntempfile =|" Cargo.toml
+        sed -i -e "s|tempfile =|crossbeam-epoch = \"0.9.8\"\ntempfile =|" Cargo.toml
         cargo install --path .
         cd -
 # Uncomment when the upstream issue
