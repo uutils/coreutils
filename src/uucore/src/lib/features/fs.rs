@@ -368,7 +368,7 @@ pub fn canonicalize<P: AsRef<Path>>(
                         return Err(Error::new(
                             ErrorKind::InvalidInput,
                             "Too many levels of symbolic links",
-                        )); // try to raise symlink loop error, TODO use ErrorKind::FilesystemLoop when stable
+                        )); // TODO use ErrorKind::FilesystemLoop when stable
                     }
                 }
                 result.pop();
