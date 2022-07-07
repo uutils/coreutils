@@ -98,6 +98,23 @@ impl FileInformation {
             self.0.file_size()
         }
     }
+
+    #[cfg(windows)]
+    pub fn file_index(&self) -> u64 {
+        self.0.file_index()
+    }
+
+    pub fn number_of_links(&self) -> u64 {
+        #[cfg(unix)]
+        return self.0.st_nlink;
+        #[cfg(windows)]
+        return self.0.number_of_links();
+    }
+
+    #[cfg(unix)]
+    pub fn inode(&self) -> u64 {
+        self.0.st_ino
+    }
 }
 
 #[cfg(unix)]

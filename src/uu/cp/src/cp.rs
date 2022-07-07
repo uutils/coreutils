@@ -19,10 +19,6 @@ extern crate uucore;
 use uucore::display::Quotable;
 use uucore::format_usage;
 use uucore::fs::FileInformation;
-#[cfg(windows)]
-use winapi::um::fileapi::CreateFileW;
-#[cfg(windows)]
-use winapi::um::fileapi::GetFileInformationByHandle;
 
 use std::borrow::Cow;
 
@@ -35,22 +31,17 @@ use std::collections::HashSet;
 use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
-#[cfg(windows)]
-use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io;
 use std::io::{stdin, stdout, Write};
-use std::mem;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::io::AsRawFd;
-#[cfg(windows)]
-use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use std::string::ToString;
@@ -793,59 +784,33 @@ fn preserve_hardlinks(
     #[cfg(not(target_os = "redox"))]
     {
         if !source.is_dir() {
-            unsafe {
-                let inode: u64;
-                let nlinks: u64;
-                #[cfg(unix)]
-                {
-                    let src_path = CString::new(source.as_os_str().to_str().unwrap()).unwrap();
-                    let mut stat = mem::zeroed();
-                    if libc::lstat(src_path.as_ptr(), &mut stat) < 0 {
-                        return Err(format!(
-                            "cannot stat {}: {}",
-                            source.quote(),
-                            std::io::Error::last_os_error()
-                        )
-                        .into());
-                    }
-                    inode = stat.st_ino as u64;
-                    nlinks = stat.st_nlink as u64;
+            let info = match FileInformation::from_path(source, false) {
+                Ok(info) => info,
+                Err(e) => {
+                    return Err(format!(
+                        "cannot stat {}: {}",
+                        source.quote(),
+                        e,
+                    ).into());
                 }
-                #[cfg(windows)]
-                {
-                    let src_path: Vec<u16> = OsStr::new(source).encode_wide().collect();
-                    #[allow(deprecated)]
-                    let stat = mem::uninitialized();
-                    let handle = CreateFileW(
-                        src_path.as_ptr(),
-                        winapi::um::winnt::GENERIC_READ,
-                        winapi::um::winnt::FILE_SHARE_READ,
-                        std::ptr::null_mut(),
-                        0,
-                        0,
-                        std::ptr::null_mut(),
-                    );
-                    if GetFileInformationByHandle(handle, stat) != 0 {
-                        return Err(format!(
-                            "cannot get file information {:?}: {}",
-                            source,
-                            std::io::Error::last_os_error()
-                        )
-                        .into());
-                    }
-                    inode = ((*stat).nFileIndexHigh as u64) << 32 | (*stat).nFileIndexLow as u64;
-                    nlinks = (*stat).nNumberOfLinks as u64;
-                }
+            };
 
-                for hard_link in hard_links.iter() {
-                    if hard_link.1 == inode {
-                        std::fs::hard_link(hard_link.0.clone(), dest).unwrap();
-                        *found_hard_link = true;
-                    }
+            #[cfg(unix)]
+            let inode = info.inode();
+
+            #[cfg(windows)]
+            let inode = info.file_index();
+
+            let nlinks = info.number_of_links();
+
+            for hard_link in hard_links.iter() {
+                if hard_link.1 == inode {
+                    std::fs::hard_link(hard_link.0.clone(), dest).unwrap();
+                    *found_hard_link = true;
                 }
-                if !(*found_hard_link) && nlinks > 1 {
-                    hard_links.push((dest.to_str().unwrap().to_string(), inode));
-                }
+            }
+            if !(*found_hard_link) && nlinks > 1 {
+                hard_links.push((dest.to_str().unwrap().to_string(), inode));
             }
         }
     }
