@@ -1245,7 +1245,7 @@ fn backup_dest(dest: &Path, backup_path: &Path) -> CopyResult<PathBuf> {
 }
 
 fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
-    if paths_refer_to_same_file(source, dest)? {
+    if paths_refer_to_same_file(source, dest, options.dereference) {
         return Err(format!("{}: same file", context_for(source, dest)).into());
     }
 
@@ -1253,7 +1253,7 @@ fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyRe
 
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
     if let Some(backup_path) = backup_path {
-        if paths_refer_to_same_file(source, &backup_path)? {
+        if paths_refer_to_same_file(source, &backup_path, true) {
             return Err(format!(
                 "backing up {} might destroy source;  {} not copied",
                 dest.quote(),
@@ -1685,12 +1685,15 @@ pub fn localize_to_target(root: &Path, source: &Path, target: &Path) -> CopyResu
     Ok(target.join(&local_to_root))
 }
 
-pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> io::Result<bool> {
+pub fn paths_refer_to_same_file(p1: &Path, p2: &Path, dereference: bool) -> bool {
     // We have to take symlinks and relative paths into account.
-    let pathbuf1 = canonicalize(p1, MissingHandling::Normal, ResolveMode::Logical)?;
-    let pathbuf2 = canonicalize(p2, MissingHandling::Normal, ResolveMode::Logical)?;
+    let res1 = FileInformation::from_path(p1, dereference);
+    let res2 = FileInformation::from_path(p2, dereference);
 
-    Ok(pathbuf1 == pathbuf2)
+    match (res1, res2) {
+        (Ok(info1), Ok(info2)) => info1 == info2,
+        _ => false,
+    }
 }
 
 pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
