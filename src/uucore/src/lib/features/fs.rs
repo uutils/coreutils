@@ -48,22 +48,16 @@ pub struct FileInformation(
 impl FileInformation {
     /// Get information from a currently open file
     #[cfg(unix)]
-    pub fn from_file(file: &impl AsRawFd) -> Option<Self> {
-        if let Ok(x) = nix::sys::stat::fstat(file.as_raw_fd()) {
-            Some(Self(x))
-        } else {
-            None
-        }
+    pub fn from_file(file: &impl AsRawFd) -> IOResult<Self> {
+        let stat = nix::sys::stat::fstat(file.as_raw_fd())?;
+        Ok(Self(stat))
     }
 
     /// Get information from a currently open file
     #[cfg(target_os = "windows")]
-    pub fn from_file(file: &impl AsHandleRef) -> Option<Self> {
-        if let Ok(x) = winapi_util::file::information(file.as_handle_ref()) {
-            Some(Self(x))
-        } else {
-            None
-        }
+    pub fn from_file(file: &impl AsHandleRef) -> IOResult<Self> {
+        let info = winapi_util::file::information(file.as_handle_ref())?;
+        Ok(Self(info))
     }
 
     /// Get information for a given path.
@@ -88,7 +82,8 @@ impl FileInformation {
             if !dereference {
                 open_options.custom_flags(winapi::um::winbase::FILE_FLAG_OPEN_REPARSE_POINT);
             }
-            Self::from_file(open_options.read(true).open(path.as_ref())?)
+            let file = open_options.read(true).open(path.as_ref())?;
+            Self::from_file(&file)
         }
     }
 
