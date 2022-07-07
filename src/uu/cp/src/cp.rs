@@ -1245,7 +1245,8 @@ fn backup_dest(dest: &Path, backup_path: &Path) -> CopyResult<PathBuf> {
 }
 
 fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
-    if paths_refer_to_same_file(source, dest, options.dereference) {
+    let dereference_to_compare = options.dereference || !is_symlink(source);
+    if paths_refer_to_same_file(source, dest, dereference_to_compare) {
         return Err(format!("{}: same file", context_for(source, dest)).into());
     }
 
@@ -1313,7 +1314,8 @@ fn copy_file(
                 dest.display()
             )));
         }
-        if options.dereference && !dest.exists() {
+        let copy_contents = options.dereference || !is_symlink(source);
+        if copy_contents && !dest.exists() {
             return Err(Error::Error(format!(
                 "not writing through dangling symlink '{}'",
                 dest.display()
@@ -1542,7 +1544,7 @@ fn copy_link(
     } else {
         // we always need to remove the file to be able to create a symlink,
         // even if it is writeable.
-        if dest.is_file() {
+        if is_symlink(dest) || dest.is_file() {
             fs::remove_file(dest)?;
         }
         dest.into()
