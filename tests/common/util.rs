@@ -22,7 +22,7 @@ use std::io::{Read, Result, Write};
 use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file};
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
-use std::path::{Path, PathBuf};
+use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::rc::Rc;
 use std::thread::sleep;
@@ -702,11 +702,13 @@ impl AtPath {
     }
 
     pub fn relative_symlink_file(&self, original: &str, link: &str) {
+        #[cfg(windows)]
+        let original = original.replace("/", &MAIN_SEPARATOR.to_string());
         log_info(
             "symlink",
-            &format!("{},{}", original, &self.plus_as_string(link)),
+            &format!("{},{}", &original, &self.plus_as_string(link)),
         );
-        symlink_file(original, &self.plus(link)).unwrap();
+        symlink_file(&original, &self.plus(link)).unwrap();
     }
 
     pub fn symlink_dir(&self, original: &str, link: &str) {
@@ -722,11 +724,13 @@ impl AtPath {
     }
 
     pub fn relative_symlink_dir(&self, original: &str, link: &str) {
+        #[cfg(windows)]
+        let original = original.replace("/", &MAIN_SEPARATOR.to_string());
         log_info(
             "symlink",
-            &format!("{},{}", original, &self.plus_as_string(link)),
+            &format!("{},{}", &original, &self.plus_as_string(link)),
         );
-        symlink_dir(original, &self.plus(link)).unwrap();
+        symlink_dir(&original, &self.plus(link)).unwrap();
     }
 
     pub fn is_symlink(&self, path: &str) -> bool {

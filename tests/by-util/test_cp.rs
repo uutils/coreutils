@@ -1492,13 +1492,12 @@ fn test_copy_through_just_created_symlink() {
         at.mkdir("a");
         at.mkdir("b");
         at.mkdir("c");
-        #[cfg(unix)]
-        fs::symlink("../t", at.plus("a/1")).unwrap();
-        #[cfg(target_os = "windows")]
-        symlink_file("../t", at.plus("a/1")).unwrap();
+        at.relative_symlink_file("../t", "a/1");
         at.touch("b/1");
+        at.write("b/1", "hello");
         if create_t {
             at.touch("t");
+            at.write("t", "world");
         }
         ucmd.arg("--no-dereference")
             .arg("a/1")
@@ -1510,6 +1509,9 @@ fn test_copy_through_just_created_symlink() {
             } else {
                 "cp: will not copy 'b/1' through just-created symlink 'c\\1'"
             });
+        if create_t {
+            assert_eq!(at.read("a/1"), "world");
+        }
     }
 }
 
