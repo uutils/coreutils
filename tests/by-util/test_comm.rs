@@ -59,13 +59,12 @@ fn output_delimiter() {
         .stdout_only_fixture("ab_delimiter_word.expected");
 }
 
-#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
-fn output_delimiter_require_arg() {
+fn output_delimiter_nul() {
     new_ucmd!()
         .args(&["--output-delimiter=", "a", "b"])
-        .fails()
-        .stderr_only("error to be defined");
+        .succeeds()
+        .stdout_only_fixture("ab_delimiter_nul.expected");
 }
 
 // even though (info) documentation suggests this is an option
