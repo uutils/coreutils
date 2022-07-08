@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld
+// spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld getpid
 mod status;
 
 #[macro_use]
@@ -241,6 +241,47 @@ fn wait_or_kill_process(
     }
 }
 
+#[cfg(unix)]
+fn preserve_signal_info(signal: libc::c_int) -> libc::c_int {
+    // This is needed because timeout is expected to preserve the exit
+    // status of its child. It is not the case that utilities have a
+    // single simple exit code, that's an illusion some shells
+    // provide.  Instead exit status is really two numbers:
+    //
+    //  - An exit code if the program ran to completion
+    //
+    //  - A signal number if the program was terminated by a signal
+    //
+    // The easiest way to preserve the latter seems to be to kill
+    // ourselves with whatever signal our child exited with, which is
+    // what the following is intended to accomplish.
+    unsafe {
+        libc::kill(libc::getpid(), signal);
+    }
+    signal
+}
+
+#[cfg(not(unix))]
+fn preserve_signal_info(signal: libc::c_int) -> libc::c_int {
+    // Do nothing
+    signal
+}
+
+#[cfg(unix)]
+fn enable_pipe_errors() -> std::io::Result<()> {
+    let ret = unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
+    if ret == libc::SIG_ERR {
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, ""));
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn enable_pipe_errors() -> std::io::Result<()> {
+    // Do nothing.
+    Ok(())
+}
+
 /// TODO: Improve exit codes, and make them consistent with the GNU Coreutils exit codes.
 
 fn timeout(
@@ -255,6 +296,9 @@ fn timeout(
     if !foreground {
         unsafe { libc::setpgid(0, 0) };
     }
+
+    enable_pipe_errors()?;
+
     let mut process = process::Command::new(&cmd[0])
         .args(&cmd[1..])
         .stdin(Stdio::inherit())
@@ -286,7 +330,7 @@ fn timeout(
     match process.wait_or_timeout(duration) {
         Ok(Some(status)) => Err(status
             .code()
-            .unwrap_or_else(|| status.signal().unwrap())
+            .unwrap_or_else(|| preserve_signal_info(status.signal().unwrap()))
             .into()),
         Ok(None) => {
             report_if_verbose(signal, &cmd[0], verbose);
