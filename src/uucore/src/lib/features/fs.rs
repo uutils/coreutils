@@ -106,14 +106,14 @@ impl FileInformation {
 
     pub fn number_of_links(&self) -> u64 {
         #[cfg(unix)]
-        return self.0.st_nlink;
+        return self.0.st_nlink as u64;
         #[cfg(windows)]
-        return self.0.number_of_links();
+        return self.0.number_of_links() as u64;
     }
 
     #[cfg(unix)]
     pub fn inode(&self) -> u64 {
-        self.0.st_ino
+        self.0.st_ino as u64
     }
 }
 
