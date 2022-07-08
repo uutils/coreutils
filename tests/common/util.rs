@@ -22,7 +22,9 @@ use std::io::{Read, Result, Write};
 use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file};
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
-use std::path::{Path, PathBuf, MAIN_SEPARATOR};
+#[cfg(windows)]
+use std::path::MAIN_SEPARATOR;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::rc::Rc;
 use std::thread::sleep;
