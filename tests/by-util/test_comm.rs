@@ -50,7 +50,6 @@ fn empty_empty() {
         .stdout_only_fixture("emptyempty.expected"); // spell-checker:disable-line
 }
 
-#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn output_delimiter() {
     new_ucmd!()
