@@ -20,7 +20,7 @@ uucore = { version=">=0.0.7", package="uucore", path="../../uucore", features=["
 chrono = "0.4.19"
 quick-error = "2.0.1"
 itertools = "0.10.0"
-regex = "1.5"
+regex = "1.6"
 
 [[bin]]
 name = "pr"
