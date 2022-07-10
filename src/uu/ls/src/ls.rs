@@ -36,6 +36,7 @@ use std::{
     os::unix::fs::{FileTypeExt, MetadataExt},
     time::Duration,
 };
+use std::collections::HashSet;
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
@@ -151,6 +152,7 @@ enum LsError {
     IOError(std::io::Error),
     IOErrorContext(std::io::Error, PathBuf),
     BlockSizeParseError(String),
+    AlreadyListedError(PathBuf),
 }
 
 impl UError for LsError {
@@ -160,6 +162,7 @@ impl UError for LsError {
             LsError::IOError(_) => 1,
             LsError::IOErrorContext(_, _) => 1,
             LsError::BlockSizeParseError(_) => 1,
+            LsError::AlreadyListedError(_) => 2,
         }
     }
 }
@@ -235,6 +238,9 @@ impl Display for LsError {
                         }
                     },
                 }
+            }
+            LsError::AlreadyListedError(path) => {
+                write!(f, "{}: not listing already-listed directory", path.to_string_lossy())
             }
         }
     }
@@ -1619,7 +1625,9 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 writeln!(out, "\n{}:", path_data.p_buf.display())?;
             }
         }
-        enter_directory(path_data, read_dir, config, &mut out)?;
+        let mut listed_ancestors = HashSet::new();
+        listed_ancestors.insert(FileInformation::from_path(&path_data.p_buf, path_data.must_dereference)?);
+        enter_directory(path_data, read_dir, config, &mut out, &mut listed_ancestors)?;
     }
 
     Ok(())
@@ -1715,6 +1723,7 @@ fn enter_directory(
     read_dir: ReadDir,
     config: &Config,
     out: &mut BufWriter<Stdout>,
+    listed_ancestors: &mut HashSet<FileInformation>,
 ) -> UResult<()> {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
@@ -1780,8 +1789,14 @@ fn enter_directory(
                     continue;
                 }
                 Ok(rd) => {
-                    writeln!(out, "\n{}:", e.p_buf.display())?;
-                    enter_directory(e, rd, config, out)?;
+                    if !listed_ancestors.insert(FileInformation::from_path(&e.p_buf, e.must_dereference)?) {
+                        out.flush()?;
+                        show!(LsError::AlreadyListedError(e.p_buf.clone()));
+                    } else {
+                        writeln!(out, "\n{}:", e.p_buf.display())?;
+                        enter_directory(e, rd, config, out, listed_ancestors)?;
+                        listed_ancestors.remove(&FileInformation::from_path(&e.p_buf, e.must_dereference)?);
+                    }
                 }
             }
         }
@@ -2254,6 +2269,7 @@ fn get_inode(metadata: &Metadata) -> String {
 use std::sync::Mutex;
 #[cfg(unix)]
 use uucore::entries;
+use uucore::fs::FileInformation;
 use uucore::quoting_style;
 
 #[cfg(unix)]
