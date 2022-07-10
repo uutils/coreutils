@@ -1494,15 +1494,23 @@ impl PathData {
 
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
+        fn get_file_type(de: &DirEntry, p_buf: &PathBuf, must_dereference: bool) -> OnceCell<Option<FileType>> {
+            if must_dereference {
+                if let Ok(md_pb) = p_buf.metadata() {
+                    return OnceCell::from(Some(md_pb.file_type()));
+                }
+            }
+            if let Ok(ft_de) = de.file_type() {
+                OnceCell::from(Some(ft_de))
+            } else if let Ok(md_pb) = p_buf.symlink_metadata() {
+                OnceCell::from(Some(md_pb.file_type()))
+            } else {
+                OnceCell::new()
+            }
+        }
         let ft = match de {
             Some(ref de) => {
-                if let Ok(ft_de) = de.file_type() {
-                    OnceCell::from(Some(ft_de))
-                } else if let Ok(md_pb) = p_buf.metadata() {
-                    OnceCell::from(Some(md_pb.file_type()))
-                } else {
-                    OnceCell::new()
-                }
+                get_file_type(&de, &p_buf, must_dereference)
             }
             None => OnceCell::new(),
         };
@@ -2534,12 +2542,17 @@ fn display_file_name(
     let mut width = name.width();
 
     if let Some(ls_colors) = &config.color {
-        name = color_name(
-            name,
-            &path.p_buf,
-            path.p_buf.symlink_metadata().ok().as_ref(),
-            ls_colors,
-        );
+        let md = path.md(out);
+        name = if md.is_some() {
+            color_name(name, &path.p_buf, md, ls_colors)
+        } else {
+            color_name(
+                name,
+                &path.p_buf,
+                path.p_buf.symlink_metadata().ok().as_ref(),
+                ls_colors,
+            )
+        };
     }
 
     if config.format != Format::Long && !more_info.is_empty() {
@@ -2580,6 +2593,7 @@ fn display_file_name(
     if config.format == Format::Long
         && path.file_type(out).is_some()
         && path.file_type(out).unwrap().is_symlink()
+        && !path.must_dereference
     {
         if let Ok(target) = path.p_buf.read_link() {
             name.push_str(" -> ");
