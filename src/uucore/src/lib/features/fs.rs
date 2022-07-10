@@ -17,12 +17,14 @@ use libc::{
     S_IXUSR,
 };
 use std::borrow::Cow;
+#[cfg(unix)]
+use std::collections::HashSet;
+use std::collections::VecDeque;
 use std::env;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::hash::Hash;
-use std::io::Error as IOError;
-use std::io::Result as IOResult;
-use std::io::{Error, ErrorKind};
+use std::io::{Error, ErrorKind, Result as IOResult};
 #[cfg(unix)]
 use std::os::unix::{fs::MetadataExt, io::AsRawFd};
 use std::path::{Component, Path, PathBuf};
@@ -46,29 +48,23 @@ pub struct FileInformation(
 impl FileInformation {
     /// Get information from a currently open file
     #[cfg(unix)]
-    pub fn from_file(file: &impl AsRawFd) -> Option<Self> {
-        if let Ok(x) = nix::sys::stat::fstat(file.as_raw_fd()) {
-            Some(Self(x))
-        } else {
-            None
-        }
+    pub fn from_file(file: &impl AsRawFd) -> IOResult<Self> {
+        let stat = nix::sys::stat::fstat(file.as_raw_fd())?;
+        Ok(Self(stat))
     }
 
     /// Get information from a currently open file
     #[cfg(target_os = "windows")]
-    pub fn from_file(file: &impl AsHandleRef) -> Option<Self> {
-        if let Ok(x) = winapi_util::file::information(file.as_handle_ref()) {
-            Some(Self(x))
-        } else {
-            None
-        }
+    pub fn from_file(file: &impl AsHandleRef) -> IOResult<Self> {
+        let info = winapi_util::file::information(file.as_handle_ref())?;
+        Ok(Self(info))
     }
 
     /// Get information for a given path.
     ///
     /// If `path` points to a symlink and `dereference` is true, information about
     /// the link's target will be returned.
-    pub fn from_path(path: impl AsRef<Path>, dereference: bool) -> Option<Self> {
+    pub fn from_path(path: impl AsRef<Path>, dereference: bool) -> IOResult<Self> {
         #[cfg(unix)]
         {
             let stat = if dereference {
@@ -76,11 +72,7 @@ impl FileInformation {
             } else {
                 nix::sys::stat::lstat(path.as_ref())
             };
-            if let Ok(stat) = stat {
-                Some(Self(stat))
-            } else {
-                None
-            }
+            Ok(Self(stat?))
         }
         #[cfg(target_os = "windows")]
         {
@@ -90,11 +82,8 @@ impl FileInformation {
             if !dereference {
                 open_options.custom_flags(winapi::um::winbase::FILE_FLAG_OPEN_REPARSE_POINT);
             }
-            open_options
-                .read(true)
-                .open(path.as_ref())
-                .ok()
-                .and_then(|file| Self::from_file(&file))
+            let file = open_options.read(true).open(path.as_ref())?;
+            Self::from_file(&file)
         }
     }
 
@@ -108,6 +97,23 @@ impl FileInformation {
         {
             self.0.file_size()
         }
+    }
+
+    #[cfg(windows)]
+    pub fn file_index(&self) -> u64 {
+        self.0.file_index()
+    }
+
+    pub fn number_of_links(&self) -> u64 {
+        #[cfg(unix)]
+        return self.0.st_nlink as u64;
+        #[cfg(windows)]
+        return self.0.number_of_links() as u64;
+    }
+
+    #[cfg(unix)]
+    pub fn inode(&self) -> u64 {
+        self.0.st_ino as u64
     }
 }
 
@@ -233,47 +239,45 @@ pub fn is_symlink<P: AsRef<Path>>(path: P) -> bool {
     fs::symlink_metadata(path).map_or(false, |m| m.file_type().is_symlink())
 }
 
-fn resolve<P: AsRef<Path>>(original: P) -> Result<PathBuf, (bool, PathBuf, IOError)> {
-    const MAX_LINKS_FOLLOWED: u32 = 255;
-    let mut followed = 0;
-    let mut result = original.as_ref().to_path_buf();
-    let mut symlink_is_absolute = false;
-    let mut first_resolution = None;
+fn resolve_symlink<P: AsRef<Path>>(path: P) -> IOResult<Option<PathBuf>> {
+    let result = if fs::symlink_metadata(&path)?.file_type().is_symlink() {
+        Some(fs::read_link(&path)?)
+    } else {
+        None
+    };
+    Ok(result)
+}
 
-    loop {
-        if followed == MAX_LINKS_FOLLOWED {
-            return Err((
-                symlink_is_absolute,
-                // When we hit MAX_LINKS_FOLLOWED we should return the first resolution (that's what GNU does - for whatever reason)
-                first_resolution.unwrap(),
-                Error::new(ErrorKind::InvalidInput, "maximum links followed"),
-            ));
-        }
+enum OwningComponent {
+    Prefix(OsString),
+    RootDir,
+    CurDir,
+    ParentDir,
+    Normal(OsString),
+}
 
-        match fs::symlink_metadata(&result) {
-            Ok(meta) => {
-                if !meta.file_type().is_symlink() {
-                    break;
-                }
-            }
-            Err(e) => return Err((symlink_is_absolute, result, e)),
-        }
-
-        followed += 1;
-        match fs::read_link(&result) {
-            Ok(path) => {
-                result.pop();
-                symlink_is_absolute = path.is_absolute();
-                result.push(path);
-            }
-            Err(e) => return Err((symlink_is_absolute, result, e)),
-        }
-
-        if first_resolution.is_none() {
-            first_resolution = Some(result.clone());
+impl OwningComponent {
+    fn as_os_str(&self) -> &OsStr {
+        match self {
+            Self::Prefix(s) => s.as_os_str(),
+            Self::RootDir => Component::RootDir.as_os_str(),
+            Self::CurDir => Component::CurDir.as_os_str(),
+            Self::ParentDir => Component::ParentDir.as_os_str(),
+            Self::Normal(s) => s.as_os_str(),
         }
     }
-    Ok(result)
+}
+
+impl<'a> From<Component<'a>> for OwningComponent {
+    fn from(comp: Component<'a>) -> Self {
+        match comp {
+            Component::Prefix(_) => Self::Prefix(comp.as_os_str().to_os_string()),
+            Component::RootDir => Self::RootDir,
+            Component::CurDir => Self::CurDir,
+            Component::ParentDir => Self::ParentDir,
+            Component::Normal(s) => Self::Normal(s.to_os_string()),
+        }
+    }
 }
 
 /// Return the canonical, absolute form of a path.
@@ -307,7 +311,7 @@ pub fn canonicalize<P: AsRef<Path>>(
     miss_mode: MissingHandling,
     res_mode: ResolveMode,
 ) -> IOResult<PathBuf> {
-    // Create an absolute path
+    const SYMLINKS_TO_LOOK_FOR_LOOPS: i32 = 256;
     let original = original.as_ref();
     let original = if original.is_absolute() {
         original.to_path_buf()
@@ -315,86 +319,72 @@ pub fn canonicalize<P: AsRef<Path>>(
         let current_dir = env::current_dir()?;
         dunce::canonicalize(current_dir)?.join(original)
     };
-
+    let path = if res_mode == ResolveMode::Logical {
+        normalize_path(&original)
+    } else {
+        original
+    };
+    let mut parts: VecDeque<OwningComponent> = path.components().map(|part| part.into()).collect();
     let mut result = PathBuf::new();
-    let mut parts = vec![];
-
-    // Split path by directory separator; add prefix (Windows-only) and root
-    // directory to final path buffer; add remaining parts to temporary
-    // vector for canonicalization.
-    for part in original.components() {
+    let mut followed_symlinks = 0;
+    #[cfg(unix)]
+    let mut visited_files = HashSet::new();
+    while let Some(part) = parts.pop_front() {
         match part {
-            Component::Prefix(_) | Component::RootDir => {
-                result.push(part.as_os_str());
-            }
-            Component::CurDir => (),
-            Component::ParentDir => {
-                if res_mode == ResolveMode::Logical {
-                    parts.pop();
-                } else {
-                    parts.push(part.as_os_str());
-                }
-            }
-            Component::Normal(_) => {
-                parts.push(part.as_os_str());
-            }
-        }
-    }
-
-    // Resolve the symlinks where possible
-    if !parts.is_empty() {
-        for part in parts[..parts.len() - 1].iter() {
-            result.push(part);
-
-            //resolve as we go to handle long relative paths on windows
-            if res_mode == ResolveMode::Physical {
-                result = normalize_path(&result);
-            }
-
-            if res_mode == ResolveMode::None {
+            OwningComponent::Prefix(s) => {
+                result.push(s);
                 continue;
             }
+            OwningComponent::RootDir | OwningComponent::Normal(..) => {
+                result.push(part.as_os_str());
+            }
+            OwningComponent::CurDir => {}
+            OwningComponent::ParentDir => {
+                result.pop();
+            }
+        }
+        if res_mode == ResolveMode::None {
+            continue;
+        }
+        match resolve_symlink(&result) {
+            Ok(Some(link_path)) => {
+                for link_part in link_path.components().rev() {
+                    parts.push_front(link_part.into());
+                }
+                if followed_symlinks < SYMLINKS_TO_LOOK_FOR_LOOPS {
+                    followed_symlinks += 1;
+                } else {
+                    #[cfg(unix)]
+                    let has_loop = {
+                        let file_info =
+                            FileInformation::from_path(&result.parent().unwrap(), false).unwrap();
+                        let mut path_to_follow = PathBuf::new();
+                        for part in &parts {
+                            path_to_follow.push(part.as_os_str());
+                        }
+                        !visited_files.insert((file_info, path_to_follow))
+                    };
 
-            match resolve(&result) {
-                Err((_, path, e)) => {
-                    if miss_mode == MissingHandling::Missing {
-                        result = path;
-                    } else {
-                        return Err(e);
+                    #[cfg(not(unix))]
+                    let has_loop = true;
+
+                    if has_loop {
+                        return Err(Error::new(
+                            ErrorKind::InvalidInput,
+                            "Too many levels of symbolic links",
+                        )); // TODO use ErrorKind::FilesystemLoop when stable
                     }
                 }
-                Ok(path) => {
-                    result = path;
-                }
+                result.pop();
             }
-        }
-
-        result.push(parts.last().unwrap());
-
-        if res_mode == ResolveMode::None {
-            return Ok(result);
-        }
-
-        match resolve(&result) {
-            Err((is_absolute, path, err)) => {
-                // If the resolved symlink is an absolute path and non-existent,
-                // `realpath` throws no such file error.
+            Err(e) => {
                 if miss_mode == MissingHandling::Existing
-                    || (err.kind() == ErrorKind::NotFound
-                        && is_absolute
-                        && miss_mode == MissingHandling::Normal)
+                    || (miss_mode == MissingHandling::Normal && !parts.is_empty())
                 {
-                    return Err(err);
-                } else {
-                    result = path;
+                    return Err(e);
                 }
             }
-            Ok(path) => {
-                result = path;
-            }
-        }
-        if res_mode == ResolveMode::Physical {
-            result = normalize_path(&result);
+            _ => {}
         }
     }
     Ok(result)

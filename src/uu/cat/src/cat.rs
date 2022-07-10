@@ -351,7 +351,7 @@ fn cat_path(
 
             if let Some(out_info) = out_info {
                 if out_info.file_size() != 0
-                    && FileInformation::from_file(&file).as_ref() == Some(out_info)
+                    && FileInformation::from_file(&file).ok().as_ref() == Some(out_info)
                 {
                     return Err(CatError::OutputIsInput);
                 }
@@ -367,7 +367,7 @@ fn cat_path(
 }
 
 fn cat_files(files: &[String], options: &OutputOptions) -> UResult<()> {
-    let out_info = FileInformation::from_file(&std::io::stdout());
+    let out_info = FileInformation::from_file(&std::io::stdout()).ok();
 
     let mut state = OutputState {
         line_number: 1,

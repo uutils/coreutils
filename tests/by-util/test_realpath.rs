@@ -1,6 +1,6 @@
 use crate::common::util::*;
 
-use std::path::Path;
+use std::path::{Path, MAIN_SEPARATOR};
 
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 
@@ -155,8 +155,8 @@ fn test_realpath_dangling() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("nonexistent-file", "link");
     ucmd.arg("link")
-        .fails()
-        .stderr_contains("realpath: link: No such file or directory");
+        .succeeds()
+        .stdout_contains(at.plus_as_string("nonexistent-file\n"));
 }
 
 #[test]
@@ -166,8 +166,8 @@ fn test_realpath_loop() {
     at.symlink_file("3", "2");
     at.symlink_file("1", "3");
     ucmd.arg("1")
-        .succeeds()
-        .stdout_only(at.plus_as_string("2\n"));
+        .fails()
+        .stderr_contains("Too many levels of symbolic links");
 }
 
 #[test]
@@ -241,7 +241,6 @@ fn test_realpath_when_symlink_is_absolute_and_enoent() {
 }
 
 #[test]
-#[ignore = "issue #3669"]
 fn test_realpath_when_symlink_part_is_missing() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -254,10 +253,13 @@ fn test_realpath_when_symlink_part_is_missing() {
     at.relative_symlink_file("../dir2/baz", "dir1/foo3");
     at.symlink_file("dir3/bar", "dir1/foo4");
 
+    let expect1 = format!("dir2{}bar", MAIN_SEPARATOR);
+    let expect2 = format!("dir2{}baz", MAIN_SEPARATOR);
+
     ucmd.args(&["dir1/foo1", "dir1/foo2", "dir1/foo3", "dir1/foo4"])
         .run()
-        .stdout_contains(at.plus_as_string("dir2/bar") + "\n")
-        .stdout_contains(at.plus_as_string("dir2/baz") + "\n")
+        .stdout_contains(expect1 + "\n")
+        .stdout_contains(expect2 + "\n")
         .stderr_contains("realpath: dir1/foo2: No such file or directory\n")
         .stderr_contains("realpath: dir1/foo4: No such file or directory\n");
 }
