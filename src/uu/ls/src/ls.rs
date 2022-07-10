@@ -1500,7 +1500,7 @@ impl PathData {
         // nearly free compared to a metadata() call on a Path
         fn get_file_type(
             de: &DirEntry,
-            p_buf: &PathBuf,
+            p_buf: &Path,
             must_dereference: bool,
         ) -> OnceCell<Option<FileType>> {
             if must_dereference {
@@ -1517,7 +1517,7 @@ impl PathData {
             }
         }
         let ft = match de {
-            Some(ref de) => get_file_type(&de, &p_buf, must_dereference),
+            Some(ref de) => get_file_type(de, &p_buf, must_dereference),
             None => OnceCell::new(),
         };
 
