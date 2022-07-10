@@ -18,6 +18,7 @@ use glob::Pattern;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
+use std::collections::HashSet;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -36,7 +37,6 @@ use std::{
     os::unix::fs::{FileTypeExt, MetadataExt},
     time::Duration,
 };
-use std::collections::HashSet;
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
@@ -240,7 +240,11 @@ impl Display for LsError {
                 }
             }
             LsError::AlreadyListedError(path) => {
-                write!(f, "{}: not listing already-listed directory", path.to_string_lossy())
+                write!(
+                    f,
+                    "{}: not listing already-listed directory",
+                    path.to_string_lossy()
+                )
             }
         }
     }
@@ -1494,7 +1498,11 @@ impl PathData {
 
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
-        fn get_file_type(de: &DirEntry, p_buf: &PathBuf, must_dereference: bool) -> OnceCell<Option<FileType>> {
+        fn get_file_type(
+            de: &DirEntry,
+            p_buf: &PathBuf,
+            must_dereference: bool,
+        ) -> OnceCell<Option<FileType>> {
             if must_dereference {
                 if let Ok(md_pb) = p_buf.metadata() {
                     return OnceCell::from(Some(md_pb.file_type()));
@@ -1509,9 +1517,7 @@ impl PathData {
             }
         }
         let ft = match de {
-            Some(ref de) => {
-                get_file_type(&de, &p_buf, must_dereference)
-            }
+            Some(ref de) => get_file_type(&de, &p_buf, must_dereference),
             None => OnceCell::new(),
         };
 
@@ -1634,7 +1640,10 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             }
         }
         let mut listed_ancestors = HashSet::new();
-        listed_ancestors.insert(FileInformation::from_path(&path_data.p_buf, path_data.must_dereference)?);
+        listed_ancestors.insert(FileInformation::from_path(
+            &path_data.p_buf,
+            path_data.must_dereference,
+        )?);
         enter_directory(path_data, read_dir, config, &mut out, &mut listed_ancestors)?;
     }
 
@@ -1797,13 +1806,16 @@ fn enter_directory(
                     continue;
                 }
                 Ok(rd) => {
-                    if !listed_ancestors.insert(FileInformation::from_path(&e.p_buf, e.must_dereference)?) {
+                    if !listed_ancestors
+                        .insert(FileInformation::from_path(&e.p_buf, e.must_dereference)?)
+                    {
                         out.flush()?;
                         show!(LsError::AlreadyListedError(e.p_buf.clone()));
                     } else {
                         writeln!(out, "\n{}:", e.p_buf.display())?;
                         enter_directory(e, rd, config, out, listed_ancestors)?;
-                        listed_ancestors.remove(&FileInformation::from_path(&e.p_buf, e.must_dereference)?);
+                        listed_ancestors
+                            .remove(&FileInformation::from_path(&e.p_buf, e.must_dereference)?);
                     }
                 }
             }

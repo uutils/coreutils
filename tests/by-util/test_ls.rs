@@ -3073,7 +3073,9 @@ fn test_ls_dereference_looped_symlinks_recursive() {
     at.mkdir("loop");
     at.relative_symlink_dir("../loop", "loop/sub");
 
-    ucmd.args(&["-RL", "loop"]).fails().stderr_contains("not listing already-listed directory");
+    ucmd.args(&["-RL", "loop"])
+        .fails()
+        .stderr_contains("not listing already-listed directory");
 }
 
 #[test]
@@ -3084,7 +3086,11 @@ fn test_dereference_dangling_color() {
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.relative_symlink_file("wat", "nonexistent");
-    ucmd.args(&["-L", "--color"]).fails().code_is(1).stderr_contains("No such file or directory").stdout_is(out_exp);
+    ucmd.args(&["-L", "--color"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("No such file or directory")
+        .stdout_is(out_exp);
 }
 
 #[test]
@@ -3098,7 +3104,9 @@ fn test_dereference_symlink_dir_color() {
     at.mkdir("dir1");
     at.mkdir("dir2");
     at.relative_symlink_dir("../dir2", "dir1/link");
-    ucmd.args(&["-L", "--color", "dir1"]).succeeds().stdout_is(out_exp);
+    ucmd.args(&["-L", "--color", "dir1"])
+        .succeeds()
+        .stdout_is(out_exp);
 }
 
 #[test]
@@ -3112,5 +3120,7 @@ fn test_dereference_symlink_file_color() {
     at.mkdir("dir1");
     at.touch("file");
     at.relative_symlink_file("../file", "dir1/link");
-    ucmd.args(&["-L", "--color", "dir1"]).succeeds().stdout_is(out_exp);
+    ucmd.args(&["-L", "--color", "dir1"])
+        .succeeds()
+        .stdout_is(out_exp);
 }
