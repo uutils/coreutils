@@ -263,3 +263,80 @@ fn test_realpath_when_symlink_part_is_missing() {
         .stderr_contains("realpath: dir1/foo2: No such file or directory\n")
         .stderr_contains("realpath: dir1/foo4: No such file or directory\n");
 }
+
+#[test]
+fn test_relative_existing_require_directories() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir1");
+    at.touch("dir1/f");
+    ucmd.args(&["-e", "--relative-base=.", "--relative-to=dir1/f", "."])
+        .fails()
+        .code_is(1)
+        .stderr_contains("Not a directory");
+}
+
+#[test]
+fn test_relative_existing_require_directories_2() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir1");
+    at.touch("dir1/f");
+    ucmd.args(&["-e", "--relative-base=.", "--relative-to=dir1", "."])
+        .succeeds()
+        .stdout_is("..\n");
+}
+
+#[test]
+fn test_relative_base_not_prefix_of_relative_to() {
+    new_ucmd!()
+        .args(&[
+            "-sm",
+            "--relative-base=/usr/local",
+            "--relative-to=/usr",
+            "/usr",
+            "/usr/local",
+        ])
+        .succeeds()
+        .stdout_is("/usr\n/usr/local\n");
+}
+
+#[test]
+fn test_relative_string_handling() {
+    new_ucmd!()
+        .args(&["-m", "--relative-to=prefix", "prefixed/1"])
+        .succeeds()
+        .stdout_is("../prefixed/1\n");
+    new_ucmd!()
+        .args(&["-m", "--relative-to=prefixed", "prefix/1"])
+        .succeeds()
+        .stdout_is("../prefix/1\n");
+    new_ucmd!()
+        .args(&["-m", "--relative-to=prefixed", "prefixed/1"])
+        .succeeds()
+        .stdout_is("1\n");
+}
+
+#[test]
+fn test_relative() {
+    new_ucmd!()
+        .args(&[
+            "-sm",
+            "--relative-base=/usr",
+            "--relative-to=/usr",
+            "/tmp",
+            "/usr",
+        ])
+        .succeeds()
+        .stdout_is("/tmp\n.\n");
+    new_ucmd!()
+        .args(&["-sm", "--relative-base=/", "--relative-to=/", "/", "/usr"])
+        .succeeds()
+        .stdout_is(".\nusr\n");
+    new_ucmd!()
+        .args(&["-sm", "--relative-base=/usr", "/tmp", "/usr"])
+        .succeeds()
+        .stdout_is("/tmp\n.\n");
+    new_ucmd!()
+        .args(&["-sm", "--relative-base=/", "/", "/usr"])
+        .succeeds()
+        .stdout_is(".\nusr\n");
+}
