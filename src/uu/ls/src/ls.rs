@@ -18,6 +18,7 @@ use glob::Pattern;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
+use std::collections::HashSet;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -151,6 +152,7 @@ enum LsError {
     IOError(std::io::Error),
     IOErrorContext(std::io::Error, PathBuf),
     BlockSizeParseError(String),
+    AlreadyListedError(PathBuf),
 }
 
 impl UError for LsError {
@@ -160,6 +162,7 @@ impl UError for LsError {
             LsError::IOError(_) => 1,
             LsError::IOErrorContext(_, _) => 1,
             LsError::BlockSizeParseError(_) => 1,
+            LsError::AlreadyListedError(_) => 2,
         }
     }
 }
@@ -235,6 +238,13 @@ impl Display for LsError {
                         }
                     },
                 }
+            }
+            LsError::AlreadyListedError(path) => {
+                write!(
+                    f,
+                    "{}: not listing already-listed directory",
+                    path.to_string_lossy()
+                )
             }
         }
     }
@@ -1488,16 +1498,26 @@ impl PathData {
 
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
-        let ft = match de {
-            Some(ref de) => {
-                if let Ok(ft_de) = de.file_type() {
-                    OnceCell::from(Some(ft_de))
-                } else if let Ok(md_pb) = p_buf.metadata() {
-                    OnceCell::from(Some(md_pb.file_type()))
-                } else {
-                    OnceCell::new()
+        fn get_file_type(
+            de: &DirEntry,
+            p_buf: &Path,
+            must_dereference: bool,
+        ) -> OnceCell<Option<FileType>> {
+            if must_dereference {
+                if let Ok(md_pb) = p_buf.metadata() {
+                    return OnceCell::from(Some(md_pb.file_type()));
                 }
             }
+            if let Ok(ft_de) = de.file_type() {
+                OnceCell::from(Some(ft_de))
+            } else if let Ok(md_pb) = p_buf.symlink_metadata() {
+                OnceCell::from(Some(md_pb.file_type()))
+            } else {
+                OnceCell::new()
+            }
+        }
+        let ft = match de {
+            Some(ref de) => get_file_type(de, &p_buf, must_dereference),
             None => OnceCell::new(),
         };
 
@@ -1619,7 +1639,12 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 writeln!(out, "\n{}:", path_data.p_buf.display())?;
             }
         }
-        enter_directory(path_data, read_dir, config, &mut out)?;
+        let mut listed_ancestors = HashSet::new();
+        listed_ancestors.insert(FileInformation::from_path(
+            &path_data.p_buf,
+            path_data.must_dereference,
+        )?);
+        enter_directory(path_data, read_dir, config, &mut out, &mut listed_ancestors)?;
     }
 
     Ok(())
@@ -1715,6 +1740,7 @@ fn enter_directory(
     read_dir: ReadDir,
     config: &Config,
     out: &mut BufWriter<Stdout>,
+    listed_ancestors: &mut HashSet<FileInformation>,
 ) -> UResult<()> {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
@@ -1780,8 +1806,17 @@ fn enter_directory(
                     continue;
                 }
                 Ok(rd) => {
-                    writeln!(out, "\n{}:", e.p_buf.display())?;
-                    enter_directory(e, rd, config, out)?;
+                    if !listed_ancestors
+                        .insert(FileInformation::from_path(&e.p_buf, e.must_dereference)?)
+                    {
+                        out.flush()?;
+                        show!(LsError::AlreadyListedError(e.p_buf.clone()));
+                    } else {
+                        writeln!(out, "\n{}:", e.p_buf.display())?;
+                        enter_directory(e, rd, config, out, listed_ancestors)?;
+                        listed_ancestors
+                            .remove(&FileInformation::from_path(&e.p_buf, e.must_dereference)?);
+                    }
                 }
             }
         }
@@ -2254,6 +2289,7 @@ fn get_inode(metadata: &Metadata) -> String {
 use std::sync::Mutex;
 #[cfg(unix)]
 use uucore::entries;
+use uucore::fs::FileInformation;
 use uucore::quoting_style;
 
 #[cfg(unix)]
@@ -2518,12 +2554,17 @@ fn display_file_name(
     let mut width = name.width();
 
     if let Some(ls_colors) = &config.color {
-        name = color_name(
-            name,
-            &path.p_buf,
-            path.p_buf.symlink_metadata().ok().as_ref(),
-            ls_colors,
-        );
+        let md = path.md(out);
+        name = if md.is_some() {
+            color_name(name, &path.p_buf, md, ls_colors)
+        } else {
+            color_name(
+                name,
+                &path.p_buf,
+                path.p_buf.symlink_metadata().ok().as_ref(),
+                ls_colors,
+            )
+        };
     }
 
     if config.format != Format::Long && !more_info.is_empty() {
@@ -2564,6 +2605,7 @@ fn display_file_name(
     if config.format == Format::Long
         && path.file_type(out).is_some()
         && path.file_type(out).unwrap().is_symlink()
+        && !path.must_dereference
     {
         if let Ok(target) = path.p_buf.read_link() {
             name.push_str(" -> ");
