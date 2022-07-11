@@ -405,22 +405,21 @@ use std::ptr;
 ))]
 use std::slice;
 /// Read file system list.
-pub fn read_fs_list() -> Vec<MountInfo> {
+pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let (file_name, f) = File::open(LINUX_MOUNTINFO)
             .map(|f| (LINUX_MOUNTINFO, f))
-            .or_else(|_| File::open(LINUX_MTAB).map(|f| (LINUX_MTAB, f)))
-            .expect("failed to find mount list files");
+            .or_else(|_| File::open(LINUX_MTAB).map(|f| (LINUX_MTAB, f)))?;
         let reader = BufReader::new(f);
-        reader
+        Ok(reader
             .lines()
             .filter_map(|line| line.ok())
             .filter_map(|line| {
                 let raw_data = line.split_whitespace().collect::<Vec<&str>>();
                 MountInfo::new(file_name, &raw_data)
             })
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>())
     }
     #[cfg(any(
         target_os = "freebsd",
@@ -435,10 +434,10 @@ pub fn read_fs_list() -> Vec<MountInfo> {
             crash!(1, "get_mount_info() failed");
         }
         let mounts = unsafe { slice::from_raw_parts(mount_buffer_ptr, len as usize) };
-        mounts
+        Ok(mounts
             .iter()
             .map(|m| MountInfo::from(*m))
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>())
     }
     #[cfg(windows)]
     {
@@ -482,12 +481,12 @@ pub fn read_fs_list() -> Vec<MountInfo> {
         unsafe {
             FindVolumeClose(find_handle);
         }
-        mounts
+        Ok(mounts)
     }
     #[cfg(any(target_os = "redox", target_os = "illumos", target_os = "solaris"))]
     {
         // No method to read mounts, yet
-        Vec::new()
+        Ok(Vec::new())
     }
 }
 

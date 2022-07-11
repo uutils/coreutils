@@ -8,7 +8,7 @@
 #[macro_use]
 extern crate uucore;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::fs::display_permissions;
 use uucore::fsext::{
     pretty_filetype, pretty_fstype, pretty_time, read_fs_list, statfs, BirthTime, FsMeta,
@@ -502,6 +502,7 @@ impl Stater {
             None
         } else {
             let mut mount_list = read_fs_list()
+                .map_err_context(|| "cannot read table of mounted file systems".into())?
                 .iter()
                 .map(|mi| mi.mount_dir.clone())
                 .collect::<Vec<String>>();
