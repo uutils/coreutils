@@ -176,9 +176,7 @@ fn prepare_relative_options(
     resolve_mode: ResolveMode,
 ) -> UResult<(Option<PathBuf>, Option<PathBuf>)> {
     let relative_to = matches.value_of(OPT_RELATIVE_TO).map(PathBuf::from);
-    let relative_base = matches
-        .value_of(OPT_RELATIVE_BASE)
-        .map(PathBuf::from);
+    let relative_base = matches.value_of(OPT_RELATIVE_BASE).map(PathBuf::from);
     let relative_to = canonicalize_relative_option(relative_to, can_mode, resolve_mode)?;
     let relative_base = canonicalize_relative_option(relative_base, can_mode, resolve_mode)?;
     if let (Some(base), Some(to)) = (relative_base.as_deref(), relative_to.as_deref()) {
