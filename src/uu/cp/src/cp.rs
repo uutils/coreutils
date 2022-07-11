@@ -19,10 +19,6 @@ extern crate uucore;
 use uucore::display::Quotable;
 use uucore::format_usage;
 use uucore::fs::FileInformation;
-#[cfg(windows)]
-use winapi::um::fileapi::CreateFileW;
-#[cfg(windows)]
-use winapi::um::fileapi::GetFileInformationByHandle;
 
 use std::borrow::Cow;
 
@@ -35,22 +31,17 @@ use std::collections::HashSet;
 use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
-#[cfg(windows)]
-use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io;
 use std::io::{stdin, stdout, Write};
-use std::mem;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::io::AsRawFd;
-#[cfg(windows)]
-use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use std::string::ToString;
@@ -779,59 +770,29 @@ fn preserve_hardlinks(
     #[cfg(not(target_os = "redox"))]
     {
         if !source.is_dir() {
-            unsafe {
-                let inode: u64;
-                let nlinks: u64;
-                #[cfg(unix)]
-                {
-                    let src_path = CString::new(source.as_os_str().to_str().unwrap()).unwrap();
-                    let mut stat = mem::zeroed();
-                    if libc::lstat(src_path.as_ptr(), &mut stat) < 0 {
-                        return Err(format!(
-                            "cannot stat {}: {}",
-                            source.quote(),
-                            std::io::Error::last_os_error()
-                        )
-                        .into());
-                    }
-                    inode = stat.st_ino as u64;
-                    nlinks = stat.st_nlink as u64;
+            let info = match FileInformation::from_path(source, false) {
+                Ok(info) => info,
+                Err(e) => {
+                    return Err(format!("cannot stat {}: {}", source.quote(), e,).into());
                 }
-                #[cfg(windows)]
-                {
-                    let src_path: Vec<u16> = OsStr::new(source).encode_wide().collect();
-                    #[allow(deprecated)]
-                    let stat = mem::uninitialized();
-                    let handle = CreateFileW(
-                        src_path.as_ptr(),
-                        winapi::um::winnt::GENERIC_READ,
-                        winapi::um::winnt::FILE_SHARE_READ,
-                        std::ptr::null_mut(),
-                        0,
-                        0,
-                        std::ptr::null_mut(),
-                    );
-                    if GetFileInformationByHandle(handle, stat) != 0 {
-                        return Err(format!(
-                            "cannot get file information {:?}: {}",
-                            source,
-                            std::io::Error::last_os_error()
-                        )
-                        .into());
-                    }
-                    inode = ((*stat).nFileIndexHigh as u64) << 32 | (*stat).nFileIndexLow as u64;
-                    nlinks = (*stat).nNumberOfLinks as u64;
-                }
+            };
 
-                for hard_link in hard_links.iter() {
-                    if hard_link.1 == inode {
-                        std::fs::hard_link(hard_link.0.clone(), dest).unwrap();
-                        *found_hard_link = true;
-                    }
+            #[cfg(unix)]
+            let inode = info.inode();
+
+            #[cfg(windows)]
+            let inode = info.file_index();
+
+            let nlinks = info.number_of_links();
+
+            for hard_link in hard_links.iter() {
+                if hard_link.1 == inode {
+                    std::fs::hard_link(hard_link.0.clone(), dest).unwrap();
+                    *found_hard_link = true;
                 }
-                if !(*found_hard_link) && nlinks > 1 {
-                    hard_links.push((dest.to_str().unwrap().to_string(), inode));
-                }
+            }
+            if !(*found_hard_link) && nlinks > 1 {
+                hard_links.push((dest.to_str().unwrap().to_string(), inode));
             }
         }
     }
@@ -1121,12 +1082,19 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
     let source_metadata = fs::symlink_metadata(source).context(context)?;
     match *attribute {
         Attribute::Mode => {
-            fs::set_permissions(dest, source_metadata.permissions()).context(context)?;
-            // FIXME: Implement this for windows as well
-            #[cfg(feature = "feat_acl")]
-            exacl::getfacl(source, None)
-                .and_then(|acl| exacl::setfacl(&[dest], &acl, None))
-                .map_err(|err| Error::Error(err.to_string()))?;
+            // The `chmod()` system call that underlies the
+            // `fs::set_permissions()` call is unable to change the
+            // permissions of a symbolic link. In that case, we just
+            // do nothing, since every symbolic link has the same
+            // permissions.
+            if !is_symlink(dest) {
+                fs::set_permissions(dest, source_metadata.permissions()).context(context)?;
+                // FIXME: Implement this for windows as well
+                #[cfg(feature = "feat_acl")]
+                exacl::getfacl(source, None)
+                    .and_then(|acl| exacl::setfacl(&[dest], &acl, None))
+                    .map_err(|err| Error::Error(err.to_string()))?;
+            }
         }
         #[cfg(unix)]
         Attribute::Ownership => {
@@ -1152,11 +1120,13 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
             .map_err(Error::Error)?;
         }
         Attribute::Timestamps => {
-            filetime::set_file_times(
-                Path::new(dest),
-                FileTime::from_last_access_time(&source_metadata),
-                FileTime::from_last_modification_time(&source_metadata),
-            )?;
+            let atime = FileTime::from_last_access_time(&source_metadata);
+            let mtime = FileTime::from_last_modification_time(&source_metadata);
+            if is_symlink(dest) {
+                filetime::set_symlink_file_times(dest, atime, mtime)?;
+            } else {
+                filetime::set_file_times(dest, atime, mtime)?;
+            }
         }
         #[cfg(feature = "feat_selinux")]
         Attribute::Context => {
@@ -1212,7 +1182,7 @@ fn symlink_file(
     {
         std::os::windows::fs::symlink_file(source, dest).context(context)?;
     }
-    if let Some(file_info) = FileInformation::from_path(dest, false) {
+    if let Ok(file_info) = FileInformation::from_path(dest, false) {
         symlinked_files.insert(file_info);
     }
     Ok(())
@@ -1230,7 +1200,8 @@ fn backup_dest(dest: &Path, backup_path: &Path) -> CopyResult<PathBuf> {
 }
 
 fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
-    if paths_refer_to_same_file(source, dest)? {
+    let dereference_to_compare = options.dereference || !is_symlink(source);
+    if paths_refer_to_same_file(source, dest, dereference_to_compare) {
         return Err(format!("{}: same file", context_for(source, dest)).into());
     }
 
@@ -1238,7 +1209,7 @@ fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyRe
 
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
     if let Some(backup_path) = backup_path {
-        if paths_refer_to_same_file(source, &backup_path)? {
+        if paths_refer_to_same_file(source, &backup_path, true) {
             return Err(format!(
                 "backing up {} might destroy source;  {} not copied",
                 dest.quote(),
@@ -1298,7 +1269,8 @@ fn copy_file(
                 dest.display()
             )));
         }
-        if options.dereference && !dest.exists() {
+        let copy_contents = options.dereference || !is_symlink(source);
+        if copy_contents && !dest.exists() {
             return Err(Error::Error(format!(
                 "not writing through dangling symlink '{}'",
                 dest.display()
@@ -1527,7 +1499,7 @@ fn copy_link(
     } else {
         // we always need to remove the file to be able to create a symlink,
         // even if it is writeable.
-        if dest.is_file() {
+        if is_symlink(dest) || dest.is_file() {
             fs::remove_file(dest)?;
         }
         dest.into()
@@ -1693,12 +1665,15 @@ pub fn localize_to_target(root: &Path, source: &Path, target: &Path) -> CopyResu
     Ok(target.join(&local_to_root))
 }
 
-pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> io::Result<bool> {
+pub fn paths_refer_to_same_file(p1: &Path, p2: &Path, dereference: bool) -> bool {
     // We have to take symlinks and relative paths into account.
-    let pathbuf1 = canonicalize(p1, MissingHandling::Normal, ResolveMode::Logical)?;
-    let pathbuf2 = canonicalize(p2, MissingHandling::Normal, ResolveMode::Logical)?;
+    let res1 = FileInformation::from_path(p1, dereference);
+    let res2 = FileInformation::from_path(p2, dereference);
 
-    Ok(pathbuf1 == pathbuf2)
+    match (res1, res2) {
+        (Ok(info1), Ok(info2)) => info1 == info2,
+        _ => false,
+    }
 }
 
 pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {

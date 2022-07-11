@@ -607,3 +607,35 @@ fn test_invalid_padding_value() {
             .stderr_contains(format!("invalid padding value '{}'", padding_value));
     }
 }
+
+#[test]
+fn test_from_unit() {
+    new_ucmd!()
+        .args(&["--from-unit=512", "4"])
+        .succeeds()
+        .stdout_is("2048\n");
+}
+
+#[test]
+fn test_to_unit() {
+    new_ucmd!()
+        .args(&["--to-unit=512", "2048"])
+        .succeeds()
+        .stdout_is("4\n");
+}
+
+#[test]
+fn test_invalid_unit_size() {
+    let commands = vec!["from", "to"];
+    let invalid_sizes = vec!["A", "0", "18446744073709551616"];
+
+    for command in commands {
+        for invalid_size in &invalid_sizes {
+            new_ucmd!()
+                .arg(format!("--{}-unit={}", command, invalid_size))
+                .fails()
+                .code_is(1)
+                .stderr_contains(format!("invalid unit size: '{}'", invalid_size));
+        }
+    }
+}

@@ -9,6 +9,8 @@ use std::os::unix::fs;
 
 #[cfg(unix)]
 use std::os::unix::fs::symlink as symlink_file;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 #[cfg(all(unix, not(target_os = "freebsd")))]
 use std::os::unix::fs::PermissionsExt;
 #[cfg(windows)]
@@ -1495,13 +1497,12 @@ fn test_copy_through_just_created_symlink() {
         at.mkdir("a");
         at.mkdir("b");
         at.mkdir("c");
-        #[cfg(unix)]
-        fs::symlink("../t", at.plus("a/1")).unwrap();
-        #[cfg(target_os = "windows")]
-        symlink_file("../t", at.plus("a/1")).unwrap();
+        at.relative_symlink_file("../t", "a/1");
         at.touch("b/1");
+        at.write("b/1", "hello");
         if create_t {
             at.touch("t");
+            at.write("t", "world");
         }
         ucmd.arg("--no-dereference")
             .arg("a/1")
@@ -1513,6 +1514,9 @@ fn test_copy_through_just_created_symlink() {
             } else {
                 "cp: will not copy 'b/1' through just-created symlink 'c\\1'"
             });
+        if create_t {
+            assert_eq!(at.read("a/1"), "world");
+        }
     }
 }
 
@@ -1537,6 +1541,47 @@ fn test_copy_through_dangling_symlink_no_dereference() {
         .succeeds()
         .no_stderr()
         .no_stdout();
+}
+
+/// Test for copying a dangling symbolic link and its permissions.
+#[test]
+fn test_copy_through_dangling_symlink_no_dereference_permissions() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    //               target name    link name
+    at.symlink_file("no-such-file", "dangle");
+    //          don't dereference the link
+    //           |    copy permissions, too
+    //           |      |    from the link
+    //           |      |      |     to new file d2
+    //           |      |      |        |
+    //           V      V      V        V
+    ucmd.args(&["-P", "-p", "dangle", "d2"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert!(at.symlink_exists("d2"));
+
+    // `-p` means `--preserve=mode,ownership,timestamps`
+    #[cfg(unix)]
+    {
+        let metadata1 = at.symlink_metadata("dangle");
+        let metadata2 = at.symlink_metadata("d2");
+        assert_eq!(metadata1.mode(), metadata2.mode());
+        assert_eq!(metadata1.uid(), metadata2.uid());
+        assert_eq!(metadata1.atime(), metadata2.atime());
+        assert_eq!(metadata1.mtime(), metadata2.mtime());
+        assert_eq!(metadata1.ctime(), metadata2.ctime());
+    }
+}
+
+#[test]
+fn test_copy_through_dangling_symlink_no_dereference_2() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.symlink_file("nonexistent", "target");
+    ucmd.args(&["-P", "file", "target"])
+        .fails()
+        .stderr_only("cp: not writing through dangling symlink 'target'");
 }
 
 #[test]
@@ -1683,4 +1728,52 @@ fn test_cp_trailing_slash_copy_to_symlinked_file() {
     s.fixtures.touch("symlink_target");
     at.symlink_file("symlink_target", "symlink");
     s.ucmd().arg("source_file_1").arg("symlink/").fails();
+}
+
+fn test_copy_no_dereference_1() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+    at.touch("a/foo");
+    at.write("a/foo", "bar");
+    at.relative_symlink_file("../a/foo", "b/foo");
+    ucmd.args(&["-P", "a/foo", "b"]).fails();
+}
+
+#[test]
+fn test_abuse_existing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.relative_symlink_file("../t", "a/1");
+    at.touch("b/1");
+    at.write("b/1", "hello");
+    at.relative_symlink_file("../t", "c/1");
+    at.touch("t");
+    at.write("t", "i");
+    ucmd.args(&["-dR", "a/1", "b/1", "c"])
+        .fails()
+        .stderr_contains(format!(
+            "will not copy 'b/1' through just-created symlink 'c{}1'",
+            if cfg!(windows) { "\\" } else { "/" }
+        ));
+    assert_eq!(at.read("t"), "i");
+}
+
+#[test]
+fn test_copy_same_symlink_no_dereference() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.relative_symlink_file("t", "a");
+    at.relative_symlink_file("t", "b");
+    at.touch("t");
+    ucmd.args(&["-d", "a", "b"]).succeeds();
+}
+
+#[test]
+fn test_copy_same_symlink_no_dereference_dangling() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.relative_symlink_file("t", "a");
+    at.relative_symlink_file("t", "b");
+    ucmd.args(&["-d", "a", "b"]).succeeds();
 }

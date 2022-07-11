@@ -22,6 +22,8 @@ use std::io::{Read, Result, Write};
 use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file};
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
+#[cfg(windows)]
+use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::rc::Rc;
@@ -702,11 +704,13 @@ impl AtPath {
     }
 
     pub fn relative_symlink_file(&self, original: &str, link: &str) {
+        #[cfg(windows)]
+        let original = original.replace('/', &MAIN_SEPARATOR.to_string());
         log_info(
             "symlink",
-            &format!("{},{}", original, &self.plus_as_string(link)),
+            &format!("{},{}", &original, &self.plus_as_string(link)),
         );
-        symlink_file(original, &self.plus(link)).unwrap();
+        symlink_file(&original, &self.plus(link)).unwrap();
     }
 
     pub fn symlink_dir(&self, original: &str, link: &str) {
@@ -722,11 +726,13 @@ impl AtPath {
     }
 
     pub fn relative_symlink_dir(&self, original: &str, link: &str) {
+        #[cfg(windows)]
+        let original = original.replace('/', &MAIN_SEPARATOR.to_string());
         log_info(
             "symlink",
-            &format!("{},{}", original, &self.plus_as_string(link)),
+            &format!("{},{}", &original, &self.plus_as_string(link)),
         );
-        symlink_dir(original, &self.plus(link)).unwrap();
+        symlink_dir(&original, &self.plus(link)).unwrap();
     }
 
     pub fn is_symlink(&self, path: &str) -> bool {
@@ -762,6 +768,14 @@ impl AtPath {
     pub fn file_exists(&self, path: &str) -> bool {
         match fs::metadata(&self.plus(path)) {
             Ok(m) => m.is_file(),
+            Err(_) => false,
+        }
+    }
+
+    /// Decide whether the named symbolic link exists in the test directory.
+    pub fn symlink_exists(&self, path: &str) -> bool {
+        match fs::symlink_metadata(&self.plus(path)) {
+            Ok(m) => m.file_type().is_symlink(),
             Err(_) => false,
         }
     }

@@ -20,7 +20,7 @@ clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 hex = "0.4.3"
 memchr = "2"
 md-5 = "0.10.1"
-regex = "1.5.5"
+regex = "1.6.0"
 sha1 = "0.10.1"
 sha2 = "0.10.2"
 sha3 = "0.10.1"

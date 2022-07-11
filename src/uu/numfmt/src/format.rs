@@ -1,6 +1,6 @@
 use uucore::display::Quotable;
 
-use crate::options::{NumfmtOptions, RoundMethod};
+use crate::options::{NumfmtOptions, RoundMethod, TransformOptions};
 use crate::units::{DisplayableSuffix, RawSuffix, Result, Suffix, Unit, IEC_BASES, SI_BASES};
 
 /// Iterate over a line's fields, where each field is a contiguous sequence of
@@ -127,10 +127,11 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
     }
 }
 
-fn transform_from(s: &str, opts: &Unit) -> Result<f64> {
+fn transform_from(s: &str, opts: &TransformOptions) -> Result<f64> {
     let (i, suffix) = parse_suffix(s)?;
+    let i = i * (opts.from_unit as f64);
 
-    remove_suffix(i, suffix, opts).map(|n| if n < 0.0 { -n.abs().ceil() } else { n.ceil() })
+    remove_suffix(i, suffix, &opts.from).map(|n| if n < 0.0 { -n.abs().ceil() } else { n.ceil() })
 }
 
 /// Divide numerator by denominator, with rounding.
@@ -206,8 +207,9 @@ fn consider_suffix(n: f64, u: &Unit, round_method: RoundMethod) -> Result<(f64, 
     }
 }
 
-fn transform_to(s: f64, opts: &Unit, round_method: RoundMethod) -> Result<String> {
-    let (i2, s) = consider_suffix(s, opts, round_method)?;
+fn transform_to(s: f64, opts: &TransformOptions, round_method: RoundMethod) -> Result<String> {
+    let (i2, s) = consider_suffix(s, &opts.to, round_method)?;
+    let i2 = i2 / (opts.to_unit as f64);
     Ok(match s {
         None => format!("{}", i2),
         Some(s) if i2.abs() < 10.0 => format!("{:.1}{}", i2, DisplayableSuffix(s)),
@@ -227,8 +229,8 @@ fn format_string(
     };
 
     let number = transform_to(
-        transform_from(source_without_suffix, &options.transform.from)?,
-        &options.transform.to,
+        transform_from(source_without_suffix, &options.transform)?,
+        &options.transform,
         options.round,
     )?;
 
