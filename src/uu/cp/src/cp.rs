@@ -1097,12 +1097,19 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
     let source_metadata = fs::symlink_metadata(source).context(context)?;
     match *attribute {
         Attribute::Mode => {
-            fs::set_permissions(dest, source_metadata.permissions()).context(context)?;
-            // FIXME: Implement this for windows as well
-            #[cfg(feature = "feat_acl")]
-            exacl::getfacl(source, None)
-                .and_then(|acl| exacl::setfacl(&[dest], &acl, None))
-                .map_err(|err| Error::Error(err.to_string()))?;
+            // The `chmod()` system call that underlies the
+            // `fs::set_permissions()` call is unable to change the
+            // permissions of a symbolic link. In that case, we just
+            // do nothing, since every symbolic link has the same
+            // permissions.
+            if !is_symlink(dest) {
+                fs::set_permissions(dest, source_metadata.permissions()).context(context)?;
+                // FIXME: Implement this for windows as well
+                #[cfg(feature = "feat_acl")]
+                exacl::getfacl(source, None)
+                    .and_then(|acl| exacl::setfacl(&[dest], &acl, None))
+                    .map_err(|err| Error::Error(err.to_string()))?;
+            }
         }
         #[cfg(unix)]
         Attribute::Ownership => {
@@ -1128,11 +1135,13 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
             .map_err(Error::Error)?;
         }
         Attribute::Timestamps => {
-            filetime::set_file_times(
-                Path::new(dest),
-                FileTime::from_last_access_time(&source_metadata),
-                FileTime::from_last_modification_time(&source_metadata),
-            )?;
+            let atime = FileTime::from_last_access_time(&source_metadata);
+            let mtime = FileTime::from_last_modification_time(&source_metadata);
+            if is_symlink(dest) {
+                filetime::set_symlink_file_times(dest, atime, mtime)?;
+            } else {
+                filetime::set_file_times(dest, atime, mtime)?;
+            }
         }
         #[cfg(feature = "feat_selinux")]
         Attribute::Context => {
