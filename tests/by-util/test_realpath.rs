@@ -1,5 +1,7 @@
 use crate::common::util::*;
 
+#[cfg(windows)]
+use regex::Regex;
 use std::path::{Path, MAIN_SEPARATOR};
 
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
@@ -272,7 +274,7 @@ fn test_relative_existing_require_directories() {
     ucmd.args(&["-e", "--relative-base=.", "--relative-to=dir1/f", "."])
         .fails()
         .code_is(1)
-        .stderr_contains("Not a directory");
+        .stderr_contains("directory");
 }
 
 #[test]
@@ -287,7 +289,7 @@ fn test_relative_existing_require_directories_2() {
 
 #[test]
 fn test_relative_base_not_prefix_of_relative_to() {
-    new_ucmd!()
+    let result = new_ucmd!()
         .args(&[
             "-sm",
             "--relative-base=/usr/local",
@@ -295,20 +297,33 @@ fn test_relative_base_not_prefix_of_relative_to() {
             "/usr",
             "/usr/local",
         ])
-        .succeeds()
-        .stdout_is("/usr\n/usr/local\n");
+        .succeeds();
+
+    #[cfg(windows)]
+    result.stdout_matches(&Regex::new(r"^.*:\\usr\n.*:\\usr\\local$").unwrap());
+
+    #[cfg(not(windows))]
+    result.stdout_is("/usr\n/usr/local\n");
 }
 
 #[test]
 fn test_relative_string_handling() {
-    new_ucmd!()
+    let result = new_ucmd!()
         .args(&["-m", "--relative-to=prefix", "prefixed/1"])
-        .succeeds()
-        .stdout_is("../prefixed/1\n");
-    new_ucmd!()
+        .succeeds();
+    #[cfg(not(windows))]
+    result.stdout_is("../prefixed/1\n");
+    #[cfg(windows)]
+    result.stdout_is("..\\prefixed\\1\n");
+
+    let result = new_ucmd!()
         .args(&["-m", "--relative-to=prefixed", "prefix/1"])
-        .succeeds()
-        .stdout_is("../prefix/1\n");
+        .succeeds();
+    #[cfg(not(windows))]
+    result.stdout_is("../prefix/1\n");
+    #[cfg(windows)]
+    result.stdout_is("..\\prefix\\1\n");
+
     new_ucmd!()
         .args(&["-m", "--relative-to=prefixed", "prefixed/1"])
         .succeeds()
@@ -317,7 +332,7 @@ fn test_relative_string_handling() {
 
 #[test]
 fn test_relative() {
-    new_ucmd!()
+    let result = new_ucmd!()
         .args(&[
             "-sm",
             "--relative-base=/usr",
@@ -325,16 +340,25 @@ fn test_relative() {
             "/tmp",
             "/usr",
         ])
-        .succeeds()
-        .stdout_is("/tmp\n.\n");
+        .succeeds();
+    #[cfg(not(windows))]
+    result.stdout_is("/tmp\n.\n");
+    #[cfg(windows)]
+    result.stdout_matches(&Regex::new(r"^.*:\\tmp\n\.$").unwrap());
+
     new_ucmd!()
         .args(&["-sm", "--relative-base=/", "--relative-to=/", "/", "/usr"])
         .succeeds()
         .stdout_is(".\nusr\n"); // spell-checker:disable-line
-    new_ucmd!()
+
+    let result = new_ucmd!()
         .args(&["-sm", "--relative-base=/usr", "/tmp", "/usr"])
-        .succeeds()
-        .stdout_is("/tmp\n.\n");
+        .succeeds();
+    #[cfg(not(windows))]
+    result.stdout_is("/tmp\n.\n");
+    #[cfg(windows)]
+    result.stdout_matches(&Regex::new(r"^.*:\\tmp\n\.$").unwrap());
+
     new_ucmd!()
         .args(&["-sm", "--relative-base=/", "/", "/usr"])
         .succeeds()
