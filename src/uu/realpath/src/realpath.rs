@@ -10,11 +10,13 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgMatches, Command};
+use std::path::Component;
 use std::{
     io::{stdout, Write},
     path::{Path, PathBuf},
 };
+use uucore::error::UClapError;
 use uucore::{
     display::{print_verbatim, Quotable},
     error::{FromIo, UResult},
@@ -32,12 +34,14 @@ static OPT_PHYSICAL: &str = "physical";
 static OPT_LOGICAL: &str = "logical";
 const OPT_CANONICALIZE_MISSING: &str = "canonicalize-missing";
 const OPT_CANONICALIZE_EXISTING: &str = "canonicalize-existing";
+const OPT_RELATIVE_TO: &str = "relative-to";
+const OPT_RELATIVE_BASE: &str = "relative-base";
 
 static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args).with_exit_code(1)?;
 
     /*  the list of files */
 
@@ -58,8 +62,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         MissingHandling::Normal
     };
+    let resolve_mode = if strip {
+        ResolveMode::None
+    } else if logical {
+        ResolveMode::Logical
+    } else {
+        ResolveMode::Physical
+    };
+    let (relative_to, relative_base) = prepare_relative_options(&matches, can_mode, resolve_mode)?;
     for path in &paths {
-        let result = resolve_path(path, strip, zero, logical, can_mode);
+        let result = resolve_path(
+            path,
+            zero,
+            resolve_mode,
+            can_mode,
+            relative_to.as_deref(),
+            relative_base.as_deref(),
+        );
         if !quiet {
             show_if_err!(result.map_err_context(|| path.maybe_quote().to_string()));
         }
@@ -127,19 +146,91 @@ pub fn uu_app<'a>() -> Command<'a> {
                 ),
         )
         .arg(
+            Arg::new(OPT_RELATIVE_TO)
+                .long(OPT_RELATIVE_TO)
+                .takes_value(true)
+                .value_name("DIR")
+                .forbid_empty_values(true)
+                .help("print the resolved path relative to DIR"),
+        )
+        .arg(
+            Arg::new(OPT_RELATIVE_BASE)
+                .long(OPT_RELATIVE_BASE)
+                .takes_value(true)
+                .value_name("DIR")
+                .forbid_empty_values(true)
+                .help("print absolute paths unless paths below DIR"),
+        )
+        .arg(
             Arg::new(ARG_FILES)
                 .multiple_occurrences(true)
-                .takes_value(true)
                 .required(true)
-                .min_values(1)
+                .forbid_empty_values(true)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }
 
+/// Prepare `--relative-to` and `--relative-base` options.
+/// Convert them to their absolute values.
+/// Check if `--relative-to` is a descendant of `--relative-base`,
+/// otherwise nullify their value.
+fn prepare_relative_options(
+    matches: &ArgMatches,
+    can_mode: MissingHandling,
+    resolve_mode: ResolveMode,
+) -> UResult<(Option<PathBuf>, Option<PathBuf>)> {
+    let relative_to = matches.value_of(OPT_RELATIVE_TO).map(PathBuf::from);
+    let relative_base = matches.value_of(OPT_RELATIVE_BASE).map(PathBuf::from);
+    let relative_to = canonicalize_relative_option(relative_to, can_mode, resolve_mode)?;
+    let relative_base = canonicalize_relative_option(relative_base, can_mode, resolve_mode)?;
+    if let (Some(base), Some(to)) = (relative_base.as_deref(), relative_to.as_deref()) {
+        if !to.starts_with(base) {
+            return Ok((None, None));
+        }
+    }
+    Ok((relative_to, relative_base))
+}
+
+/// Prepare single `relative-*` option.
+fn canonicalize_relative_option(
+    relative: Option<PathBuf>,
+    can_mode: MissingHandling,
+    resolve_mode: ResolveMode,
+) -> UResult<Option<PathBuf>> {
+    Ok(match relative {
+        None => None,
+        Some(p) => Some(
+            canonicalize_relative(&p, can_mode, resolve_mode)
+                .map_err_context(|| p.maybe_quote().to_string())?,
+        ),
+    })
+}
+
+/// Make `relative-to` or `relative-base` path values absolute.
+///
+/// # Errors
+///
+/// If the given path is not a directory the function returns an error.
+/// If some parts of the file don't exist, or symlinks make loops, or
+/// some other IO error happens, the function returns error, too.
+fn canonicalize_relative(
+    r: &Path,
+    can_mode: MissingHandling,
+    resolve: ResolveMode,
+) -> std::io::Result<PathBuf> {
+    let abs = canonicalize(r, can_mode, resolve)?;
+    if can_mode == MissingHandling::Existing && !abs.is_dir() {
+        abs.read_dir()?; // raise not a directory error
+    }
+    Ok(abs)
+}
+
 /// Resolve a path to an absolute form and print it.
 ///
-/// If `strip` is `true`, then this function does not attempt to resolve
-/// symbolic links in the path. If `zero` is `true`, then this function
+/// If `relative_to` and/or `relative_base` is given
+/// the path is printed in a relative form to one of this options.
+/// See the details in `process_relative` function.
+/// If `zero` is `true`, then this function
 /// prints the path followed by the null byte (`'\0'`) instead of a
 /// newline character (`'\n'`).
 ///
@@ -149,22 +240,70 @@ pub fn uu_app<'a>() -> Command<'a> {
 /// symbolic links.
 fn resolve_path(
     p: &Path,
-    strip: bool,
     zero: bool,
-    logical: bool,
+    resolve: ResolveMode,
     can_mode: MissingHandling,
+    relative_to: Option<&Path>,
+    relative_base: Option<&Path>,
 ) -> std::io::Result<()> {
-    let resolve = if strip {
-        ResolveMode::None
-    } else if logical {
-        ResolveMode::Logical
-    } else {
-        ResolveMode::Physical
-    };
     let abs = canonicalize(p, can_mode, resolve)?;
     let line_ending = if zero { b'\0' } else { b'\n' };
+
+    let abs = process_relative(abs, relative_base, relative_to);
 
     print_verbatim(&abs)?;
     stdout().write_all(&[line_ending])?;
     Ok(())
+}
+
+/// Conditionally converts an absolute path to a relative form,
+/// according to the rules:
+/// 1. if only `relative_to` is given, the result is relative to `relative_to`
+/// 1. if only `relative_base` is given, it checks whether given `path` is a descendant
+/// of `relative_base`, on success the result is relative to `relative_base`, otherwise
+/// the result is the given `path`
+/// 1. if both `relative_to` and `relative_base` are given, the result is relative to `relative_to`
+/// if `path` is a descendant of `relative_base`, otherwise the result is `path`
+///
+/// For more information see
+/// <https://www.gnu.org/software/coreutils/manual/html_node/Realpath-usage-examples.html>
+fn process_relative(
+    path: PathBuf,
+    relative_base: Option<&Path>,
+    relative_to: Option<&Path>,
+) -> PathBuf {
+    if let Some(base) = relative_base {
+        if path.starts_with(base) {
+            make_path_relative_to(&path, relative_to.unwrap_or(base))
+        } else {
+            path
+        }
+    } else if let Some(to) = relative_to {
+        make_path_relative_to(&path, to)
+    } else {
+        path
+    }
+}
+
+/// Converts absolute `path` to be relative to absolute `to` path.
+fn make_path_relative_to(path: &Path, to: &Path) -> PathBuf {
+    let common_prefix_size = path
+        .components()
+        .zip(to.components())
+        .take_while(|(first, second)| first == second)
+        .count();
+    let path_suffix = path
+        .components()
+        .skip(common_prefix_size)
+        .map(|x| x.as_os_str());
+    let mut components: Vec<_> = to
+        .components()
+        .skip(common_prefix_size)
+        .map(|_| Component::ParentDir.as_os_str())
+        .chain(path_suffix)
+        .collect();
+    if components.is_empty() {
+        components.push(Component::CurDir.as_os_str());
+    }
+    components.iter().collect()
 }
