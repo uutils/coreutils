@@ -170,6 +170,10 @@ pub fn uu_app<'a>() -> Command<'a> {
         )
 }
 
+/// Prepare `--relative-to` and `--relative-base` options.
+/// Convert them to their absolute values.
+/// Check if `--relative-to` is a descendant of `--relative-base`,
+/// otherwise nullify their value.
 fn prepare_relative_options(
     matches: &ArgMatches,
     can_mode: MissingHandling,
@@ -187,6 +191,7 @@ fn prepare_relative_options(
     Ok((relative_to, relative_base))
 }
 
+/// Prepare single `relative-*` option.
 fn canonicalize_relative_option(
     relative: Option<PathBuf>,
     can_mode: MissingHandling,
@@ -201,6 +206,13 @@ fn canonicalize_relative_option(
     })
 }
 
+/// Make `relative-to` or `relative-base` path values absolute.
+///
+/// # Errors
+///
+/// If the given path is not a directory the function returns an error.
+/// If some parts of the file don't exist, or symlinks make loops, or
+/// some other IO error happens, the function returns error, too.
 fn canonicalize_relative(
     r: &Path,
     can_mode: MissingHandling,
@@ -215,8 +227,10 @@ fn canonicalize_relative(
 
 /// Resolve a path to an absolute form and print it.
 ///
-/// If `strip` is `true`, then this function does not attempt to resolve
-/// symbolic links in the path. If `zero` is `true`, then this function
+/// If `relative_to` and/or `relative_base` is given
+/// the path is printed in a relative form to one of this options.
+/// See the details in `process_relative` function.
+/// If `zero` is `true`, then this function
 /// prints the path followed by the null byte (`'\0'`) instead of a
 /// newline character (`'\n'`).
 ///
@@ -242,6 +256,17 @@ fn resolve_path(
     Ok(())
 }
 
+/// Conditionally converts an absolute path to a relative form,
+/// according to the rules:
+/// 1. if only `relative_to` is given, the result is relative to `relative_to`
+/// 1. if only `relative_base` is given, it checks whether given `path` is a descendant
+/// of `relative_base`, on success the result is relative to `relative_base`, otherwise
+/// the result is the given `path`
+/// 1. if both `relative_to` and `relative_base` are given, the result is relative to `relative_to`
+/// if `path` is a descendant of `relative_base`, otherwise the result is `path`
+///
+/// For more information see
+/// <https://www.gnu.org/software/coreutils/manual/html_node/Realpath-usage-examples.html>
 fn process_relative(
     path: PathBuf,
     relative_base: Option<&Path>,
@@ -260,6 +285,7 @@ fn process_relative(
     }
 }
 
+/// Converts absolute `path` to be relative to absolute `to` path.
 fn make_path_relative_to(path: &Path, to: &Path) -> PathBuf {
     let common_prefix_size = path
         .components()
