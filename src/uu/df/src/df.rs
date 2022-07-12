@@ -14,6 +14,7 @@ mod table;
 use blocks::HumanReadable;
 use table::HeaderMode;
 use uucore::display::Quotable;
+use uucore::error::FromIo;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::fsext::{read_fs_list, MountInfo};
 use uucore::parse_size::ParseSizeError;
@@ -333,7 +334,7 @@ fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
 /// `opt` excludes certain filesystems from consideration and allows for the synchronization of filesystems before running; see
 /// [`Options`] for more information.
 
-fn get_all_filesystems(opt: &Options) -> Vec<Filesystem> {
+fn get_all_filesystems(opt: &Options) -> Result<Vec<Filesystem>, std::io::Error> {
     // Run a sync call before any operation if so instructed.
     if opt.sync {
         #[cfg(not(windows))]
@@ -349,19 +350,19 @@ fn get_all_filesystems(opt: &Options) -> Vec<Filesystem> {
     //
     // Filesystems excluded by the command-line options are
     // not considered.
-    let mounts: Vec<MountInfo> = filter_mount_list(read_fs_list(), opt);
+    let mounts: Vec<MountInfo> = filter_mount_list(read_fs_list()?, opt);
 
     // Convert each `MountInfo` into a `Filesystem`, which contains
     // both the mount information and usage information.
-    mounts
+    Ok(mounts
         .into_iter()
         .filter_map(|m| Filesystem::new(m, None))
         .filter(|fs| opt.show_all_fs || fs.usage.blocks > 0)
-        .collect()
+        .collect())
 }
 
 /// For each path, get the filesystem that contains that path.
-fn get_named_filesystems<P>(paths: &[P], opt: &Options) -> Vec<Filesystem>
+fn get_named_filesystems<P>(paths: &[P], opt: &Options) -> Result<Vec<Filesystem>, std::io::Error>
 where
     P: AsRef<Path>,
 {
@@ -371,7 +372,7 @@ where
     // considered. The "lofs" filesystem is a loopback
     // filesystem present on Solaris and FreeBSD systems. It
     // is similar to a symbolic link.
-    let mounts: Vec<MountInfo> = filter_mount_list(read_fs_list(), opt)
+    let mounts: Vec<MountInfo> = filter_mount_list(read_fs_list()?, opt)
         .into_iter()
         .filter(|mi| mi.fs_type != "lofs" && !mi.dummy)
         .collect();
@@ -381,7 +382,7 @@ where
     // this happens if the file system type doesn't exist
     if mounts.is_empty() {
         show!(USimpleError::new(1, "no file systems processed"));
-        return result;
+        return Ok(result);
     }
 
     // Convert each path into a `Filesystem`, which contains
@@ -402,7 +403,7 @@ where
             }
         }
     }
-    result
+    Ok(result)
 }
 
 #[derive(Debug)]
@@ -443,7 +444,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Get the list of filesystems to display in the output table.
     let filesystems: Vec<Filesystem> = match matches.values_of(OPT_PATHS) {
         None => {
-            let filesystems = get_all_filesystems(&opt);
+            let filesystems = get_all_filesystems(&opt)
+                .map_err_context(|| "cannot read table of mounted file systems".into())?;
 
             if filesystems.is_empty() {
                 return Err(USimpleError::new(1, "no file systems processed"));
@@ -453,7 +455,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         Some(paths) => {
             let paths: Vec<&str> = paths.collect();
-            let filesystems = get_named_filesystems(&paths, &opt);
+            let filesystems = get_named_filesystems(&paths, &opt)
+                .map_err_context(|| "cannot read table of mounted file systems".into())?;
 
             // This can happen if paths are given as command-line arguments
             // but none of the paths exist.

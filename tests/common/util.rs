@@ -772,6 +772,14 @@ impl AtPath {
         }
     }
 
+    /// Decide whether the named symbolic link exists in the test directory.
+    pub fn symlink_exists(&self, path: &str) -> bool {
+        match fs::symlink_metadata(&self.plus(path)) {
+            Ok(m) => m.file_type().is_symlink(),
+            Err(_) => false,
+        }
+    }
+
     pub fn dir_exists(&self, path: &str) -> bool {
         match fs::metadata(&self.plus(path)) {
             Ok(m) => m.is_dir(),
