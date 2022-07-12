@@ -98,7 +98,6 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
 
 fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
     match (s, u) {
-        (None, _) => Ok(i),
         (Some((raw_suffix, false)), &Unit::Auto) | (Some((raw_suffix, false)), &Unit::Si) => {
             match raw_suffix {
                 RawSuffix::K => Ok(i * 1e3),
@@ -123,6 +122,15 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
             RawSuffix::Z => Ok(i * IEC_BASES[7]),
             RawSuffix::Y => Ok(i * IEC_BASES[8]),
         },
+        (None, &Unit::Iec(true)) => Err(format!(
+            "missing 'i' suffix in input: '{}' (e.g Ki/Mi/Gi)",
+            i
+        )),
+        (Some((raw_suffix, false)), &Unit::Iec(true)) => Err(format!(
+            "missing 'i' suffix in input: '{}{:?}' (e.g Ki/Mi/Gi)",
+            i, raw_suffix
+        )),
+        (None, _) => Ok(i),
         (_, _) => Err("This suffix is unsupported for specified unit".to_owned()),
     }
 }
