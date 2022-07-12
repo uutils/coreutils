@@ -17,7 +17,6 @@ use libc::{
     S_IXUSR,
 };
 use std::borrow::Cow;
-#[cfg(unix)]
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::env;
@@ -314,7 +313,7 @@ pub fn canonicalize<P: AsRef<Path>>(
     miss_mode: MissingHandling,
     res_mode: ResolveMode,
 ) -> IOResult<PathBuf> {
-    const SYMLINKS_TO_LOOK_FOR_LOOPS: i32 = 256;
+    const SYMLINKS_TO_LOOK_FOR_LOOPS: i32 = 20;
     let original = original.as_ref();
     let original = if original.is_absolute() {
         original.to_path_buf()
@@ -330,7 +329,6 @@ pub fn canonicalize<P: AsRef<Path>>(
     let mut parts: VecDeque<OwningComponent> = path.components().map(|part| part.into()).collect();
     let mut result = PathBuf::new();
     let mut followed_symlinks = 0;
-    #[cfg(unix)]
     let mut visited_files = HashSet::new();
     while let Some(part) = parts.pop_front() {
         match part {
@@ -357,21 +355,13 @@ pub fn canonicalize<P: AsRef<Path>>(
                 if followed_symlinks < SYMLINKS_TO_LOOK_FOR_LOOPS {
                     followed_symlinks += 1;
                 } else {
-                    #[cfg(unix)]
-                    let has_loop = {
-                        let file_info =
-                            FileInformation::from_path(&result.parent().unwrap(), false).unwrap();
-                        let mut path_to_follow = PathBuf::new();
-                        for part in &parts {
-                            path_to_follow.push(part.as_os_str());
-                        }
-                        !visited_files.insert((file_info, path_to_follow))
-                    };
-
-                    #[cfg(not(unix))]
-                    let has_loop = true;
-
-                    if has_loop {
+                    let file_info =
+                        FileInformation::from_path(&result.parent().unwrap(), false).unwrap();
+                    let mut path_to_follow = PathBuf::new();
+                    for part in &parts {
+                        path_to_follow.push(part.as_os_str());
+                    }
+                    if !visited_files.insert((file_info, path_to_follow)) {
                         return Err(Error::new(
                             ErrorKind::InvalidInput,
                             "Too many levels of symbolic links",
