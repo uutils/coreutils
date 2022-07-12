@@ -18,15 +18,8 @@ use std::os::unix::io::IntoRawFd;
 use std::path::Path;
 #[cfg(not(windows))]
 use std::path::PathBuf;
-#[cfg(not(windows))]
-use std::sync::Mutex;
 use std::thread::sleep;
 use std::time::Duration;
-
-#[cfg(not(windows))]
-lazy_static! {
-    static ref UMASK_MUTEX: Mutex<()> = Mutex::new(());
-}
 
 const LONG_ARGS: &[&str] = &[
     "-l",

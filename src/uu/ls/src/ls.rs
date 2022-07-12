@@ -9,9 +9,6 @@
 
 #[macro_use]
 extern crate uucore;
-#[cfg(unix)]
-#[macro_use]
-extern crate lazy_static;
 
 use clap::{crate_version, Arg, Command};
 use glob::Pattern;
@@ -2251,6 +2248,8 @@ fn get_inode(metadata: &Metadata) -> String {
 // Currently getpwuid is `linux` target only. If it's broken out into
 // a posix-compliant attribute this can be updated...
 #[cfg(unix)]
+use once_cell::sync::Lazy;
+#[cfg(unix)]
 use std::sync::Mutex;
 #[cfg(unix)]
 use uucore::entries;
@@ -2258,9 +2257,7 @@ use uucore::quoting_style;
 
 #[cfg(unix)]
 fn cached_uid2usr(uid: u32) -> String {
-    lazy_static! {
-        static ref UID_CACHE: Mutex<HashMap<u32, String>> = Mutex::new(HashMap::new());
-    }
+    static UID_CACHE: Lazy<Mutex<HashMap<u32, String>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
     let mut uid_cache = UID_CACHE.lock().unwrap();
     uid_cache
@@ -2280,9 +2277,7 @@ fn display_uname(metadata: &Metadata, config: &Config) -> String {
 
 #[cfg(all(unix, not(target_os = "redox")))]
 fn cached_gid2grp(gid: u32) -> String {
-    lazy_static! {
-        static ref GID_CACHE: Mutex<HashMap<u32, String>> = Mutex::new(HashMap::new());
-    }
+    static GID_CACHE: Lazy<Mutex<HashMap<u32, String>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
     let mut gid_cache = GID_CACHE.lock().unwrap();
     gid_cache
