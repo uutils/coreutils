@@ -130,6 +130,12 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
             "missing 'i' suffix in input: '{}{:?}' (e.g Ki/Mi/Gi)",
             i, raw_suffix
         )),
+        (Some((raw_suffix, with_i)), &Unit::None) => Err(format!(
+            "rejecting suffix in input: '{}{:?}{}' (consider using --from)",
+            i,
+            raw_suffix,
+            if with_i { "i" } else { "" }
+        )),
         (None, _) => Ok(i),
         (_, _) => Err("This suffix is unsupported for specified unit".to_owned()),
     }

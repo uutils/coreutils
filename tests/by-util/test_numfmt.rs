@@ -646,3 +646,19 @@ fn test_invalid_unit_size() {
         }
     }
 }
+
+#[test]
+fn test_valid_but_forbidden_suffix() {
+    let numbers = vec!["12K", "12Ki"];
+
+    for number in numbers {
+        new_ucmd!()
+            .arg(number)
+            .fails()
+            .code_is(2)
+            .stderr_contains(format!(
+                "rejecting suffix in input: '{}' (consider using --from)",
+                number
+            ));
+    }
+}
