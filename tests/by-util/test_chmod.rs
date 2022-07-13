@@ -1,4 +1,5 @@
 use crate::common::util::*;
+use once_cell::sync::Lazy;
 use std::fs::{metadata, set_permissions, OpenOptions, Permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::sync::Mutex;
@@ -11,9 +12,7 @@ use self::libc::umask;
 static TEST_FILE: &str = "file";
 static REFERENCE_FILE: &str = "reference";
 static REFERENCE_PERMS: u32 = 0o247;
-lazy_static! {
-    static ref UMASK_MUTEX: Mutex<()> = Mutex::new(());
-}
+static UMASK_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 struct TestCase {
     args: Vec<&'static str>,

@@ -447,7 +447,7 @@ mod tests {
     use std::env;
     // Required to instantiate mutex in shared context
     use clap::Command;
-    use lazy_static::lazy_static;
+    use once_cell::sync::Lazy;
     use std::sync::Mutex;
 
     // The mutex is required here as by default all tests are run as separate
@@ -456,9 +456,7 @@ mod tests {
     // occur if no precautions are taken. Thus we have all tests that rely on
     // environment variables lock this empty mutex to ensure they don't access
     // it concurrently.
-    lazy_static! {
-        static ref TEST_MUTEX: Mutex<()> = Mutex::new(());
-    }
+    static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
     // Environment variable for "VERSION_CONTROL"
     static ENV_VERSION_CONTROL: &str = "VERSION_CONTROL";
