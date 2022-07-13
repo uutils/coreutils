@@ -303,7 +303,7 @@ fn create_paths_from_files0(files_0_from: &str) -> UResult<Vec<Input>> {
 }
 
 fn word_count_from_reader<T: WordCountable>(
-    reader: T,
+    mut reader: T,
     settings: &Settings,
 ) -> (WordCount, Option<io::Error>) {
     match (
@@ -313,135 +313,76 @@ fn word_count_from_reader<T: WordCountable>(
         settings.show_max_line_length,
         settings.show_words,
     ) {
-        (false, false, false, false, false) => {
-            word_count_from_reader_specialized::<_, false, false, false, false, false>(reader)
-        }
-        (false, false, false, false, true) => {
-            word_count_from_reader_specialized::<_, false, false, false, false, true>(reader)
-        }
-        (false, false, false, true, false) => {
-            word_count_from_reader_specialized::<_, false, false, false, true, false>(reader)
-        }
-        (false, false, false, true, true) => {
-            word_count_from_reader_specialized::<_, false, false, false, true, true>(reader)
-        }
-        (false, false, true, false, false) => {
-            word_count_from_reader_specialized::<_, false, false, true, false, false>(reader)
-        }
-        (false, false, true, false, true) => {
-            word_count_from_reader_specialized::<_, false, false, true, false, true>(reader)
-        }
-        (false, false, true, true, false) => {
-            word_count_from_reader_specialized::<_, false, false, true, true, false>(reader)
-        }
-        (false, false, true, true, true) => {
-            word_count_from_reader_specialized::<_, false, false, true, true, true>(reader)
-        }
-        (false, true, false, false, false) => {
-            word_count_from_reader_specialized::<_, false, true, false, false, false>(reader)
-        }
-        (false, true, false, false, true) => {
-            word_count_from_reader_specialized::<_, false, true, false, false, true>(reader)
-        }
-        (false, true, false, true, false) => {
-            word_count_from_reader_specialized::<_, false, true, false, true, false>(reader)
-        }
-        (false, true, false, true, true) => {
-            word_count_from_reader_specialized::<_, false, true, false, true, true>(reader)
-        }
-        (false, true, true, false, false) => {
-            word_count_from_reader_specialized::<_, false, true, true, false, false>(reader)
-        }
-        (false, true, true, false, true) => {
-            word_count_from_reader_specialized::<_, false, true, true, false, true>(reader)
-        }
-        (false, true, true, true, false) => {
-            word_count_from_reader_specialized::<_, false, true, true, true, false>(reader)
-        }
-        (false, true, true, true, true) => {
-            word_count_from_reader_specialized::<_, false, true, true, true, true>(reader)
-        }
+        (false, false, false, false, false) => (WordCount::default(), None),
         (true, false, false, false, false) => {
-            word_count_from_reader_specialized::<_, true, false, false, false, false>(reader)
+            // Fast path when only show_bytes is true.
+            let (bytes, error) = count_bytes_fast(&mut reader);
+            return (
+                WordCount {
+                    bytes,
+                    ..WordCount::default()
+                },
+                error,
+            );
         }
-        (true, false, false, false, true) => {
-            word_count_from_reader_specialized::<_, true, false, false, false, true>(reader)
+        (false, false, true, false, false) | (true, false, true, false, false) => {
+            // Fast path when only (show_bytes || show_lines) is true.
+            count_bytes_and_lines_fast(&mut reader)
         }
-        (true, false, false, true, false) => {
-            word_count_from_reader_specialized::<_, true, false, false, true, false>(reader)
+        (_, false, false, false, true) => {
+            word_count_from_reader_specialized::<_, false, false, false, true>(reader)
         }
-        (true, false, false, true, true) => {
-            word_count_from_reader_specialized::<_, true, false, false, true, true>(reader)
+        (_, false, false, true, false) => {
+            word_count_from_reader_specialized::<_, false, false, true, false>(reader)
         }
-        (true, false, true, false, false) => {
-            word_count_from_reader_specialized::<_, true, false, true, false, false>(reader)
+        (_, false, false, true, true) => {
+            word_count_from_reader_specialized::<_, false, false, true, true>(reader)
         }
-        (true, false, true, false, true) => {
-            word_count_from_reader_specialized::<_, true, false, true, false, true>(reader)
+        (_, false, true, false, true) => {
+            word_count_from_reader_specialized::<_, false, true, false, true>(reader)
         }
-        (true, false, true, true, false) => {
-            word_count_from_reader_specialized::<_, true, false, true, true, false>(reader)
+        (_, false, true, true, false) => {
+            word_count_from_reader_specialized::<_, false, true, true, false>(reader)
         }
-        (true, false, true, true, true) => {
-            word_count_from_reader_specialized::<_, true, false, true, true, true>(reader)
+        (_, false, true, true, true) => {
+            word_count_from_reader_specialized::<_, false, true, true, true>(reader)
         }
-        (true, true, false, false, false) => {
-            word_count_from_reader_specialized::<_, true, true, false, false, false>(reader)
+        (_, true, false, false, false) => {
+            word_count_from_reader_specialized::<_, true, false, false, false>(reader)
         }
-        (true, true, false, false, true) => {
-            word_count_from_reader_specialized::<_, true, true, false, false, true>(reader)
+        (_, true, false, false, true) => {
+            word_count_from_reader_specialized::<_, true, false, false, true>(reader)
         }
-        (true, true, false, true, false) => {
-            word_count_from_reader_specialized::<_, true, true, false, true, false>(reader)
+        (_, true, false, true, false) => {
+            word_count_from_reader_specialized::<_, true, false, true, false>(reader)
         }
-        (true, true, false, true, true) => {
-            word_count_from_reader_specialized::<_, true, true, false, true, true>(reader)
+        (_, true, false, true, true) => {
+            word_count_from_reader_specialized::<_, true, false, true, true>(reader)
         }
-        (true, true, true, false, false) => {
-            word_count_from_reader_specialized::<_, true, true, true, false, false>(reader)
+        (_, true, true, false, false) => {
+            word_count_from_reader_specialized::<_, true, true, false, false>(reader)
         }
-        (true, true, true, false, true) => {
-            word_count_from_reader_specialized::<_, true, true, true, false, true>(reader)
+        (_, true, true, false, true) => {
+            word_count_from_reader_specialized::<_, true, true, false, true>(reader)
         }
-        (true, true, true, true, false) => {
-            word_count_from_reader_specialized::<_, true, true, true, true, false>(reader)
+        (_, true, true, true, false) => {
+            word_count_from_reader_specialized::<_, true, true, true, false>(reader)
         }
-        (true, true, true, true, true) => {
-            word_count_from_reader_specialized::<_, true, true, true, true, true>(reader)
+        (_, true, true, true, true) => {
+            word_count_from_reader_specialized::<_, true, true, true, true>(reader)
         }
     }
 }
 
 fn word_count_from_reader_specialized<
     T: WordCountable,
-    const SHOW_BYTES: bool,
     const SHOW_CHARS: bool,
     const SHOW_LINES: bool,
     const SHOW_MAX_LINE_LENGTH: bool,
     const SHOW_WORDS: bool,
 >(
-    mut reader: T,
+    reader: T,
 ) -> (WordCount, Option<io::Error>) {
-    let only_count_bytes =
-        SHOW_BYTES && (!(SHOW_CHARS || SHOW_LINES || SHOW_MAX_LINE_LENGTH || SHOW_WORDS));
-    if only_count_bytes {
-        let (bytes, error) = count_bytes_fast(&mut reader);
-        return (
-            WordCount {
-                bytes,
-                ..WordCount::default()
-            },
-            error,
-        );
-    }
-
-    // we do not need to decode the byte stream if we're only counting bytes/newlines
-    let decode_chars = SHOW_CHARS || SHOW_WORDS || SHOW_MAX_LINE_LENGTH;
-
-    if !decode_chars {
-        return count_bytes_and_lines_fast(&mut reader);
-    }
-
     let mut total = WordCount::default();
     let mut reader = BufReadDecoder::new(reader.buffered());
     let mut in_word = false;
