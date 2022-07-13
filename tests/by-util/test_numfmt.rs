@@ -30,12 +30,19 @@ fn test_from_iec_i() {
 }
 
 #[test]
-#[ignore] // FIXME: GNU from iec-i requires suffix
 fn test_from_iec_i_requires_suffix() {
-    new_ucmd!()
-        .args(&["--from=iec-i", "1024"])
-        .fails()
-        .stderr_is("numfmt: missing 'i' suffix in input: '1024' (e.g Ki/Mi/Gi)");
+    let numbers = vec!["1024", "10M"];
+
+    for number in numbers {
+        new_ucmd!()
+            .args(&["--from=iec-i", number])
+            .fails()
+            .code_is(2)
+            .stderr_is(format!(
+                "numfmt: missing 'i' suffix in input: '{}' (e.g Ki/Mi/Gi)",
+                number
+            ));
+    }
 }
 
 #[test]
