@@ -3117,3 +3117,19 @@ fn test_dereference_symlink_file_color() {
         .succeeds()
         .stdout_is(out_exp);
 }
+
+#[test]
+fn test_tabsize_option() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .args(&["-T", "3"])
+        .succeeds();
+
+    scene
+        .ucmd()
+        .args(&["--tabsize", "0"])
+        .succeeds();
+}
+
