@@ -317,13 +317,13 @@ fn word_count_from_reader<T: WordCountable>(
         (true, false, false, false, false) => {
             // Fast path when only show_bytes is true.
             let (bytes, error) = count_bytes_fast(&mut reader);
-            return (
+            (
                 WordCount {
                     bytes,
                     ..WordCount::default()
                 },
                 error,
-            );
+            )
         }
         (false, false, true, false, false) | (true, false, true, false, false) => {
             // Fast path when only (show_bytes || show_lines) is true.
