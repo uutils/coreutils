@@ -84,7 +84,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 if verbose {
                     return Err(USimpleError::new(
                         1,
-                        format!("{}: errno {}", f.maybe_quote(), err.raw_os_error().unwrap()),
+                        err.map_err_context(move || f.maybe_quote().to_string())
+                            .to_string(),
                     ));
                 } else {
                     return Err(1.into());
