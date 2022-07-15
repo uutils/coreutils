@@ -70,3 +70,13 @@ fn test_long_redirection_to_root() {
     println!("expect: {:?}", expect);
     assert_eq!(actual, expect);
 }
+
+#[test]
+fn test_symlink_to_itself_verbose() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.relative_symlink_file("a", "a");
+    ucmd.args(&["-ev", "a"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("Too many levels of symbolic links");
+}
