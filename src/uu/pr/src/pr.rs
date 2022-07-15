@@ -580,7 +580,7 @@ fn build_options(
         let date_time = Local::now();
         date_time.format("%b %d %H:%M %Y").to_string()
     } else {
-        file_last_modified_time(paths.get(0).unwrap())
+        file_last_modified_time(paths.first().unwrap())
     };
 
     // +page option is less priority than --pages

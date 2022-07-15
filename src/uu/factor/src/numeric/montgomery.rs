@@ -70,7 +70,7 @@ impl<T: DoubleInt> Montgomery<T> {
 
         debug_assert!(x < (self.n.as_double_width()) << t_bits);
         // TODO: optimize
-        let Montgomery { a, n } = self;
+        let Self { a, n } = self;
         let m = T::from_double_width(x).wrapping_mul(a);
         let nm = (n.as_double_width()) * (m.as_double_width());
         let (xnm, overflow) = x.overflowing_add(&nm); // x + n*m

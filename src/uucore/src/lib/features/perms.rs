@@ -29,14 +29,14 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
 /// The various level of verbosity
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum VerbosityLevel {
     Silent,
     Changes,
     Verbose,
     Normal,
 }
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Verbosity {
     pub groups_only: bool,
     pub level: VerbosityLevel,

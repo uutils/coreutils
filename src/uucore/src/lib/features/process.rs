@@ -66,21 +66,21 @@ impl ExitStatus {
 
     pub fn success(&self) -> bool {
         match *self {
-            ExitStatus::Code(code) => code == 0,
+            Self::Code(code) => code == 0,
             _ => false,
         }
     }
 
     pub fn code(&self) -> Option<i32> {
         match *self {
-            ExitStatus::Code(code) => Some(code),
+            Self::Code(code) => Some(code),
             _ => None,
         }
     }
 
     pub fn signal(&self) -> Option<i32> {
         match *self {
-            ExitStatus::Signal(code) => Some(code),
+            Self::Signal(code) => Some(code),
             _ => None,
         }
     }
@@ -89,8 +89,8 @@ impl ExitStatus {
 impl fmt::Display for ExitStatus {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ExitStatus::Code(code) => write!(f, "exit code: {}", code),
-            ExitStatus::Signal(code) => write!(f, "exit code: {}", code),
+            Self::Code(code) => write!(f, "exit code: {}", code),
+            Self::Signal(code) => write!(f, "exit code: {}", code),
         }
     }
 }

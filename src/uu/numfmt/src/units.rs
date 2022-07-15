@@ -44,7 +44,7 @@ pub struct DisplayableSuffix(pub Suffix);
 
 impl fmt::Display for DisplayableSuffix {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let DisplayableSuffix((ref raw_suffix, ref with_i)) = *self;
+        let Self((ref raw_suffix, ref with_i)) = *self;
         match raw_suffix {
             RawSuffix::K => write!(f, "K"),
             RawSuffix::M => write!(f, "M"),

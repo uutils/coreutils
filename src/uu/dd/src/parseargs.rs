@@ -18,7 +18,7 @@ use uucore::show_warning;
 pub type Matches = ArgMatches;
 
 /// Parser Errors describe errors with parser input
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ParseError {
     MultipleFmtTable,
     MultipleUCaseLCase,

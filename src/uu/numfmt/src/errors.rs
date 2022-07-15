@@ -19,9 +19,9 @@ pub enum NumfmtError {
 impl UError for NumfmtError {
     fn code(&self) -> i32 {
         match self {
-            NumfmtError::IoError(_) => 1,
-            NumfmtError::IllegalArgument(_) => 1,
-            NumfmtError::FormattingError(_) => 2,
+            Self::IoError(_) => 1,
+            Self::IllegalArgument(_) => 1,
+            Self::FormattingError(_) => 2,
         }
     }
 }
@@ -31,9 +31,9 @@ impl Error for NumfmtError {}
 impl Display for NumfmtError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            NumfmtError::IoError(s)
-            | NumfmtError::IllegalArgument(s)
-            | NumfmtError::FormattingError(s) => write!(f, "{}", s),
+            Self::IoError(s) | Self::IllegalArgument(s) | Self::FormattingError(s) => {
+                write!(f, "{}", s)
+            }
         }
     }
 }

@@ -22,22 +22,22 @@ impl UError for MvError {}
 impl Display for MvError {
     fn fmt(&self, f: &mut Formatter) -> Result {
         match self {
-            MvError::NoSuchFile(s) => write!(f, "cannot stat {}: No such file or directory", s),
-            MvError::SameFile(s, t) => write!(f, "{} and {} are the same file", s, t),
-            MvError::SelfSubdirectory(s) => write!(
+            Self::NoSuchFile(s) => write!(f, "cannot stat {}: No such file or directory", s),
+            Self::SameFile(s, t) => write!(f, "{} and {} are the same file", s, t),
+            Self::SelfSubdirectory(s) => write!(
                 f,
                 "cannot move '{s}' to a subdirectory of itself, '{s}/{s}'",
                 s = s
             ),
-            MvError::DirectoryToNonDirectory(t) => {
+            Self::DirectoryToNonDirectory(t) => {
                 write!(f, "cannot overwrite directory {} with non-directory", t)
             }
-            MvError::NonDirectoryToDirectory(s, t) => write!(
+            Self::NonDirectoryToDirectory(s, t) => write!(
                 f,
                 "cannot overwrite non-directory {} with directory {}",
                 t, s
             ),
-            MvError::NotADirectory(t) => write!(f, "target {} is not a directory", t),
+            Self::NotADirectory(t) => write!(f, "target {} is not a directory", t),
         }
     }
 }

@@ -94,9 +94,9 @@ pub enum ParseSizeError {
 impl Error for ParseSizeError {
     fn description(&self) -> &str {
         match *self {
-            ParseSizeError::InvalidSuffix(ref s) => &*s,
-            ParseSizeError::ParseFailure(ref s) => &*s,
-            ParseSizeError::SizeTooBig(ref s) => &*s,
+            Self::InvalidSuffix(ref s) => s,
+            Self::ParseFailure(ref s) => s,
+            Self::SizeTooBig(ref s) => s,
         }
     }
 }
@@ -104,9 +104,7 @@ impl Error for ParseSizeError {
 impl fmt::Display for ParseSizeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         let s = match self {
-            ParseSizeError::InvalidSuffix(s)
-            | ParseSizeError::ParseFailure(s)
-            | ParseSizeError::SizeTooBig(s) => s,
+            Self::InvalidSuffix(s) | Self::ParseFailure(s) | Self::SizeTooBig(s) => s,
         };
         write!(f, "{}", s)
     }

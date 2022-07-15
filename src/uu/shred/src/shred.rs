@@ -483,7 +483,7 @@ fn wipe_file(
 
         for _ in 0..n_full_arrays {
             for p in &PATTERNS {
-                pass_sequence.push(PassType::Pattern(*p));
+                pass_sequence.push(PassType::Pattern(p));
             }
         }
         for pattern in PATTERNS.iter().take(remainder) {

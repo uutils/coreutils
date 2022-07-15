@@ -432,15 +432,15 @@ enum DuError {
 impl Display for DuError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DuError::InvalidMaxDepthArg(s) => write!(f, "invalid maximum depth {}", s.quote()),
-            DuError::SummarizeDepthConflict(s) => {
+            Self::InvalidMaxDepthArg(s) => write!(f, "invalid maximum depth {}", s.quote()),
+            Self::SummarizeDepthConflict(s) => {
                 write!(
                     f,
                     "summarizing conflicts with --max-depth={}",
                     s.maybe_quote()
                 )
             }
-            DuError::InvalidTimeStyleArg(s) => write!(
+            Self::InvalidTimeStyleArg(s) => write!(
                 f,
                 "invalid argument {} for 'time style'
 Valid arguments are:
@@ -451,13 +451,13 @@ Try '{} --help' for more information.",
                 s.quote(),
                 uucore::execution_phrase()
             ),
-            DuError::InvalidTimeArg(s) => write!(
+            Self::InvalidTimeArg(s) => write!(
                 f,
                 "Invalid argument {} for --time.
 'birth' and 'creation' arguments are not supported on this platform.",
                 s.quote()
             ),
-            DuError::InvalidGlob(s) => write!(f, "Invalid exclude syntax: {}", s),
+            Self::InvalidGlob(s) => write!(f, "Invalid exclude syntax: {}", s),
         }
     }
 }

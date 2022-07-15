@@ -135,7 +135,7 @@ struct PrimeHeap {
 
 impl PrimeHeap {
     fn peek(&self) -> Option<(u64, u64)> {
-        if let Some(&(x, y)) = self.data.get(0) {
+        if let Some(&(x, y)) = self.data.first() {
             Some((x, y))
         } else {
             None

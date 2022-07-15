@@ -19,7 +19,7 @@ pub struct FormatPrimitive {
     pub suffix: Option<String>,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Base {
     Ten = 10,
     Hex = 16,

@@ -147,18 +147,18 @@ impl Input {
     /// Converts input to title that appears in stats.
     fn to_title(&self, quoting_style: &QuotingStyle) -> Option<String> {
         match self {
-            Input::Path(path) => Some(escape_name(&path.clone().into_os_string(), quoting_style)),
-            Input::Stdin(StdinKind::Explicit) => {
+            Self::Path(path) => Some(escape_name(&path.clone().into_os_string(), quoting_style)),
+            Self::Stdin(StdinKind::Explicit) => {
                 Some(escape_name(OsStr::new(STDIN_REPR), quoting_style))
             }
-            Input::Stdin(StdinKind::Implicit) => None,
+            Self::Stdin(StdinKind::Implicit) => None,
         }
     }
 
     fn path_display(&self, quoting_style: &QuotingStyle) -> String {
         match self {
-            Input::Path(path) => escape_name(&path.clone().into_os_string(), quoting_style),
-            Input::Stdin(_) => escape_name(OsStr::new("standard input"), quoting_style),
+            Self::Path(path) => escape_name(&path.clone().into_os_string(), quoting_style),
+            Self::Stdin(_) => escape_name(OsStr::new("standard input"), quoting_style),
         }
     }
 }
@@ -172,12 +172,12 @@ enum WcError {
 impl UError for WcError {
     fn code(&self) -> i32 {
         match self {
-            WcError::FilesDisabled(_) | WcError::StdinReprNotAllowed(_) => 1,
+            Self::FilesDisabled(_) | Self::StdinReprNotAllowed(_) => 1,
         }
     }
 
     fn usage(&self) -> bool {
-        matches!(self, WcError::FilesDisabled(_))
+        matches!(self, Self::FilesDisabled(_))
     }
 }
 
@@ -186,7 +186,7 @@ impl Error for WcError {}
 impl Display for WcError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            WcError::FilesDisabled(message) | WcError::StdinReprNotAllowed(message) => {
+            Self::FilesDisabled(message) | Self::StdinReprNotAllowed(message) => {
                 write!(f, "{}", message)
             }
         }
