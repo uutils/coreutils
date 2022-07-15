@@ -898,8 +898,9 @@ pub fn uu_app<'a>() -> Command<'a> {
                 Arg::new(options::format::TAB_SIZE)
                     .short('T')
                     .long(options::format::TAB_SIZE)
-                    .help("assume tab stops at each COLS instead of 8 (unimplemented)")
                     .takes_value(true)
+                    .value_name("COLS")
+                    .help("Assume tab stops at each COLS instead of 8 (unimplemented)")
             )
             .arg(
                 Arg::new(options::format::COMMAS)
