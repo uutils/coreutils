@@ -530,6 +530,17 @@ impl Settings {
 
         Ok(result)
     }
+
+    fn instantiate_current_writer(&self, filename: &str) -> io::Result<BufWriter<Box<dyn Write>>> {
+        if platform::paths_refer_to_same_file(&self.input, filename) {
+            return Err(io::Error::new(
+                ErrorKind::Other,
+                format!("'{}' would overwrite input; aborting", filename),
+            ));
+        }
+
+        platform::instantiate_current_writer(&self.filter, filename)
+    }
 }
 
 /// Write a certain number of bytes to one file, then move on to another one.
@@ -569,19 +580,21 @@ struct ByteChunkWriter<'a> {
 }
 
 impl<'a> ByteChunkWriter<'a> {
-    fn new(chunk_size: u64, settings: &'a Settings) -> Option<ByteChunkWriter<'a>> {
+    fn new(chunk_size: u64, settings: &'a Settings) -> UResult<ByteChunkWriter<'a>> {
         let mut filename_iterator = FilenameIterator::new(
             &settings.prefix,
             &settings.additional_suffix,
             settings.suffix_length,
             settings.suffix_type,
         );
-        let filename = filename_iterator.next()?;
+        let filename = filename_iterator
+            .next()
+            .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
         if settings.verbose {
             println!("creating file {}", filename.quote());
         }
-        let inner = platform::instantiate_current_writer(&settings.filter, &filename);
-        Some(ByteChunkWriter {
+        let inner = settings.instantiate_current_writer(&filename)?;
+        Ok(ByteChunkWriter {
             settings,
             chunk_size,
             num_bytes_remaining_in_current_chunk: chunk_size,
@@ -652,8 +665,7 @@ impl<'a> Write for ByteChunkWriter<'a> {
                         if self.settings.verbose {
                             println!("creating file {}", filename.quote());
                         }
-                        self.inner =
-                            platform::instantiate_current_writer(&self.settings.filter, &filename);
+                        self.inner = self.settings.instantiate_current_writer(&filename)?;
                     }
                 }
             }
@@ -701,19 +713,21 @@ struct LineChunkWriter<'a> {
 }
 
 impl<'a> LineChunkWriter<'a> {
-    fn new(chunk_size: u64, settings: &'a Settings) -> Option<LineChunkWriter<'a>> {
+    fn new(chunk_size: u64, settings: &'a Settings) -> UResult<LineChunkWriter<'a>> {
         let mut filename_iterator = FilenameIterator::new(
             &settings.prefix,
             &settings.additional_suffix,
             settings.suffix_length,
             settings.suffix_type,
         );
-        let filename = filename_iterator.next()?;
+        let filename = filename_iterator
+            .next()
+            .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
         if settings.verbose {
             println!("creating file {}", filename.quote());
         }
-        let inner = platform::instantiate_current_writer(&settings.filter, &filename);
-        Some(LineChunkWriter {
+        let inner = settings.instantiate_current_writer(&filename)?;
+        Ok(LineChunkWriter {
             settings,
             chunk_size,
             num_lines_remaining_in_current_chunk: chunk_size,
@@ -745,7 +759,7 @@ impl<'a> Write for LineChunkWriter<'a> {
                 if self.settings.verbose {
                     println!("creating file {}", filename.quote());
                 }
-                self.inner = platform::instantiate_current_writer(&self.settings.filter, &filename);
+                self.inner = self.settings.instantiate_current_writer(&filename)?;
                 self.num_lines_remaining_in_current_chunk = self.chunk_size;
             }
 
@@ -807,22 +821,24 @@ struct LineBytesChunkWriter<'a> {
 }
 
 impl<'a> LineBytesChunkWriter<'a> {
-    fn new(chunk_size: u64, settings: &'a Settings) -> Option<LineBytesChunkWriter<'a>> {
+    fn new(chunk_size: u64, settings: &'a Settings) -> UResult<LineBytesChunkWriter<'a>> {
         let mut filename_iterator = FilenameIterator::new(
             &settings.prefix,
             &settings.additional_suffix,
             settings.suffix_length,
             settings.suffix_type,
         );
-        let filename = filename_iterator.next()?;
+        let filename = filename_iterator
+            .next()
+            .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
         if settings.verbose {
             println!("creating file {}", filename.quote());
         }
-        let inner = platform::instantiate_current_writer(&settings.filter, &filename);
-        Some(LineBytesChunkWriter {
+        let inner = settings.instantiate_current_writer(&filename)?;
+        Ok(LineBytesChunkWriter {
             settings,
             chunk_size,
-            num_bytes_remaining_in_current_chunk: chunk_size.try_into().unwrap(),
+            num_bytes_remaining_in_current_chunk: usize::try_from(chunk_size).unwrap(),
             num_chunks_written: 0,
             inner,
             filename_iterator,
@@ -882,7 +898,7 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
                 if self.settings.verbose {
                     println!("creating file {}", filename.quote());
                 }
-                self.inner = platform::instantiate_current_writer(&self.settings.filter, &filename);
+                self.inner = self.settings.instantiate_current_writer(&filename)?;
                 self.num_bytes_remaining_in_current_chunk = self.chunk_size.try_into().unwrap();
             }
 
@@ -1017,7 +1033,7 @@ where
         let filename = filename_iterator
             .next()
             .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
-        let writer = platform::instantiate_current_writer(&settings.filter, filename.as_str());
+        let writer = settings.instantiate_current_writer(filename.as_str())?;
         writers.push(writer);
     }
 
@@ -1093,7 +1109,7 @@ where
         let filename = filename_iterator
             .next()
             .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
-        let writer = platform::instantiate_current_writer(&settings.filter, filename.as_str());
+        let writer = settings.instantiate_current_writer(filename.as_str())?;
         writers.push(writer);
     }
 
@@ -1209,8 +1225,7 @@ fn split(settings: &Settings) -> UResult<()> {
         }
         Strategy::Number(_) => Err(USimpleError::new(1, "-n mode not yet fully implemented")),
         Strategy::Lines(chunk_size) => {
-            let mut writer = LineChunkWriter::new(chunk_size, settings)
-                .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+            let mut writer = LineChunkWriter::new(chunk_size, settings)?;
             match std::io::copy(&mut reader, &mut writer) {
                 Ok(_) => Ok(()),
                 Err(e) => match e.kind() {
@@ -1222,15 +1237,14 @@ fn split(settings: &Settings) -> UResult<()> {
                     // allowable filenames, we use `ErrorKind::Other` to
                     // indicate that. A special error message needs to be
                     // printed in that case.
-                    ErrorKind::Other => Err(USimpleError::new(1, "output file suffixes exhausted")),
+                    ErrorKind::Other => Err(USimpleError::new(1, format!("{}", e))),
                     ErrorKind::BrokenPipe => Ok(()),
                     _ => Err(uio_error!(e, "input/output error")),
                 },
             }
         }
         Strategy::Bytes(chunk_size) => {
-            let mut writer = ByteChunkWriter::new(chunk_size, settings)
-                .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+            let mut writer = ByteChunkWriter::new(chunk_size, settings)?;
             match std::io::copy(&mut reader, &mut writer) {
                 Ok(_) => Ok(()),
                 Err(e) => match e.kind() {
@@ -1242,15 +1256,14 @@ fn split(settings: &Settings) -> UResult<()> {
                     // allowable filenames, we use `ErrorKind::Other` to
                     // indicate that. A special error message needs to be
                     // printed in that case.
-                    ErrorKind::Other => Err(USimpleError::new(1, "output file suffixes exhausted")),
+                    ErrorKind::Other => Err(USimpleError::new(1, format!("{}", e))),
                     ErrorKind::BrokenPipe => Ok(()),
                     _ => Err(uio_error!(e, "input/output error")),
                 },
             }
         }
         Strategy::LineBytes(chunk_size) => {
-            let mut writer = LineBytesChunkWriter::new(chunk_size, settings)
-                .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+            let mut writer = LineBytesChunkWriter::new(chunk_size, settings)?;
             match std::io::copy(&mut reader, &mut writer) {
                 Ok(_) => Ok(()),
                 Err(e) => match e.kind() {
@@ -1262,7 +1275,7 @@ fn split(settings: &Settings) -> UResult<()> {
                     // allowable filenames, we use `ErrorKind::Other` to
                     // indicate that. A special error message needs to be
                     // printed in that case.
-                    ErrorKind::Other => Err(USimpleError::new(1, "output file suffixes exhausted")),
+                    ErrorKind::Other => Err(USimpleError::new(1, format!("{}", e))),
                     ErrorKind::BrokenPipe => Ok(()),
                     _ => Err(uio_error!(e, "input/output error")),
                 },

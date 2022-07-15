@@ -655,3 +655,31 @@ fn test_line_bytes_no_empty_file() {
     assert_eq!(at.read("xaj"), "4");
     assert!(!at.plus("xak").exists());
 }
+
+#[test]
+fn test_guard_input() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    ts.ucmd()
+        .args(&["-C", "6"])
+        .pipe_in("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n")
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("xaa"), "1\n2\n3\n");
+
+    ts.ucmd()
+        .args(&["-C", "6"])
+        .pipe_in("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n")
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("xaa"), "1\n2\n3\n");
+
+    ts.ucmd()
+        .args(&["-C", "6", "xaa"])
+        .fails()
+        .stderr_only("split: 'xaa' would overwrite input; aborting");
+    assert_eq!(at.read("xaa"), "1\n2\n3\n");
+}
