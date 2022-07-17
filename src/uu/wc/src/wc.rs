@@ -313,6 +313,7 @@ fn word_count_from_reader<T: WordCountable>(
         settings.show_max_line_length,
         settings.show_words,
     ) {
+        // Specialize scanning loop to improve the performance.
         (false, false, false, false, false) => (WordCount::default(), None),
         (true, false, false, false, false) => {
             // Fast path when only show_bytes is true.
