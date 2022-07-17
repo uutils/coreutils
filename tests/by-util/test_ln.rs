@@ -702,3 +702,16 @@ fn test_hard_logical_dir_fail() {
         .fails()
         .stderr_contains("failed to link 'link-to-dir'");
 }
+
+#[test]
+fn test_symlink_remove_existing_same_src_and_dest() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.write("a", "sample");
+    ucmd.args(&["-sf", "a", "a"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("Same file");
+    assert!(at.file_exists("a") && !at.symlink_exists("a"));
+    assert_eq!(at.read("a"), "sample");
+}
