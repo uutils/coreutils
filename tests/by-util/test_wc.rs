@@ -60,7 +60,107 @@ fn test_utf8() {
 }
 
 #[test]
-fn test_utf8_extra() {
+fn test_utf8_words() {
+    new_ucmd!()
+        .arg("-w")
+        .pipe_in_fixture("UTF_8_weirdchars.txt")
+        .run()
+        .stdout_is("87\n");
+}
+
+#[test]
+fn test_utf8_line_length_words() {
+    new_ucmd!()
+        .arg("-Lw")
+        .pipe_in_fixture("UTF_8_weirdchars.txt")
+        .run()
+        .stdout_is("     87      48\n");
+}
+
+#[test]
+fn test_utf8_line_length_chars() {
+    new_ucmd!()
+        .arg("-Lm")
+        .pipe_in_fixture("UTF_8_weirdchars.txt")
+        .run()
+        .stdout_is("    442      48\n");
+}
+
+#[test]
+fn test_utf8_line_length_chars_words() {
+    new_ucmd!()
+        .arg("-Lmw")
+        .pipe_in_fixture("UTF_8_weirdchars.txt")
+        .run()
+        .stdout_is("     87     442      48\n");
+}
+
+#[test]
+fn test_utf8_chars() {
+    new_ucmd!()
+        .arg("-m")
+        .pipe_in_fixture("UTF_8_weirdchars.txt")
+        .run()
+        .stdout_is("442\n");
+}
+
+#[test]
+fn test_utf8_chars_words() {
+    new_ucmd!()
+        .arg("-mw")
+        .pipe_in_fixture("UTF_8_weirdchars.txt")
+        .run()
+        .stdout_is("     87     442\n");
+}
+
+#[test]
+fn test_utf8_line_length_lines() {
+    new_ucmd!()
+        .arg("-Ll")
+        .pipe_in_fixture("UTF_8_weirdchars.txt")
+        .run()
+        .stdout_is("     25      48\n");
+}
+
+#[test]
+fn test_utf8_line_length_lines_words() {
+    new_ucmd!()
+        .arg("-Llw")
+        .pipe_in_fixture("UTF_8_weirdchars.txt")
+        .run()
+        .stdout_is("     25      87      48\n");
+}
+
+#[test]
+fn test_utf8_lines_chars() {
+    new_ucmd!()
+        .arg("-ml")
+        .pipe_in_fixture("UTF_8_weirdchars.txt")
+        .run()
+        .stdout_is("     25     442\n");
+}
+
+#[test]
+fn test_utf8_lines_words_chars() {
+    new_ucmd!()
+        .arg("-mlw")
+        .pipe_in_fixture("UTF_8_weirdchars.txt")
+        .run()
+        .stdout_is("     25      87     442\n");
+}
+
+#[test]
+fn test_utf8_line_length_lines_chars() {
+    new_ucmd!()
+        .arg("-Llm")
+        .pipe_in_fixture("UTF_8_weirdchars.txt")
+        .run()
+        .stdout_is("     25     442      48\n");
+}
+
+
+#[test]
+fn test_utf8_all() {
     new_ucmd!()
         .arg("-lwmcL")
         .pipe_in_fixture("UTF_8_weirdchars.txt")

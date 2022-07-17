@@ -314,7 +314,7 @@ fn word_count_from_reader<T: WordCountable>(
         settings.show_words,
     ) {
         // Specialize scanning loop to improve the performance.
-        (false, false, false, false, false) => (WordCount::default(), None),
+        (false, false, false, false, false) => unreachable!(),
         (true, false, false, false, false) => {
             // Fast path when only show_bytes is true.
             let (bytes, error) = count_bytes_fast(&mut reader);
