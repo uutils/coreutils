@@ -489,7 +489,7 @@ pub fn paths_refer_to_same_file<P: AsRef<Path>>(p1: P, p2: P, dereference: bool)
 }
 
 /// Converts absolute `path` to be relative to absolute `to` path.
-pub fn make_path_relative_to<P: AsRef<Path>>(path: P, to: P) -> PathBuf {
+pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2) -> PathBuf {
     let path = path.as_ref();
     let to = to.as_ref();
     let common_prefix_size = path

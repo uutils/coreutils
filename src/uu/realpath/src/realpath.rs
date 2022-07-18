@@ -274,12 +274,12 @@ fn process_relative(
 ) -> PathBuf {
     if let Some(base) = relative_base {
         if path.starts_with(base) {
-            make_path_relative_to(path.as_path(), relative_to.unwrap_or(base))
+            make_path_relative_to(path, relative_to.unwrap_or(base))
         } else {
             path
         }
     } else if let Some(to) = relative_to {
-        make_path_relative_to(path.as_path(), to)
+        make_path_relative_to(path, to)
     } else {
         path
     }
