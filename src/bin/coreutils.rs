@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{Arg, Command};
+use clap::{value_parser, Arg, Command};
 use clap_complete::Shell;
 use std::cmp;
 use std::ffi::OsStr;
@@ -147,7 +147,7 @@ fn gen_completions<T: uucore::Args>(
         )
         .arg(
             Arg::new("shell")
-                .possible_values(Shell::possible_values())
+                .value_parser(value_parser!(Shell))
                 .required(true),
         )
         .get_matches_from(std::iter::once(OsString::from("completion")).chain(args));
