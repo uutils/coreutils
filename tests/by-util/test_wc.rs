@@ -158,7 +158,6 @@ fn test_utf8_line_length_lines_chars() {
         .stdout_is("     25     442      48\n");
 }
 
-
 #[test]
 fn test_utf8_all() {
     new_ucmd!()
