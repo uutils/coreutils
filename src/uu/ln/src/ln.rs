@@ -492,7 +492,7 @@ fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
 }
 
 #[cfg(windows)]
-pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> Result<()> {
+pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> std::io::Result<()> {
     if src.as_ref().is_dir() {
         symlink_dir(src, dst)
     } else {
