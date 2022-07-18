@@ -347,3 +347,19 @@ fn test_rm_interactive_never() {
 
     assert!(!at.file_exists(file_2));
 }
+
+#[test]
+#[ignore = "issue #3722"]
+fn test_rm_directory_rights_rm1() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("b/a/p");
+    at.mkdir_all("b/c");
+    at.mkdir_all("b/d");
+    at.set_readonly("b/a");
+    ucmd.args(&["-rf", "b"])
+        .fails()
+        .stderr_contains("Permission denied");
+    assert!(at.dir_exists("b/a/p"));
+    assert!(!at.dir_exists("b/c"));
+    assert!(!at.dir_exists("b/d"));
+}

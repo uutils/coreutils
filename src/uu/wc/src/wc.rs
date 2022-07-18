@@ -306,29 +306,84 @@ fn word_count_from_reader<T: WordCountable>(
     mut reader: T,
     settings: &Settings,
 ) -> (WordCount, Option<io::Error>) {
-    let only_count_bytes = settings.show_bytes
-        && (!(settings.show_chars
-            || settings.show_lines
-            || settings.show_max_line_length
-            || settings.show_words));
-    if only_count_bytes {
-        let (bytes, error) = count_bytes_fast(&mut reader);
-        return (
-            WordCount {
-                bytes,
-                ..WordCount::default()
-            },
-            error,
-        );
+    match (
+        settings.show_bytes,
+        settings.show_chars,
+        settings.show_lines,
+        settings.show_max_line_length,
+        settings.show_words,
+    ) {
+        // Specialize scanning loop to improve the performance.
+        (false, false, false, false, false) => unreachable!(),
+        (true, false, false, false, false) => {
+            // Fast path when only show_bytes is true.
+            let (bytes, error) = count_bytes_fast(&mut reader);
+            (
+                WordCount {
+                    bytes,
+                    ..WordCount::default()
+                },
+                error,
+            )
+        }
+        (false, false, true, false, false) | (true, false, true, false, false) => {
+            // Fast path when only (show_bytes || show_lines) is true.
+            count_bytes_and_lines_fast(&mut reader)
+        }
+        (_, false, false, false, true) => {
+            word_count_from_reader_specialized::<_, false, false, false, true>(reader)
+        }
+        (_, false, false, true, false) => {
+            word_count_from_reader_specialized::<_, false, false, true, false>(reader)
+        }
+        (_, false, false, true, true) => {
+            word_count_from_reader_specialized::<_, false, false, true, true>(reader)
+        }
+        (_, false, true, false, true) => {
+            word_count_from_reader_specialized::<_, false, true, false, true>(reader)
+        }
+        (_, false, true, true, false) => {
+            word_count_from_reader_specialized::<_, false, true, true, false>(reader)
+        }
+        (_, false, true, true, true) => {
+            word_count_from_reader_specialized::<_, false, true, true, true>(reader)
+        }
+        (_, true, false, false, false) => {
+            word_count_from_reader_specialized::<_, true, false, false, false>(reader)
+        }
+        (_, true, false, false, true) => {
+            word_count_from_reader_specialized::<_, true, false, false, true>(reader)
+        }
+        (_, true, false, true, false) => {
+            word_count_from_reader_specialized::<_, true, false, true, false>(reader)
+        }
+        (_, true, false, true, true) => {
+            word_count_from_reader_specialized::<_, true, false, true, true>(reader)
+        }
+        (_, true, true, false, false) => {
+            word_count_from_reader_specialized::<_, true, true, false, false>(reader)
+        }
+        (_, true, true, false, true) => {
+            word_count_from_reader_specialized::<_, true, true, false, true>(reader)
+        }
+        (_, true, true, true, false) => {
+            word_count_from_reader_specialized::<_, true, true, true, false>(reader)
+        }
+        (_, true, true, true, true) => {
+            word_count_from_reader_specialized::<_, true, true, true, true>(reader)
+        }
     }
+}
 
-    // we do not need to decode the byte stream if we're only counting bytes/newlines
-    let decode_chars = settings.show_chars || settings.show_words || settings.show_max_line_length;
-
-    if !decode_chars {
-        return count_bytes_and_lines_fast(&mut reader);
-    }
-
+fn word_count_from_reader_specialized<
+    T: WordCountable,
+    const SHOW_CHARS: bool,
+    const SHOW_LINES: bool,
+    const SHOW_MAX_LINE_LENGTH: bool,
+    const SHOW_WORDS: bool,
+>(
+    reader: T,
+) -> (WordCount, Option<io::Error>) {
     let mut total = WordCount::default();
     let mut reader = BufReadDecoder::new(reader.buffered());
     let mut in_word = false;
@@ -338,7 +393,7 @@ fn word_count_from_reader<T: WordCountable>(
         match chunk {
             Ok(text) => {
                 for ch in text.chars() {
-                    if settings.show_words {
+                    if SHOW_WORDS {
                         if ch.is_whitespace() {
                             in_word = false;
                         } else if ch.is_ascii_control() {
@@ -348,7 +403,7 @@ fn word_count_from_reader<T: WordCountable>(
                             total.words += 1;
                         }
                     }
-                    if settings.show_max_line_length {
+                    if SHOW_MAX_LINE_LENGTH {
                         match ch {
                             '\n' | '\r' | '\x0c' => {
                                 total.max_line_length = max(current_len, total.max_line_length);
@@ -363,10 +418,10 @@ fn word_count_from_reader<T: WordCountable>(
                             }
                         }
                     }
-                    if settings.show_lines && ch == '\n' {
+                    if SHOW_LINES && ch == '\n' {
                         total.lines += 1;
                     }
-                    if settings.show_chars {
+                    if SHOW_CHARS {
                         total.chars += 1;
                     }
                 }

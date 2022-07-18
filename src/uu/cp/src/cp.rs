@@ -18,7 +18,7 @@ extern crate uucore;
 
 use uucore::display::Quotable;
 use uucore::format_usage;
-use uucore::fs::FileInformation;
+use uucore::fs::{paths_refer_to_same_file, FileInformation};
 
 use std::borrow::Cow;
 
@@ -1655,17 +1655,6 @@ pub fn verify_target_type(target: &Path, target_type: &TargetType) -> CopyResult
 pub fn localize_to_target(root: &Path, source: &Path, target: &Path) -> CopyResult<PathBuf> {
     let local_to_root = source.strip_prefix(&root)?;
     Ok(target.join(&local_to_root))
-}
-
-pub fn paths_refer_to_same_file(p1: &Path, p2: &Path, dereference: bool) -> bool {
-    // We have to take symlinks and relative paths into account.
-    let res1 = FileInformation::from_path(p1, dereference);
-    let res2 = FileInformation::from_path(p2, dereference);
-
-    match (res1, res2) {
-        (Ok(info1), Ok(info2)) => info1 == info2,
-        _ => false,
-    }
 }
 
 pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
