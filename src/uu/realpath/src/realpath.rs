@@ -11,12 +11,12 @@
 extern crate uucore;
 
 use clap::{crate_version, Arg, ArgMatches, Command};
-use std::path::Component;
 use std::{
     io::{stdout, Write},
     path::{Path, PathBuf},
 };
 use uucore::error::UClapError;
+use uucore::fs::make_path_relative_to;
 use uucore::{
     display::{print_verbatim, Quotable},
     error::{FromIo, UResult},
@@ -274,36 +274,13 @@ fn process_relative(
 ) -> PathBuf {
     if let Some(base) = relative_base {
         if path.starts_with(base) {
-            make_path_relative_to(&path, relative_to.unwrap_or(base))
+            make_path_relative_to(path.as_path(), relative_to.unwrap_or(base))
         } else {
             path
         }
     } else if let Some(to) = relative_to {
-        make_path_relative_to(&path, to)
+        make_path_relative_to(path.as_path(), to)
     } else {
         path
     }
-}
-
-/// Converts absolute `path` to be relative to absolute `to` path.
-fn make_path_relative_to(path: &Path, to: &Path) -> PathBuf {
-    let common_prefix_size = path
-        .components()
-        .zip(to.components())
-        .take_while(|(first, second)| first == second)
-        .count();
-    let path_suffix = path
-        .components()
-        .skip(common_prefix_size)
-        .map(|x| x.as_os_str());
-    let mut components: Vec<_> = to
-        .components()
-        .skip(common_prefix_size)
-        .map(|_| Component::ParentDir.as_os_str())
-        .chain(path_suffix)
-        .collect();
-    if components.is_empty() {
-        components.push(Component::CurDir.as_os_str());
-    }
-    components.iter().collect()
 }
