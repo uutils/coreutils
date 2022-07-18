@@ -14,7 +14,7 @@ use clap::{crate_version, Arg, Command};
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
 use uucore::format_usage;
-use uucore::fs::is_symlink;
+use uucore::fs::{is_symlink, paths_refer_to_same_file};
 
 use std::borrow::Cow;
 use std::error::Error;
@@ -435,13 +435,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         };
         if settings.backup == BackupMode::ExistingBackup && !settings.symbolic {
             // when ln --backup f f, it should detect that it is the same file
-            let dst_abs = canonicalize(dst, MissingHandling::Normal, ResolveMode::Logical)?;
-            let source_abs = canonicalize(
-                source.clone(),
-                MissingHandling::Normal,
-                ResolveMode::Logical,
-            )?;
-            if dst_abs == source_abs {
+            if paths_refer_to_same_file(src, dst, true) {
                 return Err(LnError::SameFile().into());
             }
         }
@@ -460,6 +454,9 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                 // In case of error, don't do anything
             }
             OverwriteMode::Force => {
+                if !is_symlink(dst) && paths_refer_to_same_file(src, dst, true) {
+                    return Err(LnError::SameFile().into());
+                }
                 if fs::remove_file(dst).is_ok() {};
                 // In case of error, don't do anything
             }

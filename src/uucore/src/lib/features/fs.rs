@@ -477,6 +477,17 @@ pub fn dir_strip_dot_for_creation(path: &Path) -> PathBuf {
     }
 }
 
+/// Checks if `p1` and `p2` are the same file.
+/// If error happens when trying to get files' metadata, returns false
+pub fn paths_refer_to_same_file<P: AsRef<Path>>(p1: P, p2: P, dereference: bool) -> bool {
+    if let Ok(info1) = FileInformation::from_path(p1, dereference) {
+        if let Ok(info2) = FileInformation::from_path(p2, dereference) {
+            return info1 == info2;
+        }
+    }
+    false
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
