@@ -908,7 +908,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: macos-10.15 , features: unix } ## GHA MacOS-11.0 VM won't have VirtualBox; refs: <https://github.com/actions/virtual-environments/issues/4060> , <https://github.com/actions/virtual-environments/pull/4010>
+          - { os: macos-12 , features: unix } ## GHA MacOS-11.0 VM won't have VirtualBox; refs: <https://github.com/actions/virtual-environments/issues/4060> , <https://github.com/actions/virtual-environments/pull/4010>
     env:
       mem: 2048
     steps:
