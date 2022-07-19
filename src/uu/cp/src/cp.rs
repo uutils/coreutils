@@ -1519,7 +1519,7 @@ fn copy_link(
         }
         dest.into()
     };
-    symlink_file(&link, &dest, &*context_for(&link, &dest), symlinked_files)
+    symlink_file(&link, &dest, &context_for(&link, &dest), symlinked_files)
 }
 
 /// Copies `source` to `dest` using copy-on-write if possible.

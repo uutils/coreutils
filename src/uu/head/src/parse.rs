@@ -6,7 +6,7 @@
 use std::ffi::OsString;
 use uucore::parse_size::{parse_size, ParseSizeError};
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum ParseError {
     Syntax,
     Overflow,

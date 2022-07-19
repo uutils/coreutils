@@ -143,13 +143,13 @@ impl Sequence {
         let set1 = Self::from_str(set1_str)?;
         let set2 = Self::from_str(set2_str)?;
 
-        let is_char_star = |s: &&Self| -> bool { matches!(s, Sequence::CharStar(_)) };
+        let is_char_star = |s: &&Self| -> bool { matches!(s, Self::CharStar(_)) };
         let set1_star_count = set1.iter().filter(is_char_star).count();
         if set1_star_count == 0 {
             let set2_star_count = set2.iter().filter(is_char_star).count();
             if set2_star_count < 2 {
                 let char_star = set2.iter().find_map(|s| match s {
-                    Sequence::CharStar(c) => Some(c),
+                    Self::CharStar(c) => Some(c),
                     _ => None,
                 });
                 let mut partition = set2.as_slice().split(|s| matches!(s, Self::CharStar(_)));
@@ -157,7 +157,7 @@ impl Sequence {
                 let set2_len = set2
                     .iter()
                     .filter_map(|s| match s {
-                        Sequence::CharStar(_) => None,
+                        Self::CharStar(_) => None,
                         r => Some(r),
                     })
                     .flat_map(Self::flatten)

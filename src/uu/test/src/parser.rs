@@ -14,7 +14,7 @@ use uucore::display::Quotable;
 use uucore::show_error;
 
 /// Represents one of the binary comparison operators for strings, integers, or files
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Operator {
     String(OsString),
     Int(OsString),
@@ -22,14 +22,14 @@ pub enum Operator {
 }
 
 /// Represents one of the unary test operators for strings or files
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum UnaryOperator {
     StrlenOp(OsString),
     FiletestOp(OsString),
 }
 
 /// Represents a parsed token from a test expression
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Symbol {
     LParen,
     Bang,

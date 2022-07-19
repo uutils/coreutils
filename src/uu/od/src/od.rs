@@ -218,8 +218,10 @@ impl OdOptions {
                         "Radix must be one of [d, o, n, x]".to_string(),
                     ));
                 } else {
-                    let radix: char =
-                        *(st.get(0).expect("byte string of length 1 lacks a 0th elem")) as char;
+                    let radix: char = *(st
+                        .first()
+                        .expect("byte string of length 1 lacks a 0th elem"))
+                        as char;
                     match radix {
                         'd' => Radix::Decimal,
                         'x' => Radix::Hexadecimal,

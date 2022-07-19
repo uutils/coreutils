@@ -36,7 +36,7 @@ static LONG_HELP: &str = "
 mod colors;
 use self::colors::INTERNAL_DB;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum OutputFmt {
     Shell,
     CShell,

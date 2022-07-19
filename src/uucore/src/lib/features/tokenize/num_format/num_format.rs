@@ -33,7 +33,7 @@ fn warn_char_constant_ign(remaining_bytes: &[u8]) {
                 show_warning!(
                     "{:?}: character(s) following character \
                      constant have been ignored",
-                    &*remaining_bytes
+                    remaining_bytes
                 );
             }
         }

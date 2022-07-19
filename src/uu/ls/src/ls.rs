@@ -157,11 +157,11 @@ enum LsError {
 impl UError for LsError {
     fn code(&self) -> i32 {
         match self {
-            LsError::InvalidLineWidth(_) => 2,
-            LsError::IOError(_) => 1,
-            LsError::IOErrorContext(_, _) => 1,
-            LsError::BlockSizeParseError(_) => 1,
-            LsError::AlreadyListedError(_) => 2,
+            Self::InvalidLineWidth(_) => 2,
+            Self::IOError(_) => 1,
+            Self::IOErrorContext(_, _) => 1,
+            Self::BlockSizeParseError(_) => 1,
+            Self::AlreadyListedError(_) => 2,
         }
     }
 }
@@ -171,12 +171,12 @@ impl Error for LsError {}
 impl Display for LsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LsError::BlockSizeParseError(s) => {
+            Self::BlockSizeParseError(s) => {
                 write!(f, "invalid --block-size argument {}", s.quote())
             }
-            LsError::InvalidLineWidth(s) => write!(f, "invalid line width: {}", s.quote()),
-            LsError::IOError(e) => write!(f, "general io error: {}", e),
-            LsError::IOErrorContext(e, p) => {
+            Self::InvalidLineWidth(s) => write!(f, "invalid line width: {}", s.quote()),
+            Self::IOError(e) => write!(f, "general io error: {}", e),
+            Self::IOErrorContext(e, p) => {
                 let error_kind = e.kind();
                 let errno = e.raw_os_error().unwrap_or(1i32);
 
@@ -238,7 +238,7 @@ impl Display for LsError {
                     },
                 }
             }
-            LsError::AlreadyListedError(path) => {
+            Self::AlreadyListedError(path) => {
                 write!(
                     f,
                     "{}: not listing already-listed directory",

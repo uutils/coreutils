@@ -72,7 +72,7 @@ impl Display for NohupError {
             Self::OpenFailed(_, e) => {
                 write!(f, "failed to open {}: {}", NOHUP_OUT.quote(), e)
             }
-            NohupError::OpenFailed2(_, e1, s, e2) => write!(
+            Self::OpenFailed2(_, e1, s, e2) => write!(
                 f,
                 "failed to open {}: {}\nfailed to open {}: {}",
                 NOHUP_OUT.quote(),

@@ -29,7 +29,7 @@ impl CommandLineOpts for ArgMatches {
 /// and an optional label. Offset and label are specified in bytes.
 /// `FileAndOffset` will be only used if an offset is specified,
 /// but it might be 0.
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum CommandLineInputs {
     FileNames(Vec<String>),
     FileAndOffset((String, u64, Option<u64>)),
