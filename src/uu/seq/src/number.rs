@@ -24,16 +24,16 @@ impl Number {
         // requires an addition implementation, and we don't want to
         // implement that here.
         match self {
-            Number::Int(n) => n.is_zero(),
-            Number::Float(x) => x.is_zero(),
+            Self::Int(n) => n.is_zero(),
+            Self::Float(x) => x.is_zero(),
         }
     }
 
     /// Convert this number into an `ExtendedBigDecimal`.
     pub fn into_extended_big_decimal(self) -> ExtendedBigDecimal {
         match self {
-            Number::Int(n) => ExtendedBigDecimal::from(n),
-            Number::Float(x) => x,
+            Self::Int(n) => ExtendedBigDecimal::from(n),
+            Self::Float(x) => x,
         }
     }
 
@@ -54,11 +54,11 @@ impl Number {
             // If this number is already an integer, it is already
             // rounded to the nearest integer in the direction of
             // `other`.
-            Number::Int(num) => num,
+            Self::Int(num) => num,
             // Otherwise, if this number is a float, we need to decide
             // whether `other` is larger or smaller than it, and thus
             // whether to round up or round down, respectively.
-            Number::Float(num) => {
+            Self::Float(num) => {
                 let other: ExtendedBigDecimal = From::from(other.clone());
                 if other > num {
                     num.ceil()

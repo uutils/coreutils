@@ -171,7 +171,7 @@ impl Error for SortError {}
 impl UError for SortError {
     fn code(&self) -> i32 {
         match self {
-            SortError::Disorder { .. } => 1,
+            Self::Disorder { .. } => 1,
             _ => 2,
         }
     }

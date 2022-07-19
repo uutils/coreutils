@@ -42,13 +42,13 @@ impl AstNode {
             print!("\t",);
         }
         match self {
-            AstNode::Leaf { token_idx, value } => println!(
+            Self::Leaf { token_idx, value } => println!(
                 "Leaf( {} ) at #{} ( evaluate -> {:?} )",
                 value,
                 token_idx,
                 self.evaluate()
             ),
-            AstNode::Node {
+            Self::Node {
                 token_idx,
                 op_type,
                 operands,
@@ -157,7 +157,7 @@ impl AstNode {
         }
     }
     pub fn operand_values(&self) -> Result<Vec<String>, String> {
-        if let AstNode::Node { operands, .. } = self {
+        if let Self::Node { operands, .. } = self {
             let mut out = Vec::with_capacity(operands.len());
             for operand in operands {
                 let value = operand.evaluate()?;

@@ -22,12 +22,12 @@ enum Sign {
     Positive,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct NumInfo {
     exponent: i64,
     sign: Sign,
 }
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct NumInfoParseSettings {
     pub accept_si_units: bool,
     pub thousands_separator: Option<char>,

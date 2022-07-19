@@ -41,7 +41,7 @@ pub(crate) struct IConvFlags {
 }
 
 /// Stores all Conv Flags that apply to the output
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct OConvFlags {
     pub sparse: bool,
     pub excl: bool,
@@ -52,7 +52,7 @@ pub struct OConvFlags {
 }
 
 /// Stores all Flags that apply to the input
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct IFlags {
     pub cio: bool,
     pub direct: bool,
@@ -73,7 +73,7 @@ pub struct IFlags {
 }
 
 /// Stores all Flags that apply to the output
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct OFlags {
     pub append: bool,
     pub cio: bool,
@@ -96,7 +96,7 @@ pub struct OFlags {
 /// Defaults to Reads(N)
 /// if iflag=count_bytes
 /// then becomes Bytes(N)
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum CountType {
     Reads(u64),
     Bytes(u64),

@@ -40,16 +40,16 @@ impl Line {
     // when we know that it's a FormatLine, as in the ParagraphStream iterator
     fn get_formatline(self) -> FileLine {
         match self {
-            Line::FormatLine(fl) => fl,
-            Line::NoFormatLine(..) => panic!("Found NoFormatLine when expecting FormatLine"),
+            Self::FormatLine(fl) => fl,
+            Self::NoFormatLine(..) => panic!("Found NoFormatLine when expecting FormatLine"),
         }
     }
 
     // when we know that it's a NoFormatLine, as in the ParagraphStream iterator
     fn get_noformatline(self) -> (String, bool) {
         match self {
-            Line::NoFormatLine(s, b) => (s, b),
-            Line::FormatLine(..) => panic!("Found FormatLine when expecting NoFormatLine"),
+            Self::NoFormatLine(s, b) => (s, b),
+            Self::FormatLine(..) => panic!("Found FormatLine when expecting NoFormatLine"),
         }
     }
 }

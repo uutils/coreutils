@@ -17,7 +17,7 @@ use crate::number::Number;
 use crate::number::PreciseNumber;
 
 /// An error returned when parsing a number fails.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ParseNumberError {
     Float,
     Nan,

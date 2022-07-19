@@ -23,11 +23,11 @@ pub enum Pattern {
 impl ToString for Pattern {
     fn to_string(&self) -> String {
         match self {
-            Pattern::UpToLine(n, _) => n.to_string(),
-            Pattern::UpToMatch(regex, 0, _) => format!("/{}/", regex.as_str()),
-            Pattern::UpToMatch(regex, offset, _) => format!("/{}/{:+}", regex.as_str(), offset),
-            Pattern::SkipToMatch(regex, 0, _) => format!("%{}%", regex.as_str()),
-            Pattern::SkipToMatch(regex, offset, _) => format!("%{}%{:+}", regex.as_str(), offset),
+            Self::UpToLine(n, _) => n.to_string(),
+            Self::UpToMatch(regex, 0, _) => format!("/{}/", regex.as_str()),
+            Self::UpToMatch(regex, offset, _) => format!("/{}/{:+}", regex.as_str(), offset),
+            Self::SkipToMatch(regex, 0, _) => format!("%{}%", regex.as_str()),
+            Self::SkipToMatch(regex, offset, _) => format!("%{}%{:+}", regex.as_str(), offset),
         }
     }
 }

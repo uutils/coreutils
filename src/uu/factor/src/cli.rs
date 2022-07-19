@@ -11,7 +11,8 @@ extern crate uucore;
 
 use std::error::Error;
 use std::fmt::Write as FmtWrite;
-use std::io::{self, stdin, stdout, BufRead, Write};
+use std::io::BufRead;
+use std::io::{self, stdin, stdout, Write};
 
 mod factor;
 use clap::{crate_version, Arg, Command};

@@ -43,8 +43,8 @@ impl Error for JoinError {}
 impl Display for JoinError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            JoinError::IOError(e) => write!(f, "io error: {}", e),
-            JoinError::UnorderedInput(e) => f.write_str(e),
+            Self::IOError(e) => write!(f, "io error: {}", e),
+            Self::UnorderedInput(e) => f.write_str(e),
         }
     }
 }

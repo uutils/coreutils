@@ -148,7 +148,7 @@ pub enum BackupError {
 impl UError for BackupError {
     fn code(&self) -> i32 {
         match self {
-            BackupError::BackupImpossible() => 2,
+            Self::BackupImpossible() => 2,
             _ => 1,
         }
     }
@@ -157,7 +157,7 @@ impl UError for BackupError {
         // Suggested by clippy.
         matches!(
             self,
-            BackupError::InvalidArgument(_, _) | BackupError::AmbiguousArgument(_, _)
+            Self::InvalidArgument(_, _) | Self::AmbiguousArgument(_, _)
         )
     }
 }
@@ -166,25 +166,24 @@ impl Error for BackupError {}
 
 impl Display for BackupError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use BackupError as BE;
         match self {
-            BE::InvalidArgument(arg, origin) => write!(
+            Self::InvalidArgument(arg, origin) => write!(
                 f,
                 "invalid argument {} for '{}'\n{}",
                 arg.quote(),
                 origin,
                 VALID_ARGS_HELP
             ),
-            BE::AmbiguousArgument(arg, origin) => write!(
+            Self::AmbiguousArgument(arg, origin) => write!(
                 f,
                 "ambiguous argument {} for '{}'\n{}",
                 arg.quote(),
                 origin,
                 VALID_ARGS_HELP
             ),
-            BE::BackupImpossible() => write!(f, "cannot create backup"),
+            Self::BackupImpossible() => write!(f, "cannot create backup"),
             // Placeholder for later
-            // BE::BackupFailed(from, to, e) => Display::fmt(
+            // Self::BackupFailed(from, to, e) => Display::fmt(
             //     &uio_error!(e, "failed to backup {} to {}", from.quote(), to.quote()),
             //     f
             // ),

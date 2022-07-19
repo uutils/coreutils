@@ -109,7 +109,7 @@ pub const F_SIGN: u8 = 1 << 4;
 // unused at present
 pub const F_GROUP: u8 = 1 << 5;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum OutputType {
     Str,
     Integer,
@@ -119,7 +119,7 @@ pub enum OutputType {
     Unknown,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Token {
     Char(char),
     Directive {
