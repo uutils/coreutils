@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf
+// spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf tabsize
 
 #[macro_use]
 extern crate uucore;
