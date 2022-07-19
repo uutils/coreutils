@@ -1,4 +1,4 @@
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize
 
 #[cfg(not(windows))]
 extern crate libc;
