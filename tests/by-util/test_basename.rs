@@ -174,3 +174,21 @@ fn test_triple_slash() {
     let expected = if cfg!(windows) { "\\\n" } else { "/\n" };
     new_ucmd!().arg("///").succeeds().stdout_is(expected);
 }
+
+#[test]
+fn test_simple_format() {
+    new_ucmd!().args(&["a-a", "-a"]).succeeds().stdout_is("a\n");
+    new_ucmd!()
+        .args(&["a--help", "--help"])
+        .succeeds()
+        .stdout_is("a\n");
+    new_ucmd!().args(&["a-h", "-h"]).succeeds().stdout_is("a\n");
+    new_ucmd!().args(&["f.s", ".s"]).succeeds().stdout_is("f\n");
+    new_ucmd!().args(&["a-s", "-s"]).succeeds().stdout_is("a\n");
+    new_ucmd!().args(&["a-z", "-z"]).succeeds().stdout_is("a\n");
+    new_ucmd!()
+        .args(&["a", "b", "c"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("extra operand 'c'");
+}
