@@ -36,7 +36,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // if the first argument is not an option, then there is no option,
     // and that implies there is exactly one name (no option => no -a option),
     // so simple format is used
-    if args.len() > 1 && !args[1].starts_with("-") {
+    if args.len() > 1 && !args[1].starts_with('-') {
         if args.len() > 3 {
             return Err(UUsageError::new(
                 1,
