@@ -622,7 +622,7 @@ fn test_backup_same_file() {
     at.touch("file1");
     ucmd.args(&["--backup", "file1", "./file1"])
         .fails()
-        .stderr_contains("n: failed to link 'file1' to './file1': Same file");
+        .stderr_contains("n: 'file1' and './file1' are the same file");
 }
 
 #[test]
@@ -676,14 +676,13 @@ fn test_hard_logical_non_exit_fail() {
     let file_a = "/no-such-dir";
     let link = "hard-to-dangle";
 
-    scene.ucmd().args(&["-s", file_a]);
-    assert!(!at.is_symlink("no-such-dir"));
+    at.relative_symlink_dir(file_a, "no-such-dir");
 
     scene
         .ucmd()
         .args(&["-L", "no-such-dir", link])
         .fails()
-        .stderr_contains("failed to link 'no-such-dir'");
+        .stderr_contains("failed to access 'no-such-dir'");
 }
 
 #[test]
@@ -700,7 +699,7 @@ fn test_hard_logical_dir_fail() {
         .ucmd()
         .args(&["-L", target, "hard-to-dir-link"])
         .fails()
-        .stderr_contains("failed to link 'link-to-dir'");
+        .stderr_contains("failed to create hard link 'link-to-dir'");
 }
 
 #[test]
@@ -711,7 +710,7 @@ fn test_symlink_remove_existing_same_src_and_dest() {
     ucmd.args(&["-sf", "a", "a"])
         .fails()
         .code_is(1)
-        .stderr_contains("Same file");
+        .stderr_contains("'a' and 'a' are the same file");
     assert!(at.file_exists("a") && !at.symlink_exists("a"));
     assert_eq!(at.read("a"), "sample");
 }

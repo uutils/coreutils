@@ -488,6 +488,31 @@ pub fn paths_refer_to_same_file<P: AsRef<Path>>(p1: P, p2: P, dereference: bool)
     false
 }
 
+/// Converts absolute `path` to be relative to absolute `to` path.
+pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2) -> PathBuf {
+    let path = path.as_ref();
+    let to = to.as_ref();
+    let common_prefix_size = path
+        .components()
+        .zip(to.components())
+        .take_while(|(first, second)| first == second)
+        .count();
+    let path_suffix = path
+        .components()
+        .skip(common_prefix_size)
+        .map(|x| x.as_os_str());
+    let mut components: Vec<_> = to
+        .components()
+        .skip(common_prefix_size)
+        .map(|_| Component::ParentDir.as_os_str())
+        .chain(path_suffix)
+        .collect();
+    if components.is_empty() {
+        components.push(Component::CurDir.as_os_str());
+    }
+    components.iter().collect()
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
