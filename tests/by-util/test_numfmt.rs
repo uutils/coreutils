@@ -208,11 +208,16 @@ fn test_should_report_invalid_empty_number_on_blank_stdin() {
 
 #[test]
 fn test_should_report_invalid_suffix_on_stdin() {
-    new_ucmd!()
-        .args(&["--from=auto"])
-        .pipe_in("1k")
-        .run()
-        .stderr_is("numfmt: invalid suffix in input: '1k'\n");
+    for c in b'a'..=b'z' {
+        new_ucmd!()
+            .args(&["--from=auto"])
+            .pipe_in(format!("1{}", c as char))
+            .run()
+            .stderr_is(format!(
+                "numfmt: invalid suffix in input: '1{}'\n",
+                c as char
+            ));
+    }
 
     // GNU numfmt reports this one as “invalid number”
     new_ucmd!()

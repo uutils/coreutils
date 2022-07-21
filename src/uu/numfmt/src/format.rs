@@ -79,7 +79,7 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
         Some('E') => Some((RawSuffix::E, with_i)),
         Some('Z') => Some((RawSuffix::Z, with_i)),
         Some('Y') => Some((RawSuffix::Y, with_i)),
-        Some('0'..='9') => None,
+        Some('0'..='9') if !with_i => None,
         _ => return Err(format!("invalid suffix in input: {}", s.quote())),
     };
 

@@ -12,17 +12,17 @@ extern crate uucore;
 
 use clap::{crate_version, Arg, Command};
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult};
+use uucore::error::{FromIo, UError, UResult};
 use uucore::format_usage;
-use uucore::fs::{is_symlink, paths_refer_to_same_file};
+use uucore::fs::{is_symlink, make_path_relative_to, paths_refer_to_same_file};
 
 use std::borrow::Cow;
 use std::error::Error;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs;
 
-use std::io::{stdin, Result};
+use std::io::stdin;
 #[cfg(any(unix, target_os = "redox"))]
 use std::os::unix::fs::symlink;
 #[cfg(windows)]
@@ -55,8 +55,7 @@ pub enum OverwriteMode {
 enum LnError {
     TargetIsDirectory(PathBuf),
     SomeLinksFailed,
-    FailedToLink(PathBuf, PathBuf, String),
-    SameFile(),
+    SameFile(PathBuf, PathBuf),
     MissingDestination(PathBuf),
     ExtraOperand(OsString),
 }
@@ -65,13 +64,10 @@ impl Display for LnError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::TargetIsDirectory(s) => write!(f, "target {} is not a directory", s.quote()),
-            Self::FailedToLink(s, d, e) => {
-                write!(f, "failed to link {} to {}: {}", s.quote(), d.quote(), e)
+            Self::SameFile(s, d) => {
+                write!(f, "{} and {} are the same file", s.quote(), d.quote())
             }
-            Self::SameFile() => {
-                write!(f, "Same file")
-            }
-            Self::SomeLinksFailed => write!(f, "some links failed to create"),
+            Self::SomeLinksFailed => Ok(()),
             Self::MissingDestination(s) => {
                 write!(f, "missing destination file operand after {}", s.quote())
             }
@@ -89,14 +85,7 @@ impl Error for LnError {}
 
 impl UError for LnError {
     fn code(&self) -> i32 {
-        match self {
-            Self::TargetIsDirectory(_)
-            | Self::SomeLinksFailed
-            | Self::FailedToLink(_, _, _)
-            | Self::SameFile()
-            | Self::MissingDestination(_)
-            | Self::ExtraOperand(_) => 1,
-        }
+        1
     }
 }
 
@@ -315,15 +304,7 @@ fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
     }
     assert!(!files.is_empty());
 
-    match link(&files[0], &files[1], settings) {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            Err(
-                LnError::FailedToLink(files[0].to_owned(), files[1].to_owned(), e.to_string())
-                    .into(),
-            )
-        }
-    }
+    link(&files[0], &files[1], settings)
 }
 
 fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) -> UResult<()> {
@@ -374,12 +355,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             };
 
         if let Err(e) = link(srcpath, &targetpath, settings) {
-            show_error!(
-                "cannot link {} to {}: {}",
-                targetpath.quote(),
-                srcpath.quote(),
-                e
-            );
+            show_error!("{}", e);
             all_successful = false;
         }
     }
@@ -390,38 +366,23 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
     }
 }
 
-fn relative_path<'a>(src: &Path, dst: &Path) -> Result<Cow<'a, Path>> {
-    let src_abs = canonicalize(src, MissingHandling::Normal, ResolveMode::Logical)?;
-    let mut dst_abs = canonicalize(
-        dst.parent().unwrap(),
-        MissingHandling::Normal,
-        ResolveMode::Logical,
-    )?;
-    dst_abs.push(dst.components().last().unwrap());
-    let suffix_pos = src_abs
-        .components()
-        .zip(dst_abs.components())
-        .take_while(|(s, d)| s == d)
-        .count();
-
-    let src_iter = src_abs.components().skip(suffix_pos).map(|x| x.as_os_str());
-
-    let mut result: PathBuf = dst_abs
-        .components()
-        .skip(suffix_pos + 1)
-        .map(|_| OsStr::new(".."))
-        .chain(src_iter)
-        .collect();
-    if result.as_os_str().is_empty() {
-        result.push(".");
+fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
+    if let Ok(src_abs) = canonicalize(src, MissingHandling::Missing, ResolveMode::Physical) {
+        if let Ok(dst_abs) = canonicalize(
+            dst.parent().unwrap(),
+            MissingHandling::Missing,
+            ResolveMode::Physical,
+        ) {
+            return make_path_relative_to(src_abs, dst_abs).into();
+        }
     }
-    Ok(result.into())
+    src.into()
 }
 
 fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     let mut backup_path = None;
     let source: Cow<'_, Path> = if settings.relative {
-        relative_path(src, dst)?
+        relative_path(src, dst)
     } else {
         src.into()
     };
@@ -436,11 +397,11 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         if settings.backup == BackupMode::ExistingBackup && !settings.symbolic {
             // when ln --backup f f, it should detect that it is the same file
             if paths_refer_to_same_file(src, dst, true) {
-                return Err(LnError::SameFile().into());
+                return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
             }
         }
         if let Some(ref p) = backup_path {
-            fs::rename(dst, p)?;
+            fs::rename(dst, p).map_err_context(|| format!("cannot backup {}", dst.quote()))?;
         }
         match settings.overwrite {
             OverwriteMode::NoClobber => {}
@@ -455,7 +416,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
             }
             OverwriteMode::Force => {
                 if !is_symlink(dst) && paths_refer_to_same_file(src, dst, true) {
-                    return Err(LnError::SameFile().into());
+                    return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
                 }
                 if fs::remove_file(dst).is_ok() {};
                 // In case of error, don't do anything
@@ -470,11 +431,18 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
             // if we want to have an hard link,
             // source is a symlink and -L is passed
             // we want to resolve the symlink to create the hardlink
-            std::fs::canonicalize(&source)?
+            fs::canonicalize(&source)
+                .map_err_context(|| format!("failed to access {}", source.quote()))?
         } else {
             source.to_path_buf()
         };
-        fs::hard_link(&p, dst)?;
+        fs::hard_link(&p, dst).map_err_context(|| {
+            format!(
+                "failed to create hard link {} => {}",
+                source.quote(),
+                dst.quote()
+            )
+        })?;
     }
 
     if settings.verbose {
@@ -524,7 +492,7 @@ fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
 }
 
 #[cfg(windows)]
-pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> Result<()> {
+pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> std::io::Result<()> {
     if src.as_ref().is_dir() {
         symlink_dir(src, dst)
     } else {
