@@ -62,8 +62,7 @@ pub mod options {
         pub static LONG: &str = "long";
         pub static COLUMNS: &str = "C";
         pub static ACROSS: &str = "x";
-        // silently ignored (see #3624)
-        pub static TAB_SIZE: &str = "tabsize";
+        pub static TAB_SIZE: &str = "tabsize"; // silently ignored (see #3624)
         pub static COMMAS: &str = "m";
         pub static LONG_NO_OWNER: &str = "g";
         pub static LONG_NO_GROUP: &str = "o";
@@ -893,11 +892,11 @@ pub fn uu_app<'a>() -> Command<'a> {
                         options::format::COLUMNS,
                     ]),
             )
-            .arg(
-                // silently ignored (see #3624)
+            .arg( // silently ignored (see #3624)
                 Arg::new(options::format::TAB_SIZE)
                     .short('T')
                     .long(options::format::TAB_SIZE)
+                    .env("TABSIZE")
                     .takes_value(true)
                     .value_name("COLS")
                     .help("Assume tab stops at each COLS instead of 8 (unimplemented)")
