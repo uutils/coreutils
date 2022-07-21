@@ -37,10 +37,8 @@ const USAGE: &str = "{} [OPTIONS] [COMMAND [ARGS]]";
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
 
-    let mut niceness = unsafe {
-        nix::errno::Errno::clear();
-        libc::getpriority(PRIO_PROCESS, 0)
-    };
+    nix::errno::Errno::clear();
+    let mut niceness = unsafe { libc::getpriority(PRIO_PROCESS, 0) };
     if Error::last_os_error().raw_os_error().unwrap() != 0 {
         return Err(USimpleError::new(
             125,
