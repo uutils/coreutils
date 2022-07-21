@@ -134,3 +134,26 @@ pub(crate) fn count_bytes_and_lines_fast<R: Read>(
         }
     }
 }
+
+pub(crate) fn count_chars_fast<R: Read>(handle: &mut R) -> (WordCount, Option<io::Error>) {
+    /// Mask of the value bits of a continuation byte
+    const CONT_MASK: u8 = 0b0011_1111u8;
+    /// Value of the tag bits (tag mask is !CONT_MASK) of a continuation byte
+    const TAG_CONT_U8: u8 = 0b1000_0000u8;
+
+    let mut total = WordCount::default();
+    let mut buf = [0; BUF_SIZE];
+    loop {
+        match handle.read(&mut buf) {
+            Ok(0) => return (total, None),
+            Ok(n) => {
+                total.chars += buf[..n]
+                    .iter()
+                    .filter(|&&byte| (byte & !CONT_MASK) != TAG_CONT_U8)
+                    .count();
+            }
+            Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) => return (total, Some(e)),
+        }
+    }
+}
