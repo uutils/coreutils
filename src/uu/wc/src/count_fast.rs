@@ -135,6 +135,13 @@ pub(crate) fn count_bytes_and_lines_fast<R: Read>(
     }
 }
 
+/// Returns a WordCount that counts the number of Unicode characters encoded in UTF-8 read via a Reader.
+///
+/// This corresponds to the `-m` command line flag to wc.
+///
+/// # Arguments
+///
+/// * `R` - A Reader from which the UTF-8 stream will be read.
 pub(crate) fn count_chars_fast<R: Read>(handle: &mut R) -> (WordCount, Option<io::Error>) {
     /// Mask of the value bits of a continuation byte
     const CONT_MASK: u8 = 0b0011_1111u8;
