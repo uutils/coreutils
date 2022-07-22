@@ -3126,3 +3126,27 @@ fn test_tabsize_option() {
     scene.ucmd().args(&["--tabsize", "0"]).succeeds();
     scene.ucmd().arg("-T").fails();
 }
+
+#[ignore]
+#[test]
+fn test_tabsize_formatting() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    
+    at.touch("aaaaaaaa");
+    at.touch("bbbb");
+    at.touch("cccc");
+    at.touch("dddddddd");
+    
+    ucmd.args(&["-T", "4"])
+        .succeeds()
+        .stdout_is("aaaaaaaa bbbb\ncccc\t dddddddd");
+
+    ucmd.args(&["-T", "2"])
+        .succeeds()
+        .stdout_is("aaaaaaaa bbbb\ncccc\t\t dddddddd");
+ 
+    // use spaces
+    ucmd.args(&["-T", "0"])
+        .succeeds()
+        .stdout_is("aaaaaaaa bbbb\ncccc     dddddddd");
+}
