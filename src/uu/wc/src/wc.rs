@@ -13,7 +13,7 @@ extern crate uucore;
 mod count_fast;
 mod countable;
 mod word_count;
-use count_fast::{count_bytes_and_lines_fast, count_bytes_fast};
+use count_fast::{count_bytes_and_lines_fast, count_bytes_fast, count_chars_fast};
 use countable::WordCountable;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
@@ -315,6 +315,7 @@ fn word_count_from_reader<T: WordCountable>(
     ) {
         // Specialize scanning loop to improve the performance.
         (false, false, false, false, false) => unreachable!(),
+        (false, true, false, false, false) => count_chars_fast(&mut reader),
         (true, false, false, false, false) => {
             // Fast path when only show_bytes is true.
             let (bytes, error) = count_bytes_fast(&mut reader);
