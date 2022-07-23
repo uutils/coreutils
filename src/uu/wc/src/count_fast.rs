@@ -117,32 +117,21 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
     }
 }
 
-pub(crate) fn count_bytes_and_lines_fast<R: Read>(
-    handle: &mut R,
-) -> (WordCount, Option<io::Error>) {
-    let mut total = WordCount::default();
-    let mut buf = [0; BUF_SIZE];
-    loop {
-        match handle.read(&mut buf) {
-            Ok(0) => return (total, None),
-            Ok(n) => {
-                total.bytes += n;
-                total.lines += bytecount::count(&buf[..n], b'\n');
-            }
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
-            Err(e) => return (total, Some(e)),
-        }
-    }
-}
-
-/// Returns a WordCount that counts the number of Unicode characters encoded in UTF-8 read via a Reader.
+/// Returns a WordCount that counts the number of bytes, lines, and/or the number of Unicode characters encoded in UTF-8 read via a Reader.
 ///
-/// This corresponds to the `-m` command line flag to wc.
+/// This corresponds to the `-c`, `-l` and `-m` command line flags to wc.
 ///
 /// # Arguments
 ///
 /// * `R` - A Reader from which the UTF-8 stream will be read.
-pub(crate) fn count_chars_fast<R: Read>(handle: &mut R) -> (WordCount, Option<io::Error>) {
+pub(crate) fn count_bytes_chars_and_lines_fast<
+    R: Read,
+    const COUNT_BYTES: bool,
+    const COUNT_CHARS: bool,
+    const COUNT_LINES: bool,
+>(
+    handle: &mut R,
+) -> (WordCount, Option<io::Error>) {
     /// Mask of the value bits of a continuation byte
     const CONT_MASK: u8 = 0b0011_1111u8;
     /// Value of the tag bits (tag mask is !CONT_MASK) of a continuation byte
@@ -154,10 +143,18 @@ pub(crate) fn count_chars_fast<R: Read>(handle: &mut R) -> (WordCount, Option<io
         match handle.read(&mut buf) {
             Ok(0) => return (total, None),
             Ok(n) => {
-                total.chars += buf[..n]
-                    .iter()
-                    .filter(|&&byte| (byte & !CONT_MASK) != TAG_CONT_U8)
-                    .count();
+                if COUNT_BYTES {
+                    total.bytes += n;
+                }
+                if COUNT_CHARS {
+                    total.chars += buf[..n]
+                        .iter()
+                        .filter(|&&byte| (byte & !CONT_MASK) != TAG_CONT_U8)
+                        .count();
+                }
+                if COUNT_LINES {
+                    total.lines += bytecount::count(&buf[..n], b'\n');
+                }
             }
             Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
             Err(e) => return (total, Some(e)),
