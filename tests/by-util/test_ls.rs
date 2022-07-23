@@ -3131,12 +3131,12 @@ fn test_tabsize_option() {
 #[test]
 fn test_tabsize_formatting() {
     let (at, mut ucmd) = at_and_ucmd!();
-    
+
     at.touch("aaaaaaaa");
     at.touch("bbbb");
     at.touch("cccc");
     at.touch("dddddddd");
-    
+
     ucmd.args(&["-T", "4"])
         .succeeds()
         .stdout_is("aaaaaaaa bbbb\ncccc\t dddddddd");
@@ -3144,7 +3144,7 @@ fn test_tabsize_formatting() {
     ucmd.args(&["-T", "2"])
         .succeeds()
         .stdout_is("aaaaaaaa bbbb\ncccc\t\t dddddddd");
- 
+
     // use spaces
     ucmd.args(&["-T", "0"])
         .succeeds()
