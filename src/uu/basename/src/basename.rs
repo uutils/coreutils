@@ -31,6 +31,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
+
+    // Since options have to go before names,
+    // if the first argument is not an option, then there is no option,
+    // and that implies there is exactly one name (no option => no -a option),
+    // so simple format is used
+    if args.len() > 1 && !args[1].starts_with('-') {
+        if args.len() > 3 {
+            return Err(UUsageError::new(
+                1,
+                format!("extra operand {}", args[3].to_string().quote()),
+            ));
+        }
+        let suffix = if args.len() > 2 { args[2].as_ref() } else { "" };
+        println!("{}", basename(&args[1], suffix));
+        return Ok(());
+    }
+
     //
     // Argument parsing
     //
