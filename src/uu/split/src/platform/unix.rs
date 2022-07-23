@@ -1,8 +1,11 @@
 use std::env;
 use std::io::Write;
-use std::io::{BufWriter, Result};
+use std::io::{BufWriter, Error, ErrorKind, Result};
+use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use uucore::crash;
+use uucore::fs;
+use uucore::fs::FileInformation;
 
 /// A writer that writes to a shell_process' stdin
 ///
@@ -66,7 +69,7 @@ impl FilterWriter {
     ///
     /// * `command` - The shell command to execute
     /// * `filepath` - Path of the output file (forwarded to command as $FILE)
-    fn new(command: &str, filepath: &str) -> Self {
+    fn new(command: &str, filepath: &str) -> Result<Self> {
         // set $FILE, save previous value (if there was one)
         let _with_env_var_set = WithEnvVarSet::new("FILE", filepath);
 
@@ -75,10 +78,9 @@ impl FilterWriter {
                 .arg("-c")
                 .arg(command)
                 .stdin(Stdio::piped())
-                .spawn()
-                .expect("Couldn't spawn filter command");
+                .spawn()?;
 
-        Self { shell_process }
+        Ok(Self { shell_process })
     }
 }
 
@@ -107,19 +109,35 @@ impl Drop for FilterWriter {
 pub fn instantiate_current_writer(
     filter: &Option<String>,
     filename: &str,
-) -> BufWriter<Box<dyn Write>> {
+) -> Result<BufWriter<Box<dyn Write>>> {
     match filter {
-        None => BufWriter::new(Box::new(
+        None => Ok(BufWriter::new(Box::new(
             // write to the next file
             std::fs::OpenOptions::new()
                 .write(true)
                 .create(true)
+                .truncate(true)
                 .open(std::path::Path::new(&filename))
-                .unwrap(),
-        ) as Box<dyn Write>),
-        Some(ref filter_command) => BufWriter::new(Box::new(
+                .map_err(|_| {
+                    Error::new(
+                        ErrorKind::Other,
+                        format!("unable to open '{}'; aborting", filename),
+                    )
+                })?,
+        ) as Box<dyn Write>)),
+        Some(ref filter_command) => Ok(BufWriter::new(Box::new(
             // spawn a shell command and write to it
-            FilterWriter::new(filter_command, filename),
-        ) as Box<dyn Write>),
+            FilterWriter::new(filter_command, filename)?,
+        ) as Box<dyn Write>)),
     }
+}
+
+pub fn paths_refer_to_same_file(p1: &str, p2: &str) -> bool {
+    // We have to take symlinks and relative paths into account.
+    let p1 = if p1 == "-" {
+        FileInformation::from_file(&std::io::stdin())
+    } else {
+        FileInformation::from_path(Path::new(&p1), true)
+    };
+    fs::infos_refer_to_same_file(p1, FileInformation::from_path(Path::new(p2), true))
 }

@@ -485,8 +485,20 @@ pub fn dir_strip_dot_for_creation(path: &Path) -> PathBuf {
 /// Checks if `p1` and `p2` are the same file.
 /// If error happens when trying to get files' metadata, returns false
 pub fn paths_refer_to_same_file<P: AsRef<Path>>(p1: P, p2: P, dereference: bool) -> bool {
-    if let Ok(info1) = FileInformation::from_path(p1, dereference) {
-        if let Ok(info2) = FileInformation::from_path(p2, dereference) {
+    infos_refer_to_same_file(
+        FileInformation::from_path(p1, dereference),
+        FileInformation::from_path(p2, dereference),
+    )
+}
+
+/// Checks if `p1` and `p2` are the same file information.
+/// If error happens when trying to get files' metadata, returns false
+pub fn infos_refer_to_same_file(
+    info1: IOResult<FileInformation>,
+    info2: IOResult<FileInformation>,
+) -> bool {
+    if let Ok(info1) = info1 {
+        if let Ok(info2) = info2 {
             return info1 == info2;
         }
     }
