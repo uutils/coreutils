@@ -3127,7 +3127,7 @@ fn test_tabsize_option() {
     scene.ucmd().arg("-T").fails();
 }
 
-#[ignore]
+#[ignore = "issue #3624"]
 #[test]
 fn test_tabsize_formatting() {
     let (at, mut ucmd) = at_and_ucmd!();
