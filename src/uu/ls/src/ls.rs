@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf tabsize
+// spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf tabsize dired
 
 #[macro_use]
 extern crate uucore;
@@ -137,6 +137,8 @@ pub mod options {
     pub static IGNORE: &str = "ignore";
     pub static CONTEXT: &str = "context";
     pub static GROUP_DIRECTORIES_FIRST: &str = "group-directories-first";
+    pub static ZERO: &str = "zero";
+    pub static DIRED: &str = "dired";
 }
 
 const DEFAULT_TERM_WIDTH: u16 = 80;
@@ -337,6 +339,7 @@ pub struct Config {
     context: bool,
     selinux_supported: bool,
     group_directories_first: bool,
+    eol: char,
 }
 
 // Fields that can be removed or added to the long format
@@ -481,19 +484,13 @@ impl Config {
             Time::Modification
         };
 
-        let needs_color = match options.value_of(options::COLOR) {
+        let mut needs_color = match options.value_of(options::COLOR) {
             None => options.is_present(options::COLOR),
             Some(val) => match val {
                 "" | "always" | "yes" | "force" => true,
                 "auto" | "tty" | "if-tty" => atty::is(atty::Stream::Stdout),
                 /* "never" | "no" | "none" | */ _ => false,
             },
-        };
-
-        let color = if needs_color {
-            Some(LsColors::from_env().unwrap_or_default())
-        } else {
-            None
         };
 
         let cmd_line_bs = options.value_of(options::size::BLOCK_SIZE);
@@ -607,7 +604,7 @@ impl Config {
         };
 
         #[allow(clippy::needless_bool)]
-        let show_control = if options.is_present(options::HIDE_CONTROL_CHARS) {
+        let mut show_control = if options.is_present(options::HIDE_CONTROL_CHARS) {
             false
         } else if options.is_present(options::SHOW_CONTROL_CHARS) {
             true
@@ -619,7 +616,7 @@ impl Config {
             .value_of(options::QUOTING_STYLE)
             .map(|cmd_line_qs| cmd_line_qs.to_owned());
 
-        let quoting_style = if let Some(style) = opt_quoting_style {
+        let mut quoting_style = if let Some(style) = opt_quoting_style {
             match style.as_str() {
                 "literal" => QuotingStyle::Literal { show_control },
                 "shell" => QuotingStyle::Shell {
@@ -750,6 +747,81 @@ impl Config {
             }
         }
 
+        // According to ls info page, `--zero` implies the following flags:
+        //  - `--show-control-chars`
+        //  - `--format=single-column`
+        //  - `--color=none`
+        //  - `--quoting-style=literal`
+        // Current GNU ls implementation allows `--zero` behaviour to be
+        // overridden by later flags.
+        let zero_formats_opts = [
+            options::format::ACROSS,
+            options::format::COLUMNS,
+            options::format::COMMAS,
+            options::format::LONG,
+            options::format::LONG_NO_GROUP,
+            options::format::LONG_NO_OWNER,
+            options::format::LONG_NUMERIC_UID_GID,
+            options::format::ONE_LINE,
+            options::FORMAT,
+        ];
+        let zero_colors_opts = [options::COLOR];
+        let zero_show_control_opts = [options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS];
+        let zero_quoting_style_opts = [
+            options::QUOTING_STYLE,
+            options::quoting::C,
+            options::quoting::ESCAPE,
+            options::quoting::LITERAL,
+        ];
+        let get_last =
+            |flag: &str| -> usize { options.indices_of(flag).and_then(|x| x.last()).unwrap_or(0) };
+        if get_last(options::ZERO)
+            > zero_formats_opts
+                .into_iter()
+                .map(get_last)
+                .max()
+                .unwrap_or(0)
+        {
+            format = if format == Format::Long {
+                format
+            } else {
+                Format::OneLine
+            };
+        }
+        if get_last(options::ZERO)
+            > zero_colors_opts
+                .into_iter()
+                .map(get_last)
+                .max()
+                .unwrap_or(0)
+        {
+            needs_color = false;
+        }
+        if get_last(options::ZERO)
+            > zero_show_control_opts
+                .into_iter()
+                .map(get_last)
+                .max()
+                .unwrap_or(0)
+        {
+            show_control = true;
+        }
+        if get_last(options::ZERO)
+            > zero_quoting_style_opts
+                .into_iter()
+                .map(get_last)
+                .max()
+                .unwrap_or(0)
+        {
+            quoting_style = QuotingStyle::Literal { show_control };
+        }
+
+        let color = if needs_color {
+            Some(LsColors::from_env().unwrap_or_default())
+        } else {
+            None
+        };
+
         let dereference = if options.is_present(options::dereference::ALL) {
             Dereference::All
         } else if options.is_present(options::dereference::ARGS) {
@@ -798,6 +870,11 @@ impl Config {
                 }
             },
             group_directories_first: options.is_present(options::GROUP_DIRECTORIES_FIRST),
+            eol: if options.is_present(options::ZERO) {
+                '\0'
+            } else {
+                '\n'
+            },
         })
     }
 }
@@ -912,6 +989,18 @@ pub fn uu_app<'a>() -> Command<'a> {
                         options::format::ACROSS,
                         options::format::COLUMNS,
                     ]),
+            )
+            .arg(
+                Arg::new(options::ZERO)
+                    .long(options::ZERO)
+                    .conflicts_with(options::DIRED)
+                    .help("List entries separated by ASCII NUL characters."),
+            )
+            .arg(
+                Arg::new(options::DIRED)
+                .long(options::DIRED)
+                .short('D')
+                .hide(true),
             )
             // The next four arguments do not override with the other format
             // options, see the comment in Config::from for the reason.
@@ -1884,7 +1973,12 @@ fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             .as_ref()
             .map_or(0, |md| get_block_size(md, config));
     }
-    writeln!(out, "total {}", display_size(total_size, config))?;
+    write!(
+        out,
+        "total {}{}",
+        display_size(total_size, config),
+        config.eol
+    )?;
     Ok(())
 }
 
@@ -1994,12 +2088,12 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                 // Current col is never zero again if names have been printed.
                 // So we print a newline.
                 if current_col > 0 {
-                    writeln!(out,)?;
+                    write!(out, "{}", config.eol)?;
                 }
             }
             _ => {
                 for name in names {
-                    writeln!(out, "{}", name.contents)?;
+                    write!(out, "{}{}", name.contents, config.eol)?;
                 }
             }
         };
@@ -2199,7 +2293,7 @@ fn display_item_long(
 
         let dfn = display_file_name(item, config, None, "".to_owned(), out).contents;
 
-        writeln!(out, " {} {}", display_date(md, config), dfn)?;
+        write!(out, " {} {}{}", display_date(md, config), dfn, config.eol)?;
     } else {
         #[cfg(unix)]
         let leading_char = {
