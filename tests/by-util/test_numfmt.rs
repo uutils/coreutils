@@ -3,6 +3,14 @@
 use crate::common::util::*;
 
 #[test]
+fn test_should_not_round_floats() {
+    new_ucmd!()
+        .args(&["0.99", "1.01", "1.1", "1.22", ".1", "-0.1"])
+        .succeeds()
+        .stdout_is("0.99\n1.01\n1.1\n1.22\n0.1\n-0.1\n");
+}
+
+#[test]
 fn test_from_si() {
     new_ucmd!()
         .args(&["--from=si"])

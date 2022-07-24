@@ -17,6 +17,7 @@ pub const IEC_BASES: [f64; 10] = [
 
 pub type WithI = bool;
 
+#[derive(PartialEq)]
 pub enum Unit {
     Auto,
     Si,
