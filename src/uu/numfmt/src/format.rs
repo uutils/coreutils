@@ -145,7 +145,16 @@ fn transform_from(s: &str, opts: &TransformOptions) -> Result<f64> {
     let (i, suffix) = parse_suffix(s)?;
     let i = i * (opts.from_unit as f64);
 
-    remove_suffix(i, suffix, &opts.from).map(|n| if n < 0.0 { -n.abs().ceil() } else { n.ceil() })
+    remove_suffix(i, suffix, &opts.from).map(|n| {
+        // GNU numfmt doesn't round values if no --from argument is provided by the user
+        if opts.from == Unit::None {
+            n
+        } else if n < 0.0 {
+            -n.abs().ceil()
+        } else {
+            n.ceil()
+        }
+    })
 }
 
 /// Divide numerator by denominator, with rounding.
