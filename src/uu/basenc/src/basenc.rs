@@ -18,6 +18,7 @@ use uucore::{
 };
 
 use std::io::{stdin, Read};
+use uucore::error::UClapError;
 
 static ABOUT: &str = "\
 With no FILE, or when FILE is -, read standard input.
@@ -49,10 +50,12 @@ pub fn uu_app<'a>() -> Command<'a> {
 }
 
 fn parse_cmd_args(args: impl uucore::Args) -> UResult<(Config, Format)> {
-    let matches = uu_app().get_matches_from(
-        args.collect_str(InvalidEncodingHandling::ConvertLossy)
-            .accept_any(),
-    );
+    let matches = uu_app()
+        .try_get_matches_from(
+            args.collect_str(InvalidEncodingHandling::ConvertLossy)
+                .accept_any(),
+        )
+        .with_exit_code(1)?;
     let format = ENCODINGS
         .iter()
         .find(|encoding| matches.is_present(encoding.0))
