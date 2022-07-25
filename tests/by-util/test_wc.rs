@@ -105,6 +105,33 @@ fn test_utf8_chars() {
 }
 
 #[test]
+fn test_utf8_bytes_chars() {
+    new_ucmd!()
+        .arg("-cm")
+        .pipe_in_fixture("UTF_8_weirdchars.txt")
+        .run()
+        .stdout_is("    442     513\n");
+}
+
+#[test]
+fn test_utf8_bytes_lines() {
+    new_ucmd!()
+        .arg("-cl")
+        .pipe_in_fixture("UTF_8_weirdchars.txt")
+        .run()
+        .stdout_is("     25     513\n");
+}
+
+#[test]
+fn test_utf8_bytes_chars_lines() {
+    new_ucmd!()
+        .arg("-cml")
+        .pipe_in_fixture("UTF_8_weirdchars.txt")
+        .run()
+        .stdout_is("     25     442     513\n");
+}
+
+#[test]
 fn test_utf8_chars_words() {
     new_ucmd!()
         .arg("-mw")

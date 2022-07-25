@@ -13,7 +13,7 @@ extern crate uucore;
 mod count_fast;
 mod countable;
 mod word_count;
-use count_fast::{count_bytes_and_lines_fast, count_bytes_fast, count_chars_fast};
+use count_fast::{count_bytes_chars_and_lines_fast, count_bytes_fast};
 use countable::WordCountable;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
@@ -315,7 +315,7 @@ fn word_count_from_reader<T: WordCountable>(
     ) {
         // Specialize scanning loop to improve the performance.
         (false, false, false, false, false) => unreachable!(),
-        (false, true, false, false, false) => count_chars_fast(&mut reader),
+
         (true, false, false, false, false) => {
             // Fast path when only show_bytes is true.
             let (bytes, error) = count_bytes_fast(&mut reader);
@@ -327,10 +327,27 @@ fn word_count_from_reader<T: WordCountable>(
                 error,
             )
         }
-        (false, false, true, false, false) | (true, false, true, false, false) => {
-            // Fast path when only (show_bytes || show_lines) is true.
-            count_bytes_and_lines_fast(&mut reader)
+
+        // Fast paths that can be computed without Unicode decoding.
+        (false, false, true, false, false) => {
+            count_bytes_chars_and_lines_fast::<_, false, false, true>(&mut reader)
         }
+        (false, true, false, false, false) => {
+            count_bytes_chars_and_lines_fast::<_, false, true, false>(&mut reader)
+        }
+        (false, true, true, false, false) => {
+            count_bytes_chars_and_lines_fast::<_, false, true, true>(&mut reader)
+        }
+        (true, false, true, false, false) => {
+            count_bytes_chars_and_lines_fast::<_, true, false, true>(&mut reader)
+        }
+        (true, true, false, false, false) => {
+            count_bytes_chars_and_lines_fast::<_, true, true, false>(&mut reader)
+        }
+        (true, true, true, false, false) => {
+            count_bytes_chars_and_lines_fast::<_, true, true, true>(&mut reader)
+        }
+
         (_, false, false, false, true) => {
             word_count_from_reader_specialized::<_, false, false, false, true>(reader)
         }
@@ -349,9 +366,6 @@ fn word_count_from_reader<T: WordCountable>(
         (_, false, true, true, true) => {
             word_count_from_reader_specialized::<_, false, true, true, true>(reader)
         }
-        (_, true, false, false, false) => {
-            word_count_from_reader_specialized::<_, true, false, false, false>(reader)
-        }
         (_, true, false, false, true) => {
             word_count_from_reader_specialized::<_, true, false, false, true>(reader)
         }
@@ -360,9 +374,6 @@ fn word_count_from_reader<T: WordCountable>(
         }
         (_, true, false, true, true) => {
             word_count_from_reader_specialized::<_, true, false, true, true>(reader)
-        }
-        (_, true, true, false, false) => {
-            word_count_from_reader_specialized::<_, true, true, false, false>(reader)
         }
         (_, true, true, false, true) => {
             word_count_from_reader_specialized::<_, true, true, false, true>(reader)
