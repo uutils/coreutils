@@ -45,6 +45,7 @@ fn bsd_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
         }
     }
 
+    // Report blocks read in terms of 1024-byte blocks.
     let blocks_read = div_ceil(bytes_read, 1024);
     (blocks_read, checksum)
 }
@@ -69,6 +70,7 @@ fn sysv_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
     ret = (ret & 0xffff) + (ret >> 16);
     ret = (ret & 0xffff) + (ret >> 16);
 
+    // Report blocks read in terms of 512-byte blocks.
     let blocks_read = div_ceil(bytes_read, 512);
     (blocks_read, ret as u16)
 }
