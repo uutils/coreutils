@@ -13,11 +13,11 @@ $ cargo build --release --package uu_sum
 and then you can time how it long it takes to checksum the file by running
 
 ```shell
-$ /usr/bin/time ./target/release/sum wikidatawiki-20211001-pages-logging.xml
+$ time ./target/release/sum wikidatawiki-20211001-pages-logging.xml
 ```
 
 For more systematic measurements that include warm-ups, repetitions and comparisons, [Hyperfine](https://github.com/sharkdp/hyperfine) can be helpful. For example, to compare this implementation to the one provided by your distribution run
 
 ```shell
-$ hyperfine "./target/release/sum wikidatawiki-20211001-pages-logging.xml" "/usr/bin/sum wikidatawiki-20211001-pages-logging.xml"
+$ hyperfine "./target/release/sum wikidatawiki-20211001-pages-logging.xml" "sum wikidatawiki-20211001-pages-logging.xml"
 ```
