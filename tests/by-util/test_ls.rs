@@ -1,4 +1,4 @@
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc
 
 #[cfg(not(windows))]
 extern crate libc;
@@ -3116,4 +3116,37 @@ fn test_dereference_symlink_file_color() {
     ucmd.args(&["-L", "--color", "dir1"])
         .succeeds()
         .stdout_is(out_exp);
+}
+
+#[test]
+fn test_tabsize_option() {
+    let scene = TestScenario::new(util_name!());
+
+    scene.ucmd().args(&["-T", "3"]).succeeds();
+    scene.ucmd().args(&["--tabsize", "0"]).succeeds();
+    scene.ucmd().arg("-T").fails();
+}
+
+#[ignore = "issue #3624"]
+#[test]
+fn test_tabsize_formatting() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("aaaaaaaa");
+    at.touch("bbbb");
+    at.touch("cccc");
+    at.touch("dddddddd");
+
+    ucmd.args(&["-T", "4"])
+        .succeeds()
+        .stdout_is("aaaaaaaa bbbb\ncccc\t dddddddd");
+
+    ucmd.args(&["-T", "2"])
+        .succeeds()
+        .stdout_is("aaaaaaaa bbbb\ncccc\t\t dddddddd");
+
+    // use spaces
+    ucmd.args(&["-T", "0"])
+        .succeeds()
+        .stdout_is("aaaaaaaa bbbb\ncccc     dddddddd");
 }

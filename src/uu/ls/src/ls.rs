@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf
+// spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf tabsize
 
 #[macro_use]
 extern crate uucore;
@@ -62,6 +62,7 @@ pub mod options {
         pub static LONG: &str = "long";
         pub static COLUMNS: &str = "C";
         pub static ACROSS: &str = "x";
+        pub static TAB_SIZE: &str = "tabsize"; // silently ignored (see #3624)
         pub static COMMAS: &str = "m";
         pub static LONG_NO_OWNER: &str = "g";
         pub static LONG_NO_GROUP: &str = "o";
@@ -890,6 +891,15 @@ pub fn uu_app<'a>() -> Command<'a> {
                         options::format::ACROSS,
                         options::format::COLUMNS,
                     ]),
+            )
+            .arg( // silently ignored (see #3624)
+                Arg::new(options::format::TAB_SIZE)
+                    .short('T')
+                    .long(options::format::TAB_SIZE)
+                    .env("TABSIZE")
+                    .takes_value(true)
+                    .value_name("COLS")
+                    .help("Assume tab stops at each COLS instead of 8 (unimplemented)")
             )
             .arg(
                 Arg::new(options::format::COMMAS)
