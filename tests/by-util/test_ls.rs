@@ -878,13 +878,17 @@ fn test_ls_zero() {
             .ucmd()
             .args(&["--zero", "--quoting-style=c"])
             .succeeds()
-            .stdout_only("\"0-test-zero\"\x00\"1\\ntest-zero\"\x00\"2-test-zero\"\x00\"3-test-zero\"\x00");
+            .stdout_only(
+                "\"0-test-zero\"\x00\"1\\ntest-zero\"\x00\"2-test-zero\"\x00\"3-test-zero\"\x00",
+            );
 
         scene
             .ucmd()
             .args(&["--zero", "--color=always"])
             .succeeds()
-            .stdout_only("\x1b[1;34m0-test-zero\x1b[0m\x001\ntest-zero\x002-test-zero\x003-test-zero\x00");
+            .stdout_only(
+                "\x1b[1;34m0-test-zero\x1b[0m\x001\ntest-zero\x002-test-zero\x003-test-zero\x00",
+            );
 
         scene
             .ucmd()
