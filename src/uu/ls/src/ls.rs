@@ -752,7 +752,7 @@ impl Config {
         //  - `--format=single-column`
         //  - `--color=none`
         //  - `--quoting-style=literal`
-        // Current GNU ls implementation allows `--zero` behaviour to be
+        // Current GNU ls implementation allows `--zero` Behavior to be
         // overridden by later flags.
         let zero_formats_opts = [
             options::format::ACROSS,
