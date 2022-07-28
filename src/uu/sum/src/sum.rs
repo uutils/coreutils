@@ -23,8 +23,10 @@ static USAGE: &str = "{} [OPTION]... [FILE]...";
 static SUMMARY: &str = "Checksum and count the blocks in a file.\n\
                         With no FILE, or when  FILE is -, read standard input.";
 
-// This can be replaced with usize::div_ceil once it is stabilized
-fn div_ceil(a: usize, b: usize) -> usize {
+// This can be replaced with usize::div_ceil once it is stabilized.
+// This implementation approach is optimized for when `b` is a constant,
+// particularly a power of two.
+const fn div_ceil(a: usize, b: usize) -> usize {
     (a + b - 1) / b
 }
 
