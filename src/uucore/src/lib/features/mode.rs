@@ -40,6 +40,10 @@ pub fn parse_symbolic(
     umask: u32,
     considering_dir: bool,
 ) -> Result<u32, String> {
+    if mode == "+" {
+        return Ok(fperm | 0o775 & !umask);
+    }
+
     let (mask, pos) = parse_levels(mode);
     if pos == mode.len() {
         return Err(format!("invalid mode ({})", mode));

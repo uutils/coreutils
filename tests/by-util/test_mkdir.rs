@@ -100,6 +100,16 @@ fn test_symbolic_alteration() {
 
 #[test]
 #[cfg(not(windows))]
+fn test_no_symbolic() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("-m").arg("+").arg(TEST_DIR1).succeeds();
+    let perms = at.metadata(TEST_DIR1).permissions().mode();
+    assert_eq!(perms, 0o40775);
+}
+
+#[test]
+#[cfg(not(windows))]
 fn test_multi_symbolic() {
     let (at, mut ucmd) = at_and_ucmd!();
 
