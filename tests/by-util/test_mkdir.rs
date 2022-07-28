@@ -93,9 +93,19 @@ fn test_symbolic_mode() {
 fn test_symbolic_alteration() {
     let (at, mut ucmd) = at_and_ucmd!();
 
+    let last = unsafe { umask(0) };
+
+    unsafe {
+        umask(0o555);
+    }
+
     ucmd.arg("-m").arg("-w").arg(TEST_DIR1).succeeds();
     let perms = at.metadata(TEST_DIR1).permissions().mode();
-    assert_eq!(perms, 0o40555);
+    assert_eq!(perms, 0o40000);
+
+    unsafe {
+        umask(last);
+    }
 }
 
 #[test]

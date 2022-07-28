@@ -20,8 +20,6 @@ use uucore::mode;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
 use uucore::{format_usage, InvalidEncodingHandling};
 
-static DEFAULT_PERM: u32 = 0o755;
-
 static ABOUT: &str = "Create the given DIRECTORY(ies) if they do not exist";
 const USAGE: &str = "{} [OPTION]... [USER]";
 
@@ -42,11 +40,11 @@ fn get_mode(_matches: &ArgMatches, _mode_had_minus_prefix: bool) -> Result<u32, 
 }
 
 #[cfg(not(windows))]
-fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, String> {
+fn get_mode(matches: &ArgMatches, mut mode_had_minus_prefix: bool) -> Result<u32, String> {
     let digits: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
     // Translate a ~str in octal form to u16, default to 755
     // Not tested on Windows
-    let mut new_mode = DEFAULT_PERM;
+    let mut new_mode = !mode::get_umask() & 0o0777;
     match matches.value_of(options::MODE) {
         Some(m) => {
             for mode in m.split(',') {
@@ -55,6 +53,7 @@ fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, St
                 } else {
                     let cmode = if mode_had_minus_prefix {
                         // clap parsing is finished, now put prefix back
+                        mode_had_minus_prefix = false;
                         format!("-{}", mode)
                     } else {
                         mode.to_string()
