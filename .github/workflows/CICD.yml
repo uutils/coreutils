@@ -916,7 +916,7 @@ jobs:
     - uses: Swatinem/rust-cache@v1
     - name: Prepare, build and test
       ## spell-checker:ignore (ToDO) sshfs usesh vmactions
-      uses: vmactions/freebsd-vm@v0.2.0
+      uses: vmactions/freebsd-vm@v0.2.1
       with:
         usesh: true
         # sync: sshfs
