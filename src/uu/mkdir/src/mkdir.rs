@@ -1,4 +1,4 @@
-//  * This file is part of the uutils coreutils package.
+//  * this file is part of the uutils coreutils package.
 //  *
 //  * (c) Nicholas Juszczak <juszczakn@gmail.com>
 //  *
@@ -19,6 +19,8 @@ use uucore::error::{UResult, USimpleError};
 use uucore::mode;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
 use uucore::{format_usage, InvalidEncodingHandling};
+
+static DEFAULT_PERM: u32 = 0o775;
 
 static ABOUT: &str = "Create the given DIRECTORY(ies) if they do not exist";
 const USAGE: &str = "{} [OPTION]... [USER]";
