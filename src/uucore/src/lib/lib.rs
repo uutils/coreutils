@@ -29,6 +29,7 @@ pub use crate::mods::ranges;
 pub use crate::mods::version_cmp;
 
 // * string parsing modules
+pub use crate::parser::parse_glob;
 pub use crate::parser::parse_size;
 pub use crate::parser::parse_time;
 
