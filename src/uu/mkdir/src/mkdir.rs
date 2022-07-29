@@ -1,4 +1,4 @@
-//  * this file is part of the uutils coreutils package.
+//  * This file is part of the uutils coreutils package.
 //  *
 //  * (c) Nicholas Juszczak <juszczakn@gmail.com>
 //  *
