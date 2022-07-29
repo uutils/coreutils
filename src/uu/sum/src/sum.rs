@@ -23,14 +23,21 @@ static USAGE: &str = "{} [OPTION]... [FILE]...";
 static SUMMARY: &str = "Checksum and count the blocks in a file.\n\
                         With no FILE, or when  FILE is -, read standard input.";
 
+// This can be replaced with usize::div_ceil once it is stabilized.
+// This implementation approach is optimized for when `b` is a constant,
+// particularly a power of two.
+const fn div_ceil(a: usize, b: usize) -> usize {
+    (a + b - 1) / b
+}
+
 fn bsd_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
-    let mut buf = [0; 1024];
-    let mut blocks_read = 0;
+    let mut buf = [0; 4096];
+    let mut bytes_read = 0;
     let mut checksum: u16 = 0;
     loop {
         match reader.read(&mut buf) {
             Ok(n) if n != 0 => {
-                blocks_read += 1;
+                bytes_read += n;
                 for &byte in buf[..n].iter() {
                     checksum = (checksum >> 1) + ((checksum & 1) << 15);
                     checksum = checksum.wrapping_add(u16::from(byte));
@@ -40,18 +47,20 @@ fn bsd_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
         }
     }
 
+    // Report blocks read in terms of 1024-byte blocks.
+    let blocks_read = div_ceil(bytes_read, 1024);
     (blocks_read, checksum)
 }
 
 fn sysv_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
-    let mut buf = [0; 512];
-    let mut blocks_read = 0;
+    let mut buf = [0; 4096];
+    let mut bytes_read = 0;
     let mut ret = 0u32;
 
     loop {
         match reader.read(&mut buf) {
             Ok(n) if n != 0 => {
-                blocks_read += 1;
+                bytes_read += n;
                 for &byte in buf[..n].iter() {
                     ret = ret.wrapping_add(u32::from(byte));
                 }
@@ -63,6 +72,8 @@ fn sysv_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
     ret = (ret & 0xffff) + (ret >> 16);
     ret = (ret & 0xffff) + (ret >> 16);
 
+    // Report blocks read in terms of 512-byte blocks.
+    let blocks_read = div_ceil(bytes_read, 512);
     (blocks_read, ret as u16)
 }
 
