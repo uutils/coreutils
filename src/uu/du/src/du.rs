@@ -37,6 +37,7 @@ use uucore::display::{print_verbatim, Quotable};
 use uucore::error::FromIo;
 use uucore::error::{UError, UResult};
 use uucore::format_usage;
+use uucore::parse_glob;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::InvalidEncodingHandling;
 #[cfg(windows)]
@@ -504,7 +505,7 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
         if matches.is_present(options::VERBOSE) {
             println!("adding {:?} to the exclude list ", &f);
         }
-        match Pattern::new(&f) {
+        match parse_glob::from_str(&f) {
             Ok(glob) => exclude_patterns.push(glob),
             Err(err) => return Err(DuError::InvalidGlob(err.to_string()).into()),
         }
@@ -606,12 +607,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         let path = PathBuf::from(&path_string);
+        // Check existence of path provided in argument
         if let Ok(stat) = Stat::new(path, &options) {
+            // Kick off the computation of disk usage from the initial path
             let mut inodes: HashSet<FileInfo> = HashSet::new();
             if let Some(inode) = stat.inode {
                 inodes.insert(inode);
             }
             let iter = du(stat, &options, 0, &mut inodes, &excludes);
+
+            // Sum up all the returned `Stat`s and display results
             let (_, len) = iter.size_hint();
             let len = len.unwrap();
             for (index, stat) in iter.enumerate() {

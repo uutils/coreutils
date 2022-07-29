@@ -748,6 +748,40 @@ fn test_du_exclude_mix() {
 }
 
 #[test]
+// Disable on Windows because we are looking for /
+// And the tests would be more complex if we have to support \ too
+#[cfg(not(target_os = "windows"))]
+fn test_du_complex_exclude_patterns() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("azerty/xcwww/azeaze");
+    at.mkdir_all("azerty/xcwww/qzerty");
+    at.mkdir_all("azerty/xcwww/amazing");
+
+    // Negation in glob should work with both ^ and !
+    let result = ts
+        .ucmd()
+        .arg("--exclude=azerty/*/[^q]*")
+        .arg("azerty")
+        .succeeds();
+    assert!(!result.stdout_str().contains("amazing"));
+    assert!(result.stdout_str().contains("qzerty"));
+    assert!(!result.stdout_str().contains("azeaze"));
+    assert!(result.stdout_str().contains("xcwww"));
+
+    let result = ts
+        .ucmd()
+        .arg("--exclude=azerty/*/[!q]*")
+        .arg("azerty")
+        .succeeds();
+    assert!(!result.stdout_str().contains("amazing"));
+    assert!(result.stdout_str().contains("qzerty"));
+    assert!(!result.stdout_str().contains("azeaze"));
+    assert!(result.stdout_str().contains("xcwww"));
+}
+
+#[test]
 fn test_du_exclude_several_components() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
