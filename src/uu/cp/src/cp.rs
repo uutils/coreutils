@@ -1535,7 +1535,7 @@ fn copy_on_write_linux(
     let src_file = File::open(source).context(context)?;
     let dst_file = OpenOptions::new()
         .write(true)
-        .truncate(false)
+        .truncate(true)
         .create(true)
         .open(dest)
         .context(context)?;
