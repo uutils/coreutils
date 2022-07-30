@@ -773,8 +773,7 @@ impl Config {
             options::quoting::ESCAPE,
             options::quoting::LITERAL,
         ];
-        let get_last =
-            |flag: &str| -> usize { options.indices_of(flag).and_then(|x| x.last()).unwrap_or(0) };
+        let get_last = |flag: &str| -> usize { options.index_of(flag).unwrap_or(0) };
         if get_last(options::ZERO)
             > zero_formats_opts
                 .into_iter()
@@ -994,6 +993,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 Arg::new(options::ZERO)
                     .long(options::ZERO)
                     .conflicts_with(options::DIRED)
+                    .overrides_with(options::ZERO)
                     .help("List entries separated by ASCII NUL characters."),
             )
             .arg(

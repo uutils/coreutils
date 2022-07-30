@@ -849,6 +849,12 @@ fn test_ls_zero() {
         .succeeds()
         .stdout_only("0-test-zero\x002-test-zero\x003-test-zero\x00");
 
+    scene
+        .ucmd()
+        .args(&["--zero", "--quoting-style=c", "--zero"])
+        .succeeds()
+        .stdout_only("0-test-zero\x002-test-zero\x003-test-zero\x00");
+
     #[cfg(unix)]
     {
         at.touch(&at.plus_as_string("1\ntest-zero"));
