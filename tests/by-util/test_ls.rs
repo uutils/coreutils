@@ -797,6 +797,126 @@ fn test_ls_commas() {
 }
 
 #[test]
+fn test_ls_zero() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("0-test-zero");
+    at.touch(&at.plus_as_string("2-test-zero"));
+    at.touch(&at.plus_as_string("3-test-zero"));
+
+    let ignored_opts = [
+        "--quoting-style=c",
+        "--color=always",
+        "-m",
+        "--hide-control-chars",
+    ];
+
+    scene
+        .ucmd()
+        .arg("--zero")
+        .succeeds()
+        .stdout_only("0-test-zero\x002-test-zero\x003-test-zero\x00");
+
+    for opt in ignored_opts {
+        scene
+            .ucmd()
+            .args(&[opt, "--zero"])
+            .succeeds()
+            .stdout_only("0-test-zero\x002-test-zero\x003-test-zero\x00");
+    }
+
+    scene
+        .ucmd()
+        .args(&["--zero", "--quoting-style=c"])
+        .succeeds()
+        .stdout_only("\"0-test-zero\"\x00\"2-test-zero\"\x00\"3-test-zero\"\x00");
+
+    scene
+        .ucmd()
+        .args(&["--zero", "--color=always"])
+        .succeeds()
+        .stdout_only("\x1b[1;34m0-test-zero\x1b[0m\x002-test-zero\x003-test-zero\x00");
+
+    scene
+        .ucmd()
+        .args(&["--zero", "-m"])
+        .succeeds()
+        .stdout_only("0-test-zero, 2-test-zero, 3-test-zero\x00");
+
+    scene
+        .ucmd()
+        .args(&["--zero", "--hide-control-chars"])
+        .succeeds()
+        .stdout_only("0-test-zero\x002-test-zero\x003-test-zero\x00");
+
+    scene
+        .ucmd()
+        .args(&["--zero", "--quoting-style=c", "--zero"])
+        .succeeds()
+        .stdout_only("0-test-zero\x002-test-zero\x003-test-zero\x00");
+
+    #[cfg(unix)]
+    {
+        at.touch(&at.plus_as_string("1\ntest-zero"));
+
+        let ignored_opts = [
+            "--quoting-style=c",
+            "--color=always",
+            "-m",
+            "--hide-control-chars",
+        ];
+
+        scene
+            .ucmd()
+            .arg("--zero")
+            .succeeds()
+            .stdout_only("0-test-zero\x001\ntest-zero\x002-test-zero\x003-test-zero\x00");
+
+        for opt in ignored_opts {
+            scene
+                .ucmd()
+                .args(&[opt, "--zero"])
+                .succeeds()
+                .stdout_only("0-test-zero\x001\ntest-zero\x002-test-zero\x003-test-zero\x00");
+        }
+
+        scene
+            .ucmd()
+            .args(&["--zero", "--quoting-style=c"])
+            .succeeds()
+            .stdout_only(
+                "\"0-test-zero\"\x00\"1\\ntest-zero\"\x00\"2-test-zero\"\x00\"3-test-zero\"\x00",
+            );
+
+        scene
+            .ucmd()
+            .args(&["--zero", "--color=always"])
+            .succeeds()
+            .stdout_only(
+                "\x1b[1;34m0-test-zero\x1b[0m\x001\ntest-zero\x002-test-zero\x003-test-zero\x00",
+            );
+
+        scene
+            .ucmd()
+            .args(&["--zero", "-m"])
+            .succeeds()
+            .stdout_only("0-test-zero, 1\ntest-zero, 2-test-zero, 3-test-zero\x00");
+
+        scene
+            .ucmd()
+            .args(&["--zero", "--hide-control-chars"])
+            .succeeds()
+            .stdout_only("0-test-zero\x001?test-zero\x002-test-zero\x003-test-zero\x00");
+    }
+
+    scene
+        .ucmd()
+        .args(&["-l", "--zero"])
+        .succeeds()
+        .stdout_contains("total ");
+}
+
+#[test]
 fn test_ls_commas_trailing() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
