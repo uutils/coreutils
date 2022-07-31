@@ -165,6 +165,14 @@ pub enum ReflinkMode {
     Never,
 }
 
+/// Possible arguments for `--sparse`.
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub enum SparseMode {
+    Always,
+    Auto,
+    Never,
+}
+
 /// Specifies the expected file type of copy target
 pub enum TargetType {
     Directory,
@@ -174,7 +182,6 @@ pub enum TargetType {
 pub enum CopyMode {
     Link,
     SymLink,
-    Sparse,
     Copy,
     Update,
     AttrOnly,
@@ -206,6 +213,7 @@ pub struct Options {
     one_file_system: bool,
     overwrite: OverwriteMode,
     parents: bool,
+    sparse_mode: SparseMode,
     strip_trailing_slashes: bool,
     reflink_mode: ReflinkMode,
     preserve_attributes: Vec<Attribute>,
@@ -439,17 +447,18 @@ pub fn uu_app<'a>() -> Command<'a> {
              .short('x')
              .long(options::ONE_FILE_SYSTEM)
              .help("stay on this file system"))
+        .arg(Arg::new(options::SPARSE)
+             .long(options::SPARSE)
+             .takes_value(true)
+             .value_name("WHEN")
+             .possible_values(["never", "auto", "always"])
+             .help("NotImplemented: control creation of sparse files. See below"))
 
         // TODO: implement the following args
         .arg(Arg::new(options::COPY_CONTENTS)
              .long(options::COPY_CONTENTS)
              .overrides_with(options::ATTRIBUTES_ONLY)
              .help("NotImplemented: copy contents of special files when recursive"))
-        .arg(Arg::new(options::SPARSE)
-             .long(options::SPARSE)
-             .takes_value(true)
-             .value_name("WHEN")
-             .help("NotImplemented: control creation of sparse files. See below"))
         .arg(Arg::new(options::CONTEXT)
              .long(options::CONTEXT)
              .takes_value(true)
@@ -545,8 +554,6 @@ impl CopyMode {
             Self::Link
         } else if matches.contains_id(options::SYMBOLIC_LINK) {
             Self::SymLink
-        } else if matches.contains_id(options::SPARSE) {
-            Self::Sparse
         } else if matches.contains_id(options::UPDATE) {
             Self::Update
         } else if matches.contains_id(options::ATTRIBUTES_ONLY) {
@@ -601,7 +608,6 @@ impl Options {
     fn from_matches(matches: &ArgMatches) -> CopyResult<Self> {
         let not_implemented_opts = vec![
             options::COPY_CONTENTS,
-            options::SPARSE,
             #[cfg(not(any(windows, unix)))]
             options::ONE_FILE_SYSTEM,
             options::CONTEXT,
@@ -709,6 +715,18 @@ impl Options {
                         ReflinkMode::Never
                     }
                 }
+            },
+            sparse_mode: match matches.value_of(options::SPARSE) {
+                Some("always") => SparseMode::Always,
+                Some("auto") => SparseMode::Auto,
+                Some("never") => SparseMode::Never,
+                Some(val) => {
+                    return Err(Error::InvalidArgument(format!(
+                        "invalid argument {} for \'sparse\'",
+                        val
+                    )));
+                }
+                None => SparseMode::Auto,
             },
             backup: backup_mode,
             backup_suffix,
@@ -1376,7 +1394,6 @@ fn copy_file(
         CopyMode::SymLink => {
             symlink_file(&source, &dest, context, symlinked_files)?;
         }
-        CopyMode::Sparse => return Err(Error::NotImplemented(options::SPARSE.to_string())),
         CopyMode::Update => {
             if dest.exists() {
                 let src_metadata = fs::symlink_metadata(&source)?;
@@ -1461,18 +1478,33 @@ fn copy_helper(
         copy_fifo(dest, options.overwrite)?;
     } else if source_is_symlink {
         copy_link(source, dest, symlinked_files)?;
-    } else if options.reflink_mode != ReflinkMode::Never {
-        #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
-        return Err("--reflink is only supported on linux and macOS"
-            .to_string()
-            .into());
-
-        #[cfg(target_os = "macos")]
-        copy_on_write_macos(source, dest, options.reflink_mode, context)?;
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        copy_on_write_linux(source, dest, options.reflink_mode, context)?;
     } else {
-        fs::copy(source, dest).context(context)?;
+        #[cfg(target_os = "macos")]
+        copy_on_write_macos(
+            source,
+            dest,
+            options.reflink_mode,
+            options.sparse_mode,
+            context,
+        )?;
+
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        copy_on_write_linux(
+            source,
+            dest,
+            options.reflink_mode,
+            options.sparse_mode,
+            context,
+        )?;
+
+        #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
+        copy_no_cow_fallback(
+            source,
+            dest,
+            options.reflink_mode,
+            options.sparse_mode,
+            context,
+        )?;
     }
 
     Ok(())
@@ -1522,16 +1554,36 @@ fn copy_link(
     symlink_file(&link, &dest, &context_for(&link, &dest), symlinked_files)
 }
 
+/// Copies `source` to `dest` for systems without copy-on-write
+#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
+fn copy_no_cow_fallback(
+    source: &Path,
+    dest: &Path,
+    reflink_mode: ReflinkMode,
+    sparse_mode: SparseMode,
+    context: &str,
+) -> CopyResult<()> {
+    if (reflink_mode != ReflinkMode::Never) {
+        return Err("--reflink is only supported on linux and macOS"
+            .to_string()
+            .into());
+    }
+    if (sparse_mode != SparseMode::Auto) {
+        return Err("--sparse is only supported on linux".to_string().into());
+    }
+
+    fs::copy(source, dest).context(context)
+}
+
 /// Copies `source` to `dest` using copy-on-write if possible.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn copy_on_write_linux(
     source: &Path,
     dest: &Path,
-    mode: ReflinkMode,
+    reflink_mode: ReflinkMode,
+    _sparse_mode: SparseMode,
     context: &str,
 ) -> CopyResult<()> {
-    debug_assert!(mode != ReflinkMode::Never);
-
     let src_file = File::open(source).context(context)?;
     let dst_file = OpenOptions::new()
         .write(true)
@@ -1539,7 +1591,7 @@ fn copy_on_write_linux(
         .create(true)
         .open(dest)
         .context(context)?;
-    match mode {
+    match reflink_mode {
         ReflinkMode::Always => unsafe {
             let result = libc::ioctl(dst_file.as_raw_fd(), FICLONE!(), src_file.as_raw_fd());
 
@@ -1563,7 +1615,10 @@ fn copy_on_write_linux(
             }
             Ok(())
         },
-        ReflinkMode::Never => unreachable!(),
+        ReflinkMode::Never => {
+            fs::copy(source, dest).context(context)?;
+            Ok(())
+        }
     }
 }
 
@@ -1572,10 +1627,13 @@ fn copy_on_write_linux(
 fn copy_on_write_macos(
     source: &Path,
     dest: &Path,
-    mode: ReflinkMode,
+    reflink_mode: ReflinkMode,
+    sparse_mode: SparseMode,
     context: &str,
 ) -> CopyResult<()> {
-    debug_assert!(mode != ReflinkMode::Never);
+    if (sparse_mode != SparseMode::Auto) {
+        return Err("--sparse is only supported on linux".to_string().into());
+    }
 
     // Extract paths in a form suitable to be passed to a syscall.
     // The unwrap() is safe because they come from the command-line and so contain non nul
@@ -1612,14 +1670,14 @@ fn copy_on_write_macos(
     if raw_pfn.is_null() || error != 0 {
         // clonefile(2) is either not supported or it errored out (possibly because the FS does not
         // support COW).
-        match mode {
+        match reflink_mode {
             ReflinkMode::Always => {
                 return Err(
                     format!("failed to clone {:?} from {:?}: {}", source, dest, error).into(),
                 )
             }
             ReflinkMode::Auto => fs::copy(source, dest).context(context)?,
-            ReflinkMode::Never => unreachable!(),
+            ReflinkMode::Never => fs::copy(source, dest).context(context)?,
         };
     }
 
