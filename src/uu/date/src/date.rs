@@ -14,8 +14,10 @@ use chrono::{Datelike, Timelike};
 use clap::{crate_version, Arg, Command};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::{clock_settime, timespec, CLOCK_REALTIME};
+use std::ffi::CStr;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::os::raw::c_char;
 use std::path::PathBuf;
 use uucore::display::Quotable;
 #[cfg(not(any(target_os = "macos", target_os = "redox")))]
@@ -92,7 +94,6 @@ enum Format {
     Rfc5322,
     Rfc3339(Rfc3339Format),
     Custom(String),
-    Default,
 }
 
 /// Various places that dates can come from
@@ -146,6 +147,10 @@ impl<'a> From<&'a str> for Rfc3339Format {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
+    // Initialize timezone and locale
+    libc_strftime::tz_set();
+    libc_strftime::set_locale();
+
     let format = if let Some(form) = matches.value_of(OPT_FORMAT) {
         if !form.starts_with('+') {
             return Err(USimpleError::new(
@@ -165,7 +170,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if let Some(fmt) = matches.value_of(OPT_RFC_3339).map(Into::into) {
         Format::Rfc3339(fmt)
     } else {
-        Format::Default
+        #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
+        {
+            let mut fmt_str = unsafe {
+                let c_str: *mut c_char = libc::nl_langinfo(131180 as libc::nl_item);
+                CStr::from_ptr(c_str).to_string_lossy().into_owned()
+            };
+            if fmt_str.is_empty() {
+                fmt_str = String::from("%a %b %d %I:%M:%S %Z %p %Y");
+            }
+            Format::Custom(fmt_str)
+        }
     };
 
     let date_source = if let Some(date) = matches.value_of(OPT_DATE) {
@@ -241,9 +256,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         for date in dates {
             match date {
                 Ok(date) => {
-                    // GNU `date` uses `%N` for nano seconds, however crate::chrono uses `%f`
-                    let format_string = &format_string.replace("%N", "%f");
-                    let formatted = date.format(format_string).to_string().replace("%f", "%N");
+                    let formatted = libc_strftime::strftime_local(format_string, date.timestamp());
                     println!("{}", formatted);
                 }
                 Err((input, _err)) => show_error!("invalid date {}", input.quote()),
@@ -347,7 +360,6 @@ fn make_format_string(settings: &Settings) -> &str {
             Rfc3339Format::Ns => "%F %T.%f%:z",
         },
         Format::Custom(ref fmt) => fmt,
-        Format::Default => "%c",
     }
 }
 
