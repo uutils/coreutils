@@ -9,7 +9,7 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ficlone linkgs lstat nlink nlinks pathbuf reflink strs xattrs symlinked
+// spell-checker:ignore (ToDO) ficlone ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked
 
 #[macro_use]
 extern crate quick_error;
@@ -1563,16 +1563,18 @@ fn copy_no_cow_fallback(
     sparse_mode: SparseMode,
     context: &str,
 ) -> CopyResult<()> {
-    if (reflink_mode != ReflinkMode::Never) {
+    if reflink_mode != ReflinkMode::Never {
         return Err("--reflink is only supported on linux and macOS"
             .to_string()
             .into());
     }
-    if (sparse_mode != SparseMode::Auto) {
+    if sparse_mode != SparseMode::Auto {
         return Err("--sparse is only supported on linux".to_string().into());
     }
 
-    fs::copy(source, dest).context(context)
+    fs::copy(source, dest).context(context)?;
+
+    Ok(())
 }
 
 /// Copies `source` to `dest` using copy-on-write if possible.
@@ -1581,18 +1583,21 @@ fn copy_on_write_linux(
     source: &Path,
     dest: &Path,
     reflink_mode: ReflinkMode,
-    _sparse_mode: SparseMode,
+    sparse_mode: SparseMode,
     context: &str,
 ) -> CopyResult<()> {
-    let src_file = File::open(source).context(context)?;
+    use std::os::unix::prelude::MetadataExt;
+
+    let mut src_file = File::open(source).context(context)?;
     let dst_file = OpenOptions::new()
         .write(true)
-        .truncate(false)
+        .truncate(true)
         .create(true)
         .open(dest)
         .context(context)?;
-    match reflink_mode {
-        ReflinkMode::Always => unsafe {
+
+    match (reflink_mode, sparse_mode) {
+        (ReflinkMode::Always, SparseMode::Auto) => unsafe {
             let result = libc::ioctl(dst_file.as_raw_fd(), FICLONE!(), src_file.as_raw_fd());
 
             if result != 0 {
@@ -1607,7 +1612,43 @@ fn copy_on_write_linux(
                 Ok(())
             }
         },
-        ReflinkMode::Auto => unsafe {
+        (ReflinkMode::Always, SparseMode::Always) | (ReflinkMode::Always, SparseMode::Never) => {
+            Err("`--reflink=always` can be used only with --sparse=auto".into())
+        }
+        (_, SparseMode::Always) => unsafe {
+            let size: usize = src_file.metadata()?.size().try_into().unwrap();
+            if libc::ftruncate(dst_file.as_raw_fd(), size.try_into().unwrap()) < 0 {
+                return Err(format!(
+                    "failed to ftruncate {:?} to size {}: {}",
+                    dest,
+                    size,
+                    std::io::Error::last_os_error()
+                )
+                .into());
+            }
+
+            let blksize = dst_file.metadata()?.blksize();
+            let mut buf: Vec<u8> = vec![0; blksize.try_into().unwrap()];
+            let mut current_offset: usize = 0;
+
+            while current_offset < size {
+                use std::io::Read;
+
+                let this_read = src_file.read(&mut buf)?;
+
+                if buf.iter().any(|&x| x != 0) {
+                    libc::pwrite(
+                        dst_file.as_raw_fd(),
+                        buf.as_ptr() as *const libc::c_void,
+                        this_read,
+                        current_offset.try_into().unwrap(),
+                    );
+                }
+                current_offset += this_read;
+            }
+            Ok(())
+        },
+        (ReflinkMode::Auto, SparseMode::Auto) | (ReflinkMode::Auto, SparseMode::Never) => unsafe {
             let result = libc::ioctl(dst_file.as_raw_fd(), FICLONE!(), src_file.as_raw_fd());
 
             if result != 0 {
@@ -1615,7 +1656,7 @@ fn copy_on_write_linux(
             }
             Ok(())
         },
-        ReflinkMode::Never => {
+        (ReflinkMode::Never, _) => {
             fs::copy(source, dest).context(context)?;
             Ok(())
         }
@@ -1631,7 +1672,7 @@ fn copy_on_write_macos(
     sparse_mode: SparseMode,
     context: &str,
 ) -> CopyResult<()> {
-    if (sparse_mode != SparseMode::Auto) {
+    if sparse_mode != SparseMode::Auto {
         return Err("--sparse is only supported on linux".to_string().into());
     }
 

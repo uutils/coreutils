@@ -1388,6 +1388,113 @@ fn test_closes_file_descriptors() {
         .succeeds();
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_cp_sparse_never_empty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    const BUFFER_SIZE: usize = 4096 * 4;
+    let buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+
+    at.make_file("src_file1");
+    at.write_bytes("src_file1", &buf);
+
+    ucmd.args(&["--sparse=never", "src_file1", "dst_file_non_sparse"])
+        .succeeds();
+    assert_eq!(at.read_bytes("dst_file_non_sparse"), buf);
+    assert_eq!(
+        at.metadata("dst_file_non_sparse").blocks() * 512,
+        buf.len() as u64
+    );
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_cp_sparse_always_empty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    const BUFFER_SIZE: usize = 4096 * 4;
+    let buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+
+    at.make_file("src_file1");
+    at.write_bytes("src_file1", &buf);
+
+    ucmd.args(&["--sparse=always", "src_file1", "dst_file_sparse"])
+        .succeeds();
+
+    assert_eq!(at.read_bytes("dst_file_sparse"), buf);
+    assert_eq!(at.metadata("dst_file_sparse").blocks(), 0);
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_cp_sparse_always_non_empty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    const BUFFER_SIZE: usize = 4096 * 16 + 3;
+    let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+    let blocks_to_touch = [buf.len() / 3, 2 * (buf.len() / 3)];
+
+    for i in blocks_to_touch {
+        buf[i] = b'x';
+    }
+
+    at.make_file("src_file1");
+    at.write_bytes("src_file1", &buf);
+
+    ucmd.args(&["--sparse=always", "src_file1", "dst_file_sparse"])
+        .succeeds();
+
+    let touched_block_count =
+        blocks_to_touch.len() as u64 * at.metadata("dst_file_sparse").blksize() / 512;
+
+    assert_eq!(at.read_bytes("dst_file_sparse"), buf);
+    assert_eq!(at.metadata("dst_file_sparse").blocks(), touched_block_count);
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_cp_sparse_invalid_option() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.make_file("src_file1");
+
+    ucmd.args(&["--sparse=invalid", "src_file1", "dst_file"])
+        .fails();
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_cp_sparse_always_reflink_always() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.make_file("src_file1");
+
+    ucmd.args(&[
+        "--sparse=always",
+        "--reflink=always",
+        "src_file1",
+        "dst_file",
+    ])
+    .fails();
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_cp_sparse_never_reflink_always() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.make_file("src_file1");
+
+    ucmd.args(&[
+        "--sparse=never",
+        "--reflink=always",
+        "src_file1",
+        "dst_file",
+    ])
+    .fails();
+}
+
 #[test]
 fn test_copy_dir_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
