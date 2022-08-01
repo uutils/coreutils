@@ -1,6 +1,6 @@
 # Targets that compile
 
-Note: this list isn't up to date.
+**Note: this list isn't up to date.**
 
 This is an auto-generated table showing which binaries compile for each target-triple. Note that this **does not** indicate that they are fully implemented, or that the tests pass.
 
