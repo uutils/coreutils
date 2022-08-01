@@ -19,7 +19,7 @@ use std::ffi::CStr;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 #[cfg(target_os = "linux")]
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_uint};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 #[cfg(not(any(target_os = "macos", target_os = "redox")))]
@@ -59,8 +59,11 @@ const OPT_REFERENCE: &str = "reference";
 const OPT_UNIVERSAL: &str = "universal";
 const OPT_UNIVERSAL_2: &str = "utc";
 
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
-const DATE_FMT: i32 = 131180;
+// Value of _DATE_FMT
+// in glibc.
+// https://code.woboq.org/data/symbol.html?root=../gcc/&ref=_DATE_FMT
+#[cfg(target_os = "linux")]
+const DATE_FMT: c_uint = 131180;
 
 // Help strings
 
@@ -178,7 +181,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         #[cfg(target_os = "linux")]
         {
             let mut fmt_str = unsafe {
+                // Returns the strftime format string
+                // for date in the current locale
                 let c_str: *mut c_char = libc::nl_langinfo(DATE_FMT as libc::nl_item);
+                //  Convert c_str to a String
                 CStr::from_ptr(c_str).to_string_lossy().into_owned()
             };
             if fmt_str.is_empty() {
