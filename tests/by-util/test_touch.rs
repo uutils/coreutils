@@ -701,3 +701,43 @@ fn test_touch_leap_second() {
     assert_eq!(atime.unix_seconds() - epoch.unix_seconds(), 60);
     assert_eq!(mtime.unix_seconds() - epoch.unix_seconds(), 60);
 }
+
+#[test]
+fn test_touch_trailing_slash_no_create() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    ucmd.args(&["-c", "file/"]).fails().code_is(1);
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-c", "no-file/"]).succeeds();
+    assert!(
+        !at.file_exists("no-file") && !at.dir_exists("no-file") && !at.symlink_exists("no-file")
+    );
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.relative_symlink_file("nowhere", "dangling");
+    ucmd.args(&["-c", "dangling/"]).succeeds();
+    assert!(!at.file_exists("nowhere"));
+    assert!(at.symlink_exists("dangling"));
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.relative_symlink_file("loop", "loop");
+    ucmd.args(&["-c", "loop/"]).fails().code_is(1);
+    assert!(!at.file_exists("loop"));
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file2");
+    at.relative_symlink_file("file2", "link1");
+    ucmd.args(&["-c", "link1/"]).fails().code_is(1);
+    assert!(at.file_exists("file2"));
+    assert!(at.symlink_exists("link1"));
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    ucmd.args(&["-c", "dir/"]).succeeds();
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir2");
+    at.relative_symlink_dir("dir2", "link2");
+    ucmd.args(&["-c", "link2/"]).succeeds();
+}
