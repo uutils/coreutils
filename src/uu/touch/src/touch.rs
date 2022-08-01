@@ -103,7 +103,11 @@ Try 'touch --help' for more information."##,
 
         let path = pathbuf.as_path();
 
-        if !path.exists() {
+        if let Err(e) = path.metadata() {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                return Err(e.map_err_context(|| format!("setting times of {}", filename.quote())));
+            }
+
             if matches.contains_id(options::NO_CREATE) {
                 continue;
             }
