@@ -125,7 +125,7 @@ class Target(str):
             toolchains = toolchains.stdout.decode("utf-8").split("\n")
             if "installed" not in next(filter(lambda x: self in x, toolchains)):
                 raise Exception(
-                    f"Error: the {t} target is not installed. Please do that manually"
+                    f"Error: the {self} target is not installed. Please do that manually"
                 )
         else:
             # check nightly toolchains are installed
@@ -135,7 +135,7 @@ class Target(str):
             toolchains = toolchains.stdout.decode("utf-8").split("\n")
             if "installed" not in next(filter(lambda x: self in x, toolchains)):
                 raise Exception(
-                    f"Error: the {t} nightly target is not installed. Please do that manually"
+                    f"Error: the {self} nightly target is not installed. Please do that manually"
                 )
         return True
 
@@ -217,8 +217,8 @@ def merge_tables(old, new):
 def render_md(fd, table, headings: str, row_headings: Target):
     def print_row(lst, lens=[]):
         lens = lens + [0] * (len(lst) - len(lens))
-        for e, l in zip(lst, lens):
-            fmt = "|{}" if l == 0 else "|{:>%s}" % len(header[0])
+        for e, lmd in zip(lst, lens):
+            fmt = "|{}" if lmd == 0 else "|{:>%s}" % len(header[0])
             fd.write(fmt.format(e))
         fd.write("|\n")
 
