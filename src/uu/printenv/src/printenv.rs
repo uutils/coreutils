@@ -27,7 +27,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let separator = if matches.is_present(OPT_NULL) {
+    let separator = if matches.contains_id(OPT_NULL) {
         "\x00"
     } else {
         "\n"

@@ -163,7 +163,7 @@ impl Default for BlockSize {
 }
 
 pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSizeError> {
-    if matches.is_present(OPT_BLOCKSIZE) {
+    if matches.contains_id(OPT_BLOCKSIZE) {
         let s = matches.value_of(OPT_BLOCKSIZE).unwrap();
         let bytes = parse_size(s)?;
 
@@ -172,7 +172,7 @@ pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSi
         } else {
             Err(ParseSizeError::ParseFailure(format!("{}", s.quote())))
         }
-    } else if matches.is_present(OPT_PORTABILITY) {
+    } else if matches.contains_id(OPT_PORTABILITY) {
         Ok(BlockSize::default())
     } else if let Some(bytes) = block_size_from_env() {
         Ok(BlockSize::Bytes(bytes))

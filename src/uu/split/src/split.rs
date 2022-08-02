@@ -520,7 +520,7 @@ impl Settings {
             input: matches.value_of(ARG_INPUT).unwrap().to_owned(),
             prefix: matches.value_of(ARG_PREFIX).unwrap().to_owned(),
             filter: matches.value_of(OPT_FILTER).map(|s| s.to_owned()),
-            elide_empty_files: matches.is_present(OPT_ELIDE_EMPTY_FILES),
+            elide_empty_files: matches.contains_id(OPT_ELIDE_EMPTY_FILES),
         };
         #[cfg(windows)]
         if result.filter.is_some() {

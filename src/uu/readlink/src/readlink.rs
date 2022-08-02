@@ -36,23 +36,23 @@ const ARG_FILES: &str = "files";
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
-    let mut no_newline = matches.is_present(OPT_NO_NEWLINE);
-    let use_zero = matches.is_present(OPT_ZERO);
-    let silent = matches.is_present(OPT_SILENT) || matches.is_present(OPT_QUIET);
-    let verbose = matches.is_present(OPT_VERBOSE);
+    let mut no_newline = matches.contains_id(OPT_NO_NEWLINE);
+    let use_zero = matches.contains_id(OPT_ZERO);
+    let silent = matches.contains_id(OPT_SILENT) || matches.contains_id(OPT_QUIET);
+    let verbose = matches.contains_id(OPT_VERBOSE);
 
-    let res_mode = if matches.is_present(OPT_CANONICALIZE)
-        || matches.is_present(OPT_CANONICALIZE_EXISTING)
-        || matches.is_present(OPT_CANONICALIZE_MISSING)
+    let res_mode = if matches.contains_id(OPT_CANONICALIZE)
+        || matches.contains_id(OPT_CANONICALIZE_EXISTING)
+        || matches.contains_id(OPT_CANONICALIZE_MISSING)
     {
         ResolveMode::Logical
     } else {
         ResolveMode::None
     };
 
-    let can_mode = if matches.is_present(OPT_CANONICALIZE_EXISTING) {
+    let can_mode = if matches.contains_id(OPT_CANONICALIZE_EXISTING) {
         MissingHandling::Existing
-    } else if matches.is_present(OPT_CANONICALIZE_MISSING) {
+    } else if matches.contains_id(OPT_CANONICALIZE_MISSING) {
         MissingHandling::Missing
     } else {
         MissingHandling::Normal

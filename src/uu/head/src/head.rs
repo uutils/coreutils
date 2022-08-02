@@ -195,10 +195,10 @@ impl HeadOptions {
 
         let mut options = Self::default();
 
-        options.quiet = matches.is_present(options::QUIET_NAME);
-        options.verbose = matches.is_present(options::VERBOSE_NAME);
-        options.zeroed = matches.is_present(options::ZERO_NAME);
-        options.presume_input_pipe = matches.is_present(options::PRESUME_INPUT_PIPE);
+        options.quiet = matches.contains_id(options::QUIET_NAME);
+        options.verbose = matches.contains_id(options::VERBOSE_NAME);
+        options.zeroed = matches.contains_id(options::ZERO_NAME);
+        options.presume_input_pipe = matches.contains_id(options::PRESUME_INPUT_PIPE);
 
         options.mode = Mode::from(&matches)?;
 

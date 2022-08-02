@@ -190,9 +190,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let number_mode = if matches.is_present(options::NUMBER_NONBLANK) {
+    let number_mode = if matches.contains_id(options::NUMBER_NONBLANK) {
         NumberingMode::NonEmpty
-    } else if matches.is_present(options::NUMBER) {
+    } else if matches.contains_id(options::NUMBER) {
         NumberingMode::All
     } else {
         NumberingMode::None
@@ -205,7 +205,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         options::SHOW_NONPRINTING.to_owned(),
     ]
     .iter()
-    .any(|v| matches.is_present(v));
+    .any(|v| matches.contains_id(v));
 
     let show_ends = vec![
         options::SHOW_ENDS.to_owned(),
@@ -213,7 +213,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         options::SHOW_NONPRINTING_ENDS.to_owned(),
     ]
     .iter()
-    .any(|v| matches.is_present(v));
+    .any(|v| matches.contains_id(v));
 
     let show_tabs = vec![
         options::SHOW_ALL.to_owned(),
@@ -221,9 +221,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         options::SHOW_NONPRINTING_TABS.to_owned(),
     ]
     .iter()
-    .any(|v| matches.is_present(v));
+    .any(|v| matches.contains_id(v));
 
-    let squeeze_blank = matches.is_present(options::SQUEEZE_BLANK);
+    let squeeze_blank = matches.contains_id(options::SQUEEZE_BLANK);
     let files: Vec<String> = match matches.values_of(options::FILE) {
         Some(v) => v.clone().map(|v| v.to_owned()).collect(),
         None => vec!["-".to_owned()],

@@ -109,9 +109,9 @@ impl Options {
             Some(s) => tabstops_parse(&s.collect::<Vec<&str>>().join(","))?,
         };
 
-        let aflag = (matches.is_present(options::ALL) || matches.is_present(options::TABS))
-            && !matches.is_present(options::FIRST_ONLY);
-        let uflag = !matches.is_present(options::NO_UTF8);
+        let aflag = (matches.contains_id(options::ALL) || matches.contains_id(options::TABS))
+            && !matches.contains_id(options::FIRST_ONLY);
+        let uflag = !matches.contains_id(options::NO_UTF8);
 
         let files = match matches.value_of(options::FILE) {
             Some(v) => vec![v.to_string()],

@@ -45,9 +45,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().get_matches_from(args);
 
-    let mode = if matches.is_present(options::TABLE) {
+    let mode = if matches.contains_id(options::TABLE) {
         Mode::Table
-    } else if matches.is_present(options::LIST) {
+    } else if matches.contains_id(options::LIST) {
         Mode::List
     } else {
         Mode::Kill

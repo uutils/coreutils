@@ -1076,10 +1076,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    settings.debug = matches.is_present(options::DEBUG);
+    settings.debug = matches.contains_id(options::DEBUG);
 
     // check whether user specified a zero terminated list of files for input, otherwise read files from args
-    let mut files: Vec<OsString> = if matches.is_present(options::FILES0_FROM) {
+    let mut files: Vec<OsString> = if matches.contains_id(options::FILES0_FROM) {
         let files0_from: Vec<OsString> = matches
             .values_of_os(options::FILES0_FROM)
             .map(|v| v.map(ToOwned::to_owned).collect())
@@ -1104,27 +1104,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .unwrap_or_default()
     };
 
-    settings.mode = if matches.is_present(options::modes::HUMAN_NUMERIC)
+    settings.mode = if matches.contains_id(options::modes::HUMAN_NUMERIC)
         || matches.value_of(options::modes::SORT) == Some("human-numeric")
     {
         SortMode::HumanNumeric
-    } else if matches.is_present(options::modes::MONTH)
+    } else if matches.contains_id(options::modes::MONTH)
         || matches.value_of(options::modes::SORT) == Some("month")
     {
         SortMode::Month
-    } else if matches.is_present(options::modes::GENERAL_NUMERIC)
+    } else if matches.contains_id(options::modes::GENERAL_NUMERIC)
         || matches.value_of(options::modes::SORT) == Some("general-numeric")
     {
         SortMode::GeneralNumeric
-    } else if matches.is_present(options::modes::NUMERIC)
+    } else if matches.contains_id(options::modes::NUMERIC)
         || matches.value_of(options::modes::SORT) == Some("numeric")
     {
         SortMode::Numeric
-    } else if matches.is_present(options::modes::VERSION)
+    } else if matches.contains_id(options::modes::VERSION)
         || matches.value_of(options::modes::SORT) == Some("version")
     {
         SortMode::Version
-    } else if matches.is_present(options::modes::RANDOM)
+    } else if matches.contains_id(options::modes::RANDOM)
         || matches.value_of(options::modes::SORT) == Some("random")
     {
         settings.salt = Some(get_rand_string());
@@ -1133,9 +1133,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         SortMode::Default
     };
 
-    settings.dictionary_order = matches.is_present(options::DICTIONARY_ORDER);
-    settings.ignore_non_printing = matches.is_present(options::IGNORE_NONPRINTING);
-    if matches.is_present(options::PARALLEL) {
+    settings.dictionary_order = matches.contains_id(options::DICTIONARY_ORDER);
+    settings.ignore_non_printing = matches.contains_id(options::IGNORE_NONPRINTING);
+    if matches.contains_id(options::PARALLEL) {
         // "0" is default - threads = num of cores
         settings.threads = matches
             .value_of(options::PARALLEL)
@@ -1171,11 +1171,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         })?;
     }
 
-    settings.zero_terminated = matches.is_present(options::ZERO_TERMINATED);
-    settings.merge = matches.is_present(options::MERGE);
+    settings.zero_terminated = matches.contains_id(options::ZERO_TERMINATED);
+    settings.merge = matches.contains_id(options::MERGE);
 
-    settings.check = matches.is_present(options::check::CHECK);
-    if matches.is_present(options::check::CHECK_SILENT)
+    settings.check = matches.contains_id(options::check::CHECK);
+    if matches.contains_id(options::check::CHECK_SILENT)
         || matches!(
             matches.value_of(options::check::CHECK),
             Some(options::check::SILENT) | Some(options::check::QUIET)
@@ -1185,13 +1185,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.check = true;
     };
 
-    settings.ignore_case = matches.is_present(options::IGNORE_CASE);
+    settings.ignore_case = matches.contains_id(options::IGNORE_CASE);
 
-    settings.ignore_leading_blanks = matches.is_present(options::IGNORE_LEADING_BLANKS);
+    settings.ignore_leading_blanks = matches.contains_id(options::IGNORE_LEADING_BLANKS);
 
-    settings.reverse = matches.is_present(options::REVERSE);
-    settings.stable = matches.is_present(options::STABLE);
-    settings.unique = matches.is_present(options::UNIQUE);
+    settings.reverse = matches.contains_id(options::REVERSE);
+    settings.stable = matches.contains_id(options::STABLE);
+    settings.unique = matches.contains_id(options::UNIQUE);
 
     if files.is_empty() {
         /* if no file, default to stdin */
@@ -1238,7 +1238,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    if !matches.is_present(options::KEY) {
+    if !matches.contains_id(options::KEY) {
         // add a default selector matching the whole line
         let key_settings = KeySettings::from(&settings);
         settings.selectors.push(

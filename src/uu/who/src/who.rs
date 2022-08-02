@@ -70,39 +70,39 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_default();
 
     // If true, attempt to canonicalize hostnames via a DNS lookup.
-    let do_lookup = matches.is_present(options::LOOKUP);
+    let do_lookup = matches.contains_id(options::LOOKUP);
 
     // If true, display only a list of usernames and count of
     // the users logged on.
     // Ignored for 'who am i'.
-    let short_list = matches.is_present(options::COUNT);
+    let short_list = matches.contains_id(options::COUNT);
 
-    let all = matches.is_present(options::ALL);
+    let all = matches.contains_id(options::ALL);
 
     // If true, display a line at the top describing each field.
-    let include_heading = matches.is_present(options::HEADING);
+    let include_heading = matches.contains_id(options::HEADING);
 
     // If true, display a '+' for each user if mesg y, a '-' if mesg n,
     // or a '?' if their tty cannot be statted.
-    let include_mesg = all || matches.is_present(options::MESG) || matches.is_present("w");
+    let include_mesg = all || matches.contains_id(options::MESG) || matches.contains_id("w");
 
     // If true, display the last boot time.
-    let need_boottime = all || matches.is_present(options::BOOT);
+    let need_boottime = all || matches.contains_id(options::BOOT);
 
     // If true, display dead processes.
-    let need_deadprocs = all || matches.is_present(options::DEAD);
+    let need_deadprocs = all || matches.contains_id(options::DEAD);
 
     // If true, display processes waiting for user login.
-    let need_login = all || matches.is_present(options::LOGIN);
+    let need_login = all || matches.contains_id(options::LOGIN);
 
     // If true, display processes started by init.
-    let need_initspawn = all || matches.is_present(options::PROCESS);
+    let need_initspawn = all || matches.contains_id(options::PROCESS);
 
     // If true, display the last clock change.
-    let need_clockchange = all || matches.is_present(options::TIME);
+    let need_clockchange = all || matches.contains_id(options::TIME);
 
     // If true, display the current runlevel.
-    let need_runlevel = all || matches.is_present(options::RUNLEVEL);
+    let need_runlevel = all || matches.contains_id(options::RUNLEVEL);
 
     let use_defaults = !(all
         || need_boottime
@@ -111,10 +111,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         || need_initspawn
         || need_runlevel
         || need_clockchange
-        || matches.is_present(options::USERS));
+        || matches.contains_id(options::USERS));
 
     // If true, display user processes.
-    let need_users = all || matches.is_present(options::USERS) || use_defaults;
+    let need_users = all || matches.contains_id(options::USERS) || use_defaults;
 
     // If true, display the hours:minutes since each user has touched
     // the keyboard, or "." if within the last minute, or "old" if
@@ -128,7 +128,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let short_output = !include_exit && use_defaults;
 
     // If true, display info only for the controlling tty.
-    let my_line_only = matches.is_present(options::ONLY_HOSTNAME_USER) || files.len() == 2;
+    let my_line_only = matches.contains_id(options::ONLY_HOSTNAME_USER) || files.len() == 2;
 
     let mut who = Who {
         do_lookup,

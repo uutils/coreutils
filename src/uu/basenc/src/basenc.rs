@@ -58,7 +58,7 @@ fn parse_cmd_args(args: impl uucore::Args) -> UResult<(Config, Format)> {
         .with_exit_code(1)?;
     let format = ENCODINGS
         .iter()
-        .find(|encoding| matches.is_present(encoding.0))
+        .find(|encoding| matches.contains_id(encoding.0))
         .ok_or_else(|| UUsageError::new(BASE_CMD_PARSE_ERROR, "missing encoding type"))?
         .1;
     let config = Config::from(&matches)?;

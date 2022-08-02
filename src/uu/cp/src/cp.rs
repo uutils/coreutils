@@ -517,9 +517,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 impl ClobberMode {
     fn from_matches(matches: &ArgMatches) -> Self {
-        if matches.is_present(options::FORCE) {
+        if matches.contains_id(options::FORCE) {
             Self::Force
-        } else if matches.is_present(options::REMOVE_DESTINATION) {
+        } else if matches.contains_id(options::REMOVE_DESTINATION) {
             Self::RemoveDestination
         } else {
             Self::Standard
@@ -529,9 +529,9 @@ impl ClobberMode {
 
 impl OverwriteMode {
     fn from_matches(matches: &ArgMatches) -> Self {
-        if matches.is_present(options::INTERACTIVE) {
+        if matches.contains_id(options::INTERACTIVE) {
             Self::Interactive(ClobberMode::from_matches(matches))
-        } else if matches.is_present(options::NO_CLOBBER) {
+        } else if matches.contains_id(options::NO_CLOBBER) {
             Self::NoClobber
         } else {
             Self::Clobber(ClobberMode::from_matches(matches))
@@ -541,15 +541,15 @@ impl OverwriteMode {
 
 impl CopyMode {
     fn from_matches(matches: &ArgMatches) -> Self {
-        if matches.is_present(options::LINK) {
+        if matches.contains_id(options::LINK) {
             Self::Link
-        } else if matches.is_present(options::SYMBOLIC_LINK) {
+        } else if matches.contains_id(options::SYMBOLIC_LINK) {
             Self::SymLink
-        } else if matches.is_present(options::SPARSE) {
+        } else if matches.contains_id(options::SPARSE) {
             Self::Sparse
-        } else if matches.is_present(options::UPDATE) {
+        } else if matches.contains_id(options::UPDATE) {
             Self::Update
-        } else if matches.is_present(options::ATTRIBUTES_ONLY) {
+        } else if matches.contains_id(options::ATTRIBUTES_ONLY) {
             Self::AttrOnly
         } else {
             Self::Copy
@@ -610,14 +610,14 @@ impl Options {
         ];
 
         for not_implemented_opt in not_implemented_opts {
-            if matches.is_present(not_implemented_opt) {
+            if matches.contains_id(not_implemented_opt) {
                 return Err(Error::NotImplemented(not_implemented_opt.to_string()));
             }
         }
 
-        let recursive = matches.is_present(options::RECURSIVE)
-            || matches.is_present(options::RECURSIVE_ALIAS)
-            || matches.is_present(options::ARCHIVE);
+        let recursive = matches.contains_id(options::RECURSIVE)
+            || matches.contains_id(options::RECURSIVE_ALIAS)
+            || matches.contains_id(options::ARCHIVE);
 
         let backup_mode = match backup_control::determine_backup_mode(matches) {
             Err(e) => return Err(Error::Backup(format!("{}", e))),
@@ -629,13 +629,13 @@ impl Options {
         let overwrite = OverwriteMode::from_matches(matches);
 
         // Parse target directory options
-        let no_target_dir = matches.is_present(options::NO_TARGET_DIRECTORY);
+        let no_target_dir = matches.contains_id(options::NO_TARGET_DIRECTORY);
         let target_dir = matches
             .value_of(options::TARGET_DIRECTORY)
             .map(ToString::to_string);
 
         // Parse attributes to preserve
-        let mut preserve_attributes: Vec<Attribute> = if matches.is_present(options::PRESERVE) {
+        let mut preserve_attributes: Vec<Attribute> = if matches.contains_id(options::PRESERVE) {
             match matches.values_of(options::PRESERVE) {
                 None => DEFAULT_ATTRIBUTES.to_vec(),
                 Some(attribute_strs) => {
@@ -651,12 +651,12 @@ impl Options {
                     attributes
                 }
             }
-        } else if matches.is_present(options::ARCHIVE) {
+        } else if matches.contains_id(options::ARCHIVE) {
             // --archive is used. Same as --preserve=all
             add_all_attributes()
-        } else if matches.is_present(options::NO_DEREFERENCE_PRESERVE_LINKS) {
+        } else if matches.contains_id(options::NO_DEREFERENCE_PRESERVE_LINKS) {
             vec![Attribute::Links]
-        } else if matches.is_present(options::PRESERVE_DEFAULT_ATTRIBUTES) {
+        } else if matches.contains_id(options::PRESERVE_DEFAULT_ATTRIBUTES) {
             DEFAULT_ATTRIBUTES.to_vec()
         } else {
             vec![]
@@ -668,20 +668,20 @@ impl Options {
         preserve_attributes.sort_unstable();
 
         let options = Self {
-            attributes_only: matches.is_present(options::ATTRIBUTES_ONLY),
-            copy_contents: matches.is_present(options::COPY_CONTENTS),
+            attributes_only: matches.contains_id(options::ATTRIBUTES_ONLY),
+            copy_contents: matches.contains_id(options::COPY_CONTENTS),
             copy_mode: CopyMode::from_matches(matches),
             // No dereference is set with -p, -d and --archive
-            dereference: !(matches.is_present(options::NO_DEREFERENCE)
-                || matches.is_present(options::NO_DEREFERENCE_PRESERVE_LINKS)
-                || matches.is_present(options::ARCHIVE)
+            dereference: !(matches.contains_id(options::NO_DEREFERENCE)
+                || matches.contains_id(options::NO_DEREFERENCE_PRESERVE_LINKS)
+                || matches.contains_id(options::ARCHIVE)
                 || recursive)
-                || matches.is_present(options::DEREFERENCE),
-            one_file_system: matches.is_present(options::ONE_FILE_SYSTEM),
-            parents: matches.is_present(options::PARENTS),
-            update: matches.is_present(options::UPDATE),
-            verbose: matches.is_present(options::VERBOSE),
-            strip_trailing_slashes: matches.is_present(options::STRIP_TRAILING_SLASHES),
+                || matches.contains_id(options::DEREFERENCE),
+            one_file_system: matches.contains_id(options::ONE_FILE_SYSTEM),
+            parents: matches.contains_id(options::PARENTS),
+            update: matches.contains_id(options::UPDATE),
+            verbose: matches.contains_id(options::VERBOSE),
+            strip_trailing_slashes: matches.contains_id(options::STRIP_TRAILING_SLASHES),
             reflink_mode: {
                 if let Some(reflink) = matches.value_of(options::REFLINK) {
                     match reflink {

@@ -104,7 +104,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .expect("Failed to get the first char");
 
     if ch == 'p' {
-        if matches.is_present("major") || matches.is_present("minor") {
+        if matches.contains_id("major") || matches.contains_id("minor") {
             Err(UUsageError::new(
                 1,
                 "Fifos do not have major and minor device numbers.",

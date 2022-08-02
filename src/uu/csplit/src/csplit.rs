@@ -52,10 +52,10 @@ pub struct CsplitOptions {
 
 impl CsplitOptions {
     fn new(matches: &ArgMatches) -> Self {
-        let keep_files = matches.is_present(options::KEEP_FILES);
-        let quiet = matches.is_present(options::QUIET);
-        let elide_empty_files = matches.is_present(options::ELIDE_EMPTY_FILES);
-        let suppress_matched = matches.is_present(options::SUPPRESS_MATCHED);
+        let keep_files = matches.contains_id(options::KEEP_FILES);
+        let quiet = matches.contains_id(options::QUIET);
+        let elide_empty_files = matches.contains_id(options::ELIDE_EMPTY_FILES);
+        let suppress_matched = matches.contains_id(options::SUPPRESS_MATCHED);
 
         Self {
             split_name: crash_if_err!(

@@ -38,10 +38,10 @@ fn mkdelim(col: usize, opts: &ArgMatches) -> String {
         delim => delim,
     };
 
-    if col > 1 && !opts.is_present(options::COLUMN_1) {
+    if col > 1 && !opts.contains_id(options::COLUMN_1) {
         s.push_str(delim.as_ref());
     }
-    if col > 2 && !opts.is_present(options::COLUMN_2) {
+    if col > 2 && !opts.contains_id(options::COLUMN_2) {
         s.push_str(delim.as_ref());
     }
 
@@ -91,7 +91,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
 
         match ord {
             Ordering::Less => {
-                if !opts.is_present(options::COLUMN_1) {
+                if !opts.contains_id(options::COLUMN_1) {
                     ensure_nl(ra);
                     print!("{}{}", delim[1], ra);
                 }
@@ -99,7 +99,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
                 na = a.read_line(ra);
             }
             Ordering::Greater => {
-                if !opts.is_present(options::COLUMN_2) {
+                if !opts.contains_id(options::COLUMN_2) {
                     ensure_nl(rb);
                     print!("{}{}", delim[2], rb);
                 }
@@ -107,7 +107,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
                 nb = b.read_line(rb);
             }
             Ordering::Equal => {
-                if !opts.is_present(options::COLUMN_3) {
+                if !opts.contains_id(options::COLUMN_3) {
                     ensure_nl(ra);
                     print!("{}{}", delim[3], ra);
                 }

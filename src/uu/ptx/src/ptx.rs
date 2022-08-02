@@ -113,22 +113,22 @@ struct WordFilter {
 
 impl WordFilter {
     fn new(matches: &clap::ArgMatches, config: &Config) -> UResult<Self> {
-        let (o, oset): (bool, HashSet<String>) = if matches.is_present(options::ONLY_FILE) {
+        let (o, oset): (bool, HashSet<String>) = if matches.contains_id(options::ONLY_FILE) {
             let words =
                 read_word_filter_file(matches, options::ONLY_FILE).map_err_context(String::new)?;
             (true, words)
         } else {
             (false, HashSet::new())
         };
-        let (i, iset): (bool, HashSet<String>) = if matches.is_present(options::IGNORE_FILE) {
+        let (i, iset): (bool, HashSet<String>) = if matches.contains_id(options::IGNORE_FILE) {
             let words = read_word_filter_file(matches, options::IGNORE_FILE)
                 .map_err_context(String::new)?;
             (true, words)
         } else {
             (false, HashSet::new())
         };
-        let break_set: Option<HashSet<char>> = if matches.is_present(options::BREAK_FILE)
-            && !matches.is_present(options::WORD_REGEXP)
+        let break_set: Option<HashSet<char>> = if matches.contains_id(options::BREAK_FILE)
+            && !matches.contains_id(options::WORD_REGEXP)
         {
             let chars =
                 read_char_filter_file(matches, options::BREAK_FILE).map_err_context(String::new)?;
@@ -145,7 +145,7 @@ impl WordFilter {
             None
         };
         // Ignore empty string regex from cmd-line-args
-        let arg_reg: Option<String> = if matches.is_present(options::WORD_REGEXP) {
+        let arg_reg: Option<String> = if matches.contains_id(options::WORD_REGEXP) {
             match matches.value_of(options::WORD_REGEXP) {
                 Some(v) => {
                     if v.is_empty() {
@@ -228,50 +228,50 @@ impl Display for PtxError {
 fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
     let mut config: Config = Default::default();
     let err_msg = "parsing options failed";
-    if matches.is_present(options::TRADITIONAL) {
+    if matches.contains_id(options::TRADITIONAL) {
         config.gnu_ext = false;
         config.format = OutFormat::Roff;
         config.context_regex = "[^ \t\n]+".to_owned();
     } else {
         return Err(PtxError::NotImplemented("GNU extensions").into());
     }
-    if matches.is_present(options::SENTENCE_REGEXP) {
+    if matches.contains_id(options::SENTENCE_REGEXP) {
         return Err(PtxError::NotImplemented("-S").into());
     }
-    config.auto_ref = matches.is_present(options::AUTO_REFERENCE);
-    config.input_ref = matches.is_present(options::REFERENCES);
-    config.right_ref &= matches.is_present(options::RIGHT_SIDE_REFS);
-    config.ignore_case = matches.is_present(options::IGNORE_CASE);
-    if matches.is_present(options::MACRO_NAME) {
+    config.auto_ref = matches.contains_id(options::AUTO_REFERENCE);
+    config.input_ref = matches.contains_id(options::REFERENCES);
+    config.right_ref &= matches.contains_id(options::RIGHT_SIDE_REFS);
+    config.ignore_case = matches.contains_id(options::IGNORE_CASE);
+    if matches.contains_id(options::MACRO_NAME) {
         config.macro_name = matches
             .value_of(options::MACRO_NAME)
             .expect(err_msg)
             .to_string();
     }
-    if matches.is_present(options::FLAG_TRUNCATION) {
+    if matches.contains_id(options::FLAG_TRUNCATION) {
         config.trunc_str = matches
             .value_of(options::FLAG_TRUNCATION)
             .expect(err_msg)
             .to_string();
     }
-    if matches.is_present(options::WIDTH) {
+    if matches.contains_id(options::WIDTH) {
         config.line_width = matches
             .value_of(options::WIDTH)
             .expect(err_msg)
             .parse()
             .map_err(PtxError::ParseError)?;
     }
-    if matches.is_present(options::GAP_SIZE) {
+    if matches.contains_id(options::GAP_SIZE) {
         config.gap_size = matches
             .value_of(options::GAP_SIZE)
             .expect(err_msg)
             .parse()
             .map_err(PtxError::ParseError)?;
     }
-    if matches.is_present(options::FORMAT_ROFF) {
+    if matches.contains_id(options::FORMAT_ROFF) {
         config.format = OutFormat::Roff;
     }
-    if matches.is_present(options::FORMAT_TEX) {
+    if matches.contains_id(options::FORMAT_TEX) {
         config.format = OutFormat::Tex;
     }
     Ok(config)

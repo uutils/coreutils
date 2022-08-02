@@ -78,7 +78,10 @@ Try 'touch --help' for more information."##,
     })?;
     let (mut atime, mut mtime) =
         if let Some(reference) = matches.value_of_os(options::sources::REFERENCE) {
-            stat(Path::new(reference), !matches.is_present(options::NO_DEREF))?
+            stat(
+                Path::new(reference),
+                !matches.contains_id(options::NO_DEREF),
+            )?
         } else {
             let timestamp = if let Some(date) = matches.value_of(options::sources::DATE) {
                 parse_date(date)?
@@ -101,11 +104,11 @@ Try 'touch --help' for more information."##,
         let path = pathbuf.as_path();
 
         if !path.exists() {
-            if matches.is_present(options::NO_CREATE) {
+            if matches.contains_id(options::NO_CREATE) {
                 continue;
             }
 
-            if matches.is_present(options::NO_DEREF) {
+            if matches.contains_id(options::NO_DEREF) {
                 show!(USimpleError::new(
                     1,
                     format!(
@@ -122,21 +125,21 @@ Try 'touch --help' for more information."##,
             };
 
             // Minor optimization: if no reference time was specified, we're done.
-            if !matches.is_present(options::SOURCES) {
+            if !matches.contains_id(options::SOURCES) {
                 continue;
             }
         }
 
         // If changing "only" atime or mtime, grab the existing value of the other.
         // Note that "-a" and "-m" may be passed together; this is not an xor.
-        if matches.is_present(options::ACCESS)
-            || matches.is_present(options::MODIFICATION)
-            || matches.is_present(options::TIME)
+        if matches.contains_id(options::ACCESS)
+            || matches.contains_id(options::MODIFICATION)
+            || matches.contains_id(options::TIME)
         {
-            let st = stat(path, !matches.is_present(options::NO_DEREF))?;
+            let st = stat(path, !matches.contains_id(options::NO_DEREF))?;
             let time = matches.value_of(options::TIME).unwrap_or("");
 
-            if !(matches.is_present(options::ACCESS)
+            if !(matches.contains_id(options::ACCESS)
                 || time.contains(&"access".to_owned())
                 || time.contains(&"atime".to_owned())
                 || time.contains(&"use".to_owned()))
@@ -144,7 +147,7 @@ Try 'touch --help' for more information."##,
                 atime = st.0;
             }
 
-            if !(matches.is_present(options::MODIFICATION)
+            if !(matches.contains_id(options::MODIFICATION)
                 || time.contains(&"modify".to_owned())
                 || time.contains(&"mtime".to_owned()))
             {
@@ -152,7 +155,7 @@ Try 'touch --help' for more information."##,
             }
         }
 
-        if matches.is_present(options::NO_DEREF) {
+        if matches.contains_id(options::NO_DEREF) {
             set_symlink_file_times(path, atime, mtime)
         } else {
             filetime::set_file_times(path, atime, mtime)

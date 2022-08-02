@@ -181,9 +181,9 @@ impl Options {
         }
 
         Ok(Self {
-            show_local_fs: matches.is_present(OPT_LOCAL),
-            show_all_fs: matches.is_present(OPT_ALL),
-            sync: matches.is_present(OPT_SYNC),
+            show_local_fs: matches.contains_id(OPT_LOCAL),
+            show_all_fs: matches.contains_id(OPT_ALL),
+            sync: matches.contains_id(OPT_SYNC),
             block_size: read_block_size(matches).map_err(|e| match e {
                 ParseSizeError::InvalidSuffix(s) => OptionsError::InvalidSuffix(s),
                 ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
@@ -192,13 +192,13 @@ impl Options {
                 ParseSizeError::ParseFailure(s) => OptionsError::InvalidBlockSize(s),
             })?,
             header_mode: {
-                if matches.is_present(OPT_HUMAN_READABLE_BINARY)
-                    || matches.is_present(OPT_HUMAN_READABLE_DECIMAL)
+                if matches.contains_id(OPT_HUMAN_READABLE_BINARY)
+                    || matches.contains_id(OPT_HUMAN_READABLE_DECIMAL)
                 {
                     HeaderMode::HumanReadable
-                } else if matches.is_present(OPT_PORTABILITY) {
+                } else if matches.contains_id(OPT_PORTABILITY) {
                     HeaderMode::PosixPortability
-                // is_present() doesn't work here, it always returns true because OPT_OUTPUT has
+                // contains_id() doesn't work here, it always returns true because OPT_OUTPUT has
                 // default values and hence is always present
                 } else if matches.occurrences_of(OPT_OUTPUT) > 0 {
                     HeaderMode::Output
@@ -207,9 +207,9 @@ impl Options {
                 }
             },
             human_readable: {
-                if matches.is_present(OPT_HUMAN_READABLE_BINARY) {
+                if matches.contains_id(OPT_HUMAN_READABLE_BINARY) {
                     Some(HumanReadable::Binary)
-                } else if matches.is_present(OPT_HUMAN_READABLE_DECIMAL) {
+                } else if matches.contains_id(OPT_HUMAN_READABLE_DECIMAL) {
                     Some(HumanReadable::Decimal)
                 } else {
                     None
@@ -217,7 +217,7 @@ impl Options {
             },
             include,
             exclude,
-            show_total: matches.is_present(OPT_TOTAL),
+            show_total: matches.contains_id(OPT_TOTAL),
             columns: Column::from_matches(matches).map_err(OptionsError::ColumnError)?,
         })
     }
@@ -434,7 +434,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     #[cfg(windows)]
     {
-        if matches.is_present(OPT_INODES) {
+        if matches.contains_id(OPT_INODES) {
             println!("{}: doesn't support -i option", uucore::util_name());
             return Ok(());
         }

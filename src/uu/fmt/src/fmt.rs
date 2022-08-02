@@ -92,21 +92,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         tabwidth: 8,
     };
 
-    fmt_opts.tagged = matches.is_present(OPT_TAGGED_PARAGRAPH);
-    if matches.is_present(OPT_CROWN_MARGIN) {
+    fmt_opts.tagged = matches.contains_id(OPT_TAGGED_PARAGRAPH);
+    if matches.contains_id(OPT_CROWN_MARGIN) {
         fmt_opts.crown = true;
         fmt_opts.tagged = false;
     }
-    fmt_opts.mail = matches.is_present(OPT_PRESERVE_HEADERS);
-    fmt_opts.uniform = matches.is_present(OPT_UNIFORM_SPACING);
-    fmt_opts.quick = matches.is_present(OPT_QUICK);
-    if matches.is_present(OPT_SPLIT_ONLY) {
+    fmt_opts.mail = matches.contains_id(OPT_PRESERVE_HEADERS);
+    fmt_opts.uniform = matches.contains_id(OPT_UNIFORM_SPACING);
+    fmt_opts.quick = matches.contains_id(OPT_QUICK);
+    if matches.contains_id(OPT_SPLIT_ONLY) {
         fmt_opts.split_only = true;
         fmt_opts.crown = false;
         fmt_opts.tagged = false;
     }
-    fmt_opts.xprefix = matches.is_present(OPT_EXACT_PREFIX);
-    fmt_opts.xanti_prefix = matches.is_present(OPT_SKIP_PREFIX);
+    fmt_opts.xprefix = matches.contains_id(OPT_EXACT_PREFIX);
+    fmt_opts.xanti_prefix = matches.contains_id(OPT_SKIP_PREFIX);
 
     if let Some(s) = matches.value_of(OPT_PREFIX).map(String::from) {
         fmt_opts.prefix = s;
@@ -150,7 +150,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ));
             }
         };
-        if !matches.is_present(OPT_WIDTH) {
+        if !matches.contains_id(OPT_WIDTH) {
             fmt_opts.width = cmp::max(fmt_opts.goal * 100 / 94, fmt_opts.goal + 3);
         } else if fmt_opts.goal > fmt_opts.width {
             return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));

@@ -60,7 +60,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Err(_) => usize::MAX,
     };
 
-    let mut cores = if matches.is_present(OPT_ALL) {
+    let mut cores = if matches.contains_id(OPT_ALL) {
         num_cpus_all()
     } else {
         // OMP_NUM_THREADS doesn't have an impact on --all

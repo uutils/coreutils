@@ -405,7 +405,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let delimiter_is_equal = args.contains(&"-d=".to_string()); // special case
     let matches = uu_app().get_matches_from(args);
 
-    let complement = matches.is_present(options::COMPLEMENT);
+    let complement = matches.contains_id(options::COMPLEMENT);
 
     let mode_parse = match (
         matches.value_of(options::BYTES),
@@ -422,7 +422,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             .unwrap_or_default()
                             .to_owned(),
                     ),
-                    zero_terminated: matches.is_present(options::ZERO_TERMINATED),
+                    zero_terminated: matches.contains_id(options::ZERO_TERMINATED),
                 },
             )
         }),
@@ -436,7 +436,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             .unwrap_or_default()
                             .to_owned(),
                     ),
-                    zero_terminated: matches.is_present(options::ZERO_TERMINATED),
+                    zero_terminated: matches.contains_id(options::ZERO_TERMINATED),
                 },
             )
         }),
@@ -453,8 +453,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     None => None,
                 };
 
-                let only_delimited = matches.is_present(options::ONLY_DELIMITED);
-                let zero_terminated = matches.is_present(options::ZERO_TERMINATED);
+                let only_delimited = matches.contains_id(options::ONLY_DELIMITED);
+                let zero_terminated = matches.contains_id(options::ZERO_TERMINATED);
 
                 match matches.value_of(options::DELIMITER) {
                     Some(mut delim) => {
@@ -509,12 +509,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Err(_) => mode_parse,
         Ok(mode) => match mode {
             Mode::Bytes(_, _) | Mode::Characters(_, _)
-                if matches.is_present(options::DELIMITER) =>
+                if matches.contains_id(options::DELIMITER) =>
             {
                 Err("invalid input: The '--delimiter' ('-d') option only usable if printing a sequence of fields".into())
             }
             Mode::Bytes(_, _) | Mode::Characters(_, _)
-                if matches.is_present(options::ONLY_DELIMITED) =>
+                if matches.contains_id(options::ONLY_DELIMITED) =>
             {
                 Err("invalid input: The '--only-delimited' ('-s') option only usable if printing a sequence of fields".into())
             }

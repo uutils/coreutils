@@ -120,7 +120,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec!["-".to_owned()],
     };
 
-    let sysv = matches.is_present(options::SYSTEM_V_COMPATIBLE);
+    let sysv = matches.contains_id(options::SYSTEM_V_COMPATIBLE);
 
     let print_names = if sysv {
         files.len() > 1 || files[0] != "-"
