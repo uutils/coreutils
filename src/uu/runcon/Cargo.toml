@@ -14,7 +14,7 @@ edition = "2021"
 path = "src/runcon.rs"
 
 [dependencies]
-clap         = { version = "3.1", features = ["wrap_help", "cargo"] }
+clap         = { version = "3.2", features = ["wrap_help", "cargo"] }
 uucore       = { version = ">=0.0.9", package="uucore", path="../../uucore", features=["entries", "fs", "perms"] }
 selinux      = { version = "0.2"   }
 thiserror    = { version = "1.0"   }

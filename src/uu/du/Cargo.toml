@@ -18,7 +18,7 @@ path = "src/du.rs"
 chrono = "^0.4.11"
 # For the --exclude & --exclude-from options
 glob = "0.3.0"
-clap = { version = "3.1", features = ["wrap_help", "cargo"] }
+clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
