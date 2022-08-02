@@ -43,8 +43,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().get_matches_from(args);
 
-    let before = matches.is_present(options::BEFORE);
-    let regex = matches.is_present(options::REGEX);
+    let before = matches.contains_id(options::BEFORE);
+    let regex = matches.contains_id(options::REGEX);
     let raw_separator = matches.value_of(options::SEPARATOR).unwrap_or("\n");
     let separator = if raw_separator.is_empty() {
         "\0"

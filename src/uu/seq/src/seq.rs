@@ -66,7 +66,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options = SeqOptions {
         separator: matches.value_of(OPT_SEPARATOR).unwrap_or("\n").to_string(),
         terminator: matches.value_of(OPT_TERMINATOR).unwrap_or("\n").to_string(),
-        widths: matches.is_present(OPT_WIDTHS),
+        widths: matches.contains_id(OPT_WIDTHS),
         format: matches.value_of(OPT_FORMAT),
     };
 

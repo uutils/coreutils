@@ -54,13 +54,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     // too few arguments
-    if !matches.is_present(options::NAME) {
+    if !matches.contains_id(options::NAME) {
         return Err(UUsageError::new(1, "missing operand".to_string()));
     }
 
-    let opt_suffix = matches.is_present(options::SUFFIX);
-    let opt_multiple = matches.is_present(options::MULTIPLE);
-    let opt_zero = matches.is_present(options::ZERO);
+    let opt_suffix = matches.contains_id(options::SUFFIX);
+    let opt_multiple = matches.contains_id(options::MULTIPLE);
+    let opt_zero = matches.contains_id(options::ZERO);
     let multiple_paths = opt_suffix || opt_multiple;
     // too many arguments
     if !multiple_paths && matches.occurrences_of(options::NAME) > 2 {

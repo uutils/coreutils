@@ -332,7 +332,7 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 /// }
 /// ```
 pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
-    if matches.is_present(arguments::OPT_BACKUP) {
+    if matches.contains_id(arguments::OPT_BACKUP) {
         // Use method to determine the type of backups to make. When this option
         // is used but method is not specified, then the value of the
         // VERSION_CONTROL environment variable is used. And if VERSION_CONTROL
@@ -347,7 +347,7 @@ pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
             // Default if no argument is provided to '--backup'
             Ok(BackupMode::ExistingBackup)
         }
-    } else if matches.is_present(arguments::OPT_BACKUP_NO_ARG) {
+    } else if matches.contains_id(arguments::OPT_BACKUP_NO_ARG) {
         // the short form of this option, -b does not accept any argument.
         // Using -b is equivalent to using --backup=existing.
         Ok(BackupMode::ExistingBackup)

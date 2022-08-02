@@ -34,9 +34,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let opts = Opts {
-        ignore: matches.is_present(OPT_IGNORE_FAIL_NON_EMPTY),
-        parents: matches.is_present(OPT_PARENTS),
-        verbose: matches.is_present(OPT_VERBOSE),
+        ignore: matches.contains_id(OPT_IGNORE_FAIL_NON_EMPTY),
+        parents: matches.contains_id(OPT_PARENTS),
+        verbose: matches.contains_id(OPT_VERBOSE),
     };
 
     for path in matches

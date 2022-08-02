@@ -136,13 +136,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_default();
 
     let mut state = State {
-        nflag: matches.is_present(options::OPT_NAME),
-        uflag: matches.is_present(options::OPT_EFFECTIVE_USER),
-        gflag: matches.is_present(options::OPT_GROUP),
-        gsflag: matches.is_present(options::OPT_GROUPS),
-        rflag: matches.is_present(options::OPT_REAL_ID),
-        zflag: matches.is_present(options::OPT_ZERO),
-        cflag: matches.is_present(options::OPT_CONTEXT),
+        nflag: matches.contains_id(options::OPT_NAME),
+        uflag: matches.contains_id(options::OPT_EFFECTIVE_USER),
+        gflag: matches.contains_id(options::OPT_GROUP),
+        gsflag: matches.contains_id(options::OPT_GROUPS),
+        rflag: matches.contains_id(options::OPT_REAL_ID),
+        zflag: matches.contains_id(options::OPT_ZERO),
+        cflag: matches.contains_id(options::OPT_CONTEXT),
 
         selinux_supported: {
             #[cfg(feature = "selinux")]
@@ -237,17 +237,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         };
 
         // GNU's `id` does not support the flags: -p/-P/-A.
-        if matches.is_present(options::OPT_PASSWORD) {
+        if matches.contains_id(options::OPT_PASSWORD) {
             // BSD's `id` ignores all but the first specified user
             pline(possible_pw.as_ref().map(|v| v.uid));
             return Ok(());
         };
-        if matches.is_present(options::OPT_HUMAN_READABLE) {
+        if matches.contains_id(options::OPT_HUMAN_READABLE) {
             // BSD's `id` ignores all but the first specified user
             pretty(possible_pw);
             return Ok(());
         }
-        if matches.is_present(options::OPT_AUDIT) {
+        if matches.contains_id(options::OPT_AUDIT) {
             // BSD's `id` ignores specified users
             auditid();
             return Ok(());

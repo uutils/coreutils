@@ -182,10 +182,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     #[allow(clippy::if_same_then_else)]
-    if matches.is_present(options::FILE_SYSTEM) {
+    if matches.contains_id(options::FILE_SYSTEM) {
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
         syncfs(files);
-    } else if matches.is_present(options::DATA) {
+    } else if matches.contains_id(options::DATA) {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         fdatasync(files);
     } else {

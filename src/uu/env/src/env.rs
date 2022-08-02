@@ -175,8 +175,8 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
     let app = uu_app();
     let matches = app.get_matches_from(args);
 
-    let ignore_env = matches.is_present("ignore-environment");
-    let null = matches.is_present("null");
+    let ignore_env = matches.contains_id("ignore-environment");
+    let null = matches.contains_id("null");
     let running_directory = matches.value_of("chdir");
     let files = matches
         .values_of("file")

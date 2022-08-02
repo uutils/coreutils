@@ -282,9 +282,9 @@ fn read_block_size(s: Option<&str>) -> u64 {
 }
 
 fn choose_size(matches: &ArgMatches, stat: &Stat) -> u64 {
-    if matches.is_present(options::INODES) {
+    if matches.contains_id(options::INODES) {
         stat.inodes
-    } else if matches.is_present(options::APPARENT_SIZE) || matches.is_present(options::BYTES) {
+    } else if matches.contains_id(options::APPARENT_SIZE) || matches.contains_id(options::BYTES) {
         stat.size
     } else {
         // The st_blocks field indicates the number of blocks allocated to the file, 512-byte units.
@@ -489,7 +489,7 @@ fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
 // Given the --exclude-from and/or --exclude arguments, returns the globset lists
 // to ignore the files
 fn get_glob_ignore(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
-    let mut excludes_from = if matches.is_present(options::EXCLUDE_FROM) {
+    let mut excludes_from = if matches.contains_id(options::EXCLUDE_FROM) {
         match matches.values_of(options::EXCLUDE_FROM) {
             Some(all_files) => {
                 let mut exclusion = Vec::<String>::new();
@@ -507,7 +507,7 @@ fn get_glob_ignore(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
         Vec::<String>::new()
     };
 
-    let mut excludes = if matches.is_present(options::EXCLUDE) {
+    let mut excludes = if matches.contains_id(options::EXCLUDE) {
         match matches.values_of(options::EXCLUDE) {
             Some(v) => {
                 // Read the various arguments
@@ -525,7 +525,7 @@ fn get_glob_ignore(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
         let mut builder = Vec::new();
         // Create the `Vec` of excludes
         for f in excludes {
-            if matches.is_present(options::VERBOSE) {
+            if matches.contains_id(options::VERBOSE) {
                 println!("adding {:?} to the exclude list ", &f);
             }
             match Pattern::new(&f) {
@@ -548,19 +548,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().get_matches_from(args);
 
-    let summarize = matches.is_present(options::SUMMARIZE);
+    let summarize = matches.contains_id(options::SUMMARIZE);
 
     let max_depth = parse_depth(matches.value_of(options::MAX_DEPTH), summarize)?;
 
     let options = Options {
-        all: matches.is_present(options::ALL),
+        all: matches.contains_id(options::ALL),
         max_depth,
-        total: matches.is_present(options::TOTAL),
-        separate_dirs: matches.is_present(options::SEPARATE_DIRS),
-        one_file_system: matches.is_present(options::ONE_FILE_SYSTEM),
-        dereference: matches.is_present(options::DEREFERENCE),
-        inodes: matches.is_present(options::INODES),
-        verbose: matches.is_present(options::VERBOSE),
+        total: matches.contains_id(options::TOTAL),
+        separate_dirs: matches.contains_id(options::SEPARATE_DIRS),
+        one_file_system: matches.contains_id(options::ONE_FILE_SYSTEM),
+        dereference: matches.contains_id(options::DEREFERENCE),
+        inodes: matches.contains_id(options::INODES),
+        verbose: matches.contains_id(options::VERBOSE),
     };
 
     let files = match matches.value_of(options::FILE) {
@@ -569,7 +569,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     if options.inodes
-        && (matches.is_present(options::APPARENT_SIZE) || matches.is_present(options::BYTES))
+        && (matches.contains_id(options::APPARENT_SIZE) || matches.contains_id(options::BYTES))
     {
         show_warning!("options --apparent-size and -b are ineffective with --inodes");
     }
@@ -581,19 +581,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::THRESHOLD)))
     });
 
-    let multiplier: u64 = if matches.is_present(options::SI) {
+    let multiplier: u64 = if matches.contains_id(options::SI) {
         1000
     } else {
         1024
     };
     let convert_size_fn = {
-        if matches.is_present(options::HUMAN_READABLE) || matches.is_present(options::SI) {
+        if matches.contains_id(options::HUMAN_READABLE) || matches.contains_id(options::SI) {
             convert_size_human
-        } else if matches.is_present(options::BYTES) {
+        } else if matches.contains_id(options::BYTES) {
             convert_size_b
-        } else if matches.is_present(options::BLOCK_SIZE_1K) {
+        } else if matches.contains_id(options::BLOCK_SIZE_1K) {
             convert_size_k
-        } else if matches.is_present(options::BLOCK_SIZE_1M) {
+        } else if matches.contains_id(options::BLOCK_SIZE_1M) {
             convert_size_m
         } else {
             convert_size_other
@@ -609,7 +609,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let time_format_str = parse_time_style(matches.value_of("time-style"))?;
 
-    let line_separator = if matches.is_present(options::NULL) {
+    let line_separator = if matches.contains_id(options::NULL) {
         "\0"
     } else {
         "\n"
@@ -651,7 +651,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         continue;
                     }
 
-                    if matches.is_present(options::TIME) {
+                    if matches.contains_id(options::TIME) {
                         let tm = {
                             let secs = {
                                 match matches.value_of(options::TIME) {

@@ -38,8 +38,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, obs_width) = handle_obsolete(&args[..]);
     let matches = uu_app().get_matches_from(args);
 
-    let bytes = matches.is_present(options::BYTES);
-    let spaces = matches.is_present(options::SPACES);
+    let bytes = matches.contains_id(options::BYTES);
+    let spaces = matches.contains_id(options::SPACES);
     let poss_width = match matches.value_of(options::WIDTH) {
         Some(v) => Some(v.to_owned()),
         None => obs_width,

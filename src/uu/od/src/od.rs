@@ -193,7 +193,7 @@ impl OdOptions {
             line_bytes = min_bytes;
         }
 
-        let output_duplicates = matches.is_present(options::OUTPUT_DUPLICATES);
+        let output_duplicates = matches.contains_id(options::OUTPUT_DUPLICATES);
 
         let read_bytes = match matches.value_of(options::READ_BYTES) {
             None => None,

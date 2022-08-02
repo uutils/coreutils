@@ -34,10 +34,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().get_matches_from(args);
 
-    if matches.is_present(options::CONTEXT) {
+    if matches.contains_id(options::CONTEXT) {
         return Err(USimpleError::new(1, "--context is not implemented"));
     }
-    if matches.is_present(options::SE_LINUX_SECURITY_CONTEXT) {
+    if matches.contains_id(options::SE_LINUX_SECURITY_CONTEXT) {
         return Err(USimpleError::new(1, "-Z is not implemented"));
     }
 

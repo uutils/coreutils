@@ -315,11 +315,11 @@ struct Options {
 fn parse_command_line(config: clap::Command, args: impl uucore::Args) -> Result<Options> {
     let matches = config.try_get_matches_from(args)?;
 
-    let verbose = matches.is_present(options::VERBOSE);
+    let verbose = matches.contains_id(options::VERBOSE);
 
-    let (recursive_mode, affect_symlink_referent) = if matches.is_present(options::RECURSIVE) {
-        if matches.is_present(options::sym_links::FOLLOW_DIR_SYM_LINKS) {
-            if matches.is_present(options::dereference::NO_DEREFERENCE) {
+    let (recursive_mode, affect_symlink_referent) = if matches.contains_id(options::RECURSIVE) {
+        if matches.contains_id(options::sym_links::FOLLOW_DIR_SYM_LINKS) {
+            if matches.contains_id(options::dereference::NO_DEREFERENCE) {
                 return Err(Error::ArgumentsMismatch(format!(
                     "'--{}' with '--{}' require '-P'",
                     options::RECURSIVE,
@@ -328,8 +328,8 @@ fn parse_command_line(config: clap::Command, args: impl uucore::Args) -> Result<
             }
 
             (RecursiveMode::RecursiveAndFollowAllDirSymLinks, true)
-        } else if matches.is_present(options::sym_links::FOLLOW_ARG_DIR_SYM_LINK) {
-            if matches.is_present(options::dereference::NO_DEREFERENCE) {
+        } else if matches.contains_id(options::sym_links::FOLLOW_ARG_DIR_SYM_LINK) {
+            if matches.contains_id(options::dereference::NO_DEREFERENCE) {
                 return Err(Error::ArgumentsMismatch(format!(
                     "'--{}' with '--{}' require '-P'",
                     options::RECURSIVE,
@@ -339,7 +339,7 @@ fn parse_command_line(config: clap::Command, args: impl uucore::Args) -> Result<
 
             (RecursiveMode::RecursiveAndFollowArgDirSymLinks, true)
         } else {
-            if matches.is_present(options::dereference::DEREFERENCE) {
+            if matches.contains_id(options::dereference::DEREFERENCE) {
                 return Err(Error::ArgumentsMismatch(format!(
                     "'--{}' with '--{}' require either '-H' or '-L'",
                     options::RECURSIVE,
@@ -350,12 +350,12 @@ fn parse_command_line(config: clap::Command, args: impl uucore::Args) -> Result<
             (RecursiveMode::RecursiveButDoNotFollowSymLinks, false)
         }
     } else {
-        let no_dereference = matches.is_present(options::dereference::NO_DEREFERENCE);
+        let no_dereference = matches.contains_id(options::dereference::NO_DEREFERENCE);
         (RecursiveMode::NotRecursive, !no_dereference)
     };
 
     // By default, do not preserve root.
-    let preserve_root = matches.is_present(options::preserve_root::PRESERVE_ROOT);
+    let preserve_root = matches.contains_id(options::preserve_root::PRESERVE_ROOT);
 
     let mut files = matches.values_of_os("FILE").unwrap_or_default();
 
@@ -363,10 +363,10 @@ fn parse_command_line(config: clap::Command, args: impl uucore::Args) -> Result<
         CommandLineMode::ReferenceBased {
             reference: PathBuf::from(path),
         }
-    } else if matches.is_present(options::USER)
-        || matches.is_present(options::ROLE)
-        || matches.is_present(options::TYPE)
-        || matches.is_present(options::RANGE)
+    } else if matches.contains_id(options::USER)
+        || matches.contains_id(options::ROLE)
+        || matches.contains_id(options::TYPE)
+        || matches.contains_id(options::RANGE)
     {
         CommandLineMode::Custom {
             user: matches.value_of_os(options::USER).map(Into::into),

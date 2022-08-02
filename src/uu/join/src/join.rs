@@ -623,7 +623,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    settings.ignore_case = matches.is_present("i");
+    settings.ignore_case = matches.contains_id("i");
     settings.key1 = get_field_number(keys, key1)?;
     settings.key2 = get_field_number(keys, key2)?;
 
@@ -669,19 +669,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.empty = empty.as_bytes().to_vec();
     }
 
-    if matches.is_present("nocheck-order") {
+    if matches.contains_id("nocheck-order") {
         settings.check_order = CheckOrder::Disabled;
     }
 
-    if matches.is_present("check-order") {
+    if matches.contains_id("check-order") {
         settings.check_order = CheckOrder::Enabled;
     }
 
-    if matches.is_present("header") {
+    if matches.contains_id("header") {
         settings.headers = true;
     }
 
-    if matches.is_present("z") {
+    if matches.contains_id("z") {
         settings.line_ending = LineEnding::Nul;
     }
 

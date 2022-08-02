@@ -36,7 +36,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
-    let separator = if matches.is_present(options::ZERO) {
+    let separator = if matches.contains_id(options::ZERO) {
         "\0"
     } else {
         "\n"

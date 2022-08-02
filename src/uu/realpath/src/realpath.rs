@@ -51,13 +51,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(PathBuf::from)
         .collect();
 
-    let strip = matches.is_present(OPT_STRIP);
-    let zero = matches.is_present(OPT_ZERO);
-    let quiet = matches.is_present(OPT_QUIET);
-    let logical = matches.is_present(OPT_LOGICAL);
-    let can_mode = if matches.is_present(OPT_CANONICALIZE_EXISTING) {
+    let strip = matches.contains_id(OPT_STRIP);
+    let zero = matches.contains_id(OPT_ZERO);
+    let quiet = matches.contains_id(OPT_QUIET);
+    let logical = matches.contains_id(OPT_LOGICAL);
+    let can_mode = if matches.contains_id(OPT_CANONICALIZE_EXISTING) {
         MissingHandling::Existing
-    } else if matches.is_present(OPT_CANONICALIZE_MISSING) {
+    } else if matches.contains_id(OPT_CANONICALIZE_MISSING) {
         MissingHandling::Missing
     } else {
         MissingHandling::Normal

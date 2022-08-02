@@ -98,8 +98,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
     let dirs = matches.values_of_os(options::DIRS).unwrap_or_default();
-    let verbose = matches.is_present(options::VERBOSE);
-    let recursive = matches.is_present(options::PARENTS);
+    let verbose = matches.contains_id(options::VERBOSE);
+    let recursive = matches.contains_id(options::PARENTS);
 
     match get_mode(&matches, mode_had_minus_prefix) {
         Ok(mode) => exec(dirs, recursive, mode, verbose),

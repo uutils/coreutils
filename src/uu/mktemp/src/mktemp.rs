@@ -147,7 +147,7 @@ struct Options {
 /// option. This function returns `true` in this case and `false`
 /// in all other cases.
 fn is_tmpdir_argument_actually_the_template(matches: &ArgMatches) -> bool {
-    if !matches.is_present(ARG_TEMPLATE) {
+    if !matches.contains_id(ARG_TEMPLATE) {
         if let Some(tmpdir) = matches.value_of(OPT_TMPDIR) {
             if !Path::new(tmpdir).is_dir() && tmpdir.contains("XXX") {
                 return true;
@@ -178,12 +178,12 @@ impl Options {
             (tmpdir, template)
         };
         Self {
-            directory: matches.is_present(OPT_DIRECTORY),
-            dry_run: matches.is_present(OPT_DRY_RUN),
-            quiet: matches.is_present(OPT_QUIET),
+            directory: matches.contains_id(OPT_DIRECTORY),
+            dry_run: matches.contains_id(OPT_DRY_RUN),
+            quiet: matches.contains_id(OPT_QUIET),
             tmpdir,
             suffix: matches.value_of(OPT_SUFFIX).map(String::from),
-            treat_as_template: matches.is_present(OPT_T),
+            treat_as_template: matches.contains_id(OPT_T),
             template,
         }
     }
@@ -326,7 +326,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if env::var("POSIXLY_CORRECT").is_ok() {
         // If POSIXLY_CORRECT was set, template MUST be the last argument.
-        if is_tmpdir_argument_actually_the_template(&matches) || matches.is_present(ARG_TEMPLATE) {
+        if is_tmpdir_argument_actually_the_template(&matches) || matches.contains_id(ARG_TEMPLATE) {
             // Template argument was provided, check if was the last one.
             if args.last().unwrap() != &options.template {
                 return Err(Box::new(MkTempError::TooManyTemplates));

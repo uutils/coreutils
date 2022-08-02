@@ -82,9 +82,9 @@ impl Config {
                 Err(err) => return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err)),
             };
 
-        let preserve_status: bool = options.is_present(options::PRESERVE_STATUS);
-        let foreground = options.is_present(options::FOREGROUND);
-        let verbose = options.is_present(options::VERBOSE);
+        let preserve_status: bool = options.contains_id(options::PRESERVE_STATUS);
+        let foreground = options.contains_id(options::FOREGROUND);
+        let verbose = options.contains_id(options::VERBOSE);
 
         let command = options
             .values_of(options::COMMAND)

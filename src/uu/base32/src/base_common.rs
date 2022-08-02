@@ -77,8 +77,8 @@ impl Config {
             .transpose()?;
 
         Ok(Self {
-            decode: options.is_present(options::DECODE),
-            ignore_garbage: options.is_present(options::IGNORE_GARBAGE),
+            decode: options.contains_id(options::DECODE),
+            ignore_garbage: options.contains_id(options::IGNORE_GARBAGE),
             wrap_cols: cols,
             to_read: file,
         })

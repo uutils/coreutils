@@ -54,16 +54,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let options = Options {
-        append: matches.is_present(options::APPEND),
-        ignore_interrupts: matches.is_present(options::IGNORE_INTERRUPTS),
+        append: matches.contains_id(options::APPEND),
+        ignore_interrupts: matches.contains_id(options::IGNORE_INTERRUPTS),
         files: matches
             .values_of(options::FILE)
             .map(|v| v.map(ToString::to_string).collect())
             .unwrap_or_default(),
         output_error: {
-            if matches.is_present(options::IGNORE_PIPE_ERRORS) {
+            if matches.contains_id(options::IGNORE_PIPE_ERRORS) {
                 Some(OutputErrorMode::WarnNoPipe)
-            } else if matches.is_present(options::OUTPUT_ERROR) {
+            } else if matches.contains_id(options::OUTPUT_ERROR) {
                 if let Some(v) = matches.value_of(options::OUTPUT_ERROR) {
                     match v {
                         "warn" => Some(OutputErrorMode::Warn),

@@ -85,7 +85,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let force = matches.is_present(OPT_FORCE);
+    let force = matches.contains_id(OPT_FORCE);
 
     if files.is_empty() && !force {
         // Still check by hand and not use clap
@@ -95,11 +95,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let options = Options {
             force,
             interactive: {
-                if matches.is_present(OPT_PROMPT) {
+                if matches.contains_id(OPT_PROMPT) {
                     InteractiveMode::Always
-                } else if matches.is_present(OPT_PROMPT_MORE) {
+                } else if matches.contains_id(OPT_PROMPT_MORE) {
                     InteractiveMode::Once
-                } else if matches.is_present(OPT_INTERACTIVE) {
+                } else if matches.contains_id(OPT_INTERACTIVE) {
                     match matches.value_of(OPT_INTERACTIVE).unwrap() {
                         "never" => InteractiveMode::Never,
                         "once" => InteractiveMode::Once,
@@ -115,11 +115,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     InteractiveMode::Never
                 }
             },
-            one_fs: matches.is_present(OPT_ONE_FILE_SYSTEM),
-            preserve_root: !matches.is_present(OPT_NO_PRESERVE_ROOT),
-            recursive: matches.is_present(OPT_RECURSIVE) || matches.is_present(OPT_RECURSIVE_R),
-            dir: matches.is_present(OPT_DIR),
-            verbose: matches.is_present(OPT_VERBOSE),
+            one_fs: matches.contains_id(OPT_ONE_FILE_SYSTEM),
+            preserve_root: !matches.contains_id(OPT_NO_PRESERVE_ROOT),
+            recursive: matches.contains_id(OPT_RECURSIVE) || matches.contains_id(OPT_RECURSIVE_R),
+            dir: matches.contains_id(OPT_DIR),
+            verbose: matches.contains_id(OPT_VERBOSE),
         };
         if options.interactive == InteractiveMode::Once && (options.recursive || files.len() > 3) {
             let msg = if options.recursive {

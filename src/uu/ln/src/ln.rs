@@ -146,11 +146,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(PathBuf::from)
         .collect();
 
-    let symbolic = matches.is_present(options::SYMBOLIC);
+    let symbolic = matches.contains_id(options::SYMBOLIC);
 
-    let overwrite_mode = if matches.is_present(options::FORCE) {
+    let overwrite_mode = if matches.contains_id(options::FORCE) {
         OverwriteMode::Force
-    } else if matches.is_present(options::INTERACTIVE) {
+    } else if matches.contains_id(options::INTERACTIVE) {
         OverwriteMode::Interactive
     } else {
         OverwriteMode::NoClobber
@@ -160,7 +160,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let backup_suffix = backup_control::determine_backup_suffix(&matches);
 
     // When we have "-L" or "-L -P", false otherwise
-    let logical = matches.is_present(options::LOGICAL);
+    let logical = matches.contains_id(options::LOGICAL);
 
     let settings = Settings {
         overwrite: overwrite_mode,
@@ -168,13 +168,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         suffix: backup_suffix,
         symbolic,
         logical,
-        relative: matches.is_present(options::RELATIVE),
+        relative: matches.contains_id(options::RELATIVE),
         target_dir: matches
             .value_of(options::TARGET_DIRECTORY)
             .map(String::from),
-        no_target_dir: matches.is_present(options::NO_TARGET_DIRECTORY),
-        no_dereference: matches.is_present(options::NO_DEREFERENCE),
-        verbose: matches.is_present(options::VERBOSE),
+        no_target_dir: matches.contains_id(options::NO_TARGET_DIRECTORY),
+        no_dereference: matches.contains_id(options::NO_DEREFERENCE),
+        verbose: matches.contains_id(options::VERBOSE),
     };
 
     exec(&paths[..], &settings)

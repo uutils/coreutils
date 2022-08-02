@@ -68,35 +68,35 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut include_idle = true;
 
     // If true, display a line at the top describing each field.
-    let include_heading = !matches.is_present(options::OMIT_HEADINGS);
+    let include_heading = !matches.contains_id(options::OMIT_HEADINGS);
 
     // if true, display the user's full name from pw_gecos.
     let mut include_fullname = true;
 
     // if true, display the user's ~/.project file when doing long format.
-    let include_project = !matches.is_present(options::OMIT_PROJECT_FILE);
+    let include_project = !matches.contains_id(options::OMIT_PROJECT_FILE);
 
     // if true, display the user's ~/.plan file when doing long format.
-    let include_plan = !matches.is_present(options::OMIT_PLAN_FILE);
+    let include_plan = !matches.contains_id(options::OMIT_PLAN_FILE);
 
     // if true, display the user's home directory and shell
     // when doing long format.
-    let include_home_and_shell = !matches.is_present(options::OMIT_HOME_DIR);
+    let include_home_and_shell = !matches.contains_id(options::OMIT_HOME_DIR);
 
     // if true, use the "short" output format.
-    let do_short_format = !matches.is_present(options::LONG_FORMAT);
+    let do_short_format = !matches.contains_id(options::LONG_FORMAT);
 
     /* if true, display the ut_host field. */
     let mut include_where = true;
 
-    if matches.is_present(options::OMIT_NAME) {
+    if matches.contains_id(options::OMIT_NAME) {
         include_fullname = false;
     }
-    if matches.is_present(options::OMIT_NAME_HOST) {
+    if matches.contains_id(options::OMIT_NAME_HOST) {
         include_fullname = false;
         include_where = false;
     }
-    if matches.is_present(options::OMIT_NAME_HOST_TIME) {
+    if matches.contains_id(options::OMIT_NAME_HOST_TIME) {
         include_fullname = false;
         include_idle = false;
         include_where = false;

@@ -18,7 +18,7 @@ impl CommandLineOpts for ArgMatches {
     }
 
     fn opts_present(&self, opts: &[&str]) -> bool {
-        opts.iter().any(|opt| self.is_present(opt))
+        opts.iter().any(|opt| self.contains_id(opt))
     }
 }
 

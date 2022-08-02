@@ -328,11 +328,11 @@ pub fn uu_app<'a>() -> Command<'a> {
 ///
 ///
 fn check_unimplemented(matches: &ArgMatches) -> UResult<()> {
-    if matches.is_present(OPT_NO_TARGET_DIRECTORY) {
+    if matches.contains_id(OPT_NO_TARGET_DIRECTORY) {
         Err(InstallError::Unimplemented(String::from("--no-target-directory, -T")).into())
-    } else if matches.is_present(OPT_PRESERVE_CONTEXT) {
+    } else if matches.contains_id(OPT_PRESERVE_CONTEXT) {
         Err(InstallError::Unimplemented(String::from("--preserve-context, -P")).into())
-    } else if matches.is_present(OPT_CONTEXT) {
+    } else if matches.contains_id(OPT_CONTEXT) {
         Err(InstallError::Unimplemented(String::from("--context, -Z")).into())
     } else {
         Ok(())
@@ -348,7 +348,7 @@ fn check_unimplemented(matches: &ArgMatches) -> UResult<()> {
 /// In event of failure, returns an integer intended as a program return code.
 ///
 fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
-    let main_function = if matches.is_present(OPT_DIRECTORY) {
+    let main_function = if matches.contains_id(OPT_DIRECTORY) {
         MainFunction::Directory
     } else {
         MainFunction::Standard
@@ -356,7 +356,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let considering_dir: bool = MainFunction::Directory == main_function;
 
-    let specified_mode: Option<u32> = if matches.is_present(OPT_MODE) {
+    let specified_mode: Option<u32> = if matches.contains_id(OPT_MODE) {
         let x = matches.value_of(OPT_MODE).ok_or(1)?;
         Some(mode::parse(x, considering_dir, get_umask()).map_err(|err| {
             show_error!("Invalid mode string: {}", err);
@@ -369,9 +369,9 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let backup_mode = backup_control::determine_backup_mode(matches)?;
     let target_dir = matches.value_of(OPT_TARGET_DIRECTORY).map(|d| d.to_owned());
 
-    let preserve_timestamps = matches.is_present(OPT_PRESERVE_TIMESTAMPS);
-    let compare = matches.is_present(OPT_COMPARE);
-    let strip = matches.is_present(OPT_STRIP);
+    let preserve_timestamps = matches.contains_id(OPT_PRESERVE_TIMESTAMPS);
+    let compare = matches.contains_id(OPT_COMPARE);
+    let strip = matches.contains_id(OPT_STRIP);
     if preserve_timestamps && compare {
         show_error!("Options --compare and --preserve-timestamps are mutually exclusive");
         return Err(1.into());
@@ -387,7 +387,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         suffix: backup_control::determine_backup_suffix(matches),
         owner: matches.value_of(OPT_OWNER).unwrap_or("").to_string(),
         group: matches.value_of(OPT_GROUP).unwrap_or("").to_string(),
-        verbose: matches.is_present(OPT_VERBOSE),
+        verbose: matches.contains_id(OPT_VERBOSE),
         preserve_timestamps,
         compare,
         strip,
@@ -396,7 +396,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
                 .value_of(OPT_STRIP_PROGRAM)
                 .unwrap_or(DEFAULT_STRIP_PROGRAM),
         ),
-        create_leading: matches.is_present(OPT_CREATE_LEADING),
+        create_leading: matches.contains_id(OPT_CREATE_LEADING),
         target_dir,
     })
 }

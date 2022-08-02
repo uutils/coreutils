@@ -43,7 +43,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let absfrom = canonicalize(from, MissingHandling::Normal, ResolveMode::Logical)
         .map_err_context(String::new)?;
 
-    if matches.is_present(options::DIR) {
+    if matches.contains_id(options::DIR) {
         let base = Path::new(&matches.value_of(options::DIR).unwrap()).to_path_buf();
         let absbase = canonicalize(base, MissingHandling::Normal, ResolveMode::Logical)
             .map_err_context(String::new)?;
