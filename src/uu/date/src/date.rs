@@ -188,7 +188,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 CStr::from_ptr(c_str).to_string_lossy().into_owned()
             };
             if fmt_str.is_empty() {
-                fmt_str = String::from("%a %b %d %I:%M:%S %Z %p %Y");
+                fmt_str = String::from("%a %b %e %H:%M:%S %Z %Y");
             }
             Format::Custom(fmt_str)
         }
@@ -269,6 +269,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         for date in dates {
             match date {
                 Ok(date) => {
+                    // libc_strftime::strftime_local can be replaced with chrono::format_localized
+                    // once issues
+                    // https://github.com/chronotope/chrono/issues/749 and
+                    // https://github.com/chronotope/chrono/issues/708
+                    // are fixed
                     let formatted = libc_strftime::strftime_local(format_string, date.timestamp());
                     println!("{}", formatted);
                 }
