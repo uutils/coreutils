@@ -9,7 +9,7 @@
 #[macro_use]
 extern crate quick_error;
 
-use clap::{AppSettings, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgMatches, Command};
 use itertools::Itertools;
 use quick_error::ResultExt;
 use regex::Regex;
@@ -22,9 +22,8 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UResult};
+use uucore::error::UResult;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 const ABOUT: &str =
     "Write content of given file or standard input to standard output with pagination filter";
 const AFTER_HELP: &str =
@@ -85,7 +84,6 @@ mod options {
     pub const INDENT: &str = "indent";
     pub const JOIN_LINES: &str = "join-lines";
     pub const HELP: &str = "help";
-    pub const VERSION: &str = "version";
     pub const FILES: &str = "files";
 }
 
@@ -196,13 +194,11 @@ quick_error! {
 
 pub fn uu_app<'a>() -> Command<'a> {
     Command::new(uucore::util_name())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .infer_long_args(true)
         .args_override_self(true)
-        .setting(AppSettings::NoAutoHelp)
-        .setting(AppSettings::NoAutoVersion)
         .arg(
             Arg::new(options::PAGES)
                 .long(options::PAGES)
@@ -362,13 +358,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help("Show this help message")
-        )
-        .arg(
-            Arg::new(options::VERSION)
-                .short('V')
-                .long(options::VERSION)
-                .help("Show version information")
+                .help("Print help information")
         )
         .arg(
             Arg::new(options::FILES)
@@ -389,20 +379,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Ok(m) => m,
         Err(e) => {
             e.print()?;
-            set_exit_code(1);
             return Ok(());
         }
     };
-
-    if matches.contains_id(options::VERSION) {
-        println!("{}", command.render_long_version());
-        return Ok(());
-    }
-
-    if matches.contains_id(options::HELP) {
-        command.print_help()?;
-        return Ok(());
-    }
 
     let mut files = matches
         .get_many::<String>(options::FILES)

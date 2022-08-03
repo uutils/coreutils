@@ -469,3 +469,13 @@ fn test_value_for_number_lines() {
     // Therefore, pr tries to access the file, which does not exist.
     new_ucmd!().args(&["-n", "foo5.txt", "test.log"]).fails();
 }
+
+#[test]
+fn test_help() {
+    new_ucmd!().arg("--help").succeeds();
+}
+
+#[test]
+fn test_version() {
+    new_ucmd!().arg("--version").succeeds();
+}
