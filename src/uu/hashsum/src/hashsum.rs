@@ -161,31 +161,31 @@ fn detect_algo(
                     alg = Some(val);
                     output_bits = bits;
                 };
-                if matches.is_present("md5") {
+                if matches.contains_id("md5") {
                     set_or_crash("MD5", Box::new(Md5::new()), 128);
                 }
-                if matches.is_present("sha1") {
+                if matches.contains_id("sha1") {
                     set_or_crash("SHA1", Box::new(Sha1::new()), 160);
                 }
-                if matches.is_present("sha224") {
+                if matches.contains_id("sha224") {
                     set_or_crash("SHA224", Box::new(Sha224::new()), 224);
                 }
-                if matches.is_present("sha256") {
+                if matches.contains_id("sha256") {
                     set_or_crash("SHA256", Box::new(Sha256::new()), 256);
                 }
-                if matches.is_present("sha384") {
+                if matches.contains_id("sha384") {
                     set_or_crash("SHA384", Box::new(Sha384::new()), 384);
                 }
-                if matches.is_present("sha512") {
+                if matches.contains_id("sha512") {
                     set_or_crash("SHA512", Box::new(Sha512::new()), 512);
                 }
-                if matches.is_present("b2sum") {
+                if matches.contains_id("b2sum") {
                     set_or_crash("BLAKE2", Box::new(blake2b_simd::State::new()), 512);
                 }
-                if matches.is_present("b3sum") {
+                if matches.contains_id("b3sum") {
                     set_or_crash("BLAKE3", Box::new(blake3::Hasher::new()), 256);
                 }
-                if matches.is_present("sha3") {
+                if matches.contains_id("sha3") {
                     match matches.value_of("bits") {
                         Some(bits_str) => match (bits_str).parse::<usize>() {
                             Ok(224) => set_or_crash(
@@ -217,19 +217,19 @@ fn detect_algo(
                         None => crash!(1, "--bits required for SHA3"),
                     }
                 }
-                if matches.is_present("sha3-224") {
+                if matches.contains_id("sha3-224") {
                     set_or_crash("SHA3-224", Box::new(Sha3_224::new()), 224);
                 }
-                if matches.is_present("sha3-256") {
+                if matches.contains_id("sha3-256") {
                     set_or_crash("SHA3-256", Box::new(Sha3_256::new()), 256);
                 }
-                if matches.is_present("sha3-384") {
+                if matches.contains_id("sha3-384") {
                     set_or_crash("SHA3-384", Box::new(Sha3_384::new()), 384);
                 }
-                if matches.is_present("sha3-512") {
+                if matches.contains_id("sha3-512") {
                     set_or_crash("SHA3-512", Box::new(Sha3_512::new()), 512);
                 }
-                if matches.is_present("shake128") {
+                if matches.contains_id("shake128") {
                     match matches.value_of("bits") {
                         Some(bits_str) => match (bits_str).parse::<usize>() {
                             Ok(bits) => set_or_crash("SHAKE128", Box::new(Shake128::new()), bits),
@@ -238,7 +238,7 @@ fn detect_algo(
                         None => crash!(1, "--bits required for SHAKE-128"),
                     }
                 }
-                if matches.is_present("shake256") {
+                if matches.contains_id("shake256") {
                     match matches.value_of("bits") {
                         Some(bits_str) => match (bits_str).parse::<usize>() {
                             Ok(bits) => set_or_crash("SHAKE256", Box::new(Shake256::new()), bits),
@@ -287,20 +287,20 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
 
     let (name, algo, bits) = detect_algo(&binary_name, &matches);
 
-    let binary = if matches.is_present("binary") {
+    let binary = if matches.contains_id("binary") {
         true
-    } else if matches.is_present("text") {
+    } else if matches.contains_id("text") {
         false
     } else {
         binary_flag_default
     };
-    let check = matches.is_present("check");
-    let tag = matches.is_present("tag");
-    let nonames = matches.is_present("no-names");
-    let status = matches.is_present("status");
-    let quiet = matches.is_present("quiet") || status;
-    let strict = matches.is_present("strict");
-    let warn = matches.is_present("warn") && !status;
+    let check = matches.contains_id("check");
+    let tag = matches.contains_id("tag");
+    let nonames = matches.contains_id("no-names");
+    let status = matches.contains_id("status");
+    let quiet = matches.contains_id("quiet") || status;
+    let strict = matches.contains_id("strict");
+    let warn = matches.contains_id("warn") && !status;
 
     let opts = Options {
         algoname: name,

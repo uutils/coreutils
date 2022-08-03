@@ -369,7 +369,7 @@ struct PaddingCollection {
 impl Config {
     #[allow(clippy::cognitive_complexity)]
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
-        let context = options.is_present(options::CONTEXT);
+        let context = options.contains_id(options::CONTEXT);
         let (mut format, opt) = if let Some(format_) = options.value_of(options::FORMAT) {
             (
                 match format_ {
@@ -383,13 +383,13 @@ impl Config {
                 },
                 Some(options::FORMAT),
             )
-        } else if options.is_present(options::format::LONG) {
+        } else if options.contains_id(options::format::LONG) {
             (Format::Long, Some(options::format::LONG))
-        } else if options.is_present(options::format::ACROSS) {
+        } else if options.contains_id(options::format::ACROSS) {
             (Format::Across, Some(options::format::ACROSS))
-        } else if options.is_present(options::format::COMMAS) {
+        } else if options.contains_id(options::format::COMMAS) {
             (Format::Commas, Some(options::format::COMMAS))
-        } else if options.is_present(options::format::COLUMNS) {
+        } else if options.contains_id(options::format::COLUMNS) {
             (Format::Columns, Some(options::format::COLUMNS))
         } else if atty::is(atty::Stream::Stdout) {
             (Format::Columns, None)
@@ -435,9 +435,9 @@ impl Config {
             }
         }
 
-        let files = if options.is_present(options::files::ALL) {
+        let files = if options.contains_id(options::files::ALL) {
             Files::All
-        } else if options.is_present(options::files::ALMOST_ALL) {
+        } else if options.contains_id(options::files::ALMOST_ALL) {
             Files::AlmostAll
         } else {
             Files::Normal
@@ -454,15 +454,15 @@ impl Config {
                 // below should never happen as clap already restricts the values.
                 _ => unreachable!("Invalid field for --sort"),
             }
-        } else if options.is_present(options::sort::TIME) {
+        } else if options.contains_id(options::sort::TIME) {
             Sort::Time
-        } else if options.is_present(options::sort::SIZE) {
+        } else if options.contains_id(options::sort::SIZE) {
             Sort::Size
-        } else if options.is_present(options::sort::NONE) {
+        } else if options.contains_id(options::sort::NONE) {
             Sort::None
-        } else if options.is_present(options::sort::VERSION) {
+        } else if options.contains_id(options::sort::VERSION) {
             Sort::Version
-        } else if options.is_present(options::sort::EXTENSION) {
+        } else if options.contains_id(options::sort::EXTENSION) {
             Sort::Extension
         } else {
             Sort::Name
@@ -476,16 +476,16 @@ impl Config {
                 // below should never happen as clap already restricts the values.
                 _ => unreachable!("Invalid field for --time"),
             }
-        } else if options.is_present(options::time::ACCESS) {
+        } else if options.contains_id(options::time::ACCESS) {
             Time::Access
-        } else if options.is_present(options::time::CHANGE) {
+        } else if options.contains_id(options::time::CHANGE) {
             Time::Change
         } else {
             Time::Modification
         };
 
         let mut needs_color = match options.value_of(options::COLOR) {
-            None => options.is_present(options::COLOR),
+            None => options.contains_id(options::COLOR),
             Some(val) => match val {
                 "" | "always" | "yes" | "force" => true,
                 "auto" | "tty" | "if-tty" => atty::is(atty::Stream::Stdout),
@@ -499,14 +499,14 @@ impl Config {
                 .value_of(options::size::BLOCK_SIZE)
                 .unwrap()
                 .eq("si")
-            || options.is_present(options::size::SI);
+            || options.contains_id(options::size::SI);
         let opt_hr = (cmd_line_bs.is_some()
             && options
                 .value_of(options::size::BLOCK_SIZE)
                 .unwrap()
                 .eq("human-readable"))
-            || options.is_present(options::size::HUMAN_READABLE);
-        let opt_kb = options.is_present(options::size::KIBIBYTES);
+            || options.contains_id(options::size::HUMAN_READABLE);
+        let opt_kb = options.contains_id(options::size::KIBIBYTES);
 
         let bs_env_var = std::env::var_os("BLOCK_SIZE");
         let ls_bs_env_var = std::env::var_os("LS_BLOCK_SIZE");
@@ -555,12 +555,12 @@ impl Config {
         };
 
         let long = {
-            let author = options.is_present(options::AUTHOR);
-            let group = !options.is_present(options::NO_GROUP)
-                && !options.is_present(options::format::LONG_NO_GROUP);
-            let owner = !options.is_present(options::format::LONG_NO_OWNER);
+            let author = options.contains_id(options::AUTHOR);
+            let group = !options.contains_id(options::NO_GROUP)
+                && !options.contains_id(options::format::LONG_NO_GROUP);
+            let owner = !options.contains_id(options::format::LONG_NO_OWNER);
             #[cfg(unix)]
-            let numeric_uid_gid = options.is_present(options::format::LONG_NUMERIC_UID_GID);
+            let numeric_uid_gid = options.contains_id(options::format::LONG_NUMERIC_UID_GID);
             LongFormat {
                 author,
                 group,
@@ -604,9 +604,9 @@ impl Config {
         };
 
         #[allow(clippy::needless_bool)]
-        let mut show_control = if options.is_present(options::HIDE_CONTROL_CHARS) {
+        let mut show_control = if options.contains_id(options::HIDE_CONTROL_CHARS) {
             false
-        } else if options.is_present(options::SHOW_CONTROL_CHARS) {
+        } else if options.contains_id(options::SHOW_CONTROL_CHARS) {
             true
         } else {
             !atty::is(atty::Stream::Stdout)
@@ -647,13 +647,13 @@ impl Config {
                 },
                 _ => unreachable!("Should have been caught by Clap"),
             }
-        } else if options.is_present(options::quoting::LITERAL) {
+        } else if options.contains_id(options::quoting::LITERAL) {
             QuotingStyle::Literal { show_control }
-        } else if options.is_present(options::quoting::ESCAPE) {
+        } else if options.contains_id(options::quoting::ESCAPE) {
             QuotingStyle::C {
                 quotes: quoting_style::Quotes::None,
             }
-        } else if options.is_present(options::quoting::C) {
+        } else if options.contains_id(options::quoting::C) {
             QuotingStyle::C {
                 quotes: quoting_style::Quotes::Double,
             }
@@ -687,9 +687,9 @@ impl Config {
                 }
                 &_ => IndicatorStyle::None,
             }
-        } else if options.is_present(options::indicator_style::SLASH) {
+        } else if options.contains_id(options::indicator_style::SLASH) {
             IndicatorStyle::Slash
-        } else if options.is_present(options::indicator_style::FILE_TYPE) {
+        } else if options.contains_id(options::indicator_style::FILE_TYPE) {
             IndicatorStyle::FileType
         } else {
             IndicatorStyle::None
@@ -698,7 +698,7 @@ impl Config {
         let time_style = if let Some(field) = options.value_of(options::TIME_STYLE) {
             //If both FULL_TIME and TIME_STYLE are present
             //The one added last is dominant
-            if options.is_present(options::FULL_TIME)
+            if options.contains_id(options::FULL_TIME)
                 && options.indices_of(options::FULL_TIME).unwrap().last()
                     > options.indices_of(options::TIME_STYLE).unwrap().last()
             {
@@ -714,7 +714,7 @@ impl Config {
                     _ => unreachable!("Invalid field for --time-style"),
                 }
             }
-        } else if options.is_present(options::FULL_TIME) {
+        } else if options.contains_id(options::FULL_TIME) {
             TimeStyle::FullIso
         } else {
             TimeStyle::Locale
@@ -722,7 +722,7 @@ impl Config {
 
         let mut ignore_patterns: Vec<Pattern> = Vec::new();
 
-        if options.is_present(options::IGNORE_BACKUPS) {
+        if options.contains_id(options::IGNORE_BACKUPS) {
             ignore_patterns.push(Pattern::new("*~").unwrap());
             ignore_patterns.push(Pattern::new(".*~").unwrap());
         }
@@ -821,13 +821,13 @@ impl Config {
             None
         };
 
-        let dereference = if options.is_present(options::dereference::ALL) {
+        let dereference = if options.contains_id(options::dereference::ALL) {
             Dereference::All
-        } else if options.is_present(options::dereference::ARGS) {
+        } else if options.contains_id(options::dereference::ARGS) {
             Dereference::Args
-        } else if options.is_present(options::dereference::DIR_ARGS) {
+        } else if options.contains_id(options::dereference::DIR_ARGS) {
             Dereference::DirArgs
-        } else if options.is_present(options::DIRECTORY)
+        } else if options.contains_id(options::DIRECTORY)
             || indicator_style == IndicatorStyle::Classify
             || format == Format::Long
         {
@@ -840,18 +840,18 @@ impl Config {
             format,
             files,
             sort,
-            recursive: options.is_present(options::RECURSIVE),
-            reverse: options.is_present(options::REVERSE),
+            recursive: options.contains_id(options::RECURSIVE),
+            reverse: options.contains_id(options::REVERSE),
             dereference,
             ignore_patterns,
             size_format,
-            directory: options.is_present(options::DIRECTORY),
+            directory: options.contains_id(options::DIRECTORY),
             time,
             color,
             #[cfg(unix)]
-            inode: options.is_present(options::INODE),
+            inode: options.contains_id(options::INODE),
             long,
-            alloc_size: options.is_present(options::size::ALLOCATION_SIZE),
+            alloc_size: options.contains_id(options::size::ALLOCATION_SIZE),
             block_size,
             width,
             quoting_style,
@@ -868,8 +868,8 @@ impl Config {
                     false
                 }
             },
-            group_directories_first: options.is_present(options::GROUP_DIRECTORIES_FIRST),
-            eol: if options.is_present(options::ZERO) {
+            group_directories_first: options.contains_id(options::GROUP_DIRECTORIES_FIRST),
+            eol: if options.contains_id(options::ZERO) {
                 '\0'
             } else {
                 '\n'

@@ -274,18 +274,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let uniq = Uniq {
-        repeats_only: matches.is_present(options::REPEATED)
-            || matches.is_present(options::ALL_REPEATED),
-        uniques_only: matches.is_present(options::UNIQUE),
-        all_repeated: matches.is_present(options::ALL_REPEATED)
-            || matches.is_present(options::GROUP),
+        repeats_only: matches.contains_id(options::REPEATED)
+            || matches.contains_id(options::ALL_REPEATED),
+        uniques_only: matches.contains_id(options::UNIQUE),
+        all_repeated: matches.contains_id(options::ALL_REPEATED)
+            || matches.contains_id(options::GROUP),
         delimiters: get_delimiter(&matches),
-        show_counts: matches.is_present(options::COUNT),
+        show_counts: matches.contains_id(options::COUNT),
         skip_fields: opt_parsed(options::SKIP_FIELDS, &matches)?,
         slice_start: opt_parsed(options::SKIP_CHARS, &matches)?,
         slice_stop: opt_parsed(options::CHECK_CHARS, &matches)?,
-        ignore_case: matches.is_present(options::IGNORE_CASE),
-        zero_terminated: matches.is_present(options::ZERO_TERMINATED),
+        ignore_case: matches.contains_id(options::IGNORE_CASE),
+        zero_terminated: matches.contains_id(options::ZERO_TERMINATED),
     };
 
     if uniq.show_counts && uniq.all_repeated {
@@ -410,7 +410,7 @@ fn get_delimiter(matches: &ArgMatches) -> Delimiters {
         .or_else(|| matches.value_of(options::GROUP));
     if let Some(delimiter_arg) = value {
         Delimiters::from_str(delimiter_arg).unwrap() // All possible values for ALL_REPEATED are Delimiters (of type `&str`)
-    } else if matches.is_present(options::GROUP) {
+    } else if matches.contains_id(options::GROUP) {
         Delimiters::Separate
     } else {
         Delimiters::None

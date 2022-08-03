@@ -58,11 +58,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
-    let changes = matches.is_present(options::CHANGES);
-    let quiet = matches.is_present(options::QUIET);
-    let verbose = matches.is_present(options::VERBOSE);
-    let preserve_root = matches.is_present(options::PRESERVE_ROOT);
-    let recursive = matches.is_present(options::RECURSIVE);
+    let changes = matches.contains_id(options::CHANGES);
+    let quiet = matches.contains_id(options::QUIET);
+    let verbose = matches.contains_id(options::VERBOSE);
+    let preserve_root = matches.contains_id(options::PRESERVE_ROOT);
+    let recursive = matches.contains_id(options::RECURSIVE);
     let fmode = match matches.value_of(options::REFERENCE) {
         Some(fref) => match fs::metadata(fref) {
             Ok(meta) => Some(meta.mode()),

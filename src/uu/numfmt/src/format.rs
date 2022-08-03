@@ -97,6 +97,18 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
     Ok((number, suffix))
 }
 
+// Returns the implicit precision of a number, which is the count of digits after the dot. For
+// example, 1.23 has an implicit precision of 2.
+fn parse_implicit_precision(s: &str) -> usize {
+    match s.split_once('.') {
+        Some((_, decimal_part)) => decimal_part
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .count(),
+        None => 0,
+    }
+}
+
 fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
     match (s, u) {
         (Some((raw_suffix, false)), &Unit::Auto) | (Some((raw_suffix, false)), &Unit::Si) => {
@@ -288,11 +300,19 @@ fn format_string(
         None => source,
     };
 
+    let precision = if let Some(p) = options.format.precision {
+        p
+    } else if options.transform.from == Unit::None && options.transform.to == Unit::None {
+        parse_implicit_precision(source_without_suffix)
+    } else {
+        0
+    };
+
     let number = transform_to(
         transform_from(source_without_suffix, &options.transform)?,
         &options.transform,
         options.round,
-        options.format.precision,
+        precision,
     )?;
 
     // bring back the suffix before applying padding
@@ -421,5 +441,18 @@ mod tests {
         assert_eq!(0.123, round_with_precision(0.12345, rm, 3));
         assert_eq!(0.1234, round_with_precision(0.12345, rm, 4));
         assert_eq!(0.12345, round_with_precision(0.12345, rm, 5));
+    }
+
+    #[test]
+    fn test_parse_implicit_precision() {
+        assert_eq!(0, parse_implicit_precision(""));
+        assert_eq!(0, parse_implicit_precision("1"));
+        assert_eq!(1, parse_implicit_precision("1.2"));
+        assert_eq!(2, parse_implicit_precision("1.23"));
+        assert_eq!(3, parse_implicit_precision("1.234"));
+        assert_eq!(0, parse_implicit_precision("1K"));
+        assert_eq!(1, parse_implicit_precision("1.2K"));
+        assert_eq!(2, parse_implicit_precision("1.23K"));
+        assert_eq!(3, parse_implicit_precision("1.234K"));
     }
 }

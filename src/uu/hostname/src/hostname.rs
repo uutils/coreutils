@@ -118,7 +118,7 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
         .to_string_lossy()
         .into_owned();
 
-    if matches.is_present(OPT_IP_ADDRESS) {
+    if matches.contains_id(OPT_IP_ADDRESS) {
         // XXX: to_socket_addrs needs hostname:port so append a dummy port and remove it later.
         // This was originally supposed to use std::net::lookup_host, but that seems to be
         // deprecated.  Perhaps we should use the dns-lookup crate?
@@ -148,10 +148,10 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
 
         Ok(())
     } else {
-        if matches.is_present(OPT_SHORT) || matches.is_present(OPT_DOMAIN) {
+        if matches.contains_id(OPT_SHORT) || matches.contains_id(OPT_DOMAIN) {
             let mut it = hostname.char_indices().filter(|&ci| ci.1 == '.');
             if let Some(ci) = it.next() {
-                if matches.is_present(OPT_SHORT) {
+                if matches.contains_id(OPT_SHORT) {
                     println!("{}", &hostname[0..ci.0]);
                 } else {
                     println!("{}", &hostname[ci.0 + 1..]);

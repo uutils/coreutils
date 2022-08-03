@@ -11,6 +11,14 @@ fn test_should_not_round_floats() {
 }
 
 #[test]
+fn test_should_preserve_trailing_zeros() {
+    new_ucmd!()
+        .args(&["0.1000", "10.00"])
+        .succeeds()
+        .stdout_is("0.1000\n10.00\n");
+}
+
+#[test]
 fn test_from_si() {
     new_ucmd!()
         .args(&["--from=si"])
@@ -820,6 +828,18 @@ fn test_format_with_precision_and_to_arg() {
             ])
             .succeeds()
             .stdout_is(format!("{}\n", expected));
+    }
+}
+
+#[test]
+fn test_format_preserve_trailing_zeros_if_no_precision_is_specified() {
+    let values = vec!["10.0", "0.0100"];
+
+    for value in values {
+        new_ucmd!()
+            .args(&["--format=%f", value])
+            .succeeds()
+            .stdout_is(format!("{}\n", value));
     }
 }
 

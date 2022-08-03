@@ -23,22 +23,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // We check if any options on formatting or quoting style have been given.
     // If not, we will use dir default formatting and quoting style options
 
-    if !matches.is_present(options::QUOTING_STYLE)
-        && !matches.is_present(options::quoting::C)
-        && !matches.is_present(options::quoting::ESCAPE)
-        && !matches.is_present(options::quoting::LITERAL)
+    if !matches.contains_id(options::QUOTING_STYLE)
+        && !matches.contains_id(options::quoting::C)
+        && !matches.contains_id(options::quoting::ESCAPE)
+        && !matches.contains_id(options::quoting::LITERAL)
     {
         default_quoting_style = true;
     }
-    if !matches.is_present(options::FORMAT)
-        && !matches.is_present(options::format::ACROSS)
-        && !matches.is_present(options::format::COLUMNS)
-        && !matches.is_present(options::format::COMMAS)
-        && !matches.is_present(options::format::LONG)
-        && !matches.is_present(options::format::LONG_NO_GROUP)
-        && !matches.is_present(options::format::LONG_NO_OWNER)
-        && !matches.is_present(options::format::LONG_NUMERIC_UID_GID)
-        && !matches.is_present(options::format::ONE_LINE)
+    if !matches.contains_id(options::FORMAT)
+        && !matches.contains_id(options::format::ACROSS)
+        && !matches.contains_id(options::format::COLUMNS)
+        && !matches.contains_id(options::format::COMMAS)
+        && !matches.contains_id(options::format::LONG)
+        && !matches.contains_id(options::format::LONG_NO_GROUP)
+        && !matches.contains_id(options::format::LONG_NO_OWNER)
+        && !matches.contains_id(options::format::LONG_NUMERIC_UID_GID)
+        && !matches.contains_id(options::format::ONE_LINE)
     {
         default_format_style = true;
     }

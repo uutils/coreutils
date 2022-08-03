@@ -75,8 +75,8 @@ impl Column {
     /// than once in the command-line argument.
     pub(crate) fn from_matches(matches: &ArgMatches) -> Result<Vec<Self>, ColumnError> {
         match (
-            matches.is_present(OPT_PRINT_TYPE),
-            matches.is_present(OPT_INODES),
+            matches.contains_id(OPT_PRINT_TYPE),
+            matches.contains_id(OPT_INODES),
             matches.occurrences_of(OPT_OUTPUT) > 0,
         ) {
             (false, false, false) => Ok(vec![

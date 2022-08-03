@@ -173,7 +173,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|mut iter| iter.next().unwrap_or(DATE).into())
     {
         Format::Iso8601(fmt)
-    } else if matches.is_present(OPT_RFC_EMAIL) {
+    } else if matches.contains_id(OPT_RFC_EMAIL) {
         Format::Rfc5322
     } else if let Some(fmt) = matches.value_of(OPT_RFC_3339).map(Into::into) {
         Format::Rfc3339(fmt)
@@ -216,7 +216,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let settings = Settings {
-        utc: matches.is_present(OPT_UNIVERSAL),
+        utc: matches.contains_id(OPT_UNIVERSAL),
         format,
         date_source,
         set_to,

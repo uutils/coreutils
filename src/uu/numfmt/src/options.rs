@@ -78,7 +78,7 @@ impl RoundMethod {
 pub struct FormatOptions {
     pub grouping: bool,
     pub padding: Option<isize>,
-    pub precision: usize,
+    pub precision: Option<usize>,
     pub prefix: String,
     pub suffix: String,
     pub zero_padding: bool,
@@ -89,7 +89,7 @@ impl Default for FormatOptions {
         Self {
             grouping: false,
             padding: None,
-            precision: 0,
+            precision: None,
             prefix: String::from(""),
             suffix: String::from(""),
             zero_padding: false,
@@ -206,10 +206,12 @@ impl FromStr for FormatOptions {
 
             if !precision.is_empty() {
                 if let Ok(p) = precision.parse() {
-                    options.precision = p;
+                    options.precision = Some(p);
                 } else {
                     return Err(format!("invalid precision in format '{}'", s));
                 }
+            } else {
+                options.precision = Some(0);
             }
         }
 
@@ -302,10 +304,10 @@ mod tests {
     fn test_parse_format_with_precision() {
         let mut expected_options = FormatOptions::default();
         let formats = vec![
-            ("%6.2f", Some(6), 2),
-            ("%6.f", Some(6), 0),
-            ("%.2f", None, 2),
-            ("%.f", None, 0),
+            ("%6.2f", Some(6), Some(2)),
+            ("%6.f", Some(6), Some(0)),
+            ("%.2f", None, Some(2)),
+            ("%.f", None, Some(0)),
         ];
 
         for (format, expected_padding, expected_precision) in formats {

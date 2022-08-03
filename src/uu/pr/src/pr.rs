@@ -394,12 +394,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    if matches.is_present(options::VERSION) {
+    if matches.contains_id(options::VERSION) {
         println!("{}", command.render_long_version());
         return Ok(());
     }
 
-    if matches.is_present(options::HELP) {
+    if matches.contains_id(options::HELP) {
         command.print_help()?;
         return Ok(());
     }
@@ -413,7 +413,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         files.insert(0, FILE_STDIN);
     }
 
-    let file_groups: Vec<_> = if matches.is_present(options::MERGE) {
+    let file_groups: Vec<_> = if matches.contains_id(options::MERGE) {
         vec![files]
     } else {
         files.into_iter().map(|i| vec![i]).collect()
@@ -477,7 +477,7 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
 }
 
 fn print_error(matches: &ArgMatches, err: &PrError) {
-    if !matches.is_present(options::NO_FILE_WARNINGS) {
+    if !matches.contains_id(options::NO_FILE_WARNINGS) {
         eprintln!("{}", err);
     }
 }
@@ -501,21 +501,21 @@ fn build_options(
     paths: &[&str],
     free_args: &str,
 ) -> Result<OutputOptions, PrError> {
-    let form_feed_used = matches.is_present(options::FORM_FEED);
+    let form_feed_used = matches.contains_id(options::FORM_FEED);
 
-    let is_merge_mode = matches.is_present(options::MERGE);
+    let is_merge_mode = matches.contains_id(options::MERGE);
 
-    if is_merge_mode && matches.is_present(options::COLUMN) {
+    if is_merge_mode && matches.contains_id(options::COLUMN) {
         let err_msg = String::from("cannot specify number of columns when printing in parallel");
         return Err(PrError::EncounteredErrors(err_msg));
     }
 
-    if is_merge_mode && matches.is_present(options::ACROSS) {
+    if is_merge_mode && matches.contains_id(options::ACROSS) {
         let err_msg = String::from("cannot specify both printing across and printing in parallel");
         return Err(PrError::EncounteredErrors(err_msg));
     }
 
-    let merge_files_print = if matches.is_present(options::MERGE) {
+    let merge_files_print = if matches.contains_id(options::MERGE) {
         Some(paths.len())
     } else {
         None
@@ -559,14 +559,14 @@ fn build_options(
             }
         })
         .or_else(|| {
-            if matches.is_present(options::NUMBER_LINES) {
+            if matches.contains_id(options::NUMBER_LINES) {
                 Some(NumberingMode::default())
             } else {
                 None
             }
         });
 
-    let double_space = matches.is_present(options::DOUBLE_SPACE);
+    let double_space = matches.contains_id(options::DOUBLE_SPACE);
 
     let content_line_separator = if double_space {
         "\n".repeat(2)
@@ -670,7 +670,7 @@ fn build_options(
     let page_length_le_ht = page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
 
     let display_header_and_trailer =
-        !(page_length_le_ht) && !matches.is_present(options::OMIT_HEADER);
+        !(page_length_le_ht) && !matches.contains_id(options::OMIT_HEADER);
 
     let content_lines_per_page = if page_length_le_ht {
         page_length
@@ -678,14 +678,14 @@ fn build_options(
         page_length - (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE)
     };
 
-    let page_separator_char = if matches.is_present(options::FORM_FEED) {
+    let page_separator_char = if matches.contains_id(options::FORM_FEED) {
         let bytes = vec![FF];
         String::from_utf8(bytes).unwrap()
     } else {
         "\n".to_string()
     };
 
-    let across_mode = matches.is_present(options::ACROSS);
+    let across_mode = matches.contains_id(options::ACROSS);
 
     let column_separator = match matches.value_of(options::COLUMN_STRING_SEPARATOR) {
         Some(x) => Some(x),
@@ -694,8 +694,8 @@ fn build_options(
     .map(ToString::to_string)
     .unwrap_or_else(|| DEFAULT_COLUMN_SEPARATOR.to_string());
 
-    let default_column_width = if matches.is_present(options::COLUMN_WIDTH)
-        && matches.is_present(options::COLUMN_CHAR_SEPARATOR)
+    let default_column_width = if matches.contains_id(options::COLUMN_WIDTH)
+        && matches.contains_id(options::COLUMN_CHAR_SEPARATOR)
     {
         DEFAULT_COLUMN_WIDTH_WITH_S_OPTION
     } else {
@@ -705,7 +705,7 @@ fn build_options(
     let column_width =
         parse_usize(matches, options::COLUMN_WIDTH).unwrap_or(Ok(default_column_width))?;
 
-    let page_width = if matches.is_present(options::JOIN_LINES) {
+    let page_width = if matches.contains_id(options::JOIN_LINES) {
         None
     } else {
         match parse_usize(matches, options::PAGE_WIDTH) {
@@ -741,7 +741,7 @@ fn build_options(
     });
 
     let offset_spaces = " ".repeat(parse_usize(matches, options::INDENT).unwrap_or(Ok(0))?);
-    let join_lines = matches.is_present(options::JOIN_LINES);
+    let join_lines = matches.contains_id(options::JOIN_LINES);
 
     let col_sep_for_printing = column_mode_options
         .as_ref()

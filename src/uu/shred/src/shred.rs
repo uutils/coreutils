@@ -272,7 +272,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().get_matches_from(args);
 
-    if !matches.is_present(options::FILE) {
+    if !matches.contains_id(options::FILE) {
         return Err(UUsageError::new(1, "missing file operand"));
     }
 
@@ -298,13 +298,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // TODO: implement --random-source
 
-    let force = matches.is_present(options::FORCE);
-    let remove = matches.is_present(options::REMOVE);
+    let force = matches.contains_id(options::FORCE);
+    let remove = matches.contains_id(options::REMOVE);
     let size_arg = matches.value_of(options::SIZE).map(|s| s.to_string());
     let size = get_size(size_arg);
-    let exact = matches.is_present(options::EXACT) && size.is_none(); // if -s is given, ignore -x
-    let zero = matches.is_present(options::ZERO);
-    let verbose = matches.is_present(options::VERBOSE);
+    let exact = matches.contains_id(options::EXACT) && size.is_none(); // if -s is given, ignore -x
+    let zero = matches.contains_id(options::ZERO);
+    let verbose = matches.contains_id(options::VERBOSE);
 
     for path_str in matches.values_of(options::FILE).unwrap() {
         show_if_err!(wipe_file(

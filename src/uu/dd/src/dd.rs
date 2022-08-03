@@ -716,8 +716,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_matches_from(dashed_args);
 
     match (
-        matches.is_present(options::INFILE),
-        matches.is_present(options::OUTFILE),
+        matches.contains_id(options::INFILE),
+        matches.contains_id(options::OUTFILE),
     ) {
         (true, true) => {
             let i = Input::<File>::new(&matches)?;

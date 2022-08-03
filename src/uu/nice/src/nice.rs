@@ -48,7 +48,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let adjustment = match matches.value_of(options::ADJUSTMENT) {
         Some(nstr) => {
-            if !matches.is_present(options::COMMAND) {
+            if !matches.contains_id(options::COMMAND) {
                 return Err(UUsageError::new(
                     125,
                     "A command must be given with an adjustment.",
@@ -65,7 +65,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
         None => {
-            if !matches.is_present(options::COMMAND) {
+            if !matches.contains_id(options::COMMAND) {
                 println!("{}", niceness);
                 return Ok(());
             }

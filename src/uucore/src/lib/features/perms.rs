@@ -470,25 +470,25 @@ pub fn chown_base<'a>(
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let preserve_root = matches.is_present(options::preserve_root::PRESERVE);
+    let preserve_root = matches.contains_id(options::preserve_root::PRESERVE);
 
-    let mut dereference = if matches.is_present(options::dereference::DEREFERENCE) {
+    let mut dereference = if matches.contains_id(options::dereference::DEREFERENCE) {
         Some(true)
-    } else if matches.is_present(options::dereference::NO_DEREFERENCE) {
+    } else if matches.contains_id(options::dereference::NO_DEREFERENCE) {
         Some(false)
     } else {
         None
     };
 
-    let mut traverse_symlinks = if matches.is_present(options::traverse::TRAVERSE) {
+    let mut traverse_symlinks = if matches.contains_id(options::traverse::TRAVERSE) {
         TraverseSymlinks::First
-    } else if matches.is_present(options::traverse::EVERY) {
+    } else if matches.contains_id(options::traverse::EVERY) {
         TraverseSymlinks::All
     } else {
         TraverseSymlinks::None
     };
 
-    let recursive = matches.is_present(options::RECURSIVE);
+    let recursive = matches.contains_id(options::RECURSIVE);
     if recursive {
         if traverse_symlinks == TraverseSymlinks::None {
             if dereference == Some(true) {
@@ -500,13 +500,13 @@ pub fn chown_base<'a>(
         traverse_symlinks = TraverseSymlinks::None;
     }
 
-    let verbosity_level = if matches.is_present(options::verbosity::CHANGES) {
+    let verbosity_level = if matches.contains_id(options::verbosity::CHANGES) {
         VerbosityLevel::Changes
-    } else if matches.is_present(options::verbosity::SILENT)
-        || matches.is_present(options::verbosity::QUIET)
+    } else if matches.contains_id(options::verbosity::SILENT)
+        || matches.contains_id(options::verbosity::QUIET)
     {
         VerbosityLevel::Silent
-    } else if matches.is_present(options::verbosity::VERBOSE) {
+    } else if matches.contains_id(options::verbosity::VERBOSE) {
         VerbosityLevel::Verbose
     } else {
         VerbosityLevel::Normal

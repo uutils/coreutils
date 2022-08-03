@@ -138,7 +138,7 @@ impl Settings {
             ..Default::default()
         };
 
-        settings.follow = if matches.is_present(options::FOLLOW_RETRY) {
+        settings.follow = if matches.contains_id(options::FOLLOW_RETRY) {
             Some(FollowMode::Name)
         } else if matches.occurrences_of(options::FOLLOW) == 0 {
             None
@@ -160,7 +160,7 @@ impl Settings {
             }
         }
 
-        settings.use_polling = matches.is_present(options::USE_POLLING);
+        settings.use_polling = matches.contains_id(options::USE_POLLING);
 
         if let Some(s) = matches.value_of(options::MAX_UNCHANGED_STATS) {
             settings.max_unchanged_stats = match s.parse::<u32>() {
@@ -249,28 +249,28 @@ impl Settings {
         }
 
         settings.retry =
-            matches.is_present(options::RETRY) || matches.is_present(options::FOLLOW_RETRY);
+            matches.contains_id(options::RETRY) || matches.contains_id(options::FOLLOW_RETRY);
 
         if settings.retry && settings.follow.is_none() {
             show_warning!("--retry ignored; --retry is useful only when following");
         }
 
-        if matches.is_present(options::ZERO_TERM) {
+        if matches.contains_id(options::ZERO_TERM) {
             if let FilterMode::Lines(count, _) = settings.mode {
                 settings.mode = FilterMode::Lines(count, 0);
             }
         }
 
-        settings.stdin_is_pipe_or_fifo = matches.is_present(options::PRESUME_INPUT_PIPE);
+        settings.stdin_is_pipe_or_fifo = matches.contains_id(options::PRESUME_INPUT_PIPE);
 
         settings.paths = matches
             .values_of(options::ARG_FILES)
             .map(|v| v.map(PathBuf::from).collect())
             .unwrap_or_default();
 
-        settings.verbose = (matches.is_present(options::verbosity::VERBOSE)
+        settings.verbose = (matches.contains_id(options::verbosity::VERBOSE)
             || settings.paths.len() > 1)
-            && !matches.is_present(options::verbosity::QUIET);
+            && !matches.contains_id(options::verbosity::QUIET);
 
         Ok(settings)
     }

@@ -129,8 +129,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if files.is_empty() {
         return Err(UUsageError::new(1, "missing file operand"));
     } else {
-        let io_blocks = matches.is_present(options::IO_BLOCKS);
-        let no_create = matches.is_present(options::NO_CREATE);
+        let io_blocks = matches.contains_id(options::IO_BLOCKS);
+        let no_create = matches.contains_id(options::NO_CREATE);
         let reference = matches.value_of(options::REFERENCE).map(String::from);
         let size = matches.value_of(options::SIZE).map(String::from);
         truncate(no_create, io_blocks, reference, size, &files)

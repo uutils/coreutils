@@ -56,14 +56,14 @@ fn read_until<R: Read>(
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
-    let serial = matches.is_present(options::SERIAL);
+    let serial = matches.contains_id(options::SERIAL);
     let delimiters = matches.value_of(options::DELIMITER).unwrap();
     let files = matches
         .values_of(options::FILE)
         .unwrap()
         .map(|s| s.to_owned())
         .collect();
-    let line_ending = if matches.is_present(options::ZERO_TERMINATED) {
+    let line_ending = if matches.contains_id(options::ZERO_TERMINATED) {
         LineEnding::Nul
     } else {
         LineEnding::Newline

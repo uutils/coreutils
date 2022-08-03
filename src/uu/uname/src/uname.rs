@@ -61,15 +61,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         PlatformInfo::new().map_err_context(|| "failed to create PlatformInfo".to_string())?;
     let mut output = String::new();
 
-    let all = matches.is_present(options::ALL);
-    let kernelname = matches.is_present(options::KERNELNAME);
-    let nodename = matches.is_present(options::NODENAME);
-    let kernelrelease = matches.is_present(options::KERNELRELEASE);
-    let kernelversion = matches.is_present(options::KERNELVERSION);
-    let machine = matches.is_present(options::MACHINE);
-    let processor = matches.is_present(options::PROCESSOR);
-    let hwplatform = matches.is_present(options::HWPLATFORM);
-    let os = matches.is_present(options::OS);
+    let all = matches.contains_id(options::ALL);
+    let kernelname = matches.contains_id(options::KERNELNAME);
+    let nodename = matches.contains_id(options::NODENAME);
+    let kernelrelease = matches.contains_id(options::KERNELRELEASE);
+    let kernelversion = matches.contains_id(options::KERNELVERSION);
+    let machine = matches.contains_id(options::MACHINE);
+    let processor = matches.contains_id(options::PROCESSOR);
+    let hwplatform = matches.contains_id(options::HWPLATFORM);
+    let os = matches.contains_id(options::OS);
 
     let none = !(all
         || kernelname

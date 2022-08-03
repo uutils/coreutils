@@ -86,8 +86,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
         output: matches.value_of(options::OUTPUT).map(String::from),
         random_source: matches.value_of(options::RANDOM_SOURCE).map(String::from),
-        repeat: matches.is_present(options::REPEAT),
-        sep: if matches.is_present(options::ZERO_TERMINATED) {
+        repeat: matches.contains_id(options::REPEAT),
+        sep: if matches.contains_id(options::ZERO_TERMINATED) {
             0x00_u8
         } else {
             0x0a_u8

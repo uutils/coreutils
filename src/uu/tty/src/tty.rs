@@ -30,7 +30,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().get_matches_from(args);
 
-    let silent = matches.is_present(options::SILENT);
+    let silent = matches.contains_id(options::SILENT);
 
     // Call libc function ttyname
     let tty = unsafe {

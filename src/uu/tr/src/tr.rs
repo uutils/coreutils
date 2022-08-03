@@ -48,10 +48,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
-    let delete_flag = matches.is_present(options::DELETE);
-    let complement_flag = matches.is_present(options::COMPLEMENT);
-    let squeeze_flag = matches.is_present(options::SQUEEZE);
-    let truncate_set1_flag = matches.is_present(options::TRUNCATE_SET1);
+    let delete_flag = matches.contains_id(options::DELETE);
+    let complement_flag = matches.contains_id(options::COMPLEMENT);
+    let squeeze_flag = matches.contains_id(options::SQUEEZE);
+    let truncate_set1_flag = matches.contains_id(options::TRUNCATE_SET1);
 
     let sets = matches
         .values_of(options::SETS)

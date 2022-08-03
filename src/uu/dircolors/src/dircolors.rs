@@ -77,9 +77,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // clap provides .conflicts_with / .conflicts_with_all, but we want to
     // manually handle conflicts so we can match the output of GNU coreutils
-    if (matches.is_present(options::C_SHELL) || matches.is_present(options::BOURNE_SHELL))
-        && (matches.is_present(options::PRINT_DATABASE)
-            || matches.is_present(options::PRINT_LS_COLORS))
+    if (matches.contains_id(options::C_SHELL) || matches.contains_id(options::BOURNE_SHELL))
+        && (matches.contains_id(options::PRINT_DATABASE)
+            || matches.contains_id(options::PRINT_LS_COLORS))
     {
         return Err(UUsageError::new(
             1,
@@ -88,14 +88,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    if matches.is_present(options::PRINT_DATABASE) && matches.is_present(options::PRINT_LS_COLORS) {
+    if matches.contains_id(options::PRINT_DATABASE) && matches.contains_id(options::PRINT_LS_COLORS)
+    {
         return Err(UUsageError::new(
             1,
             "options --print-database and --print-ls-colors are mutually exclusive",
         ));
     }
 
-    if matches.is_present(options::PRINT_DATABASE) {
+    if matches.contains_id(options::PRINT_DATABASE) {
         if !files.is_empty() {
             return Err(UUsageError::new(
                 1,
@@ -110,11 +111,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Ok(());
     }
 
-    let mut out_format = if matches.is_present(options::C_SHELL) {
+    let mut out_format = if matches.contains_id(options::C_SHELL) {
         OutputFmt::CShell
-    } else if matches.is_present(options::BOURNE_SHELL) {
+    } else if matches.contains_id(options::BOURNE_SHELL) {
         OutputFmt::Shell
-    } else if matches.is_present(options::PRINT_LS_COLORS) {
+    } else if matches.contains_id(options::PRINT_LS_COLORS) {
         OutputFmt::Display
     } else {
         OutputFmt::Unknown

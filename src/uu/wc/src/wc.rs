@@ -60,11 +60,11 @@ impl Settings {
         };
 
         let settings = Self {
-            show_bytes: matches.is_present(options::BYTES),
-            show_chars: matches.is_present(options::CHAR),
-            show_lines: matches.is_present(options::LINES),
-            show_words: matches.is_present(options::WORDS),
-            show_max_line_length: matches.is_present(options::MAX_LINE_LENGTH),
+            show_bytes: matches.contains_id(options::BYTES),
+            show_chars: matches.contains_id(options::CHAR),
+            show_lines: matches.contains_id(options::LINES),
+            show_words: matches.contains_id(options::WORDS),
+            show_max_line_length: matches.contains_id(options::MAX_LINE_LENGTH),
             files0_from_stdin_mode,
             title_quoting_style,
         };
@@ -264,7 +264,7 @@ pub fn uu_app<'a>() -> Command<'a> {
 fn inputs(matches: &ArgMatches) -> UResult<Vec<Input>> {
     match matches.values_of_os(ARG_FILES) {
         Some(os_values) => {
-            if matches.is_present(options::FILES0_FROM) {
+            if matches.contains_id(options::FILES0_FROM) {
                 return Err(WcError::FilesDisabled(
                     "file operands cannot be combined with --files0-from".into(),
                 )

@@ -115,8 +115,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .accept_any();
     let matches = uu_app().get_matches_from(args);
 
-    let no_newline = matches.is_present(options::NO_NEWLINE);
-    let escaped = matches.is_present(options::ENABLE_BACKSLASH_ESCAPE);
+    let no_newline = matches.contains_id(options::NO_NEWLINE);
+    let escaped = matches.contains_id(options::ENABLE_BACKSLASH_ESCAPE);
     let values: Vec<String> = match matches.values_of(options::STRING) {
         Some(s) => s.map(|s| s.to_string()).collect(),
         None => vec!["".to_string()],

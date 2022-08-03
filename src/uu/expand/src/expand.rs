@@ -216,8 +216,8 @@ impl Options {
             None => (RemainingMode::None, vec![DEFAULT_TABSTOP]),
         };
 
-        let iflag = matches.is_present(options::INITIAL);
-        let uflag = !matches.is_present(options::NO_UTF8);
+        let iflag = matches.contains_id(options::INITIAL);
+        let uflag = !matches.contains_id(options::NO_UTF8);
 
         // avoid allocations when dumping out long sequences of spaces
         // by precomputing the longest string of spaces we will ever need

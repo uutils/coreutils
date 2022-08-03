@@ -12,8 +12,8 @@ from tqdm import tqdm
 
 # spell-checker:ignore (libs) tqdm imap ; (shell/mac) xcrun ; (vars) nargs
 
-BINS_PATH=Path("../src/uu")
-CACHE_PATH=Path("compiles_table.csv")
+BINS_PATH = Path("../src/uu")
+CACHE_PATH = Path("compiles_table.csv")
 TARGETS = [
     # Linux - GNU
     "aarch64-unknown-linux-gnu",
@@ -51,6 +51,7 @@ TARGETS = [
     "x86_64-fuchsia",
 ]
 
+
 class Target(str):
     def __new__(cls, content):
         obj = super().__new__(cls, content)
@@ -83,13 +84,26 @@ class Target(str):
     # Perform the 'it-compiles' check
     def check(self, binary):
         if self.requires_nightly():
-            args = [ "cargo", "+nightly", "check",
-                    "-p", f"uu_{binary}", "--bin", binary,
-                    f"--target={self}"]
+            args = [
+                "cargo",
+                "+nightly",
+                "check",
+                "-p",
+                f"uu_{binary}",
+                "--bin",
+                binary,
+                f"--target={self}",
+            ]
         else:
-            args = ["cargo", "check",
-                    "-p", f"uu_{binary}", "--bin", binary,
-                    f"--target={self}"]
+            args = [
+                "cargo",
+                "check",
+                "-p",
+                f"uu_{binary}",
+                "--bin",
+                binary,
+                f"--target={self}",
+            ]
 
         res = subprocess.run(args, capture_output=True)
         return res.returncode
@@ -100,30 +114,43 @@ class Target(str):
         if "ios" in self:
             res = subprocess.run(["which", "xcrun"], capture_output=True)
             if len(res.stdout) == 0:
-                raise Exception("Error: IOS sdk does not seem to be installed. Please do that manually")
+                raise Exception(
+                    "Error: IOS sdk does not seem to be installed. Please do that manually"
+                )
         if not self.requires_nightly():
             # check std toolchains are installed
-            toolchains = subprocess.run(["rustup", "target", "list"], capture_output=True)
-            toolchains = toolchains.stdout.decode('utf-8').split("\n")
+            toolchains = subprocess.run(
+                ["rustup", "target", "list"], capture_output=True
+            )
+            toolchains = toolchains.stdout.decode("utf-8").split("\n")
             if "installed" not in next(filter(lambda x: self in x, toolchains)):
-                raise Exception(f"Error: the {t} target is not installed. Please do that manually")
+                raise Exception(
+                    f"Error: the {self} target is not installed. Please do that manually"
+                )
         else:
             # check nightly toolchains are installed
-            toolchains = subprocess.run(["rustup", "+nightly", "target", "list"], capture_output=True)
-            toolchains = toolchains.stdout.decode('utf-8').split("\n")
+            toolchains = subprocess.run(
+                ["rustup", "+nightly", "target", "list"], capture_output=True
+            )
+            toolchains = toolchains.stdout.decode("utf-8").split("\n")
             if "installed" not in next(filter(lambda x: self in x, toolchains)):
-                raise Exception(f"Error: the {t} nightly target is not installed. Please do that manually")
+                raise Exception(
+                    f"Error: the {self} nightly target is not installed. Please do that manually"
+                )
         return True
+
 
 def install_targets():
     cmd = ["rustup", "target", "add"] + TARGETS
     print(" ".join(cmd))
     ret = subprocess.run(cmd)
-    assert(ret.returncode == 0)
+    assert ret.returncode == 0
+
 
 def get_all_bins():
     bins = map(lambda x: x.name, BINS_PATH.iterdir())
     return sorted(list(bins))
+
 
 def get_targets(selection):
     if "all" in selection:
@@ -132,10 +159,12 @@ def get_targets(selection):
         # preserve the same order as in TARGETS
         return list(map(Target, filter(lambda x: x in selection, TARGETS)))
 
+
 def test_helper(tup):
     bin, target = tup
     retcode = target.check(bin)
     return (target, bin, retcode)
+
 
 def test_all_targets(targets, bins):
     pool = multiprocessing.Pool()
@@ -148,17 +177,19 @@ def test_all_targets(targets, bins):
         table[t][b] = r
     return table
 
+
 def save_csv(file, table):
-    targets = get_targets(table.keys()) # preserve order in CSV
+    targets = get_targets(table.keys())  # preserve order in CSV
     bins = list(list(table.values())[0].keys())
     with open(file, "w") as csvfile:
         header = ["target"] + bins
         writer = csv.DictWriter(csvfile, fieldnames=header)
         writer.writeheader()
         for t in targets:
-            d = {"target" : t}
+            d = {"target": t}
             d.update(table[t])
             writer.writerow(d)
+
 
 def load_csv(file):
     table = {}
@@ -166,7 +197,7 @@ def load_csv(file):
     rows = []
     with open(file, "r") as csvfile:
         reader = csv.DictReader(csvfile)
-        cols = list(filter(lambda x: x!="target", reader.fieldnames))
+        cols = list(filter(lambda x: x != "target", reader.fieldnames))
         for row in reader:
             t = Target(row["target"])
             rows += [t]
@@ -174,34 +205,38 @@ def load_csv(file):
             table[t] = dict([k, int(v)] for k, v in row.items())
     return (table, rows, cols)
 
+
 def merge_tables(old, new):
     from copy import deepcopy
+
     tmp = deepcopy(old)
     tmp.update(deepcopy(new))
     return tmp
 
+
 def render_md(fd, table, headings: str, row_headings: Target):
     def print_row(lst, lens=[]):
         lens = lens + [0] * (len(lst) - len(lens))
-        for e, l in zip(lst, lens):
-            fmt = '|{}' if l == 0 else '|{:>%s}' % len(header[0])
+        for e, lmd in zip(lst, lens):
+            fmt = "|{}" if lmd == 0 else "|{:>%s}" % len(header[0])
             fd.write(fmt.format(e))
         fd.write("|\n")
+
     def cell_render(target, bin):
         return "y" if table[target][bin] == 0 else " "
 
     # add some 'hard' padding to specific columns
     lens = [
         max(map(lambda x: len(x.os), row_headings)) + 2,
-        max(map(lambda x: len(x.arch), row_headings)) + 2
-        ]
+        max(map(lambda x: len(x.arch), row_headings)) + 2,
+    ]
     header = Target.get_heading()
     header[0] = ("{:#^%d}" % lens[0]).format(header[0])
     header[1] = ("{:#^%d}" % lens[1]).format(header[1])
 
     header += headings
     print_row(header)
-    lines = list(map(lambda x: '-'*len(x), header))
+    lines = list(map(lambda x: "-" * len(x), header))
     print_row(lines)
 
     for t in row_headings:
@@ -209,18 +244,32 @@ def render_md(fd, table, headings: str, row_headings: Target):
         row = t.get_row_heading() + row
         print_row(row)
 
+
 if __name__ == "__main__":
     # create the top-level parser
-    parser = argparse.ArgumentParser(prog='compiles_table.py')
-    subparsers = parser.add_subparsers(help='sub-command to execute', required=True, dest="cmd")
+    parser = argparse.ArgumentParser(prog="compiles_table.py")
+    subparsers = parser.add_subparsers(
+        help="sub-command to execute", required=True, dest="cmd"
+    )
     # create the parser for the "check" command
-    parser_a = subparsers.add_parser('check', help='run cargo check on specified targets and update csv cache')
-    parser_a.add_argument("targets", metavar="TARGET", type=str, nargs='+', choices=["all"]+TARGETS,
-                            help="target-triple to check, as shown by 'rustup target list'")
+    parser_a = subparsers.add_parser(
+        "check", help="run cargo check on specified targets and update csv cache"
+    )
+    parser_a.add_argument(
+        "targets",
+        metavar="TARGET",
+        type=str,
+        nargs="+",
+        choices=["all"] + TARGETS,
+        help="target-triple to check, as shown by 'rustup target list'",
+    )
     # create the parser for the "render" command
-    parser_b = subparsers.add_parser('render', help='print a markdown table to stdout')
-    parser_b.add_argument("--equidistant", action="store_true",
-                            help="NOT IMPLEMENTED: render each column with an equal width (in plaintext)")
+    parser_b = subparsers.add_parser("render", help="print a markdown table to stdout")
+    parser_b.add_argument(
+        "--equidistant",
+        action="store_true",
+        help="NOT IMPLEMENTED: render each column with an equal width (in plaintext)",
+    )
     args = parser.parse_args()
 
     if args.cmd == "render":
@@ -231,7 +280,7 @@ if __name__ == "__main__":
         targets = get_targets(args.targets)
         bins = get_all_bins()
 
-        assert(all(map(Target.is_installed, targets)))
+        assert all(map(Target.is_installed, targets))
         table = test_all_targets(targets, bins)
 
         prev_table, _, _ = load_csv(CACHE_PATH)

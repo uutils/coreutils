@@ -80,7 +80,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .try_get_matches_from_mut(args)
         .unwrap_or_else(|e| e.exit());
 
-    if !matches.is_present(OPT_TARGET_DIRECTORY) && matches.occurrences_of(ARG_FILES) == 1 {
+    if !matches.contains_id(OPT_TARGET_DIRECTORY) && matches.occurrences_of(ARG_FILES) == 1 {
         app.error(
             ErrorKind::TooFewValues,
             format!(
@@ -113,13 +113,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         overwrite: overwrite_mode,
         backup: backup_mode,
         suffix: backup_suffix,
-        update: matches.is_present(OPT_UPDATE),
+        update: matches.contains_id(OPT_UPDATE),
         target_dir: matches
             .value_of_os(OPT_TARGET_DIRECTORY)
             .map(OsString::from),
-        no_target_dir: matches.is_present(OPT_NO_TARGET_DIRECTORY),
-        verbose: matches.is_present(OPT_VERBOSE),
-        strip_slashes: matches.is_present(OPT_STRIP_TRAILING_SLASHES),
+        no_target_dir: matches.contains_id(OPT_NO_TARGET_DIRECTORY),
+        verbose: matches.contains_id(OPT_VERBOSE),
+        strip_slashes: matches.contains_id(OPT_STRIP_TRAILING_SLASHES),
     };
 
     exec(&files[..], &behavior)
@@ -207,9 +207,9 @@ fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
     // overwrite options are supplied, only the last takes effect.
     // To default to no-clobber in that situation seems safer:
     //
-    if matches.is_present(OPT_NO_CLOBBER) {
+    if matches.contains_id(OPT_NO_CLOBBER) {
         OverwriteMode::NoClobber
-    } else if matches.is_present(OPT_INTERACTIVE) {
+    } else if matches.contains_id(OPT_INTERACTIVE) {
         OverwriteMode::Interactive
     } else {
         OverwriteMode::Force

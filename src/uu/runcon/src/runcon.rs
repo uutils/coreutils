@@ -209,7 +209,7 @@ struct Options {
 fn parse_command_line(config: Command, args: impl uucore::Args) -> Result<Options> {
     let matches = config.try_get_matches_from(args)?;
 
-    let compute_transition_context = matches.is_present(options::COMPUTE);
+    let compute_transition_context = matches.contains_id(options::COMPUTE);
 
     let mut args = matches
         .values_of_os("ARG")
@@ -217,10 +217,10 @@ fn parse_command_line(config: Command, args: impl uucore::Args) -> Result<Option
         .map(OsString::from);
 
     if compute_transition_context
-        || matches.is_present(options::USER)
-        || matches.is_present(options::ROLE)
-        || matches.is_present(options::TYPE)
-        || matches.is_present(options::RANGE)
+        || matches.contains_id(options::USER)
+        || matches.contains_id(options::ROLE)
+        || matches.contains_id(options::TYPE)
+        || matches.contains_id(options::RANGE)
     {
         // runcon [-c] [-u USER] [-r ROLE] [-t TYPE] [-l RANGE] [COMMAND [args]]
 

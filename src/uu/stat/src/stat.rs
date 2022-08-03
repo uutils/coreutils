@@ -477,7 +477,7 @@ impl Stater {
             .values_of_os(ARG_FILES)
             .map(|v| v.map(OsString::from).collect())
             .unwrap_or_default();
-        let format_str = if matches.is_present(options::PRINTF) {
+        let format_str = if matches.contains_id(options::PRINTF) {
             matches
                 .value_of(options::PRINTF)
                 .expect("Invalid format string")
@@ -485,9 +485,9 @@ impl Stater {
             matches.value_of(options::FORMAT).unwrap_or("")
         };
 
-        let use_printf = matches.is_present(options::PRINTF);
-        let terse = matches.is_present(options::TERSE);
-        let show_fs = matches.is_present(options::FILE_SYSTEM);
+        let use_printf = matches.contains_id(options::PRINTF);
+        let terse = matches.contains_id(options::TERSE);
+        let show_fs = matches.contains_id(options::FILE_SYSTEM);
 
         let default_tokens = if format_str.is_empty() {
             Self::generate_tokens(&Self::default_format(show_fs, terse, false), use_printf)?
@@ -513,7 +513,7 @@ impl Stater {
         };
 
         Ok(Self {
-            follow: matches.is_present(options::DEREFERENCE),
+            follow: matches.contains_id(options::DEREFERENCE),
             show_fs,
             from_user: !format_str.is_empty(),
             files,
