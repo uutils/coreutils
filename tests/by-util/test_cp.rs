@@ -1422,10 +1422,15 @@ fn test_cp_reflink_always_override() {
         .args(&["-s", "128M", DISK])
         .succeeds();
 
-    scene
-        .cmd("mkfs.btrfs")
-        .args(&["--rootdir", ROOTDIR, DISK])
-        .succeeds();
+    if !scene
+        .cmd_keepenv("env")
+        .args(&["mkfs.btrfs", "--rootdir", ROOTDIR, DISK])
+        .run()
+        .succeeded()
+    {
+        print!("Test skipped; couldn't make btrfs disk image");
+        return;
+    }
 
     scene.fixtures.mkdir(MOUNTPOINT);
 
