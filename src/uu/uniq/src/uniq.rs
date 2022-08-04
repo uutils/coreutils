@@ -311,7 +311,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::ALL_REPEATED)
                 .short('D')
                 .long(options::ALL_REPEATED)
-                .possible_values(&[
+                .value_parser([
                     "none",
                     "prepend",
                     "separate"
@@ -326,7 +326,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::GROUP)
                 .long(options::GROUP)
-                .possible_values(&[
+                .value_parser([
                     "separate",
                     "prepend",
                     "append",

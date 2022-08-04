@@ -911,7 +911,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                     .long(options::FORMAT)
                     .help("Set the display format.")
                     .takes_value(true)
-                    .possible_values(&[
+                    .value_parser([
                         "long",
                         "verbose",
                         "single-column",
@@ -1042,7 +1042,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                     .long(options::QUOTING_STYLE)
                     .takes_value(true)
                     .help("Set quoting style.")
-                    .possible_values(&[
+                    .value_parser([
                         "literal",
                         "shell",
                         "shell-always",
@@ -1120,7 +1120,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                     )
                     .value_name("field")
                     .takes_value(true)
-                    .possible_values(&[
+                    .value_parser([
                         "atime", "access", "use", "ctime", "status", "birth", "creation",
                     ])
                     .hide_possible_values(true)
@@ -1182,7 +1182,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                     .help("Sort by <field>: name, none (-U), time (-t), size (-S) or extension (-X)")
                     .value_name("field")
                     .takes_value(true)
-                    .possible_values(&["name", "none", "time", "size", "version", "extension"])
+                    .value_parser(["name", "none", "time", "size", "version", "extension"])
                     .require_equals(true)
                     .overrides_with_all(&[
                         options::SORT,
@@ -1411,7 +1411,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                     .long(options::COLOR)
                     .help("Color output based on file type.")
                     .takes_value(true)
-                    .possible_values(&[
+                    .value_parser([
                         "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
                     ])
                     .require_equals(true)
@@ -1425,7 +1425,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                         none (default),  slash (-p), file-type (--file-type), classify (-F)",
                     )
                     .takes_value(true)
-                    .possible_values(&["none", "slash", "file-type", "classify"])
+                    .value_parser(["none", "slash", "file-type", "classify"])
                     .overrides_with_all(&[
                         options::indicator_style::FILE_TYPE,
                         options::indicator_style::SLASH,
@@ -1456,7 +1456,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                     )
                     .takes_value(true)
                     .value_name("when")
-                    .possible_values(&[
+                    .value_parser([
                         "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
                     ])
                     .default_missing_value("always")
@@ -1498,7 +1498,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                     .help("time/date format with -l; see TIME_STYLE below")
                     .value_name("TIME_STYLE")
                     .env("TIME_STYLE")
-                    .possible_values(&["full-iso", "long-iso", "iso", "locale"])
+                    .value_parser(["full-iso", "long-iso", "iso", "locale"])
                     .overrides_with_all(&[options::TIME_STYLE]),
             )
             .arg(

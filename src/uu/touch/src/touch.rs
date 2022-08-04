@@ -234,7 +234,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                      equivalent to -m",
                 )
                 .value_name("WORD")
-                .possible_values(&["access", "atime", "use"])
+                .value_parser(["access", "atime", "use"])
                 .takes_value(true),
         )
         .arg(

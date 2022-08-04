@@ -713,7 +713,7 @@ When FILE1 or FILE2 (not both) is -, read standard input.",
                 .short('a')
                 .multiple_occurrences(true)
                 .number_of_values(1)
-                .possible_values(&["1", "2"])
+                .value_parser(["1", "2"])
                 .value_name("FILENUM")
                 .help(
                     "also print unpairable lines from file FILENUM, where
@@ -725,7 +725,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
                 .short('v')
                 .multiple_occurrences(true)
                 .number_of_values(1)
-                .possible_values(&["1", "2"])
+                .value_parser(["1", "2"])
                 .value_name("FILENUM")
                 .help("like -a FILENUM, but suppress joined output lines"),
         )
