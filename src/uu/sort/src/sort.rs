@@ -1286,7 +1286,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::modes::SORT)
                 .long(options::modes::SORT)
                 .takes_value(true)
-                .possible_values(&[
+                .value_parser([
                     "general-numeric",
                     "human-numeric",
                     "month",
@@ -1351,7 +1351,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .takes_value(true)
                 .require_equals(true)
                 .min_values(0)
-                .possible_values(&[
+                .value_parser([
                     options::check::SILENT,
                     options::check::QUIET,
                     options::check::DIAGNOSE_FIRST,

@@ -401,7 +401,7 @@ pub fn uu_app<'a>() -> Command<'a> {
              .takes_value(true)
              .multiple_occurrences(true)
              .use_value_delimiter(true)
-             .possible_values(PRESERVABLE_ATTRIBUTES)
+             .value_parser(clap::builder::PossibleValuesParser::new(PRESERVABLE_ATTRIBUTES))
              .min_values(0)
              .value_name("ATTR_LIST")
              .overrides_with_all(&[options::ARCHIVE, options::PRESERVE_DEFAULT_ATTRIBUTES, options::NO_PRESERVE])
@@ -451,7 +451,7 @@ pub fn uu_app<'a>() -> Command<'a> {
              .long(options::SPARSE)
              .takes_value(true)
              .value_name("WHEN")
-             .possible_values(["never", "auto", "always"])
+             .value_parser(["never", "auto", "always"])
              .help("NotImplemented: control creation of sparse files. See below"))
 
         // TODO: implement the following args

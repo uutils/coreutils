@@ -895,7 +895,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .value_name("WORD")
                 .require_equals(true)
                 .min_values(0)
-                .possible_values(&["atime", "access", "use", "ctime", "status", "birth", "creation"])
+                .value_parser(["atime", "access", "use", "ctime", "status", "birth", "creation"])
                 .help(
                     "show time of the last modification of any file in the \
                     directory, or any of its subdirectories. If WORD is given, show time as WORD instead \

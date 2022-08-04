@@ -122,7 +122,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .require_equals(true)
                 .min_values(0)
                 .max_values(1)
-                .possible_values([
+                .value_parser([
                     PossibleValue::new("warn")
                         .help("produce warnings for errors writing to any output"),
                     PossibleValue::new("warn-nopipe")

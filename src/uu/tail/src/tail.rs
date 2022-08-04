@@ -585,7 +585,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .min_values(0)
                 .max_values(1)
                 .require_equals(true)
-                .possible_values(&["descriptor", "name"])
+                .value_parser(["descriptor", "name"])
                 .help("Print the file as it grows"),
         )
         .arg(

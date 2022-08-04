@@ -559,7 +559,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .require_equals(true)
                 .use_value_delimiter(true)
                 .multiple_occurrences(true)
-                .possible_values(OUTPUT_FIELD_LIST)
+                .value_parser(OUTPUT_FIELD_LIST)
                 .default_missing_values(&OUTPUT_FIELD_LIST)
                 .default_values(&["source", "size", "used", "avail", "pcent", "target"])
                 .conflicts_with_all(&[OPT_INODES, OPT_PORTABILITY, OPT_PRINT_TYPE])

@@ -375,7 +375,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 )
                 .value_name("METHOD")
                 .default_value("from-zero")
-                .possible_values(&["up", "down", "from-zero", "towards-zero", "nearest"]),
+                .value_parser(["up", "down", "from-zero", "towards-zero", "nearest"]),
         )
         .arg(
             Arg::new(options::SUFFIX)

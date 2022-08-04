@@ -142,12 +142,14 @@ fn gen_completions<T: uucore::Args>(
         .about("Prints completions to stdout")
         .arg(
             Arg::new("utility")
-                .possible_values(all_utilities)
+                .value_parser(clap::builder::PossibleValuesParser::new(all_utilities))
                 .required(true),
         )
         .arg(
             Arg::new("shell")
-                .possible_values(Shell::possible_values())
+                .value_parser(clap::builder::PossibleValuesParser::new(
+                    Shell::possible_values(),
+                ))
                 .required(true),
         )
         .get_matches_from(std::iter::once(OsString::from("completion")).chain(args));

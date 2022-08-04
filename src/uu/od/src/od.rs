@@ -332,7 +332,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::ENDIAN)
                 .long(options::ENDIAN)
                 .help("byte order to use for multi-byte formats")
-                .possible_values(&["big", "little"])
+                .value_parser(["big", "little"])
                 .value_name("big|little"),
         )
         .arg(
