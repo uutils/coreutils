@@ -31,6 +31,7 @@ use uucore::format_usage;
 #[cfg(unix)]
 use uucore::signals::signal_name_by_value;
 
+const ABOUT: &str = "set each NAME to VALUE in the environment and run COMMAND";
 const USAGE: &str = "{} [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
 const AFTER_HELP: &str = "\
 A mere - implies -i. If no COMMAND, print the resulting environment.
@@ -128,8 +129,7 @@ fn build_command<'a, 'b>(args: &'a mut Vec<&'b str>) -> (Cow<'b, str>, &'a [&'b 
 pub fn uu_app<'a>() -> Command<'a> {
     Command::new(crate_name!())
         .version(crate_version!())
-        .author(crate_authors!())
-        .about(crate_description!())
+        .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)
         .allow_external_subcommands(true)

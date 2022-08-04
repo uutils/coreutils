@@ -25,8 +25,8 @@ use uucore::{format_usage, InvalidEncodingHandling};
 
 static NAME: &str = "unexpand";
 static USAGE: &str = "{} [OPTION]... [FILE]...";
-static SUMMARY: &str = "Convert blanks in each FILE to tabs, writing to standard output.\n\
-                        With no FILE, or when FILE is -, read standard input.";
+static ABOUT: &str = r#"Convert blanks in each FILE to tabs, writing to standard output.
+                        With no FILE, or when FILE is -, read standard input."#;
 
 const DEFAULT_TABSTOP: usize = 8;
 
@@ -179,7 +179,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
-        .about(SUMMARY)
+        .about(ABOUT)
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)

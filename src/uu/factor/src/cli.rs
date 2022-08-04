@@ -25,8 +25,8 @@ pub mod numeric;
 mod rho;
 pub mod table;
 
-static SUMMARY: &str = "Print the prime factors of the given NUMBER(s).
-If none are specified, read from standard input.";
+static ABOUT: &str = r#"Print the prime factors of the given NUMBER(s).
+If none are specified, read from standard input."#;
 
 mod options {
     pub static NUMBER: &str = "NUMBER";
@@ -81,7 +81,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app<'a>() -> Command<'a> {
     Command::new(uucore::util_name())
         .version(crate_version!())
-        .about(SUMMARY)
+        .about(ABOUT)
         .infer_long_args(true)
         .arg(Arg::new(options::NUMBER).multiple_occurrences(true))
 }

@@ -19,6 +19,7 @@ use uucore::{format_usage, InvalidEncodingHandling};
 mod helper;
 
 static NAME: &str = "nl";
+static ABOUT: &str = "number lines of files";
 static USAGE: &str = "{} [OPTION]... [FILE]...";
 
 // Settings store options used by nl to produce its output.
@@ -143,6 +144,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app<'a>() -> Command<'a> {
     Command::new(uucore::util_name())
         .name(NAME)
+        .about(ABOUT)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

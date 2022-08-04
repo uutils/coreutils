@@ -20,8 +20,8 @@ use uucore::{format_usage, InvalidEncodingHandling};
 
 static NAME: &str = "sum";
 static USAGE: &str = "{} [OPTION]... [FILE]...";
-static SUMMARY: &str = "Checksum and count the blocks in a file.\n\
-                        With no FILE, or when  FILE is -, read standard input.";
+static ABOUT: &str = r#"Checksum and count the blocks in a file.
+                        With no FILE, or when  FILE is -, read standard input."#;
 
 // This can be replaced with usize::div_ceil once it is stabilized.
 // This implementation approach is optimized for when `b` is a constant,
@@ -156,7 +156,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
-        .about(SUMMARY)
+        .about(ABOUT)
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)

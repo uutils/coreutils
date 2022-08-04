@@ -17,7 +17,7 @@ use uucore::{display::Quotable, InvalidEncodingHandling};
 
 static NAME: &str = "mkfifo";
 static USAGE: &str = "{} [OPTION]... NAME...";
-static SUMMARY: &str = "Create a FIFO with the given name.";
+static ABOUT: &str = "Create a FIFO with the given name.";
 
 mod options {
     pub static MODE: &str = "mode";
@@ -75,7 +75,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
-        .about(SUMMARY)
+        .about(ABOUT)
         .infer_long_args(true)
         .arg(
             Arg::new(options::MODE)

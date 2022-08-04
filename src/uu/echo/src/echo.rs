@@ -14,7 +14,7 @@ use uucore::error::{FromIo, UResult};
 use uucore::{format_usage, InvalidEncodingHandling};
 
 const NAME: &str = "echo";
-const SUMMARY: &str = "display a line of text";
+const ABOUT: &str = "display a line of text";
 const USAGE: &str = "{} [OPTIONS]... [STRING]...";
 const AFTER_HELP: &str = r#"
  Echo the STRING(s) to standard output.
@@ -136,7 +136,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .allow_hyphen_values(true)
         .infer_long_args(true)
         .version(crate_version!())
-        .about(SUMMARY)
+        .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
         .arg(

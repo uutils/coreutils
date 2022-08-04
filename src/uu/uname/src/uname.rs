@@ -17,7 +17,8 @@ use uucore::{
     format_usage,
 };
 
-const ABOUT: &str = "Print certain system information.  With no OPTION, same as -s.";
+const ABOUT: &str = r#"Print certain system information.
+With no OPTION, same as -s."#;
 const USAGE: &str = "{} [OPTION]...";
 
 pub mod options {

@@ -78,7 +78,7 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-const SUMMARY: &str = "estimate file space usage";
+const ABOUT: &str = "estimate file space usage";
 const LONG_HELP: &str = "
 Display values are in units of the first available SIZE from --block-size,
 and the DU_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environment variables.
@@ -729,7 +729,7 @@ fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<u
 pub fn uu_app<'a>() -> Command<'a> {
     Command::new(uucore::util_name())
         .version(crate_version!())
-        .about(SUMMARY)
+        .about(ABOUT)
         .after_help(LONG_HELP)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

@@ -27,7 +27,7 @@ mod searcher;
 static NAME: &str = "cut";
 static USAGE: &str =
     "{} [-d] [-s] [-z] [--output-delimiter] ((-f|-b|-c) {{sequence}}) {{sourcefile}}+";
-static SUMMARY: &str =
+static ABOUT: &str =
     "Prints specified byte or field columns from each line of stdin or the input files";
 static LONG_HELP: &str = "
  Each call must specify a mode (what to use for columns),
@@ -539,7 +539,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
-        .about(SUMMARY)
+        .about(ABOUT)
         .after_help(LONG_HELP)
         .infer_long_args(true)
         .arg(
