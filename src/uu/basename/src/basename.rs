@@ -13,8 +13,8 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError};
 use uucore::{format_usage, InvalidEncodingHandling};
 
-static SUMMARY: &str = "Print NAME with any leading directory components removed
-If specified, also remove a trailing SUFFIX";
+static ABOUT: &str = r#"Print NAME with any leading directory components removed
+If specified, also remove a trailing SUFFIX"#;
 
 const USAGE: &str = "{} NAME [SUFFIX]
     {} OPTION... NAME...";
@@ -107,7 +107,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app<'a>() -> Command<'a> {
     Command::new(uucore::util_name())
         .version(crate_version!())
-        .about(SUMMARY)
+        .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(

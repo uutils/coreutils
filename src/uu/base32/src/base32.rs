@@ -13,6 +13,7 @@ use uucore::{encoding::Format, error::UResult};
 pub mod base_common;
 
 static ABOUT: &str = "\
+encode/decode data and print to standard output
 With no FILE, or when FILE is -, read standard input.
 
 The data are encoded as described for the base32 alphabet in RFC

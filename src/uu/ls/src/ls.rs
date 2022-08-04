@@ -53,6 +53,9 @@ static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not e
 #[cfg(feature = "selinux")]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file";
 
+const ABOUT: &str = r#"List directory contents.
+Ignore files and directories starting with a '.' by default"#;
+
 const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 pub mod options {
@@ -898,7 +901,7 @@ pub fn uu_app<'a>() -> Command<'a> {
     Command::new(uucore::util_name())
         .version(crate_version!())
             .override_usage(format_usage(USAGE))
-            .about("List directory contents. Ignore files and directories starting with a '.' by default")
+            .about(ABOUT)
             .infer_long_args(true)
             .arg(
                 Arg::new(options::HELP)

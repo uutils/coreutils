@@ -40,8 +40,8 @@ use uucore::{format_usage, InvalidEncodingHandling};
 
 static NAME: &str = "cat";
 static USAGE: &str = "{} [OPTION]... [FILE]...";
-static SUMMARY: &str = "Concatenate FILE(s), or standard input, to standard output
- With no FILE, or when FILE is -, read standard input.";
+static ABOUT: &str = "Concatenate FILE(s), or standard input, to standard output
+With no FILE, or when FILE is -, read standard input.";
 
 #[derive(Error, Debug)]
 enum CatError {
@@ -244,7 +244,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
-        .about(SUMMARY)
+        .about(ABOUT)
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)

@@ -26,7 +26,7 @@ mod options {
 }
 
 static USAGE: &str = "{} [OPTION]... [FILE]";
-static SUMMARY: &str = "Output commands to set the LS_COLORS environment variable.";
+static ABOUT: &str = "Output commands to set the LS_COLORS environment variable.";
 static LONG_HELP: &str = "
  If FILE is specified, read it to determine which colors to use for which
  file types and extensions.  Otherwise, a precompiled database is used.
@@ -173,7 +173,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app<'a>() -> Command<'a> {
     Command::new(uucore::util_name())
         .version(crate_version!())
-        .about(SUMMARY)
+        .about(ABOUT)
         .after_help(LONG_HELP)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

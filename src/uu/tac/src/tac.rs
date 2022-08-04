@@ -26,7 +26,7 @@ use crate::error::TacError;
 
 static NAME: &str = "tac";
 static USAGE: &str = "{} [OPTION]... [FILE]...";
-static SUMMARY: &str = "Write each file to standard output, last line first.";
+static ABOUT: &str = "Write each file to standard output, last line first.";
 
 mod options {
     pub static BEFORE: &str = "before";
@@ -65,7 +65,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
-        .about(SUMMARY)
+        .about(ABOUT)
         .infer_long_args(true)
         .arg(
             Arg::new(options::BEFORE)

@@ -14,10 +14,10 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::{format_usage, InvalidEncodingHandling};
 
-static SUMMARY: &str = "Topological sort the strings in FILE.
+static ABOUT: &str = "Topological sort the strings in FILE.
 Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline).
 If FILE is not passed in, stdin is used instead.";
-static USAGE: &str = "tsort [OPTIONS] FILE";
+static USAGE: &str = "{} [OPTIONS] FILE";
 
 mod options {
     pub const FILE: &str = "file";
@@ -93,7 +93,7 @@ pub fn uu_app<'a>() -> Command<'a> {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
-        .about(SUMMARY)
+        .about(ABOUT)
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)

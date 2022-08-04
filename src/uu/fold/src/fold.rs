@@ -19,7 +19,7 @@ const TAB_WIDTH: usize = 8;
 
 static NAME: &str = "fold";
 static USAGE: &str = "{} [OPTION]... [FILE]...";
-static SUMMARY: &str = "Writes each file (or standard input if no files are given)
+static ABOUT: &str = "Writes each file (or standard input if no files are given)
  to standard output whilst breaking long lines";
 
 mod options {
@@ -68,7 +68,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
-        .about(SUMMARY)
+        .about(ABOUT)
         .infer_long_args(true)
         .arg(
             Arg::new(options::BYTES)

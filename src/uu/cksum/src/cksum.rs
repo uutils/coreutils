@@ -21,7 +21,7 @@ const CRC_TABLE: [u32; CRC_TABLE_LEN] = generate_crc_table();
 
 const NAME: &str = "cksum";
 const USAGE: &str = "{} [OPTIONS] [FILE]...";
-const SUMMARY: &str = "Print CRC and size for each file";
+const ABOUT: &str = "Print CRC and size for each file";
 
 const fn generate_crc_table() -> [u32; CRC_TABLE_LEN] {
     let mut table = [0; CRC_TABLE_LEN];
@@ -144,7 +144,7 @@ pub fn uu_app<'a>() -> Command<'a> {
     Command::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
-        .about(SUMMARY)
+        .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(

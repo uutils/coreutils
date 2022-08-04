@@ -10,9 +10,6 @@
 use std::borrow::Cow;
 use std::io::{self, Result, Write};
 
-#[macro_use]
-extern crate clap;
-
 use clap::{Arg, Command};
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
@@ -20,6 +17,7 @@ use uucore::format_usage;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod splice;
 
+const ABOUT: &str = "repeatedly display a line with STRING (or 'y')";
 const USAGE: &str = "{} [STRING]...";
 
 // it's possible that using a smaller or larger buffer might provide better performance on some
@@ -50,7 +48,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app<'a>() -> Command<'a> {
-    command!()
+    Command::new(uucore::util_name())
+        .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .arg(Arg::new("STRING").index(1).multiple_occurrences(true))
         .infer_long_args(true)

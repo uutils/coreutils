@@ -25,7 +25,7 @@ mod split_name;
 use crate::csplit_error::CsplitError;
 use crate::split_name::SplitName;
 
-static SUMMARY: &str = "split a file into sections determined by context lines";
+static ABOUT: &str = "split a file into sections determined by context lines";
 static LONG_HELP: &str = "Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output.";
 const USAGE: &str = "{} [OPTION]... FILE PATTERN...";
 
@@ -749,7 +749,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app<'a>() -> Command<'a> {
     Command::new(uucore::util_name())
         .version(crate_version!())
-        .about(SUMMARY)
+        .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(

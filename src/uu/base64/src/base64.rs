@@ -14,6 +14,7 @@ use uucore::{encoding::Format, error::UResult};
 use std::io::{stdin, Read};
 
 static ABOUT: &str = "\
+encode/decode data and print to standard output
 With no FILE, or when FILE is -, read standard input.
 
 The data are encoded as described for the base64 alphabet in RFC

@@ -33,7 +33,7 @@ fn get_userlogin() -> Option<String> {
     }
 }
 
-static SUMMARY: &str = "Print user's login name";
+static ABOUT: &str = "Print user's login name";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -55,6 +55,6 @@ pub fn uu_app<'a>() -> Command<'a> {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .override_usage(uucore::execution_phrase())
-        .about(SUMMARY)
+        .about(ABOUT)
         .infer_long_args(true)
 }

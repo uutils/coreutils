@@ -14,15 +14,13 @@ mod tokens;
 
 const VERSION: &str = "version";
 const HELP: &str = "help";
-static ABOUT: &str = "Print the value of EXPRESSION to standard output";
-static USAGE: &str = r#"
+static USAGE: &str = r#"Print the value of EXPRESSION to standard output
     expr [EXPRESSION]
     expr [OPTIONS]"#;
 
 pub fn uu_app<'a>() -> Command<'a> {
     Command::new(uucore::util_name())
         .version(crate_version!())
-        .about(ABOUT)
         .override_usage(USAGE)
         .infer_long_args(true)
         .arg(

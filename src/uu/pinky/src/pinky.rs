@@ -22,7 +22,7 @@ use clap::{crate_version, Arg, Command};
 use std::path::PathBuf;
 use uucore::{format_usage, InvalidEncodingHandling};
 
-static ABOUT: &str = "pinky - lightweight finger";
+static ABOUT: &str = "lightweight finger";
 const USAGE: &str = "{} [OPTION]... [USER]...";
 
 mod options {
