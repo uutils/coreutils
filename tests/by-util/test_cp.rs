@@ -1,4 +1,4 @@
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs ROOTDIR USERDIR
 
 use crate::common::util::*;
 #[cfg(not(windows))]
@@ -1493,6 +1493,84 @@ fn test_cp_sparse_never_reflink_always() {
         "dst_file",
     ])
     .fails();
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_cp_reflink_always_override() {
+    let scene = TestScenario::new(util_name!());
+
+    const DISK: &str = "disk.img";
+    const ROOTDIR: &str = "disk_root/";
+    const USERDIR: &str = "dir/";
+    const MOUNTPOINT: &str = "mountpoint/";
+
+    let src1_path: &str = &vec![MOUNTPOINT, USERDIR, "src1"].concat();
+    let src2_path: &str = &vec![MOUNTPOINT, USERDIR, "src2"].concat();
+    let dst_path: &str = &vec![MOUNTPOINT, USERDIR, "dst"].concat();
+
+    scene.fixtures.mkdir(ROOTDIR);
+    scene.fixtures.mkdir(&vec![ROOTDIR, USERDIR].concat());
+
+    // Setup:
+    // Because neither `mkfs.btrfs` not btrfs `mount` options allow us to have a mountpoint owned
+    // by a non-root user, we want the following directory structure:
+    //
+    // uid  | path
+    // ---------------------------
+    // user | .
+    // root | └── mountpoint
+    // user |     └── dir
+    // user |         ├── src1
+    // user |         └── src2
+
+    scene
+        .ccmd("truncate")
+        .args(&["-s", "128M", DISK])
+        .succeeds();
+
+    if !scene
+        .cmd_keepenv("env")
+        .args(&["mkfs.btrfs", "--rootdir", ROOTDIR, DISK])
+        .run()
+        .succeeded()
+    {
+        print!("Test skipped; couldn't make btrfs disk image");
+        return;
+    }
+
+    scene.fixtures.mkdir(MOUNTPOINT);
+
+    let mount = scene
+        .cmd_keepenv("sudo")
+        .args(&["-E", "--non-interactive", "mount", DISK, MOUNTPOINT])
+        .run();
+
+    if !mount.succeeded() {
+        print!("Test skipped; requires root user");
+        return;
+    }
+
+    scene.fixtures.make_file(src1_path);
+    scene.fixtures.write_bytes(src1_path, &[0x64; 8192]);
+
+    scene.fixtures.make_file(src2_path);
+    scene.fixtures.write(src2_path, "other data");
+
+    scene
+        .ucmd()
+        .args(&["--reflink=always", src1_path, dst_path])
+        .succeeds();
+
+    scene
+        .ucmd()
+        .args(&["--reflink=always", src2_path, dst_path])
+        .succeeds();
+
+    scene
+        .cmd_keepenv("sudo")
+        .args(&["-E", "--non-interactive", "umount", MOUNTPOINT])
+        .succeeds();
 }
 
 #[test]
