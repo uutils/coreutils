@@ -14,6 +14,9 @@ pub(crate) enum Error {
     #[error("No files are specified")]
     MissingFiles,
 
+    #[error("Data is out of range")]
+    OutOfRange,
+
     #[error("{0}")]
     ArgumentsMismatch(String),
 

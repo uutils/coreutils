@@ -448,10 +448,39 @@ enum CommandLineMode {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DeviceAndINode {
+    device_id: u64,
+    inode: u64,
+}
+
+#[cfg(unix)]
+impl From<fs::Metadata> for DeviceAndINode {
+    fn from(md: fs::Metadata) -> Self {
+        use std::os::unix::fs::MetadataExt;
+
+        Self {
+            device_id: md.dev(),
+            inode: md.ino(),
+        }
+    }
+}
+
+impl TryFrom<&libc::stat> for DeviceAndINode {
+    type Error = Error;
+
+    #[allow(clippy::useless_conversion)]
+    fn try_from(st: &libc::stat) -> Result<Self> {
+        let device_id = u64::try_from(st.st_dev).map_err(|_r| Error::OutOfRange)?;
+        let inode = u64::try_from(st.st_ino).map_err(|_r| Error::OutOfRange)?;
+        Ok(Self { device_id, inode })
+    }
+}
+
 fn process_files(
     options: &Options,
     context: &SELinuxSecurityContext,
-    root_dev_ino: Option<(libc::ino_t, libc::dev_t)>,
+    root_dev_ino: Option<DeviceAndINode>,
 ) -> Vec<Error> {
     let fts_options = options.recursive_mode.fts_open_options();
     let mut fts = match fts::FTS::new(options.files.iter(), fts_options) {
@@ -483,7 +512,7 @@ fn process_file(
     options: &Options,
     context: &SELinuxSecurityContext,
     fts: &mut fts::FTS,
-    root_dev_ino: Option<(libc::ino_t, libc::dev_t)>,
+    root_dev_ino: Option<DeviceAndINode>,
 ) -> Result<()> {
     let mut entry = fts.last_entry_ref().unwrap();
 
@@ -504,8 +533,8 @@ fn process_file(
     };
 
     // SAFETY: If `entry.fts_statp` is not null, then is is assumed to be valid.
-    let file_dev_ino = if let Some(stat) = entry.stat() {
-        (stat.st_ino, stat.st_dev)
+    let file_dev_ino: DeviceAndINode = if let Some(st) = entry.stat() {
+        st.try_into()?
     } else {
         return Err(err("Getting meta data", io::ErrorKind::InvalidInput));
     };
@@ -692,18 +721,13 @@ pub(crate) fn os_str_to_c_string(s: &OsStr) -> Result<CString> {
 
 /// Call `lstat()` to get the device and inode numbers for `/`.
 #[cfg(unix)]
-fn get_root_dev_ino() -> Result<(libc::ino_t, libc::dev_t)> {
-    use std::os::unix::fs::MetadataExt;
-
+fn get_root_dev_ino() -> Result<DeviceAndINode> {
     fs::symlink_metadata("/")
-        .map(|md| (md.ino(), md.dev()))
+        .map(DeviceAndINode::from)
         .map_err(|r| Error::from_io1("std::fs::symlink_metadata", "/", r))
 }
 
-fn root_dev_ino_check(
-    root_dev_ino: Option<(libc::ino_t, libc::dev_t)>,
-    dir_dev_ino: (libc::ino_t, libc::dev_t),
-) -> bool {
+fn root_dev_ino_check(root_dev_ino: Option<DeviceAndINode>, dir_dev_ino: DeviceAndINode) -> bool {
     root_dev_ino.map_or(false, |root_dev_ino| root_dev_ino == dir_dev_ino)
 }
 
