@@ -20,11 +20,6 @@ use std::thread::sleep;
 #[cfg(unix)]
 use std::time::Duration;
 
-#[cfg(target_os = "linux")]
-pub static BACKEND: &str = "inotify";
-// #[cfg(all(unix, not(target_os = "linux")))]
-// pub static BACKEND: &str = "kqueue";
-
 static FOOBAR_TXT: &str = "foobar.txt";
 static FOOBAR_2_TXT: &str = "foobar2.txt";
 static FOOBAR_WITH_NULL_TXT: &str = "foobar_with_null.txt";
@@ -1445,6 +1440,8 @@ fn test_retry9() {
     // inspired by: gnu/tests/tail-2/inotify-dir-recreate.sh
     // Ensure that inotify will switch to polling mode if directory
     // of the watched file was removed and recreated.
+
+    use tail::text::BACKEND;
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;

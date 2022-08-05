@@ -1,6 +1,3 @@
-#[cfg(all(unix, not(target_os = "macos")))]
-use pretty_assertions::assert_ne;
-
 use crate::common::util::*;
 
 // spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars
@@ -404,6 +401,7 @@ fn test_read_from_nonexistent_file() {
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_files_from_pseudo_filesystem() {
+    use pretty_assertions::assert_ne;
     let result = new_ucmd!().arg("-c").arg("/proc/cpuinfo").succeeds();
     assert_ne!(result.stdout_str(), "0 /proc/cpuinfo\n");
 }
