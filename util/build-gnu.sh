@@ -213,3 +213,11 @@ sed -i -e "s/timeout 10 sleep 0x.002p1/#timeout 10 sleep 0x.002p1/" tests/misc/s
 
 # install verbose messages shows ginstall as command
 sed -i -e "s/ginstall: creating directory/install: creating directory/g" tests/install/basic-1.sh
+
+# GNU doesn't support padding < -LONG_MAX
+# disable this testcase
+sed -i -Ez "s/\n([^\n#]*pad-3\.2[^\n]*)\n([^\n]*)\n([^\n]*)/\n# uutils\/numfmt supports padding = LONG_MIN\n#\1\n#\2\n#\3/" tests/misc/numfmt.pl
+
+# GNU doesn't support width > INT_MAX
+# disable these testcases
+sed -i -E "s|^([^#]*2_31.*)$|#\1|g" tests/misc/printf-cov.pl
