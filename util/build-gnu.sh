@@ -170,7 +170,7 @@ sed -i -e "s|---dis ||g" tests/tail-2/overlay-headers.sh
 
 # F-headers.sh test sometime fails (but only in CI),
 # just testing inotify should make it more stable
-sed -i -e "s|check_tail_output \.1 7|check_tail_output .1 12|g" -e "s| '---disable-inotify'||g" tests/tail-2/F-headers.sh
+sed -i -e "s|echo x > a|sleep .1; echo x > a; sleep .1|g" -e "s|echo y > b|sleep .1; echo y > b; sleep .1|g" -e "s| '---disable-inotify'||g" tests/tail-2/F-headers.sh
 
 test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
 
