@@ -748,9 +748,83 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
             } else {
                 watcher.watch_with_parent(path.parent().unwrap())?;
             }
+        } else if settings.follow_name() {
+            // retry == false
+            if !path.exists() {
+                show_error!(
+                    "cannot watch {}: No such file or directory",
+                    files.get_display_name(path).quote()
+                );
+            }
         } else {
             // TODO: [2022-05; jhscheer] do we need to handle this case?
             unimplemented!();
+        }
+    }
+
+    // handle all events that could happen after last tail and before watcher started to watch it
+    if !settings.use_polling && settings.follow_name() {
+        let all_paths: Vec<_> = files.keys().map(|path| path.to_owned()).collect();
+        for path in &all_paths {
+            let data = files.get(path);
+            let display_name = files.get_display_name(path);
+            if let Ok(new_md) = path.metadata() {
+                if !path.is_tailable() {
+                    if let Some(old_md) = &data.metadata {
+                        if old_md.is_tailable() {
+                            if settings.retry {
+                                show_error!(
+                                    "{} has been replaced with an untailable file",
+                                    display_name.quote()
+                                );
+                            } else {
+                                show_error!(
+                                    "{} has been replaced with an untailable file; giving up on this name",
+                                    display_name.quote()
+                                );
+                            }
+                        }
+                    } else {
+                        // nothing changed
+                    }
+                } else {
+                    if let Some(old_md) = &data.metadata {
+                        if !old_md.is_tailable() {
+                            show_error!("{} has become accessible", display_name.quote());
+                            files.update_reader(path)?;
+                        } else if data.reader.is_none() {
+                            show_error!(
+                                "{} has appeared;  following new file",
+                                display_name.quote()
+                            );
+                            files.update_reader(path)?;
+                        } else if !old_md.file_id_eq(&new_md) {
+                            show_error!(
+                                "{} has been replaced;  following new file",
+                                display_name.quote()
+                            );
+                            files.update_reader(path)?;
+                        }
+                    } else {
+                        show_error!("{} has appeared;  following new file", display_name.quote());
+                        files.update_reader(path)?;
+                    }
+                }
+                files.update_metadata(path, Some(new_md));
+                files.tail_file(path, settings.verbose)?;
+            } else {
+                if let Some(old_md) = &data.metadata {
+                    if old_md.is_tailable() && data.reader.is_some() {
+                        show_error!(
+                            "{} {}: {}",
+                            display_name.quote(),
+                            text::BECOME_INACCESSIBLE,
+                            text::NO_SUCH_FILE
+                        );
+                    }
+                }
+                files.update_metadata(path, None);
+            }
         }
     }
 
