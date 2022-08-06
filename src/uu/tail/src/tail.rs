@@ -792,10 +792,7 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
                         show_error!("{} has become accessible", display_name.quote());
                         files.update_reader(path)?;
                     } else if data.reader.is_none() {
-                        show_error!(
-                            "{} has appeared;  following new file",
-                            display_name.quote()
-                        );
+                        show_error!("{} has appeared;  following new file", display_name.quote());
                         files.update_reader(path)?;
                     } else if !old_md.file_id_eq(&new_md) {
                         show_error!(
