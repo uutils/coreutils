@@ -4,7 +4,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command};
 use std::io::Write;
 use uucore::error::{set_exit_code, UResult};
 
@@ -20,13 +20,13 @@ operation causes the program to return `1` instead.
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut command = uu_app();
 
-    if let Ok(matches) = command.try_get_matches_from_mut(args) {
-        let error = if matches.index_of("help").is_some() {
-            command.print_help()
-        } else if matches.index_of("version").is_some() {
-            writeln!(std::io::stdout(), "{}", command.render_version())
-        } else {
-            Ok(())
+    if let Err(e) = command.try_get_matches_from_mut(args) {
+        let error = match e.kind() {
+            clap::ErrorKind::DisplayHelp => command.print_help(),
+            clap::ErrorKind::DisplayVersion => {
+                writeln!(std::io::stdout(), "{}", command.render_version())
+            }
+            _ => Ok(()),
         };
 
         if let Err(print_fail) = error {
@@ -53,11 +53,13 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new("help")
                 .long("help")
                 .help("Print help information")
-                .exclusive(true),
+                .exclusive(true)
+                .action(ArgAction::Help),
         )
         .arg(
             Arg::new("version")
                 .long("version")
-                .help("Print version information"),
+                .help("Print version information")
+                .action(ArgAction::Version),
         )
 }
