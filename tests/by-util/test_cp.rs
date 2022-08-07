@@ -1732,6 +1732,8 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     let (at, mut ucmd) = at_and_ucmd!();
     //               target name    link name
     at.symlink_file("no-such-file", "dangle");
+    // to check if access time and modification time didn't change
+    sleep(Duration::from_millis(5000));
     //          don't dereference the link
     //           |    copy permissions, too
     //           |      |    from the link
@@ -1753,7 +1755,6 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
         assert_eq!(metadata1.uid(), metadata2.uid());
         assert_eq!(metadata1.atime(), metadata2.atime());
         assert_eq!(metadata1.mtime(), metadata2.mtime());
-        assert_eq!(metadata1.ctime(), metadata2.ctime());
     }
 }
 
