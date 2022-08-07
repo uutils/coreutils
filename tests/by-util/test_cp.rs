@@ -1742,19 +1742,27 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
         .succeeds()
         .no_stderr()
         .no_stdout();
-    assert!(at.symlink_exists("d2"));
+    assert!(at.symlink_exists("d2"), "symlink wasn't created");
 
     // `-p` means `--preserve=mode,ownership,timestamps`
     #[cfg(unix)]
     {
         let metadata1 = at.symlink_metadata("dangle");
         let metadata2 = at.symlink_metadata("d2");
-        assert_eq!(metadata1.mode(), metadata2.mode());
-        assert_eq!(metadata1.uid(), metadata2.uid());
-        assert_eq!(metadata1.atime(), metadata2.atime());
-        assert_eq!(metadata1.atime_nsec(), metadata2.atime_nsec());
-        assert_eq!(metadata1.mtime(), metadata2.mtime());
-        assert_eq!(metadata1.mtime_nsec(), metadata2.mtime_nsec());
+        assert_eq!(metadata1.mode(), metadata2.mode(), "mode is different");
+        assert_eq!(metadata1.uid(), metadata2.uid(), "uid is different");
+        assert_eq!(metadata1.atime(), metadata2.atime(), "atime is different");
+        assert_eq!(
+            metadata1.atime_nsec(),
+            metadata2.atime_nsec(),
+            "atime_nsec is different"
+        );
+        assert_eq!(metadata1.mtime(), metadata2.mtime(), "mtime is different");
+        assert_eq!(
+            metadata1.mtime_nsec(),
+            metadata2.mtime_nsec(),
+            "mtime_nsec is different"
+        );
     }
 }
 
