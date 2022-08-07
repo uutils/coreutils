@@ -22,9 +22,7 @@ use filetime::FileTime;
 use rlimit::Resource;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs as std_fs;
-#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
-#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::time::Duration;
 use uucore::display::Quotable;
 
