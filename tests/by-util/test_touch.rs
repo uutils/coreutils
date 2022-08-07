@@ -703,6 +703,8 @@ fn test_touch_leap_second() {
 }
 
 #[test]
+#[cfg(not(windows))]
+// File::create doesn't support trailing separator in Windows
 fn test_touch_trailing_slash_no_create() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
@@ -725,12 +727,16 @@ fn test_touch_trailing_slash_no_create() {
     ucmd.args(&["-c", "loop/"]).fails().code_is(1);
     assert!(!at.file_exists("loop"));
 
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.touch("file2");
-    at.relative_symlink_file("file2", "link1");
-    ucmd.args(&["-c", "link1/"]).fails().code_is(1);
-    assert!(at.file_exists("file2"));
-    assert!(at.symlink_exists("link1"));
+    #[cfg(not(target_os = "macos"))]
+    // MacOS supports trailing slash for symlinks to files
+    {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("file2");
+        at.relative_symlink_file("file2", "link1");
+        ucmd.args(&["-c", "link1/"]).fails().code_is(1);
+        assert!(at.file_exists("file2"));
+        assert!(at.symlink_exists("link1"));
+    }
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
