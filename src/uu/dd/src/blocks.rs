@@ -22,7 +22,7 @@ const SPACE: u8 = b' ';
 /// read from the input (as indicated in `rstat`), then leave an
 /// all-spaces block at the end. Otherwise, remove the last block if
 /// it is all spaces.
-fn block(buf: &[u8], cbs: usize, sync: bool, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
+fn block(buf: Vec<u8>, cbs: usize, sync: bool, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
     let mut blocks = buf
         .split(|&e| e == NEWLINE)
         .map(|split| split.to_vec())
@@ -51,7 +51,7 @@ fn block(buf: &[u8], cbs: usize, sync: bool, rstat: &mut ReadStat) -> Vec<Vec<u8
 /// Trims padding from each cbs-length partition of buf
 /// as specified by conv=unblock and cbs=N
 /// Expects ascii encoded data
-fn unblock(buf: &[u8], cbs: usize) -> Vec<u8> {
+fn unblock(buf: Vec<u8>, cbs: usize) -> Vec<u8> {
     buf.chunks(cbs).fold(Vec::new(), |mut acc, block| {
         if let Some(last_char_idx) = block.iter().rposition(|&e| e != SPACE) {
             // Include text up to last space.
@@ -78,53 +78,43 @@ fn unblock(buf: &[u8], cbs: usize) -> Vec<u8> {
 /// settings of `mode`, this function will update the number of
 /// records truncated; that's why `rstat` is borrowed mutably.
 pub(crate) fn conv_block_unblock_helper(
-    mut buf: Vec<u8>,
+    buf: Vec<u8>,
     mode: &ConversionMode,
     rstat: &mut ReadStat,
 ) -> Vec<u8> {
-    // TODO This function has a mutable input `buf` but also returns a
-    // completely new `Vec`; that seems fishy. Could we either make
-    // the input immutable or make the function not return anything?
-
-    fn apply_conversion(buf: &mut [u8], ct: &ConversionTable) {
-        for idx in 0..buf.len() {
-            buf[idx] = ct[buf[idx] as usize];
-        }
+    fn apply_conversion(buf: Vec<u8>, ct: &ConversionTable) -> impl Iterator<Item = u8> + '_ {
+        buf.into_iter().map(|b| ct[b as usize])
     }
 
     match mode {
-        ConversionMode::ConvertOnly(ct) => {
-            apply_conversion(&mut buf, ct);
-            buf
-        }
+        ConversionMode::ConvertOnly(ct) => apply_conversion(buf, ct).collect(),
         ConversionMode::BlockThenConvert(ct, cbs, sync) => {
-            let mut blocks = block(&buf, *cbs, *sync, rstat);
-            for buf in &mut blocks {
-                apply_conversion(buf, ct);
-            }
-            blocks.into_iter().flatten().collect()
+            let blocks = block(buf, *cbs, *sync, rstat);
+            blocks
+                .into_iter()
+                .flat_map(|block| apply_conversion(block, ct))
+                .collect()
         }
         ConversionMode::ConvertThenBlock(ct, cbs, sync) => {
-            apply_conversion(&mut buf, ct);
-            block(&buf, *cbs, *sync, rstat)
+            let buf: Vec<_> = apply_conversion(buf, ct).collect();
+            block(buf, *cbs, *sync, rstat)
                 .into_iter()
                 .flatten()
                 .collect()
         }
-        ConversionMode::BlockOnly(cbs, sync) => block(&buf, *cbs, *sync, rstat)
+        ConversionMode::BlockOnly(cbs, sync) => block(buf, *cbs, *sync, rstat)
             .into_iter()
             .flatten()
             .collect(),
         ConversionMode::UnblockThenConvert(ct, cbs) => {
-            let mut buf = unblock(&buf, *cbs);
-            apply_conversion(&mut buf, ct);
-            buf
+            let buf = unblock(buf, *cbs);
+            apply_conversion(buf, ct).collect()
         }
         ConversionMode::ConvertThenUnblock(ct, cbs) => {
-            apply_conversion(&mut buf, ct);
-            unblock(&buf, *cbs)
+            let buf: Vec<_> = apply_conversion(buf, ct).collect();
+            unblock(buf, *cbs)
         }
-        ConversionMode::UnblockOnly(cbs) => unblock(&buf, *cbs),
+        ConversionMode::UnblockOnly(cbs) => unblock(buf, *cbs),
     }
 }
 
