@@ -1754,7 +1754,9 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
         assert_eq!(metadata1.mode(), metadata2.mode());
         assert_eq!(metadata1.uid(), metadata2.uid());
         assert_eq!(metadata1.atime(), metadata2.atime());
+        assert_eq!(metadata1.atime_nsec(), metadata2.atime_nsec());
         assert_eq!(metadata1.mtime(), metadata2.mtime());
+        assert_eq!(metadata1.mtime_nsec(), metadata2.mtime_nsec());
     }
 }
 
