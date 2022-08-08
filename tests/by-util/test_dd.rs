@@ -1155,6 +1155,7 @@ fn test_bytes_oseek_bytes_trunc_oflag() {
     new_ucmd!()
         .args(&["oseek=8", "oflag=seek_bytes", "bs=2", "count=0"])
         .pipe_in("abcdefghijklm")
+        .ignore_stdin_write_error()
         .succeeds()
         .stdout_is_fixture_bytes("dd-bytes-null-trunc.spec");
 }
