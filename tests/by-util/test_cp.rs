@@ -22,9 +22,7 @@ use filetime::FileTime;
 use rlimit::Resource;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs as std_fs;
-#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
-#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::time::Duration;
 use uucore::display::Quotable;
 
@@ -1732,6 +1730,8 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     let (at, mut ucmd) = at_and_ucmd!();
     //               target name    link name
     at.symlink_file("no-such-file", "dangle");
+    // to check if access time and modification time didn't change
+    sleep(Duration::from_millis(5000));
     //          don't dereference the link
     //           |    copy permissions, too
     //           |      |    from the link
@@ -1742,18 +1742,27 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
         .succeeds()
         .no_stderr()
         .no_stdout();
-    assert!(at.symlink_exists("d2"));
+    assert!(at.symlink_exists("d2"), "symlink wasn't created");
 
     // `-p` means `--preserve=mode,ownership,timestamps`
     #[cfg(unix)]
     {
         let metadata1 = at.symlink_metadata("dangle");
         let metadata2 = at.symlink_metadata("d2");
-        assert_eq!(metadata1.mode(), metadata2.mode());
-        assert_eq!(metadata1.uid(), metadata2.uid());
-        assert_eq!(metadata1.atime(), metadata2.atime());
-        assert_eq!(metadata1.mtime(), metadata2.mtime());
-        assert_eq!(metadata1.ctime(), metadata2.ctime());
+        assert_eq!(metadata1.mode(), metadata2.mode(), "mode is different");
+        assert_eq!(metadata1.uid(), metadata2.uid(), "uid is different");
+        assert_eq!(metadata1.atime(), metadata2.atime(), "atime is different");
+        assert_eq!(
+            metadata1.atime_nsec(),
+            metadata2.atime_nsec(),
+            "atime_nsec is different"
+        );
+        assert_eq!(metadata1.mtime(), metadata2.mtime(), "mtime is different");
+        assert_eq!(
+            metadata1.mtime_nsec(),
+            metadata2.mtime_nsec(),
+            "mtime_nsec is different"
+        );
     }
 }
 
