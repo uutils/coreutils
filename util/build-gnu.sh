@@ -168,10 +168,6 @@ sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 # however there's a bug because `---dis` is an alias for: `---disable-inotify`
 sed -i -e "s|---dis ||g" tests/tail-2/overlay-headers.sh
 
-# F-headers.sh test sometime fails (but only in CI),
-# just testing inotify should make it more stable
-sed -i -e "s|echo x > a|sleep .1; echo x > a; sleep .1|g" -e "s|echo y > b|sleep .1; echo y > b; sleep .1|g" -e "s| '---disable-inotify'||g" tests/tail-2/F-headers.sh
-
 test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
 
 # When decoding an invalid base32/64 string, gnu writes everything it was able to decode until
