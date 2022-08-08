@@ -501,7 +501,9 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                 }
                 if !path.is_orphan() {
                     if let Some((ref mut watcher, _)) = watcher_rx {
-                        watcher.watch(path.parent().unwrap(), RecursiveMode::NonRecursive).unwrap();
+                        watcher
+                            .watch(path.parent().unwrap(), RecursiveMode::NonRecursive)
+                            .unwrap();
                     }
                 }
                 // Insert non-is_tailable() paths into `files.map`
