@@ -1011,6 +1011,7 @@ fn test_positive_zero_lines() {
     ts.ucmd()
         .args(&["-n", "0"])
         .pipe_in("a\nb\nc\nd\ne\n")
+        .ignore_stdin_write_error()
         .succeeds()
         .no_stderr()
         .no_stdout();
