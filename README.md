@@ -8,6 +8,7 @@
 
 [![Build Status (FreeBSD)](https://api.cirrus-ci.com/github/uutils/coreutils.svg)](https://cirrus-ci.com/github/uutils/coreutils/master)
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
+![MSRV](https://img.shields.io/badge/MSRV-1.56.1-brightgreen)
 
 -----------------------------------------------
 
@@ -50,7 +51,7 @@ Both can also be generated locally, the instructions for that can be found in th
 ### Rust Version
 
 uutils follows Rust's release channels and is tested against stable, beta and nightly.
-The current oldest supported version of the Rust compiler is `1.56.1`.
+The current Minimum Supported Rust Version (MSRV) is `1.56.1`.
 
 ## Building
 
