@@ -517,18 +517,16 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                     false,
                 );
             }
-            if !path.exists() && !settings.stdin_is_pipe_or_fifo {
-                if watcher_rx.is_some() {
-                    // NOTE: This error message is used as a trigger in
-                    // "gnu/tests/tail-2/F-headers.sh". To prevent a possible
-                    // race condition, we delay showing it until this path
-                    // is added to the watcher thread.
-                    show_error!(
-                        "cannot open {} for reading: {}",
-                        display_name.quote(),
-                        text::NO_SUCH_FILE
-                    );
-                }
+            if !path.exists() && !settings.stdin_is_pipe_or_fifo && watcher_rx.is_some() {
+                // NOTE: This error message is used as a trigger in
+                // "gnu/tests/tail-2/F-headers.sh". To prevent a possible
+                // race condition, we delay showing it until this path
+                // is added to the watcher thread.
+                show_error!(
+                    "cannot open {} for reading: {}",
+                    display_name.quote(),
+                    text::NO_SUCH_FILE
+                );
             }
         }
     }
@@ -710,13 +708,15 @@ pub fn uu_app<'a>() -> Command<'a> {
         )
 }
 
+type WatcherRx = (
+    Box<(dyn Watcher)>,
+    Receiver<Result<notify::Event, notify::Error>>,
+);
+
 fn follow(
     files: &mut FileHandling,
     settings: &mut Settings,
-    watcher_rx: Option<(
-        Box<dyn Watcher>,
-        Receiver<Result<notify::Event, notify::Error>>,
-    )>,
+    watcher_rx: Option<WatcherRx>,
 ) -> UResult<()> {
     let (mut watcher, rx) = watcher_rx.unwrap();
     let mut process = platform::ProcessChecker::new(settings.pid);
@@ -840,15 +840,7 @@ fn follow(
     Ok(())
 }
 
-fn start_watcher_thread(
-    settings: &mut Settings,
-) -> Result<
-    (
-        Box<(dyn Watcher)>,
-        Receiver<Result<notify::Event, notify::Error>>,
-    ),
-    Box<(dyn UError)>,
-> {
+fn start_watcher_thread(settings: &mut Settings) -> Result<WatcherRx, Box<(dyn UError)>> {
     let (tx, rx) = channel();
 
     /*
