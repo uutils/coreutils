@@ -71,7 +71,7 @@ impl TmpDirWrapper {
     }
 
     pub fn wait_if_signal(&self) {
-        let _ = self.lock.lock().unwrap();
+        let _lock = self.lock.lock().unwrap();
     }
 }
 
