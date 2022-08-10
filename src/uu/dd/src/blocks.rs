@@ -22,7 +22,7 @@ const SPACE: u8 = b' ';
 /// read from the input (as indicated in `rstat`), then leave an
 /// all-spaces block at the end. Otherwise, remove the last block if
 /// it is all spaces.
-fn block(buf: Vec<u8>, cbs: usize, sync: bool, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
+fn block(buf: &[u8], cbs: usize, sync: bool, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
     let mut blocks = buf
         .split(|&e| e == NEWLINE)
         .map(|split| split.to_vec())
@@ -51,7 +51,7 @@ fn block(buf: Vec<u8>, cbs: usize, sync: bool, rstat: &mut ReadStat) -> Vec<Vec<
 /// Trims padding from each cbs-length partition of buf
 /// as specified by conv=unblock and cbs=N
 /// Expects ascii encoded data
-fn unblock(buf: Vec<u8>, cbs: usize) -> Vec<u8> {
+fn unblock(buf: &[u8], cbs: usize) -> Vec<u8> {
     buf.chunks(cbs).fold(Vec::new(), |mut acc, block| {
         if let Some(last_char_idx) = block.iter().rposition(|&e| e != SPACE) {
             // Include text up to last space.
@@ -89,7 +89,7 @@ pub(crate) fn conv_block_unblock_helper(
     match mode {
         ConversionMode::ConvertOnly(ct) => apply_conversion(buf, ct).collect(),
         ConversionMode::BlockThenConvert(ct, cbs, sync) => {
-            let blocks = block(buf, *cbs, *sync, rstat);
+            let blocks = block(&buf, *cbs, *sync, rstat);
             blocks
                 .into_iter()
                 .flat_map(|block| apply_conversion(block, ct))
@@ -97,24 +97,24 @@ pub(crate) fn conv_block_unblock_helper(
         }
         ConversionMode::ConvertThenBlock(ct, cbs, sync) => {
             let buf: Vec<_> = apply_conversion(buf, ct).collect();
-            block(buf, *cbs, *sync, rstat)
+            block(&buf, *cbs, *sync, rstat)
                 .into_iter()
                 .flatten()
                 .collect()
         }
-        ConversionMode::BlockOnly(cbs, sync) => block(buf, *cbs, *sync, rstat)
+        ConversionMode::BlockOnly(cbs, sync) => block(&buf, *cbs, *sync, rstat)
             .into_iter()
             .flatten()
             .collect(),
         ConversionMode::UnblockThenConvert(ct, cbs) => {
-            let buf = unblock(buf, *cbs);
+            let buf = unblock(&buf, *cbs);
             apply_conversion(buf, ct).collect()
         }
         ConversionMode::ConvertThenUnblock(ct, cbs) => {
             let buf: Vec<_> = apply_conversion(buf, ct).collect();
-            unblock(buf, *cbs)
+            unblock(&buf, *cbs)
         }
-        ConversionMode::UnblockOnly(cbs) => unblock(buf, *cbs),
+        ConversionMode::UnblockOnly(cbs) => unblock(&buf, *cbs),
     }
 }
 
