@@ -45,7 +45,8 @@ impl TmpDirWrapper {
         let path = self.temp_dir.as_ref().unwrap().path().to_owned();
         let lock = self.lock.clone();
         ctrlc::set_handler(move || {
-            // Take the lock so that `next_file_path` returns no new file path.
+            // Take the lock so that `next_file_path` returns no new file path,
+            // and the program doesn't terminate before the handler has finished
             let _lock = lock.lock().unwrap();
             if let Err(e) = remove_tmp_dir(&path) {
                 show_error!("failed to delete temporary directory: {}", e);
@@ -70,6 +71,7 @@ impl TmpDirWrapper {
         ))
     }
 
+    /// Function just waits if signal handler was called
     pub fn wait_if_signal(&self) {
         let _lock = self.lock.lock().unwrap();
     }

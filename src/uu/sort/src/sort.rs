@@ -1268,6 +1268,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.init_precomputed();
 
     let result = exec(&mut files, &settings, output, &mut tmp_dir);
+    // Wait here if `SIGINT` was received,
+    // for signal handler to do its work and terminate the program.
     tmp_dir.wait_if_signal();
     result
 }
