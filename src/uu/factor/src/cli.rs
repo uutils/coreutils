@@ -61,8 +61,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     } else {
         let stdin = stdin();
-
-        for line in stdin.lock().lines() {
+        let lines = stdin.lock().lines();
+        for line in lines {
             for number in line.unwrap().split_whitespace() {
                 if let Err(e) = print_factors_str(number, &mut w, &mut factors_buffer) {
                     show_warning!("{}: {}", number.maybe_quote(), e);

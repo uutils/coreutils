@@ -474,7 +474,8 @@ fn word_count_from_input(input: &Input, settings: &Settings) -> CountResult {
         Input::Stdin(_) => {
             let stdin = io::stdin();
             let stdin_lock = stdin.lock();
-            match word_count_from_reader(stdin_lock, settings) {
+            let count = word_count_from_reader(stdin_lock, settings);
+            match count {
                 (total, Some(error)) => CountResult::Interrupted(total, error),
                 (total, None) => CountResult::Success(total),
             }
