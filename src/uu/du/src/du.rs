@@ -37,6 +37,7 @@ use uucore::display::{print_verbatim, Quotable};
 use uucore::error::FromIo;
 use uucore::error::{UError, UResult};
 use uucore::format_usage;
+use uucore::parse_glob;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::InvalidEncodingHandling;
 #[cfg(windows)]
@@ -488,55 +489,28 @@ fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
 
 // Given the --exclude-from and/or --exclude arguments, returns the globset lists
 // to ignore the files
-fn get_glob_ignore(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
-    let mut excludes_from = if matches.contains_id(options::EXCLUDE_FROM) {
-        match matches.values_of(options::EXCLUDE_FROM) {
-            Some(all_files) => {
-                let mut exclusion = Vec::<String>::new();
-                // Read the exclude lists from all the files
-                // and add them into a vector of string
-                let files: Vec<String> = all_files.clone().map(|v| v.to_owned()).collect();
-                for f in files {
-                    exclusion.extend(file_as_vec(&f));
-                }
-                exclusion
-            }
-            None => Vec::<String>::new(),
-        }
-    } else {
-        Vec::<String>::new()
-    };
+fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
+    let exclude_from_iterator = matches
+        .values_of(options::EXCLUDE_FROM)
+        .unwrap_or_default()
+        .flat_map(|f| file_as_vec(&f));
 
-    let mut excludes = if matches.contains_id(options::EXCLUDE) {
-        match matches.values_of(options::EXCLUDE) {
-            Some(v) => {
-                // Read the various arguments
-                v.clone().map(|v| v.to_owned()).collect()
-            }
-            None => Vec::<String>::new(),
-        }
-    } else {
-        Vec::<String>::new()
-    };
+    let excludes_iterator = matches
+        .values_of(options::EXCLUDE)
+        .unwrap_or_default()
+        .map(|v| v.to_owned());
 
-    // Merge the two lines
-    excludes.append(&mut excludes_from);
-    if !&excludes.is_empty() {
-        let mut builder = Vec::new();
-        // Create the `Vec` of excludes
-        for f in excludes {
-            if matches.contains_id(options::VERBOSE) {
-                println!("adding {:?} to the exclude list ", &f);
-            }
-            match Pattern::new(&f) {
-                Ok(glob) => builder.push(glob),
-                Err(err) => return Err(DuError::InvalidGlob(err.to_string()).into()),
-            };
+    let mut exclude_patterns = Vec::new();
+    for f in excludes_iterator.chain(exclude_from_iterator) {
+        if matches.is_present(options::VERBOSE) {
+            println!("adding {:?} to the exclude list ", &f);
         }
-        Ok(builder)
-    } else {
-        Ok(Vec::new())
+        match parse_glob::from_str(&f) {
+            Ok(glob) => exclude_patterns.push(glob),
+            Err(err) => return Err(DuError::InvalidGlob(err.to_string()).into()),
+        }
     }
+    Ok(exclude_patterns)
 }
 
 #[uucore::main]
@@ -615,85 +589,84 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         "\n"
     };
 
-    let excludes = get_glob_ignore(&matches)?;
+    let excludes = build_exclude_patterns(&matches)?;
 
     let mut grand_total = 0;
     'loop_file: for path_string in files {
         // Skip if we don't want to ignore anything
         if !&excludes.is_empty() {
             for pattern in &excludes {
-                {
-                    if pattern.matches(path_string) {
-                        // if the directory is ignored, leave early
-                        if options.verbose {
-                            println!("{} ignored", path_string.quote());
-                        }
-                        continue 'loop_file;
+                if pattern.matches(path_string) {
+                    // if the directory is ignored, leave early
+                    if options.verbose {
+                        println!("{} ignored", path_string.quote());
                     }
+                    continue 'loop_file;
                 }
             }
         }
 
         let path = PathBuf::from(&path_string);
-        match Stat::new(path, &options) {
-            Ok(stat) => {
-                let mut inodes: HashSet<FileInfo> = HashSet::new();
-                if let Some(inode) = stat.inode {
-                    inodes.insert(inode);
+        // Check existence of path provided in argument
+        if let Ok(stat) = Stat::new(path, &options) {
+            // Kick off the computation of disk usage from the initial path
+            let mut inodes: HashSet<FileInfo> = HashSet::new();
+            if let Some(inode) = stat.inode {
+                inodes.insert(inode);
+            }
+            let iter = du(stat, &options, 0, &mut inodes, &excludes);
+
+            // Sum up all the returned `Stat`s and display results
+            let (_, len) = iter.size_hint();
+            let len = len.unwrap();
+            for (index, stat) in iter.enumerate() {
+                let size = choose_size(&matches, &stat);
+
+                if threshold.map_or(false, |threshold| threshold.should_exclude(size)) {
+                    continue;
                 }
-                let iter = du(stat, &options, 0, &mut inodes, &excludes);
-                let (_, len) = iter.size_hint();
-                let len = len.unwrap();
-                for (index, stat) in iter.enumerate() {
-                    let size = choose_size(&matches, &stat);
 
-                    if threshold.map_or(false, |threshold| threshold.should_exclude(size)) {
-                        continue;
-                    }
-
-                    if matches.contains_id(options::TIME) {
-                        let tm = {
-                            let secs = {
-                                match matches.value_of(options::TIME) {
-                                    Some(s) => match s {
-                                        "ctime" | "status" => stat.modified,
-                                        "access" | "atime" | "use" => stat.accessed,
-                                        "birth" | "creation" => stat
-                                            .created
-                                            .ok_or_else(|| DuError::InvalidTimeArg(s.into()))?,
-                                        // below should never happen as clap already restricts the values.
-                                        _ => unreachable!("Invalid field for --time"),
-                                    },
-                                    None => stat.modified,
-                                }
-                            };
-                            DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs))
+                if matches.is_present(options::TIME) {
+                    let tm = {
+                        let secs = {
+                            match matches.value_of(options::TIME) {
+                                Some(s) => match s {
+                                    "ctime" | "status" => stat.modified,
+                                    "access" | "atime" | "use" => stat.accessed,
+                                    "birth" | "creation" => stat
+                                        .created
+                                        .ok_or_else(|| DuError::InvalidTimeArg(s.into()))?,
+                                    // below should never happen as clap already restricts the values.
+                                    _ => unreachable!("Invalid field for --time"),
+                                },
+                                None => stat.modified,
+                            }
                         };
-                        if !summarize || index == len - 1 {
-                            let time_str = tm.format(time_format_str).to_string();
-                            print!("{}\t{}\t", convert_size(size), time_str);
-                            print_verbatim(stat.path).unwrap();
-                            print!("{}", line_separator);
-                        }
-                    } else if !summarize || index == len - 1 {
-                        print!("{}\t", convert_size(size));
+                        DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs))
+                    };
+                    if !summarize || index == len - 1 {
+                        let time_str = tm.format(time_format_str).to_string();
+                        print!("{}\t{}\t", convert_size(size), time_str);
                         print_verbatim(stat.path).unwrap();
                         print!("{}", line_separator);
                     }
-                    if options.total && index == (len - 1) {
-                        // The last element will be the total size of the the path under
-                        // path_string.  We add it to the grand total.
-                        grand_total += size;
-                    }
+                } else if !summarize || index == len - 1 {
+                    print!("{}\t", convert_size(size));
+                    print_verbatim(stat.path).unwrap();
+                    print!("{}", line_separator);
+                }
+                if options.total && index == (len - 1) {
+                    // The last element will be the total size of the the path under
+                    // path_string.  We add it to the grand total.
+                    grand_total += size;
                 }
             }
-            Err(_) => {
-                show_error!(
-                    "{}: {}",
-                    path_string.maybe_quote(),
-                    "No such file or directory"
-                );
-            }
+        } else {
+            show_error!(
+                "{}: {}",
+                path_string.maybe_quote(),
+                "No such file or directory"
+            );
         }
     }
 
