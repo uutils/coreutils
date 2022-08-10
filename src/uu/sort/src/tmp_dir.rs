@@ -69,6 +69,10 @@ impl TmpDirWrapper {
             path,
         ))
     }
+
+    pub fn wait_if_signal(&self) {
+        let _ = self.lock.lock().unwrap();
+    }
 }
 
 /// Remove the directory at `path` by deleting its child files and then itself.

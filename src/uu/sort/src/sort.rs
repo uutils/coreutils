@@ -1267,7 +1267,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     settings.init_precomputed();
 
-    exec(&mut files, &settings, output, &mut tmp_dir)
+    let result = exec(&mut files, &settings, output, &mut tmp_dir);
+    tmp_dir.wait_if_signal();
+    result
 }
 
 pub fn uu_app<'a>() -> Command<'a> {
