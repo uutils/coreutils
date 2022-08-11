@@ -39,7 +39,7 @@ pub mod options {
 
 impl Config {
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
-        let file: Option<String> = match options.values_of(options::FILE) {
+        let file: Option<String> = match options.get_many::<String>(options::FILE) {
             Some(mut values) => {
                 let name = values.next().unwrap();
                 if let Some(extra_op) = values.next() {

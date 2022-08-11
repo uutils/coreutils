@@ -104,9 +104,9 @@ struct Options {
 
 impl Options {
     fn new(matches: &clap::ArgMatches) -> Result<Self, ParseError> {
-        let tabstops = match matches.values_of(options::TABS) {
+        let tabstops = match matches.get_many::<String>(options::TABS) {
             None => vec![DEFAULT_TABSTOP],
-            Some(s) => tabstops_parse(&s.collect::<Vec<&str>>().join(","))?,
+            Some(s) => tabstops_parse(&s.map(|s| s.as_str()).collect::<Vec<_>>().join(","))?,
         };
 
         let aflag = (matches.contains_id(options::ALL) || matches.contains_id(options::TABS))

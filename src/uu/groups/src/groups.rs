@@ -73,7 +73,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let users: Vec<String> = matches
-        .values_of(options::USERS)
+        .get_many::<String>(options::USERS)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 

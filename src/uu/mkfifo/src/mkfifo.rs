@@ -49,7 +49,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => 0o666,
     };
 
-    let fifos: Vec<String> = match matches.values_of(options::FIFO) {
+    let fifos: Vec<String> = match matches.get_many::<String>(options::FIFO) {
         Some(v) => v.clone().map(|s| s.to_owned()).collect(),
         None => return Err(USimpleError::new(1, "missing operand")),
     };

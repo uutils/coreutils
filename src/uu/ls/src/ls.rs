@@ -730,7 +730,11 @@ impl Config {
             ignore_patterns.push(Pattern::new(".*~").unwrap());
         }
 
-        for pattern in options.values_of(options::IGNORE).into_iter().flatten() {
+        for pattern in options
+            .get_many::<String>(options::IGNORE)
+            .into_iter()
+            .flatten()
+        {
             match Pattern::new(pattern) {
                 Ok(p) => {
                     ignore_patterns.push(p);
@@ -740,7 +744,11 @@ impl Config {
         }
 
         if files == Files::Normal {
-            for pattern in options.values_of(options::HIDE).into_iter().flatten() {
+            for pattern in options
+                .get_many::<String>(options::HIDE)
+                .into_iter()
+                .flatten()
+            {
                 match Pattern::new(pattern) {
                     Ok(p) => {
                         ignore_patterns.push(p);

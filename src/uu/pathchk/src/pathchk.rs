@@ -46,9 +46,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     // set working mode
-    let is_posix = matches.values_of(options::POSIX).is_some();
-    let is_posix_special = matches.values_of(options::POSIX_SPECIAL).is_some();
-    let is_portability = matches.values_of(options::PORTABILITY).is_some();
+    let is_posix = matches.get_many::<String>(options::POSIX).is_some();
+    let is_posix_special = matches.get_many::<String>(options::POSIX_SPECIAL).is_some();
+    let is_portability = matches.get_many::<String>(options::PORTABILITY).is_some();
 
     let mode = if (is_posix && is_posix_special) || is_portability {
         Mode::Both
@@ -61,7 +61,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     // take necessary actions
-    let paths = matches.values_of(options::PATH);
+    let paths = matches.get_many::<String>(options::PATH);
     if paths.is_none() {
         return Err(UUsageError::new(1, "missing operand"));
     }

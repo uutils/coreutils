@@ -491,12 +491,12 @@ fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
 // to ignore the files
 fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     let exclude_from_iterator = matches
-        .values_of(options::EXCLUDE_FROM)
+        .get_many::<String>(options::EXCLUDE_FROM)
         .unwrap_or_default()
         .flat_map(|f| file_as_vec(&f));
 
     let excludes_iterator = matches
-        .values_of(options::EXCLUDE)
+        .get_many::<String>(options::EXCLUDE)
         .unwrap_or_default()
         .map(|v| v.to_owned());
 
@@ -538,7 +538,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let files = match matches.value_of(options::FILE) {
-        Some(_) => matches.values_of(options::FILE).unwrap().collect(),
+        Some(_) => matches
+            .get_many::<String>(options::FILE)
+            .unwrap()
+            .map(|s| s.as_str())
+            .collect(),
         None => vec!["."],
     };
 

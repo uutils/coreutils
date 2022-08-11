@@ -156,8 +156,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let form = form[1..].to_string();
         Format::Custom(form)
     } else if let Some(fmt) = matches
-        .values_of(OPT_ISO_8601)
-        .map(|mut iter| iter.next().unwrap_or(DATE).into())
+        .get_many::<String>(OPT_ISO_8601)
+        .map(|mut iter| iter.next().unwrap_or(&DATE.to_string()).as_str().into())
     {
         Format::Iso8601(fmt)
     } else if matches.contains_id(OPT_RFC_EMAIL) {

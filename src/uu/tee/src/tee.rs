@@ -57,7 +57,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         append: matches.contains_id(options::APPEND),
         ignore_interrupts: matches.contains_id(options::IGNORE_INTERRUPTS),
         files: matches
-            .values_of(options::FILE)
+            .get_many::<String>(options::FILE)
             .map(|v| v.map(ToString::to_string).collect())
             .unwrap_or_default(),
         output_error: {

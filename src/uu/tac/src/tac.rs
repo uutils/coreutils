@@ -52,8 +52,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         raw_separator
     };
 
-    let files: Vec<&str> = match matches.values_of(options::FILE) {
-        Some(v) => v.collect(),
+    let files: Vec<&str> = match matches.get_many::<String>(options::FILE) {
+        Some(v) => v.map(|s| s.as_str()).collect(),
         None => vec!["-"],
     };
 

@@ -224,7 +224,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     .any(|v| matches.contains_id(v));
 
     let squeeze_blank = matches.contains_id(options::SQUEEZE_BLANK);
-    let files: Vec<String> = match matches.values_of(options::FILE) {
+    let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
         Some(v) => v.clone().map(|v| v.to_owned()).collect(),
         None => vec!["-".to_owned()],
     };

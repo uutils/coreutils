@@ -1228,7 +1228,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.separator = Some(separator.chars().next().unwrap());
     }
 
-    if let Some(values) = matches.values_of(options::KEY) {
+    if let Some(values) = matches.get_many::<String>(options::KEY) {
         for value in values {
             let selector = FieldSelector::parse(value, &settings)?;
             if selector.settings.mode == SortMode::Random && settings.salt.is_none() {

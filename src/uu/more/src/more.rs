@@ -55,11 +55,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut buff = String::new();
     let silent = matches.contains_id(options::SILENT);
-    if let Some(files) = matches.values_of(options::FILES) {
+    if let Some(files) = matches.get_many::<String>(options::FILES) {
         let mut stdout = setup_term();
         let length = files.len();
 
-        let mut files_iter = files.peekable();
+        let mut files_iter = files.map(|s| s.as_str()).peekable();
         while let (Some(file), next_file) = (files_iter.next(), files_iter.peek()) {
             let file = Path::new(file);
             if file.is_dir() {

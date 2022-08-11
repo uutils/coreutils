@@ -54,7 +54,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let truncate_set1_flag = matches.contains_id(options::TRUNCATE_SET1);
 
     let sets = matches
-        .values_of(options::SETS)
+        .get_many::<String>(options::SETS)
         .map(|v| {
             v.map(ToString::to_string)
                 .map(|input| convert::reduce_octal_to_char(&input))

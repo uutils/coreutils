@@ -202,7 +202,7 @@ impl HeadOptions {
 
         options.mode = Mode::from(&matches)?;
 
-        options.files = match matches.values_of(options::FILES_NAME) {
+        options.files = match matches.get_many::<String>(options::FILES_NAME) {
             Some(v) => v.map(|s| s.to_owned()).collect(),
             None => vec!["-".to_owned()],
         };

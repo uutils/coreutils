@@ -608,14 +608,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut settings: Settings = Default::default();
 
-    let v_values = matches.values_of("v");
+    let v_values = matches.get_many::<String>("v");
     if v_values.is_some() {
         settings.print_joined = false;
     }
 
     let unpaired = v_values
         .unwrap_or_default()
-        .chain(matches.values_of("a").unwrap_or_default());
+        .chain(matches.get_many("a").unwrap_or_default());
     for file_num in unpaired {
         match parse_file_number(file_num)? {
             FileNum::File1 => settings.print_unpaired1 = true,
