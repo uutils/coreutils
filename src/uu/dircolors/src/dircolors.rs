@@ -72,7 +72,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(&args);
 
     let files = matches
-        .values_of(options::FILE)
+        .get_many::<String>(options::FILE)
         .map_or(vec![], |file_values| file_values.collect());
 
     // clap provides .conflicts_with / .conflicts_with_all, but we want to

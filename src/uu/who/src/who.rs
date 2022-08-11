@@ -65,7 +65,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
     let files: Vec<String> = matches
-        .values_of(options::FILE)
+        .get_many::<String>(options::FILE)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 

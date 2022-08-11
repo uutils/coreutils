@@ -523,9 +523,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let files: Vec<String> = matches
-        .values_of(options::FILE)
+        .get_many::<String>(options::FILE)
         .unwrap_or_default()
-        .map(str::to_owned)
+        .map(|s| s.to_owned())
         .collect();
 
     match mode_parse {

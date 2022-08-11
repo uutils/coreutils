@@ -53,7 +53,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut w = io::BufWriter::with_capacity(4 * 1024, stdout.lock());
     let mut factors_buffer = String::new();
 
-    if let Some(values) = matches.values_of(options::NUMBER) {
+    if let Some(values) = matches.get_many::<String>(options::NUMBER) {
         for number in values {
             if let Err(e) = print_factors_str(number, &mut w, &mut factors_buffer) {
                 show_warning!("{}: {}", number.maybe_quote(), e);
@@ -61,8 +61,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     } else {
         let stdin = stdin();
-
-        for line in stdin.lock().lines() {
+        let lines = stdin.lock().lines();
+        for line in lines {
             for number in line.unwrap().split_whitespace() {
                 if let Err(e) = print_factors_str(number, &mut w, &mut factors_buffer) {
                     show_warning!("{}: {}", number.maybe_quote(), e);

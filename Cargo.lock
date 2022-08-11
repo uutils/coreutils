@@ -3102,6 +3102,7 @@ dependencies = [
  "data-encoding-macro",
  "dns-lookup",
  "dunce",
+ "glob",
  "itertools",
  "libc",
  "nix",

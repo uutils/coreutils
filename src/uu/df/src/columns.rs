@@ -93,7 +93,10 @@ impl Column {
                 // Unwrapping should not panic because in this arm of
                 // the `match` statement, we know that `OPT_OUTPUT`
                 // is non-empty.
-                let names = matches.values_of(OPT_OUTPUT).unwrap();
+                let names = matches
+                    .get_many::<String>(OPT_OUTPUT)
+                    .unwrap()
+                    .map(|s| s.as_str());
                 let mut seen: Vec<&str> = vec![];
                 let mut columns = vec![];
                 for name in names {

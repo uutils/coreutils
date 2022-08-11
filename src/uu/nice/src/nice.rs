@@ -79,7 +79,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let cstrs: Vec<CString> = matches
-        .values_of(options::COMMAND)
+        .get_many::<String>(options::COMMAND)
         .unwrap()
         .map(|x| CString::new(x.as_bytes()).unwrap())
         .collect();

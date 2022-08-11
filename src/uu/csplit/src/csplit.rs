@@ -724,9 +724,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // get the patterns to split on
     let patterns: Vec<String> = matches
-        .values_of(options::PATTERN)
+        .get_many::<String>(options::PATTERN)
         .unwrap()
-        .map(str::to_string)
+        .map(|s| s.to_string())
         .collect();
     let patterns = patterns::get_patterns(&patterns[..])?;
     let options = CsplitOptions::new(&matches);

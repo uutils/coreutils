@@ -264,7 +264,7 @@ impl Settings {
         settings.stdin_is_pipe_or_fifo = matches.contains_id(options::PRESUME_INPUT_PIPE);
 
         settings.paths = matches
-            .values_of(options::ARG_FILES)
+            .get_many::<String>(options::ARG_FILES)
             .map(|v| v.map(PathBuf::from).collect())
             .unwrap_or_default();
 

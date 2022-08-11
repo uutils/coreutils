@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) cmdline evec seps rvec fdata
 
-use clap::{crate_version, Arg, Command, Values};
+use clap::{crate_version, Arg, Command};
 use memchr::memchr_iter;
 use rand::prelude::SliceRandom;
 use rand::RngCore;
@@ -62,7 +62,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().get_matches_from(args);
 
-    let mode = if let Some(args) = matches.values_of(options::ECHO) {
+    let mode = if let Some(args) = matches.get_many::<String>(options::ECHO) {
         Mode::Echo(args.map(String::from).collect())
     } else if let Some(range) = matches.value_of(options::INPUT_RANGE) {
         match parse_range(range) {
@@ -77,9 +77,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let options = Options {
         head_count: {
-            let mut headcounts: Values<'_> =
-                matches.values_of(options::HEAD_COUNT).unwrap_or_default();
-            match parse_head_count(&mut headcounts) {
+            let headcounts = matches
+                .get_many::<String>(options::HEAD_COUNT)
+                .unwrap_or_default()
+                .map(|s| s.to_owned())
+                .collect();
+            match parse_head_count(headcounts) {
                 Ok(val) => val,
                 Err(msg) => return Err(USimpleError::new(1, msg)),
             }
@@ -295,7 +298,7 @@ fn parse_range(input_range: &str) -> Result<(usize, usize), String> {
     }
 }
 
-fn parse_head_count(headcounts: &mut Values<'_>) -> Result<usize, String> {
+fn parse_head_count(headcounts: Vec<String>) -> Result<usize, String> {
     let mut result = std::usize::MAX;
     for count in headcounts {
         match count.parse::<usize>() {

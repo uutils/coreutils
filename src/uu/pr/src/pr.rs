@@ -405,8 +405,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let mut files = matches
-        .values_of(options::FILES)
-        .map(|v| v.collect::<Vec<_>>())
+        .get_many::<String>(options::FILES)
+        .map(|v| v.map(|s| s.as_str()).collect::<Vec<_>>())
         .unwrap_or_default()
         .clone();
     if files.is_empty() {

@@ -211,8 +211,8 @@ struct Options {
 
 impl Options {
     fn new(matches: &ArgMatches) -> Result<Self, ParseError> {
-        let (remaining_mode, tabstops) = match matches.values_of(options::TABS) {
-            Some(s) => tabstops_parse(&s.collect::<Vec<&str>>().join(","))?,
+        let (remaining_mode, tabstops) = match matches.get_many::<String>(options::TABS) {
+            Some(s) => tabstops_parse(&s.map(|s| s.as_str()).collect::<Vec<_>>().join(","))?,
             None => (RemainingMode::None, vec![DEFAULT_TABSTOP]),
         };
 
@@ -232,7 +232,7 @@ impl Options {
             .unwrap(); // length of tabstops is guaranteed >= 1
         let tspaces = " ".repeat(nspaces);
 
-        let files: Vec<String> = match matches.values_of(options::FILES) {
+        let files: Vec<String> = match matches.get_many::<String>(options::FILES) {
             Some(s) => s.map(|v| v.to_string()).collect(),
             None => vec!["-".to_owned()],
         };

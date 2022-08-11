@@ -269,8 +269,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
 
-    let result = match matches.values_of(options::NUMBER) {
-        Some(values) => handle_args(values, &options),
+    let result = match matches.get_many::<String>(options::NUMBER) {
+        Some(values) => handle_args(values.map(|s| s.as_str()), &options),
         None => {
             let stdin = std::io::stdin();
             let mut locked_stdin = stdin.lock();

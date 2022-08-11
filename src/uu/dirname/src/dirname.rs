@@ -43,9 +43,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let dirnames: Vec<String> = matches
-        .values_of(options::DIR)
+        .get_many::<String>(options::DIR)
         .unwrap_or_default()
-        .map(str::to_owned)
+        .map(|s| s.to_owned())
         .collect();
 
     if !dirnames.is_empty() {

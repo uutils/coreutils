@@ -503,7 +503,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         let paths: Vec<String> = matches
-            .values_of(options::PATHS)
+            .get_many::<String>(options::PATHS)
             .map(|v| v.map(ToString::to_string).collect())
             .unwrap_or_default();
 
@@ -642,7 +642,7 @@ impl Options {
 
         // Parse attributes to preserve
         let mut preserve_attributes: Vec<Attribute> = if matches.contains_id(options::PRESERVE) {
-            match matches.values_of(options::PRESERVE) {
+            match matches.get_many::<String>(options::PRESERVE) {
                 None => DEFAULT_ATTRIBUTES.to_vec(),
                 Some(attribute_strs) => {
                     let mut attributes = Vec::new();

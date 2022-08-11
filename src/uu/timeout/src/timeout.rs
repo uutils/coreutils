@@ -87,7 +87,7 @@ impl Config {
         let verbose = options.contains_id(options::VERBOSE);
 
         let command = options
-            .values_of(options::COMMAND)
+            .get_many::<String>(options::COMMAND)
             .unwrap()
             .map(String::from)
             .collect::<Vec<_>>();

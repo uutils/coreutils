@@ -83,7 +83,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         modes.to_string()
     };
     let mut files: Vec<String> = matches
-        .values_of(options::FILE)
+        .get_many::<String>(options::FILE)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
     let cmode = if fmode.is_some() {

@@ -1228,7 +1228,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.separator = Some(separator.chars().next().unwrap());
     }
 
-    if let Some(values) = matches.values_of(options::KEY) {
+    if let Some(values) = matches.get_many::<String>(options::KEY) {
         for value in values {
             let selector = FieldSelector::parse(value, &settings)?;
             if selector.settings.mode == SortMode::Random && settings.salt.is_none() {
@@ -1267,7 +1267,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     settings.init_precomputed();
 
-    exec(&mut files, &settings, output, &mut tmp_dir)
+    let result = exec(&mut files, &settings, output, &mut tmp_dir);
+    // Wait here if `SIGINT` was received,
+    // for signal handler to do its work and terminate the program.
+    tmp_dir.wait_if_signal();
+    result
 }
 
 pub fn uu_app<'a>() -> Command<'a> {

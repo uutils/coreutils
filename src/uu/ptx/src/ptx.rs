@@ -729,7 +729,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // let mut opts = Options::new();
     let matches = uu_app().get_matches_from(args);
 
-    let mut input_files: Vec<String> = match &matches.values_of(options::FILE) {
+    let mut input_files: Vec<String> = match &matches.get_many::<String>(options::FILE) {
         Some(v) => v.clone().map(|v| v.to_owned()).collect(),
         None => vec!["-".to_string()],
     };

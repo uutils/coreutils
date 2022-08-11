@@ -81,7 +81,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().after_help(&long_usage[..]).get_matches_from(args);
 
     let files: Vec<String> = matches
-        .values_of(ARG_FILES)
+        .get_many::<String>(ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
@@ -429,8 +429,8 @@ fn prompt(msg: &str) -> bool {
     let mut buf = Vec::new();
     let stdin = stdin();
     let mut stdin = stdin.lock();
-
-    match stdin.read_until(b'\n', &mut buf) {
+    let read = stdin.read_until(b'\n', &mut buf);
+    match read {
         Ok(x) if x > 0 => matches!(buf[0], b'y' | b'Y'),
         _ => false,
     }
