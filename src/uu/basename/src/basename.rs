@@ -69,7 +69,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             format!(
                 "extra operand {}",
                 matches
-                    .values_of(options::NAME)
+                    .get_many::<String>(options::NAME)
                     .unwrap()
                     .nth(2)
                     .unwrap()
@@ -81,7 +81,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let suffix = if opt_suffix {
         matches.value_of(options::SUFFIX).unwrap()
     } else if !opt_multiple && matches.occurrences_of(options::NAME) > 1 {
-        matches.values_of(options::NAME).unwrap().nth(1).unwrap()
+        matches
+            .get_many::<String>(options::NAME)
+            .unwrap()
+            .nth(1)
+            .unwrap()
     } else {
         ""
     };
@@ -91,9 +95,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     //
 
     let paths: Vec<_> = if multiple_paths {
-        matches.values_of(options::NAME).unwrap().collect()
+        matches.get_many::<String>(options::NAME).unwrap().collect()
     } else {
-        matches.values_of(options::NAME).unwrap().take(1).collect()
+        matches
+            .get_many::<String>(options::NAME)
+            .unwrap()
+            .take(1)
+            .collect()
     };
 
     let line_ending = if opt_zero { "\0" } else { "\n" };

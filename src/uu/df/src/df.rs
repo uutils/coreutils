@@ -442,7 +442,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let opt = Options::from(&matches).map_err(DfError::OptionsError)?;
     // Get the list of filesystems to display in the output table.
-    let filesystems: Vec<Filesystem> = match matches.values_of(OPT_PATHS) {
+    let filesystems: Vec<Filesystem> = match matches.get_many::<String>(OPT_PATHS) {
         None => {
             let filesystems = get_all_filesystems(&opt)
                 .map_err_context(|| "cannot read table of mounted file systems".into())?;
@@ -454,7 +454,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             filesystems
         }
         Some(paths) => {
-            let paths: Vec<&str> = paths.collect();
+            let paths: Vec<_> = paths.collect();
             let filesystems = get_named_filesystems(&paths, &opt)
                 .map_err_context(|| "cannot read table of mounted file systems".into())?;
 

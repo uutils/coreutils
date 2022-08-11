@@ -306,7 +306,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let zero = matches.contains_id(options::ZERO);
     let verbose = matches.contains_id(options::VERBOSE);
 
-    for path_str in matches.values_of(options::FILE).unwrap() {
+    for path_str in matches.get_many::<String>(options::FILE).unwrap() {
         show_if_err!(wipe_file(
             path_str, iterations, remove, size, exact, zero, verbose, force,
         ));

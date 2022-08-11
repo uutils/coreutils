@@ -55,7 +55,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => 80,
     };
 
-    let files = match matches.values_of(options::FILE) {
+    let files = match matches.get_many::<String>(options::FILE) {
         Some(v) => v.map(|v| v.to_owned()).collect(),
         None => vec!["-".to_owned()],
     };

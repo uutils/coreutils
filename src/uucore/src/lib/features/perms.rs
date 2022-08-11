@@ -466,7 +466,7 @@ pub fn chown_base<'a>(
     let matches = command.get_matches_from(args);
 
     let files: Vec<String> = matches
-        .values_of(options::ARG_FILES)
+        .get_many::<String>(options::ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 

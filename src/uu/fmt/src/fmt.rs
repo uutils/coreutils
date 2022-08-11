@@ -70,7 +70,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let mut files: Vec<String> = matches
-        .values_of(ARG_FILES)
+        .get_many::<String>(ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 

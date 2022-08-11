@@ -59,7 +59,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let serial = matches.contains_id(options::SERIAL);
     let delimiters = matches.value_of(options::DELIMITER).unwrap();
     let files = matches
-        .values_of(options::FILE)
+        .get_many::<String>(options::FILE)
         .unwrap()
         .map(|s| s.to_owned())
         .collect();

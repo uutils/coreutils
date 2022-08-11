@@ -141,7 +141,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     /* the list of files */
 
     let paths: Vec<PathBuf> = matches
-        .values_of(ARG_FILES)
+        .get_many::<String>(ARG_FILES)
         .unwrap()
         .map(PathBuf::from)
         .collect();

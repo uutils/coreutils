@@ -116,7 +116,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let mut read_stdin = false;
-    let files: Vec<String> = match matches.values_of(options::FILE) {
+    let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
         Some(v) => v.clone().map(|v| v.to_owned()).collect(),
         None => vec!["-".to_owned()],
     };

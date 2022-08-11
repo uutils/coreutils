@@ -529,7 +529,7 @@ fn parse_flag_list<T: std::str::FromStr<Err = ParseError>>(
     matches: &Matches,
 ) -> Result<Vec<T>, ParseError> {
     matches
-        .values_of(tag)
+        .get_many::<String>(tag)
         .unwrap_or_default()
         .map(|f| f.parse())
         .collect()

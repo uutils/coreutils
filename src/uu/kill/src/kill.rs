@@ -54,7 +54,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let pids_or_signals: Vec<String> = matches
-        .values_of(options::PIDS_OR_SIGNALS)
+        .get_many::<String>(options::PIDS_OR_SIGNALS)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 

@@ -178,14 +178,14 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
     let ignore_env = matches.contains_id("ignore-environment");
     let null = matches.contains_id("null");
     let running_directory = matches.value_of("chdir");
-    let files = matches
-        .values_of("file")
-        .map(Iterator::collect)
-        .unwrap_or_else(|| Vec::with_capacity(0));
-    let unsets = matches
-        .values_of("unset")
-        .map(Iterator::collect)
-        .unwrap_or_else(|| Vec::with_capacity(0));
+    let files = match matches.get_many::<String>("file") {
+        Some(v) => v.map(|s| s.as_str()).collect(),
+        None => Vec::with_capacity(0),
+    };
+    let unsets = match matches.get_many::<String>("unset") {
+        Some(v) => v.map(|s| s.as_str()).collect(),
+        None => Vec::with_capacity(0),
+    };
 
     let mut opts = Options {
         ignore_env,
@@ -222,7 +222,7 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
             begin_prog_opts = parse_name_value_opt(&mut opts, external)?;
         }
 
-        if let Some(mut iter) = matches.values_of("") {
+        if let Some(mut iter) = matches.get_many::<String>("") {
             // read NAME=VALUE arguments (and up to a single program argument)
             while !begin_prog_opts {
                 if let Some(opt) = iter.next() {

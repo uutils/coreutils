@@ -23,7 +23,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let variables: Vec<String> = matches
-        .values_of(ARG_VARIABLES)
+        .get_many::<String>(ARG_VARIABLES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 

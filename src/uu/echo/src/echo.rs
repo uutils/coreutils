@@ -117,7 +117,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let no_newline = matches.contains_id(options::NO_NEWLINE);
     let escaped = matches.contains_id(options::ENABLE_BACKSLASH_ESCAPE);
-    let values: Vec<String> = match matches.values_of(options::STRING) {
+    let values: Vec<String> = match matches.get_many::<String>(options::STRING) {
         Some(s) => s.map(|s| s.to_string()).collect(),
         None => vec!["".to_string()],
     };
