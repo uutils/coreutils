@@ -323,8 +323,14 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
         settings.paths.push_front(dash);
     }
 
+    // TODO: is there a better way to check for a readable stdin?
+    let mut buf = [0; 0]; // empty buffer to check if stdin().read().is_err()
+    let stdin_read_possible = settings.stdin_is_pipe_or_fifo && stdin().read(&mut buf).is_ok();
+
     let mut first_header = true;
     let mut files = FileHandling::with_capacity(settings.paths.len());
+    let mut orphans = Vec::new();
+
     let mut watcher_rx = if settings.follow.is_some() {
         let (watcher, rx) = start_watcher_thread(&mut settings)?;
         Some((watcher, rx))
@@ -332,28 +338,45 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
         None
     };
 
-    // Do an initial tail print of each path's content.
-    // Add `path` to `files` map if `--follow` is selected.
-    // Add existing regular files to `Watcher` (InotifyWatcher).
-    // If `path` is not an existing file, add its parent to `Watcher`.
-    for path in &settings.paths {
-        let mut path = path.to_owned();
-        let mut display_name = path.to_owned();
+    // Iterate user provided `paths` and add them to Watcher.
+    if let Some((ref mut watcher, _)) = watcher_rx {
+        for path in &settings.paths {
+            let mut path = path.handle_redirect();
+            if path.is_stdin() {
+                continue;
+            }
+            #[cfg(all(unix, not(target_os = "linux")))]
+            if !path.is_file() {
+                continue;
+            }
+            if path.is_relative() {
+                path = std::env::current_dir()?.join(&path);
+            }
 
-        // Workaround to handle redirects, e.g. `touch f && tail -f - < f`
-        if cfg!(unix) && path.is_stdin() {
-            display_name = PathBuf::from(text::STDIN_HEADER);
-            if let Ok(p) = Path::new(text::DEV_STDIN).canonicalize() {
-                path = p;
+            if path.is_tailable() {
+                // Add existing regular files to `Watcher` (InotifyWatcher).
+                watcher.watch_with_parent(&path)?;
+            } else if !path.is_orphan() {
+                // If `path` is not a tailable file, add its parent to `Watcher`.
+                watcher
+                    .watch(path.parent().unwrap(), RecursiveMode::NonRecursive)
+                    .unwrap();
             } else {
-                path = PathBuf::from(text::DEV_STDIN);
+                // If there is no parent, add `path` to `orphans`.
+                orphans.push(path.to_owned());
             }
         }
+    }
 
-        // TODO: is there a better way to check for a readable stdin?
-        let mut buf = [0; 0]; // empty buffer to check if stdin().read().is_err()
-        let stdin_read_possible = settings.stdin_is_pipe_or_fifo && stdin().read(&mut buf).is_ok();
-
+    // Do an initial tail print of each path's content.
+    // Add `path` and `reader` to `files` map if `--follow` is selected.
+    for path in &settings.paths {
+        let display_name = if cfg!(unix) && path.is_stdin() {
+            PathBuf::from(text::STDIN_HEADER)
+        } else {
+            path.to_owned()
+        };
+        let mut path = path.handle_redirect();
         let path_is_tailable = path.is_tailable();
 
         if !path.is_stdin() && !path_is_tailable {
@@ -363,13 +386,11 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
 
             if !path.exists() && !settings.stdin_is_pipe_or_fifo {
                 set_exit_code(1);
-                if watcher_rx.is_none() {
-                    show_error!(
-                        "cannot open {} for reading: {}",
-                        display_name.quote(),
-                        text::NO_SUCH_FILE
-                    );
-                }
+                show_error!(
+                    "cannot open {} for reading: {}",
+                    display_name.quote(),
+                    text::NO_SUCH_FILE
+                );
             } else if path.is_dir() || display_name.is_stdin() && !stdin_read_possible {
                 if settings.verbose {
                     files.print_header(&display_name, !first_header);
@@ -468,9 +489,6 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                         unbounded_tail(&mut reader, &settings)?;
                     }
                     if settings.follow.is_some() {
-                        if let Some((ref mut watcher, _)) = watcher_rx {
-                            watcher.watch_with_parent(&path)?;
-                        }
                         // Insert existing/file `path` into `files.map`
                         files.insert(
                             &path,
@@ -494,40 +512,20 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                     }));
                 }
             }
-        } else {
-            if settings.retry && settings.follow.is_some() {
-                if path.is_relative() {
-                    path = std::env::current_dir()?.join(&path);
-                }
-                if !path.is_orphan() {
-                    if let Some((ref mut watcher, _)) = watcher_rx {
-                        watcher
-                            .watch(path.parent().unwrap(), RecursiveMode::NonRecursive)
-                            .unwrap();
-                    }
-                }
-                // Insert non-is_tailable() paths into `files.map`
-                files.insert(
-                    &path,
-                    PathData {
-                        reader: None,
-                        metadata,
-                        display_name: display_name.to_owned(),
-                    },
-                    false,
-                );
+        } else if settings.retry && settings.follow.is_some() {
+            if path.is_relative() {
+                path = std::env::current_dir()?.join(&path);
             }
-            if !path.exists() && !settings.stdin_is_pipe_or_fifo && watcher_rx.is_some() {
-                // NOTE: This error message is used as a trigger in
-                // "gnu/tests/tail-2/F-headers.sh". To prevent a possible
-                // race condition, we delay showing it until this path
-                // is added to the watcher thread.
-                show_error!(
-                    "cannot open {} for reading: {}",
-                    display_name.quote(),
-                    text::NO_SUCH_FILE
-                );
-            }
+            // Insert non-is_tailable() paths into `files.map`
+            files.insert(
+                &path,
+                PathData {
+                    reader: None,
+                    metadata,
+                    display_name,
+                },
+                false,
+            );
         }
     }
 
@@ -546,7 +544,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                 show_error!("{}", text::NO_FILES_REMAINING);
             }
         } else if !(settings.stdin_is_pipe_or_fifo && settings.paths.len() == 1) {
-            follow(&mut files, &mut settings, watcher_rx)?;
+            follow(files, &settings, watcher_rx, orphans)?;
         }
     }
 
@@ -714,20 +712,13 @@ type WatcherRx = (
 );
 
 fn follow(
-    files: &mut FileHandling,
-    settings: &mut Settings,
+    mut files: FileHandling,
+    settings: &Settings,
     watcher_rx: Option<WatcherRx>,
+    mut orphans: Vec<PathBuf>,
 ) -> UResult<()> {
     let (mut watcher, rx) = watcher_rx.unwrap();
     let mut process = platform::ProcessChecker::new(settings.pid);
-
-    // Iterate user provided `paths`.
-    // If there is no parent, add `path` to `orphans`.
-    let mut orphans: Vec<PathBuf> = files
-        .keys()
-        .filter(|p| p.is_orphan())
-        .map(|p| p.to_owned())
-        .collect();
 
     // TODO: [2021-10; jhscheer]
     let mut _event_counter = 0;
@@ -781,7 +772,8 @@ fn follow(
                 if let Some(event_path) = event.paths.first() {
                     if files.contains_key(event_path) {
                         // Handle Event if it is about a path that we are monitoring
-                        paths = handle_event(&event, files, settings, &mut watcher, &mut orphans)?;
+                        paths =
+                            handle_event(&event, &mut files, settings, &mut watcher, &mut orphans)?;
                     }
                 }
             }
@@ -1613,6 +1605,7 @@ trait PathExtTail {
     fn is_stdin(&self) -> bool;
     fn is_orphan(&self) -> bool;
     fn is_tailable(&self) -> bool;
+    fn handle_redirect(&self) -> PathBuf;
 }
 
 impl PathExtTail for Path {
@@ -1630,6 +1623,17 @@ impl PathExtTail for Path {
     /// Return true if `path` is is a file type that can be tailed
     fn is_tailable(&self) -> bool {
         self.is_file() || self.exists() && self.metadata().unwrap().is_tailable()
+    }
+    /// Workaround to handle redirects, e.g. `touch f && tail -f - < f`
+    fn handle_redirect(&self) -> PathBuf {
+        if cfg!(unix) && self.is_stdin() {
+            if let Ok(p) = Self::new(text::DEV_STDIN).canonicalize() {
+                return p;
+            } else {
+                return PathBuf::from(text::DEV_STDIN);
+            }
+        }
+        self.into()
     }
 }
 
