@@ -49,7 +49,7 @@ use winapi::um::minwinbase::{FileIdInfo, FileStandardInfo};
 #[cfg(windows)]
 use winapi::um::winbase::GetFileInformationByHandleEx;
 #[cfg(windows)]
-use winapi::um::winnt::{FILE_ID_128, ULONGLONG};
+use winapi::um::winnt::FILE_ID_128;
 
 mod options {
     pub const HELP: &str = "help";
@@ -254,7 +254,7 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
         if success != 0 {
             result = Some(FileInfo {
                 file_id: std::mem::transmute::<FILE_ID_128, u128>(file_info.FileId),
-                dev_id: std::mem::transmute::<ULONGLONG, u64>(file_info.VolumeSerialNumber),
+                dev_id: file_info.VolumeSerialNumber,
             });
         }
     }

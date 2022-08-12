@@ -491,7 +491,7 @@ fn pathbuf_from_stdout() -> UResult<PathBuf> {
         // to a u32.
         let ret = unsafe {
             GetFinalPathNameByHandleW(
-                std::mem::transmute(handle),
+                handle,
                 file_path_buffer.as_mut_ptr(),
                 file_path_buffer.len() as u32,
                 FILE_NAME_OPENED,

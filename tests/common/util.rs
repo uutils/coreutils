@@ -982,7 +982,7 @@ impl UCommand {
         tmpd: Rc<TempDir>,
         env_clear: bool,
     ) -> Self {
-        let tmpd_path_buf = String::from(&(*tmpd.as_ref().path().to_str().unwrap()));
+        let tmpd_path_buf = String::from(tmpd.as_ref().path().to_str().unwrap());
         let mut ucmd: Self = Self::new(bin_path, util_name, tmpd_path_buf, env_clear);
         ucmd.tmpd = Some(tmpd);
         ucmd
@@ -1296,7 +1296,7 @@ pub fn check_coreutil_version(
     std::str::from_utf8(&version_check.stdout).unwrap()
         .split('\n')
         .collect::<Vec<_>>()
-        .get(0)
+        .first()
         .map_or_else(
             || Err(format!("{}: unexpected output format for reference coreutil: '{} --version'", UUTILS_WARNING, util_name)),
             |s| {

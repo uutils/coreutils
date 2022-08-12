@@ -404,8 +404,8 @@ fn test_with_pr_core_utils_tests() {
     for test_case in test_cases {
         let (flags, input_file, expected_file, return_code) = test_case;
         let mut scenario = new_ucmd!();
-        let input_file_path = input_file.get(0).unwrap();
-        let test_file_path = expected_file.get(0).unwrap();
+        let input_file_path = input_file.first().unwrap();
+        let test_file_path = expected_file.first().unwrap();
         let value = file_last_modified_time(&scenario, test_file_path);
         let mut arguments: Vec<&str> = flags
             .split(' ')

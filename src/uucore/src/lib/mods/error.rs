@@ -1,3 +1,5 @@
+// TODO fix broken links
+#![allow(rustdoc::broken_intra_doc_links)]
 //! All utils return exit with an exit code. Usually, the following scheme is used:
 //! * `0`: succeeded
 //! * `1`: minor problems
@@ -48,7 +50,7 @@
 //! * Using [`ExitCode`] is not recommended but can be useful for converting utils to use
 //!   [`UResult`].
 
-// spell-checker:ignore uioerror
+// spell-checker:ignore uioerror rustdoc
 
 use clap;
 use std::{

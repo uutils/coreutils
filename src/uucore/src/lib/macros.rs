@@ -1,3 +1,5 @@
+// TODO fix broken links
+#![allow(rustdoc::broken_intra_doc_links)]
 //! Macros for the uucore utilities.
 //!
 //! This module bundles all macros used across the uucore utilities. These
@@ -28,7 +30,7 @@
 //! - Terminate util execution
 //!   - Crash program: [`crash!`], [`crash_if_err!`]
 
-// spell-checker:ignore sourcepath targetpath
+// spell-checker:ignore sourcepath targetpath rustdoc
 
 use std::sync::atomic::AtomicBool;
 
