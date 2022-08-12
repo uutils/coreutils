@@ -360,7 +360,7 @@ fn test_pipe_fifo() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "freebsd"))))]
 fn test_stdin_pipe_fifo1() {
     // $ echo | stat -
     // File: -
@@ -400,7 +400,10 @@ fn test_stdin_pipe_fifo2() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+#[cfg(all(
+    unix,
+    not(any(target_os = "android", target_os = "macos", target_os = "freebsd"))
+))]
 fn test_stdin_redirect() {
     // $ touch f && stat - < f
     // File: -
