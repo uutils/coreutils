@@ -74,7 +74,7 @@ impl RoundMethod {
 }
 
 // Represents the options extracted from the --format argument provided by the user.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct FormatOptions {
     pub grouping: bool,
     pub padding: Option<isize>,
