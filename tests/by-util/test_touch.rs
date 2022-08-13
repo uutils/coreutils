@@ -621,6 +621,7 @@ fn test_touch_no_such_file_error_msg() {
 }
 
 #[test]
+#[cfg(not(target_os = "freebsd"))]
 fn test_touch_changes_time_of_file_in_stdout() {
     // command like: `touch - 1< ./c`
     // should change the timestamp of c

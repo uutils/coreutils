@@ -9,7 +9,7 @@ use std::os::unix::fs;
 
 #[cfg(unix)]
 use std::os::unix::fs::symlink as symlink_file;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "freebsd")))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(all(unix, not(target_os = "freebsd")))]
 use std::os::unix::fs::PermissionsExt;
@@ -22,7 +22,9 @@ use filetime::FileTime;
 use rlimit::Resource;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs as std_fs;
+#[cfg(not(target_os = "freebsd"))]
 use std::thread::sleep;
+#[cfg(not(target_os = "freebsd"))]
 use std::time::Duration;
 use uucore::display::Quotable;
 
@@ -1581,6 +1583,7 @@ fn test_copy_dir_symlink() {
 }
 
 #[test]
+#[cfg(not(target_os = "freebsd"))] // FIXME: fix this test for FreeBSD
 fn test_copy_dir_with_symlinks() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
@@ -1725,6 +1728,7 @@ fn test_copy_through_dangling_symlink_no_dereference() {
 }
 
 /// Test for copying a dangling symbolic link and its permissions.
+#[cfg(not(target_os = "freebsd"))] // FIXME: fix this test for FreeBSD
 #[test]
 fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     let (at, mut ucmd) = at_and_ucmd!();

@@ -667,7 +667,7 @@ fn test_file_not_owned_by_euid() {
 }
 
 #[test]
-#[cfg(not(windows))]
+#[cfg(all(not(windows), not(target_os = "freebsd")))]
 fn test_file_owned_by_egid() {
     new_ucmd!().args(&["-G", "regular_file"]).succeeds();
 }

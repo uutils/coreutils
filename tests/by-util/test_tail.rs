@@ -211,7 +211,7 @@ fn test_follow_redirect_stdin_name_retry() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
+#[cfg(all(unix, not(any(target_os = "android", target_os = "freebsd"))))] // FIXME: fix this test for Android/FreeBSD
 fn test_stdin_redirect_dir() {
     // $ mkdir dir
     // $ tail < dir, $ tail - < dir
@@ -1913,7 +1913,7 @@ fn test_follow_truncate_fast() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
+#[cfg(target_os = "linux")] // FIXME: make this work not just on Linux
 fn test_follow_name_move_create1() {
     // This test triggers a move/create event while `tail --follow=name file` is running.
     // ((sleep 2 && mv file backup && sleep 2 && cp backup file &)>/dev/null 2>&1 &) ; tail --follow=name file
@@ -1958,7 +1958,7 @@ fn test_follow_name_move_create1() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
+#[cfg(target_os = "linux")] // FIXME: make this work not just on Linux
 fn test_follow_name_move_create2() {
     // inspired by: "gnu/tests/tail-2/inotify-hash-abuse.sh"
     // Exercise an abort-inducing flaw in inotify-enabled tail -F
@@ -2029,7 +2029,7 @@ fn test_follow_name_move_create2() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
+#[cfg(target_os = "linux")] // FIXME: make this work not just on Linux
 fn test_follow_name_move1() {
     // This test triggers a move event while `tail --follow=name file` is running.
     // ((sleep 2 && mv file backup &)>/dev/null 2>&1 &) ; tail --follow=name file
@@ -2074,7 +2074,7 @@ fn test_follow_name_move1() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
+#[cfg(target_os = "linux")] // FIXME: make this work not just on Linux
 fn test_follow_name_move2() {
     // Like test_follow_name_move1, but move to a name that's already monitored.
 
@@ -2155,7 +2155,7 @@ fn test_follow_name_move2() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
+#[cfg(target_os = "linux")] // FIXME: make this work not just on Linux
 fn test_follow_name_move_retry1() {
     // Similar to test_follow_name_move1 but with `--retry` (`-F`)
     // This test triggers two move/rename events while `tail --follow=name --retry file` is running.
@@ -2206,7 +2206,7 @@ fn test_follow_name_move_retry1() {
     }
 }
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
+#[cfg(target_os = "linux")] // FIXME: make this work not just on Linux
 fn test_follow_name_move_retry2() {
     // inspired by: "gnu/tests/tail-2/F-vs-rename.sh"
     // Similar to test_follow_name_move2 (move to a name that's already monitored)
@@ -2304,7 +2304,7 @@ fn test_follow_name_move_retry2() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "freebsd")))] // FIXME: fix this test for FreeBSD
 fn test_follow_inotify_only_regular() {
     // The GNU test inotify-only-regular.sh uses strace to ensure that `tail -f`
     // doesn't make inotify syscalls and only uses inotify for regular files or fifos.
