@@ -6,7 +6,7 @@
 // that was distributed with this source code.
 
 // spell-checker:ignore (vars/api) fcntl setrlimit setitimer
-// spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGPIPE SIGPROF SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTERM SIGTRAP SIGTSTP SIGTTIN SIGTTOU SIGURG SIGUSR SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT TSTP TTIN TTOU VTALRM XCPU XFSZ
+// spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGPIPE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VTALRM XCPU XFSZ
 
 pub static DEFAULT_SIGNAL: usize = 15;
 
@@ -79,7 +79,7 @@ pub static ALL_SIGNALS: [&str; 32] = [
 ];
 
 /*
- 
+
      The following signals are defined in NetBSD:
 
      SIGHUP           1     Hangup
@@ -120,7 +120,59 @@ pub static ALL_SIGNALS: [&str; 32] = [
 pub static ALL_SIGNALS: [&str; 33] = [
     "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
     "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO",
-    "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "INFO", "USR1", "USR2", "PWR"
+    "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "INFO", "USR1", "USR2", "PWR",
+];
+
+/*
+
+     The following signals are defined in OpenBSD:
+
+     SIGHUP       terminate process    terminal line hangup
+     SIGINT       terminate process    interrupt program
+     SIGQUIT      create core image    quit program
+     SIGILL       create core image    illegal instruction
+     SIGTRAP      create core image    trace trap
+     SIGABRT      create core image    abort(3) call (formerly SIGIOT)
+     SIGEMT       create core image    emulate instruction executed
+     SIGFPE       create core image    floating-point exception
+     SIGKILL      terminate process    kill program (cannot be caught or
+                                       ignored)
+     SIGBUS       create core image    bus error
+     SIGSEGV      create core image    segmentation violation
+     SIGSYS       create core image    system call given invalid argument
+     SIGPIPE      terminate process    write on a pipe with no reader
+     SIGALRM      terminate process    real-time timer expired
+     SIGTERM      terminate process    software termination signal
+     SIGURG       discard signal       urgent condition present on socket
+     SIGSTOP      stop process         stop (cannot be caught or ignored)
+     SIGTSTP      stop process         stop signal generated from keyboard
+     SIGCONT      discard signal       continue after stop
+     SIGCHLD      discard signal       child status has changed
+     SIGTTIN      stop process         background read attempted from control
+                                       terminal
+     SIGTTOU      stop process         background write attempted to control
+                                       terminal
+     SIGIO        discard signal       I/O is possible on a descriptor (see
+                                       fcntl(2))
+     SIGXCPU      terminate process    CPU time limit exceeded (see
+                                       setrlimit(2))
+     SIGXFSZ      terminate process    file size limit exceeded (see
+                                       setrlimit(2))
+     SIGVTALRM    terminate process    virtual time alarm (see setitimer(2))
+     SIGPROF      terminate process    profiling timer alarm (see
+                                       setitimer(2))
+     SIGWINCH     discard signal       window size change
+     SIGINFO      discard signal       status request from keyboard
+     SIGUSR1      terminate process    user-defined signal 1
+     SIGUSR2      terminate process    user-defined signal 2
+     SIGTHR       discard signal       thread AST
+*/
+
+#[cfg(target_os = "openbsd")]
+pub static ALL_SIGNALS: [&str; 33] = [
+    "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
+    "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO",
+    "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "INFO", "USR1", "USR2", "THR",
 ];
 
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
