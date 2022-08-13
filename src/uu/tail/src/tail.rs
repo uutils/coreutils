@@ -36,7 +36,7 @@ use std::fmt;
 use std::fs::{File, Metadata};
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, channel};
+use std::sync::mpsc::{self, channel, Receiver};
 use std::time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{
@@ -323,29 +323,60 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
         settings.paths.push_front(dash);
     }
 
+    // TODO: is there a better way to check for a readable stdin?
+    let mut buf = [0; 0]; // empty buffer to check if stdin().read().is_err()
+    let stdin_read_possible = settings.stdin_is_pipe_or_fifo && stdin().read(&mut buf).is_ok();
+
     let mut first_header = true;
     let mut files = FileHandling::with_capacity(settings.paths.len());
+    let mut orphans = Vec::new();
 
-    // Do an initial tail print of each path's content.
-    // Add `path` to `files` map if `--follow` is selected.
-    for path in &settings.paths {
-        let mut path = path.to_owned();
-        let mut display_name = path.to_owned();
+    let mut watcher_rx = if settings.follow.is_some() {
+        let (watcher, rx) = start_watcher_thread(&mut settings)?;
+        Some((watcher, rx))
+    } else {
+        None
+    };
 
-        // Workaround to handle redirects, e.g. `touch f && tail -f - < f`
-        if cfg!(unix) && path.is_stdin() {
-            display_name = PathBuf::from(text::STDIN_HEADER);
-            if let Ok(p) = Path::new(text::DEV_STDIN).canonicalize() {
-                path = p;
+    // Iterate user provided `paths` and add them to Watcher.
+    if let Some((ref mut watcher, _)) = watcher_rx {
+        for path in &settings.paths {
+            let mut path = path.handle_redirect();
+            if path.is_stdin() {
+                continue;
+            }
+            #[cfg(all(unix, not(target_os = "linux")))]
+            if !path.is_file() {
+                continue;
+            }
+            if path.is_relative() {
+                path = std::env::current_dir()?.join(&path);
+            }
+
+            if path.is_tailable() {
+                // Add existing regular files to `Watcher` (InotifyWatcher).
+                watcher.watch_with_parent(&path)?;
+            } else if !path.is_orphan() {
+                // If `path` is not a tailable file, add its parent to `Watcher`.
+                watcher
+                    .watch(path.parent().unwrap(), RecursiveMode::NonRecursive)
+                    .unwrap();
             } else {
-                path = PathBuf::from(text::DEV_STDIN);
+                // If there is no parent, add `path` to `orphans`.
+                orphans.push(path.to_owned());
             }
         }
+    }
 
-        // TODO: is there a better way to check for a readable stdin?
-        let mut buf = [0; 0]; // empty buffer to check if stdin().read().is_err()
-        let stdin_read_possible = settings.stdin_is_pipe_or_fifo && stdin().read(&mut buf).is_ok();
-
+    // Do an initial tail print of each path's content.
+    // Add `path` and `reader` to `files` map if `--follow` is selected.
+    for path in &settings.paths {
+        let display_name = if cfg!(unix) && path.is_stdin() {
+            PathBuf::from(text::STDIN_HEADER)
+        } else {
+            path.to_owned()
+        };
+        let mut path = path.handle_redirect();
         let path_is_tailable = path.is_tailable();
 
         if !path.is_stdin() && !path_is_tailable {
@@ -513,7 +544,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                 show_error!("{}", text::NO_FILES_REMAINING);
             }
         } else if !(settings.stdin_is_pipe_or_fifo && settings.paths.len() == 1) {
-            follow(&mut files, &mut settings)?;
+            follow(files, &settings, watcher_rx, orphans)?;
         }
     }
 
@@ -526,7 +557,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
 
 fn arg_iterate<'a>(
     mut args: impl uucore::Args + 'a,
-) -> Result<Box<dyn Iterator<Item = OsString> + 'a>, Box<(dyn UError + 'static)>> {
+) -> Result<Box<dyn Iterator<Item = OsString> + 'a>, Box<(dyn UError)>> {
     // argv[0] is always present
     let first = args.next().unwrap();
     if let Some(second) = args.next() {
@@ -675,84 +706,19 @@ pub fn uu_app<'a>() -> Command<'a> {
         )
 }
 
-fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
+type WatcherRx = (
+    Box<(dyn Watcher)>,
+    Receiver<Result<notify::Event, notify::Error>>,
+);
+
+fn follow(
+    mut files: FileHandling,
+    settings: &Settings,
+    watcher_rx: Option<WatcherRx>,
+    mut orphans: Vec<PathBuf>,
+) -> UResult<()> {
+    let (mut watcher, rx) = watcher_rx.unwrap();
     let mut process = platform::ProcessChecker::new(settings.pid);
-
-    let (tx, rx) = channel();
-
-    /*
-    Watcher is implemented per platform using the best implementation available on that
-    platform. In addition to such event driven implementations, a polling implementation
-    is also provided that should work on any platform.
-    Linux / Android: inotify
-    macOS: FSEvents / kqueue
-    Windows: ReadDirectoryChangesWatcher
-    FreeBSD / NetBSD / OpenBSD / DragonflyBSD: kqueue
-    Fallback: polling every n seconds
-
-    NOTE:
-    We force the use of kqueue with: features=["macos_kqueue"].
-    On macOS only `kqueue` is suitable for our use case because `FSEvents`
-    waits for file close util it delivers a modify event. See:
-    https://github.com/notify-rs/notify/issues/240
-    */
-
-    let mut watcher: Box<dyn Watcher>;
-    let watcher_config = notify::poll::PollWatcherConfig {
-        poll_interval: settings.sleep_sec,
-        /*
-        NOTE: By enabling compare_contents, performance will be significantly impacted
-        as all files will need to be read and hashed at each `poll_interval`.
-        However, this is necessary to pass: "gnu/tests/tail-2/F-vs-rename.sh"
-        */
-        compare_contents: true,
-    };
-    if settings.use_polling || RecommendedWatcher::kind() == WatcherKind::PollWatcher {
-        settings.use_polling = true; // We have to use polling because there's no supported backend
-        watcher = Box::new(notify::PollWatcher::with_config(tx, watcher_config).unwrap());
-    } else {
-        let tx_clone = tx.clone();
-        match notify::RecommendedWatcher::new(tx) {
-            Ok(w) => watcher = Box::new(w),
-            Err(e) if e.to_string().starts_with("Too many open files") => {
-                /*
-                NOTE: This ErrorKind is `Uncategorized`, but it is not recommended
-                to match an error against `Uncategorized`
-                NOTE: Could be tested with decreasing `max_user_instances`, e.g.:
-                `sudo sysctl fs.inotify.max_user_instances=64`
-                */
-                show_error!(
-                    "{} cannot be used, reverting to polling: Too many open files",
-                    text::BACKEND
-                );
-                set_exit_code(1);
-                settings.use_polling = true;
-                watcher =
-                    Box::new(notify::PollWatcher::with_config(tx_clone, watcher_config).unwrap());
-            }
-            Err(e) => return Err(USimpleError::new(1, e.to_string())),
-        };
-    }
-
-    // Iterate user provided `paths`.
-    // Add existing regular files to `Watcher` (InotifyWatcher).
-    // If `path` is not an existing file, add its parent to `Watcher`.
-    // If there is no parent, add `path` to `orphans`.
-    let mut orphans = Vec::new();
-    for path in files.keys() {
-        if path.is_tailable() {
-            watcher.watch_with_parent(path)?;
-        } else if settings.follow.is_some() && settings.retry {
-            if path.is_orphan() {
-                orphans.push(path.to_owned());
-            } else {
-                watcher.watch_with_parent(path.parent().unwrap())?;
-            }
-        } else {
-            // TODO: [2022-05; jhscheer] do we need to handle this case?
-            unimplemented!();
-        }
-    }
 
     // TODO: [2021-10; jhscheer]
     let mut _event_counter = 0;
@@ -806,7 +772,8 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
                 if let Some(event_path) = event.paths.first() {
                     if files.contains_key(event_path) {
                         // Handle Event if it is about a path that we are monitoring
-                        paths = handle_event(&event, files, settings, &mut watcher, &mut orphans)?;
+                        paths =
+                            handle_event(&event, &mut files, settings, &mut watcher, &mut orphans)?;
                     }
                 }
             }
@@ -863,6 +830,65 @@ fn follow(files: &mut FileHandling, settings: &mut Settings) -> UResult<()> {
         }
     }
     Ok(())
+}
+
+fn start_watcher_thread(settings: &mut Settings) -> Result<WatcherRx, Box<(dyn UError)>> {
+    let (tx, rx) = channel();
+
+    /*
+    Watcher is implemented per platform using the best implementation available on that
+    platform. In addition to such event driven implementations, a polling implementation
+    is also provided that should work on any platform.
+    Linux / Android: inotify
+    macOS: FSEvents / kqueue
+    Windows: ReadDirectoryChangesWatcher
+    FreeBSD / NetBSD / OpenBSD / DragonflyBSD: kqueue
+    Fallback: polling every n seconds
+
+    NOTE:
+    We force the use of kqueue with: features=["macos_kqueue"].
+    On macOS only `kqueue` is suitable for our use case because `FSEvents`
+    waits for file close util it delivers a modify event. See:
+    https://github.com/notify-rs/notify/issues/240
+    */
+
+    let watcher: Box<dyn Watcher>;
+    let watcher_config = notify::poll::PollWatcherConfig {
+        poll_interval: settings.sleep_sec,
+        /*
+        NOTE: By enabling compare_contents, performance will be significantly impacted
+        as all files will need to be read and hashed at each `poll_interval`.
+        However, this is necessary to pass: "gnu/tests/tail-2/F-vs-rename.sh"
+        */
+        compare_contents: true,
+    };
+    if settings.use_polling || RecommendedWatcher::kind() == WatcherKind::PollWatcher {
+        settings.use_polling = true; // We have to use polling because there's no supported backend
+        watcher = Box::new(notify::PollWatcher::with_config(tx, watcher_config).unwrap());
+    } else {
+        let tx_clone = tx.clone();
+        match notify::RecommendedWatcher::new(tx) {
+            Ok(w) => watcher = Box::new(w),
+            Err(e) if e.to_string().starts_with("Too many open files") => {
+                /*
+                NOTE: This ErrorKind is `Uncategorized`, but it is not recommended
+                to match an error against `Uncategorized`
+                NOTE: Could be tested with decreasing `max_user_instances`, e.g.:
+                `sudo sysctl fs.inotify.max_user_instances=64`
+                */
+                show_error!(
+                    "{} cannot be used, reverting to polling: Too many open files",
+                    text::BACKEND
+                );
+                set_exit_code(1);
+                settings.use_polling = true;
+                watcher =
+                    Box::new(notify::PollWatcher::with_config(tx_clone, watcher_config).unwrap());
+            }
+            Err(e) => return Err(USimpleError::new(1, e.to_string())),
+        };
+    }
+    Ok((watcher, rx))
 }
 
 fn handle_event(
@@ -1521,10 +1547,7 @@ impl FileExtTail for File {
 
 trait MetadataExtTail {
     fn is_tailable(&self) -> bool;
-    fn got_truncated(
-        &self,
-        other: &Metadata,
-    ) -> Result<bool, Box<(dyn uucore::error::UError + 'static)>>;
+    fn got_truncated(&self, other: &Metadata) -> Result<bool, Box<(dyn UError)>>;
     fn get_block_size(&self) -> u64;
     fn file_id_eq(&self, other: &Metadata) -> bool;
 }
@@ -1543,10 +1566,7 @@ impl MetadataExtTail for Metadata {
     }
 
     /// Return true if the file was modified and is now shorter
-    fn got_truncated(
-        &self,
-        other: &Metadata,
-    ) -> Result<bool, Box<(dyn uucore::error::UError + 'static)>> {
+    fn got_truncated(&self, other: &Metadata) -> Result<bool, Box<(dyn UError)>> {
         Ok(other.len() < self.len() && other.modified()? != self.modified()?)
     }
 
@@ -1585,6 +1605,7 @@ trait PathExtTail {
     fn is_stdin(&self) -> bool;
     fn is_orphan(&self) -> bool;
     fn is_tailable(&self) -> bool;
+    fn handle_redirect(&self) -> PathBuf;
 }
 
 impl PathExtTail for Path {
@@ -1602,6 +1623,17 @@ impl PathExtTail for Path {
     /// Return true if `path` is is a file type that can be tailed
     fn is_tailable(&self) -> bool {
         self.is_file() || self.exists() && self.metadata().unwrap().is_tailable()
+    }
+    /// Workaround to handle redirects, e.g. `touch f && tail -f - < f`
+    fn handle_redirect(&self) -> PathBuf {
+        if cfg!(unix) && self.is_stdin() {
+            if let Ok(p) = Self::new(text::DEV_STDIN).canonicalize() {
+                return p;
+            } else {
+                return PathBuf::from(text::DEV_STDIN);
+            }
+        }
+        self.into()
     }
 }
 
