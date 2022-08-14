@@ -18,10 +18,23 @@ urllib.request.urlretrieve(
 types = ("/*/*.sh", "/*/*.pl", "/*/*.xpl")
 
 tests = []
+error_or_skip_tests = []
+
 for files in types:
     tests.extend(glob.glob(base + files))
 # sort by size
 list_of_files = sorted(tests, key=lambda x: os.stat(x).st_size)
+
+
+def show_list(l):
+    # Remove the factor tests and reverse the list (bigger first)
+    tests = list(filter(lambda k: "factor" not in k, l))
+
+    for f in reversed(tests):
+        print("%s: %s" % (f, os.stat(f).st_size))
+    print("")
+    print("%s tests remaining" % len(tests))
+
 
 with open("result.json", "r") as json_file:
     data = json.load(json_file)
@@ -40,10 +53,15 @@ for d in data:
         if data[d][e] == "PASS":
             list_of_files.remove(a)
 
-# Remove the factor tests and reverse the list (bigger first)
-tests = list(filter(lambda k: "factor" not in k, list_of_files))
+        # if it is SKIP or ERROR, show it
+        if data[d][e] == "SKIP" or data[d][e] == "ERROR":
+            list_of_files.remove(a)
+            error_or_skip_tests.append(a)
 
-for f in reversed(tests):
-    print("%s: %s" % (f, os.stat(f).st_size))
+
+print("SKIP and ERROR tests:")
+show_list(error_or_skip_tests)
 print("")
-print("%s tests remaining" % len(tests))
+print("===============")
+print("FAIL tests:")
+show_list(list_of_files)

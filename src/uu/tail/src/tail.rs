@@ -11,7 +11,7 @@
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (acronyms)
 // spell-checker:ignore (env/flags)
-// spell-checker:ignore (jargon) tailable untailable
+// spell-checker:ignore (jargon) tailable untailable stdlib
 // spell-checker:ignore (names)
 // spell-checker:ignore (shell/tools)
 // spell-checker:ignore (misc)
@@ -1522,13 +1522,16 @@ pub fn stdin_is_pipe_or_fifo() -> bool {
             .unwrap_or(false)
     }
 }
-
+#[inline]
 pub fn stdin_is_bad_fd() -> bool {
-    #[cfg(unix)]
+    // FIXME : Rust's stdlib is reopening fds as /dev/null
+    // see also: https://github.com/uutils/coreutils/issues/2873
+    // (gnu/tests/tail-2/follow-stdin.sh fails because of this)
+    //#[cfg(unix)]
     {
-        platform::stdin_is_bad_fd()
+        //platform::stdin_is_bad_fd()
     }
-    #[cfg(not(unix))]
+    //#[cfg(not(unix))]
     false
 }
 
