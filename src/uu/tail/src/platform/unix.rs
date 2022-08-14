@@ -8,16 +8,12 @@
  * file that was distributed with this source code.
  */
 
-// spell-checker:ignore (ToDO) stdlib
-// spell-checker:ignore (options) GETFD EPERM ENOSYS
+// spell-checker:ignore (ToDO) stdlib, ISCHR, GETFD
+// spell-checker:ignore (options) EPERM, ENOSYS
 
-use std::io::{stdin, Error};
-
-use std::os::unix::prelude::AsRawFd;
-
+use libc::S_IFCHR;
 use nix::sys::stat::fstat;
-
-use libc::{S_IFIFO, S_IFSOCK};
+use std::io::Error;
 
 pub type Pid = libc::pid_t;
 
@@ -49,26 +45,19 @@ pub fn supports_pid_checks(pid: self::Pid) -> bool {
 fn get_errno() -> i32 {
     Error::last_os_error().raw_os_error().unwrap()
 }
-
+#[inline]
 pub fn stdin_is_pipe_or_fifo() -> bool {
-    let fd = stdin().lock().as_raw_fd();
-    // GNU tail checks fd >= 0
-    fd >= 0
-        && match fstat(fd) {
-            Ok(stat) => {
-                let mode = stat.st_mode as libc::mode_t;
-                // NOTE: This is probably not the most correct way to check this
-                (mode & S_IFIFO != 0) || (mode & S_IFSOCK != 0)
-            }
-            Err(err) => panic!("{}", err),
-        }
+    // IFCHR means the file (stdin) is a character input device, which is the case of a terminal.
+    // We just need to check if stdin is not a character device here, because we are not interested
+    // in the type of stdin itself.
+    fstat(libc::STDIN_FILENO).map_or(false, |file| file.st_mode as libc::mode_t & S_IFCHR == 0)
 }
 
+//pub fn stdin_is_bad_fd() -> bool {
 // FIXME: Detect a closed file descriptor, e.g.: `tail <&-`
-pub fn stdin_is_bad_fd() -> bool {
-    let fd = stdin().as_raw_fd();
-    // this is never `true`, even with `<&-` because Rust's stdlib is reopening fds as /dev/null
-    // see also: https://github.com/uutils/coreutils/issues/2873
-    // (gnu/tests/tail-2/follow-stdin.sh fails because of this)
-    unsafe { libc::fcntl(fd, libc::F_GETFD) == -1 && get_errno() == libc::EBADF }
-}
+// this is never `true`, even with `<&-` because Rust's stdlib is reopening fds as /dev/null
+// see also: https://github.com/uutils/coreutils/issues/2873
+// (gnu/tests/tail-2/follow-stdin.sh fails because of this)
+// unsafe { libc::fcntl(fd, libc::F_GETFD) == -1 && get_errno() == libc::EBADF }
+//false
+//}
