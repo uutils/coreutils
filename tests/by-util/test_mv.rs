@@ -856,7 +856,7 @@ fn test_mv_info_self() {
 }
 
 #[test]
-fn test_mv_into_self_data_() {
+fn test_mv_into_self_data() {
     let scene = TestScenario::new(util_name!());
 
     let at = &scene.fixtures;
@@ -872,7 +872,7 @@ fn test_mv_into_self_data_() {
 
     let result = scene.ucmd().arg(file1).arg(sub_dir).arg(sub_dir).run();
 
-    // Exitcode is 1, sub_dir exists, file1 has been moved, file2 still exists.
+    // sub_dir exists, file1 has been moved, file2 still exists.
     result.code_is(1);
 
     assert!(at.dir_exists(sub_dir));
