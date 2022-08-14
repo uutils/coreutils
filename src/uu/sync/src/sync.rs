@@ -71,7 +71,6 @@ mod platform {
     use self::winapi::um::winbase;
     use self::winapi::um::winnt;
     use std::fs::OpenOptions;
-    use std::mem;
     use std::os::windows::prelude::*;
     use std::path::Path;
     use uucore::crash;
