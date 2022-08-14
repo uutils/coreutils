@@ -9,7 +9,7 @@ import json
 import sys
 from os import environ
 
-REPO_DEFAULT_BRANCH = environ.get('REPO_DEFAULT_BRANCH', 'main')
+REPO_DEFAULT_BRANCH = environ.get("REPO_DEFAULT_BRANCH", "main")
 
 NEW = json.load(open("gnu-result.json"))
 OLD = json.load(open("main-gnu-result.json"))
