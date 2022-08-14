@@ -334,7 +334,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
                 show!(USimpleError::new(
                     1,
                     format!(
-                        "cannot move {} to a subdirectory of itself, '{}/{}'",
+                        "cannot move '{}' to a subdirectory of itself, '{}/{}'",
                         sourcepath.display(),
                         target_dir.display(),
                         canonized_target_dir.components().last().map_or_else(
