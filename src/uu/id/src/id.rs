@@ -41,8 +41,6 @@ extern crate uucore;
 
 use clap::{crate_version, Arg, Command};
 use std::ffi::CStr;
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-use std::mem::MaybeUninit;
 use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::UResult;
@@ -545,6 +543,8 @@ fn auditid() {}
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn auditid() {
+    use std::mem::MaybeUninit;
+
     let mut auditinfo: MaybeUninit<audit::c_auditinfo_addr_t> = MaybeUninit::uninit();
     let address = auditinfo.as_mut_ptr();
     if unsafe { audit::getaudit(address) } < 0 {
