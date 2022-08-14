@@ -41,7 +41,6 @@ extern crate uucore;
 
 use clap::{crate_version, Arg, Command};
 use std::ffi::CStr;
-use std::mem::MaybeUninit;
 use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::UResult;
