@@ -41,6 +41,8 @@ extern crate uucore;
 
 use clap::{crate_version, Arg, Command};
 use std::ffi::CStr;
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+use std::mem::MaybeUninit;
 use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::UResult;
