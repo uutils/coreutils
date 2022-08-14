@@ -1730,6 +1730,7 @@ fn test_cp_trailing_slash_copy_to_symlinked_file() {
     s.ucmd().arg("source_file_1").arg("symlink/").fails();
 }
 
+#[test]
 fn test_copy_no_dereference_1() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a");
