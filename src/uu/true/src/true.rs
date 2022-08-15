@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
-use std::io::Write;
+use std::{ffi::OsString, io::Write};
 use uucore::error::{set_exit_code, UResult};
 
 static ABOUT: &str = "\
@@ -19,6 +19,11 @@ operation causes the program to return `1` instead.
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut command = uu_app();
+
+    let args: Vec<OsString> = args.collect();
+    if args.len() > 2 {
+        return Ok(());
+    }
 
     if let Err(e) = command.try_get_matches_from_mut(args) {
         let error = match e.kind() {
@@ -53,7 +58,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new("help")
                 .long("help")
                 .help("Print help information")
-                .exclusive(true)
                 .action(ArgAction::Help),
         )
         .arg(
