@@ -297,28 +297,27 @@ fn test_canonicalize_trailing_slash_subdir_missing() {
     let at = &scene.fixtures;
     at.mkdir("subdir");
     at.relative_symlink_file("subdir/missing", "link4");
-    for name in ["link4"] {
-        scene
-            .ucmd()
-            .args(&["-f", name])
-            .succeeds()
-            .stdout_contains(path_concat!("subdir", "missing"));
-        scene
-            .ucmd()
-            .args(&["-f", &format!("./{}/", name)])
-            .succeeds()
-            .stdout_contains(path_concat!("subdir", "missing"));
-        scene
-            .ucmd()
-            .args(&["-f", &format!("{}/more", name)])
-            .fails()
-            .code_is(1);
-        scene
-            .ucmd()
-            .args(&["-f", &format!("./{}/more/", name)])
-            .fails()
-            .code_is(1);
-    }
+    let name = "link4";
+    scene
+        .ucmd()
+        .args(&["-f", name])
+        .succeeds()
+        .stdout_contains(path_concat!("subdir", "missing"));
+    scene
+        .ucmd()
+        .args(&["-f", &format!("./{}/", name)])
+        .succeeds()
+        .stdout_contains(path_concat!("subdir", "missing"));
+    scene
+        .ucmd()
+        .args(&["-f", &format!("{}/more", name)])
+        .fails()
+        .code_is(1);
+    scene
+        .ucmd()
+        .args(&["-f", &format!("./{}/more/", name)])
+        .fails()
+        .code_is(1);
 }
 
 #[test]
