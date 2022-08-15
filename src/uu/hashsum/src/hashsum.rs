@@ -296,7 +296,11 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     };
     let check = matches.contains_id("check");
     let tag = matches.contains_id("tag");
-    let nonames = matches.contains_id("no-names");
+    let nonames = if binary_name == "b3sum" {
+        matches.contains_id("no-names")
+    } else {
+        false
+    };
     let status = matches.contains_id("status");
     let quiet = matches.contains_id("quiet") || status;
     let strict = matches.contains_id("strict");

@@ -1,4 +1,5 @@
-// spell-checker:ignore checkfile, nonames
+use crate::common::util::*;
+// spell-checker:ignore checkfile, nonames, testf
 macro_rules! get_hash(
     ($str:expr) => (
         $str.split(' ').collect::<Vec<&str>>()[0]
@@ -33,10 +34,13 @@ macro_rules! test_digest {
         fn test_nonames() {
             let ts = TestScenario::new("hashsum");
             // EXPECTED_FILE has no newline character at the end
-            assert_eq!(format!("{0}\n{0}\n", ts.fixtures.read(EXPECTED_FILE)),
+            if DIGEST_ARG == "b3sum" {
+                // Option only available on b3sum
+                assert_eq!(format!("{0}\n{0}\n", ts.fixtures.read(EXPECTED_FILE)),
                        ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("--no-names").arg("input.txt").arg("-").pipe_in_fixture("input.txt")
                        .succeeds().no_stderr().stdout_str()
                        );
+                }
         }
 
         #[test]
@@ -91,4 +95,24 @@ test_digest! {
     shake256_512 shake256 512
     b2sum b2sum 512
     b3sum b3sum 256
+}
+
+#[test]
+fn test_check_sha1() {
+    // To make sure that #3815 doesn't happen again
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("testf", "foobar\n");
+    at.write(
+        "testf.sha1",
+        "988881adc9fc3655077dc2d4d757d480b5ea0e11  testf\n",
+    );
+    scene
+        .ccmd("sha1sum")
+        .arg("-c")
+        .arg(at.subdir.join("testf.sha1"))
+        .succeeds()
+        .stdout_is("testf: OK\n")
+        .stderr_is("");
 }
