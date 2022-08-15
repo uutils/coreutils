@@ -855,6 +855,31 @@ fn test_mv_info_self() {
         .stderr_contains("mv: cannot move 'dir2' to a subdirectory of itself, 'dir2/dir2'");
 }
 
+#[test]
+fn test_mv_into_self_data() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+    let sub_dir = "sub_folder";
+    let file1 = "t1.test";
+    let file2 = "sub_folder/t2.test";
+
+    let file1_result_location = "sub_folder/t1.test";
+
+    at.mkdir(sub_dir);
+    at.touch(file1);
+    at.touch(file2);
+
+    let result = scene.ucmd().arg(file1).arg(sub_dir).arg(sub_dir).run();
+
+    // sub_dir exists, file1 has been moved, file2 still exists.
+    result.code_is(1);
+
+    assert!(at.dir_exists(sub_dir));
+    assert!(at.file_exists(file1_result_location));
+    assert!(at.file_exists(file2));
+    assert!(!at.file_exists(file1));
+}
 // Todo:
 
 // $ at.touch a b

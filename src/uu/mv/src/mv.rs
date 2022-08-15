@@ -302,20 +302,6 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
             let target_dir = paths.last().unwrap();
             let sources = &paths[..paths.len() - 1];
 
-            // Check if we have mv dir1 dir2 dir2
-            // And generate an error if this is the case
-            if sources.contains(target_dir) {
-                return Err(USimpleError::new(
-                    1,
-                    format!(
-                        "cannot move {} to a subdirectory of itself, '{}/{}'",
-                        target_dir.quote(),
-                        target_dir.display(),
-                        target_dir.display()
-                    ),
-                ));
-            }
-
             move_files_into_dir(sources, target_dir, b)
         }
     }
@@ -326,6 +312,10 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         return Err(MvError::NotADirectory(target_dir.quote().to_string()).into());
     }
 
+    let canonized_target_dir = target_dir
+        .canonicalize()
+        .unwrap_or_else(|_| target_dir.to_path_buf());
+
     for sourcepath in files.iter() {
         let targetpath = match sourcepath.file_name() {
             Some(name) => target_dir.join(name),
@@ -334,6 +324,29 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
                 continue;
             }
         };
+
+        // Check if we have mv dir1 dir2 dir2
+        // And generate an error if this is the case
+        if let Ok(canonized_source) = sourcepath.canonicalize() {
+            if canonized_source == canonized_target_dir {
+                // User tried to move directory to itself, warning is shown
+                // and process of moving files is continued.
+                show!(USimpleError::new(
+                    1,
+                    format!(
+                        "cannot move '{}' to a subdirectory of itself, '{}/{}'",
+                        sourcepath.display(),
+                        target_dir.display(),
+                        canonized_target_dir.components().last().map_or_else(
+                            || target_dir.display().to_string(),
+                            |dir| { PathBuf::from(dir.as_os_str()).display().to_string() }
+                        )
+                    )
+                ));
+                continue;
+            }
+        }
+
         show_if_err!(
             rename(sourcepath, &targetpath, b).map_err_context(|| format!(
                 "cannot move {} to {}",
