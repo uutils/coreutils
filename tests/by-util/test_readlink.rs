@@ -126,10 +126,9 @@ fn test_trailing_slash_symlink_to_regular_file() {
         .stdout_contains("regfile");
     scene
         .ucmd()
-        .args(&["-ev", "./link/more"])
+        .args(&["-e", "./link/more"])
         .fails()
         .code_is(1)
-        .stderr_contains(NOT_A_DIRECTORY)
         .no_stdout();
 }
 
