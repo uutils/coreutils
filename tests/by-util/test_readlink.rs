@@ -3,6 +3,11 @@ use crate::common::util::*;
 
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 
+#[cfg(not(windows))]
+static NOT_A_DIRECTORY: &str = "Not a directory";
+#[cfg(windows)]
+static NOT_A_DIRECTORY: &str = "The directory name is invalid.";
+
 #[test]
 fn test_resolve() {
     let scene = TestScenario::new(util_name!());
@@ -92,7 +97,7 @@ fn test_trailing_slash_regular_file() {
         .args(&["-ev", "./regfile/"])
         .fails()
         .code_is(1)
-        .stderr_contains("Not a directory")
+        .stderr_contains(NOT_A_DIRECTORY)
         .no_stdout();
     scene
         .ucmd()
@@ -112,7 +117,7 @@ fn test_trailing_slash_symlink_to_regular_file() {
         .args(&["-ev", "./link/"])
         .fails()
         .code_is(1)
-        .stderr_contains("Not a directory")
+        .stderr_contains(NOT_A_DIRECTORY)
         .no_stdout();
     scene
         .ucmd()
@@ -124,7 +129,7 @@ fn test_trailing_slash_symlink_to_regular_file() {
         .args(&["-ev", "./link/more"])
         .fails()
         .code_is(1)
-        .stderr_contains("Not a directory")
+        .stderr_contains(NOT_A_DIRECTORY)
         .no_stdout();
 }
 
@@ -206,19 +211,19 @@ fn test_canonicalize_trailing_slash_regfile() {
             .args(&["-fv", &format!("./{}/", name)])
             .fails()
             .code_is(1)
-            .stderr_contains("Not a directory");
+            .stderr_contains(NOT_A_DIRECTORY);
         scene
             .ucmd()
             .args(&["-fv", &format!("{}/more", name)])
             .fails()
             .code_is(1)
-            .stderr_contains("Not a directory");
+            .stderr_contains(NOT_A_DIRECTORY);
         scene
             .ucmd()
             .args(&["-fv", &format!("./{}/more/", name)])
             .fails()
             .code_is(1)
-            .stderr_contains("Not a directory");
+            .stderr_contains(NOT_A_DIRECTORY);
     }
 }
 
