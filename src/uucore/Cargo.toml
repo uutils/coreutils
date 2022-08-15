@@ -22,7 +22,7 @@ uucore_procs = { version=">=0.0.12", path="../uucore_procs" }
 clap = "3.2"
 dns-lookup = { version="1.0.5", optional=true }
 dunce = "1.0.0"
-wild = "2.0"
+wild = "2.1"
 glob = "0.3.0"
 # * optional
 itertools = { version="0.10.0", optional=true }
