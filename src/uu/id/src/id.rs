@@ -543,13 +543,17 @@ fn auditid() {}
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn auditid() {
-    #[allow(deprecated)]
-    let mut auditinfo: audit::c_auditinfo_addr_t = unsafe { std::mem::uninitialized() };
-    let address = &mut auditinfo as *mut audit::c_auditinfo_addr_t;
+    use std::mem::MaybeUninit;
+
+    let mut auditinfo: MaybeUninit<audit::c_auditinfo_addr_t> = MaybeUninit::uninit();
+    let address = auditinfo.as_mut_ptr();
     if unsafe { audit::getaudit(address) } < 0 {
         println!("couldn't retrieve information");
         return;
     }
+
+    // SAFETY: getaudit wrote a valid struct to auditinfo
+    let auditinfo = unsafe { auditinfo.assume_init() };
 
     println!("auid={}", auditinfo.ai_auid);
     println!("mask.success=0x{:x}", auditinfo.ai_mask.am_success);
