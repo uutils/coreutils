@@ -164,7 +164,8 @@ fn test_trailing_slash_symlink_to_directory() {
         .args(&["-ev", "./link/more"])
         .fails()
         .code_is(1)
-        .stderr_contains("No such file or directory");
+        .stderr_contains("No such file or directory")
+        .no_stdout();
 }
 
 #[test]
@@ -189,7 +190,8 @@ fn test_trailing_slash_symlink_to_missing() {
             .args(&["-ev", query])
             .fails()
             .code_is(1)
-            .stderr_contains("No such file or directory");
+            .stderr_contains("No such file or directory")
+            .no_stdout();
     }
 }
 
@@ -210,19 +212,22 @@ fn test_canonicalize_trailing_slash_regfile() {
             .args(&["-fv", &format!("./{}/", name)])
             .fails()
             .code_is(1)
-            .stderr_contains(NOT_A_DIRECTORY);
+            .stderr_contains(NOT_A_DIRECTORY)
+            .no_stdout();
         scene
             .ucmd()
             .args(&["-fv", &format!("{}/more", name)])
             .fails()
             .code_is(1)
-            .stderr_contains(NOT_A_DIRECTORY);
+            .stderr_contains(NOT_A_DIRECTORY)
+            .no_stdout();
         scene
             .ucmd()
             .args(&["-fv", &format!("./{}/more/", name)])
             .fails()
             .code_is(1)
-            .stderr_contains(NOT_A_DIRECTORY);
+            .stderr_contains(NOT_A_DIRECTORY)
+            .no_stdout();
     }
 }
 
@@ -257,12 +262,14 @@ fn test_canonicalize_trailing_slash_subdir() {
             .ucmd()
             .args(&["-f", &format!("{}/more/more2", name)])
             .fails()
-            .code_is(1);
+            .code_is(1)
+            .no_stdout();
         scene
             .ucmd()
             .args(&["-f", &format!("./{}/more/more2/", name)])
             .fails()
-            .code_is(1);
+            .code_is(1)
+            .no_stdout();
     }
 }
 
@@ -286,12 +293,14 @@ fn test_canonicalize_trailing_slash_missing() {
             .ucmd()
             .args(&["-f", &format!("{}/more", name)])
             .fails()
-            .code_is(1);
+            .code_is(1)
+            .no_stdout();
         scene
             .ucmd()
             .args(&["-f", &format!("./{}/more/", name)])
             .fails()
-            .code_is(1);
+            .code_is(1)
+            .no_stdout();
     }
 }
 
@@ -301,49 +310,34 @@ fn test_canonicalize_trailing_slash_subdir_missing() {
     let at = &scene.fixtures;
     at.mkdir("subdir");
     at.relative_symlink_file("subdir/missing", "link4");
-    let name = "link4";
-    scene
-        .ucmd()
-        .args(&["-f", name])
-        .succeeds()
-        .stdout_contains(path_concat!("subdir", "missing"));
-    scene
-        .ucmd()
-        .args(&["-f", &format!("./{}/", name)])
-        .succeeds()
-        .stdout_contains(path_concat!("subdir", "missing"));
-    scene
-        .ucmd()
-        .args(&["-f", &format!("{}/more", name)])
-        .fails()
-        .code_is(1);
-    scene
-        .ucmd()
-        .args(&["-f", &format!("./{}/more/", name)])
-        .fails()
-        .code_is(1);
+    for query in ["link4", "./link4/"] {
+        scene
+            .ucmd()
+            .args(&["-f", query])
+            .succeeds()
+            .stdout_contains(path_concat!("subdir", "missing"));
+    }
+    for query in ["link4/more", "./link4/more/"] {
+        scene
+            .ucmd()
+            .args(&["-f", query])
+            .fails()
+            .code_is(1)
+            .no_stdout();
+    }
 }
 
 #[test]
 fn test_canonicalize_trailing_slash_symlink_loop() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let name = "link5";
-    at.relative_symlink_file(name, name);
-    scene.ucmd().args(&["-f", name]).fails().code_is(1);
-    scene
-        .ucmd()
-        .args(&["-f", &format!("./{}/", name)])
-        .fails()
-        .code_is(1);
-    scene
-        .ucmd()
-        .args(&["-f", &format!("{}/more", name)])
-        .fails()
-        .code_is(1);
-    scene
-        .ucmd()
-        .args(&["-f", &format!("./{}/more/", name)])
-        .fails()
-        .code_is(1);
+    at.relative_symlink_file("link5", "link5");
+    for query in ["link5", "./link5/", "link5/more", "./link5/more/"] {
+        scene
+            .ucmd()
+            .args(&["-f", query])
+            .fails()
+            .code_is(1)
+            .no_stdout();
+    }
 }
