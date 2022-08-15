@@ -324,23 +324,22 @@ fn test_canonicalize_trailing_slash_subdir_missing() {
 fn test_canonicalize_trailing_slash_symlink_loop() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.relative_symlink_file("link5", "link5");
-    for name in ["link5"] {
-        scene.ucmd().args(&["-f", name]).fails().code_is(1);
-        scene
-            .ucmd()
-            .args(&["-f", &format!("./{}/", name)])
-            .fails()
-            .code_is(1);
-        scene
-            .ucmd()
-            .args(&["-f", &format!("{}/more", name)])
-            .fails()
-            .code_is(1);
-        scene
-            .ucmd()
-            .args(&["-f", &format!("./{}/more/", name)])
-            .fails()
-            .code_is(1);
-    }
+    let name = "link5";
+    at.relative_symlink_file(name, name);
+    scene.ucmd().args(&["-f", name]).fails().code_is(1);
+    scene
+        .ucmd()
+        .args(&["-f", &format!("./{}/", name)])
+        .fails()
+        .code_is(1);
+    scene
+        .ucmd()
+        .args(&["-f", &format!("{}/more", name)])
+        .fails()
+        .code_is(1);
+    scene
+        .ucmd()
+        .args(&["-f", &format!("./{}/more/", name)])
+        .fails()
+        .code_is(1);
 }
