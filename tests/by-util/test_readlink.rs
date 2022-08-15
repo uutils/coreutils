@@ -1,3 +1,4 @@
+// spell-checker:ignore regfile
 use crate::common::util::*;
 
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
