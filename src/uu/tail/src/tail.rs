@@ -853,21 +853,20 @@ fn start_watcher_thread(settings: &mut Settings) -> Result<WatcherRx, Box<(dyn U
     */
 
     let watcher: Box<dyn Watcher>;
-    let watcher_config = notify::poll::PollWatcherConfig {
-        poll_interval: settings.sleep_sec,
+    let watcher_config = notify::Config::default()
+        .with_poll_interval(settings.sleep_sec)
         /*
         NOTE: By enabling compare_contents, performance will be significantly impacted
         as all files will need to be read and hashed at each `poll_interval`.
         However, this is necessary to pass: "gnu/tests/tail-2/F-vs-rename.sh"
         */
-        compare_contents: true,
-    };
+        .with_compare_contents(true);
     if settings.use_polling || RecommendedWatcher::kind() == WatcherKind::PollWatcher {
         settings.use_polling = true; // We have to use polling because there's no supported backend
-        watcher = Box::new(notify::PollWatcher::with_config(tx, watcher_config).unwrap());
+        watcher = Box::new(notify::PollWatcher::new(tx, watcher_config).unwrap());
     } else {
         let tx_clone = tx.clone();
-        match notify::RecommendedWatcher::new(tx) {
+        match notify::RecommendedWatcher::new(tx, notify::Config::default()) {
             Ok(w) => watcher = Box::new(w),
             Err(e) if e.to_string().starts_with("Too many open files") => {
                 /*
@@ -882,8 +881,7 @@ fn start_watcher_thread(settings: &mut Settings) -> Result<WatcherRx, Box<(dyn U
                 );
                 set_exit_code(1);
                 settings.use_polling = true;
-                watcher =
-                    Box::new(notify::PollWatcher::with_config(tx_clone, watcher_config).unwrap());
+                watcher = Box::new(notify::PollWatcher::new(tx_clone, watcher_config).unwrap());
             }
             Err(e) => return Err(USimpleError::new(1, e.to_string())),
         };
