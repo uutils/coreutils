@@ -147,9 +147,7 @@ fn gen_completions<T: uucore::Args>(
         )
         .arg(
             Arg::new("shell")
-                .value_parser(clap::builder::PossibleValuesParser::new(
-                    Shell::possible_values(),
-                ))
+                .value_parser(clap::builder::EnumValueParser::<Shell>::new())
                 .required(true),
         )
         .get_matches_from(std::iter::once(OsString::from("completion")).chain(args));
