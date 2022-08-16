@@ -80,7 +80,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         };
         match path_result {
             Ok(path) => {
-                show(&path, no_trailing_delimiter, use_zero).map_err_context(String::new)?
+                show(&path, no_trailing_delimiter, use_zero).map_err_context(String::new)?;
             }
             Err(err) => {
                 if verbose {
