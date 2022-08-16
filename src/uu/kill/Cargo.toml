@@ -16,7 +16,7 @@ path = "src/kill.rs"
 
 [dependencies]
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-nix = { version = "0.24.2", features = ["signal"] }
+nix = { version = "0.25", features = ["signal"] }
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["signals"] }
 
 [[bin]]

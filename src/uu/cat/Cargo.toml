@@ -22,7 +22,7 @@ uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=[
 
 [target.'cfg(unix)'.dependencies]
 unix_socket = "0.5.0"
-nix = { version = "0.24.2", default-features = false }
+nix = { version = "0.25", default-features = false }
 
 [[bin]]
 name = "cat"

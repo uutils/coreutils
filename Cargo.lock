@@ -351,7 +351,7 @@ dependencies = [
  "glob",
  "hex-literal",
  "libc",
- "nix 0.24.2",
+ "nix",
  "once_cell",
  "phf",
  "phf_codegen",
@@ -690,7 +690,7 @@ version = "3.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d91974fbbe88ec1df0c24a4f00f99583667a7e2e6272b2b92d294d81e462173"
 dependencies = [
- "nix 0.25.0",
+ "nix",
  "winapi 0.3.9",
 ]
 
@@ -1216,18 +1216,6 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.24.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "195cdbc1741b8134346d515b3a56a1c94b0912758009cfd53f99ea0f57b065fc"
-dependencies = [
- "bitflags",
- "cfg-if 1.0.0",
- "libc",
- "memoffset",
-]
-
-[[package]]
-name = "nix"
 version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e322c04a9e3440c327fca7b6c8a63e6890a32fa2ad689db972425f07e0d22abb"
@@ -1236,6 +1224,8 @@ dependencies = [
  "bitflags",
  "cfg-if 1.0.0",
  "libc",
+ "memoffset",
+ "pin-utils",
 ]
 
 [[package]]
@@ -1484,6 +1474,12 @@ checksum = "b6796ad771acdc0123d2a88dc428b5e38ef24456743ddb1744ed628f9815c096"
 dependencies = [
  "siphasher",
 ]
+
+[[package]]
+name = "pin-utils"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
 name = "pkg-config"
@@ -2191,7 +2187,7 @@ version = "0.0.14"
 dependencies = [
  "atty",
  "clap 3.2.17",
- "nix 0.24.2",
+ "nix",
  "thiserror",
  "unix_socket",
  "uucore",
@@ -2530,7 +2526,7 @@ name = "uu_kill"
 version = "0.0.14"
 dependencies = [
  "clap 3.2.17",
- "nix 0.24.2",
+ "nix",
  "uucore",
 ]
 
@@ -2620,7 +2616,7 @@ dependencies = [
  "atty",
  "clap 3.2.17",
  "crossterm",
- "nix 0.24.2",
+ "nix",
  "unicode-segmentation",
  "unicode-width",
  "uucore",
@@ -2641,7 +2637,7 @@ version = "0.0.14"
 dependencies = [
  "clap 3.2.17",
  "libc",
- "nix 0.24.2",
+ "nix",
  "uucore",
 ]
 
@@ -2947,7 +2943,7 @@ version = "0.0.14"
 dependencies = [
  "clap 3.2.17",
  "libc",
- "nix 0.24.2",
+ "nix",
  "notify",
  "uucore",
  "winapi 0.3.9",
@@ -2980,7 +2976,7 @@ version = "0.0.14"
 dependencies = [
  "clap 3.2.17",
  "libc",
- "nix 0.24.2",
+ "nix",
  "uucore",
 ]
 
@@ -3108,7 +3104,7 @@ dependencies = [
  "bytecount",
  "clap 3.2.17",
  "libc",
- "nix 0.24.2",
+ "nix",
  "unicode-width",
  "utf-8",
  "uucore",
@@ -3138,7 +3134,7 @@ version = "0.0.14"
 dependencies = [
  "clap 3.2.17",
  "libc",
- "nix 0.24.2",
+ "nix",
  "uucore",
 ]
 
@@ -3154,7 +3150,7 @@ dependencies = [
  "glob",
  "itertools",
  "libc",
- "nix 0.24.2",
+ "nix",
  "once_cell",
  "os_display",
  "thiserror",
