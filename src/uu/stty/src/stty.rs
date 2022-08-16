@@ -19,7 +19,16 @@ use std::os::unix::io::{AsRawFd, RawFd};
 use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, InvalidEncodingHandling};
 
-use flags::{BAUD_RATES, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
+#[cfg(not(any(
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "ios",
+    target_os = "macos",
+    target_os = "netbsd",
+    target_os = "openbsd"
+)))]
+use flags::BAUD_RATES;
+use flags::{CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
 
 const NAME: &str = "stty";
 const USAGE: &str = "\
@@ -177,6 +186,28 @@ fn stty(opts: &Options) -> UResult<()> {
 
 fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
     let speed = cfgetospeed(termios);
+
+    // BSDs use a u32 for the baud rate, so we can simply print it.
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    print!("speed {} baud; ", speed);
+
+    // Other platforms need to use the baud rate enum, so printing the right value
+    // becomes slightly more complicated.
+    #[cfg(not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
     for (text, baud_rate) in BAUD_RATES {
         if *baud_rate == speed {
             print!("speed {} baud; ", text);
@@ -190,21 +221,25 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
         print!("rows {}; columns {}; ", size.rows, size.columns);
     }
 
-    // For some reason the normal nix Termios struct does not expose the line,
-    // so we get the underlying libc::termios struct to get that information.
-    let libc_termios: nix::libc::termios = termios.clone().into();
-    let line = libc_termios.c_line;
-    print!("line = {};", line);
+    #[cfg(any(target_os = "linux", target_os = "redox"))]
+    {
+        // For some reason the normal nix Termios struct does not expose the line,
+        // so we get the underlying libc::termios struct to get that information.
+        let libc_termios: nix::libc::termios = termios.clone().into();
+        let line = libc_termios.c_line;
+        print!("line = {};", line);
+    }
+
     println!();
     Ok(())
 }
 
 fn print_settings(termios: &Termios, opts: &Options) -> nix::Result<()> {
     print_terminal_size(termios, opts)?;
-    print_flags(termios, opts, &CONTROL_FLAGS);
-    print_flags(termios, opts, &INPUT_FLAGS);
-    print_flags(termios, opts, &OUTPUT_FLAGS);
-    print_flags(termios, opts, &LOCAL_FLAGS);
+    print_flags(termios, opts, CONTROL_FLAGS);
+    print_flags(termios, opts, INPUT_FLAGS);
+    print_flags(termios, opts, OUTPUT_FLAGS);
+    print_flags(termios, opts, LOCAL_FLAGS);
     Ok(())
 }
 
@@ -249,10 +284,10 @@ fn apply_setting(termios: &mut Termios, s: &str) -> ControlFlow<bool> {
         Some(s) => (true, s),
         None => (false, s),
     };
-    apply_flag(termios, &CONTROL_FLAGS, name, remove)?;
-    apply_flag(termios, &INPUT_FLAGS, name, remove)?;
-    apply_flag(termios, &OUTPUT_FLAGS, name, remove)?;
-    apply_flag(termios, &LOCAL_FLAGS, name, remove)?;
+    apply_flag(termios, CONTROL_FLAGS, name, remove)?;
+    apply_flag(termios, INPUT_FLAGS, name, remove)?;
+    apply_flag(termios, OUTPUT_FLAGS, name, remove)?;
+    apply_flag(termios, LOCAL_FLAGS, name, remove)?;
     ControlFlow::Break(false)
 }
 

@@ -9,13 +9,25 @@
 // spell-checker:ignore isig icanon iexten echoe crterase echok echonl noflsh xcase tostop echoprt prterase echoctl ctlecho echoke crtkill flusho extproc
 
 use crate::Flag;
-use nix::sys::termios::{
-    BaudRate, ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O,
-};
 
-pub const CONTROL_FLAGS: [Flag<C>; 12] = [
+#[cfg(not(any(
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "ios",
+    target_os = "macos",
+    target_os = "netbsd",
+    target_os = "openbsd"
+)))]
+use nix::sys::termios::BaudRate;
+use nix::sys::termios::{ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O};
+
+pub const CONTROL_FLAGS: &[Flag<C>] = &[
     Flag::new("parenb", C::PARENB),
     Flag::new("parodd", C::PARODD),
+    #[cfg(any(
+        target_os = "android",
+        all(target_os = "linux", not(target_arch = "mips"))
+    ))]
     Flag::new("cmspar", C::CMSPAR),
     Flag::new_grouped("cs5", C::CS5, C::CSIZE),
     Flag::new_grouped("cs6", C::CS6, C::CSIZE),
@@ -28,7 +40,7 @@ pub const CONTROL_FLAGS: [Flag<C>; 12] = [
     Flag::new("crtscts", C::CRTSCTS),
 ];
 
-pub const INPUT_FLAGS: [Flag<I>; 15] = [
+pub const INPUT_FLAGS: &[Flag<I>] = &[
     Flag::new("ignbrk", I::IGNBRK),
     Flag::new("brkint", I::BRKINT).sane(),
     Flag::new("ignpar", I::IGNPAR),
@@ -48,8 +60,14 @@ pub const INPUT_FLAGS: [Flag<I>; 15] = [
     Flag::new("iutf8", I::IUTF8),
 ];
 
-pub const OUTPUT_FLAGS: [Flag<O>; 24] = [
+pub const OUTPUT_FLAGS: &[Flag<O>] = &[
     Flag::new("opost", O::OPOST).sane(),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "linux",
+        target_os = "openbsd"
+    ))]
     Flag::new("olcuc", O::OLCUC),
     Flag::new("ocrnl", O::OCRNL),
     Flag::new("onlcr", O::ONLCR).sane(),
@@ -75,7 +93,7 @@ pub const OUTPUT_FLAGS: [Flag<O>; 24] = [
     Flag::new_grouped("ff1", O::FF1, O::FFDLY),
 ];
 
-pub const LOCAL_FLAGS: [Flag<L>; 18] = [
+pub const LOCAL_FLAGS: &[Flag<L>] = &[
     Flag::new("isig", L::ISIG).sane(),
     Flag::new("icanon", L::ICANON).sane(),
     Flag::new("iexten", L::IEXTEN).sane(),
@@ -98,6 +116,15 @@ pub const LOCAL_FLAGS: [Flag<L>; 18] = [
     Flag::new("extproc", L::EXTPROC),
 ];
 
+// BSD's use u32 as baud rate, to using the enum is unnecessary.
+#[cfg(not(any(
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "ios",
+    target_os = "macos",
+    target_os = "netbsd",
+    target_os = "openbsd"
+)))]
 pub const BAUD_RATES: &[(&str, BaudRate)] = &[
     ("0", BaudRate::B0),
     ("50", BaudRate::B50),
@@ -111,62 +138,17 @@ pub const BAUD_RATES: &[(&str, BaudRate)] = &[
     ("1200", BaudRate::B1200),
     ("1800", BaudRate::B1800),
     ("2400", BaudRate::B2400),
-    #[cfg(any(
-        target_os = "dragonfly",
-        target_os = "freebsd",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
-    ("4800", BaudRate::B4800),
     ("9600", BaudRate::B9600),
-    #[cfg(any(
-        target_os = "dragonfly",
-        target_os = "freebsd",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
-    ("14400", BaudRate::B14400),
     ("19200", BaudRate::B19200),
-    #[cfg(any(
-        target_os = "dragonfly",
-        target_os = "freebsd",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
-    ("28800", BaudRate::B28800),
     ("38400", BaudRate::B38400),
     ("57600", BaudRate::B57600),
-    #[cfg(any(
-        target_os = "dragonfly",
-        target_os = "freebsd",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
-    ("76800", BaudRate::B76800),
     ("115200", BaudRate::B115200),
     ("230400", BaudRate::B230400),
-    #[cfg(any(
-        target_os = "dragonfly",
-        target_os = "freebsd",
-        target_os = "macos",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
-    ("460800", BaudRate::B460800),
     #[cfg(any(target_os = "android", target_os = "linux"))]
     ("500000", BaudRate::B500000),
     #[cfg(any(target_os = "android", target_os = "linux"))]
     ("576000", BaudRate::B576000),
-    #[cfg(any(
-        target_os = "android",
-        target_os = "freebsd",
-        target_os = "linux",
-        target_os = "netbsd"
-    ))]
+    #[cfg(any(target_os = "android", target_os = "linux",))]
     ("921600", BaudRate::B921600),
     #[cfg(any(target_os = "android", target_os = "linux"))]
     ("1000000", BaudRate::B1000000),
