@@ -82,7 +82,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let suffix = if opt_suffix {
-        matches.value_of(options::SUFFIX).unwrap()
+        matches.get_one::<String>(options::SUFFIX).unwrap()
     } else if !opt_multiple && name_args_count > 1 {
         matches
             .get_many::<String>(options::NAME)

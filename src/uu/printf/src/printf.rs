@@ -274,7 +274,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let format_string = matches
-        .value_of(options::FORMATSTRING)
+        .get_one::<String>(options::FORMATSTRING)
         .ok_or_else(|| UUsageError::new(1, "missing operand"))?;
     let values: Vec<String> = match matches.get_many::<String>(options::ARGUMENT) {
         Some(s) => s.map(|s| s.to_string()).collect(),

@@ -158,7 +158,7 @@ struct Options {
 /// in all other cases.
 fn is_tmpdir_argument_actually_the_template(matches: &ArgMatches) -> bool {
     if !matches.contains_id(ARG_TEMPLATE) {
-        if let Some(tmpdir) = matches.value_of(OPT_TMPDIR) {
+        if let Some(tmpdir) = matches.get_one::<String>(OPT_TMPDIR) {
             if !Path::new(tmpdir).is_dir() && tmpdir.contains("XXX") {
                 return true;
             }
@@ -177,13 +177,13 @@ impl Options {
         // See https://github.com/clap-rs/clap/pull/1587
         let (tmpdir, template) = if is_tmpdir_argument_actually_the_template(matches) {
             let tmpdir = Some(env::temp_dir().display().to_string());
-            let template = matches.value_of(OPT_TMPDIR).unwrap().to_string();
+            let template = matches.get_one::<String>(OPT_TMPDIR).unwrap().to_string();
             (tmpdir, template)
         } else {
             // If no template argument is given, `--tmpdir` is implied.
-            match matches.value_of(ARG_TEMPLATE) {
+            match matches.get_one::<String>(ARG_TEMPLATE) {
                 None => {
-                    let tmpdir = match matches.value_of(OPT_TMPDIR) {
+                    let tmpdir = match matches.get_one::<String>(OPT_TMPDIR) {
                         None => Some(env::temp_dir().display().to_string()),
                         Some(tmpdir) => Some(tmpdir.to_string()),
                     };
@@ -191,7 +191,7 @@ impl Options {
                     (tmpdir, template.to_string())
                 }
                 Some(template) => {
-                    let tmpdir = matches.value_of(OPT_TMPDIR).map(String::from);
+                    let tmpdir = matches.get_one::<String>(OPT_TMPDIR).map(String::from);
                     (tmpdir, template.to_string())
                 }
             }
@@ -201,7 +201,7 @@ impl Options {
             dry_run: matches.contains_id(OPT_DRY_RUN),
             quiet: matches.contains_id(OPT_QUIET),
             tmpdir,
-            suffix: matches.value_of(OPT_SUFFIX).map(String::from),
+            suffix: matches.get_one::<String>(OPT_SUFFIX).map(String::from),
             treat_as_template: matches.contains_id(OPT_T),
             template,
         }

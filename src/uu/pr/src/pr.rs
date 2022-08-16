@@ -470,7 +470,7 @@ fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>
         })
     };
     matches
-        .value_of(opt)
+        .get_one::<String>(opt)
         .map(|i| (i.to_string(), format!("-{}", opt)))
         .map(from_parse_error_to_pr_error)
 }
@@ -501,7 +501,8 @@ fn build_options(
     };
 
     let header = matches
-        .value_of(options::HEADER)
+        .get_one::<String>(options::HEADER)
+        .map(|s| s.as_str())
         .unwrap_or(if is_merge_mode || paths[0] == FILE_STDIN {
             ""
         } else {
@@ -514,7 +515,7 @@ fn build_options(
         parse_usize(matches, options::FIRST_LINE_NUMBER).unwrap_or(Ok(default_first_number))?;
 
     let number = matches
-        .value_of(options::NUMBER_LINES)
+        .get_one::<String>(options::NUMBER_LINES)
         .map(|i| {
             let parse_result = i.parse::<usize>();
 
@@ -596,7 +597,7 @@ fn build_options(
     };
 
     let invalid_pages_map = |i: String| {
-        let unparsed_value = matches.value_of(options::PAGES).unwrap();
+        let unparsed_value = matches.get_one::<String>(options::PAGES).unwrap();
         i.parse::<usize>().map_err(|_e| {
             PrError::EncounteredErrors(format!(
                 "invalid --pages argument {}",
@@ -606,7 +607,7 @@ fn build_options(
     };
 
     let start_page = match matches
-        .value_of(options::PAGES)
+        .get_one::<String>(options::PAGES)
         .map(|i| {
             let x: Vec<_> = i.split(':').collect();
             x[0].to_string()
@@ -618,7 +619,7 @@ fn build_options(
     };
 
     let end_page = match matches
-        .value_of(options::PAGES)
+        .get_one::<String>(options::PAGES)
         .filter(|i| i.contains(':'))
         .map(|i| {
             let x: Vec<_> = i.split(':').collect();
@@ -668,9 +669,9 @@ fn build_options(
 
     let across_mode = matches.contains_id(options::ACROSS);
 
-    let column_separator = match matches.value_of(options::COLUMN_STRING_SEPARATOR) {
+    let column_separator = match matches.get_one::<String>(options::COLUMN_STRING_SEPARATOR) {
         Some(x) => Some(x),
-        None => matches.value_of(options::COLUMN_CHAR_SEPARATOR),
+        None => matches.get_one::<String>(options::COLUMN_CHAR_SEPARATOR),
     }
     .map(ToString::to_string)
     .unwrap_or_else(|| DEFAULT_COLUMN_SEPARATOR.to_string());

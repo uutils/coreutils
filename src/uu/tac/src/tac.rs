@@ -42,7 +42,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let before = matches.contains_id(options::BEFORE);
     let regex = matches.contains_id(options::REGEX);
-    let raw_separator = matches.value_of(options::SEPARATOR).unwrap_or("\n");
+    let raw_separator = matches
+        .get_one::<String>(options::SEPARATOR)
+        .map(|s| s.as_str())
+        .unwrap_or("\n");
     let separator = if raw_separator.is_empty() {
         "\0"
     } else {

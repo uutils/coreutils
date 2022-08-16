@@ -124,19 +124,22 @@ struct OdOptions {
 
 impl OdOptions {
     fn new(matches: &ArgMatches, args: &[String]) -> UResult<Self> {
-        let byte_order = match matches.value_of(options::ENDIAN) {
-            None => ByteOrder::Native,
-            Some("little") => ByteOrder::Little,
-            Some("big") => ByteOrder::Big,
-            Some(s) => {
-                return Err(USimpleError::new(
-                    1,
-                    format!("Invalid argument --endian={}", s),
-                ));
+        let byte_order = if let Some(s) = matches.get_one::<String>(options::ENDIAN) {
+            match s.as_str() {
+                "little" => ByteOrder::Little,
+                "big" => ByteOrder::Big,
+                _ => {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("Invalid argument --endian={}", s),
+                    ))
+                }
             }
+        } else {
+            ByteOrder::Native
         };
 
-        let mut skip_bytes = match matches.value_of(options::SKIP_BYTES) {
+        let mut skip_bytes = match matches.get_one::<String>(options::SKIP_BYTES) {
             None => 0,
             Some(s) => match parse_number_of_bytes(s) {
                 Ok(n) => n,
@@ -164,7 +167,7 @@ impl OdOptions {
 
         let formats = parse_format_flags(args).map_err(|e| USimpleError::new(1, e))?;
 
-        let mut line_bytes = match matches.value_of(options::WIDTH) {
+        let mut line_bytes = match matches.get_one::<String>(options::WIDTH) {
             None => 16,
             Some(s) => {
                 if matches.value_source(options::WIDTH) == Some(ValueSource::CommandLine) {
@@ -194,7 +197,7 @@ impl OdOptions {
 
         let output_duplicates = matches.contains_id(options::OUTPUT_DUPLICATES);
 
-        let read_bytes = match matches.value_of(options::READ_BYTES) {
+        let read_bytes = match matches.get_one::<String>(options::READ_BYTES) {
             None => None,
             Some(s) => match parse_number_of_bytes(s) {
                 Ok(n) => Some(n),
@@ -207,7 +210,7 @@ impl OdOptions {
             },
         };
 
-        let radix = match matches.value_of(options::ADDRESS_RADIX) {
+        let radix = match matches.get_one::<String>(options::ADDRESS_RADIX) {
             None => Radix::Octal,
             Some(s) => {
                 let st = s.as_bytes();

@@ -521,7 +521,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let summarize = matches.contains_id(options::SUMMARIZE);
 
-    let max_depth = parse_depth(matches.value_of(options::MAX_DEPTH), summarize)?;
+    let max_depth = parse_depth(
+        matches
+            .get_one::<String>(options::MAX_DEPTH)
+            .map(|s| s.as_str()),
+        summarize,
+    )?;
 
     let options = Options {
         all: matches.contains_id(options::ALL),
@@ -534,7 +539,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         verbose: matches.contains_id(options::VERBOSE),
     };
 
-    let files = match matches.value_of(options::FILE) {
+    let files = match matches.get_one::<String>(options::FILE) {
         Some(_) => matches
             .get_many::<String>(options::FILE)
             .unwrap()
@@ -549,9 +554,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         show_warning!("options --apparent-size and -b are ineffective with --inodes");
     }
 
-    let block_size = read_block_size(matches.value_of(options::BLOCK_SIZE));
+    let block_size = read_block_size(
+        matches
+            .get_one::<String>(options::BLOCK_SIZE)
+            .map(|s| s.as_str()),
+    );
 
-    let threshold = matches.value_of(options::THRESHOLD).map(|s| {
+    let threshold = matches.get_one::<String>(options::THRESHOLD).map(|s| {
         Threshold::from_str(s)
             .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::THRESHOLD)))
     });
@@ -582,7 +591,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    let time_format_str = parse_time_style(matches.value_of("time-style"))?;
+    let time_format_str =
+        parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?;
 
     let line_separator = if matches.contains_id(options::NULL) {
         "\0"
@@ -630,8 +640,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 if matches.is_present(options::TIME) {
                     let tm = {
                         let secs = {
-                            match matches.value_of(options::TIME) {
-                                Some(s) => match s {
+                            match matches.get_one::<String>(options::TIME) {
+                                Some(s) => match s.as_str() {
                                     "ctime" | "status" => stat.modified,
                                     "access" | "atime" | "use" => stat.accessed,
                                     "birth" | "creation" => stat

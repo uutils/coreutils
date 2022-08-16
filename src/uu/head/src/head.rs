@@ -130,7 +130,7 @@ impl Default for Mode {
 
 impl Mode {
     fn from(matches: &ArgMatches) -> Result<Self, String> {
-        if let Some(v) = matches.value_of(options::BYTES_NAME) {
+        if let Some(v) = matches.get_one::<String>(options::BYTES_NAME) {
             let (n, all_but_last) =
                 parse::parse_num(v).map_err(|err| format!("invalid number of bytes: {}", err))?;
             if all_but_last {
@@ -138,7 +138,7 @@ impl Mode {
             } else {
                 Ok(Self::FirstBytes(n))
             }
-        } else if let Some(v) = matches.value_of(options::LINES_NAME) {
+        } else if let Some(v) = matches.get_one::<String>(options::LINES_NAME) {
             let (n, all_but_last) =
                 parse::parse_num(v).map_err(|err| format!("invalid number of lines: {}", err))?;
             if all_but_last {

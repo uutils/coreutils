@@ -26,12 +26,15 @@ const USAGE: &str = "\
     {} [OPTION]... --reference=RFILE FILE...";
 
 fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>, IfFrom)> {
-    let dest_gid = if let Some(file) = matches.value_of(options::REFERENCE) {
+    let dest_gid = if let Some(file) = matches.get_one::<String>(options::REFERENCE) {
         fs::metadata(&file)
             .map(|meta| Some(meta.gid()))
             .map_err_context(|| format!("failed to get attributes of {}", file.quote()))?
     } else {
-        let group = matches.value_of(options::ARG_GROUP).unwrap_or_default();
+        let group = matches
+            .get_one::<String>(options::ARG_GROUP)
+            .map(|s| s.as_str())
+            .unwrap_or_default();
         if group.is_empty() {
             None
         } else {

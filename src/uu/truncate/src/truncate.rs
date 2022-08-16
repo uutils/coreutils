@@ -131,8 +131,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         let io_blocks = matches.contains_id(options::IO_BLOCKS);
         let no_create = matches.contains_id(options::NO_CREATE);
-        let reference = matches.value_of(options::REFERENCE).map(String::from);
-        let size = matches.value_of(options::SIZE).map(String::from);
+        let reference = matches
+            .get_one::<String>(options::REFERENCE)
+            .map(String::from);
+        let size = matches.get_one::<String>(options::SIZE).map(String::from);
         truncate(no_create, io_blocks, reference, size, &files)
     }
 }

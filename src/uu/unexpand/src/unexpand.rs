@@ -113,7 +113,7 @@ impl Options {
             && !matches.contains_id(options::FIRST_ONLY);
         let uflag = !matches.contains_id(options::NO_UTF8);
 
-        let files = match matches.value_of(options::FILE) {
+        let files = match matches.get_one::<String>(options::FILE) {
             Some(v) => vec![v.to_string()],
             None => vec!["-".to_owned()],
         };

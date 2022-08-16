@@ -43,7 +43,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let default_option: &'static str = "-i";
     let user_shell = std::env::var("SHELL");
 
-    let newroot: &Path = match matches.value_of(options::NEWROOT) {
+    let newroot: &Path = match matches.get_one::<String>(options::NEWROOT) {
         Some(v) => Path::new(v),
         None => return Err(ChrootError::MissingNewRoot.into()),
     };
@@ -165,10 +165,19 @@ pub fn uu_app<'a>() -> Command<'a> {
 }
 
 fn set_context(root: &Path, options: &clap::ArgMatches) -> UResult<()> {
-    let userspec_str = options.value_of(options::USERSPEC);
-    let user_str = options.value_of(options::USER).unwrap_or_default();
-    let group_str = options.value_of(options::GROUP).unwrap_or_default();
-    let groups_str = options.value_of(options::GROUPS).unwrap_or_default();
+    let userspec_str = options.get_one::<String>(options::USERSPEC);
+    let user_str = options
+        .get_one::<String>(options::USER)
+        .map(|s| s.as_str())
+        .unwrap_or_default();
+    let group_str = options
+        .get_one::<String>(options::GROUP)
+        .map(|s| s.as_str())
+        .unwrap_or_default();
+    let groups_str = options
+        .get_one::<String>(options::GROUPS)
+        .map(|s| s.as_str())
+        .unwrap_or_default();
     let skip_chdir = options.contains_id(options::SKIP_CHDIR);
     let userspec = match userspec_str {
         Some(u) => {

@@ -170,7 +170,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         logical,
         relative: matches.contains_id(options::RELATIVE),
         target_dir: matches
-            .value_of(options::TARGET_DIRECTORY)
+            .get_one::<String>(options::TARGET_DIRECTORY)
             .map(String::from),
         no_target_dir: matches.contains_id(options::NO_TARGET_DIRECTORY),
         no_dereference: matches.contains_id(options::NO_DEREFERENCE),

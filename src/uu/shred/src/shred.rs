@@ -274,7 +274,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(UUsageError::new(1, "missing file operand"));
     }
 
-    let iterations = match matches.value_of(options::ITERATIONS) {
+    let iterations = match matches.get_one::<String>(options::ITERATIONS) {
         Some(s) => match s.parse::<usize>() {
             Ok(u) => u,
             Err(_) => {
@@ -298,7 +298,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let force = matches.contains_id(options::FORCE);
     let remove = matches.contains_id(options::REMOVE);
-    let size_arg = matches.value_of(options::SIZE).map(|s| s.to_string());
+    let size_arg = matches
+        .get_one::<String>(options::SIZE)
+        .map(|s| s.to_string());
     let size = get_size(size_arg);
     let exact = matches.contains_id(options::EXACT) && size.is_none(); // if -s is given, ignore -x
     let zero = matches.contains_id(options::ZERO);
