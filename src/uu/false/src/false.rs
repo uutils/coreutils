@@ -4,8 +4,8 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-use clap::{Arg, Command};
-use std::io::Write;
+use clap::{Arg, ArgAction, Command};
+use std::{ffi::OsString, io::Write};
 use uucore::error::{set_exit_code, UResult};
 
 static ABOUT: &str = "\
@@ -26,13 +26,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // and unwind through the standard library allocation handling machinery.
     set_exit_code(1);
 
-    if let Ok(matches) = command.try_get_matches_from_mut(args) {
-        let error = if matches.index_of("help").is_some() {
-            command.print_help()
-        } else if matches.index_of("version").is_some() {
-            writeln!(std::io::stdout(), "{}", command.render_version())
-        } else {
-            Ok(())
+    let args: Vec<OsString> = args.collect();
+    if args.len() > 2 {
+        return Ok(());
+    }
+
+    if let Err(e) = command.try_get_matches_from_mut(args) {
+        let error = match e.kind() {
+            clap::ErrorKind::DisplayHelp => command.print_help(),
+            clap::ErrorKind::DisplayVersion => {
+                writeln!(std::io::stdout(), "{}", command.render_version())
+            }
+            _ => Ok(()),
         };
 
         // Try to display this error.
@@ -56,11 +61,12 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new("help")
                 .long("help")
                 .help("Print help information")
-                .exclusive(true),
+                .action(ArgAction::Help),
         )
         .arg(
             Arg::new("version")
                 .long("version")
-                .help("Print version information"),
+                .help("Print version information")
+                .action(ArgAction::Version),
         )
 }
