@@ -1189,28 +1189,17 @@ fn test_final_stats_si_iec() {
 }
 
 #[test]
-fn test_cbs_invalid_arg_gnu_compatibility() {
-    let result = new_ucmd!().args(&["cbs="]).pipe_in("").fails();
-
-    result.stderr_is("dd: invalid number: ‘’");
-
-    let result = new_ucmd!().args(&["cbs=29d"]).pipe_in("").fails();
-
-    result.stderr_is("dd: invalid number: ‘29d’");
-}
-
-#[test]
 fn test_invalid_number_arg_gnu_compatibility() {
     let commands = vec!["bs", "cbs", "count", "ibs", "obs", "seek", "skip"];
 
     for command in commands {
         new_ucmd!()
-            .args(&[format!("{command}=")])
+            .args(&[format!("{}=", command)])
             .fails()
             .stderr_is("dd: invalid number: ‘’");
 
         new_ucmd!()
-            .args(&[format!("{command}=29d")])
+            .args(&[format!("{}=29d", command)])
             .fails()
             .stderr_is("dd: invalid number: ‘29d’");
     }
@@ -1222,12 +1211,12 @@ fn test_invalid_flag_arg_gnu_compatibility() {
 
     for command in commands {
         new_ucmd!()
-            .args(&[format!("{command}=")])
+            .args(&[format!("{}=", command)])
             .fails()
             .stderr_is("dd: invalid input flag: ‘’\nTry 'dd --help' for more information.");
 
         new_ucmd!()
-            .args(&[format!("{command}=29d")])
+            .args(&[format!("{}=29d", command)])
             .fails()
             .stderr_is("dd: invalid input flag: ‘29d’\nTry 'dd --help' for more information.");
     }
@@ -1236,24 +1225,24 @@ fn test_invalid_flag_arg_gnu_compatibility() {
 #[test]
 fn test_invalid_file_arg_gnu_compatibility() {
     new_ucmd!()
-        .args(&[format!("if=")])
+        .args(&["if="])
         .fails()
         .stderr_is("dd: failed to open '': No such file or directory");
 
     new_ucmd!()
-        .args(&[format!("if=81as9bn8as9g302az8ns9.pdf.zip.pl.com")])
+        .args(&["if=81as9bn8as9g302az8ns9.pdf.zip.pl.com"])
         .fails()
         .stderr_is(
             "dd: failed to open '81as9bn8as9g302az8ns9.pdf.zip.pl.com': No such file or directory",
         );
 
     new_ucmd!()
-        .args(&[format!("of=")])
+        .args(&["of="])
         .fails()
         .stderr_is("dd: failed to open '': No such file or directory");
 
     new_ucmd!()
-        .args(&[format!("of=81as9bn8as9g302az8ns9.pdf.zip.pl.com")])
+        .args(&["of=81as9bn8as9g302az8ns9.pdf.zip.pl.com"])
         .pipe_in("")
         .succeeds();
 }
