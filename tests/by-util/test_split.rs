@@ -696,5 +696,5 @@ fn test_multiple_of_input_chunk() {
     for filename in glob.collect() {
         assert_eq!(glob.directory.metadata(&filename).len(), 8 * 1024);
     }
-    assert_eq!(glob.collate(), at.read_bytes(name))
+    assert_eq!(glob.collate(), at.read_bytes(name));
 }
