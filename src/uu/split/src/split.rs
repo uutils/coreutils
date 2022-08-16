@@ -618,6 +618,21 @@ impl<'a> Write for ByteChunkWriter<'a> {
                 return Ok(carryover_bytes_written);
             }
 
+            if self.num_bytes_remaining_in_current_chunk == 0 {
+                // Increment the chunk number, reset the number of bytes remaining, and instantiate the new underlying writer.
+                self.num_chunks_written += 1;
+                self.num_bytes_remaining_in_current_chunk = self.chunk_size;
+
+                // Allocate the new file, since at this point we know there are bytes to be written to it.
+                let filename = self.filename_iterator.next().ok_or_else(|| {
+                    std::io::Error::new(ErrorKind::Other, "output file suffixes exhausted")
+                })?;
+                if self.settings.verbose {
+                    println!("creating file {}", filename.quote());
+                }
+                self.inner = self.settings.instantiate_current_writer(&filename)?;
+            }
+
             // If the capacity of this chunk is greater than the number of
             // bytes in `buf`, then write all the bytes in `buf`. Otherwise,
             // write enough bytes to fill the current chunk, then increment
@@ -635,38 +650,18 @@ impl<'a> Write for ByteChunkWriter<'a> {
                 // n, which is already usize.
                 let i = self.num_bytes_remaining_in_current_chunk as usize;
                 let num_bytes_written = self.inner.write(&buf[..i])?;
+                self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
 
                 // It's possible that the underlying writer did not
                 // write all the bytes.
                 if num_bytes_written < i {
-                    self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
                     return Ok(carryover_bytes_written + num_bytes_written);
                 } else {
                     // Move the window to look at only the remaining bytes.
                     buf = &buf[i..];
 
-                    // Increment the chunk number, reset the number of
-                    // bytes remaining, and instantiate the new
-                    // underlying writer.
-                    self.num_chunks_written += 1;
-                    self.num_bytes_remaining_in_current_chunk = self.chunk_size;
-
                     // Remember for the next iteration that we wrote these bytes.
                     carryover_bytes_written += num_bytes_written;
-
-                    // Only create the writer for the next chunk if
-                    // there are any remaining bytes to write. This
-                    // check prevents us from creating a new empty
-                    // file.
-                    if !buf.is_empty() {
-                        let filename = self.filename_iterator.next().ok_or_else(|| {
-                            std::io::Error::new(ErrorKind::Other, "output file suffixes exhausted")
-                        })?;
-                        if self.settings.verbose {
-                            println!("creating file {}", filename.quote());
-                        }
-                        self.inner = self.settings.instantiate_current_writer(&filename)?;
-                    }
                 }
             }
         }

@@ -683,3 +683,18 @@ fn test_guard_input() {
         .stderr_only("split: 'xaa' would overwrite input; aborting");
     assert_eq!(at.read("xaa"), "1\n2\n3\n");
 }
+
+#[test]
+fn test_multiple_of_input_chunk() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "multiple_of_input_chunk";
+    RandomFile::new(&at, name).add_bytes(16 * 1024);
+    ucmd.args(&["-b", "8K", name, "b"]).succeeds();
+
+    let glob = Glob::new(&at, ".", r"b[[:alpha:]][[:alpha:]]$");
+    assert_eq!(glob.count(), 2);
+    for filename in glob.collect() {
+        assert_eq!(glob.directory.metadata(&filename).len(), 8 * 1024);
+    }
+    assert_eq!(glob.collate(), at.read_bytes(name));
+}
