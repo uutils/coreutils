@@ -146,7 +146,7 @@ impl Input<File> {
                 }
 
                 opts.open(fname)
-                    .map_err_context(|| "failed to open input file".to_string())?
+                    .map_err_context(|| format!("failed to open {}", fname.quote()))?
             };
 
             // The --skip and --iseek flags are additive. On a file, they seek.

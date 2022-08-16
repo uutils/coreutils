@@ -1187,3 +1187,73 @@ fn test_final_stats_si_iec() {
     let s = result.stderr_str();
     assert!(s.starts_with("2+0 records in\n2+0 records out\n1024 bytes (1 KB, 1024 B) copied,"));
 }
+
+#[test]
+fn test_cbs_invalid_arg_gnu_compatibility() {
+    let result = new_ucmd!().args(&["cbs="]).pipe_in("").fails();
+
+    result.stderr_is("dd: invalid number: ‘’");
+
+    let result = new_ucmd!().args(&["cbs=29d"]).pipe_in("").fails();
+
+    result.stderr_is("dd: invalid number: ‘29d’");
+}
+
+#[test]
+fn test_invalid_number_arg_gnu_compatibility() {
+    let commands = vec!["bs", "cbs", "count", "ibs", "obs", "seek", "skip"];
+
+    for command in commands {
+        new_ucmd!()
+            .args(&[format!("{command}=")])
+            .fails()
+            .stderr_is("dd: invalid number: ‘’");
+
+        new_ucmd!()
+            .args(&[format!("{command}=29d")])
+            .fails()
+            .stderr_is("dd: invalid number: ‘29d’");
+    }
+}
+
+#[test]
+fn test_invalid_flag_arg_gnu_compatibility() {
+    let commands = vec!["iflag", "oflag"];
+
+    for command in commands {
+        new_ucmd!()
+            .args(&[format!("{command}=")])
+            .fails()
+            .stderr_is("dd: invalid input flag: ‘’\nTry 'dd --help' for more information.");
+
+        new_ucmd!()
+            .args(&[format!("{command}=29d")])
+            .fails()
+            .stderr_is("dd: invalid input flag: ‘29d’\nTry 'dd --help' for more information.");
+    }
+}
+
+#[test]
+fn test_invalid_file_arg_gnu_compatibility() {
+    new_ucmd!()
+        .args(&[format!("if=")])
+        .fails()
+        .stderr_is("dd: failed to open '': No such file or directory");
+
+    new_ucmd!()
+        .args(&[format!("if=81as9bn8as9g302az8ns9.pdf.zip.pl.com")])
+        .fails()
+        .stderr_is(
+            "dd: failed to open '81as9bn8as9g302az8ns9.pdf.zip.pl.com': No such file or directory",
+        );
+
+    new_ucmd!()
+        .args(&[format!("of=")])
+        .fails()
+        .stderr_is("dd: failed to open '': No such file or directory");
+
+    new_ucmd!()
+        .args(&[format!("of=81as9bn8as9g302az8ns9.pdf.zip.pl.com")])
+        .pipe_in("")
+        .succeeds();
+}
