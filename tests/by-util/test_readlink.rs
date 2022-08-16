@@ -341,3 +341,34 @@ fn test_canonicalize_trailing_slash_symlink_loop() {
             .no_stdout();
     }
 }
+
+#[test]
+#[cfg(not(windows))]
+fn test_delimiters() {
+    new_ucmd!()
+        .args(&["--zero", "-n", "-m", "/a"])
+        .succeeds()
+        .stdout_only("/a");
+    new_ucmd!()
+        .args(&["-n", "-m", "/a"])
+        .succeeds()
+        .stdout_only("/a");
+    new_ucmd!()
+        .args(&["--zero", "-m", "/a"])
+        .succeeds()
+        .stdout_only("/a\0");
+    new_ucmd!()
+        .args(&["-m", "/a"])
+        .succeeds()
+        .stdout_only("/a\n");
+    new_ucmd!()
+        .args(&["--zero", "-n", "-m", "/a", "/a"])
+        .succeeds()
+        .stderr_contains("ignoring --no-newline with multiple arguments")
+        .stdout_is("/a\0/a\0");
+    new_ucmd!()
+        .args(&["-n", "-m", "/a", "/a"])
+        .succeeds()
+        .stderr_contains("ignoring --no-newline with multiple arguments")
+        .stdout_is("/a\n/a\n");
+}
