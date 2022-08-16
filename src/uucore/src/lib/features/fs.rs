@@ -22,11 +22,12 @@ use std::collections::VecDeque;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs;
+use std::fs::read_dir;
 use std::hash::Hash;
 use std::io::{Error, ErrorKind, Result as IOResult};
 #[cfg(unix)]
 use std::os::unix::{fs::MetadataExt, io::AsRawFd};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, Path, PathBuf, MAIN_SEPARATOR};
 #[cfg(target_os = "windows")]
 use winapi_util::AsHandleRef;
 
@@ -318,6 +319,11 @@ pub fn canonicalize<P: AsRef<Path>>(
 ) -> IOResult<PathBuf> {
     const SYMLINKS_TO_LOOK_FOR_LOOPS: i32 = 20;
     let original = original.as_ref();
+    let has_to_be_directory =
+        (miss_mode == MissingHandling::Normal || miss_mode == MissingHandling::Existing) && {
+            let path_str = original.to_string_lossy();
+            path_str.ends_with(MAIN_SEPARATOR) || path_str.ends_with('/')
+        };
     let original = if original.is_absolute() {
         original.to_path_buf()
     } else {
@@ -382,6 +388,24 @@ pub fn canonicalize<P: AsRef<Path>>(
             }
             _ => {}
         }
+    }
+    // raise Not a directory if required
+    match miss_mode {
+        MissingHandling::Existing => {
+            if has_to_be_directory {
+                read_dir(&result)?;
+            }
+        }
+        MissingHandling::Normal => {
+            if result.exists() {
+                if has_to_be_directory {
+                    read_dir(&result)?;
+                }
+            } else if let Some(parent) = result.parent() {
+                read_dir(parent)?;
+            }
+        }
+        _ => {}
     }
     Ok(result)
 }

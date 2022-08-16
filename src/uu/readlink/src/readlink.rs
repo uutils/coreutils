@@ -36,7 +36,7 @@ const ARG_FILES: &str = "files";
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
-    let mut no_newline = matches.contains_id(OPT_NO_NEWLINE);
+    let mut no_trailing_delimiter = matches.contains_id(OPT_NO_NEWLINE);
     let use_zero = matches.contains_id(OPT_ZERO);
     let silent = matches.contains_id(OPT_SILENT) || matches.contains_id(OPT_QUIET);
     let verbose = matches.contains_id(OPT_VERBOSE);
@@ -66,9 +66,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(UUsageError::new(1, "missing operand"));
     }
 
-    if no_newline && files.len() > 1 && !silent {
+    if no_trailing_delimiter && files.len() > 1 && !silent {
         show_error!("ignoring --no-newline with multiple arguments");
-        no_newline = false;
+        no_trailing_delimiter = false;
     }
 
     for f in &files {
@@ -79,7 +79,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             canonicalize(&p, can_mode, res_mode)
         };
         match path_result {
-            Ok(path) => show(&path, no_newline, use_zero).map_err_context(String::new)?,
+            Ok(path) => {
+                show(&path, no_trailing_delimiter, use_zero).map_err_context(String::new)?;
+            }
             Err(err) => {
                 if verbose {
                     return Err(USimpleError::new(
@@ -167,12 +169,12 @@ pub fn uu_app<'a>() -> Command<'a> {
         )
 }
 
-fn show(path: &Path, no_newline: bool, use_zero: bool) -> std::io::Result<()> {
+fn show(path: &Path, no_trailing_delimiter: bool, use_zero: bool) -> std::io::Result<()> {
     let path = path.to_str().unwrap();
-    if use_zero {
-        print!("{}\0", path);
-    } else if no_newline {
+    if no_trailing_delimiter {
         print!("{}", path);
+    } else if use_zero {
+        print!("{}\0", path);
     } else {
         println!("{}", path);
     }
