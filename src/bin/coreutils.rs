@@ -147,22 +147,19 @@ fn gen_completions<T: uucore::Args>(
         )
         .arg(
             Arg::new("shell")
-                .value_parser(clap::builder::PossibleValuesParser::new(
-                    Shell::possible_values(),
-                ))
+                .value_parser(clap::builder::EnumValueParser::<Shell>::new())
                 .required(true),
         )
         .get_matches_from(std::iter::once(OsString::from("completion")).chain(args));
 
     let utility = matches.value_of("utility").unwrap();
-    let shell = matches.value_of("shell").unwrap();
+    let shell = matches.get_one::<Shell>("shell").unwrap().to_owned();
 
     let mut command = if utility == "coreutils" {
         gen_coreutils_app(util_map)
     } else {
         util_map.get(utility).unwrap().1()
     };
-    let shell: Shell = shell.parse().unwrap();
     let bin_name = std::env::var("PROG_PREFIX").unwrap_or_default() + utility;
 
     clap_complete::generate(shell, &mut command, bin_name, &mut io::stdout());

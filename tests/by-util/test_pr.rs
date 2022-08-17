@@ -28,7 +28,7 @@ fn all_minutes(from: DateTime<Local>, to: DateTime<Local>) -> Vec<String> {
     let mut current = from;
     while current < to {
         vec.push(current.format(FORMAT).to_string());
-        current = current + Duration::minutes(1);
+        current += Duration::minutes(1);
     }
     vec
 }
