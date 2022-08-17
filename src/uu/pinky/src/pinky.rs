@@ -20,7 +20,7 @@ use std::os::unix::fs::MetadataExt;
 
 use clap::{crate_version, Arg, Command};
 use std::path::PathBuf;
-use uucore::{format_usage, InvalidEncodingHandling};
+use uucore::format_usage;
 
 static ABOUT: &str = "lightweight finger";
 const USAGE: &str = "{} [OPTION]... [USER]...";
@@ -49,7 +49,7 @@ fn get_long_usage() -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_str(InvalidEncodingHandling::Ignore);
+    let args = args.collect_ignore();
 
     let after_help = get_long_usage();
 

@@ -39,7 +39,6 @@ use uucore::error::{UError, UResult};
 use uucore::format_usage;
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size, ParseSizeError};
-use uucore::InvalidEncodingHandling;
 #[cfg(windows)]
 use winapi::shared::minwindef::{DWORD, LPVOID};
 #[cfg(windows)]
@@ -516,7 +515,7 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_str(InvalidEncodingHandling::Ignore);
+    let args = args.collect_ignore();
 
     let matches = uu_app().get_matches_from(args);
 

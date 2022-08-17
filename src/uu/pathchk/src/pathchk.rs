@@ -13,7 +13,7 @@ use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UResult, UUsageError};
-use uucore::{format_usage, InvalidEncodingHandling};
+use uucore::format_usage;
 
 // operating mode
 enum Mode {
@@ -39,7 +39,7 @@ const POSIX_NAME_MAX: usize = 14;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_str(InvalidEncodingHandling::ConvertLossy);
+    let args = args.collect_lossy();
 
     let matches = uu_app().get_matches_from(args);
 

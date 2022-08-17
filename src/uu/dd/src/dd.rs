@@ -37,7 +37,7 @@ use clap::{crate_version, Arg, ArgMatches, Command};
 use gcd::Gcd;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::{show_error, InvalidEncodingHandling};
+use uucore::show_error;
 
 const ABOUT: &str = "copy, and optionally convert, a file system resource";
 const BUF_INIT_BYTE: u8 = 0xDD;
@@ -706,7 +706,7 @@ fn append_dashes_if_not_present(mut acc: Vec<String>, mut s: String) -> Vec<Stri
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let dashed_args = args
-        .collect_str(InvalidEncodingHandling::Ignore)
+        .collect_ignore()
         .into_iter()
         .fold(Vec::new(), append_dashes_if_not_present);
 

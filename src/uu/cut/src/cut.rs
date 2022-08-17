@@ -19,8 +19,8 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 
 use self::searcher::Searcher;
+use uucore::format_usage;
 use uucore::ranges::Range;
-use uucore::{format_usage, InvalidEncodingHandling};
 
 mod searcher;
 
@@ -398,7 +398,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_str(InvalidEncodingHandling::Ignore);
+    let args = args.collect_ignore();
 
     let delimiter_is_equal = args.contains(&"-d=".to_string()); // special case
     let matches = uu_app().get_matches_from(args);

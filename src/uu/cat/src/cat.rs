@@ -36,7 +36,7 @@ use std::net::Shutdown;
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use unix_socket::UnixStream;
-use uucore::{format_usage, InvalidEncodingHandling};
+use uucore::format_usage;
 
 static NAME: &str = "cat";
 static USAGE: &str = "{} [OPTION]... [FILE]...";
@@ -184,7 +184,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_str(InvalidEncodingHandling::Ignore);
+    let args = args.collect_ignore();
 
     let matches = uu_app().try_get_matches_from(args)?;
 

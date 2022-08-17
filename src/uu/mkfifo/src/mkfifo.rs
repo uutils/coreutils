@@ -11,9 +11,9 @@ extern crate uucore;
 use clap::{crate_version, Arg, Command};
 use libc::mkfifo;
 use std::ffi::CString;
+use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
-use uucore::{display::Quotable, InvalidEncodingHandling};
 
 static NAME: &str = "mkfifo";
 static USAGE: &str = "{} [OPTION]... NAME...";
@@ -28,7 +28,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_str(InvalidEncodingHandling::Ignore);
+    let args = args.collect_ignore();
 
     let matches = uu_app().get_matches_from(args);
 

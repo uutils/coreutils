@@ -9,7 +9,7 @@ use clap::{crate_version, Arg, Command};
 use std::path::Path;
 use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
-use uucore::{format_usage, InvalidEncodingHandling};
+use uucore::format_usage;
 
 static ABOUT: &str = "strip last component from file name";
 const USAGE: &str = "{} [OPTION] NAME...";
@@ -28,7 +28,7 @@ fn get_long_usage() -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_str(InvalidEncodingHandling::ConvertLossy);
+    let args = args.collect_lossy();
 
     let after_help = get_long_usage();
 

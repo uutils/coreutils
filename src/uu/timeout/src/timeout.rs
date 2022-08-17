@@ -20,9 +20,9 @@ use std::process::{self, Child, Stdio};
 use std::time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::format_usage;
 use uucore::process::ChildExt;
 use uucore::signals::{signal_by_name_or_value, signal_name_by_value};
-use uucore::{format_usage, InvalidEncodingHandling};
 
 static ABOUT: &str = "Start COMMAND, and kill it if still running after DURATION.";
 const USAGE: &str = "{} [OPTION] DURATION COMMAND...";
@@ -106,7 +106,7 @@ impl Config {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_str(InvalidEncodingHandling::ConvertLossy);
+    let args = args.collect_lossy();
 
     let command = uu_app();
 

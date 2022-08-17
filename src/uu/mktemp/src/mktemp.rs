@@ -11,7 +11,7 @@
 use clap::{crate_version, Arg, ArgMatches, Command};
 use uucore::display::{println_verbatim, Quotable};
 use uucore::error::{FromIo, UError, UResult};
-use uucore::{format_usage, InvalidEncodingHandling};
+use uucore::format_usage;
 
 use std::env;
 use std::error::Error;
@@ -316,7 +316,7 @@ impl Params {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_str(InvalidEncodingHandling::ConvertLossy);
+    let args = args.collect_lossy();
 
     let matches = uu_app().try_get_matches_from(&args)?;
 

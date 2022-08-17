@@ -19,7 +19,6 @@ use std::{
 use uucore::display::Quotable;
 use uucore::error::UError;
 use uucore::error::UResult;
-use uucore::InvalidEncodingHandling;
 use uucore::{format_usage, show};
 
 use crate::error::TacError;
@@ -37,7 +36,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_str(InvalidEncodingHandling::ConvertLossy);
+    let args = args.collect_lossy();
 
     let matches = uu_app().get_matches_from(args);
 

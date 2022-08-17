@@ -16,8 +16,8 @@ use nix::unistd::Pid;
 use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::format_usage;
 use uucore::signals::{signal_by_name_or_value, ALL_SIGNALS};
-use uucore::{format_usage, InvalidEncodingHandling};
 
 static ABOUT: &str = "Send signal to processes or list information about signals.";
 const USAGE: &str = "{} [OPTIONS]... PID...";
@@ -38,7 +38,7 @@ pub enum Mode {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut args = args.collect_str(InvalidEncodingHandling::Ignore);
+    let mut args = args.collect_ignore();
     let obs_signal = handle_obsolete(&mut args);
 
     let matches = uu_app().get_matches_from(args);

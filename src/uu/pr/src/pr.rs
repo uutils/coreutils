@@ -378,7 +378,7 @@ pub fn uu_app<'a>() -> Command<'a> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_str(uucore::InvalidEncodingHandling::Ignore);
+    let args = args.collect_ignore();
 
     let opt_args = recreate_arguments(&args);
 

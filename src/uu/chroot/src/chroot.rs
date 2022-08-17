@@ -17,7 +17,7 @@ use std::path::Path;
 use std::process;
 use uucore::error::{set_exit_code, UResult};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
-use uucore::{entries, format_usage, InvalidEncodingHandling};
+use uucore::{entries, format_usage};
 
 static ABOUT: &str = "Run COMMAND with root directory set to NEWROOT.";
 static USAGE: &str = "{} [OPTION]... NEWROOT [COMMAND [ARG]...]";
@@ -33,7 +33,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_str(InvalidEncodingHandling::ConvertLossy);
+    let args = args.collect_lossy();
 
     let matches = uu_app().get_matches_from(args);
 

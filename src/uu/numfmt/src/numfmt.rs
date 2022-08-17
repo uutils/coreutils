@@ -16,8 +16,8 @@ use std::io::{BufRead, Write};
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
+use uucore::format_usage;
 use uucore::ranges::Range;
-use uucore::{format_usage, InvalidEncodingHandling};
 
 pub mod errors;
 pub mod format;
@@ -261,7 +261,7 @@ fn concat_format_arg_and_value(args: &[String]) -> Vec<String> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_str(InvalidEncodingHandling::Ignore);
+    let args = args.collect_ignore();
 
     let matches = uu_app().get_matches_from(concat_format_arg_and_value(&args));
 

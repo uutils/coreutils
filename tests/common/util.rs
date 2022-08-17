@@ -30,7 +30,7 @@ use std::rc::Rc;
 use std::thread::sleep;
 use std::time::Duration;
 use tempfile::TempDir;
-use uucore::{Args, InvalidEncodingHandling};
+use uucore::Args;
 
 #[cfg(windows)]
 static PROGNAME: &str = concat!(env!("CARGO_PKG_NAME"), ".exe");
@@ -1021,7 +1021,7 @@ impl UCommand {
         let strings = args
             .iter()
             .map(|s| s.as_ref().to_os_string())
-            .collect_str(InvalidEncodingHandling::Ignore);
+            .collect_ignore();
 
         for s in strings {
             self.comm_string.push(' ');

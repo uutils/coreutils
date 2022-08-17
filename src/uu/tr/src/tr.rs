@@ -18,8 +18,8 @@ use std::io::{stdin, stdout, BufReader, BufWriter};
 use uucore::{format_usage, show};
 
 use crate::operation::DeleteOperation;
+use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::{display::Quotable, InvalidEncodingHandling};
 
 static ABOUT: &str = "translate or delete characters";
 const USAGE: &str = "{} [OPTION]... SET1 [SET2]";
@@ -40,7 +40,7 @@ fn get_long_usage() -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_str(InvalidEncodingHandling::ConvertLossy);
+    let args = args.collect_lossy();
 
     let after_help = get_long_usage();
 

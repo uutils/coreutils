@@ -20,7 +20,7 @@ use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::{format_usage, util_name, InvalidEncodingHandling};
+use uucore::{format_usage, util_name};
 
 #[macro_use]
 extern crate uucore;
@@ -266,7 +266,7 @@ pub mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_str(InvalidEncodingHandling::Ignore);
+    let args = args.collect_ignore();
 
     let matches = uu_app().get_matches_from(args);
 

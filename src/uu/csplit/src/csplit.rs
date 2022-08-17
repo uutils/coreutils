@@ -16,7 +16,7 @@ use clap::{crate_version, Arg, ArgMatches, Command};
 use regex::Regex;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::{format_usage, InvalidEncodingHandling};
+use uucore::format_usage;
 
 mod csplit_error;
 mod patterns;
@@ -713,7 +713,7 @@ mod tests {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_str(InvalidEncodingHandling::Ignore);
+    let args = args.collect_ignore();
 
     let matches = uu_app().get_matches_from(args);
 
