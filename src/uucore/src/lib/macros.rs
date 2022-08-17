@@ -25,7 +25,7 @@
 //! - Print errors
 //!   - From types implementing [`crate::error::UError`]: [`show!`],
 //!     [`show_if_err!`]
-//!   - From custom messages: [`show_error!`], [`show_usage_error!`]
+//!   - From custom messages: [`show_error!`]
 //! - Print warnings: [`show_warning!`]
 //! - Terminate util execution
 //!   - Crash program: [`crash!`], [`crash_if_err!`]
@@ -155,26 +155,6 @@ macro_rules! show_error(
     })
 );
 
-/// Show a warning to stderr in a similar style to GNU coreutils.
-///
-/// Is this really required? Used in the following locations:
-///
-/// ./src/uu/head/src/head.rs:12
-/// ./src/uu/head/src/head.rs:424
-/// ./src/uu/head/src/head.rs:427
-/// ./src/uu/head/src/head.rs:430
-/// ./src/uu/head/src/head.rs:453
-/// ./src/uu/du/src/du.rs:339
-/// ./src/uu/wc/src/wc.rs:270
-/// ./src/uu/wc/src/wc.rs:273
-#[macro_export]
-macro_rules! show_error_custom_description (
-    ($err:expr,$($args:tt)+) => ({
-        eprint!("{}: {}: ", $crate::util_name(), $err);
-        eprintln!($($args)+);
-    })
-);
-
 /// Print a warning message to stderr.
 ///
 /// Takes [`format!`]-compatible input and prepends it with the current
@@ -195,31 +175,6 @@ macro_rules! show_warning(
     ($($args:tt)+) => ({
         eprint!("{}: warning: ", $crate::util_name());
         eprintln!($($args)+);
-    })
-);
-
-/// Show a bad invocation help message in a similar style to GNU coreutils.
-///
-/// Takes a [`format!`]-compatible input and prepends it with the current
-/// utility's name before printing to stderr.
-///
-/// # Examples
-///
-/// ```
-/// # #[macro_use]
-/// # extern crate uucore;
-/// # fn main() {
-/// // outputs <name>: Couldn't apply foo to bar
-/// //         Try '<name> --help' for more information.
-/// show_usage_error!("Couldn't apply {} to {}", "foo", "bar");
-/// # }
-/// ```
-#[macro_export]
-macro_rules! show_usage_error(
-    ($($args:tt)+) => ({
-        eprint!("{}: ", $crate::util_name());
-        eprintln!($($args)+);
-        eprintln!("Try '{} --help' for more information.", $crate::execution_phrase());
     })
 );
 
