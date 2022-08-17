@@ -4,7 +4,6 @@
 
 use clap::{crate_version, Arg, Command};
 use uucore::error::{UResult, UUsageError};
-use uucore::InvalidEncodingHandling;
 use uucore::{format_usage, memo};
 
 const VERSION: &str = "version";
@@ -271,9 +270,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::Ignore)
-        .accept_any();
+    let args = args.collect_ignore();
     let matches = uu_app().get_matches_from(args);
 
     let format_string = matches

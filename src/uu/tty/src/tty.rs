@@ -13,7 +13,7 @@ use clap::{crate_version, Arg, Command};
 use std::ffi::CStr;
 use std::io::Write;
 use uucore::error::UResult;
-use uucore::{format_usage, InvalidEncodingHandling};
+use uucore::format_usage;
 
 static ABOUT: &str = "Print the file name of the terminal connected to standard input.";
 const USAGE: &str = "{} [OPTION]...";
@@ -24,9 +24,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::ConvertLossy)
-        .accept_any();
+    let args = args.collect_lossy();
 
     let matches = uu_app().get_matches_from(args);
 

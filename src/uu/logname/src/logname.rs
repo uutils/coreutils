@@ -15,7 +15,6 @@ extern crate uucore;
 use clap::{crate_version, Command};
 use std::ffi::CStr;
 use uucore::error::UResult;
-use uucore::InvalidEncodingHandling;
 
 extern "C" {
     // POSIX requires using getlogin (or equivalent code)
@@ -37,9 +36,7 @@ static ABOUT: &str = "Print user's login name";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::Ignore)
-        .accept_any();
+    let args = args.collect_ignore();
 
     let _ = uu_app().get_matches_from(args);
 

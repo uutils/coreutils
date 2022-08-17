@@ -13,7 +13,7 @@ use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::{format_usage, InvalidEncodingHandling};
+use uucore::format_usage;
 
 const TAB_WIDTH: usize = 8;
 
@@ -31,9 +31,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::ConvertLossy)
-        .accept_any();
+    let args = args.collect_lossy();
 
     let (args, obs_width) = handle_obsolete(&args[..]);
     let matches = uu_app().get_matches_from(args);

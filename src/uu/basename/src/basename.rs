@@ -11,7 +11,7 @@ use clap::{crate_version, Arg, Command};
 use std::path::{is_separator, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError};
-use uucore::{format_usage, InvalidEncodingHandling};
+use uucore::format_usage;
 
 static ABOUT: &str = r#"Print NAME with any leading directory components removed
 If specified, also remove a trailing SUFFIX"#;
@@ -28,9 +28,7 @@ pub mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::ConvertLossy)
-        .accept_any();
+    let args = args.collect_lossy();
 
     // Since options have to go before names,
     // if the first argument is not an option, then there is no option,

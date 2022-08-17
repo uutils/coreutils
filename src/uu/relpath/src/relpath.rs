@@ -12,8 +12,8 @@ use std::env;
 use std::path::{Path, PathBuf};
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
+use uucore::format_usage;
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
-use uucore::{format_usage, InvalidEncodingHandling};
 
 static ABOUT: &str = "Convert TO destination to the relative path from the FROM dir.
 If FROM path is omitted, current working dir will be used.";
@@ -27,9 +27,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::ConvertLossy)
-        .accept_any();
+    let args = args.collect_lossy();
 
     let matches = uu_app().get_matches_from(args);
 

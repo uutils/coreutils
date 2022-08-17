@@ -65,9 +65,7 @@ pub fn guess_syntax() -> OutputFmt {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::Ignore)
-        .accept_any();
+    let args = args.collect_ignore();
 
     let matches = uu_app().get_matches_from(&args);
 
@@ -278,7 +276,7 @@ enum ParseState {
 }
 
 use std::collections::HashMap;
-use uucore::{format_usage, InvalidEncodingHandling};
+use uucore::format_usage;
 
 fn parse<T>(lines: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
 where
