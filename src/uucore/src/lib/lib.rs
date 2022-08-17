@@ -153,7 +153,6 @@ pub fn execution_phrase() -> &'static str {
 pub enum InvalidEncodingHandling {
     Ignore,
     ConvertLossy,
-    Panic,
 }
 
 #[must_use]
@@ -192,11 +191,9 @@ pub trait Args: Iterator<Item = OsString> + Sized {
     /// Converts each iterator item to a String and collects these into a vector
     /// On invalid encoding, the result will depend on the argument. This method allows to either drop entries with illegal encoding
     /// completely (```InvalidEncodingHandling::Ignore```), convert them using lossy-conversion (```InvalidEncodingHandling::ConvertLossy```)
-    /// which will result in strange strings or can chosen to panic (```InvalidEncodingHandling::Panic```).
+    /// which will result in strange strings or can chosen to panic.
     /// # Arguments
     /// * `handling` - This switch allows to switch the behavior, when invalid encoding is encountered
-    /// # Panics
-    /// * Occurs, when invalid encoding is encountered and handling is set to ```InvalidEncodingHandling::Panic```
     fn collect_str(self, handling: InvalidEncodingHandling) -> ConversionResult {
         let mut full_conversion = true;
         let result_vector: Vec<String> = self
@@ -212,9 +209,6 @@ pub trait Args: Iterator<Item = OsString> + Sized {
                         InvalidEncodingHandling::Ignore => Err(String::new()),
                         InvalidEncodingHandling::ConvertLossy => {
                             Err(s_ret.to_string_lossy().into_owned())
-                        }
-                        InvalidEncodingHandling::Panic => {
-                            panic!("Broken encoding found but caller cannot handle it")
                         }
                     }
                 }
