@@ -35,6 +35,7 @@ pub enum ParseError {
     IbsOutOfRange,
     ObsOutOfRange,
     CbsOutOfRange,
+    InvalidNumber(String),
 }
 
 impl ParseError {
@@ -56,6 +57,7 @@ impl ParseError {
             Self::IbsOutOfRange => Self::IbsOutOfRange,
             Self::ObsOutOfRange => Self::ObsOutOfRange,
             Self::CbsOutOfRange => Self::CbsOutOfRange,
+            Self::InvalidNumber(_) => Self::InvalidNumber(s),
         }
     }
 }
@@ -79,7 +81,12 @@ impl std::fmt::Display for ParseError {
                 write!(f, "Only one ov conv=excl or conv=nocreat may be specified")
             }
             Self::FlagNoMatch(arg) => {
-                write!(f, "Unrecognized iflag=FLAG or oflag=FLAG -> {}", arg)
+                // Additional message about 'dd --help' is displayed only in this situation.
+                write!(
+                    f,
+                    "invalid input flag: ‘{}’\nTry 'dd --help' for more information.",
+                    arg
+                )
             }
             Self::ConvFlagNoMatch(arg) => {
                 write!(f, "Unrecognized conv=CONV -> {}", arg)
@@ -114,6 +121,9 @@ impl std::fmt::Display for ParseError {
             }
             Self::Unimplemented(arg) => {
                 write!(f, "feature not implemented on this system -> {}", arg)
+            }
+            Self::InvalidNumber(arg) => {
+                write!(f, "invalid number: ‘{}’", arg)
             }
         }
     }
@@ -389,7 +399,7 @@ fn parse_bytes_no_x(s: &str) -> Result<u64, ParseError> {
         (None, None, None) => match uucore::parse_size::parse_size(s) {
             Ok(n) => (n, 1),
             Err(ParseSizeError::InvalidSuffix(s)) | Err(ParseSizeError::ParseFailure(s)) => {
-                return Err(ParseError::MultiplierStringParseFailure(s))
+                return Err(ParseError::InvalidNumber(s))
             }
             Err(ParseSizeError::SizeTooBig(s)) => {
                 return Err(ParseError::MultiplierStringOverflow(s))
