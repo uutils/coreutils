@@ -52,10 +52,7 @@ pub fn uu_app<'a>() -> Command<'a> {
 
 fn parse_cmd_args(args: impl uucore::Args) -> UResult<(Config, Format)> {
     let matches = uu_app()
-        .try_get_matches_from(
-            args.collect_str(InvalidEncodingHandling::ConvertLossy)
-                .accept_any(),
-        )
+        .try_get_matches_from(args.collect_str(InvalidEncodingHandling::ConvertLossy))
         .with_exit_code(1)?;
     let format = ENCODINGS
         .iter()

@@ -155,38 +155,6 @@ pub enum InvalidEncodingHandling {
     ConvertLossy,
 }
 
-#[must_use]
-pub enum ConversionResult {
-    Complete(Vec<String>),
-    Lossy(Vec<String>),
-}
-
-impl ConversionResult {
-    pub fn accept_any(self) -> Vec<String> {
-        match self {
-            Self::Complete(result) | Self::Lossy(result) => result,
-        }
-    }
-
-    pub fn expect_lossy(self, msg: &str) -> Vec<String> {
-        match self {
-            Self::Lossy(result) => result,
-            Self::Complete(_) => {
-                panic!("{}", msg);
-            }
-        }
-    }
-
-    pub fn expect_complete(self, msg: &str) -> Vec<String> {
-        match self {
-            Self::Complete(result) => result,
-            Self::Lossy(_) => {
-                panic!("{}", msg);
-            }
-        }
-    }
-}
-
 pub trait Args: Iterator<Item = OsString> + Sized {
     /// Converts each iterator item to a String and collects these into a vector
     /// On invalid encoding, the result will depend on the argument. This method allows to either drop entries with illegal encoding
@@ -194,45 +162,31 @@ pub trait Args: Iterator<Item = OsString> + Sized {
     /// which will result in strange strings or can chosen to panic.
     /// # Arguments
     /// * `handling` - This switch allows to switch the behavior, when invalid encoding is encountered
-    fn collect_str(self, handling: InvalidEncodingHandling) -> ConversionResult {
-        let mut full_conversion = true;
-        let result_vector: Vec<String> = self
-            .map(|s| match s.into_string() {
-                Ok(string) => Ok(string),
-                Err(s_ret) => {
-                    full_conversion = false;
-                    eprintln!(
-                        "Input with broken encoding occurred! (s = {}) ",
-                        s_ret.quote()
-                    );
-                    match handling {
-                        InvalidEncodingHandling::Ignore => Err(String::new()),
-                        InvalidEncodingHandling::ConvertLossy => {
-                            Err(s_ret.to_string_lossy().into_owned())
-                        }
+    fn collect_str(self, handling: InvalidEncodingHandling) -> Vec<String> {
+        self.map(|s| match s.into_string() {
+            Ok(string) => Ok(string),
+            Err(s_ret) => {
+                eprintln!(
+                    "Input with broken encoding occurred! (s = {}) ",
+                    s_ret.quote()
+                );
+                match handling {
+                    InvalidEncodingHandling::Ignore => Err(String::new()),
+                    InvalidEncodingHandling::ConvertLossy => {
+                        Err(s_ret.to_string_lossy().into_owned())
                     }
                 }
-            })
-            .filter(|s| match handling {
-                InvalidEncodingHandling::Ignore => s.is_ok(),
-                _ => true,
-            })
-            .map(|s| match s {
-                Ok(v) => v,
-                Err(e) => e,
-            })
-            .collect();
-
-        if full_conversion {
-            ConversionResult::Complete(result_vector)
-        } else {
-            ConversionResult::Lossy(result_vector)
-        }
-    }
-
-    /// convenience function for a more slim interface
-    fn collect_str_lossy(self) -> ConversionResult {
-        self.collect_str(InvalidEncodingHandling::ConvertLossy)
+            }
+        })
+        .filter(|s| match handling {
+            InvalidEncodingHandling::Ignore => s.is_ok(),
+            _ => true,
+        })
+        .map(|s| match s {
+            Ok(v) => v,
+            Err(e) => e,
+        })
+        .collect()
     }
 }
 
@@ -255,7 +209,7 @@ mod tests {
         ]
     }
 
-    fn collect_os_str(vec: Vec<OsString>, handling: InvalidEncodingHandling) -> ConversionResult {
+    fn collect_os_str(vec: Vec<OsString>, handling: InvalidEncodingHandling) -> Vec<String> {
         vec.into_iter().collect_str(handling)
     }
 
@@ -265,8 +219,7 @@ mod tests {
         assert!(os_str.to_os_string().into_string().is_err());
         let test_vec = make_os_vec(os_str);
         let collected_to_str =
-            collect_os_str(test_vec.clone(), InvalidEncodingHandling::ConvertLossy)
-                .expect_lossy("Lossy conversion expected in this test: bad encoding entries should be converted as good as possible");
+            collect_os_str(test_vec.clone(), InvalidEncodingHandling::ConvertLossy);
         //conservation of length - when accepting lossy conversion no arguments may be dropped
         assert_eq!(collected_to_str.len(), test_vec.len());
         //first indices identical
@@ -288,10 +241,7 @@ mod tests {
         //assert our string is invalid utf8
         assert!(os_str.to_os_string().into_string().is_err());
         let test_vec = make_os_vec(os_str);
-        let collected_to_str = collect_os_str(test_vec.clone(), InvalidEncodingHandling::Ignore)
-            .expect_lossy(
-                "Lossy conversion expected in this test: bad encoding entries should be filtered",
-            );
+        let collected_to_str = collect_os_str(test_vec.clone(), InvalidEncodingHandling::Ignore);
         //assert that the broken entry is filtered out
         assert_eq!(collected_to_str.len(), test_vec.len() - 1);
         //assert that the unbroken indices are converted as expected
@@ -308,8 +258,7 @@ mod tests {
         //create a vector containing only correct encoding
         let test_vec = make_os_vec(&OsString::from("test2"));
         //expect complete conversion without losses, even when lossy conversion is accepted
-        let _ = collect_os_str(test_vec, InvalidEncodingHandling::ConvertLossy)
-            .expect_complete("Lossy conversion not expected in this test");
+        let _ = collect_os_str(test_vec, InvalidEncodingHandling::ConvertLossy);
     }
 
     #[cfg(any(unix, target_os = "redox"))]

@@ -1055,9 +1055,7 @@ fn make_sort_mode_arg<'a>(mode: &'a str, short: char, help: &'a str) -> Arg<'a> 
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::Ignore)
-        .accept_any();
+    let args = args.collect_str(InvalidEncodingHandling::Ignore);
     let mut settings: GlobalSettings = Default::default();
 
     let matches = match uu_app().try_get_matches_from(args) {

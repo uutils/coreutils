@@ -1021,8 +1021,7 @@ impl UCommand {
         let strings = args
             .iter()
             .map(|s| s.as_ref().to_os_string())
-            .collect_str(InvalidEncodingHandling::Ignore)
-            .accept_any();
+            .collect_str(InvalidEncodingHandling::Ignore);
 
         for s in strings {
             self.comm_string.push(' ');

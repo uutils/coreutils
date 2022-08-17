@@ -33,9 +33,7 @@ pub fn uu_app<'a>() -> Command<'a> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::ConvertLossy)
-        .accept_any();
+    let args = args.collect_str(InvalidEncodingHandling::ConvertLossy);
 
     // For expr utility we do not want getopts.
     // The following usage should work without escaping hyphens: `expr -15 = 1 +  2 \* \( 3 - -4 \)`

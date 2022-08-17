@@ -56,9 +56,7 @@ fn get_long_usage() -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::Ignore)
-        .accept_any();
+    let args = args.collect_str(InvalidEncodingHandling::Ignore);
 
     let after_help = get_long_usage();
 

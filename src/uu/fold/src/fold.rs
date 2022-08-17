@@ -31,9 +31,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::ConvertLossy)
-        .accept_any();
+    let args = args.collect_str(InvalidEncodingHandling::ConvertLossy);
 
     let (args, obs_width) = handle_obsolete(&args[..]);
     let matches = uu_app().get_matches_from(args);

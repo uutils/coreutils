@@ -39,9 +39,7 @@ const POSIX_NAME_MAX: usize = 14;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::ConvertLossy)
-        .accept_any();
+    let args = args.collect_str(InvalidEncodingHandling::ConvertLossy);
 
     let matches = uu_app().get_matches_from(args);
 

@@ -38,9 +38,7 @@ pub enum Mode {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut args = args
-        .collect_str(InvalidEncodingHandling::Ignore)
-        .accept_any();
+    let mut args = args.collect_str(InvalidEncodingHandling::Ignore);
     let obs_signal = handle_obsolete(&mut args);
 
     let matches = uu_app().get_matches_from(args);

@@ -707,7 +707,6 @@ fn append_dashes_if_not_present(mut acc: Vec<String>, mut s: String) -> Vec<Stri
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let dashed_args = args
         .collect_str(InvalidEncodingHandling::Ignore)
-        .accept_any()
         .into_iter()
         .fold(Vec::new(), append_dashes_if_not_present);
 

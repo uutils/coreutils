@@ -184,9 +184,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::Ignore)
-        .accept_any();
+    let args = args.collect_str(InvalidEncodingHandling::Ignore);
 
     let matches = uu_app().try_get_matches_from(args)?;
 

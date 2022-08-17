@@ -722,9 +722,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::Ignore)
-        .accept_any();
+    let args = args.collect_str(InvalidEncodingHandling::Ignore);
 
     // let mut opts = Options::new();
     let matches = uu_app().get_matches_from(args);

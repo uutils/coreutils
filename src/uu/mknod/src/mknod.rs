@@ -81,9 +81,7 @@ fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::Ignore)
-        .accept_any();
+    let args = args.collect_str(InvalidEncodingHandling::Ignore);
     // Linux-specific options, not implemented
     // opts.optflag("Z", "", "set the SELinux security context to default type");
     // opts.optopt("", "context", "like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX");

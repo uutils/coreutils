@@ -106,9 +106,7 @@ impl Config {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::ConvertLossy)
-        .accept_any();
+    let args = args.collect_str(InvalidEncodingHandling::ConvertLossy);
 
     let command = uu_app();
 

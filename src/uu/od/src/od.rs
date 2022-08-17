@@ -256,9 +256,7 @@ impl OdOptions {
 /// opens the input and calls `odfunc` to process the input.
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::Ignore)
-        .accept_any();
+    let args = args.collect_str(InvalidEncodingHandling::Ignore);
 
     let clap_opts = uu_app();
 
