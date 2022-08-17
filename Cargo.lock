@@ -3030,7 +3030,7 @@ version = "0.0.14"
 dependencies = [
  "atty",
  "clap 3.2.17",
- "libc",
+ "nix",
  "uucore",
 ]
 
