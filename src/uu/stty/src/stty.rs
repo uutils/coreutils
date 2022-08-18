@@ -17,7 +17,7 @@ use std::io::{self, stdout};
 use std::ops::ControlFlow;
 use std::os::unix::io::{AsRawFd, RawFd};
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, InvalidEncodingHandling};
+use uucore::format_usage;
 
 #[cfg(not(any(
     target_os = "freebsd",
@@ -138,8 +138,7 @@ ioctl_write_ptr_bad!(
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
-        .collect_str(InvalidEncodingHandling::ConvertLossy)
-        .accept_any();
+        .collect_lossy();
 
     let matches = uu_app().get_matches_from(args);
 
