@@ -20,63 +20,53 @@ pub struct Range {
 impl FromStr for Range {
     type Err = &'static str;
 
+    /// Parse a string of the form `a-b` into a `Range`
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use uucore::ranges::Range;
+    /// assert_eq!(Range::from_str("5"), Ok(Range { low: 5, high: 5 }));
+    /// assert_eq!(Range::from_str("4-"), Ok(Range { low: 4, high: usize::MAX - 1 }));
+    /// assert_eq!(Range::from_str("-4"), Ok(Range { low: 1, high: 4 }));
+    /// assert_eq!(Range::from_str("2-4"), Ok(Range { low: 2, high: 4 }));
+    /// assert!(Range::from_str("0-4").is_err());
+    /// assert!(Range::from_str("4-2").is_err());
+    /// assert!(Range::from_str("-").is_err());
+    /// assert!(Range::from_str("a").is_err());
+    /// assert!(Range::from_str("a-b").is_err());
+    /// ```
     fn from_str(s: &str) -> Result<Self, &'static str> {
-        use std::usize::MAX;
-
-        let mut parts = s.splitn(2, '-');
-
-        let field = "fields and positions are numbered from 1";
-        let order = "high end of range less than low end";
-        let inval = "failed to parse range";
-
-        match (parts.next(), parts.next()) {
-            (Some(nm), None) => {
-                if let Ok(nm) = nm.parse::<usize>() {
-                    if nm > 0 {
-                        Ok(Self { low: nm, high: nm })
-                    } else {
-                        Err(field)
-                    }
-                } else {
-                    Err(inval)
-                }
+        fn parse(s: &str) -> Result<usize, &'static str> {
+            match s.parse::<usize>() {
+                Ok(0) => Err("fields and positions are numbered from 1"),
+                Ok(n) => Ok(n),
+                Err(_) => Err("failed to parse range"),
             }
-            (Some(n), Some(m)) if m.is_empty() => {
-                if let Ok(low) = n.parse::<usize>() {
-                    if low > 0 {
-                        Ok(Self { low, high: MAX - 1 })
-                    } else {
-                        Err(field)
-                    }
-                } else {
-                    Err(inval)
-                }
-            }
-            (Some(n), Some(m)) if n.is_empty() => {
-                if let Ok(high) = m.parse::<usize>() {
-                    if high > 0 {
-                        Ok(Self { low: 1, high })
-                    } else {
-                        Err(field)
-                    }
-                } else {
-                    Err(inval)
-                }
-            }
-            (Some(n), Some(m)) => match (n.parse::<usize>(), m.parse::<usize>()) {
-                (Ok(low), Ok(high)) => {
-                    if low > 0 && low <= high {
-                        Ok(Self { low, high })
-                    } else if low == 0 {
-                        Err(field)
-                    } else {
-                        Err(order)
-                    }
-                }
-                _ => Err(inval),
-            },
-            _ => unreachable!(),
         }
+
+        Ok(match s.split_once('-') {
+            None => {
+                let n = parse(s)?;
+                Self { low: n, high: n }
+            }
+            Some(("", "")) => return Err("invalid range with no endpoint"),
+            Some((low, "")) => Self {
+                low: parse(low)?,
+                high: usize::MAX - 1,
+            },
+            Some(("", high)) => Self {
+                low: 1,
+                high: parse(high)?,
+            },
+            Some((low, high)) => {
+                let (low, high) = (parse(low)?, parse(high)?);
+                if low <= high {
+                    Self { low, high }
+                } else {
+                    return Err("high end of range less than low end");
+                }
+            }
+        })
     }
 }
 
@@ -109,8 +99,6 @@ impl Range {
 }
 
 pub fn complement(ranges: &[Range]) -> Vec<Range> {
-    use std::usize;
-
     let mut complements = Vec::with_capacity(ranges.len() + 1);
 
     if !ranges.is_empty() && ranges[0].low > 1 {
