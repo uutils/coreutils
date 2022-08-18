@@ -1132,9 +1132,9 @@ dependencies = [
 
 [[package]]
 name = "lscolors"
-version = "0.11.1"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b3501e949531fefe2d23b2d5fb9bbb0f450e528bbfcdcd78ad04f28c3dea550"
+checksum = "074bff749d092e2e818fe954952102f88e21f67fc69f4d350621aab15a1810f1"
 dependencies = [
  "ansi_term",
 ]
@@ -1319,9 +1319,9 @@ checksum = "b8f8bdf33df195859076e54ab11ee78a1b208382d3a26ec40d142ffc1ecc49ef"
 
 [[package]]
 name = "once_cell"
-version = "1.13.0"
+version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18a6dbe30758c9f83eb00cbea4ac95966305f5a7772f3f42ebfc7fc7eddbd8e1"
+checksum = "074864da206b4973b84eb91683020dbefd6a8c3f0f38e054d93954e891935e4e"
 
 [[package]]
 name = "onig"
