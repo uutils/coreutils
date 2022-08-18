@@ -81,11 +81,11 @@ impl Range {
             ranges.push(range_item);
         }
 
-        Ok(Range::merge(ranges))
+        Ok(Self::merge(ranges))
     }
 
     /// Merge any overlapping ranges
-    /// 
+    ///
     /// Is guaranteed to return only disjoint ranges in a sorted order.
     fn merge(mut ranges: Vec<Self>) -> Vec<Self> {
         ranges.sort();
@@ -107,36 +107,24 @@ impl Range {
 }
 
 pub fn complement(ranges: &[Range]) -> Vec<Range> {
+    let mut prev_high = 0;
     let mut complements = Vec::with_capacity(ranges.len() + 1);
 
-    if !ranges.is_empty() && ranges[0].low > 1 {
-        complements.push(Range {
-            low: 1,
-            high: ranges[0].low - 1,
-        });
+    for range in ranges {
+        if range.low > prev_high + 1 {
+            complements.push(Range {
+                low: prev_high + 1,
+                high: range.low - 1,
+            });
+        }
+        prev_high = range.high;
     }
 
-    let mut ranges_iter = ranges.iter().peekable();
-    loop {
-        match (ranges_iter.next(), ranges_iter.peek()) {
-            (Some(left), Some(right)) => {
-                if left.high + 1 != right.low {
-                    complements.push(Range {
-                        low: left.high + 1,
-                        high: right.low - 1,
-                    });
-                }
-            }
-            (Some(last), None) => {
-                if last.high < usize::MAX - 1 {
-                    complements.push(Range {
-                        low: last.high + 1,
-                        high: usize::MAX - 1,
-                    });
-                }
-            }
-            _ => break,
-        }
+    if prev_high < usize::MAX - 1 {
+        complements.push(Range {
+            low: prev_high + 1,
+            high: usize::MAX - 1,
+        });
     }
 
     complements
@@ -172,7 +160,7 @@ pub fn contain(ranges: &[Range], n: usize) -> bool {
 
 #[cfg(test)]
 mod test {
-    use super::Range;
+    use super::{complement, Range};
 
     fn m(a: Vec<Range>, b: Vec<Range>) {
         assert_eq!(Range::merge(a), b);
@@ -181,7 +169,7 @@ mod test {
     fn r(low: usize, high: usize) -> Range {
         Range { low, high }
     }
-    
+
     #[test]
     fn merging() {
         // Single element
@@ -212,26 +200,35 @@ mod test {
         );
 
         // Last one joins the previous two
-        m(
-            vec![
-                r(10,20),
-                r(30,40),
-                r(20,30),
-            ],
-            vec![r(10,40)]
-        );
+        m(vec![r(10, 20), r(30, 40), r(20, 30)], vec![r(10, 40)]);
 
         m(
-            vec![
-                r(10,20),
-                r(30,40),
-                r(50,60),
-                r(20,30),
-            ],
-            vec![r(10,40), r(50,60)]
+            vec![r(10, 20), r(30, 40), r(50, 60), r(20, 30)],
+            vec![r(10, 40), r(50, 60)],
         );
 
         // Merge adjacent ranges
         m(vec![r(1, 3), r(4, 6)], vec![r(1, 6)])
+    }
+
+    #[test]
+    fn complementing() {
+        // Simple
+        assert_eq!(complement(&[r(3, 4)]), vec![r(1, 2), r(5, usize::MAX - 1)]);
+
+        // With start
+        assert_eq!(
+            complement(&[r(1, 3), r(6, 10)]),
+            vec![r(4, 5), r(11, usize::MAX - 1)]
+        );
+
+        // With end
+        assert_eq!(
+            complement(&[r(2, 4), r(6, usize::MAX - 1)]),
+            vec![r(1, 1), r(5, 5)]
+        );
+
+        // With start and end
+        assert_eq!(complement(&[r(1, 4), r(6, usize::MAX - 1)]), vec![r(5, 5)]);
     }
 }
