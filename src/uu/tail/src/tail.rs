@@ -436,9 +436,9 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
 
         let metadata = path.metadata().ok();
 
-        if display_name.is_stdin() && path_is_tailable {
+        if display_name.is_stdin() && path_is_tailable && !path.is_file() {
             if settings.verbose {
-                files.print_header(Path::new(text::STDIN_HEADER), !first_header);
+                files.print_header(&display_name, !first_header);
                 first_header = false;
             }
 
@@ -452,7 +452,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                         PathData {
                             reader: Some(Box::new(reader)),
                             metadata: None,
-                            display_name: PathBuf::from(text::STDIN_HEADER),
+                            display_name,
                         },
                         true,
                     );
@@ -476,7 +476,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
             match File::open(&path) {
                 Ok(mut file) => {
                     if settings.verbose {
-                        files.print_header(&path, !first_header);
+                        files.print_header(&display_name, !first_header);
                         first_header = false;
                     }
                     let mut reader;

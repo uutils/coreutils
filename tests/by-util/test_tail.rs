@@ -76,6 +76,7 @@ fn test_stdin_redirect_file() {
         .set_stdin(std::fs::File::open(at.plus("f")).unwrap())
         .arg("-v")
         .run()
+        .no_stderr()
         .stdout_is("==> standard input <==\nfoo")
         .succeeded();
 
