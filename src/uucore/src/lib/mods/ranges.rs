@@ -7,6 +7,7 @@
 
 // spell-checker:ignore (ToDO) inval
 
+use std::cmp::max;
 use std::str::FromStr;
 
 use crate::display::Quotable;
@@ -72,9 +73,7 @@ impl FromStr for Range {
 
 impl Range {
     pub fn from_list(list: &str) -> Result<Vec<Self>, String> {
-        use std::cmp::max;
-
-        let mut ranges: Vec<Self> = vec![];
+        let mut ranges = Vec::new();
 
         for item in list.split(',') {
             let range_item = FromStr::from_str(item)
@@ -82,19 +81,28 @@ impl Range {
             ranges.push(range_item);
         }
 
+        Ok(Range::merge(ranges))
+    }
+
+    /// Merge any overlapping ranges
+    /// 
+    /// Is guaranteed to return only disjoint ranges in a sorted order.
+    fn merge(mut ranges: Vec<Self>) -> Vec<Self> {
         ranges.sort();
 
         // merge overlapping ranges
         for i in 0..ranges.len() {
             let j = i + 1;
 
-            while j < ranges.len() && ranges[j].low <= ranges[i].high {
+            // The +1 is a small optimization, because we can merge adjacent Ranges.
+            // For example (1,3) and (4,6), because in the integers, there are no
+            // possible values between 3 and 4, this is equivalent to (1,6).
+            while j < ranges.len() && ranges[j].low <= ranges[i].high + 1 {
                 let j_high = ranges.remove(j).high;
                 ranges[i].high = max(ranges[i].high, j_high);
             }
         }
-
-        Ok(ranges)
+        ranges
     }
 }
 
@@ -160,4 +168,70 @@ pub fn contain(ranges: &[Range], n: usize) -> bool {
     }
 
     false
+}
+
+#[cfg(test)]
+mod test {
+    use super::Range;
+
+    fn m(a: Vec<Range>, b: Vec<Range>) {
+        assert_eq!(Range::merge(a), b);
+    }
+
+    fn r(low: usize, high: usize) -> Range {
+        Range { low, high }
+    }
+    
+    #[test]
+    fn merging() {
+        // Single element
+        m(vec![r(1, 2)], vec![r(1, 2)]);
+
+        // Disjoint in wrong order
+        m(vec![r(4, 5), r(1, 2)], vec![r(1, 2), r(4, 5)]);
+
+        // Two elements must be merged
+        m(vec![r(1, 3), r(2, 4), r(6, 7)], vec![r(1, 4), r(6, 7)]);
+
+        // Two merges and a duplicate
+        m(
+            vec![r(1, 3), r(6, 7), r(2, 4), r(6, 7)],
+            vec![r(1, 4), r(6, 7)],
+        );
+
+        // One giant
+        m(
+            vec![
+                r(110, 120),
+                r(10, 20),
+                r(100, 200),
+                r(130, 140),
+                r(150, 160),
+            ],
+            vec![r(10, 20), r(100, 200)],
+        );
+
+        // Last one joins the previous two
+        m(
+            vec![
+                r(10,20),
+                r(30,40),
+                r(20,30),
+            ],
+            vec![r(10,40)]
+        );
+
+        m(
+            vec![
+                r(10,20),
+                r(30,40),
+                r(50,60),
+                r(20,30),
+            ],
+            vec![r(10,40), r(50,60)]
+        );
+
+        // Merge adjacent ranges
+        m(vec![r(1, 3), r(4, 6)], vec![r(1, 6)])
+    }
 }
