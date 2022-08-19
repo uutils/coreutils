@@ -16,7 +16,7 @@ path = "src/timeout.rs"
 
 [dependencies]
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-libc = "0.2.126"
+libc = "0.2.132"
 nix = { version = "0.25", default-features = false, features = ["signal"] }
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["process", "signals"] }
 

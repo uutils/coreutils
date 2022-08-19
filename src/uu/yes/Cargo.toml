@@ -16,7 +16,7 @@ path = "src/yes.rs"
 
 [dependencies]
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-libc = "0.2.126"
+libc = "0.2.132"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["pipes"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
