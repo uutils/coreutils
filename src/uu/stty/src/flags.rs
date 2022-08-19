@@ -57,6 +57,7 @@ pub const INPUT_FLAGS: &[Flag<I>] = &[
     // Flag::new("iuclc", I::IUCLC),
     Flag::new("ixany", I::IXANY),
     Flag::new("imaxbel", I::IMAXBEL).sane(),
+    #[cfg(any(target_os = "android", target_os = "linux", target_os = "macos"))]
     Flag::new("iutf8", I::IUTF8),
 ];
 
@@ -73,23 +74,156 @@ pub const OUTPUT_FLAGS: &[Flag<O>] = &[
     Flag::new("onlcr", O::ONLCR).sane(),
     Flag::new("onocr", O::ONOCR),
     Flag::new("onlret", O::ONLRET),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     Flag::new("ofill", O::OFILL),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     Flag::new("ofdel", O::OFDEL),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     Flag::new_grouped("nl0", O::NL0, O::NLDLY).sane(),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     Flag::new_grouped("nl1", O::NL1, O::NLDLY),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     Flag::new_grouped("cr0", O::CR0, O::CRDLY).sane(),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     Flag::new_grouped("cr1", O::CR1, O::CRDLY),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     Flag::new_grouped("cr2", O::CR2, O::CRDLY),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     Flag::new_grouped("cr3", O::CR3, O::CRDLY),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     Flag::new_grouped("tab0", O::TAB0, O::TABDLY).sane(),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     Flag::new_grouped("tab1", O::TAB1, O::TABDLY),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     Flag::new_grouped("tab2", O::TAB2, O::TABDLY),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     Flag::new_grouped("tab3", O::TAB3, O::TABDLY),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     Flag::new_grouped("bs0", O::BS0, O::BSDLY).sane(),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     Flag::new_grouped("bs1", O::BS1, O::BSDLY),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     Flag::new_grouped("vt0", O::VT0, O::VTDLY).sane(),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     Flag::new_grouped("vt1", O::VT1, O::VTDLY),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     Flag::new_grouped("ff0", O::FF0, O::FFDLY).sane(),
+    #[cfg(any(
+        target_os = "android",
+        target_os = "haiku",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "macos"
+    ))]
     Flag::new_grouped("ff1", O::FF1, O::FFDLY),
 ];
 
