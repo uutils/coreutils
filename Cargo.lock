@@ -2913,7 +2913,7 @@ dependencies = [
 name = "uu_stty"
 version = "0.0.14"
 dependencies = [
- "clap 3.2.15",
+ "clap 3.2.17",
  "nix",
  "uucore",
 ]
