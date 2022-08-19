@@ -18,6 +18,8 @@ path = "src/sync.rs"
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 libc = "0.2.126"
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["wide"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3", features = ["errhandlingapi", "fileapi", "handleapi", "std", "winbase", "winerror"] }
 
 [[bin]]
