@@ -11,33 +11,28 @@
 # 6) Run util/publish.sh --do-it
 # 7) In some cases, you might have to fix dependencies and run import
 
-FROM="0.0.13"
-TO="0.0.14"
+FROM="0.0.14"
+TO="0.0.15"
 
-UUCORE_PROCS_FROM="0.0.13"
-UUCORE_PROCS_TO="0.0.14"
-
-UUCORE_FROM="0.0.13"
-UUCORE_TO="0.0.14"
-
-PROGS=$(ls -1d src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml Cargo.toml src/uu/base64/Cargo.toml)
+PROGS=$(ls -1d src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml Cargo.toml)
 
 # update the version of all programs
 #shellcheck disable=SC2086
 sed -i -e "s|version = \"$FROM\"|version = \"$TO\"|" $PROGS
 
 # Update uucore_procs
-sed -i -e "s|version = \"$UUCORE_PROCS_FROM\"|version = \"$UUCORE_PROCS_TO\"|" src/uucore_procs/Cargo.toml
+sed -i -e "s|version = \"$FROM\"|version = \"$TO\"|" src/uucore_procs/Cargo.toml
 
 # Update the stdbuf stuff
 sed -i -e "s|libstdbuf = { version=\"$FROM\"|libstdbuf = { version=\"$TO\"|" src/uu/stdbuf/Cargo.toml
 sed -i -e "s|= { optional=true, version=\"$FROM\", package=\"uu_|= { optional=true, version=\"$TO\", package=\"uu_|g" Cargo.toml
 
 # Update uucore itself
-sed -i -e "s|version = \"$UUCORE_FROM\"|version = \"$UUCORE_TO\"|" src/uucore/Cargo.toml
+sed -i -e "s|version = \"$FROM\"|version = \"$TO\"|" src/uucore/Cargo.toml
 # Update crates using uucore
 #shellcheck disable=SC2086
-sed -i -e "s|uucore = { version=\">=$UUCORE_FROM\",|uucore = { version=\">=$UUCORE_TO\",|" $PROGS
+sed -i -e "s|uucore = { version=\">=$FROM\",|uucore = { version=\">=$TO\",|" $PROGS
 # Update crates using uucore_procs
 #shellcheck disable=SC2086
-sed -i -e "s|uucore_procs = { version=\">=$UUCORE_PROCS_FROM\",|uucore_procs = { version=\">=$UUCORE_PROCS_TO\",|" $PROGS
+sed -i -e "s|uucore_procs = { version=\">=$FROM\",|uucore_procs = { version=\">=$TO\",|" $PROGS
+
