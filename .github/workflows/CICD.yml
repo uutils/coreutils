@@ -444,6 +444,7 @@ jobs:
     name: Build/stable
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -470,6 +471,7 @@ jobs:
     name: Build/nightly
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -543,6 +545,7 @@ jobs:
     name: Build
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -973,6 +976,7 @@ jobs:
   coverage:
     name: Code Coverage
     runs-on: ${{ matrix.job.os }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
