@@ -27,6 +27,9 @@ sed -i -e "s|version = \"$FROM\"|version = \"$TO\"|" src/uucore_procs/Cargo.toml
 sed -i -e "s|libstdbuf = { version=\"$FROM\"|libstdbuf = { version=\"$TO\"|" src/uu/stdbuf/Cargo.toml
 sed -i -e "s|= { optional=true, version=\"$FROM\", package=\"uu_|= { optional=true, version=\"$TO\", package=\"uu_|g" Cargo.toml
 
+# Update the base32 depencency for basenc and base64
+sed -i -e "s|uu_base32 = { version=\">=$FROM\"|uu_base32 { version=\">=$TO\"|" src/uu/base64/Cargo.toml src/uu/basenc/Cargo.toml
+
 # Update the ls dependency for dir and vdir
 sed -i -e "s|uu_ls = { version = \">=$FROM\"|uu_ls = { version = \">=$TO\"|" src/uu/dir/Cargo.toml src/uu/vdir/Cargo.toml
 

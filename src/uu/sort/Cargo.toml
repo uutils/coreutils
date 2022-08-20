@@ -1,6 +1,6 @@
 [package]
 name = "uu_sort"
-version = "0.0.14"
+version = "0.0.15"
 authors = ["uutils developers"]
 license = "MIT"
 description = "sort ~ (uutils) sort input lines"
@@ -27,7 +27,7 @@ rand = "0.8"
 rayon = "1.5"
 tempfile = "3"
 unicode-width = "0.1.8"
-uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["fs"] }
+uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["fs"] }
 
 [[bin]]
 name = "sort"

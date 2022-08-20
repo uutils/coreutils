@@ -1,6 +1,6 @@
 [package]
 name = "uu_who"
-version = "0.0.14"
+version = "0.0.15"
 authors = ["uutils developers"]
 license = "MIT"
 description = "who ~ (uutils) display information about currently logged-in users"
@@ -16,7 +16,7 @@ path = "src/who.rs"
 
 [dependencies]
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["utmpx"] }
+uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["utmpx"] }
 
 [[bin]]
 name = "who"

@@ -1,7 +1,7 @@
 # spell-checker:ignore (libs) kqueue
 [package]
 name = "uu_tail"
-version = "0.0.14"
+version = "0.0.15"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tail ~ (uutils) display the last lines of input"
@@ -19,7 +19,7 @@ path = "src/tail.rs"
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 libc = "0.2.132"
 notify = { version = "=5.0.0-pre.16", features=["macos_kqueue"]}
-uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["ringbuffer", "lines"] }
+uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["ringbuffer", "lines"] }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version="0.3", features=["fileapi", "handleapi", "processthreadsapi", "synchapi", "winbase"] }
