@@ -22,4 +22,4 @@ libc = "0.2"
 uucore = { version=">=0.0.15", package="uucore", path="../../../../uucore" }
 
 [build-dependencies]
-cpp_build = "0.4"
+cpp_build = "0.5"
