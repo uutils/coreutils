@@ -1,6 +1,6 @@
 [package]
 name = "uu_realpath"
-version = "0.0.14"
+version = "0.0.15"
 authors = ["uutils developers"]
 license = "MIT"
 description = "realpath ~ (uutils) display resolved absolute path of PATHNAME"
@@ -16,7 +16,7 @@ path = "src/realpath.rs"
 
 [dependencies]
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["fs"] }
+uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["fs"] }
 
 [[bin]]
 name = "realpath"

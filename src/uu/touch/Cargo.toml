@@ -1,6 +1,6 @@
 [package]
 name = "uu_touch"
-version = "0.0.14"
+version = "0.0.15"
 authors = ["uutils developers"]
 license = "MIT"
 description = "touch ~ (uutils) change FILE timestamps"
@@ -18,7 +18,7 @@ path = "src/touch.rs"
 filetime = "0.2.17"
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 time = { version = "0.3", features = ["parsing", "formatting", "local-offset", "macros"] }
-uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["libc"] }
+uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["libc"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3" }

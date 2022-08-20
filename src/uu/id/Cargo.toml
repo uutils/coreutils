@@ -1,6 +1,6 @@
 [package]
 name = "uu_id"
-version = "0.0.14"
+version = "0.0.15"
 authors = ["uutils developers"]
 license = "MIT"
 description = "id ~ (uutils) display user and group information for USER"
@@ -16,7 +16,7 @@ path = "src/id.rs"
 
 [dependencies]
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["entries", "process"] }
+uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["entries", "process"] }
 selinux = { version="0.2", optional = true }
 
 [[bin]]

@@ -64,8 +64,6 @@ highlight = "all"
 # introduces it.
 # spell-checker: disable
 skip = [
-    # getrandom
-    { name = "wasi", version="0.10.0+wasi-snapshot-preview1" },
     # blake2d_simd
     { name = "arrayvec", version = "=0.7.2" },
     # flimit/unix_socket
@@ -85,8 +83,6 @@ skip = [
     { name = "memchr", version = "=1.0.2" },
     { name = "quote", version = "=0.3.15" },
     { name = "unicode-xid", version = "=0.0.4" },
-    # chrono
-    { name = "time", version = "=0.1.44" },
 ]
 # spell-checker: enable
 

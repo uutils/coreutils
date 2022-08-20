@@ -1,6 +1,6 @@
 [package]
 name = "uu_env"
-version = "0.0.14"
+version = "0.0.15"
 authors = ["uutils developers"]
 license = "MIT"
 description = "env ~ (uutils) set each NAME to VALUE in the environment and run COMMAND"
@@ -17,7 +17,7 @@ path = "src/env.rs"
 [dependencies]
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 rust-ini = "0.18.0"
-uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["signals"]}
+uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["signals"]}
 
 [[bin]]
 name = "env"

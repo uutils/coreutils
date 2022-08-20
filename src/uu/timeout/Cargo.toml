@@ -1,6 +1,6 @@
 [package]
 name = "uu_timeout"
-version = "0.0.14"
+version = "0.0.15"
 authors = ["uutils developers"]
 license = "MIT"
 description = "timeout ~ (uutils) run COMMAND with a DURATION time limit"
@@ -18,7 +18,7 @@ path = "src/timeout.rs"
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 libc = "0.2.132"
 nix = { version = "0.25", default-features = false, features = ["signal"] }
-uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["process", "signals"] }
+uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["process", "signals"] }
 
 [[bin]]
 name = "timeout"

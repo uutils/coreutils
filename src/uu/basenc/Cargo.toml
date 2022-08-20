@@ -1,6 +1,6 @@
 [package]
 name = "uu_basenc"
-version = "0.0.14"
+version = "0.0.15"
 authors = ["uutils developers"]
 license = "MIT"
 description = "basenc ~ (uutils) decode/encode input"
@@ -16,8 +16,8 @@ path = "src/basenc.rs"
 
 [dependencies]
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features = ["encoding"] }
-uu_base32 = { version=">=0.0.8", package="uu_base32", path="../base32"}
+uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features = ["encoding"] }
+uu_base32 = { version=">=0.0.15", package="uu_base32", path="../base32"}
 
 [[bin]]
 name = "basenc"

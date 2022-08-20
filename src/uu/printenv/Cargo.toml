@@ -1,6 +1,6 @@
 [package]
 name = "uu_printenv"
-version = "0.0.14"
+version = "0.0.15"
 authors = ["uutils developers"]
 license = "MIT"
 description = "printenv ~ (uutils) display value of environment VAR"
@@ -16,7 +16,7 @@ path = "src/printenv.rs"
 
 [dependencies]
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.15", package="uucore", path="../../uucore" }
 
 [[bin]]
 name = "printenv"
