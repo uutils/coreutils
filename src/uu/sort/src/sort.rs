@@ -1201,7 +1201,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    if let Some(arg) = matches.value_of_os(options::SEPARATOR) {
+    if let Some(arg) = matches.get_one::<OsString>(options::SEPARATOR) {
         let mut separator = arg.to_str().ok_or_else(|| {
             UUsageError::new(
                 2,

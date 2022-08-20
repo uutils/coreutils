@@ -78,7 +78,7 @@ Try 'touch --help' for more information."##,
         )
     })?;
     let (mut atime, mut mtime) =
-        if let Some(reference) = matches.value_of_os(options::sources::REFERENCE) {
+        if let Some(reference) = matches.get_one::<OsString>(options::sources::REFERENCE) {
             stat(
                 Path::new(reference),
                 !matches.contains_id(options::NO_DEREF),
