@@ -18,7 +18,7 @@ use uucore::fs::is_symlink;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::{format_usage, show_error, InvalidEncodingHandling};
+use uucore::{format_usage, show_error};
 
 static ABOUT: &str = "Change the mode of each FILE to MODE.
  With --reference, change the mode of each FILE to that of RFILE.";
@@ -46,9 +46,7 @@ fn get_long_usage() -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut args = args
-        .collect_str(InvalidEncodingHandling::ConvertLossy)
-        .accept_any();
+    let mut args = args.collect_lossy();
 
     // Before we can parse 'args' with clap (and previously getopts),
     // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").

@@ -849,6 +849,7 @@ jobs:
     name: Test Android builds
     needs: [ min_version, deps ]
     runs-on: macos-latest
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -904,6 +905,7 @@ jobs:
     name: Tests/FreeBSD test suite
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:

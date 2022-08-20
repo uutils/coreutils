@@ -10,10 +10,10 @@
 // spell-checker:ignore (ToDO) ttyname filedesc
 
 use clap::{crate_version, Arg, Command};
-use std::ffi::CStr;
 use std::io::Write;
-use uucore::error::UResult;
-use uucore::{format_usage, InvalidEncodingHandling};
+use std::os::unix::io::AsRawFd;
+use uucore::error::{set_exit_code, UResult};
+use uucore::format_usage;
 
 static ABOUT: &str = "Print the file name of the terminal connected to standard input.";
 const USAGE: &str = "{} [OPTION]...";
@@ -24,44 +24,39 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::ConvertLossy)
-        .accept_any();
-
     let matches = uu_app().get_matches_from(args);
 
     let silent = matches.contains_id(options::SILENT);
 
-    // Call libc function ttyname
-    let tty = unsafe {
-        let ptr = libc::ttyname(libc::STDIN_FILENO);
-        if !ptr.is_null() {
-            String::from_utf8_lossy(CStr::from_ptr(ptr).to_bytes()).to_string()
+    // If silent, we don't need the name, only whether or not stdin is a tty.
+    if silent {
+        return if atty::is(atty::Stream::Stdin) {
+            Ok(())
         } else {
-            "".to_owned()
-        }
+            Err(1.into())
+        };
     };
 
     let mut stdout = std::io::stdout();
 
-    if !silent {
-        let write_result = if !tty.chars().all(|c| c.is_whitespace()) {
-            writeln!(stdout, "{}", tty)
-        } else {
-            writeln!(stdout, "not a tty")
-        };
-        if write_result.is_err() || stdout.flush().is_err() {
-            // Don't return to prevent a panic later when another flush is attempted
-            // because the `uucore_procs::main` macro inserts a flush after execution for every utility.
-            std::process::exit(3);
-        }
-    }
+    // Get the ttyname via nix
+    let name = nix::unistd::ttyname(std::io::stdin().as_raw_fd());
 
-    if atty::is(atty::Stream::Stdin) {
-        Ok(())
-    } else {
-        Err(libc::EXIT_FAILURE.into())
-    }
+    let write_result = match name {
+        Ok(name) => writeln!(stdout, "{}", name.display()),
+        Err(_) => {
+            set_exit_code(1);
+            writeln!(stdout, "not a tty")
+        }
+    };
+
+    if write_result.is_err() || stdout.flush().is_err() {
+        // Don't return to prevent a panic later when another flush is attempted
+        // because the `uucore_procs::main` macro inserts a flush after execution for every utility.
+        std::process::exit(3);
+    };
+
+    Ok(())
 }
 
 pub fn uu_app<'a>() -> Command<'a> {

@@ -320,8 +320,8 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         warn,
     };
 
-    match matches.values_of_os("FILE") {
-        Some(files) => hashsum(opts, files),
+    match matches.get_many::<OsString>("FILE") {
+        Some(files) => hashsum(opts, files.map(|f| f.as_os_str())),
         None => hashsum(opts, iter::once(OsStr::new("-"))),
     }
 }

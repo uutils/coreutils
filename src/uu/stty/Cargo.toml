@@ -1,24 +1,24 @@
 [package]
-name = "uu_uname"
+name = "uu_stty"
 version = "0.0.14"
 authors = ["uutils developers"]
 license = "MIT"
-description = "uname ~ (uutils) display system information"
+description = "stty ~ (uutils) print or change terminal characteristics"
 
 homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/main/src/uu/uname"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/stty"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
 
 [lib]
-path = "src/uname.rs"
+path = "src/stty.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-platform-info = "1.0.0"
+clap = { version = "3.1", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore" }
+nix = { version="0.25", features = ["term"] }
 
 [[bin]]
-name = "uname"
+name = "stty"
 path = "src/main.rs"

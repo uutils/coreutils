@@ -12,7 +12,7 @@ use std::io::{stdout, Read, Write};
 use uucore::display::Quotable;
 use uucore::encoding::{wrap_print, Data, Format};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::{format_usage, InvalidEncodingHandling};
+use uucore::format_usage;
 
 use std::fs::File;
 use std::io::{BufReader, Stdin};
@@ -87,9 +87,7 @@ impl Config {
 
 pub fn parse_base_cmd_args(args: impl uucore::Args, about: &str, usage: &str) -> UResult<Config> {
     let command = base_app(about, usage);
-    let arg_list = args
-        .collect_str(InvalidEncodingHandling::ConvertLossy)
-        .accept_any();
+    let arg_list = args.collect_lossy();
     Config::from(&command.try_get_matches_from(arg_list)?)
 }
 

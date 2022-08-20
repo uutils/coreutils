@@ -19,8 +19,8 @@ use std::process;
 use tempfile::tempdir;
 use tempfile::TempDir;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::format_usage;
 use uucore::parse_size::parse_size;
-use uucore::{format_usage, InvalidEncodingHandling};
 
 static ABOUT: &str =
     "Run COMMAND, with modified buffering operations for its standard streams.\n\n\
@@ -156,9 +156,7 @@ fn get_preload_env(tmp_dir: &mut TempDir) -> io::Result<(String, PathBuf)> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::Ignore)
-        .accept_any();
+    let args = args.collect_ignore();
 
     let matches = uu_app().get_matches_from(args);
 

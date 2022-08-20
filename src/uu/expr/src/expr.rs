@@ -7,7 +7,6 @@
 
 use clap::{crate_version, Arg, Command};
 use uucore::error::{UResult, USimpleError};
-use uucore::InvalidEncodingHandling;
 
 mod syntax_tree;
 mod tokens;
@@ -33,9 +32,7 @@ pub fn uu_app<'a>() -> Command<'a> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::ConvertLossy)
-        .accept_any();
+    let args = args.collect_lossy();
 
     // For expr utility we do not want getopts.
     // The following usage should work without escaping hyphens: `expr -15 = 1 +  2 \* \( 3 - -4 \)`

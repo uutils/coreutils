@@ -1037,21 +1037,28 @@ fn handle_event(
             if settings.follow_descriptor() {
                 let new_path = event.paths.last().unwrap();
                 paths.push(new_path.to_owned());
-                // Open new file and seek to End:
-                let mut file = File::open(&new_path)?;
-                file.seek(SeekFrom::End(0))?;
+                // Remove old reader
+                let old_reader = files.remove(event_path).reader;
+                let reader = if old_reader.is_some() {
+                    // Use old reader with the same file descriptor if there is one
+                    old_reader
+                } else if let Ok(file) = File::open(&new_path) {
+                    // Open new file tail from start
+                    Some(Box::new(BufReader::new(file)) as Box<dyn BufRead>)
+                } else {
+                    // Probably file was renamed/moved or removed again
+                    None
+                };
                 // Add new reader but keep old display name
                 files.insert(
                     new_path,
                     PathData {
-                        metadata: file.metadata().ok(),
-                        reader: Some(Box::new(BufReader::new(file))),
+                        metadata: new_path.metadata().ok(),
+                        reader,
                         display_name, // mimic GNU's tail and show old name in header
                     },
                     files.get_last().unwrap() == event_path
                 );
-                // Remove old reader
-                files.remove(event_path);
                 // Unwatch old path and watch new path
                 let _ = watcher.unwatch(event_path);
                 watcher.watch_with_parent(new_path)?;
@@ -1103,8 +1110,8 @@ mod files {
         }
 
         /// Wrapper for HashMap::remove using Path::canonicalize
-        pub fn remove(&mut self, k: &Path) {
-            self.map.remove(&Self::canonicalize_path(k)).unwrap();
+        pub fn remove(&mut self, k: &Path) -> PathData {
+            self.map.remove(&Self::canonicalize_path(k)).unwrap()
         }
 
         /// Wrapper for HashMap::get using Path::canonicalize

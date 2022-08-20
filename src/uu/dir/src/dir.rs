@@ -6,6 +6,7 @@
 // * that was distributed with this source code.
 
 use clap::Command;
+use std::ffi::OsString;
 use std::path::Path;
 use uu_ls::{options, Config, Format};
 use uucore::error::UResult;
@@ -13,7 +14,7 @@ use uucore::quoting_style::{Quotes, QuotingStyle};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let command = uu_ls::uu_app();
+    let command = uu_app();
 
     let matches = command.get_matches_from(args);
 
@@ -55,7 +56,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let locs = matches
-        .values_of_os(options::PATHS)
+        .get_many::<OsString>(options::PATHS)
         .map(|v| v.map(Path::new).collect())
         .unwrap_or_else(|| vec![Path::new(".")]);
 
@@ -64,7 +65,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 // To avoid code duplication, we reuse ls uu_app function which has the same
 // arguments. However, coreutils won't compile if one of the utils is missing
-// an uu_app function, so we need this dummy one.
+// an uu_app function, so we return the `ls` app.
 pub fn uu_app<'a>() -> Command<'a> {
-    Command::new(uucore::util_name())
+    uu_ls::uu_app()
 }

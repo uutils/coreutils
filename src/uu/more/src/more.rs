@@ -18,6 +18,7 @@ use std::{
 extern crate nix;
 
 use clap::{crate_version, Arg, Command};
+use crossterm::event::KeyEventKind;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute, queue,
@@ -230,12 +231,20 @@ fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) 
         if event::poll(Duration::from_millis(10)).unwrap() {
             match event::read().unwrap() {
                 Event::Key(KeyEvent {
+                    kind: KeyEventKind::Release,
+                    ..
+                }) => continue,
+                Event::Key(KeyEvent {
                     code: KeyCode::Char('q'),
                     modifiers: KeyModifiers::NONE,
+                    kind: KeyEventKind::Press,
+                    ..
                 })
                 | Event::Key(KeyEvent {
                     code: KeyCode::Char('c'),
                     modifiers: KeyModifiers::CONTROL,
+                    kind: KeyEventKind::Press,
+                    ..
                 }) => {
                     reset_term(stdout);
                     std::process::exit(0);
@@ -243,10 +252,12 @@ fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) 
                 Event::Key(KeyEvent {
                     code: KeyCode::Down,
                     modifiers: KeyModifiers::NONE,
+                    ..
                 })
                 | Event::Key(KeyEvent {
                     code: KeyCode::Char(' '),
                     modifiers: KeyModifiers::NONE,
+                    ..
                 }) => {
                     if pager.should_close() {
                         return Ok(());
@@ -257,12 +268,14 @@ fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) 
                 Event::Key(KeyEvent {
                     code: KeyCode::Up,
                     modifiers: KeyModifiers::NONE,
+                    ..
                 }) => {
                     pager.page_up();
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Char('j'),
                     modifiers: KeyModifiers::NONE,
+                    ..
                 }) => {
                     if pager.should_close() {
                         return Ok(());
@@ -273,6 +286,7 @@ fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) 
                 Event::Key(KeyEvent {
                     code: KeyCode::Char('k'),
                     modifiers: KeyModifiers::NONE,
+                    ..
                 }) => {
                     pager.prev_line();
                 }

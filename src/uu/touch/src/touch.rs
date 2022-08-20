@@ -14,6 +14,7 @@ extern crate uucore;
 
 use clap::{crate_version, Arg, ArgGroup, Command};
 use filetime::*;
+use std::ffi::OsString;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use time::macros::{format_description, offset, time};
@@ -69,7 +70,7 @@ fn dt_to_filename(tm: time::PrimitiveDateTime) -> FileTime {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
-    let files = matches.values_of_os(ARG_FILES).ok_or_else(|| {
+    let files = matches.get_many::<OsString>(ARG_FILES).ok_or_else(|| {
         USimpleError::new(
             1,
             r##"missing file operand
@@ -77,7 +78,7 @@ Try 'touch --help' for more information."##,
         )
     })?;
     let (mut atime, mut mtime) =
-        if let Some(reference) = matches.value_of_os(options::sources::REFERENCE) {
+        if let Some(reference) = matches.get_one::<OsString>(options::sources::REFERENCE) {
             stat(
                 Path::new(reference),
                 !matches.contains_id(options::NO_DEREF),

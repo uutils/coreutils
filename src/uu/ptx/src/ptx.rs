@@ -19,7 +19,7 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::num::ParseIntError;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
-use uucore::{format_usage, InvalidEncodingHandling};
+use uucore::format_usage;
 
 static NAME: &str = "ptx";
 const USAGE: &str = "\
@@ -722,9 +722,7 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::Ignore)
-        .accept_any();
+    let args = args.collect_ignore();
 
     // let mut opts = Options::new();
     let matches = uu_app().get_matches_from(args);

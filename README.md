@@ -17,6 +17,8 @@
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
 utilities in [Rust](http://www.rust-lang.org).
+While all programs hve been implemented, some options might be missing
+or different behavior might be experienced.
 
 To install it:
 
@@ -408,98 +410,98 @@ Please note that this is not fully accurate:
 See https://github.com/uutils/coreutils/issues/3336 for the main meta bugs
 (many are missing).
 
-| Done      | WIP       | To Do  |
-|-----------|-----------|--------|
-| arch      | cp        | stty   |
-| base32    | date      |        |
-| base64    | dd        |        |
-| basename  | df        |        |
-| basenc    | expr      |        |
-| cat       | install   |        |
-| chcon     | ls        |        |
-| chgrp     | more      |        |
-| chmod     | numfmt    |        |
-| chown     | od (`--strings` and 128-bit data types missing) | |
-| chroot    | pr        |        |
-| cksum     | printf    |        |
-| comm      | sort      |        |
-| csplit    | split     |        |
-| cut       | tac       |        |
-| dircolors | test      |        |
-| dirname   | dir       |        |
-| du        | vdir      |        |
-| echo      |           |        |
-| env       |           |        |
-| expand    |           |        |
-| factor    |           |        |
-| false     |           |        |
-| fmt       |           |        |
-| fold      |           |        |
-| groups    |           |        |
-| hashsum   |           |        |
-| head      |           |        |
-| hostid    |           |        |
-| hostname  |           |        |
-| id        |           |        |
-| join      |           |        |
-| kill      |           |        |
-| link      |           |        |
-| ln        |           |        |
-| logname   |           |        |
-| ~~md5sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | | |
-| ~~sha1sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | | |
-| ~~sha224sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | | |
-| ~~sha256sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | | |
-| ~~sha384sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | | |
-| ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | | |
-| mkdir     |           |        |
-| mkfifo    |           |        |
-| mknod     |           |        |
-| mktemp    |           |        |
-| mv        |           |        |
-| nice      |           |        |
-| nl        |           |        |
-| nohup     |           |        |
-| nproc     |           |        |
-| paste     |           |        |
-| pathchk   |           |        |
-| pinky     |           |        |
-| printenv  |           |        |
-| ptx       |           |        |
-| pwd       |           |        |
-| readlink  |           |        |
-| realpath  |           |        |
-| relpath   |           |        |
-| rm        |           |        |
-| rmdir     |           |        |
-| runcon    |           |        |
-| seq       |           |        |
-| shred     |           |        |
-| shuf      |           |        |
-| sleep     |           |        |
-| stat      |           |        |
-| stdbuf    |           |        |
-| sum       |           |        |
-| sync      |           |        |
-| tail      |           |        |
-| tee       |           |        |
-| timeout   |           |        |
-| touch     |           |        |
-| tr        |           |        |
-| true      |           |        |
-| truncate  |           |        |
-| tsort     |           |        |
-| tty       |           |        |
-| uname     |           |        |
-| unexpand  |           |        |
-| uniq      |           |        |
-| unlink    |           |        |
-| uptime    |           |        |
-| users     |           |        |
-| wc        |           |        |
-| who       |           |        |
-| whoami    |           |        |
-| yes       |           |        |
+| Done      | WIP       |
+|-----------|-----------|
+| arch      | cp        |
+| base32    | date      |
+| base64    | dd        |
+| basename  | df        |
+| basenc    | expr      |
+| cat       | install   |
+| chcon     | ls        |
+| chgrp     | more      |
+| chmod     | numfmt    |
+| chown     | od (`--strings` and 128-bit data types missing) |
+| chroot    | pr        |
+| cksum     | printf    |
+| comm      | sort      |
+| csplit    | split     |
+| cut       | tac       |
+| dircolors | test      |
+| dirname   | dir       |
+| du        | vdir      |
+| echo      | stty      |
+| env       |           |
+| expand    |           |
+| factor    |           |
+| false     |           |
+| fmt       |           |
+| fold      |           |
+| groups    |           |
+| hashsum   |           |
+| head      |           |
+| hostid    |           |
+| hostname  |           |
+| id        |           |
+| join      |           |
+| kill      |           |
+| link      |           |
+| ln        |           |
+| logname   |           |
+| ~~md5sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | |
+| ~~sha1sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | |
+| ~~sha224sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | |
+| ~~sha256sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | |
+| ~~sha384sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | |
+| ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | |
+| mkdir     |           |
+| mkfifo    |           |
+| mknod     |           |
+| mktemp    |           |
+| mv        |           |
+| nice      |           |
+| nl        |           |
+| nohup     |           |
+| nproc     |           |
+| paste     |           |
+| pathchk   |           |
+| pinky     |           |
+| printenv  |           |
+| ptx       |           |
+| pwd       |           |
+| readlink  |           |
+| realpath  |           |
+| relpath   |           |
+| rm        |           |
+| rmdir     |           |
+| runcon    |           |
+| seq       |           |
+| shred     |           |
+| shuf      |           |
+| sleep     |           |
+| stat      |           |
+| stdbuf    |           |
+| sum       |           |
+| sync      |           |
+| tail      |           |
+| tee       |           |
+| timeout   |           |
+| touch     |           |
+| tr        |           |
+| true      |           |
+| truncate  |           |
+| tsort     |           |
+| tty       |           |
+| uname     |           |
+| unexpand  |           |
+| uniq      |           |
+| unlink    |           |
+| uptime    |           |
+| users     |           |
+| wc        |           |
+| who       |           |
+| whoami    |           |
+| yes       |           |
 
 ## License
 

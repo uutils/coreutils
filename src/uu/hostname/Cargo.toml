@@ -18,6 +18,8 @@ path = "src/hostname.rs"
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 hostname = { version = "0.3", features = ["set"] }
 uucore = { version=">=0.0.11", package="uucore", path="../../uucore", features=["wide"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version="0.3", features=["sysinfoapi", "winsock2"] }
 
 [[bin]]

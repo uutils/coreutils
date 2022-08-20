@@ -92,7 +92,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let files: Vec<OsString> = matches
-        .values_of_os(ARG_FILES)
+        .get_many::<OsString>(ARG_FILES)
         .unwrap_or_default()
         .map(|v| v.to_os_string())
         .collect();
@@ -115,7 +115,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         suffix: backup_suffix,
         update: matches.contains_id(OPT_UPDATE),
         target_dir: matches
-            .value_of_os(OPT_TARGET_DIRECTORY)
+            .get_one::<OsString>(OPT_TARGET_DIRECTORY)
             .map(OsString::from),
         no_target_dir: matches.contains_id(OPT_NO_TARGET_DIRECTORY),
         verbose: matches.contains_id(OPT_VERBOSE),

@@ -11,6 +11,7 @@
 extern crate uucore;
 
 use clap::{crate_version, Arg, Command};
+use std::ffi::OsString;
 use std::fs::{read_dir, remove_dir};
 use std::io;
 use std::path::Path;
@@ -40,7 +41,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     for path in matches
-        .values_of_os(ARG_DIRS)
+        .get_many::<OsString>(ARG_DIRS)
         .unwrap_or_default()
         .map(Path::new)
     {

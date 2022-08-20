@@ -357,9 +357,9 @@ fn parse_command_line(config: clap::Command, args: impl uucore::Args) -> Result<
     // By default, do not preserve root.
     let preserve_root = matches.contains_id(options::preserve_root::PRESERVE_ROOT);
 
-    let mut files = matches.values_of_os("FILE").unwrap_or_default();
+    let mut files = matches.get_many::<PathBuf>("FILE").unwrap_or_default();
 
-    let mode = if let Some(path) = matches.value_of_os(options::REFERENCE) {
+    let mode = if let Some(path) = matches.get_one::<OsString>(options::REFERENCE) {
         CommandLineMode::ReferenceBased {
             reference: PathBuf::from(path),
         }
@@ -369,10 +369,10 @@ fn parse_command_line(config: clap::Command, args: impl uucore::Args) -> Result<
         || matches.contains_id(options::RANGE)
     {
         CommandLineMode::Custom {
-            user: matches.value_of_os(options::USER).map(Into::into),
-            role: matches.value_of_os(options::ROLE).map(Into::into),
-            the_type: matches.value_of_os(options::TYPE).map(Into::into),
-            range: matches.value_of_os(options::RANGE).map(Into::into),
+            user: matches.get_one::<OsString>(options::USER).map(Into::into),
+            role: matches.get_one::<OsString>(options::ROLE).map(Into::into),
+            the_type: matches.get_one::<OsString>(options::TYPE).map(Into::into),
+            range: matches.get_one::<OsString>(options::RANGE).map(Into::into),
         }
     } else if let Some(context) = files.next() {
         CommandLineMode::ContextBased {

@@ -13,7 +13,7 @@ use std::io::{self, stdin, BufRead, BufReader, Stdin};
 use std::path::Path;
 use uucore::error::FromIo;
 use uucore::error::UResult;
-use uucore::{format_usage, InvalidEncodingHandling};
+use uucore::format_usage;
 
 use clap::{crate_version, Arg, ArgMatches, Command};
 
@@ -132,9 +132,7 @@ fn open_file(name: &str) -> io::Result<LineReader> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::ConvertLossy)
-        .accept_any();
+    let args = args.collect_lossy();
 
     let matches = uu_app().get_matches_from(args);
     let filename1 = matches.value_of(options::FILE_1).unwrap();
