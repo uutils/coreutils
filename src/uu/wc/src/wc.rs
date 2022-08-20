@@ -24,7 +24,7 @@ use clap::{crate_version, Arg, ArgMatches, Command};
 
 use std::cmp::max;
 use std::error::Error;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
@@ -262,7 +262,7 @@ pub fn uu_app<'a>() -> Command<'a> {
 }
 
 fn inputs(matches: &ArgMatches) -> UResult<Vec<Input>> {
-    match matches.values_of_os(ARG_FILES) {
+    match matches.get_many::<OsString>(ARG_FILES) {
         Some(os_values) => {
             if matches.contains_id(options::FILES0_FROM) {
                 return Err(WcError::FilesDisabled(
@@ -271,7 +271,7 @@ fn inputs(matches: &ArgMatches) -> UResult<Vec<Input>> {
                 .into());
             }
 
-            Ok(os_values.map(Input::from).collect())
+            Ok(os_values.map(|s| Input::from(s.as_os_str())).collect())
         }
         None => match matches.value_of(options::FILES0_FROM) {
             Some(files_0_from) => create_paths_from_files0(files_0_from),

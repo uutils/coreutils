@@ -212,7 +212,7 @@ fn parse_command_line(config: Command, args: impl uucore::Args) -> Result<Option
     let compute_transition_context = matches.contains_id(options::COMPUTE);
 
     let mut args = matches
-        .values_of_os("ARG")
+        .get_many::<OsString>("ARG")
         .unwrap_or_default()
         .map(OsString::from);
 

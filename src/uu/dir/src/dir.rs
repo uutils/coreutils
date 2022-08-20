@@ -6,6 +6,7 @@
 // * that was distributed with this source code.
 
 use clap::Command;
+use std::ffi::OsString;
 use std::path::Path;
 use uu_ls::{options, Config, Format};
 use uucore::error::UResult;
@@ -55,7 +56,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let locs = matches
-        .values_of_os(options::PATHS)
+        .get_many::<OsString>(options::PATHS)
         .map(|v| v.map(Path::new).collect())
         .unwrap_or_else(|| vec![Path::new(".")]);
 

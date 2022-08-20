@@ -1079,7 +1079,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // check whether user specified a zero terminated list of files for input, otherwise read files from args
     let mut files: Vec<OsString> = if matches.contains_id(options::FILES0_FROM) {
         let files0_from: Vec<OsString> = matches
-            .values_of_os(options::FILES0_FROM)
+            .get_many::<OsString>(options::FILES0_FROM)
             .map(|v| v.map(ToOwned::to_owned).collect())
             .unwrap_or_default();
 
@@ -1097,7 +1097,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         files
     } else {
         matches
-            .values_of_os(options::FILES)
+            .get_many::<OsString>(options::FILES)
             .map(|v| v.map(ToOwned::to_owned).collect())
             .unwrap_or_default()
     };

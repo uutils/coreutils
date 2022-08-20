@@ -92,7 +92,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let files: Vec<OsString> = matches
-        .values_of_os(ARG_FILES)
+        .get_many::<OsString>(ARG_FILES)
         .unwrap_or_default()
         .map(|v| v.to_os_string())
         .collect();

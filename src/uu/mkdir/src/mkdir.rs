@@ -10,7 +10,9 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, Arg, ArgMatches, Command, OsValues};
+use clap::parser::ValuesRef;
+use clap::{crate_version, Arg, ArgMatches, Command};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
 use uucore::error::FromIo;
@@ -95,7 +97,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // " of each created directory to CTX"),
     let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
-    let dirs = matches.values_of_os(options::DIRS).unwrap_or_default();
+    let dirs = matches
+        .get_many::<OsString>(options::DIRS)
+        .unwrap_or_default();
     let verbose = matches.contains_id(options::VERBOSE);
     let recursive = matches.contains_id(options::PARENTS);
 
@@ -143,7 +147,7 @@ pub fn uu_app<'a>() -> Command<'a> {
 /**
  * Create the list of new directories
  */
-fn exec(dirs: OsValues, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
+fn exec(dirs: ValuesRef<OsString>, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
     for dir in dirs {
         // Special case to match GNU's behavior:
         // mkdir -p foo/. should work and just create foo/

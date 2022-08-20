@@ -474,7 +474,7 @@ impl Stater {
 
     fn new(matches: &ArgMatches) -> UResult<Self> {
         let files = matches
-            .values_of_os(ARG_FILES)
+            .get_many::<OsString>(ARG_FILES)
             .map(|v| v.map(OsString::from).collect())
             .unwrap_or_default();
         let format_str = if matches.contains_id(options::PRINTF) {
