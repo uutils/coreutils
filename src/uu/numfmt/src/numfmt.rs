@@ -16,7 +16,7 @@ use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::format_usage;
 use uucore::ranges::Range;
-use uucore::{format_usage, help_section, help_usage, InvalidEncodingHandling};
+use uucore::{help_section, help_usage};
 
 pub mod errors;
 pub mod format;
