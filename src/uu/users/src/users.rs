@@ -8,6 +8,7 @@
 
 // spell-checker:ignore (paths) wtmp
 
+use std::ffi::OsString;
 use std::path::Path;
 
 use clap::{crate_version, Arg, Command};
@@ -35,7 +36,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
 
     let files: Vec<&Path> = matches
-        .values_of_os(ARG_FILES)
+        .get_many::<OsString>(ARG_FILES)
         .map(|v| v.map(AsRef::as_ref).collect())
         .unwrap_or_default();
 

@@ -898,7 +898,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let config = Config::from(&matches)?;
 
     let locs = matches
-        .values_of_os(options::PATHS)
+        .get_many::<OsString>(options::PATHS)
         .map(|v| v.map(Path::new).collect())
         .unwrap_or_else(|| vec![Path::new(".")]);
 

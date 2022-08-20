@@ -5,6 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 use clap::{crate_version, Arg, Command};
+use std::ffi::OsString;
 use std::fs::hard_link;
 use std::path::Path;
 use uucore::display::Quotable;
@@ -23,7 +24,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let files: Vec<_> = matches
-        .values_of_os(options::FILES)
+        .get_many::<OsString>(options::FILES)
         .unwrap_or_default()
         .collect();
     let old = Path::new(files[0]);

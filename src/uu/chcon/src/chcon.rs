@@ -357,7 +357,7 @@ fn parse_command_line(config: clap::Command, args: impl uucore::Args) -> Result<
     // By default, do not preserve root.
     let preserve_root = matches.contains_id(options::preserve_root::PRESERVE_ROOT);
 
-    let mut files = matches.values_of_os("FILE").unwrap_or_default();
+    let mut files = matches.get_many::<PathBuf>("FILE").unwrap_or_default();
 
     let mode = if let Some(path) = matches.value_of_os(options::REFERENCE) {
         CommandLineMode::ReferenceBased {
