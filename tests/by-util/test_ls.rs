@@ -5,8 +5,6 @@ extern crate libc;
 extern crate regex;
 #[cfg(not(windows))]
 extern crate tempfile;
-#[cfg(unix)]
-extern crate unix_socket;
 
 use self::regex::Regex;
 use crate::common::util::*;
@@ -2037,7 +2035,7 @@ fn test_ls_indicator_style() {
     // Test sockets. Because the canonical way of making sockets to test is with
     // TempDir, we need a separate test.
     {
-        use self::unix_socket::UnixListener;
+        use std::os::unix::net::UnixListener;
 
         let dir = tempfile::Builder::new()
             .prefix("unix_socket")

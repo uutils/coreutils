@@ -3,8 +3,6 @@ extern crate libc;
 extern crate regex;
 #[cfg(not(windows))]
 extern crate tempfile;
-#[cfg(unix)]
-extern crate unix_socket;
 
 use self::regex::Regex;
 use crate::common::util::*;

@@ -10,9 +10,6 @@
 
 // spell-checker:ignore (ToDO) nonprint nonblank nonprinting
 
-#[cfg(unix)]
-extern crate unix_socket;
-
 // last synced with: cat (GNU coreutils) 8.13
 use clap::{crate_version, Arg, Command};
 use std::fs::{metadata, File};
@@ -35,7 +32,7 @@ use std::net::Shutdown;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
-use unix_socket::UnixStream;
+use std::os::unix::net::UnixStream;
 use uucore::format_usage;
 
 static NAME: &str = "cat";
