@@ -9,22 +9,12 @@
 use uu_base32::base_common;
 pub use uu_base32::uu_app;
 
-use uucore::{encoding::Format, error::UResult};
+use uucore::{encoding::Format, error::UResult, help_section, help_usage};
 
 use std::io::{stdin, Read};
 
-static ABOUT: &str = "\
-encode/decode data and print to standard output
-With no FILE, or when FILE is -, read standard input.
-
-The data are encoded as described for the base64 alphabet in RFC
-3548. When decoding, the input may contain newlines in addition
-to the bytes of the formal base64 alphabet. Use --ignore-garbage
-to attempt to recover from any other non-alphabet bytes in the
-encoded stream.
-";
-
-const USAGE: &str = "{0} [OPTION]... [FILE]";
+const ABOUT: &str = help_section!("about", "base64.md");
+const USAGE: &str = help_usage!("base64.md");
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
