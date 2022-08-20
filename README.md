@@ -17,7 +17,7 @@
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
 utilities in [Rust](http://www.rust-lang.org).
-While all programs hve been implemented, some options might be missing
+While all programs have been implemented, some options might be missing
 or different behavior might be experienced.
 
 To install it:
