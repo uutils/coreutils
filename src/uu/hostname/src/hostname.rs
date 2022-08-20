@@ -7,9 +7,9 @@
 
 // spell-checker:ignore (ToDO) MAKEWORD addrs hashset
 
-use std::collections::hash_set::HashSet;
 use std::net::ToSocketAddrs;
 use std::str;
+use std::{collections::hash_set::HashSet, ffi::OsString};
 
 use clap::{crate_version, Arg, ArgMatches, Command};
 
@@ -65,7 +65,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     #[cfg(windows)]
     let _handle = wsa::start().map_err_context(|| "failed to start Winsock".to_owned())?;
 
-    match matches.value_of_os(OPT_HOST) {
+    match matches.get_one::<OsString>(OPT_HOST) {
         None => display_hostname(&matches),
         Some(host) => hostname::set(host).map_err_context(|| "failed to set hostname".to_owned()),
     }

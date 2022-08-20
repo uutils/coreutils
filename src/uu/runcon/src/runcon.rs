@@ -226,10 +226,10 @@ fn parse_command_line(config: Command, args: impl uucore::Args) -> Result<Option
 
         let mode = CommandLineMode::CustomContext {
             compute_transition_context,
-            user: matches.value_of_os(options::USER).map(Into::into),
-            role: matches.value_of_os(options::ROLE).map(Into::into),
-            the_type: matches.value_of_os(options::TYPE).map(Into::into),
-            range: matches.value_of_os(options::RANGE).map(Into::into),
+            user: matches.get_one::<OsString>(options::USER).map(Into::into),
+            role: matches.get_one::<OsString>(options::ROLE).map(Into::into),
+            the_type: matches.get_one::<OsString>(options::TYPE).map(Into::into),
+            range: matches.get_one::<OsString>(options::RANGE).map(Into::into),
             command: args.next(),
         };
 

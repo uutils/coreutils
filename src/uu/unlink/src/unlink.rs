@@ -7,6 +7,7 @@
 
 /* last synced with: unlink (GNU coreutils) 8.21 */
 
+use std::ffi::OsString;
 use std::fs::remove_file;
 use std::path::Path;
 
@@ -22,7 +23,7 @@ static OPT_PATH: &str = "FILE";
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
-    let path: &Path = matches.value_of_os(OPT_PATH).unwrap().as_ref();
+    let path: &Path = matches.get_one::<OsString>(OPT_PATH).unwrap().as_ref();
 
     remove_file(path).map_err_context(|| format!("cannot unlink {}", path.quote()))
 }

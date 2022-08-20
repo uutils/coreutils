@@ -15,6 +15,7 @@ use memchr::{memchr3_iter, memchr_iter};
 use std::cmp::Ordering;
 use std::convert::From;
 use std::error::Error;
+use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Split, Stdin, Write};
@@ -627,7 +628,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.key1 = get_field_number(keys, key1)?;
     settings.key2 = get_field_number(keys, key2)?;
 
-    if let Some(value_os) = matches.value_of_os("t") {
+    if let Some(value_os) = matches.get_one::<OsString>("t") {
         #[cfg(unix)]
         let value = value_os.as_bytes();
         #[cfg(not(unix))]
