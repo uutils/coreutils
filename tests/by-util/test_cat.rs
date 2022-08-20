@@ -453,9 +453,9 @@ fn test_dev_full_show_all() {
 #[ignore]
 fn test_domain_socket() {
     use std::io::prelude::*;
+    use std::os::unix::net::UnixListener;
     use std::sync::{Arc, Barrier};
     use std::thread;
-    use unix_socket::UnixListener;
 
     let dir = tempfile::Builder::new()
         .prefix("unix_socket")

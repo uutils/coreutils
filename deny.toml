@@ -66,8 +66,6 @@ highlight = "all"
 skip = [
     # blake2d_simd
     { name = "arrayvec", version = "=0.7.2" },
-    # flimit/unix_socket
-    { name = "cfg-if", version = "=0.1.10" },
     # kernel32-sys
     { name = "winapi", version = "=0.2.8" },
     # bindgen 0.59.2
