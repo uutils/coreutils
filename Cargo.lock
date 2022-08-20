@@ -31,7 +31,7 @@ version = "0.7.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e37cfd5e7657ada45f742d6e99ca5788580b5c529dc78faf11ece6dc702656f"
 dependencies = [
- "memchr 2.5.0",
+ "memchr",
 ]
 
 [[package]]
@@ -123,7 +123,7 @@ dependencies = [
  "log",
  "peeking_take_while",
  "proc-macro2",
- "quote 1.0.21",
+ "quote",
  "regex",
  "rustc-hash",
  "shlex",
@@ -177,7 +177,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba3569f383e8f1598449f1a423e72e99569137b47740b1da11ef19af3d5c3223"
 dependencies = [
  "lazy_static",
- "memchr 2.5.0",
+ "memchr",
  "regex-automata",
 ]
 
@@ -486,28 +486,17 @@ dependencies = [
 
 [[package]]
 name = "cpp_build"
-version = "0.4.0"
+version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c47531e7e09532ad4827098729794f5e1a5b1c2ccbb5e295498d2e7ab451c445"
+checksum = "16f4d303b8ec35fb3afd7e963e2c898117f1e49930becb703e4a7ac528ad2dd0"
 dependencies = [
  "cc",
- "cpp_common 0.4.0",
- "cpp_syn",
- "cpp_synmap",
- "cpp_synom",
+ "cpp_common",
  "lazy_static",
-]
-
-[[package]]
-name = "cpp_common"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79e39149a7943affa02f5b6e347ca2840a129cc78d5883ee229f0f1c4027d628"
-dependencies = [
- "cpp_syn",
- "cpp_synom",
- "lazy_static",
- "quote 0.3.15",
+ "proc-macro2",
+ "regex",
+ "syn",
+ "unicode-xid",
 ]
 
 [[package]]
@@ -529,42 +518,11 @@ checksum = "7fdaa01904c12a8989dbfa110b41ef27efc432ac9934f691b9732f01cb64dc01"
 dependencies = [
  "aho-corasick",
  "byteorder",
- "cpp_common 0.5.7",
+ "cpp_common",
  "lazy_static",
  "proc-macro2",
- "quote 1.0.21",
+ "quote",
  "syn",
-]
-
-[[package]]
-name = "cpp_syn"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8cd649bf5b3804d92fe12a60c7698f5a538a6033ed8a668bf5241d4d4f1644e"
-dependencies = [
- "cpp_synom",
- "quote 0.3.15",
- "unicode-xid",
-]
-
-[[package]]
-name = "cpp_synmap"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "897e4f9cdbe2874edd3ffe53718ee5d8b89e2a970057b2c93d3214104f2e90b6"
-dependencies = [
- "cpp_syn",
- "cpp_synom",
- "memchr 1.0.2",
-]
-
-[[package]]
-name = "cpp_synom"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fc8da5694233b646150c785118f77835ad0a49680c7f312a10ef30957c67b6d"
-dependencies = [
- "unicode-xid",
 ]
 
 [[package]]
@@ -671,7 +629,7 @@ version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdffe87e1d521a10f9696f833fe502293ea446d7f256c06128293a4119bdf4cb"
 dependencies = [
- "quote 1.0.21",
+ "quote",
  "syn",
 ]
 
@@ -1147,15 +1105,6 @@ dependencies = [
 
 [[package]]
 name = "memchr"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "148fab2e51b4f1cfc66da2a7c32981d1d3c083a803978268bb11fe4b86925e7a"
-dependencies = [
- "libc",
-]
-
-[[package]]
-name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
@@ -1225,7 +1174,7 @@ version = "7.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8903e5a29a317527874d0402f867152a3d21c908bb0b933e416c65e301d4c36"
 dependencies = [
- "memchr 2.5.0",
+ "memchr",
  "minimal-lexical",
 ]
 
@@ -1380,7 +1329,7 @@ dependencies = [
  "Inflector",
  "proc-macro-error",
  "proc-macro2",
- "quote 1.0.21",
+ "quote",
  "syn",
 ]
 
@@ -1514,7 +1463,7 @@ checksum = "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
 dependencies = [
  "proc-macro-error-attr",
  "proc-macro2",
- "quote 1.0.21",
+ "quote",
  "syn",
  "version_check",
 ]
@@ -1526,7 +1475,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1be40180e52ecc98ad80b184934baf3d0d29f979574e439af5a55274b35f869"
 dependencies = [
  "proc-macro2",
- "quote 1.0.21",
+ "quote",
  "version_check",
 ]
 
@@ -1555,12 +1504,6 @@ dependencies = [
  "log",
  "rand",
 ]
-
-[[package]]
-name = "quote"
-version = "0.3.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a6e920b65c65f10b2ae65c831a81a073a89edd28c7cce89475bff467ab4167a"
 
 [[package]]
 name = "quote"
@@ -1656,7 +1599,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c4eb3267174b8c6c2f654116623910a0fef09c4753f8dd83db29c48a0df988b"
 dependencies = [
  "aho-corasick",
- "memchr 2.5.0",
+ "memchr",
  "regex-syntax",
 ]
 
@@ -1894,7 +1837,7 @@ checksum = "1e385be0d24f186b4ce2f9982191e7101bb737312ad61c1f2f984f34bcf85d59"
 dependencies = [
  "heck",
  "proc-macro2",
- "quote 1.0.21",
+ "quote",
  "rustversion",
  "syn",
 ]
@@ -1912,7 +1855,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "58dbef6ec655055e20b86b15a8cc6d439cca19b667537ac6a1369572d151ab13"
 dependencies = [
  "proc-macro2",
- "quote 1.0.21",
+ "quote",
  "unicode-ident",
 ]
 
@@ -2020,7 +1963,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12bafc5b54507e0149cdf1b145a5d80ab80a90bcd9275df43d4fff68460f6c21"
 dependencies = [
  "proc-macro2",
- "quote 1.0.21",
+ "quote",
  "syn",
 ]
 
@@ -2077,9 +2020,9 @@ checksum = "3ed742d4ea2bd1176e236172c8429aaf54486e7ac098db29ffe6529e0ce50973"
 
 [[package]]
 name = "unicode-xid"
-version = "0.0.4"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c1f860d7d29cf02cb2f3f359fd35991af3d30bac52c57d265a3c461074cb4dc"
+checksum = "957e51f3646910546462e67d5f7599b9e4fb8acdd304b087a6494730f9eebf04"
 
 [[package]]
 name = "unindent"
@@ -2256,7 +2199,7 @@ dependencies = [
  "atty",
  "bstr",
  "clap 3.2.17",
- "memchr 2.5.0",
+ "memchr",
  "uucore",
 ]
 
@@ -2424,7 +2367,7 @@ dependencies = [
  "digest",
  "hex",
  "md-5",
- "memchr 2.5.0",
+ "memchr",
  "regex",
  "sha1",
  "sha2",
@@ -2437,7 +2380,7 @@ name = "uu_head"
 version = "0.0.15"
 dependencies = [
  "clap 3.2.17",
- "memchr 2.5.0",
+ "memchr",
  "uucore",
 ]
 
@@ -2486,7 +2429,7 @@ name = "uu_join"
 version = "0.0.15"
 dependencies = [
  "clap 3.2.17",
- "memchr 2.5.0",
+ "memchr",
  "uucore",
 ]
 
@@ -2807,7 +2750,7 @@ name = "uu_shuf"
 version = "0.0.15"
 dependencies = [
  "clap 3.2.17",
- "memchr 2.5.0",
+ "memchr",
  "rand",
  "rand_core",
  "uucore",
@@ -2831,7 +2774,7 @@ dependencies = [
  "ctrlc",
  "fnv",
  "itertools",
- "memchr 2.5.0",
+ "memchr",
  "ouroboros",
  "rand",
  "rayon",
@@ -2845,7 +2788,7 @@ name = "uu_split"
 version = "0.0.15"
 dependencies = [
  "clap 3.2.17",
- "memchr 2.5.0",
+ "memchr",
  "uucore",
 ]
 
@@ -2909,7 +2852,7 @@ name = "uu_tac"
 version = "0.0.15"
 dependencies = [
  "clap 3.2.17",
- "memchr 2.5.0",
+ "memchr",
  "memmap2",
  "regex",
  "uucore",
@@ -3146,7 +3089,7 @@ name = "uucore_procs"
 version = "0.0.15"
 dependencies = [
  "proc-macro2",
- "quote 1.0.21",
+ "quote",
 ]
 
 [[package]]
@@ -3204,7 +3147,7 @@ dependencies = [
  "log",
  "once_cell",
  "proc-macro2",
- "quote 1.0.21",
+ "quote",
  "syn",
  "wasm-bindgen-shared",
 ]
@@ -3215,7 +3158,7 @@ version = "0.2.82"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b260f13d3012071dfb1512849c033b1925038373aea48ced3012c09df952c602"
 dependencies = [
- "quote 1.0.21",
+ "quote",
  "wasm-bindgen-macro-support",
 ]
 
@@ -3226,7 +3169,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5be8e654bdd9b79216c2929ab90721aa82faf65c48cdf08bdc4e7f51357b80da"
 dependencies = [
  "proc-macro2",
- "quote 1.0.21",
+ "quote",
  "syn",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
