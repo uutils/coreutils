@@ -66,8 +66,6 @@ highlight = "all"
 skip = [
     # blake2d_simd
     { name = "arrayvec", version = "=0.7.2" },
-    # kernel32-sys
-    { name = "winapi", version = "=0.2.8" },
     # bindgen 0.59.2
     { name = "clap", version = "=2.34.0" },
     { name = "strsim", version = "=0.8.0" },
