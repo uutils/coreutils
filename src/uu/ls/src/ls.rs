@@ -588,8 +588,8 @@ impl Config {
                     }
                 }
             }
-            None => match termsize::get() {
-                Some(size) => size.cols,
+            None => match terminal_size::terminal_size() {
+                Some((width, _)) => width.0,
                 None => match std::env::var_os("COLUMNS") {
                     Some(columns) => match columns.to_str().and_then(|s| s.parse().ok()) {
                         Some(columns) => columns,
