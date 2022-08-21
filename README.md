@@ -6,7 +6,6 @@
 [![LOC](https://tokei.rs/b1/github/uutils/coreutils?category=code)](https://github.com/Aaronepower/tokei)
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
-[![Build Status (FreeBSD)](https://api.cirrus-ci.com/github/uutils/coreutils.svg)](https://cirrus-ci.com/github/uutils/coreutils/master)
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
 ![MSRV](https://img.shields.io/badge/MSRV-1.56.1-brightgreen)
 
