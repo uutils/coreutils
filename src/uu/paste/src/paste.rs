@@ -22,6 +22,7 @@ mod options {
     pub const SERIAL: &str = "serial";
     pub const FILE: &str = "file";
     pub const ZERO_TERMINATED: &str = "zero-terminated";
+    pub const INPUT_FILE: &str = "input-file";
 }
 
 #[repr(u8)]
@@ -58,11 +59,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let serial = matches.contains_id(options::SERIAL);
     let delimiters = matches.value_of(options::DELIMITER).unwrap();
-    let files = matches
+    let input_file: Option<&str> = matches.value_of(options::INPUT_FILE);
+    // if we got an input file, read it to get the filenames for `paste`
+    let files = if let Some(input_file) = input_file {
+        let file = File::open(input_file)?;
+        let buf = BufReader::new(file);
+        buf.lines().collect::<Result<Vec<_>, _>>()?
+    } else {matches
         .get_many::<String>(options::FILE)
         .unwrap()
         .map(|s| s.to_owned())
-        .collect();
+        .collect()
+    };
     let line_ending = if matches.contains_id(options::ZERO_TERMINATED) {
         LineEnding::Nul
     } else {
@@ -105,6 +113,15 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('z')
                 .help("line delimiter is NUL, not newline"),
         )
+        .arg(
+            Arg::new(options::INPUT_FILE)
+                .long(options::INPUT_FILE)
+                .short('f')
+                .help("file with list of input files (one per line)")
+                .value_name("FILE")
+                .value_hint(clap::ValueHint::FilePath),
+        )
+
 }
 
 fn paste(
