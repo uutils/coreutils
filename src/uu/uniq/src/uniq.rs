@@ -120,7 +120,7 @@ impl Uniq {
             let mut i = 0;
             let mut char_indices = line.char_indices();
             for _ in 0..skip_fields {
-                if char_indices.find(|(_, c)| !c.is_whitespace()) == None {
+                if char_indices.all(|(_, c)| c.is_whitespace()) {
                     return "";
                 }
                 match char_indices.find(|(_, c)| c.is_whitespace()) {

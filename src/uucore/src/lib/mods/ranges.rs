@@ -162,7 +162,7 @@ pub fn contain(ranges: &[Range], n: usize) -> bool {
 mod test {
     use super::{complement, Range};
 
-    fn m(a: Vec<Range>, b: Vec<Range>) {
+    fn m(a: Vec<Range>, b: &[Range]) {
         assert_eq!(Range::merge(a), b);
     }
 
@@ -173,18 +173,18 @@ mod test {
     #[test]
     fn merging() {
         // Single element
-        m(vec![r(1, 2)], vec![r(1, 2)]);
+        m(vec![r(1, 2)], &[r(1, 2)]);
 
         // Disjoint in wrong order
-        m(vec![r(4, 5), r(1, 2)], vec![r(1, 2), r(4, 5)]);
+        m(vec![r(4, 5), r(1, 2)], &[r(1, 2), r(4, 5)]);
 
         // Two elements must be merged
-        m(vec![r(1, 3), r(2, 4), r(6, 7)], vec![r(1, 4), r(6, 7)]);
+        m(vec![r(1, 3), r(2, 4), r(6, 7)], &[r(1, 4), r(6, 7)]);
 
         // Two merges and a duplicate
         m(
             vec![r(1, 3), r(6, 7), r(2, 4), r(6, 7)],
-            vec![r(1, 4), r(6, 7)],
+            &[r(1, 4), r(6, 7)],
         );
 
         // One giant
@@ -196,19 +196,19 @@ mod test {
                 r(130, 140),
                 r(150, 160),
             ],
-            vec![r(10, 20), r(100, 200)],
+            &[r(10, 20), r(100, 200)],
         );
 
         // Last one joins the previous two
-        m(vec![r(10, 20), r(30, 40), r(20, 30)], vec![r(10, 40)]);
+        m(vec![r(10, 20), r(30, 40), r(20, 30)], &[r(10, 40)]);
 
         m(
             vec![r(10, 20), r(30, 40), r(50, 60), r(20, 30)],
-            vec![r(10, 40), r(50, 60)],
+            &[r(10, 40), r(50, 60)],
         );
 
         // Merge adjacent ranges
-        m(vec![r(1, 3), r(4, 6)], vec![r(1, 6)])
+        m(vec![r(1, 3), r(4, 6)], &[r(1, 6)]);
     }
 
     #[test]

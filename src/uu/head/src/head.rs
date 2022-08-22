@@ -618,6 +618,7 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn test_arg_iterate_bad_encoding() {
+        #[allow(clippy::invalid_utf8_in_unchecked)]
         let invalid = unsafe { std::str::from_utf8_unchecked(b"\x80\x81") };
         // this arises from a conversion from OsString to &str
         assert!(

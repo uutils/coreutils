@@ -51,7 +51,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let p = Path::new(path);
             match p.parent() {
                 Some(d) => {
-                    if d.components().next() == None {
+                    if d.components().next().is_none() {
                         print!(".");
                     } else {
                         print_verbatim(d).unwrap();

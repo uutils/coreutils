@@ -510,7 +510,7 @@ impl<'a> WordSplit<'a> {
                 word_start = Some(os);
                 break;
             } else if c == '\t' {
-                if beforetab == None {
+                if beforetab.is_none() {
                     beforetab = Some(aftertab);
                     aftertab = 0;
                 } else {
