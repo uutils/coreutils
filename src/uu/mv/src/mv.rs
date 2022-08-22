@@ -131,73 +131,67 @@ pub fn uu_app<'a>() -> Command<'a> {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
-    .arg(
-        backup_control::arguments::backup()
-    )
-    .arg(
-        backup_control::arguments::backup_no_args()
-    )
-    .arg(
+        .arg(backup_control::arguments::backup())
+        .arg(backup_control::arguments::backup_no_args())
+        .arg(
             Arg::new(OPT_FORCE)
-            .short('f')
-            .long(OPT_FORCE)
-            .help("do not prompt before overwriting")
-    )
-    .arg(
+                .short('f')
+                .long(OPT_FORCE)
+                .help("do not prompt before overwriting"),
+        )
+        .arg(
             Arg::new(OPT_INTERACTIVE)
-            .short('i')
-            .long(OPT_INTERACTIVE)
-            .help("prompt before override")
-    )
-    .arg(
-            Arg::new(OPT_NO_CLOBBER).short('n')
-            .long(OPT_NO_CLOBBER)
-            .help("do not overwrite an existing file")
-    )
-    .arg(
+                .short('i')
+                .long(OPT_INTERACTIVE)
+                .help("prompt before override"),
+        )
+        .arg(
+            Arg::new(OPT_NO_CLOBBER)
+                .short('n')
+                .long(OPT_NO_CLOBBER)
+                .help("do not overwrite an existing file"),
+        )
+        .arg(
             Arg::new(OPT_STRIP_TRAILING_SLASHES)
-            .long(OPT_STRIP_TRAILING_SLASHES)
-            .help("remove any trailing slashes from each SOURCE argument")
-    )
-    .arg(
-        backup_control::arguments::suffix()
-    )
-    .arg(
-        Arg::new(OPT_TARGET_DIRECTORY)
-        .short('t')
-        .long(OPT_TARGET_DIRECTORY)
-        .help("move all SOURCE arguments into DIRECTORY")
-        .takes_value(true)
-        .value_name("DIRECTORY")
-        .value_hint(clap::ValueHint::DirPath)
-        .conflicts_with(OPT_NO_TARGET_DIRECTORY)
-        .allow_invalid_utf8(true)
-    )
-    .arg(
+                .long(OPT_STRIP_TRAILING_SLASHES)
+                .help("remove any trailing slashes from each SOURCE argument"),
+        )
+        .arg(backup_control::arguments::suffix())
+        .arg(
+            Arg::new(OPT_TARGET_DIRECTORY)
+                .short('t')
+                .long(OPT_TARGET_DIRECTORY)
+                .help("move all SOURCE arguments into DIRECTORY")
+                .takes_value(true)
+                .value_name("DIRECTORY")
+                .value_hint(clap::ValueHint::DirPath)
+                .conflicts_with(OPT_NO_TARGET_DIRECTORY)
+                .allow_invalid_utf8(true),
+        )
+        .arg(
             Arg::new(OPT_NO_TARGET_DIRECTORY)
-            .short('T')
-            .long(OPT_NO_TARGET_DIRECTORY)
-            .help("treat DEST as a normal file")
-    )
-    .arg(
-            Arg::new(OPT_UPDATE)
-            .short('u')
-            .long(OPT_UPDATE)
-            .help("move only when the SOURCE file is newer than the destination file or when the destination file is missing")
-    )
-    .arg(
+                .short('T')
+                .long(OPT_NO_TARGET_DIRECTORY)
+                .help("treat DEST as a normal file"),
+        )
+        .arg(Arg::new(OPT_UPDATE).short('u').long(OPT_UPDATE).help(
+            "move only when the SOURCE file is newer than the destination file \
+                       or when the destination file is missing",
+        ))
+        .arg(
             Arg::new(OPT_VERBOSE)
-            .short('v')
-            .long(OPT_VERBOSE).help("explain what is being done")
-    )
-    .arg(
-        Arg::new(ARG_FILES)
-            .multiple_occurrences(true)
-            .takes_value(true)
-            .min_values(1)
-            .required(true)
-            .allow_invalid_utf8(true)
-            .value_hint(clap::ValueHint::AnyPath)
+                .short('v')
+                .long(OPT_VERBOSE)
+                .help("explain what is being done"),
+        )
+        .arg(
+            Arg::new(ARG_FILES)
+                .multiple_occurrences(true)
+                .takes_value(true)
+                .min_values(1)
+                .required(true)
+                .allow_invalid_utf8(true)
+                .value_hint(clap::ValueHint::AnyPath),
         )
 }
 
