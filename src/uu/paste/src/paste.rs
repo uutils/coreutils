@@ -65,11 +65,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let file = File::open(input_file)?;
         let buf = BufReader::new(file);
         buf.lines().collect::<Result<Vec<_>, _>>()?
-    } else {matches
-        .get_many::<String>(options::FILE)
-        .unwrap()
-        .map(|s| s.to_owned())
-        .collect()
+    } else {
+        matches
+            .get_many::<String>(options::FILE)
+            .unwrap()
+            .map(|s| s.to_owned())
+            .collect()
     };
     let line_ending = if matches.contains_id(options::ZERO_TERMINATED) {
         LineEnding::Nul
@@ -121,7 +122,6 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::FilePath),
         )
-
 }
 
 fn paste(
