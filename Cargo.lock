@@ -2814,6 +2814,7 @@ version = "0.0.15"
 dependencies = [
  "clap 3.2.17",
  "libc",
+ "memchr",
  "nix",
  "notify",
  "uucore",

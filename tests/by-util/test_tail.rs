@@ -30,6 +30,10 @@ static FOLLOW_NAME_SHORT_EXP: &str = "follow_name_short.expected";
 #[cfg(target_os = "linux")]
 static FOLLOW_NAME_EXP: &str = "follow_name.expected";
 
+static RANDOM_TEXT_BUFFER_SIZE: &str = "random_ascii_8192_bytes_103_lines.txt";
+static RANDOM_TEXT_BUFFER_SIZE_PLUS_ONE: &str = "random_ascii_8193_bytes_103_lines.txt";
+static RANDOM_TEXT_BUFFER_SIZE_MULT_THREE: &str = "random_ascii_24576_bytes_304_lines.txt";
+
 #[test]
 #[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_stdin_default() {
@@ -2434,4 +2438,446 @@ fn test_illegal_seek() {
             tail: FILE: cannot seek to offset 0: Illegal seek\n"
     );
     assert_eq!(p.wait().unwrap().code().unwrap(), 1);
+}
+
+#[test]
+fn test_pipe_when_lines_option_value_is_higher_than_contained_lines() {
+    let test_string = "a\nb\n";
+    new_ucmd!()
+        .args(&["-n", "3"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only(test_string);
+    new_ucmd!()
+        .args(&["-n", "4"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only(test_string);
+    new_ucmd!()
+        .args(&["-n", "999"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only(test_string);
+    new_ucmd!()
+        .args(&["-n", "+3"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("");
+    new_ucmd!()
+        .args(&["-n", "+4"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("");
+    new_ucmd!()
+        .args(&["-n", "+999"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("");
+}
+
+#[test]
+fn test_pipe_when_negative_lines_option_given_no_newline_at_eof() {
+    let test_string = "a\nb";
+    new_ucmd!()
+        .args(&["-n", "0"])
+        .pipe_in(test_string)
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    new_ucmd!()
+        .args(&["-n", "1"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("b");
+    new_ucmd!()
+        .args(&["-n", "2"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("a\nb");
+}
+
+#[test]
+fn test_pipe_when_positive_lines_option_given_no_newline_at_eof() {
+    let test_string = "a\nb";
+    new_ucmd!()
+        .args(&["-n", "+0"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("a\nb");
+    new_ucmd!()
+        .args(&["-n", "+1"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("a\nb");
+    new_ucmd!()
+        .args(&["-n", "+2"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("b");
+}
+
+#[test]
+fn test_pipe_when_lines_option_given_multibyte_utf8_characters() {
+    // the test string consists of from left to right a 4-byte,3-byte,2-byte,1-byte utf-8 character
+    let test_string = "𝅘𝅥𝅮\n⏻\nƒ\na";
+    new_ucmd!()
+        .args(&["-n", "+0"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only(test_string);
+    new_ucmd!()
+        .args(&["-n", "+2"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("⏻\nƒ\na");
+    new_ucmd!()
+        .args(&["-n", "+3"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("ƒ\na");
+    new_ucmd!()
+        .args(&["-n", "+4"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("a");
+    new_ucmd!()
+        .args(&["-n", "+5"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("");
+    new_ucmd!()
+        .args(&["-n", "-4"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only(test_string);
+    new_ucmd!()
+        .args(&["-n", "-3"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("⏻\nƒ\na");
+    new_ucmd!()
+        .args(&["-n", "-2"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("ƒ\na");
+    new_ucmd!()
+        .args(&["-n", "-1"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("a");
+    new_ucmd!()
+        .args(&["-n", "-0"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("");
+}
+
+#[test]
+fn test_pipe_when_lines_option_given_input_size_is_equal_to_buffer_size() {
+    new_ucmd!()
+        .args(&["-n", "+0"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE)
+        .succeeds()
+        .stdout_is_fixture(RANDOM_TEXT_BUFFER_SIZE);
+    new_ucmd!()
+        .args(&["-n", "+2"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_8192_bytes_103_lines_n_+2.expected");
+    new_ucmd!()
+        .args(&["-n", "-0"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE)
+        .succeeds()
+        .stdout_only("");
+    new_ucmd!()
+        .args(&["-n", "-1"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_8192_bytes_103_lines_n_-1.expected");
+    new_ucmd!()
+        .args(&["-n", "-102"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_8192_bytes_103_lines_n_-102.expected");
+    new_ucmd!()
+        .args(&["-n", "-103"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE)
+        .succeeds()
+        .stdout_is_fixture(RANDOM_TEXT_BUFFER_SIZE);
+}
+
+#[test]
+fn test_pipe_when_lines_option_given_input_size_is_one_byte_greater_than_buffer_size() {
+    new_ucmd!()
+        .args(&["-n", "+0"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_PLUS_ONE)
+        .succeeds()
+        .stdout_is_fixture(RANDOM_TEXT_BUFFER_SIZE_PLUS_ONE);
+
+    new_ucmd!()
+        .args(&["-n", "-1"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_PLUS_ONE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_8193_bytes_103_lines_n_-1.expected");
+
+    new_ucmd!()
+        .args(&["-n", "+2"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_PLUS_ONE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_8193_bytes_103_lines_n_+2.expected");
+
+    new_ucmd!()
+        .args(&["-n", "-102"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_PLUS_ONE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_8193_bytes_103_lines_n_-102.expected");
+}
+
+#[test]
+fn test_pipe_when_bytes_option_value_is_higher_than_contained_bytes() {
+    let test_string = "a\nb";
+    new_ucmd!()
+        .args(&["-c", "4"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only(test_string);
+    new_ucmd!()
+        .args(&["-c", "5"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only(test_string);
+    new_ucmd!()
+        .args(&["-c", "999"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only(test_string);
+    new_ucmd!()
+        .args(&["-c", "+4"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("");
+    new_ucmd!()
+        .args(&["-c", "+5"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("");
+    new_ucmd!()
+        .args(&["-c", "+999"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("");
+}
+
+#[test]
+fn test_pipe_when_bytes_option_given_multibyte_utf8_characters() {
+    // the test string consists of from left to right a 4-byte,3-byte,2-byte,1-byte utf-8 character
+    let test_string = "𝅘𝅥𝅮⏻ƒa";
+    new_ucmd!()
+        .args(&["-c", "+0"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only(test_string);
+    new_ucmd!()
+        .args(&["-c", "+2"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only_bytes(&test_string.as_bytes()[1..]);
+    new_ucmd!()
+        .args(&["-c", "+5"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("⏻ƒa");
+    new_ucmd!()
+        .args(&["-c", "+8"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("ƒa");
+    new_ucmd!()
+        .args(&["-c", "+10"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("a");
+    new_ucmd!()
+        .args(&["-c", "+11"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("");
+    new_ucmd!()
+        .args(&["-c", "-1"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("a");
+    new_ucmd!()
+        .args(&["-c", "-2"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only_bytes(&"ƒa".as_bytes()[1..]);
+    new_ucmd!()
+        .args(&["-c", "-3"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("ƒa");
+    new_ucmd!()
+        .args(&["-c", "-6"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only("⏻ƒa");
+    new_ucmd!()
+        .args(&["-c", "-10"])
+        .pipe_in(test_string)
+        .succeeds()
+        .stdout_only(test_string);
+}
+
+#[test]
+fn test_pipe_when_bytes_option_given_input_size_is_equal_to_buffer_size() {
+    new_ucmd!()
+        .args(&["-c", "+0"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE)
+        .succeeds()
+        .stdout_is_fixture(RANDOM_TEXT_BUFFER_SIZE);
+
+    new_ucmd!()
+        .args(&["-c", "+2"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_8192_bytes_103_lines_c_+2.expected");
+
+    new_ucmd!()
+        .args(&["-c", "-0"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE)
+        .succeeds()
+        .stdout_only("");
+
+    new_ucmd!()
+        .args(&["-c", "-8191"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_8192_bytes_103_lines_c_-8191.expected");
+
+    new_ucmd!()
+        .args(&["-c", "-8192"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE)
+        .succeeds()
+        .stdout_is_fixture(RANDOM_TEXT_BUFFER_SIZE);
+
+    new_ucmd!()
+        .args(&["-c", "-8193"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE)
+        .succeeds()
+        .stdout_is_fixture(RANDOM_TEXT_BUFFER_SIZE);
+
+    new_ucmd!()
+        .args(&["-c", "-1"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_8192_bytes_103_lines_c_-1.expected");
+}
+
+#[test]
+fn test_pipe_when_bytes_option_given_input_size_is_one_byte_greater_than_buffer_size() {
+    new_ucmd!()
+        .args(&["-c", "+0"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_PLUS_ONE)
+        .succeeds()
+        .stdout_is_fixture(RANDOM_TEXT_BUFFER_SIZE_PLUS_ONE);
+
+    new_ucmd!()
+        .args(&["-c", "+2"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_PLUS_ONE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_8193_bytes_103_lines_c_+2.expected");
+
+    new_ucmd!()
+        .args(&["-c", "-0"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_PLUS_ONE)
+        .succeeds()
+        .stdout_only("");
+
+    new_ucmd!()
+        .args(&["-c", "-1"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_PLUS_ONE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_8193_bytes_103_lines_c_-1.expected");
+
+    new_ucmd!()
+        .args(&["-c", "-8192"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_PLUS_ONE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_8193_bytes_103_lines_c_-8192.expected");
+
+    new_ucmd!()
+        .args(&["-c", "-8193"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_PLUS_ONE)
+        .succeeds()
+        .stdout_is_fixture(RANDOM_TEXT_BUFFER_SIZE_PLUS_ONE);
+}
+
+#[test]
+fn test_pipe_when_bytes_option_given_input_size_has_multiple_size_of_buffer_size() {
+    new_ucmd!()
+        .args(&["-c", "+0"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_MULT_THREE)
+        .succeeds()
+        .stdout_is_fixture(RANDOM_TEXT_BUFFER_SIZE_MULT_THREE);
+
+    new_ucmd!()
+        .args(&["-c", "-0"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_MULT_THREE)
+        .succeeds()
+        .stdout_only("");
+
+    new_ucmd!()
+        .args(&["-c", "+8193"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_MULT_THREE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_24576_bytes_304_lines_c_+8193.expected");
+
+    new_ucmd!()
+        .args(&["-c", "+8194"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_MULT_THREE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_24576_bytes_304_lines_c_+8194.expected");
+
+    new_ucmd!()
+        .args(&["-c", "+16385"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_MULT_THREE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_24576_bytes_304_lines_c_+16385.expected");
+
+    new_ucmd!()
+        .args(&["-c", "+16386"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_MULT_THREE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_24576_bytes_304_lines_c_+16386.expected");
+
+    new_ucmd!()
+        .args(&["-c", "-8192"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_MULT_THREE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_24576_bytes_304_lines_c_-8192.expected");
+
+    new_ucmd!()
+        .args(&["-c", "-8193"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_MULT_THREE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_24576_bytes_304_lines_c_-8193.expected");
+
+    new_ucmd!()
+        .args(&["-c", "-16384"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_MULT_THREE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_24576_bytes_304_lines_c_-16384.expected");
+
+    new_ucmd!()
+        .args(&["-c", "-16385"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_MULT_THREE)
+        .succeeds()
+        .stdout_is_fixture("random_ascii_24576_bytes_304_lines_c_-16385.expected");
+
+    new_ucmd!()
+        .args(&["-c", "-24576"])
+        .pipe_in_fixture(RANDOM_TEXT_BUFFER_SIZE_MULT_THREE)
+        .succeeds()
+        .stdout_is_fixture(RANDOM_TEXT_BUFFER_SIZE_MULT_THREE);
 }

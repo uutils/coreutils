@@ -21,6 +21,7 @@ extern crate clap;
 
 #[macro_use]
 extern crate uucore;
+extern crate core;
 
 mod chunks;
 mod parse;
@@ -30,11 +31,12 @@ use chunks::ReverseChunks;
 
 use clap::{Arg, Command};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
+use std::cmp::Ordering;
 use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
-use std::fmt;
 use std::fs::{File, Metadata};
-use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
+use std::io;
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, channel, Receiver};
 use std::time::Duration;
@@ -43,9 +45,7 @@ use uucore::error::{
     get_exit_code, set_exit_code, FromIo, UError, UResult, USimpleError, UUsageError,
 };
 use uucore::format_usage;
-use uucore::lines::lines;
 use uucore::parse_size::{parse_size, ParseSizeError};
-use uucore::ringbuffer::RingBuffer;
 
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
@@ -1427,70 +1427,67 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
     std::io::copy(file, &mut stdout).unwrap();
 }
 
-/// An alternative to [`Iterator::skip`] with u64 instead of usize. This is
-/// necessary because the usize limit doesn't make sense when iterating over
-/// something that's not in memory. For example, a very large file. This allows
-/// us to skip data larger than 4 GiB even on 32-bit platforms.
-fn skip_u64(iter: &mut impl Iterator, num: u64) {
-    for _ in 0..num {
-        if iter.next().is_none() {
-            break;
-        }
-    }
-}
-
-/// Collect the last elements of an iterator into a `VecDeque`.
-///
-/// This function returns a [`VecDeque`] containing either the last
-/// `count` elements of `iter`, an [`Iterator`] over [`Result`]
-/// instances, or all but the first `count` elements of `iter`. If
-/// `beginning` is `true`, then all but the first `count` elements are
-/// returned.
-///
-/// # Panics
-///
-/// If any element of `iter` is an [`Err`], then this function panics.
-fn unbounded_tail_collect<T, E>(
-    mut iter: impl Iterator<Item = Result<T, E>>,
-    count: u64,
-    beginning: bool,
-) -> UResult<VecDeque<T>>
-where
-    E: fmt::Debug,
-{
-    if beginning {
-        // GNU `tail` seems to index bytes and lines starting at 1, not
-        // at 0. It seems to treat `+0` and `+1` as the same thing.
-        let i = count.max(1) - 1;
-        skip_u64(&mut iter, i);
-        Ok(iter.map(|r| r.unwrap()).collect())
-    } else {
-        let count: usize = count
-            .try_into()
-            .map_err(|_| USimpleError::new(1, "Insufficient addressable memory"))?;
-        Ok(RingBuffer::from_iter(iter.map(|r| r.unwrap()), count).data)
-    }
-}
-
 fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
-    // Read through each line/char and store them in a ringbuffer that always
-    // contains count lines/chars. When reaching the end of file, output the
-    // data in the ringbuf.
-    match settings.mode {
-        FilterMode::Lines(count, sep) => {
-            let mut stdout = stdout();
-            for line in unbounded_tail_collect(lines(reader, sep), count, settings.beginning)? {
-                stdout
-                    .write_all(&line)
-                    .map_err_context(|| String::from("IO error"))?;
+    match (&settings.mode, settings.beginning) {
+        (FilterMode::Lines(count, sep), false) => {
+            let mut chunks = chunks::LinesChunkBuffer::new(*sep, *count);
+            let mut writer = BufWriter::new(stdout().lock());
+            for chunk in chunks.fill(reader)? {
+                writer.write_all(chunk.get_buffer())?;
             }
         }
-        FilterMode::Bytes(count) => {
-            for byte in unbounded_tail_collect(reader.bytes(), count, settings.beginning)? {
-                if let Err(err) = stdout().write(&[byte]) {
-                    return Err(USimpleError::new(1, err.to_string()));
+        (FilterMode::Lines(count, sep), true) => {
+            let mut num_skip = (*count).max(1) - 1;
+            let mut writer = BufWriter::new(stdout().lock());
+            let mut chunk = chunks::LinesChunk::new(*sep);
+            while chunk.fill(reader)?.is_some() {
+                let lines = chunk.get_lines() as u64;
+                match lines.cmp(&num_skip) {
+                    Ordering::Less => {
+                        num_skip -= lines;
+                    }
+                    Ordering::Equal | Ordering::Greater => {
+                        break;
+                    }
                 }
             }
+            if chunk.has_data() {
+                if !chunk.get_buffer().ends_with(&[*sep]) {
+                    chunk.increment_lines();
+                }
+                chunk.print_lines(&mut writer, num_skip as usize)?;
+                io::copy(reader, &mut writer)?;
+            }
+        }
+        (FilterMode::Bytes(count), false) => {
+            let mut chunks = chunks::BytesChunkBuffer::new(*count);
+            let mut writer = BufWriter::new(stdout().lock());
+            for chunk in chunks.fill(reader)? {
+                writer.write_all(chunk.get_buffer())?;
+            }
+        }
+        (FilterMode::Bytes(count), true) => {
+            let mut num_skip = (*count).max(1) - 1;
+            let mut writer = BufWriter::new(stdout().lock());
+            let mut chunk = chunks::BytesChunk::new();
+            loop {
+                if let Some(bytes) = chunk.fill(reader)? {
+                    let bytes: u64 = bytes as u64;
+                    match bytes.cmp(&num_skip) {
+                        Ordering::Less => num_skip -= bytes,
+                        Ordering::Equal => {
+                            break;
+                        }
+                        Ordering::Greater => {
+                            writer.write_all(chunk.get_buffer_with(num_skip as usize))?;
+                            break;
+                        }
+                    }
+                } else {
+                    return Ok(());
+                }
+            }
+            io::copy(reader, &mut writer)?;
         }
     }
     Ok(())
