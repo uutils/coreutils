@@ -1429,17 +1429,18 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
 }
 
 fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
+    let stdout = stdout();
     match (&settings.mode, settings.beginning) {
         (FilterMode::Lines(count, sep), false) => {
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, *count);
-            let mut writer = BufWriter::new(stdout().lock());
+            let mut writer = BufWriter::new(stdout.lock());
             for chunk in chunks.fill(reader)? {
                 writer.write_all(chunk.get_buffer())?;
             }
         }
         (FilterMode::Lines(count, sep), true) => {
             let mut num_skip = (*count).max(1) - 1;
-            let mut writer = BufWriter::new(stdout().lock());
+            let mut writer = BufWriter::new(stdout.lock());
             let mut chunk = chunks::LinesChunk::new(*sep);
             while chunk.fill(reader)?.is_some() {
                 let lines = chunk.get_lines() as u64;
@@ -1462,14 +1463,14 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         }
         (FilterMode::Bytes(count), false) => {
             let mut chunks = chunks::BytesChunkBuffer::new(*count);
-            let mut writer = BufWriter::new(stdout().lock());
+            let mut writer = BufWriter::new(stdout.lock());
             for chunk in chunks.fill(reader)? {
                 writer.write_all(chunk.get_buffer())?;
             }
         }
         (FilterMode::Bytes(count), true) => {
             let mut num_skip = (*count).max(1) - 1;
-            let mut writer = BufWriter::new(stdout().lock());
+            let mut writer = BufWriter::new(stdout.lock());
             let mut chunk = chunks::BytesChunk::new();
             loop {
                 if let Some(bytes) = chunk.fill(reader)? {
