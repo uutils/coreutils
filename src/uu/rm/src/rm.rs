@@ -29,6 +29,7 @@ enum InteractiveMode {
     Never,
     Once,
     Always,
+    Default,
 }
 
 struct Options {
@@ -114,7 +115,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         }
                     }
                 } else {
-                    InteractiveMode::Never
+                    InteractiveMode::Default
                 }
             },
             one_fs: matches.contains_id(OPT_ONE_FILE_SYSTEM),
@@ -386,7 +387,7 @@ fn remove_file(path: &Path, options: &Options) -> bool {
     } else {
         true
     };
-    if response && prompt_write_protected(path, false) {
+    if response && prompt_write_protected(path, false, options) {
         match fs::remove_file(path) {
             Ok(_) => {
                 if options.verbose {
@@ -408,7 +409,10 @@ fn remove_file(path: &Path, options: &Options) -> bool {
     false
 }
 
-fn prompt_write_protected(path: &Path, is_dir: bool) -> bool {
+fn prompt_write_protected(path: &Path, is_dir: bool, options: &Options) -> bool {
+    if options.interactive == InteractiveMode::Never {
+        return true;
+    }
     match File::open(path) {
         Ok(_) => true,
         Err(err) => {
