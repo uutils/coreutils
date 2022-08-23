@@ -4,7 +4,7 @@
 //  * file that was distributed with this source code.
 // spell-checker:ignore itotal iused iavail ipcent pcent squashfs
 use crate::{OPT_INODES, OPT_OUTPUT, OPT_PRINT_TYPE};
-use clap::ArgMatches;
+use clap::{ArgMatches, ValueSource};
 
 /// The columns in the output table produced by `df`.
 ///
@@ -77,7 +77,7 @@ impl Column {
         match (
             matches.contains_id(OPT_PRINT_TYPE),
             matches.contains_id(OPT_INODES),
-            matches.occurrences_of(OPT_OUTPUT) > 0,
+            matches.value_source(OPT_OUTPUT) == Some(ValueSource::CommandLine),
         ) {
             (false, false, false) => Ok(vec![
                 Self::Source,

@@ -9,7 +9,7 @@ use crate::errors::*;
 use crate::format::format_and_print;
 use crate::options::*;
 use crate::units::{Result, Unit};
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgMatches, Command, ValueSource};
 use std::io::{BufRead, Write};
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
@@ -143,20 +143,19 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         None => Ok(0),
     }?;
 
-    let header = match args.occurrences_of(options::HEADER) {
-        0 => Ok(0),
-        _ => {
-            let value = args.value_of(options::HEADER).unwrap();
+    let header = if args.value_source(options::HEADER) == Some(ValueSource::CommandLine) {
+        let value = args.value_of(options::HEADER).unwrap();
 
-            value
-                .parse::<usize>()
-                .map_err(|_| value)
-                .and_then(|n| match n {
-                    0 => Err(value),
-                    _ => Ok(n),
-                })
-                .map_err(|value| format!("invalid header value {}", value.quote()))
-        }
+        value
+            .parse::<usize>()
+            .map_err(|_| value)
+            .and_then(|n| match n {
+                0 => Err(value),
+                _ => Ok(n),
+            })
+            .map_err(|value| format!("invalid header value {}", value.quote()))
+    } else {
+        Ok(0)
     }?;
 
     let fields = match args.value_of(options::FIELD).unwrap() {

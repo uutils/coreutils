@@ -28,7 +28,7 @@ mod platform;
 use crate::files::FileHandling;
 use chunks::ReverseChunks;
 
-use clap::{Arg, Command};
+use clap::{Arg, Command, ValueSource};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
@@ -140,7 +140,7 @@ impl Settings {
 
         settings.follow = if matches.contains_id(options::FOLLOW_RETRY) {
             Some(FollowMode::Name)
-        } else if matches.occurrences_of(options::FOLLOW) == 0 {
+        } else if matches.value_source(options::FOLLOW) != Some(ValueSource::CommandLine) {
             None
         } else if matches.value_of(options::FOLLOW) == Some("name") {
             Some(FollowMode::Name)
