@@ -1411,7 +1411,9 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
             file.seek(SeekFrom::Start(i as u64)).unwrap();
         }
         (FilterMode::Bytes(count), false) => {
-            file.seek(SeekFrom::End(-(*count as i64))).unwrap();
+            let len = file.seek(SeekFrom::End(0)).unwrap();
+            file.seek(SeekFrom::End(-((*count).min(len) as i64)))
+                .unwrap();
         }
         (FilterMode::Bytes(count), true) => {
             // GNU `tail` seems to index bytes and lines starting at 1, not
