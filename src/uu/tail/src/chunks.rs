@@ -2,8 +2,10 @@
 //! or at the end of piped stdin with [`LinesChunk`] or [`BytesChunk`].
 //!
 //! Use [`ReverseChunks::new`] to create a new iterator over chunks of bytes from the file.
-use std::collections::vec_deque::Iter;
-use std::collections::VecDeque;
+
+// spell-checker:ignore (ToDO) filehandle
+
+use std::collections::vec_deque::{Iter, VecDeque};
 use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use uucore::error::UResult;
@@ -226,7 +228,7 @@ impl BytesChunkBuffer {
             0
         } else {
             // the calculated offset must be in the range 0 to BUFFER_SIZE and is therefore safely
-            // convertable to a usize without losses.
+            // convertible to a usize without losses.
             (self.bytes - self.num_print) as usize
         };
 

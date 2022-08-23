@@ -7,7 +7,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf unwatch Uncategorized
+// spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf unwatch Uncategorized filehandle
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (acronyms)
 // spell-checker:ignore (env/flags)
@@ -32,7 +32,8 @@ use chunks::ReverseChunks;
 use clap::{Arg, Command};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::cmp::Ordering;
-use std::collections::{HashMap, VecDeque};
+use std::collections::vec_deque::VecDeque;
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::{File, Metadata};
 use std::io;
