@@ -490,18 +490,26 @@ mod tests {
     }
 
     #[test]
-    fn test_bytes_chunk_from_when_offset_is_larger_than_chunk_size_then_panics() {
+    #[should_panic]
+    fn test_bytes_chunk_from_when_offset_is_larger_than_chunk_size_then_panics_1() {
         let mut chunk = BytesChunk::new();
         chunk.bytes = BUFFER_SIZE;
-        let result = std::panic::catch_unwind(|| BytesChunk::from(&chunk, BUFFER_SIZE + 1));
-        assert!(result.is_err());
+        BytesChunk::from(&chunk, BUFFER_SIZE + 1);
+    }
 
+    #[test]
+    #[should_panic]
+    fn test_bytes_chunk_from_when_offset_is_larger_than_chunk_size_then_panics_2() {
+        let mut chunk = BytesChunk::new();
         chunk.bytes = 0;
-        let result = std::panic::catch_unwind(|| BytesChunk::from(&chunk, 1));
-        assert!(result.is_err());
+        BytesChunk::from(&chunk, 1);
+    }
 
+    #[test]
+    #[should_panic]
+    fn test_bytes_chunk_from_when_offset_is_larger_than_chunk_size_then_panics_3() {
+        let mut chunk = BytesChunk::new();
         chunk.bytes = 1;
-        let result = std::panic::catch_unwind(|| BytesChunk::from(&chunk, 2));
-        assert!(result.is_err());
+        BytesChunk::from(&chunk, 2);
     }
 }
