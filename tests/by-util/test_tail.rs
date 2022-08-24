@@ -1046,18 +1046,6 @@ fn test_invalid_num() {
         .fails()
         .stderr_str()
         .starts_with("tail: invalid number of lines: '1Y': Value too large for defined data type");
-    #[cfg(target_pointer_width = "32")]
-    {
-        let sizes = ["1000G", "10T"];
-        for size in &sizes {
-            new_ucmd!()
-                .args(&["-c", size])
-                .fails()
-                .code_is(1)
-                .stderr_str()
-                .starts_with("tail: Insufficient addressable memory");
-        }
-    }
     new_ucmd!()
         .args(&["-c", "-³"])
         .fails()
