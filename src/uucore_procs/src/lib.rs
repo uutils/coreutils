@@ -241,6 +241,6 @@ mod tests {
                 "
             ),
             "{} [some] [options]"
-        )
+        );
     }
 }

@@ -996,7 +996,7 @@ fn test_install_backup_numbered_if_existing_backup_existing() {
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
     assert!(at.file_exists(file_b_backup));
-    assert!(at.file_exists(&*format!("{}.~2~", file_b)));
+    assert!(at.file_exists(&format!("{}.~2~", file_b)));
 }
 
 #[test]
@@ -1022,7 +1022,7 @@ fn test_install_backup_numbered_if_existing_backup_nil() {
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
     assert!(at.file_exists(file_b_backup));
-    assert!(at.file_exists(&*format!("{}.~2~", file_b)));
+    assert!(at.file_exists(&format!("{}.~2~", file_b)));
 }
 
 #[test]

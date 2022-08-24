@@ -73,7 +73,7 @@ fn test_cp_existing_target() {
     assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
 
     // No backup should have been created
-    assert!(!at.file_exists(&*format!("{}~", TEST_EXISTING_FILE)));
+    assert!(!at.file_exists(&format!("{}~", TEST_EXISTING_FILE)));
 }
 
 #[test]
@@ -344,7 +344,7 @@ fn test_cp_arg_backup() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
 }
@@ -360,7 +360,7 @@ fn test_cp_arg_backup_with_other_args() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
 }
@@ -376,7 +376,7 @@ fn test_cp_arg_backup_arg_first() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
 }
@@ -394,7 +394,7 @@ fn test_cp_arg_suffix() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&*format!("{}.bak", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{}.bak", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
 }
@@ -412,7 +412,7 @@ fn test_cp_arg_suffix_hyphen_value() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&*format!("{}-v", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{}-v", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
 }
@@ -431,7 +431,7 @@ fn test_cp_custom_backup_suffix_via_env() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&*format!("{}{}", TEST_HOW_ARE_YOU_SOURCE, suffix)),
+        at.read(&format!("{}{}", TEST_HOW_ARE_YOU_SOURCE, suffix)),
         "How are you?\n"
     );
 }
@@ -448,7 +448,7 @@ fn test_cp_backup_numbered_with_t() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&*format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
 }
@@ -465,7 +465,7 @@ fn test_cp_backup_numbered() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&*format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
 }
@@ -482,7 +482,7 @@ fn test_cp_backup_existing() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
 }
@@ -499,7 +499,7 @@ fn test_cp_backup_nil() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
 }
@@ -507,7 +507,7 @@ fn test_cp_backup_nil() {
 #[test]
 fn test_cp_numbered_if_existing_backup_existing() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let existing_backup = &*format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE);
+    let existing_backup = &format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE);
     at.touch(existing_backup);
 
     ucmd.arg("--backup=existing")
@@ -519,7 +519,7 @@ fn test_cp_numbered_if_existing_backup_existing() {
     assert!(at.file_exists(TEST_HOW_ARE_YOU_SOURCE));
     assert!(at.file_exists(existing_backup));
     assert_eq!(
-        at.read(&*format!("{}.~2~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{}.~2~", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
 }
@@ -527,7 +527,7 @@ fn test_cp_numbered_if_existing_backup_existing() {
 #[test]
 fn test_cp_numbered_if_existing_backup_nil() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let existing_backup = &*format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE);
+    let existing_backup = &format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE);
 
     at.touch(existing_backup);
     ucmd.arg("--backup=nil")
@@ -539,7 +539,7 @@ fn test_cp_numbered_if_existing_backup_nil() {
     assert!(at.file_exists(TEST_HOW_ARE_YOU_SOURCE));
     assert!(at.file_exists(existing_backup));
     assert_eq!(
-        at.read(&*format!("{}.~2~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{}.~2~", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
 }
@@ -556,7 +556,7 @@ fn test_cp_backup_simple() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
 }
@@ -591,7 +591,7 @@ fn test_cp_backup_never() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
 }

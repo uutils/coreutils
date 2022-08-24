@@ -257,14 +257,12 @@ fn test_filter() {
     // assert all characters are 'i' / no character is not 'i'
     // (assert that command succeeded)
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
-    assert!(
-        glob.collate().iter().find(|&&c| {
-            // is not i
-            c != (b'i')
+    assert!(!glob.collate().iter().any(|&c| {
+        // is not i
+        c != (b'i')
             // is not newline
             && c != (b'\n')
-        }) == None
-    );
+    }));
 }
 
 #[test]
