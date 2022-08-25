@@ -15,5 +15,3 @@ lib*.a
 *.iml
 ### macOS ###
 .DS_Store
-
-**/*.BIG
