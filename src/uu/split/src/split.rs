@@ -13,7 +13,7 @@ mod platform;
 
 use crate::filenames::FilenameIterator;
 use crate::filenames::SuffixType;
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgMatches, Command, ValueSource};
 use std::env;
 use std::fmt;
 use std::fs::{metadata, File};
@@ -368,28 +368,28 @@ impl Strategy {
         // `ArgGroup` since `ArgGroup` considers a default value `Arg`
         // as "defined".
         match (
-            matches.occurrences_of(OPT_LINES),
-            matches.occurrences_of(OPT_BYTES),
-            matches.occurrences_of(OPT_LINE_BYTES),
-            matches.occurrences_of(OPT_NUMBER),
+            matches.value_source(OPT_LINES) == Some(ValueSource::CommandLine),
+            matches.value_source(OPT_BYTES) == Some(ValueSource::CommandLine),
+            matches.value_source(OPT_LINE_BYTES) == Some(ValueSource::CommandLine),
+            matches.value_source(OPT_NUMBER) == Some(ValueSource::CommandLine),
         ) {
-            (0, 0, 0, 0) => Ok(Self::Lines(1000)),
-            (1, 0, 0, 0) => {
+            (false, false, false, false) => Ok(Self::Lines(1000)),
+            (true, false, false, false) => {
                 let s = matches.value_of(OPT_LINES).unwrap();
                 let n = parse_size(s).map_err(StrategyError::Lines)?;
                 Ok(Self::Lines(n))
             }
-            (0, 1, 0, 0) => {
+            (false, true, false, false) => {
                 let s = matches.value_of(OPT_BYTES).unwrap();
                 let n = parse_size(s).map_err(StrategyError::Bytes)?;
                 Ok(Self::Bytes(n))
             }
-            (0, 0, 1, 0) => {
+            (false, false, true, false) => {
                 let s = matches.value_of(OPT_LINE_BYTES).unwrap();
                 let n = parse_size(s).map_err(StrategyError::Bytes)?;
                 Ok(Self::LineBytes(n))
             }
-            (0, 0, 0, 1) => {
+            (false, false, false, true) => {
                 let s = matches.value_of(OPT_NUMBER).unwrap();
                 let number_type = NumberType::from(s).map_err(StrategyError::NumberType)?;
                 Ok(Self::Number(number_type))
@@ -401,9 +401,9 @@ impl Strategy {
 
 /// Parse the suffix type from the command-line arguments.
 fn suffix_type_from(matches: &ArgMatches) -> SuffixType {
-    if matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0 {
+    if matches.value_source(OPT_NUMERIC_SUFFIXES) == Some(ValueSource::CommandLine) {
         SuffixType::Decimal
-    } else if matches.occurrences_of(OPT_HEX_SUFFIXES) > 0 {
+    } else if matches.value_source(OPT_HEX_SUFFIXES) == Some(ValueSource::CommandLine) {
         SuffixType::Hexadecimal
     } else {
         SuffixType::Alphabetic
@@ -515,7 +515,7 @@ impl Settings {
                 .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?,
             suffix_type,
             additional_suffix,
-            verbose: matches.occurrences_of("verbose") > 0,
+            verbose: matches.value_source("verbose") == Some(ValueSource::CommandLine),
             strategy,
             input: matches.value_of(ARG_INPUT).unwrap().to_owned(),
             prefix: matches.value_of(ARG_PREFIX).unwrap().to_owned(),

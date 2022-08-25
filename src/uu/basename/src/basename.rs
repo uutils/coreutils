@@ -60,8 +60,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let opt_multiple = matches.contains_id(options::MULTIPLE);
     let opt_zero = matches.contains_id(options::ZERO);
     let multiple_paths = opt_suffix || opt_multiple;
+    let name_args_count = matches
+        .get_many::<String>(options::NAME)
+        .map(|n| n.len())
+        .unwrap_or(0);
+
     // too many arguments
-    if !multiple_paths && matches.occurrences_of(options::NAME) > 2 {
+    if !multiple_paths && name_args_count > 2 {
         return Err(UUsageError::new(
             1,
             format!(
@@ -78,7 +83,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let suffix = if opt_suffix {
         matches.value_of(options::SUFFIX).unwrap()
-    } else if !opt_multiple && matches.occurrences_of(options::NAME) > 1 {
+    } else if !opt_multiple && name_args_count > 1 {
         matches
             .get_many::<String>(options::NAME)
             .unwrap()

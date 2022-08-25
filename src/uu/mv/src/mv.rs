@@ -80,7 +80,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .try_get_matches_from_mut(args)
         .unwrap_or_else(|e| e.exit());
 
-    if !matches.contains_id(OPT_TARGET_DIRECTORY) && matches.occurrences_of(ARG_FILES) == 1 {
+    if !matches.contains_id(OPT_TARGET_DIRECTORY)
+        && matches
+            .get_many::<OsString>(ARG_FILES)
+            .map(|f| f.len())
+            .unwrap_or(0)
+            == 1
+    {
         app.error(
             ErrorKind::TooFewValues,
             format!(
