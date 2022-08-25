@@ -10,6 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::builder::ValueParser;
 use clap::{crate_version, Arg, Command};
 use memchr::{memchr3_iter, memchr_iter};
 use std::cmp::Ordering;
@@ -762,7 +763,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
                 .short('t')
                 .takes_value(true)
                 .value_name("CHAR")
-                .allow_invalid_utf8(true)
+                .value_parser(ValueParser::os_string())
                 .help("use CHAR as input and output field separator"),
         )
         .arg(

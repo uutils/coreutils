@@ -13,6 +13,7 @@ mod error;
 #[macro_use]
 extern crate uucore;
 
+use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgMatches, Command, ErrorKind};
 use std::env;
 use std::ffi::OsString;
@@ -172,7 +173,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .value_name("DIRECTORY")
                 .value_hint(clap::ValueHint::DirPath)
                 .conflicts_with(OPT_NO_TARGET_DIRECTORY)
-                .allow_invalid_utf8(true),
+                .value_parser(ValueParser::os_string()),
         )
         .arg(
             Arg::new(OPT_NO_TARGET_DIRECTORY)
@@ -196,7 +197,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .takes_value(true)
                 .min_values(1)
                 .required(true)
-                .allow_invalid_utf8(true)
+                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }

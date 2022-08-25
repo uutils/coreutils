@@ -10,6 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{crate_version, Arg, ArgMatches, Command};
 use std::ffi::OsString;
@@ -139,7 +140,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .multiple_occurrences(true)
                 .takes_value(true)
                 .min_values(1)
-                .allow_invalid_utf8(true)
+                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::DirPath),
         )
 }

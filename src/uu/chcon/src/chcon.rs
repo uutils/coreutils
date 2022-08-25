@@ -2,6 +2,7 @@
 
 #![allow(clippy::upper_case_acronyms)]
 
+use clap::builder::ValueParser;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::{display::Quotable, show_error, show_warning};
@@ -203,7 +204,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                     "Use security context of RFILE, rather than specifying \
                      a CONTEXT value.",
                 )
-                .allow_invalid_utf8(true),
+                .value_parser(ValueParser::os_string()),
         )
         .arg(
             Arg::new(options::USER)
@@ -213,7 +214,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .value_name("USER")
                 .value_hint(clap::ValueHint::Username)
                 .help("Set user USER in the target security context.")
-                .allow_invalid_utf8(true),
+                .value_parser(ValueParser::os_string()),
         )
         .arg(
             Arg::new(options::ROLE)
@@ -222,7 +223,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .takes_value(true)
                 .value_name("ROLE")
                 .help("Set role ROLE in the target security context.")
-                .allow_invalid_utf8(true),
+                .value_parser(ValueParser::os_string()),
         )
         .arg(
             Arg::new(options::TYPE)
@@ -231,7 +232,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .takes_value(true)
                 .value_name("TYPE")
                 .help("Set type TYPE in the target security context.")
-                .allow_invalid_utf8(true),
+                .value_parser(ValueParser::os_string()),
         )
         .arg(
             Arg::new(options::RANGE)
@@ -240,7 +241,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .takes_value(true)
                 .value_name("RANGE")
                 .help("Set range RANGE in the target security context.")
-                .allow_invalid_utf8(true),
+                .value_parser(ValueParser::os_string()),
         )
         .arg(
             Arg::new(options::RECURSIVE)
@@ -298,7 +299,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .multiple_occurrences(true)
                 .value_hint(clap::ValueHint::FilePath)
                 .min_values(1)
-                .allow_invalid_utf8(true),
+                .value_parser(ValueParser::os_string()),
         )
 }
 

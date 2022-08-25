@@ -1,3 +1,4 @@
+use clap::builder::ValueParser;
 //  * This file is part of the uutils coreutils package.
 //  *
 //  * (c) Michael Gehring <mg@ebfe.org>
@@ -48,6 +49,6 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .max_values(2)
                 .takes_value(true)
                 .value_hint(clap::ValueHint::AnyPath)
-                .allow_invalid_utf8(true),
+                .value_parser(ValueParser::os_string()),
         )
 }

@@ -12,6 +12,7 @@ mod filesystem;
 mod table;
 
 use blocks::HumanReadable;
+use clap::builder::ValueParser;
 use table::HeaderMode;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
@@ -585,7 +586,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_TYPE)
                 .short('t')
                 .long("type")
-                .allow_invalid_utf8(true)
+                .value_parser(ValueParser::os_string())
                 .takes_value(true)
                 .value_name("TYPE")
                 .multiple_occurrences(true)
@@ -602,7 +603,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_EXCLUDE_TYPE)
                 .short('x')
                 .long("exclude-type")
-                .allow_invalid_utf8(true)
+                .value_parser(ValueParser::os_string())
                 .takes_value(true)
                 .value_name("TYPE")
                 .use_value_delimiter(true)
