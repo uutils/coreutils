@@ -780,7 +780,7 @@ checksum = "e94a7bbaa59354bc20dd75b67f23e2797b4490e9d6928203fb105c79e448c86c"
 dependencies = [
  "cfg-if",
  "libc",
- "redox_syscall",
+ "redox_syscall 0.2.16",
  "windows-sys",
 ]
 
@@ -1344,7 +1344,7 @@ checksum = "09a279cbf25cb0757810394fbc1e359949b59e348145c643a939a525692e6929"
 dependencies = [
  "cfg-if",
  "libc",
- "redox_syscall",
+ "redox_syscall 0.2.16",
  "smallvec",
  "windows-sys",
 ]
@@ -1557,6 +1557,15 @@ name = "redox_syscall"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb5a58c1855b4b6819d59012155603f0b22ad30cad752600aadfcb695265519a"
+dependencies = [
+ "bitflags",
+]
+
+[[package]]
+name = "redox_syscall"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da878fa5823593d85e75e0f702fdf2ae5de760b9b4e3ee4ef1b133b7d989360f"
 dependencies = [
  "bitflags",
 ]
@@ -1843,7 +1852,7 @@ dependencies = [
  "cfg-if",
  "fastrand",
  "libc",
- "redox_syscall",
+ "redox_syscall 0.2.16",
  "remove_dir_all 0.5.3",
  "winapi",
 ]
@@ -2837,7 +2846,7 @@ version = "0.0.15"
 dependencies = [
  "clap 3.2.17",
  "libc",
- "redox_syscall",
+ "redox_syscall 0.3.2",
  "uucore",
 ]
 

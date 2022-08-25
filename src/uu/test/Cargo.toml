@@ -20,7 +20,7 @@ libc = "0.2.132"
 uucore = { version=">=0.0.15", package="uucore", path="../../uucore" }
 
 [target.'cfg(target_os = "redox")'.dependencies]
-redox_syscall = "0.2"
+redox_syscall = "0.3"
 
 [[bin]]
 name = "test"
