@@ -25,6 +25,7 @@ mod numeric_str_cmp;
 mod tmp_dir;
 
 use chunks::LineData;
+use clap::builder::ValueParser;
 use clap::{crate_version, Arg, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
@@ -1437,7 +1438,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::SEPARATOR)
                 .help("custom separator for -k")
                 .takes_value(true)
-                .allow_invalid_utf8(true),
+                .value_parser(ValueParser::os_string()),
         )
         .arg(
             Arg::new(options::ZERO_TERMINATED)
@@ -1489,7 +1490,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .takes_value(true)
                 .value_name("NUL_FILES")
                 .multiple_occurrences(true)
-                .allow_invalid_utf8(true)
+                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -1501,7 +1502,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::FILES)
                 .multiple_occurrences(true)
                 .takes_value(true)
-                .allow_invalid_utf8(true)
+                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
         )
 }

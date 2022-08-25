@@ -11,6 +11,7 @@ use std::net::ToSocketAddrs;
 use std::str;
 use std::{collections::hash_set::HashSet, ffi::OsString};
 
+use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgMatches, Command};
 
 use uucore::{
@@ -107,7 +108,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         )
         .arg(
             Arg::new(OPT_HOST)
-                .allow_invalid_utf8(true)
+                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::Hostname),
         )
 }

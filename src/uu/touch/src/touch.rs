@@ -12,6 +12,7 @@ pub extern crate filetime;
 #[macro_use]
 extern crate uucore;
 
+use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgGroup, Command};
 use filetime::*;
 use std::ffi::OsString;
@@ -227,7 +228,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::sources::REFERENCE)
                 .help("use this file's times instead of the current time")
                 .value_name("FILE")
-                .allow_invalid_utf8(true)
+                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath),
         )
         .arg(
@@ -247,7 +248,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .multiple_occurrences(true)
                 .takes_value(true)
                 .min_values(1)
-                .allow_invalid_utf8(true)
+                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath),
         )
         .group(ArgGroup::new(options::SOURCES).args(&[

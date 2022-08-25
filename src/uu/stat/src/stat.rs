@@ -7,6 +7,7 @@
 
 #[macro_use]
 extern crate uucore;
+use clap::builder::ValueParser;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::fs::display_permissions;
@@ -1043,7 +1044,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(ARG_FILES)
                 .multiple_occurrences(true)
                 .takes_value(true)
-                .allow_invalid_utf8(true)
+                .value_parser(ValueParser::os_string())
                 .min_values(1)
                 .value_hint(clap::ValueHint::FilePath),
         )
