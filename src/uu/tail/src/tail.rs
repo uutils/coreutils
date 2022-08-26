@@ -437,7 +437,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
 
         let metadata = path.metadata().ok();
 
-        if display_name.is_stdin() && path_is_tailable {
+        if display_name.is_stdin() && (path_is_tailable || settings.stdin_is_pipe_or_fifo) {
             if settings.verbose {
                 files.print_header(Path::new(text::STDIN_HEADER), !first_header);
                 first_header = false;
