@@ -2435,3 +2435,23 @@ fn test_illegal_seek() {
     );
     assert_eq!(p.wait().unwrap().code().unwrap(), 1);
 }
+
+#[test]
+fn test_seek_bytes_backward_outside_file() {
+    new_ucmd!()
+        .arg("-c")
+        .arg("100")
+        .arg(FOOBAR_TXT)
+        .run()
+        .stdout_is_fixture(FOOBAR_TXT);
+}
+
+#[test]
+fn test_seek_bytes_forward_outside_file() {
+    new_ucmd!()
+        .arg("-c")
+        .arg("+100")
+        .arg(FOOBAR_TXT)
+        .run()
+        .stdout_is("");
+}
