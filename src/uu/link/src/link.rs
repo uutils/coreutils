@@ -1,10 +1,10 @@
-use clap::builder::ValueParser;
 //  * This file is part of the uutils coreutils package.
 //  *
 //  * (c) Michael Gehring <mg@ebfe.org>
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
+use clap::builder::ValueParser;
 use clap::{crate_version, Arg, Command};
 use std::ffi::OsString;
 use std::fs::hard_link;
