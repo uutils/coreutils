@@ -23,8 +23,9 @@ use blocks::conv_block_unblock_helper;
 
 use std::cmp;
 use std::env;
+use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Seek, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
@@ -682,6 +683,49 @@ fn append_dashes_if_not_present(mut acc: Vec<String>, mut s: String) -> Vec<Stri
     acc
 }
 
+/// Canonicalized file name of `/dev/stdout`.
+///
+/// For example, if this process were invoked from the command line as
+/// `dd`, then this function returns the [`OsString`] form of
+/// `"/dev/stdout"`. However, if this process were invoked as `dd >
+/// outfile`, then this function returns the canonicalized path to
+/// `outfile`, something like `"/path/to/outfile"`.
+fn stdout_canonicalized() -> OsString {
+    match Path::new("/dev/stdout").canonicalize() {
+        Ok(p) => p.into_os_string(),
+        Err(_) => OsString::from("/dev/stdout"),
+    }
+}
+
+/// Decide whether stdout is being redirected to a seekable file.
+///
+/// For example, if this process were invoked from the command line as
+///
+/// ```sh
+/// dd if=/dev/zero bs=1 count=10 seek=5 > /dev/sda1
+/// ```
+///
+/// where `/dev/sda1` is a seekable block device then this function
+/// would return true. If invoked as
+///
+/// ```sh
+/// dd if=/dev/zero bs=1 count=10 seek=5
+/// ```
+///
+/// then this function would return false.
+fn is_stdout_redirected_to_seekable_file() -> bool {
+    let s = stdout_canonicalized();
+    let p = Path::new(&s);
+    match File::open(p) {
+        Ok(mut f) => {
+            f.seek(SeekFrom::Current(0)).is_ok()
+                && f.seek(SeekFrom::End(0)).is_ok()
+                && f.seek(SeekFrom::Start(0)).is_ok()
+        }
+        Err(_) => false,
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let dashed_args = args
@@ -720,6 +764,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         (true, true) => {
             let ifname = matches.value_of(options::INFILE).unwrap();
             let ofname = matches.value_of(options::OUTFILE).unwrap();
+
             let i = Input::<File>::new(
                 ibs,
                 print_level,
@@ -742,13 +787,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let fname = matches.value_of(options::INFILE).unwrap();
             let i =
                 Input::<File>::new(ibs, print_level, count, icflags, iflags, fname, skip_amount)?;
-            let o = Output::<io::Stdout>::new(obs, oflags, ocflags, seek_amount, "-")?;
-            o.dd_out(i).map_err_context(|| "IO error".to_string())
+            if is_stdout_redirected_to_seekable_file() {
+                let ofname = stdout_canonicalized().into_string().unwrap();
+                let o = Output::<File>::new(obs, oflags, ocflags, seek_amount, &ofname)?;
+                o.dd_out(i).map_err_context(|| "IO error".to_string())
+            } else {
+                let o = Output::<io::Stdout>::new(obs, oflags, ocflags, seek_amount, "-")?;
+                o.dd_out(i).map_err_context(|| "IO error".to_string())
+            }
         }
         (false, false) => {
             let i = Input::<io::Stdin>::new(ibs, print_level, count, icflags, iflags, skip_amount)?;
-            let o = Output::<io::Stdout>::new(obs, oflags, ocflags, seek_amount, "-")?;
-            o.dd_out(i).map_err_context(|| "IO error".to_string())
+            if is_stdout_redirected_to_seekable_file() {
+                let ofname = stdout_canonicalized().into_string().unwrap();
+                let o = Output::<File>::new(obs, oflags, ocflags, seek_amount, &ofname)?;
+                o.dd_out(i).map_err_context(|| "IO error".to_string())
+            } else {
+                let o = Output::<io::Stdout>::new(obs, oflags, ocflags, seek_amount, "-")?;
+                o.dd_out(i).map_err_context(|| "IO error".to_string())
+            }
         }
     }
 }
