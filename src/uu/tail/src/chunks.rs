@@ -139,7 +139,7 @@ impl BytesChunk {
     /// ```
     fn from_chunk(chunk: &Self, offset: usize) -> Self {
         if offset >= chunk.bytes {
-            Self::new();
+            return Self::new();
         }
 
         let mut buffer: ChunkBuffer = [0; BUFFER_SIZE];
@@ -318,7 +318,7 @@ impl LinesChunk {
     /// ```
     fn from_chunk(chunk: &Self, offset: usize) -> Self {
         if offset >= chunk.lines {
-            Self::new(chunk.delimiter);
+            return Self::new(chunk.delimiter);
         }
 
         let mut buffer: ChunkBuffer = [0; BUFFER_SIZE];
@@ -475,7 +475,7 @@ impl LinesChunkBuffer {
 
 #[cfg(test)]
 mod tests {
-    use crate::chunks::{BytesChunk, ChunkBuffer, BUFFER_SIZE};
+    use crate::chunks::{BytesChunk, BUFFER_SIZE};
 
     #[test]
     fn test_bytes_chunk_from_when_offset_is_zero() {
@@ -548,19 +548,5 @@ mod tests {
         chunk.bytes = 1;
         let new_chunk = BytesChunk::from_chunk(&chunk, 1);
         assert_eq!(0, new_chunk.bytes);
-    }
-
-    #[test]
-    fn example() {
-        let mut chunk = BytesChunk::new();
-        chunk.buffer[1] = 1;
-        chunk.bytes = 2;
-        let new_chunk = BytesChunk::from_chunk(&chunk, 0);
-        assert_eq!(2, new_chunk.get_buffer().len());
-        assert_eq!(&[0, 1], new_chunk.get_buffer());
-
-        let new_chunk = BytesChunk::from_chunk(&chunk, 1);
-        assert_eq!(1, new_chunk.get_buffer().len());
-        assert_eq!(&[1], new_chunk.get_buffer());
     }
 }
