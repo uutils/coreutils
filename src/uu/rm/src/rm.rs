@@ -29,7 +29,7 @@ enum InteractiveMode {
     Never,
     Once,
     Always,
-    Default,
+    PromptProtected,
 }
 
 struct Options {
@@ -115,7 +115,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         }
                     }
                 } else {
-                    InteractiveMode::Default
+                    InteractiveMode::PromptProtected
                 }
             },
             one_fs: matches.contains_id(OPT_ONE_FILE_SYSTEM),
