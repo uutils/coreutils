@@ -333,13 +333,12 @@ impl BytesChunkBuffer {
     }
 }
 
+#[derive(Debug)]
 /// Works similar to a [`BytesChunk`] but also stores the number of lines encountered in the current
 /// buffer. The size of the buffer is limited to a fixed size number of bytes (See [`ChunkBuffer`])
 pub(crate) struct LinesChunk {
-    /// The [`ChunkBuffer`] to store the bytes
-    buffer: ChunkBuffer,
-    /// The number of bytes stored in the buffer
-    bytes: usize,
+    /// Work on top of a [`BytesChunk`]
+    chunk: BytesChunk,
     /// The number of lines delimited by `delimiter`
     lines: usize,
     /// The delimiter to use, to count the lines
@@ -349,8 +348,7 @@ pub(crate) struct LinesChunk {
 impl LinesChunk {
     pub(crate) fn new(delimiter: u8) -> Self {
         Self {
-            buffer: [0; BUFFER_SIZE],
-            bytes: 0,
+            chunk: BytesChunk::new(),
             lines: 0,
             delimiter,
         }
@@ -407,20 +405,16 @@ impl LinesChunk {
     /// let offset = 13; // offset larger
     /// ```
     fn from_chunk(chunk: &Self, offset: usize) -> Self {
-        if offset >= chunk.lines {
+        if offset > chunk.lines {
             return Self::new(chunk.delimiter);
         }
 
-        let mut buffer: ChunkBuffer = [0; BUFFER_SIZE];
-
         let bytes_offset = chunk.calculate_bytes_offset_from(offset);
-        let slice = chunk.get_buffer_with(bytes_offset);
-        buffer[..slice.len()].copy_from_slice(slice);
+        let new_chunk = BytesChunk::from_chunk(&chunk.chunk, bytes_offset);
 
         Self {
-            buffer,
+            chunk: new_chunk,
             lines: chunk.lines - offset,
-            bytes: chunk.bytes - bytes_offset,
             delimiter: chunk.delimiter,
         }
     }
@@ -440,26 +434,26 @@ impl LinesChunk {
     /// assert!(chunk.has_data());
     /// ```
     pub(crate) fn has_data(&self) -> bool {
-        self.bytes > 0
+        self.chunk.bytes > 0
     }
 
     /// Returns this buffer safely. See [`BytesChunk::get_buffer`]
     ///
     /// returns: &[u8] with length [`Self::bytes`]
     pub(crate) fn get_buffer(&self) -> &[u8] {
-        &self.buffer[..self.bytes]
+        self.chunk.get_buffer()
     }
 
     /// Returns this buffer safely with an offset applied. See [`BytesChunk::get_buffer_with`].
     ///
     /// returns: &[u8] with length `self.bytes - offset`
     pub(crate) fn get_buffer_with(&self, offset: usize) -> &[u8] {
-        &self.buffer[offset..self.bytes]
+        self.chunk.get_buffer_with(offset)
     }
 
     /// Return the number of lines the buffer contains. `self.lines` needs to be set before the call
     /// to this function returns the correct value. If the calculation of lines is needed then
-    /// better use [`Self::count_lines`].
+    /// use [`Self::count_lines`].
     pub(crate) fn get_lines(&self) -> usize {
         self.lines
     }
@@ -481,16 +475,16 @@ impl LinesChunk {
     ///
     /// returns: `Result<Option<usize>, Box<dyn UError, Global>>`
     pub(crate) fn fill(&mut self, filehandle: &mut BufReader<impl Read>) -> UResult<Option<usize>> {
-        let num_bytes = filehandle.read(&mut self.buffer)?;
-        self.bytes = num_bytes;
-
-        if num_bytes == 0 {
-            self.lines = 0;
-            return Ok(None);
+        match self.chunk.fill(filehandle)? {
+            None => {
+                self.lines = 0;
+                Ok(None)
+            }
+            Some(bytes) => {
+                self.lines = self.count_lines();
+                Ok(Some(bytes))
+            }
         }
-
-        self.lines = self.count_lines();
-        Ok(Some(self.bytes))
     }
 
     /// Calculates the offset in bytes within this buffer from the offset in number of lines. The
@@ -549,7 +543,7 @@ impl LinesChunk {
     /// * `writer`: must implement [`Write`]
     /// * `offset`: An offset in number of bytes.
     pub(crate) fn print_bytes(&self, writer: &mut impl Write, offset: usize) -> UResult<()> {
-        writer.write_all(&self.buffer[offset..self.bytes])?;
+        writer.write_all(self.get_buffer_with(offset))?;
         Ok(())
     }
 }
@@ -613,7 +607,7 @@ impl LinesChunkBuffer {
         if !&self.chunks.is_empty() {
             let length = &self.chunks.len();
             let last = &mut self.chunks[length - 1];
-            if !last.buffer[..last.bytes].ends_with(&[self.delimiter]) {
+            if !last.get_buffer().ends_with(&[self.delimiter]) {
                 last.lines += 1;
                 self.lines += 1;
             }
