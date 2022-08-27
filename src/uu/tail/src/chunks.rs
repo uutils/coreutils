@@ -4,7 +4,6 @@
 //! Use [`ReverseChunks::new`] to create a new iterator over chunks of bytes from the file.
 
 // spell-checker:ignore (ToDO) filehandle
-
 use std::collections::vec_deque::{Iter, VecDeque};
 use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
@@ -188,6 +187,10 @@ impl BytesChunk {
     /// ```
     pub(crate) fn get_buffer_with(&self, offset: usize) -> &[u8] {
         &self.buffer[offset..self.bytes]
+    }
+
+    pub(crate) fn has_data(&self) -> bool {
+        self.bytes > 0
     }
 
     /// Fills this [`buffer`](Self::buffer) with maximal [`BUFFER_SIZE`] number of bytes, draining
@@ -432,7 +435,7 @@ impl LinesChunk {
     /// assert!(chunk.has_data());
     /// ```
     pub(crate) fn has_data(&self) -> bool {
-        self.chunk.bytes > 0
+        self.chunk.has_data()
     }
 
     /// Returns this buffer safely. See [`BytesChunk::get_buffer`]

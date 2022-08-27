@@ -2658,6 +2658,59 @@ mod pipe_tests {
     }
 
     #[test]
+    fn test_pipe_when_lines_option_given_input_size_has_multiple_size_of_buffer_size() {
+        let total_lines = 100;
+        let random_string = RandomString::generate_with_delimiter(
+            Alphanumeric,
+            b'\n',
+            total_lines,
+            true,
+            CHUNK_BUFFER_SIZE * 3 + 1,
+        );
+        let random_string = random_string.as_str();
+        let lines = random_string.split_inclusive('\n');
+
+        new_ucmd!()
+            .args(&["-n", "+0"])
+            .pipe_in(random_string)
+            .succeeds()
+            .stdout_only(random_string);
+
+        let expected = lines.clone().skip(1).collect::<String>();
+        new_ucmd!()
+            .args(&["-n", "+2"])
+            .pipe_in(random_string)
+            .succeeds()
+            .stdout_only(expected);
+
+        new_ucmd!()
+            .args(&["-n", "-0"])
+            .pipe_in(random_string)
+            .succeeds()
+            .stdout_only("");
+
+        let expected = lines.clone().skip(total_lines - 1).collect::<String>();
+        new_ucmd!()
+            .args(&["-n", "-1"])
+            .pipe_in(random_string)
+            .succeeds()
+            .stdout_only(expected);
+
+        let expected = lines.clone().skip(1).collect::<String>();
+        new_ucmd!()
+            .args(&["-n", "-99"])
+            .pipe_in(random_string)
+            .succeeds()
+            .stdout_only(expected);
+
+        new_ucmd!()
+            .args(&["-n", "-100"])
+            .pipe_in(random_string)
+            .succeeds()
+            .stdout_only(random_string);
+    }
+
+    #[test]
     fn test_pipe_when_bytes_option_value_is_higher_than_contained_bytes() {
         let test_string = "a\nb";
         new_ucmd!()
