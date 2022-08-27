@@ -1,5 +1,6 @@
 // spell-checker:ignore (vars) RFILE
 
+use clap::builder::ValueParser;
 use uucore::error::{UResult, UUsageError};
 
 use clap::{Arg, Command};
@@ -124,7 +125,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .takes_value(true)
                 .value_name("USER")
                 .help("Set user USER in the target security context.")
-                .allow_invalid_utf8(true),
+                .value_parser(ValueParser::os_string()),
         )
         .arg(
             Arg::new(options::ROLE)
@@ -133,7 +134,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .takes_value(true)
                 .value_name("ROLE")
                 .help("Set role ROLE in the target security context.")
-                .allow_invalid_utf8(true),
+                .value_parser(ValueParser::os_string()),
         )
         .arg(
             Arg::new(options::TYPE)
@@ -142,7 +143,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .takes_value(true)
                 .value_name("TYPE")
                 .help("Set type TYPE in the target security context.")
-                .allow_invalid_utf8(true),
+                .value_parser(ValueParser::os_string()),
         )
         .arg(
             Arg::new(options::RANGE)
@@ -151,12 +152,12 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .takes_value(true)
                 .value_name("RANGE")
                 .help("Set range RANGE in the target security context.")
-                .allow_invalid_utf8(true),
+                .value_parser(ValueParser::os_string()),
         )
         .arg(
             Arg::new("ARG")
                 .multiple_occurrences(true)
-                .allow_invalid_utf8(true)
+                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::CommandName),
         )
         // Once "ARG" is parsed, everything after that belongs to it.

@@ -13,6 +13,7 @@ extern crate uucore;
 mod count_fast;
 mod countable;
 mod word_count;
+use clap::builder::ValueParser;
 use count_fast::{count_bytes_chars_and_lines_fast, count_bytes_fast};
 use countable::WordCountable;
 use unicode_width::UnicodeWidthChar;
@@ -256,7 +257,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(ARG_FILES)
                 .multiple_occurrences(true)
                 .takes_value(true)
-                .allow_invalid_utf8(true)
+                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
         )
 }

@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, Arg, Command};
+use clap::{builder::ValueParser, crate_version, Arg, Command};
 use glob::Pattern;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
@@ -1536,7 +1536,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                     .multiple_occurrences(true)
                     .takes_value(true)
                     .value_hint(clap::ValueHint::AnyPath)
-                    .allow_invalid_utf8(true)
+                    .value_parser(ValueParser::os_string())
             )
             .after_help(
                 "The TIME_STYLE argument can be full-iso, long-iso, iso. \

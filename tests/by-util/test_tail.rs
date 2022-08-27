@@ -2925,3 +2925,22 @@ fn test_pipe_when_bytes_option_given_input_size_has_multiple_size_of_buffer_size
         .succeeds()
         .stdout_only(random_string);
 }
+
+fn test_seek_bytes_backward_outside_file() {
+    new_ucmd!()
+        .arg("-c")
+        .arg("100")
+        .arg(FOOBAR_TXT)
+        .run()
+        .stdout_is_fixture(FOOBAR_TXT);
+}
+
+#[test]
+fn test_seek_bytes_forward_outside_file() {
+    new_ucmd!()
+        .arg("-c")
+        .arg("+100")
+        .arg(FOOBAR_TXT)
+        .run()
+        .stdout_is("");
+}

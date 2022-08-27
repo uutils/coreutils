@@ -11,6 +11,7 @@ use std::ffi::OsString;
 use std::fs::remove_file;
 use std::path::Path;
 
+use clap::builder::ValueParser;
 use clap::{crate_version, Arg, Command};
 
 use uucore::display::Quotable;
@@ -37,7 +38,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_PATH)
                 .required(true)
                 .hide(true)
-                .allow_invalid_utf8(true)
+                .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }

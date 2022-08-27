@@ -43,7 +43,7 @@ use crate::parse_nrofbytes::parse_number_of_bytes;
 use crate::partialreader::*;
 use crate::peekreader::*;
 use crate::prn_char::format_ascii_dump;
-use clap::{crate_version, AppSettings, Arg, ArgMatches, Command};
+use clap::{crate_version, AppSettings, Arg, ArgMatches, Command, ValueSource};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
@@ -167,9 +167,7 @@ impl OdOptions {
         let mut line_bytes = match matches.value_of(options::WIDTH) {
             None => 16,
             Some(s) => {
-                if matches.occurrences_of(options::WIDTH) == 0 {
-                    16
-                } else {
+                if matches.value_source(options::WIDTH) == Some(ValueSource::CommandLine) {
                     match parse_number_of_bytes(s) {
                         Ok(n) => usize::try_from(n)
                             .map_err(|_| USimpleError::new(1, format!("‘{}‘ is too large", s)))?,
@@ -180,6 +178,8 @@ impl OdOptions {
                             ))
                         }
                     }
+                } else {
+                    16
                 }
             }
         };

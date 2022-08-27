@@ -29,7 +29,7 @@ mod platform;
 use crate::files::FileHandling;
 use chunks::ReverseChunks;
 
-use clap::{Arg, Command};
+use clap::{Arg, Command, ValueSource};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::cmp::Ordering;
 use std::collections::vec_deque::VecDeque;
@@ -141,7 +141,7 @@ impl Settings {
 
         settings.follow = if matches.contains_id(options::FOLLOW_RETRY) {
             Some(FollowMode::Name)
-        } else if matches.occurrences_of(options::FOLLOW) == 0 {
+        } else if matches.value_source(options::FOLLOW) != Some(ValueSource::CommandLine) {
             None
         } else if matches.value_of(options::FOLLOW) == Some("name") {
             Some(FollowMode::Name)
@@ -1412,7 +1412,9 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
             file.seek(SeekFrom::Start(i as u64)).unwrap();
         }
         (FilterMode::Bytes(count), false) => {
-            file.seek(SeekFrom::End(-(*count as i64))).unwrap();
+            let len = file.seek(SeekFrom::End(0)).unwrap();
+            file.seek(SeekFrom::End(-((*count).min(len) as i64)))
+                .unwrap();
         }
         (FilterMode::Bytes(count), true) => {
             // GNU `tail` seems to index bytes and lines starting at 1, not

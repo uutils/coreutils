@@ -120,7 +120,7 @@ build () {
 
 tests () {
     probe='/sdcard/tests.probe'
-    command="'cd ~/coreutils && cargo test --features feat_os_unix_android --no-fail-fast >/sdcard/tests.log 2>&1; echo \$? >$probe'"
+    command="'cd ~/coreutils && timeout --preserve-status --verbose -k 1m 60m cargo test --features feat_os_unix_android --no-fail-fast >/sdcard/tests.log 2>&1; echo \$? >$probe'"
     run_termux_command "$command" "$probe"
     return_code=$?
     adb pull /sdcard/tests.log .

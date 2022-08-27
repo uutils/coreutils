@@ -20,6 +20,7 @@ mod digest;
 use self::digest::Digest;
 use self::digest::DigestWriter;
 
+use clap::builder::ValueParser;
 use clap::{Arg, ArgMatches, Command};
 use hex::encode;
 use md5::Md5;
@@ -392,7 +393,7 @@ pub fn uu_app_common<'a>() -> Command<'a> {
                 .multiple_occurrences(true)
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::FilePath)
-                .allow_invalid_utf8(true),
+                .value_parser(ValueParser::os_string()),
         )
 }
 

@@ -4,6 +4,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
+use clap::builder::ValueParser;
 use clap::{crate_version, Arg, Command};
 use std::ffi::OsString;
 use std::fs::hard_link;
@@ -48,6 +49,6 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .max_values(2)
                 .takes_value(true)
                 .value_hint(clap::ValueHint::AnyPath)
-                .allow_invalid_utf8(true),
+                .value_parser(ValueParser::os_string()),
         )
 }
