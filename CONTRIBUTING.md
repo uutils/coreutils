@@ -41,7 +41,7 @@ search the issues to make sure no one else is working on it.
 We take pride in support many operating systems and architectures. 
 
 **Tip:**
-For Windows, Microsoft provides some images (VMWare, Hyper-V, VirtualBox et Parallels) 
+For Windows, Microsoft provides some images (VMWare, Hyper-V, VirtualBox and Parallels) 
 for development:
 https://developer.microsoft.com/windows/downloads/virtual-machines/
 
