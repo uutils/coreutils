@@ -459,12 +459,6 @@ impl LinesChunk {
         self.lines
     }
 
-    /// Increment the number of lines stored in the field [`Self::lines`] by one.
-    pub(crate) fn increment_lines(&mut self) -> usize {
-        self.lines += 1;
-        self.lines
-    }
-
     /// Fills `self.buffer` with maximal [`BUFFER_SIZE`] number of bytes, draining the reader by
     /// that number of bytes. This function works like the [`BytesChunk::fill`] function besides
     /// that this function also counts and stores the number of lines encountered while reading from

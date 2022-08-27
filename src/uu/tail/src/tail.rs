@@ -1455,9 +1455,6 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
                 }
             }
             if chunk.has_data() {
-                if !chunk.get_buffer().ends_with(&[*sep]) {
-                    chunk.increment_lines();
-                }
                 chunk.print_lines(&mut writer, num_skip as usize)?;
                 io::copy(reader, &mut writer)?;
             }
@@ -1488,6 +1485,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
                     return Ok(());
                 }
             }
+
             io::copy(reader, &mut writer)?;
         }
     }

@@ -2564,6 +2564,34 @@ mod pipe_tests {
     }
 
     #[test]
+    fn test_pipe_when_lines_option_given_input_size_is_equal_to_buffer_size_no_newline_at_eof() {
+        let total_lines = 1;
+        let random_string = RandomString::generate_with_delimiter(
+            Alphanumeric,
+            b'\n',
+            total_lines,
+            false,
+            CHUNK_BUFFER_SIZE,
+        );
+        let random_string = random_string.as_str();
+        let lines = random_string.split_inclusive('\n');
+
+        let expected = lines.clone().skip(1).collect::<String>();
+        new_ucmd!()
+            .args(&["-n", "+2"])
+            .pipe_in(random_string)
+            .succeeds()
+            .stdout_only(expected);
+
+        let expected = lines.clone().skip(1).collect::<String>();
+        new_ucmd!()
+            .args(&["-n", "-1"])
+            .pipe_in(random_string)
+            .succeeds()
+            .stdout_only(expected);
+    }
+
+    #[test]
     fn test_pipe_when_lines_option_given_input_size_is_equal_to_buffer_size() {
         let total_lines = 100;
         let random_string = RandomString::generate_with_delimiter(
