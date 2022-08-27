@@ -110,11 +110,37 @@ impl BytesChunk {
         }
     }
 
-    fn from(chunk: &Self, offset: usize) -> Self {
-        assert!(
-            offset <= chunk.bytes,
-            "offset may not be larger than the chunk size"
-        );
+    /// Create a new chunk from an existing chunk. The new chunk's buffer will be copied from the
+    /// old chunk's buffer, copying the slice `[offset..old_chunk.bytes]` into the new chunk's
+    /// buffer but starting at 0 instead of offset. If the offset is larger or equal to
+    /// `chunk.lines` then a new empty `BytesChunk` is returned.
+    ///
+    /// # Arguments
+    ///
+    /// * `chunk`: The chunk to create a new `BytesChunk` chunk from
+    /// * `offset`: Start to copy the old chunk's buffer from this position. May not be larger
+    ///             than `chunk.bytes`.
+    ///
+    /// returns: BytesChunk
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let mut chunk = BytesChunk::new();
+    /// chunk.buffer[1] = 1;
+    /// chunk.bytes = 2;
+    /// let new_chunk = BytesChunk::from_chunk(&chunk, 0);
+    /// assert_eq!(2, new_chunk.get_buffer().len());
+    /// assert_eq!(&[0, 1], new_chunk.get_buffer());
+    ///
+    /// let new_chunk = BytesChunk::from_chunk(&chunk, 1);
+    /// assert_eq!(1, new_chunk.get_buffer().len());
+    /// assert_eq!(&[1], new_chunk.get_buffer());
+    /// ```
+    fn from_chunk(chunk: &Self, offset: usize) -> Self {
+        if offset >= chunk.bytes {
+            Self::new();
+        }
 
         let mut buffer: ChunkBuffer = [0; BUFFER_SIZE];
         let slice = chunk.get_buffer_with(offset);
@@ -233,7 +259,7 @@ impl BytesChunkBuffer {
         };
 
         self.chunks
-            .push_front(Box::new(BytesChunk::from(&chunk, offset)));
+            .push_front(Box::new(BytesChunk::from_chunk(&chunk, offset)));
 
         Ok(self.chunks.iter())
     }
@@ -287,6 +313,8 @@ impl LinesChunk {
     /// assert_eq!("world\n".as_bytes(), new_chunk.get_buffer());
     /// assert_eq!(6, new_chunk.bytes);
     /// assert_eq!(1, new_chunk.lines);
+    ///
+    /// let offset = 13; // offset larger
     /// ```
     fn from_chunk(chunk: &Self, offset: usize) -> Self {
         if offset >= chunk.lines {
@@ -447,27 +475,27 @@ impl LinesChunkBuffer {
 
 #[cfg(test)]
 mod tests {
-    use crate::chunks::{BytesChunk, BUFFER_SIZE};
+    use crate::chunks::{BytesChunk, ChunkBuffer, BUFFER_SIZE};
 
     #[test]
     fn test_bytes_chunk_from_when_offset_is_zero() {
         let mut chunk = BytesChunk::new();
         chunk.bytes = BUFFER_SIZE;
         chunk.buffer[1] = 1;
-        let other = BytesChunk::from(&chunk, 0);
+        let other = BytesChunk::from_chunk(&chunk, 0);
         assert_eq!(other, chunk);
 
         chunk.bytes = 2;
-        let other = BytesChunk::from(&chunk, 0);
+        let other = BytesChunk::from_chunk(&chunk, 0);
         assert_eq!(other, chunk);
 
         chunk.bytes = 1;
-        let other = BytesChunk::from(&chunk, 0);
+        let other = BytesChunk::from_chunk(&chunk, 0);
         assert_eq!(other.buffer, [0; BUFFER_SIZE]);
         assert_eq!(other.bytes, chunk.bytes);
 
         chunk.bytes = BUFFER_SIZE;
-        let other = BytesChunk::from(&chunk, 2);
+        let other = BytesChunk::from_chunk(&chunk, 2);
         assert_eq!(other.buffer, [0; BUFFER_SIZE]);
         assert_eq!(other.bytes, BUFFER_SIZE - 2);
     }
@@ -478,38 +506,61 @@ mod tests {
         chunk.bytes = BUFFER_SIZE;
         chunk.buffer[1] = 1;
 
-        let other = BytesChunk::from(&chunk, 1);
+        let other = BytesChunk::from_chunk(&chunk, 1);
         let mut expected_buffer = [0; BUFFER_SIZE];
         expected_buffer[0] = 1;
         assert_eq!(other.buffer, expected_buffer);
         assert_eq!(other.bytes, BUFFER_SIZE - 1);
 
-        let other = BytesChunk::from(&chunk, 2);
+        let other = BytesChunk::from_chunk(&chunk, 2);
         assert_eq!(other.buffer, [0; BUFFER_SIZE]);
         assert_eq!(other.bytes, BUFFER_SIZE - 2);
     }
 
     #[test]
-    #[should_panic]
-    fn test_bytes_chunk_from_when_offset_is_larger_than_chunk_size_then_panics_1() {
+    fn test_bytes_chunk_from_when_offset_is_larger_than_chunk_size_1() {
         let mut chunk = BytesChunk::new();
         chunk.bytes = BUFFER_SIZE;
-        BytesChunk::from(&chunk, BUFFER_SIZE + 1);
+        let new_chunk = BytesChunk::from_chunk(&chunk, BUFFER_SIZE + 1);
+        assert_eq!(0, new_chunk.bytes);
     }
 
     #[test]
-    #[should_panic]
-    fn test_bytes_chunk_from_when_offset_is_larger_than_chunk_size_then_panics_2() {
+    fn test_bytes_chunk_from_when_offset_is_larger_than_chunk_size_2() {
         let mut chunk = BytesChunk::new();
         chunk.bytes = 0;
-        BytesChunk::from(&chunk, 1);
+        let new_chunk = BytesChunk::from_chunk(&chunk, 1);
+        assert_eq!(0, new_chunk.bytes);
     }
 
     #[test]
-    #[should_panic]
-    fn test_bytes_chunk_from_when_offset_is_larger_than_chunk_size_then_panics_3() {
+    fn test_bytes_chunk_from_when_offset_is_larger_than_chunk_size_3() {
         let mut chunk = BytesChunk::new();
         chunk.bytes = 1;
-        BytesChunk::from(&chunk, 2);
+        let new_chunk = BytesChunk::from_chunk(&chunk, 2);
+        assert_eq!(0, new_chunk.bytes);
+    }
+
+    #[test]
+    fn test_bytes_chunk_from_when_offset_is_equal_to_chunk_size() {
+        let mut chunk = BytesChunk::new();
+        chunk.buffer[0] = 1;
+        chunk.bytes = 1;
+        let new_chunk = BytesChunk::from_chunk(&chunk, 1);
+        assert_eq!(0, new_chunk.bytes);
+    }
+
+    #[test]
+    fn example() {
+        let mut chunk = BytesChunk::new();
+        chunk.buffer[1] = 1;
+        chunk.bytes = 2;
+        let new_chunk = BytesChunk::from_chunk(&chunk, 0);
+        assert_eq!(2, new_chunk.get_buffer().len());
+        assert_eq!(&[0, 1], new_chunk.get_buffer());
+
+        let new_chunk = BytesChunk::from_chunk(&chunk, 1);
+        assert_eq!(1, new_chunk.get_buffer().len());
+        assert_eq!(&[1], new_chunk.get_buffer());
     }
 }
