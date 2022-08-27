@@ -190,10 +190,10 @@ impl BytesChunk {
         &self.buffer[offset..self.bytes]
     }
 
-    /// Fills this [`buffer`](Self::buffer) with maximal [`BUFFER_SIZE`] number of bytes, draining the reader by that
-    /// number of bytes. If EOF is reached (so 0 bytes are read), then returns [`UResult<None>`] or
-    /// else the result with [`Some(bytes)`] where bytes is the number of bytes read from the
-    /// source.
+    /// Fills this [`buffer`](Self::buffer) with maximal [`BUFFER_SIZE`] number of bytes, draining
+    /// the reader by that number of bytes. If EOF is reached (so 0 bytes are read), then returns
+    /// [`UResult<None>`] or else the result with [`Some(bytes)`] where bytes is the number of bytes
+    /// read from the source.
     ///
     /// # Arguments
     ///
@@ -254,9 +254,9 @@ impl BytesChunkBuffer {
     }
 
     /// Fills this buffer with chunks and consumes the reader completely. This method ensures that
-    /// there are exactly as many chunks as needed to match [`Self::num_print`] bytes, so there are in
-    /// sum exactly `self.num_print` bytes stored in all chunks. The method returns an iterator over
-    /// these chunks. If there are no chunks, for example because the piped stdin contained no
+    /// there are exactly as many chunks as needed to match [`Self::num_print`] bytes, so there are
+    /// in sum exactly `self.num_print` bytes stored in all chunks. The method returns an iterator
+    /// over these chunks. If there are no chunks, for example because the piped stdin contained no
     /// bytes, or `num_print = 0` then `iterator.next` returns None.
     ///
     /// # Arguments
@@ -377,8 +377,8 @@ impl LinesChunk {
     /// Creates a new [`LinesChunk`] from an existing one with an offset in lines. The new chunk
     /// contains exactly `chunk.lines - offset` lines. The offset in bytes is calculated and applied
     /// to the new chunk, so the new chunk contains only the bytes encountered after the offset in
-    /// number of lines and the `delimiter`. If the offset is larger or equal to `chunk.lines` then
-    /// a new empty `LinesChunk` is returned.
+    /// number of lines and the `delimiter`. If the offset is larger than `chunk.lines` then a new
+    /// empty `LinesChunk` is returned.
     ///
     /// # Arguments
     ///
@@ -401,8 +401,6 @@ impl LinesChunk {
     /// assert_eq!("world\n".as_bytes(), new_chunk.get_buffer());
     /// assert_eq!(6, new_chunk.bytes);
     /// assert_eq!(1, new_chunk.lines);
-    ///
-    /// let offset = 13; // offset larger
     /// ```
     fn from_chunk(chunk: &Self, offset: usize) -> Self {
         if offset > chunk.lines {
@@ -439,7 +437,7 @@ impl LinesChunk {
 
     /// Returns this buffer safely. See [`BytesChunk::get_buffer`]
     ///
-    /// returns: &[u8] with length [`Self::bytes`]
+    /// returns: &[u8] with length `self.bytes`
     pub(crate) fn get_buffer(&self) -> &[u8] {
         self.chunk.get_buffer()
     }
@@ -464,10 +462,10 @@ impl LinesChunk {
         self.lines
     }
 
-    /// Fills this [`buffer`](Self::buffer) with maximal [`BUFFER_SIZE`] number of bytes, draining
-    /// the reader by that number of bytes. This function works like the [`BytesChunk::fill`]
-    /// function besides that this function also counts and stores the number of lines encountered
-    /// while reading from the [`reader`].
+    /// Fills `self.buffer` with maximal [`BUFFER_SIZE`] number of bytes, draining the reader by
+    /// that number of bytes. This function works like the [`BytesChunk::fill`] function besides
+    /// that this function also counts and stores the number of lines encountered while reading from
+    /// the `filehandle`.
     ///
     /// # Arguments
     ///
