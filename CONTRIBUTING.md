@@ -38,7 +38,7 @@ search the issues to make sure no one else is working on it.
 
 ## Platforms
 
-We take pride in support many operating systems and architectures. 
+We take pride in supporting many operating systems and architectures. 
 
 **Tip:**
 For Windows, Microsoft provides some images (VMWare, Hyper-V, VirtualBox and Parallels) 
