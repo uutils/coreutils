@@ -78,34 +78,25 @@ fn unblock(buf: &[u8], cbs: usize) -> Vec<u8> {
 /// settings of `mode`, this function will update the number of
 /// records truncated; that's why `rstat` is borrowed mutably.
 pub(crate) fn conv_block_unblock_helper(
-    mut buf: Vec<u8>,
+    buf: Vec<u8>,
     mode: &ConversionMode,
     rstat: &mut ReadStat,
 ) -> Vec<u8> {
-    // TODO This function has a mutable input `buf` but also returns a
-    // completely new `Vec`; that seems fishy. Could we either make
-    // the input immutable or make the function not return anything?
-
-    fn apply_conversion(buf: &mut [u8], ct: &ConversionTable) {
-        for idx in 0..buf.len() {
-            buf[idx] = ct[buf[idx] as usize];
-        }
+    fn apply_conversion(buf: Vec<u8>, ct: &ConversionTable) -> impl Iterator<Item = u8> + '_ {
+        buf.into_iter().map(|b| ct[b as usize])
     }
 
     match mode {
-        ConversionMode::ConvertOnly(ct) => {
-            apply_conversion(&mut buf, ct);
-            buf
-        }
+        ConversionMode::ConvertOnly(ct) => apply_conversion(buf, ct).collect(),
         ConversionMode::BlockThenConvert(ct, cbs, sync) => {
-            let mut blocks = block(&buf, *cbs, *sync, rstat);
-            for buf in &mut blocks {
-                apply_conversion(buf, ct);
-            }
-            blocks.into_iter().flatten().collect()
+            let blocks = block(&buf, *cbs, *sync, rstat);
+            blocks
+                .into_iter()
+                .flat_map(|block| apply_conversion(block, ct))
+                .collect()
         }
         ConversionMode::ConvertThenBlock(ct, cbs, sync) => {
-            apply_conversion(&mut buf, ct);
+            let buf: Vec<_> = apply_conversion(buf, ct).collect();
             block(&buf, *cbs, *sync, rstat)
                 .into_iter()
                 .flatten()
@@ -116,12 +107,11 @@ pub(crate) fn conv_block_unblock_helper(
             .flatten()
             .collect(),
         ConversionMode::UnblockThenConvert(ct, cbs) => {
-            let mut buf = unblock(&buf, *cbs);
-            apply_conversion(&mut buf, ct);
-            buf
+            let buf = unblock(&buf, *cbs);
+            apply_conversion(buf, ct).collect()
         }
         ConversionMode::ConvertThenUnblock(ct, cbs) => {
-            apply_conversion(&mut buf, ct);
+            let buf: Vec<_> = apply_conversion(buf, ct).collect();
             unblock(&buf, *cbs)
         }
         ConversionMode::UnblockOnly(cbs) => unblock(&buf, *cbs),
