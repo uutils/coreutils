@@ -30,7 +30,8 @@ pub struct ReverseChunks<'a> {
 
 impl<'a> ReverseChunks<'a> {
     pub fn new(file: &'a mut File) -> ReverseChunks<'a> {
-        let size = file.seek(SeekFrom::End(0)).unwrap();
+        let current = file.seek(SeekFrom::Current(0)).unwrap();
+        let size = file.seek(SeekFrom::End(0)).unwrap() - current;
         let max_blocks_to_read = (size as f64 / BLOCK_SIZE as f64).ceil() as usize;
         let block_idx = 0;
         ReverseChunks {

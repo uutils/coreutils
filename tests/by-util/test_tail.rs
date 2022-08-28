@@ -95,6 +95,26 @@ fn test_stdin_redirect_file() {
 }
 
 #[test]
+#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
+fn test_stdin_redirect_offset() {
+    // inspired by: "gnu/tests/tail-2/start-middle.sh"
+    use std::io::{Seek, SeekFrom};
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("k", "1\n2\n");
+    let mut fh = std::fs::File::open(at.plus("k")).unwrap();
+    fh.seek(SeekFrom::Start(2)).unwrap();
+
+    ts.ucmd()
+        .set_stdin(fh)
+        .run()
+        .stdout_is("2\n")
+        .succeeded();
+}
+
+#[test]
 fn test_nc_0_wo_follow() {
     // verify that -[nc]0 without -f, exit without reading
 
