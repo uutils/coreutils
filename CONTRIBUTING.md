@@ -36,6 +36,16 @@ search the issues to make sure no one else is working on it.
 1. uutils is original code. It cannot contain code from existing GNU or Unix-like
    utilities, nor should it link to or reference GNU libraries.
 
+## Platforms
+
+We take pride in supporting many operating systems and architectures. 
+
+**Tip:**
+For Windows, Microsoft provides some images (VMWare, Hyper-V, VirtualBox and Parallels) 
+for development:
+https://developer.microsoft.com/windows/downloads/virtual-machines/
+
+
 ## Commit messages
 
 To help the project maintainers review pull requests from contributors across
