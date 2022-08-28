@@ -862,6 +862,33 @@ fn test_swab_257_test() {
 }
 
 #[test]
+fn test_block_lower() {
+    new_ucmd!()
+        .args(&["conv=block,lcase", "cbs=8"])
+        .pipe_in_fixture("dd-block8-lowercase.test")
+        .succeeds()
+        .stdout_is_fixture_bytes("dd-block8-lowercase.spec");
+}
+
+#[test]
+fn test_lower_block() {
+    new_ucmd!()
+        .args(&["conv=lcase,block", "cbs=8"])
+        .pipe_in_fixture("dd-block8-lowercase.test")
+        .succeeds()
+        .stdout_is_fixture_bytes("dd-block8-lowercase.spec");
+}
+
+#[test]
+fn test_unblock_lower() {
+    new_ucmd!()
+        .args(&["conv=unblock,lcase", "cbs=8"])
+        .pipe_in_fixture("dd-unblock8-lowercase.test")
+        .succeeds()
+        .stdout_is_fixture_bytes("dd-unblock8-lowercase.spec");
+}
+
+#[test]
 fn test_zeros_4k_conv_sync_obs_gt_ibs() {
     new_ucmd!()
         .args(&["conv=sync", "ibs=521", "obs=1031"])
