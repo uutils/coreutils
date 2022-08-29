@@ -363,3 +363,33 @@ fn test_rm_directory_rights_rm1() {
     assert!(!at.dir_exists("b/c"));
     assert!(!at.dir_exists("b/d"));
 }
+
+#[cfg(feature = "chmod")]
+#[test]
+fn test_prompt_write_protected_yes() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file_1 = "test_rm_prompt_write_protected_1";
+
+    at.touch(file_1);
+
+    scene.ccmd("chmod").arg("0").arg(file_1).succeeds();
+
+    scene.ucmd().arg(file_1).pipe_in("y").succeeds();
+    assert!(!at.file_exists(file_1));
+}
+
+#[cfg(feature = "chmod")]
+#[test]
+fn test_prompt_write_protected_no() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file_2 = "test_rm_prompt_write_protected_2";
+
+    at.touch(file_2);
+
+    scene.ccmd("chmod").arg("0").arg(file_2).succeeds();
+
+    scene.ucmd().arg(file_2).pipe_in("n").succeeds();
+    assert!(at.file_exists(file_2));
+}
