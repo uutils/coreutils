@@ -420,7 +420,15 @@ fn prompt_write_protected(path: &Path, is_dir: bool, options: &Options) -> bool 
                 if is_dir {
                     prompt(&(format!("rm: remove write-protected directory {}? ", path.quote())))
                 } else {
-                    prompt(&(format!("rm: remove write-protected file {}? ", path.quote())))
+                    if fs::metadata(path).unwrap().len() == 0 {
+                        return prompt(
+                            &(format!(
+                                "rm: remove write-protected regular empty file {}? ",
+                                path.quote()
+                            )),
+                        );
+                    }
+                    prompt(&(format!("rm: remove write-protected regular file {}? ", path.quote())))
                 }
             } else {
                 true
