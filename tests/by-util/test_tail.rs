@@ -2423,7 +2423,7 @@ fn test_illegal_seek() {
     );
     assert_eq!(p.wait().unwrap().code().unwrap(), 1);
 }
-
+// FIXME: Occasionally broken pipe on macos when no output is expected. Switch on such cases for macos when fixed.
 #[cfg(all(not(target_os = "android"), not(target_os = "windows")))] // FIXME: See https://github.com/uutils/coreutils/issues/3881
 mod pipe_tests {
     use super::*;
@@ -2439,47 +2439,62 @@ mod pipe_tests {
             .pipe_in(test_string)
             .succeeds()
             .stdout_only(test_string);
+
         new_ucmd!()
             .args(&["-n", "4"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only(test_string);
+
         new_ucmd!()
             .args(&["-n", "999"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only(test_string);
+
+        #[cfg(all(not(target_os = "macos")))]
         new_ucmd!()
             .args(&["-n", "+3"])
             .pipe_in(test_string)
             .succeeds()
-            .stdout_only("");
+            .no_stdout()
+            .no_stderr();
+
+        #[cfg(all(not(target_os = "macos")))]
         new_ucmd!()
             .args(&["-n", "+4"])
             .pipe_in(test_string)
             .succeeds()
-            .stdout_only("");
+            .no_stdout()
+            .no_stderr();
+
+        #[cfg(all(not(target_os = "macos")))]
         new_ucmd!()
             .args(&["-n", "+999"])
             .pipe_in(test_string)
             .succeeds()
-            .stdout_only("");
+            .no_stdout()
+            .no_stderr();
     }
 
     #[test]
     fn test_pipe_when_negative_lines_option_given_no_newline_at_eof() {
         let test_string = "a\nb";
+
+        #[cfg(all(not(target_os = "macos")))]
         new_ucmd!()
             .args(&["-n", "0"])
             .pipe_in(test_string)
             .succeeds()
             .no_stdout()
             .no_stderr();
+
         new_ucmd!()
             .args(&["-n", "1"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only("b");
+
         new_ucmd!()
             .args(&["-n", "2"])
             .pipe_in(test_string)
@@ -2490,16 +2505,19 @@ mod pipe_tests {
     #[test]
     fn test_pipe_when_positive_lines_option_given_no_newline_at_eof() {
         let test_string = "a\nb";
+
         new_ucmd!()
             .args(&["-n", "+0"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only("a\nb");
+
         new_ucmd!()
             .args(&["-n", "+1"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only("a\nb");
+
         new_ucmd!()
             .args(&["-n", "+2"])
             .pipe_in(test_string)
@@ -2511,56 +2529,70 @@ mod pipe_tests {
     fn test_pipe_when_lines_option_given_multibyte_utf8_characters() {
         // the test string consists of from left to right a 4-byte,3-byte,2-byte,1-byte utf-8 character
         let test_string = "𝅘𝅥𝅮\n⏻\nƒ\na";
+
         new_ucmd!()
             .args(&["-n", "+0"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only(test_string);
+
         new_ucmd!()
             .args(&["-n", "+2"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only("⏻\nƒ\na");
+
         new_ucmd!()
             .args(&["-n", "+3"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only("ƒ\na");
+
         new_ucmd!()
             .args(&["-n", "+4"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only("a");
+
+        #[cfg(all(not(target_os = "macos")))]
         new_ucmd!()
             .args(&["-n", "+5"])
             .pipe_in(test_string)
             .succeeds()
-            .stdout_only("");
+            .no_stdout()
+            .no_stderr();
+
         new_ucmd!()
             .args(&["-n", "-4"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only(test_string);
+
         new_ucmd!()
             .args(&["-n", "-3"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only("⏻\nƒ\na");
+
         new_ucmd!()
             .args(&["-n", "-2"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only("ƒ\na");
+
         new_ucmd!()
             .args(&["-n", "-1"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only("a");
+
+        #[cfg(all(not(target_os = "macos")))]
         new_ucmd!()
             .args(&["-n", "-0"])
             .pipe_in(test_string)
             .succeeds()
-            .stdout_only("");
+            .no_stdout()
+            .no_stderr();
     }
 
     #[test]
@@ -2617,11 +2649,13 @@ mod pipe_tests {
             .succeeds()
             .stdout_only(expected);
 
+        #[cfg(all(not(target_os = "macos")))]
         new_ucmd!()
             .args(&["-n", "-0"])
             .pipe_in(random_string)
             .succeeds()
-            .stdout_only("");
+            .no_stdout()
+            .no_stderr();
 
         let expected = lines.clone().skip(total_lines - 1).collect::<String>();
         new_ucmd!()
@@ -2711,11 +2745,13 @@ mod pipe_tests {
             .succeeds()
             .stdout_only(expected);
 
+        #[cfg(all(not(target_os = "macos")))]
         new_ucmd!()
             .args(&["-n", "-0"])
             .pipe_in(random_string)
             .succeeds()
-            .stdout_only("");
+            .no_stdout()
+            .no_stderr();
 
         let expected = lines.clone().skip(total_lines - 1).collect::<String>();
         new_ucmd!()
@@ -2746,31 +2782,42 @@ mod pipe_tests {
             .pipe_in(test_string)
             .succeeds()
             .stdout_only(test_string);
+
         new_ucmd!()
             .args(&["-c", "5"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only(test_string);
+
         new_ucmd!()
             .args(&["-c", "999"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only(test_string);
+
+        #[cfg(all(not(target_os = "macos")))]
         new_ucmd!()
             .args(&["-c", "+4"])
             .pipe_in(test_string)
             .succeeds()
-            .stdout_only("");
+            .no_stdout()
+            .no_stderr();
+
+        #[cfg(all(not(target_os = "macos")))]
         new_ucmd!()
             .args(&["-c", "+5"])
             .pipe_in(test_string)
             .succeeds()
-            .stdout_only("");
+            .no_stdout()
+            .no_stderr();
+
+        #[cfg(all(not(target_os = "macos")))]
         new_ucmd!()
             .args(&["-c", "+999"])
             .pipe_in(test_string)
             .succeeds()
-            .stdout_only("");
+            .no_stdout()
+            .no_stderr();
     }
 
     #[test]
@@ -2782,51 +2829,63 @@ mod pipe_tests {
             .pipe_in(test_string)
             .succeeds()
             .stdout_only(test_string);
+
         new_ucmd!()
             .args(&["-c", "+2"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only_bytes(&test_string.as_bytes()[1..]);
+
         new_ucmd!()
             .args(&["-c", "+5"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only("⏻ƒa");
+
         new_ucmd!()
             .args(&["-c", "+8"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only("ƒa");
+
         new_ucmd!()
             .args(&["-c", "+10"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only("a");
+
+        #[cfg(all(not(target_os = "macos")))]
         new_ucmd!()
             .args(&["-c", "+11"])
             .pipe_in(test_string)
             .succeeds()
-            .stdout_only("");
+            .no_stdout()
+            .no_stderr();
+
         new_ucmd!()
             .args(&["-c", "-1"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only("a");
+
         new_ucmd!()
             .args(&["-c", "-2"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only_bytes(&"ƒa".as_bytes()[1..]);
+
         new_ucmd!()
             .args(&["-c", "-3"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only("ƒa");
+
         new_ucmd!()
             .args(&["-c", "-6"])
             .pipe_in(test_string)
             .succeeds()
             .stdout_only("⏻ƒa");
+
         new_ucmd!()
             .args(&["-c", "-10"])
             .pipe_in(test_string)
@@ -2852,11 +2911,13 @@ mod pipe_tests {
             .succeeds()
             .stdout_only_bytes(expected);
 
+        #[cfg(all(not(target_os = "macos")))]
         new_ucmd!()
             .args(&["-c", "-0"])
             .pipe_in(random_string)
             .succeeds()
-            .stdout_only("");
+            .no_stdout()
+            .no_stderr();
 
         let expected = &random_string.as_bytes()[1..];
         new_ucmd!()
@@ -2903,11 +2964,13 @@ mod pipe_tests {
             .succeeds()
             .stdout_only_bytes(expected);
 
+        #[cfg(all(not(target_os = "macos")))]
         new_ucmd!()
             .args(&["-c", "-0"])
             .pipe_in(random_string)
             .succeeds()
-            .stdout_only("");
+            .no_stdout()
+            .no_stderr();
 
         let expected = &random_string.as_bytes()[CHUNK_BUFFER_SIZE..];
         new_ucmd!()
@@ -2941,11 +3004,13 @@ mod pipe_tests {
             .succeeds()
             .stdout_only(random_string);
 
+        #[cfg(all(not(target_os = "macos")))]
         new_ucmd!()
             .args(&["-c", "-0"])
             .pipe_in(random_string)
             .succeeds()
-            .stdout_only("");
+            .no_stdout()
+            .no_stderr();
 
         let expected = &random_string.as_bytes()[8192..];
         new_ucmd!()
