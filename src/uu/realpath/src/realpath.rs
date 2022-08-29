@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{builder::NonEmptyStringValueParser, crate_version, Arg, ArgMatches, Command};
 use std::{
     io::{stdout, Write},
     path::{Path, PathBuf},
@@ -150,7 +150,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(OPT_RELATIVE_TO)
                 .takes_value(true)
                 .value_name("DIR")
-                .forbid_empty_values(true)
+                .value_parser(NonEmptyStringValueParser::new())
                 .help("print the resolved path relative to DIR"),
         )
         .arg(
@@ -158,14 +158,14 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(OPT_RELATIVE_BASE)
                 .takes_value(true)
                 .value_name("DIR")
-                .forbid_empty_values(true)
+                .value_parser(NonEmptyStringValueParser::new())
                 .help("print absolute paths unless paths below DIR"),
         )
         .arg(
             Arg::new(ARG_FILES)
                 .multiple_occurrences(true)
                 .required(true)
-                .forbid_empty_values(true)
+                .value_parser(NonEmptyStringValueParser::new())
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }
