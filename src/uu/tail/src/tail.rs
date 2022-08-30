@@ -318,20 +318,23 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
         ));
     }
 
+    settings.stdin_redirect = dash.handle_redirect();
+    if cfg!(unix) && settings.stdin_is_pipe_or_fifo {
+        // Save the current seek position/offset of a stdin redirected file.
+        // This is needed to pass "gnu/tests/tail-2/start-middle.sh"
+        use same_file::Handle;
+        if let Ok(mut stdin_handle) = Handle::stdin() {
+            if let Ok(offset) = stdin_handle.as_file_mut().seek(SeekFrom::Current(0)) {
+                settings.stdin_offset = offset;
+            }
+        }
+    }
+
     // add '-' to paths
     if !settings.paths.contains(&dash) && settings.stdin_is_pipe_or_fifo
         || settings.paths.is_empty() && !settings.stdin_is_pipe_or_fifo
     {
         settings.paths.push_front(dash);
-    }
-
-    if cfg!(unix) && settings.stdin_is_pipe_or_fifo {
-        settings.stdin_redirect = PathBuf::from(text::STDIN_HEADER).handle_redirect();
-        use std::os::unix::io::FromRawFd;
-        let mut stdin_handle = unsafe { std::fs::File::from_raw_fd(0) };
-        if let Ok(offset) = stdin_handle.seek(SeekFrom::Current(0)) {
-            settings.stdin_offset = offset;
-        }
     }
 
     // TODO: is there a better way to check for a readable stdin?
@@ -455,7 +458,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
 
         let metadata = path.metadata().ok();
 
-        if display_name.is_stdin() && path_is_tailable && !path.is_file() {
+        if display_name.is_stdin() && !path.is_file() {
             if settings.verbose {
                 files.print_header(&display_name, !first_header);
                 first_header = false;
@@ -500,11 +503,8 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                     }
 
                     let mut reader;
-                    if file.is_seekable(if display_name.is_stdin() {
-                        settings.stdin_offset
-                    } else {
-                        0
-                    }) && metadata.as_ref().unwrap().get_block_size() > 0
+                    if file.is_seekable(settings.stdin_offset)
+                        && metadata.as_ref().unwrap().get_block_size() > 0
                     {
                         bounded_tail(&mut file, &settings);
                         reader = BufReader::new(file);

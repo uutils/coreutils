@@ -2816,6 +2816,7 @@ dependencies = [
  "libc",
  "nix",
  "notify",
+ "same-file",
  "uucore",
  "winapi",
  "winapi-util",

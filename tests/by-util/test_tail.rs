@@ -107,11 +107,7 @@ fn test_stdin_redirect_offset() {
     let mut fh = std::fs::File::open(at.plus("k")).unwrap();
     fh.seek(SeekFrom::Start(2)).unwrap();
 
-    ts.ucmd()
-        .set_stdin(fh)
-        .run()
-        .stdout_is("2\n")
-        .succeeded();
+    ts.ucmd().set_stdin(fh).run().stdout_is("2\n").succeeded();
 }
 
 #[test]
