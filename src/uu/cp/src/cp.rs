@@ -313,165 +313,247 @@ pub fn uu_app<'a>() -> Command<'a> {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
-        .arg(Arg::new(options::TARGET_DIRECTORY)
-             .short('t')
-             .conflicts_with(options::NO_TARGET_DIRECTORY)
-             .long(options::TARGET_DIRECTORY)
-             .value_name(options::TARGET_DIRECTORY)
-             .value_hint(clap::ValueHint::DirPath)
-             .takes_value(true)
-             .validator(|s| {
-                 if Path::new(s).is_dir() {
-                     return Ok(());
-                 }
-                 Err(format!("'{}' is not a directory", s))
-             })
-             .help("copy all SOURCE arguments into target-directory"))
-        .arg(Arg::new(options::NO_TARGET_DIRECTORY)
-             .short('T')
-             .long(options::NO_TARGET_DIRECTORY)
-             .conflicts_with(options::TARGET_DIRECTORY)
-             .help("Treat DEST as a regular file and not a directory"))
-        .arg(Arg::new(options::INTERACTIVE)
-             .short('i')
-             .long(options::INTERACTIVE)
-             .overrides_with(options::NO_CLOBBER)
-             .help("ask before overwriting files"))
-        .arg(Arg::new(options::LINK)
-             .short('l')
-             .long(options::LINK)
-             .overrides_with_all(MODE_ARGS)
-             .help("hard-link files instead of copying"))
-        .arg(Arg::new(options::NO_CLOBBER)
-             .short('n')
-             .long(options::NO_CLOBBER)
-             .overrides_with(options::INTERACTIVE)
-             .help("don't overwrite a file that already exists"))
-        .arg(Arg::new(options::RECURSIVE)
-             .short('r')
-             .long(options::RECURSIVE)
-             // --archive sets this option
-            .help("copy directories recursively"))
-        .arg(Arg::new(options::RECURSIVE_ALIAS)
-             .short('R')
-             .help("same as -r"))
-        .arg(Arg::new(options::STRIP_TRAILING_SLASHES)
-             .long(options::STRIP_TRAILING_SLASHES)
-             .help("remove any trailing slashes from each SOURCE argument"))
-        .arg(Arg::new(options::VERBOSE)
-             .short('v')
-             .long(options::VERBOSE)
-             .help("explicitly state what is being done"))
-        .arg(Arg::new(options::SYMBOLIC_LINK)
-             .short('s')
-             .long(options::SYMBOLIC_LINK)
-             .overrides_with_all(MODE_ARGS)
-             .help("make symbolic links instead of copying"))
-        .arg(Arg::new(options::FORCE)
-             .short('f')
-             .long(options::FORCE)
-             .help("if an existing destination file cannot be opened, remove it and \
+        .arg(
+            Arg::new(options::TARGET_DIRECTORY)
+                .short('t')
+                .conflicts_with(options::NO_TARGET_DIRECTORY)
+                .long(options::TARGET_DIRECTORY)
+                .value_name(options::TARGET_DIRECTORY)
+                .value_hint(clap::ValueHint::DirPath)
+                .takes_value(true)
+                .validator(|s| {
+                    if Path::new(s).is_dir() {
+                        return Ok(());
+                    }
+                    Err(format!("'{}' is not a directory", s))
+                })
+                .help("copy all SOURCE arguments into target-directory"),
+        )
+        .arg(
+            Arg::new(options::NO_TARGET_DIRECTORY)
+                .short('T')
+                .long(options::NO_TARGET_DIRECTORY)
+                .conflicts_with(options::TARGET_DIRECTORY)
+                .help("Treat DEST as a regular file and not a directory"),
+        )
+        .arg(
+            Arg::new(options::INTERACTIVE)
+                .short('i')
+                .long(options::INTERACTIVE)
+                .overrides_with(options::NO_CLOBBER)
+                .help("ask before overwriting files"),
+        )
+        .arg(
+            Arg::new(options::LINK)
+                .short('l')
+                .long(options::LINK)
+                .overrides_with_all(MODE_ARGS)
+                .help("hard-link files instead of copying"),
+        )
+        .arg(
+            Arg::new(options::NO_CLOBBER)
+                .short('n')
+                .long(options::NO_CLOBBER)
+                .overrides_with(options::INTERACTIVE)
+                .help("don't overwrite a file that already exists"),
+        )
+        .arg(
+            Arg::new(options::RECURSIVE)
+                .short('r')
+                .long(options::RECURSIVE)
+                // --archive sets this option
+                .help("copy directories recursively"),
+        )
+        .arg(
+            Arg::new(options::RECURSIVE_ALIAS)
+                .short('R')
+                .help("same as -r"),
+        )
+        .arg(
+            Arg::new(options::STRIP_TRAILING_SLASHES)
+                .long(options::STRIP_TRAILING_SLASHES)
+                .help("remove any trailing slashes from each SOURCE argument"),
+        )
+        .arg(
+            Arg::new(options::VERBOSE)
+                .short('v')
+                .long(options::VERBOSE)
+                .help("explicitly state what is being done"),
+        )
+        .arg(
+            Arg::new(options::SYMBOLIC_LINK)
+                .short('s')
+                .long(options::SYMBOLIC_LINK)
+                .overrides_with_all(MODE_ARGS)
+                .help("make symbolic links instead of copying"),
+        )
+        .arg(
+            Arg::new(options::FORCE)
+                .short('f')
+                .long(options::FORCE)
+                .help(
+                    "if an existing destination file cannot be opened, remove it and \
                     try again (this option is ignored when the -n option is also used). \
-                    Currently not implemented for Windows."))
-        .arg(Arg::new(options::REMOVE_DESTINATION)
-             .long(options::REMOVE_DESTINATION)
-             .overrides_with(options::FORCE)
-             .help("remove each existing destination file before attempting to open it \
-                    (contrast with --force). On Windows, currently only works for writeable files."))
+                    Currently not implemented for Windows.",
+                ),
+        )
+        .arg(
+            Arg::new(options::REMOVE_DESTINATION)
+                .long(options::REMOVE_DESTINATION)
+                .overrides_with(options::FORCE)
+                .help(
+                    "remove each existing destination file before attempting to open it \
+                    (contrast with --force). On Windows, currently only works for \
+                    writeable files.",
+                ),
+        )
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
         .arg(backup_control::arguments::suffix())
-        .arg(Arg::new(options::UPDATE)
-             .short('u')
-             .long(options::UPDATE)
-             .help("copy only when the SOURCE file is newer than the destination file \
-                    or when the destination file is missing"))
-        .arg(Arg::new(options::REFLINK)
-             .long(options::REFLINK)
-             .takes_value(true)
-             .value_name("WHEN")
-             .overrides_with_all(MODE_ARGS)
-             .help("control clone/CoW copies. See below"))
-        .arg(Arg::new(options::ATTRIBUTES_ONLY)
-             .long(options::ATTRIBUTES_ONLY)
-             .overrides_with_all(MODE_ARGS)
-             .help("Don't copy the file data, just the attributes"))
-        .arg(Arg::new(options::PRESERVE)
-             .long(options::PRESERVE)
-             .takes_value(true)
-             .multiple_occurrences(true)
-             .use_value_delimiter(true)
-             .value_parser(clap::builder::PossibleValuesParser::new(PRESERVABLE_ATTRIBUTES))
-             .min_values(0)
-             .value_name("ATTR_LIST")
-             .overrides_with_all(&[options::ARCHIVE, options::PRESERVE_DEFAULT_ATTRIBUTES, options::NO_PRESERVE])
-             // -d sets this option
-             // --archive sets this option
-             .help("Preserve the specified attributes (default: mode, ownership (unix only), timestamps), \
-                    if possible additional attributes: context, links, xattr, all"))
-        .arg(Arg::new(options::PRESERVE_DEFAULT_ATTRIBUTES)
-             .short('p')
-             .long(options::PRESERVE_DEFAULT_ATTRIBUTES)
-             .overrides_with_all(&[options::PRESERVE, options::NO_PRESERVE, options::ARCHIVE])
-             .help("same as --preserve=mode,ownership(unix only),timestamps"))
-        .arg(Arg::new(options::NO_PRESERVE)
-             .long(options::NO_PRESERVE)
-             .takes_value(true)
-             .value_name("ATTR_LIST")
-             .overrides_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::PRESERVE, options::ARCHIVE])
-             .help("don't preserve the specified attributes"))
-        .arg(Arg::new(options::PARENTS)
-            .long(options::PARENTS)
-            .alias(options::PARENT)
-            .help("use full source file name under DIRECTORY"))
-        .arg(Arg::new(options::NO_DEREFERENCE)
-             .short('P')
-             .long(options::NO_DEREFERENCE)
-             .overrides_with(options::DEREFERENCE)
-             // -d sets this option
-             .help("never follow symbolic links in SOURCE"))
-        .arg(Arg::new(options::DEREFERENCE)
-             .short('L')
-             .long(options::DEREFERENCE)
-             .overrides_with(options::NO_DEREFERENCE)
-             .help("always follow symbolic links in SOURCE"))
-        .arg(Arg::new(options::ARCHIVE)
-             .short('a')
-             .long(options::ARCHIVE)
-             .overrides_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::PRESERVE, options::NO_PRESERVE])
-             .help("Same as -dR --preserve=all"))
-        .arg(Arg::new(options::NO_DEREFERENCE_PRESERVE_LINKS)
-             .short('d')
-             .help("same as --no-dereference --preserve=links"))
-        .arg(Arg::new(options::ONE_FILE_SYSTEM)
-             .short('x')
-             .long(options::ONE_FILE_SYSTEM)
-             .help("stay on this file system"))
-        .arg(Arg::new(options::SPARSE)
-             .long(options::SPARSE)
-             .takes_value(true)
-             .value_name("WHEN")
-             .value_parser(["never", "auto", "always"])
-             .help("NotImplemented: control creation of sparse files. See below"))
-
+        .arg(
+            Arg::new(options::UPDATE)
+                .short('u')
+                .long(options::UPDATE)
+                .help(
+                    "copy only when the SOURCE file is newer than the destination file \
+                    or when the destination file is missing",
+                ),
+        )
+        .arg(
+            Arg::new(options::REFLINK)
+                .long(options::REFLINK)
+                .takes_value(true)
+                .value_name("WHEN")
+                .overrides_with_all(MODE_ARGS)
+                .help("control clone/CoW copies. See below"),
+        )
+        .arg(
+            Arg::new(options::ATTRIBUTES_ONLY)
+                .long(options::ATTRIBUTES_ONLY)
+                .overrides_with_all(MODE_ARGS)
+                .help("Don't copy the file data, just the attributes"),
+        )
+        .arg(
+            Arg::new(options::PRESERVE)
+                .long(options::PRESERVE)
+                .takes_value(true)
+                .multiple_occurrences(true)
+                .use_value_delimiter(true)
+                .value_parser(clap::builder::PossibleValuesParser::new(
+                    PRESERVABLE_ATTRIBUTES,
+                ))
+                .min_values(0)
+                .value_name("ATTR_LIST")
+                .overrides_with_all(&[
+                    options::ARCHIVE,
+                    options::PRESERVE_DEFAULT_ATTRIBUTES,
+                    options::NO_PRESERVE,
+                ])
+                // -d sets this option
+                // --archive sets this option
+                .help(
+                    "Preserve the specified attributes (default: mode, ownership (unix only), \
+                     timestamps), if possible additional attributes: context, links, xattr, all",
+                ),
+        )
+        .arg(
+            Arg::new(options::PRESERVE_DEFAULT_ATTRIBUTES)
+                .short('p')
+                .long(options::PRESERVE_DEFAULT_ATTRIBUTES)
+                .overrides_with_all(&[options::PRESERVE, options::NO_PRESERVE, options::ARCHIVE])
+                .help("same as --preserve=mode,ownership(unix only),timestamps"),
+        )
+        .arg(
+            Arg::new(options::NO_PRESERVE)
+                .long(options::NO_PRESERVE)
+                .takes_value(true)
+                .value_name("ATTR_LIST")
+                .overrides_with_all(&[
+                    options::PRESERVE_DEFAULT_ATTRIBUTES,
+                    options::PRESERVE,
+                    options::ARCHIVE,
+                ])
+                .help("don't preserve the specified attributes"),
+        )
+        .arg(
+            Arg::new(options::PARENTS)
+                .long(options::PARENTS)
+                .alias(options::PARENT)
+                .help("use full source file name under DIRECTORY"),
+        )
+        .arg(
+            Arg::new(options::NO_DEREFERENCE)
+                .short('P')
+                .long(options::NO_DEREFERENCE)
+                .overrides_with(options::DEREFERENCE)
+                // -d sets this option
+                .help("never follow symbolic links in SOURCE"),
+        )
+        .arg(
+            Arg::new(options::DEREFERENCE)
+                .short('L')
+                .long(options::DEREFERENCE)
+                .overrides_with(options::NO_DEREFERENCE)
+                .help("always follow symbolic links in SOURCE"),
+        )
+        .arg(
+            Arg::new(options::ARCHIVE)
+                .short('a')
+                .long(options::ARCHIVE)
+                .overrides_with_all(&[
+                    options::PRESERVE_DEFAULT_ATTRIBUTES,
+                    options::PRESERVE,
+                    options::NO_PRESERVE,
+                ])
+                .help("Same as -dR --preserve=all"),
+        )
+        .arg(
+            Arg::new(options::NO_DEREFERENCE_PRESERVE_LINKS)
+                .short('d')
+                .help("same as --no-dereference --preserve=links"),
+        )
+        .arg(
+            Arg::new(options::ONE_FILE_SYSTEM)
+                .short('x')
+                .long(options::ONE_FILE_SYSTEM)
+                .help("stay on this file system"),
+        )
+        .arg(
+            Arg::new(options::SPARSE)
+                .long(options::SPARSE)
+                .takes_value(true)
+                .value_name("WHEN")
+                .value_parser(["never", "auto", "always"])
+                .help("NotImplemented: control creation of sparse files. See below"),
+        )
         // TODO: implement the following args
-        .arg(Arg::new(options::COPY_CONTENTS)
-             .long(options::COPY_CONTENTS)
-             .overrides_with(options::ATTRIBUTES_ONLY)
-             .help("NotImplemented: copy contents of special files when recursive"))
-        .arg(Arg::new(options::CONTEXT)
-             .long(options::CONTEXT)
-             .takes_value(true)
-             .value_name("CTX")
-             .help("NotImplemented: set SELinux security context of destination file to default type"))
-        .arg(Arg::new(options::CLI_SYMBOLIC_LINKS)
-             .short('H')
-             .help("NotImplemented: follow command-line symbolic links in SOURCE"))
+        .arg(
+            Arg::new(options::COPY_CONTENTS)
+                .long(options::COPY_CONTENTS)
+                .overrides_with(options::ATTRIBUTES_ONLY)
+                .help("NotImplemented: copy contents of special files when recursive"),
+        )
+        .arg(
+            Arg::new(options::CONTEXT)
+                .long(options::CONTEXT)
+                .takes_value(true)
+                .value_name("CTX")
+                .help(
+                    "NotImplemented: set SELinux security context of destination file to \
+                    default type",
+                ),
+        )
+        .arg(
+            Arg::new(options::CLI_SYMBOLIC_LINKS)
+                .short('H')
+                .help("NotImplemented: follow command-line symbolic links in SOURCE"),
+        )
         // END TODO
-
-        .arg(Arg::new(options::PATHS)
-             .multiple_occurrences(true)
-             .value_hint(clap::ValueHint::AnyPath))
+        .arg(
+            Arg::new(options::PATHS)
+                .multiple_occurrences(true)
+                .value_hint(clap::ValueHint::AnyPath),
+        )
 }
 
 #[uucore::main]
