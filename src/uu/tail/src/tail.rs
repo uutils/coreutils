@@ -503,8 +503,11 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                     }
 
                     let mut reader;
-                    if file.is_seekable(settings.stdin_offset)
-                        && metadata.as_ref().unwrap().get_block_size() > 0
+                    if file.is_seekable(if display_name.is_stdin() {
+                        settings.stdin_offset
+                    } else {
+                        0
+                    }) && metadata.as_ref().unwrap().get_block_size() > 0
                     {
                         bounded_tail(&mut file, &settings);
                         reader = BufReader::new(file);
