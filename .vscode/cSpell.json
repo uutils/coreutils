@@ -22,7 +22,8 @@
     "target/**",
     "tests/**/fixtures/**",
     "src/uu/dd/test-resources/**",
-    "vendor/**"
+    "vendor/**",
+    "**/*.svg"
   ],
 
   // words to ignore (even if they are in the flagWords)
