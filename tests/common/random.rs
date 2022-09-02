@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-#![allow(dead_code)]
+// #![allow(dead_code)]
 
 use rand::distributions::{Distribution, Uniform};
 use rand::{thread_rng, Rng};
@@ -29,20 +29,6 @@ impl AlphanumericNewline {
     /// The charset to act upon
     const CHARSET: &'static [u8] =
         b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789\n";
-
-    /// Generate a random byte from [`Self::CHARSET`] and return it as `char`.
-    ///
-    /// # Arguments
-    ///
-    /// * `rng`: A [`rand::Rng`]
-    ///
-    /// returns: char
-    fn random_char<R>(rng: &mut R) -> char
-    where
-        R: Rng + ?Sized,
-    {
-        Self::random(rng) as char
-    }
 
     /// Generate a random byte from [`Self::CHARSET`] and return it as `u8`.
     ///

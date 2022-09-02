@@ -23,7 +23,7 @@ extern crate clap;
 extern crate uucore;
 extern crate core;
 
-mod chunks;
+pub mod chunks;
 mod parse;
 mod platform;
 use crate::files::FileHandling;
@@ -32,12 +32,10 @@ use chunks::ReverseChunks;
 use clap::{Arg, Command, ValueSource};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::cmp::Ordering;
-use std::collections::vec_deque::VecDeque;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
 use std::fs::{File, Metadata};
-use std::io;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, channel, Receiver};
 use std::time::Duration;
@@ -1436,9 +1434,8 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
     match (&settings.mode, settings.beginning) {
         (FilterMode::Lines(count, sep), false) => {
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, *count);
-            for chunk in chunks.fill(reader)? {
-                writer.write_all(chunk.get_buffer())?;
-            }
+            chunks.fill(reader)?;
+            chunks.print(writer)?;
         }
         (FilterMode::Lines(count, sep), true) => {
             let mut num_skip = (*count).max(1) - 1;
@@ -1461,9 +1458,8 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         }
         (FilterMode::Bytes(count), false) => {
             let mut chunks = chunks::BytesChunkBuffer::new(*count);
-            for chunk in chunks.fill(reader)? {
-                writer.write_all(chunk.get_buffer())?;
-            }
+            chunks.fill(reader)?;
+            chunks.print(writer)?;
         }
         (FilterMode::Bytes(count), true) => {
             let mut num_skip = (*count).max(1) - 1;

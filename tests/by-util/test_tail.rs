@@ -2429,7 +2429,7 @@ mod pipe_tests {
     use super::*;
     use crate::common::random::*;
     use rand::distributions::Alphanumeric;
-    const CHUNK_BUFFER_SIZE: usize = 8192;
+    use tail::chunks::BUFFER_SIZE as CHUNK_BUFFER_SIZE;
 
     #[test]
     fn test_pipe_when_lines_option_value_is_higher_than_contained_lines() {

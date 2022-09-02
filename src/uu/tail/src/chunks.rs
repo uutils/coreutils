@@ -1,10 +1,14 @@
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+
 //! Iterating over a file by chunks, either starting at the end of the file with [`ReverseChunks`]
 //! or at the end of piped stdin with [`LinesChunk`] or [`BytesChunk`].
 //!
 //! Use [`ReverseChunks::new`] to create a new iterator over chunks of bytes from the file.
-
-// spell-checker:ignore (ToDO) filehandle
-use std::collections::vec_deque::{Iter, VecDeque};
+// spell-checker:ignore (ToDO) filehandle BUFSIZ
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use uucore::error::UResult;
@@ -13,10 +17,11 @@ use uucore::error::UResult;
 /// block read at a time.
 pub const BLOCK_SIZE: u64 = 1 << 16;
 
-/// The size of the backing buffer of a LinesChunk or BytesChunk. Some calculations concerning the
-/// buffer assume that the target system's usize is greater than this BUFFER_SIZE, and therefore
-/// convert from u64 to usize as long as it is known, that the value resides somewhere between 0
-/// and the BUFFER_SIZE.
+/// The size of the backing buffer of a LinesChunk or BytesChunk in bytes. The value of BUFFER_SIZE
+/// originates from the BUFSIZ constant in stdio.h and the libc crate to make stream IO efficient.
+/// In the latter the value is constantly set to 8192 on all platforms, where the value in stdio.h
+/// is determined on each platform differently. Since libc chose 8192 as a reasonable default the
+/// value here is set to this value, too.
 pub const BUFFER_SIZE: usize = 8192;
 
 /// An iterator over a file in non-overlapping chunks from the end of the file.
@@ -106,11 +111,21 @@ pub struct BytesChunk {
     /// Stores the number of bytes, this buffer holds. This is not equal to buffer.len(), since the
     /// [`BytesChunk`] may store less bytes than the internal buffer can hold. In addition
     /// [`BytesChunk`] may be reused, what makes it necessary to track the number of stored bytes.
+    /// The choice of usize is sufficient here, since the number of bytes max value is
+    /// [`BUFFER_SIZE`], which is a usize.
     bytes: usize,
 }
 
+// Silence a clippy warning about a missing default trait implementation, because a user might
+// expect to be able to use `Default` as the type can be constructed without arguments.
+impl Default for BytesChunk {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BytesChunk {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             buffer: [0; BUFFER_SIZE],
             bytes: 0,
@@ -127,8 +142,6 @@ impl BytesChunk {
     /// * `chunk`: The chunk to create a new `BytesChunk` chunk from
     /// * `offset`: Start to copy the old chunk's buffer from this position. May not be larger
     ///             than `chunk.bytes`.
-    ///
-    /// returns: BytesChunk
     ///
     /// # Examples
     ///
@@ -170,7 +183,7 @@ impl BytesChunk {
     /// chunk.bytes = 1;
     /// assert_eq!(&[0], chunk.get_buffer());
     /// ```
-    pub(crate) fn get_buffer(&self) -> &[u8] {
+    pub fn get_buffer(&self) -> &[u8] {
         &self.buffer[..self.bytes]
     }
 
@@ -185,25 +198,19 @@ impl BytesChunk {
     /// chunk.bytes = 2;
     /// assert_eq!(&[0], chunk.get_buffer_with(1));
     /// ```
-    pub(crate) fn get_buffer_with(&self, offset: usize) -> &[u8] {
+    pub fn get_buffer_with(&self, offset: usize) -> &[u8] {
         &self.buffer[offset..self.bytes]
     }
 
-    pub(crate) fn has_data(&self) -> bool {
+    pub fn has_data(&self) -> bool {
         self.bytes > 0
     }
 
-    /// Fills this [`buffer`](Self::buffer) with maximal [`BUFFER_SIZE`] number of bytes, draining
-    /// the reader by that number of bytes. If EOF is reached (so 0 bytes are read), then returns
+    /// Fills `self.buffer` with maximal [`BUFFER_SIZE`] number of bytes, draining the reader by
+    /// that number of bytes. If EOF is reached (so 0 bytes are read), then returns
     /// [`UResult<None>`] or else the result with [`Some(bytes)`] where bytes is the number of bytes
     /// read from the source.
-    ///
-    /// # Arguments
-    ///
-    /// * `filehandle`: A [`BufReader`], where the inner must implement [`Read`]
-    ///
-    /// returns: `Result<Option<usize>, Box<dyn UError, Global>>`
-    pub(crate) fn fill(&mut self, filehandle: &mut BufReader<impl Read>) -> UResult<Option<usize>> {
+    pub fn fill(&mut self, filehandle: &mut BufReader<impl Read>) -> UResult<Option<usize>> {
         let num_bytes = filehandle.read(&mut self.buffer)?;
         self.bytes = num_bytes;
         if num_bytes == 0 {
@@ -216,10 +223,12 @@ impl BytesChunk {
 
 /// An abstraction layer on top of [`BytesChunk`] mainly to simplify filling only the needed amount
 /// of chunks. See also [`Self::fill`].
-pub(crate) struct BytesChunkBuffer {
+pub struct BytesChunkBuffer {
     /// The number of bytes to print
     num_print: u64,
-    /// The current number of bytes summed over all stored chunks in [`Self::chunks`]
+    /// The current number of bytes summed over all stored chunks in [`Self::chunks`]. Use u64 here
+    /// to support files > 4GB on 32-bit systems. Note, this differs from `BytesChunk::bytes` which
+    /// is a usize. The choice of u64 is based on `tail::FilterMode::Bytes`.
     bytes: u64,
     /// The buffer to store [`BytesChunk`] in
     chunks: VecDeque<Box<BytesChunk>>,
@@ -231,8 +240,6 @@ impl BytesChunkBuffer {
     /// # Arguments
     ///
     /// * `num_print`: The number of bytes to print
-    ///
-    /// returns: BytesChunk
     ///
     /// # Examples
     ///
@@ -248,7 +255,7 @@ impl BytesChunkBuffer {
     /// assert_eq!(1, new_chunk.get_buffer().len());
     /// assert_eq!(&[1], new_chunk.get_buffer());
     /// ```
-    pub(crate) fn new(num_print: u64) -> Self {
+    pub fn new(num_print: u64) -> Self {
         Self {
             bytes: 0,
             num_print,
@@ -257,16 +264,10 @@ impl BytesChunkBuffer {
     }
 
     /// Fills this buffer with chunks and consumes the reader completely. This method ensures that
-    /// there are exactly as many chunks as needed to match [`Self::num_print`] bytes, so there are
+    /// there are exactly as many chunks as needed to match `self.num_print` bytes, so there are
     /// in sum exactly `self.num_print` bytes stored in all chunks. The method returns an iterator
     /// over these chunks. If there are no chunks, for example because the piped stdin contained no
     /// bytes, or `num_print = 0` then `iterator.next` returns None.
-    ///
-    /// # Arguments
-    ///
-    /// * `reader`: A [`BufReader`] with an inner element implementing the [`Read`] trait.
-    ///
-    /// returns: Result<Iter<Box<BytesChunk, Global>>, Box<dyn UError, Global>>
     ///
     /// # Examples
     ///
@@ -276,25 +277,14 @@ impl BytesChunkBuffer {
     /// let mut reader = BufReader::new(Cursor::new(""));
     /// let num_print = 0;
     /// let mut chunks = BytesChunkBuffer::new(num_print);
-    /// let mut iter = chunks.fill(&mut reader).unwrap();
+    /// chunks.fill(&mut reader).unwrap();
     ///
-    /// let chunk = iter.next();
-    /// assert!(chunk.is_none());
-    ///
-    /// let mut reader = BufReader::new(Cursor::new("a"));
+    /// let mut reader = BufReader::new(Cursor::new("a");
     /// let num_print = 1;
     /// let mut chunks = BytesChunkBuffer::new(num_print);
-    /// let mut iter = chunks.fill(&mut reader).unwrap();
-    ///
-    /// let chunk = iter.next();
-    /// assert!(chunk.is_some());
-    /// assert_eq!(&[b'a'], chunk.unwrap().get_buffer());
-    /// assert_eq!(None, iter.next());
+    /// chunks.fill(&mut reader).unwrap();
     /// ```
-    pub(crate) fn fill(
-        &mut self,
-        reader: &mut BufReader<impl Read>,
-    ) -> UResult<Iter<Box<BytesChunk>>> {
+    pub fn fill(&mut self, reader: &mut BufReader<impl Read>) -> UResult<()> {
         let mut chunk = Box::new(BytesChunk::new());
 
         // fill chunks with all bytes from reader and reuse already instantiated chunks if possible
@@ -313,43 +303,45 @@ impl BytesChunkBuffer {
 
         // quit early if there are no chunks for example in case the pipe was empty
         if self.chunks.is_empty() {
-            return Ok(self.chunks.iter());
+            return Ok(());
         }
 
         let chunk = self.chunks.pop_front().unwrap();
-        // calculate the offset in the first chunk and put the calculated chunk as first element in
-        // the self.chunks collection.
-        let offset = if self.num_print >= self.bytes {
-            // ignore a passed in value exceeding the number of actually read bytes and treat it
-            // like a value equal to the number of bytes.
-            0
-        } else {
-            // the calculated offset must be in the range 0 to BUFFER_SIZE and is therefore safely
-            // convertible to a usize without losses.
-            (self.bytes - self.num_print) as usize
-        };
 
+        // calculate the offset in the first chunk and put the calculated chunk as first element in
+        // the self.chunks collection. The calculated offset must be in the range 0 to BUFFER_SIZE
+        // and is therefore safely convertible to a usize without losses.
+        let offset = self.bytes.saturating_sub(self.num_print) as usize;
         self.chunks
             .push_front(Box::new(BytesChunk::from_chunk(&chunk, offset)));
 
-        Ok(self.chunks.iter())
+        Ok(())
+    }
+
+    pub fn print(&self, mut writer: impl Write) -> UResult<()> {
+        for chunk in &self.chunks {
+            writer.write_all(chunk.get_buffer())?;
+        }
+        Ok(())
     }
 }
 
-#[derive(Debug)]
 /// Works similar to a [`BytesChunk`] but also stores the number of lines encountered in the current
-/// buffer. The size of the buffer is limited to a fixed size number of bytes (See [`ChunkBuffer`])
-pub(crate) struct LinesChunk {
+/// buffer. The size of the buffer is limited to a fixed size number of bytes.
+#[derive(Debug)]
+pub struct LinesChunk {
     /// Work on top of a [`BytesChunk`]
     chunk: BytesChunk,
-    /// The number of lines delimited by `delimiter`
+    /// The number of lines delimited by `delimiter`. The choice of usize is sufficient here,
+    /// because lines max value is the number of bytes contained in this chunk's buffer, and the
+    /// number of bytes max value is [`BUFFER_SIZE`], which is a usize.
     lines: usize,
     /// The delimiter to use, to count the lines
     delimiter: u8,
 }
 
 impl LinesChunk {
-    pub(crate) fn new(delimiter: u8) -> Self {
+    pub fn new(delimiter: u8) -> Self {
         Self {
             chunk: BytesChunk::new(),
             lines: 0,
@@ -387,8 +379,6 @@ impl LinesChunk {
     ///
     /// * `chunk`: The chunk to create the new chunk from
     /// * `offset`: The offset in number of lines (not bytes)
-    ///
-    /// returns: LinesChunk
     ///
     /// # Examples
     ///
@@ -434,28 +424,28 @@ impl LinesChunk {
     /// chunk.bytes = 1;
     /// assert!(chunk.has_data());
     /// ```
-    pub(crate) fn has_data(&self) -> bool {
+    pub fn has_data(&self) -> bool {
         self.chunk.has_data()
     }
 
     /// Returns this buffer safely. See [`BytesChunk::get_buffer`]
     ///
     /// returns: &[u8] with length `self.bytes`
-    pub(crate) fn get_buffer(&self) -> &[u8] {
+    pub fn get_buffer(&self) -> &[u8] {
         self.chunk.get_buffer()
     }
 
     /// Returns this buffer safely with an offset applied. See [`BytesChunk::get_buffer_with`].
     ///
     /// returns: &[u8] with length `self.bytes - offset`
-    pub(crate) fn get_buffer_with(&self, offset: usize) -> &[u8] {
+    pub fn get_buffer_with(&self, offset: usize) -> &[u8] {
         self.chunk.get_buffer_with(offset)
     }
 
     /// Return the number of lines the buffer contains. `self.lines` needs to be set before the call
     /// to this function returns the correct value. If the calculation of lines is needed then
-    /// use [`Self::count_lines`].
-    pub(crate) fn get_lines(&self) -> usize {
+    /// use `self.count_lines`.
+    pub fn get_lines(&self) -> usize {
         self.lines
     }
 
@@ -463,13 +453,7 @@ impl LinesChunk {
     /// that number of bytes. This function works like the [`BytesChunk::fill`] function besides
     /// that this function also counts and stores the number of lines encountered while reading from
     /// the `filehandle`.
-    ///
-    /// # Arguments
-    ///
-    /// * `filehandle`: A [`BufReader`], where the inner must implement [`Read`]
-    ///
-    /// returns: `Result<Option<usize>, Box<dyn UError, Global>>`
-    pub(crate) fn fill(&mut self, filehandle: &mut BufReader<impl Read>) -> UResult<Option<usize>> {
+    pub fn fill(&mut self, filehandle: &mut BufReader<impl Read>) -> UResult<Option<usize>> {
         match self.chunk.fill(filehandle)? {
             None => {
                 self.lines = 0;
@@ -489,8 +473,6 @@ impl LinesChunk {
     ///
     /// * `offset`: the offset in number of lines. If offset is 0 then 0 is returned, if larger than
     ///             the contained lines then self.bytes is returned.
-    ///
-    /// returns: usize
     ///
     /// # Examples
     ///
@@ -527,7 +509,7 @@ impl LinesChunk {
     ///
     /// * `writer`: must implement [`Write`]
     /// * `offset`: An offset in number of lines.
-    pub(crate) fn print_lines(&self, writer: &mut impl Write, offset: usize) -> UResult<()> {
+    pub fn print_lines(&self, writer: &mut impl Write, offset: usize) -> UResult<()> {
         self.print_bytes(writer, self.calculate_bytes_offset_from(offset))
     }
 
@@ -537,7 +519,7 @@ impl LinesChunk {
     ///
     /// * `writer`: must implement [`Write`]
     /// * `offset`: An offset in number of bytes.
-    pub(crate) fn print_bytes(&self, writer: &mut impl Write, offset: usize) -> UResult<()> {
+    pub fn print_bytes(&self, writer: &mut impl Write, offset: usize) -> UResult<()> {
         writer.write_all(self.get_buffer_with(offset))?;
         Ok(())
     }
@@ -545,21 +527,23 @@ impl LinesChunk {
 
 /// An abstraction layer on top of [`LinesChunk`] mainly to simplify filling only the needed amount
 /// of chunks. See also [`Self::fill`]. Works similar like [`BytesChunkBuffer`], but works on top
-/// of lines delimited by [`Self::delimiter`] instead of bytes.
+/// of lines delimited by `self.delimiter` instead of bytes.
 pub struct LinesChunkBuffer {
-    // The delimiter to recognize a line. Any [`u8`] is allowed.
+    /// The delimiter to recognize a line. Any [`u8`] is allowed.
     delimiter: u8,
-    // The amount of lines occurring in all currently stored [`LinesChunk`]s
+    /// The amount of lines occurring in all currently stored [`LinesChunk`]s. Use u64 here to
+    /// support files > 4GB on 32-bit systems. Note, this differs from [`LinesChunk::lines`] which
+    /// is a usize. The choice of u64 is based on `tail::FilterMode::Lines`.
     lines: u64,
-    // The amount of lines to print.
+    /// The amount of lines to print.
     num_print: u64,
-    // Stores the [`LinesChunk`]
+    /// Stores the [`LinesChunk`]
     chunks: VecDeque<Box<LinesChunk>>,
 }
 
 impl LinesChunkBuffer {
     /// Create a new [`LinesChunkBuffer`]
-    pub(crate) fn new(delimiter: u8, num_print: u64) -> Self {
+    pub fn new(delimiter: u8, num_print: u64) -> Self {
         Self {
             delimiter,
             num_print,
@@ -569,20 +553,11 @@ impl LinesChunkBuffer {
     }
 
     /// Fills this buffer with chunks and consumes the reader completely. This method ensures that
-    /// there are exactly as many chunks as needed to match [`Self::num_print`] lines, so there are
+    /// there are exactly as many chunks as needed to match `self.num_print` lines, so there are
     /// in sum exactly `self.num_print` lines stored in all chunks. The method returns an iterator
     /// over these chunks. If there are no chunks, for example because the piped stdin contained no
     /// lines, or `num_print = 0` then `iterator.next` will return None.
-    ///
-    /// # Arguments
-    ///
-    /// * `reader`: A [`BufReader`] with an inner element implementing the [`Read`] trait.
-    ///
-    /// returns: Result<Iter<Box<LinesChunk, Global>>, Box<dyn UError, Global>>
-    pub(crate) fn fill(
-        &mut self,
-        reader: &mut BufReader<impl Read>,
-    ) -> UResult<Iter<Box<LinesChunk>>> {
+    pub fn fill(&mut self, reader: &mut BufReader<impl Read>) -> UResult<()> {
         let mut chunk = Box::new(LinesChunk::new(self.delimiter));
 
         while (chunk.fill(reader)?).is_some() {
@@ -608,7 +583,7 @@ impl LinesChunkBuffer {
             }
         } else {
             // chunks is empty when a file is empty so quitting early here
-            return Ok(self.chunks.iter());
+            return Ok(());
         }
 
         // skip unnecessary chunks and save the first chunk which may hold some lines we have to
@@ -627,17 +602,21 @@ impl LinesChunkBuffer {
             }
         };
 
-        // calculate the number of lines to skip in the chunk
-        let skip_lines = if self.num_print >= self.lines {
-            0
-        } else {
-            (self.lines - self.num_print) as usize
-        };
-
+        // Calculate the number of lines to skip in the current chunk. The calculated value must be
+        // in the range 0 to BUFFER_SIZE and is therefore safely convertible to a usize without
+        // losses.
+        let skip_lines = self.lines.saturating_sub(self.num_print) as usize;
         let chunk = LinesChunk::from_chunk(&chunk, skip_lines);
         self.chunks.push_front(Box::new(chunk));
 
-        Ok(self.chunks.iter())
+        Ok(())
+    }
+
+    pub fn print(&self, mut writer: impl Write) -> UResult<()> {
+        for chunk in &self.chunks {
+            chunk.print_bytes(&mut writer, 0)?;
+        }
+        Ok(())
     }
 }
 
