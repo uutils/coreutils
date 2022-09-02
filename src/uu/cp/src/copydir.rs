@@ -303,6 +303,27 @@ pub(crate) fn copy_directory(
         .into());
     }
 
+    // If in `--parents` mode, create all the necessary ancestor directories.
+    //
+    // For example, if the command is `cp --parents a/b/c d`, that
+    // means we need to copy the two ancestor directories first:
+    //
+    // a -> d/a
+    // a/b -> d/a/b
+    //
+    let tmp = if options.parents {
+        if let Some(parent) = root.parent() {
+            let new_target = target.join(parent);
+            std::fs::create_dir_all(&new_target)?;
+            new_target
+        } else {
+            target.to_path_buf()
+        }
+    } else {
+        target.to_path_buf()
+    };
+    let target = tmp.as_path();
+
     let mut hard_links: Vec<(String, u64)> = vec![];
     let preserve_hard_links = options.preserve_hard_links();
 

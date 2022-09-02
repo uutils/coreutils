@@ -1999,6 +1999,19 @@ fn test_copy_same_symlink_no_dereference_dangling() {
     ucmd.args(&["-d", "a", "b"]).succeeds();
 }
 
+#[cfg(not(windows))]
+#[test]
+fn test_cp_parents_2_dirs() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("a/b/c");
+    at.mkdir("d");
+    ucmd.args(&["-a", "--parents", "a/b/c", "d"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert!(at.dir_exists("d/a/b/c"));
+}
+
 #[test]
 #[ignore = "issue #3332"]
 fn test_cp_parents_2() {
