@@ -3,8 +3,6 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// #![allow(dead_code)]
-
 use rand::distributions::{Distribution, Uniform};
 use rand::{thread_rng, Rng};
 
@@ -22,7 +20,6 @@ use rand::{thread_rng, Rng};
 /// println!("Random chars: {}", String::from_utf8(vec).unwrap());
 /// ```
 #[derive(Clone, Copy, Debug)]
-#[cfg_attr(feature = "serde1", derive(serde::Serialize, serde::Deserialize))]
 pub struct AlphanumericNewline;
 
 impl AlphanumericNewline {

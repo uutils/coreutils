@@ -1442,13 +1442,10 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
             let mut chunk = chunks::LinesChunk::new(*sep);
             while chunk.fill(reader)?.is_some() {
                 let lines = chunk.get_lines() as u64;
-                match lines.cmp(&num_skip) {
-                    Ordering::Less => {
-                        num_skip -= lines;
-                    }
-                    Ordering::Equal | Ordering::Greater => {
-                        break;
-                    }
+                if lines < num_skip {
+                    num_skip -= lines;
+                } else {
+                    break;
                 }
             }
             if chunk.has_data() {

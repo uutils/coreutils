@@ -116,15 +116,8 @@ pub struct BytesChunk {
     bytes: usize,
 }
 
-// Silence a clippy warning about a missing default trait implementation, because a user might
-// expect to be able to use `Default` as the type can be constructed without arguments.
-impl Default for BytesChunk {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl BytesChunk {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             buffer: [0; BUFFER_SIZE],
