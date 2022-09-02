@@ -14,6 +14,8 @@ use clap::{crate_version, Arg, Command};
 use remove_dir_all::remove_dir_all;
 use std::collections::VecDeque;
 use std::fs;
+use std::fs::File;
+use std::io::ErrorKind;
 use std::io::{stderr, stdin, BufRead, Write};
 use std::ops::BitOr;
 use std::path::{Path, PathBuf};
@@ -27,6 +29,7 @@ enum InteractiveMode {
     Never,
     Once,
     Always,
+    PromptProtected,
 }
 
 struct Options {
@@ -112,7 +115,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         }
                     }
                 } else {
-                    InteractiveMode::Never
+                    InteractiveMode::PromptProtected
                 }
             },
             one_fs: matches.contains_id(OPT_ONE_FILE_SYSTEM),
@@ -384,7 +387,7 @@ fn remove_file(path: &Path, options: &Options) -> bool {
     } else {
         true
     };
-    if response {
+    if response && prompt_write_protected(path, false, options) {
         match fs::remove_file(path) {
             Ok(_) => {
                 if options.verbose {
@@ -404,6 +407,34 @@ fn remove_file(path: &Path, options: &Options) -> bool {
     }
 
     false
+}
+
+fn prompt_write_protected(path: &Path, is_dir: bool, options: &Options) -> bool {
+    if options.interactive == InteractiveMode::Never {
+        return true;
+    }
+    match File::open(path) {
+        Ok(_) => true,
+        Err(err) => {
+            if err.kind() == ErrorKind::PermissionDenied {
+                if is_dir {
+                    prompt(&(format!("rm: remove write-protected directory {}? ", path.quote())))
+                } else {
+                    if fs::metadata(path).unwrap().len() == 0 {
+                        return prompt(
+                            &(format!(
+                                "rm: remove write-protected regular empty file {}? ",
+                                path.quote()
+                            )),
+                        );
+                    }
+                    prompt(&(format!("rm: remove write-protected regular file {}? ", path.quote())))
+                }
+            } else {
+                true
+            }
+        }
+    }
 }
 
 fn prompt_file(path: &Path, is_dir: bool) -> bool {
