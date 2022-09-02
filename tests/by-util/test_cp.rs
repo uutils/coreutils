@@ -1997,6 +1997,31 @@ fn test_copy_same_symlink_no_dereference_dangling() {
     ucmd.args(&["-d", "a", "b"]).succeeds();
 }
 
+#[cfg(not(windows))]
+#[test]
+fn test_cp_parents_2_dirs() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("a/b/c");
+    at.mkdir("d");
+    #[cfg(not(windows))]
+    let expected_stdout = "a -> d/a\na/b -> d/a/b\n'a/b/c' -> 'd/a/b/c'\n";
+    // TODO We should iron out exactly what the `--verbose` behavior
+    // should be on Windows. Currently, we have it printing, for
+    // example,
+    //
+    //     a/b -> d\a/b
+    //
+    // Should the path separators all be forward slashes? All
+    // backslashes?
+    #[cfg(windows)]
+    let expected_stdout = "a -> d\\a\na/b -> d\\a/b\n'a/b/c' -> 'd\\a/b\\c'\n";
+    ucmd.args(&["--verbose", "-a", "--parents", "a/b/c", "d"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is(expected_stdout);
+    assert!(at.dir_exists("d/a/b/c"));
+}
+
 #[test]
 #[ignore = "issue #3332"]
 fn test_cp_parents_2() {

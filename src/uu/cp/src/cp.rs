@@ -1086,6 +1086,38 @@ fn copy_directory(
         .into());
     }
 
+    // If in `--parents` mode, create all the necessary ancestor directories.
+    //
+    // For example, if the command is `cp --parents a/b/c d`, that
+    // means we need to copy the two ancestor directories first:
+    //
+    // a -> d/a
+    // a/b -> d/a/b
+    //
+    let tmp = if options.parents {
+        if let Some(parent) = root.parent() {
+            let new_target = target.join(parent);
+            std::fs::create_dir_all(&new_target)?;
+
+            if options.verbose {
+                let mut ancestors = vec![];
+                for p in parent.ancestors() {
+                    ancestors.push(p);
+                }
+                for p in ancestors.iter().rev().skip(1) {
+                    println!("{} -> {}", p.display(), target.join(p).display());
+                }
+            }
+
+            new_target
+        } else {
+            target.to_path_buf()
+        }
+    } else {
+        target.to_path_buf()
+    };
+    let target = tmp.as_path();
+
     let current_dir =
         env::current_dir().unwrap_or_else(|e| crash!(1, "failed to get current directory {}", e));
 
@@ -1144,7 +1176,10 @@ fn copy_directory(
             if target.is_file() {
                 return Err("cannot overwrite non-directory with directory".into());
             }
-            fs::create_dir_all(local_to_target)?;
+            fs::create_dir_all(&local_to_target)?;
+            if options.verbose {
+                println!("{}", context_for(p.path(), &local_to_target));
+            }
         } else if !path.is_dir() {
             if preserve_hard_links {
                 let mut found_hard_link = false;
