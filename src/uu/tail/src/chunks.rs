@@ -265,6 +265,7 @@ impl BytesChunkBuffer {
     /// # Examples
     ///
     /// ```rust,ignore
+    /// use crate::chunks::BytesChunkBuffer;
     /// use std::io::{BufReader, Cursor};
     ///
     /// let mut reader = BufReader::new(Cursor::new(""));
@@ -272,7 +273,7 @@ impl BytesChunkBuffer {
     /// let mut chunks = BytesChunkBuffer::new(num_print);
     /// chunks.fill(&mut reader).unwrap();
     ///
-    /// let mut reader = BufReader::new(Cursor::new("a");
+    /// let mut reader = BufReader::new(Cursor::new("a"));
     /// let num_print = 1;
     /// let mut chunks = BytesChunkBuffer::new(num_print);
     /// chunks.fill(&mut reader).unwrap();
