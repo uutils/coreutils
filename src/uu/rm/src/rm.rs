@@ -150,66 +150,74 @@ pub fn uu_app<'a>() -> Command<'a> {
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_FORCE)
-            .short('f')
-            .long(OPT_FORCE)
-            .multiple_occurrences(true)
-            .help("ignore nonexistent files and arguments, never prompt")
+                .short('f')
+                .long(OPT_FORCE)
+                .multiple_occurrences(true)
+                .help("ignore nonexistent files and arguments, never prompt"),
         )
         .arg(
             Arg::new(OPT_PROMPT)
-            .short('i')
-            .help("prompt before every removal")
+                .short('i')
+                .help("prompt before every removal"),
         )
-        .arg(
-            Arg::new(OPT_PROMPT_MORE)
-            .short('I')
-            .help("prompt once before removing more than three files, or when removing recursively. Less intrusive than -i, while still giving some protection against most mistakes")
-        )
+        .arg(Arg::new(OPT_PROMPT_MORE).short('I').help(
+            "prompt once before removing more than three files, or when removing recursively. \
+            Less intrusive than -i, while still giving some protection against most mistakes",
+        ))
         .arg(
             Arg::new(OPT_INTERACTIVE)
-            .long(OPT_INTERACTIVE)
-            .help("prompt according to WHEN: never, once (-I), or always (-i). Without WHEN, prompts always")
-            .value_name("WHEN")
-            .takes_value(true)
+                .long(OPT_INTERACTIVE)
+                .help(
+                    "prompt according to WHEN: never, once (-I), or always (-i). Without WHEN, \
+                    prompts always",
+                )
+                .value_name("WHEN")
+                .takes_value(true),
         )
         .arg(
             Arg::new(OPT_ONE_FILE_SYSTEM)
-            .long(OPT_ONE_FILE_SYSTEM)
-            .help("when removing a hierarchy recursively, skip any directory that is on a file system different from that of the corresponding command line argument (NOT IMPLEMENTED)")
+                .long(OPT_ONE_FILE_SYSTEM)
+                .help(
+                    "when removing a hierarchy recursively, skip any directory that is on a file \
+                    system different from that of the corresponding command line argument (NOT \
+                    IMPLEMENTED)",
+                ),
         )
         .arg(
             Arg::new(OPT_NO_PRESERVE_ROOT)
-            .long(OPT_NO_PRESERVE_ROOT)
-            .help("do not treat '/' specially")
+                .long(OPT_NO_PRESERVE_ROOT)
+                .help("do not treat '/' specially"),
         )
         .arg(
             Arg::new(OPT_PRESERVE_ROOT)
-            .long(OPT_PRESERVE_ROOT)
-            .help("do not remove '/' (default)")
+                .long(OPT_PRESERVE_ROOT)
+                .help("do not remove '/' (default)"),
         )
         .arg(
-            Arg::new(OPT_RECURSIVE).short('r')
-            .multiple_occurrences(true)
-            .long(OPT_RECURSIVE)
-            .help("remove directories and their contents recursively")
+            Arg::new(OPT_RECURSIVE)
+                .short('r')
+                .multiple_occurrences(true)
+                .long(OPT_RECURSIVE)
+                .help("remove directories and their contents recursively"),
         )
         .arg(
             // To mimic GNU's behavior we also want the '-R' flag. However, using clap's
             // alias method 'visible_alias("R")' would result in a long '--R' flag.
-            Arg::new(OPT_RECURSIVE_R).short('R')
-            .help("Equivalent to -r")
+            Arg::new(OPT_RECURSIVE_R)
+                .short('R')
+                .help("Equivalent to -r"),
         )
         .arg(
             Arg::new(OPT_DIR)
-            .short('d')
-            .long(OPT_DIR)
-            .help("remove empty directories")
+                .short('d')
+                .long(OPT_DIR)
+                .help("remove empty directories"),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
-            .short('v')
-            .long(OPT_VERBOSE)
-            .help("explain what is being done")
+                .short('v')
+                .long(OPT_VERBOSE)
+                .help("explain what is being done"),
         )
         // From the GNU source code:
         // This is solely for testing.
@@ -221,16 +229,16 @@ pub fn uu_app<'a>() -> Command<'a> {
         // hyphens. Therefore it supports 3 leading hyphens.
         .arg(
             Arg::new(PRESUME_INPUT_TTY)
-            .long(PRESUME_INPUT_TTY)
-            .alias(PRESUME_INPUT_TTY)
-            .hide(true)
+                .long(PRESUME_INPUT_TTY)
+                .alias(PRESUME_INPUT_TTY)
+                .hide(true),
         )
         .arg(
             Arg::new(ARG_FILES)
-            .multiple_occurrences(true)
-            .takes_value(true)
-            .min_values(1)
-            .value_hint(clap::ValueHint::AnyPath)
+                .multiple_occurrences(true)
+                .takes_value(true)
+                .min_values(1)
+                .value_hint(clap::ValueHint::AnyPath),
         )
 }
 
