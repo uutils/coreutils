@@ -835,6 +835,15 @@ impl Options {
     fn dereference(&self, in_command_line: bool) -> bool {
         self.dereference || (in_command_line && self.cli_dereference)
     }
+
+    fn preserve_hard_links(&self) -> bool {
+        for attribute in &self.preserve_attributes {
+            if *attribute == Attribute::Links {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 impl TargetType {
@@ -938,12 +947,7 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
     let target_type = TargetType::determine(sources, target);
     verify_target_type(target, &target_type)?;
 
-    let mut preserve_hard_links = false;
-    for attribute in &options.preserve_attributes {
-        if *attribute == Attribute::Links {
-            preserve_hard_links = true;
-        }
-    }
+    let preserve_hard_links = options.preserve_hard_links();
 
     let mut hard_links: Vec<(String, u64)> = vec![];
 
@@ -1108,12 +1112,7 @@ fn copy_directory(
 
     #[cfg(unix)]
     let mut hard_links: Vec<(String, u64)> = vec![];
-    let mut preserve_hard_links = false;
-    for attribute in &options.preserve_attributes {
-        if *attribute == Attribute::Links {
-            preserve_hard_links = true;
-        }
-    }
+    let preserve_hard_links = options.preserve_hard_links();
 
     // This should be changed once Redox supports hardlinks
     #[cfg(any(windows, target_os = "redox"))]
