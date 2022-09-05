@@ -296,19 +296,23 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .value_name("N, LIST")
                 .takes_value(true)
                 .multiple_occurrences(true)
-                .help("have tabs N characters apart, not 8 or use comma separated list of explicit tab positions"),
+                .help(
+                    "have tabs N characters apart, not 8 or use comma separated list \
+                    of explicit tab positions",
+                ),
         )
         .arg(
             Arg::new(options::NO_UTF8)
                 .long(options::NO_UTF8)
                 .short('U')
                 .help("interpret input file as 8-bit ASCII rather than UTF-8"),
-        ).arg(
+        )
+        .arg(
             Arg::new(options::FILES)
                 .multiple_occurrences(true)
                 .hide(true)
                 .takes_value(true)
-                .value_hint(clap::ValueHint::FilePath)
+                .value_hint(clap::ValueHint::FilePath),
         )
 }
 
