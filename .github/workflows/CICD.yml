@@ -546,6 +546,8 @@ jobs:
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
     timeout-minutes: 90
+    env:
+      DOCKER_OPTS: '--volume /etc/passwd:/etc/passwd --volume /etc/group:/etc/group'
     strategy:
       fail-fast: false
       matrix:
