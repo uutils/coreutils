@@ -24,6 +24,7 @@ use uucore::{format_usage, show};
 use clap::{crate_version, Arg, ArgMatches, Command, ValueSource};
 
 use std::error::Error;
+use std::ffi::OsString;
 use std::fmt;
 use std::path::Path;
 
@@ -172,8 +173,12 @@ impl fmt::Display for OptionsError {
 impl Options {
     /// Convert command-line arguments into [`Options`].
     fn from(matches: &ArgMatches) -> Result<Self, OptionsError> {
-        let include = matches.values_of_lossy(OPT_TYPE);
-        let exclude = matches.values_of_lossy(OPT_EXCLUDE_TYPE);
+        let include: Option<Vec<_>> = matches
+            .get_many::<OsString>(OPT_TYPE)
+            .map(|v| v.map(|s| s.to_string_lossy().to_string()).collect());
+        let exclude: Option<Vec<_>> = matches
+            .get_many::<OsString>(OPT_EXCLUDE_TYPE)
+            .map(|v| v.map(|s| s.to_string_lossy().to_string()).collect());
 
         if let (Some(include), Some(exclude)) = (&include, &exclude) {
             if let Some(types) = Self::get_intersected_types(include, exclude) {
