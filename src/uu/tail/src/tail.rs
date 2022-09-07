@@ -128,6 +128,8 @@ pub struct Settings {
     use_polling: bool,
     verbose: bool,
     stdin_is_pipe_or_fifo: bool,
+    stdin_offset: u64,
+    stdin_redirect: PathBuf,
 }
 
 impl Settings {
@@ -316,6 +318,18 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
         ));
     }
 
+    settings.stdin_redirect = dash.handle_redirect();
+    if cfg!(unix) && settings.stdin_is_pipe_or_fifo {
+        // Save the current seek position/offset of a stdin redirected file.
+        // This is needed to pass "gnu/tests/tail-2/start-middle.sh"
+        use same_file::Handle;
+        if let Ok(mut stdin_handle) = Handle::stdin() {
+            if let Ok(offset) = stdin_handle.as_file_mut().seek(SeekFrom::Current(0)) {
+                settings.stdin_offset = offset;
+            }
+        }
+    }
+
     // add '-' to paths
     if !settings.paths.contains(&dash) && settings.stdin_is_pipe_or_fifo
         || settings.paths.is_empty() && !settings.stdin_is_pipe_or_fifo
@@ -341,7 +355,11 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
     // Iterate user provided `paths` and add them to Watcher.
     if let Some((ref mut watcher, _)) = watcher_rx {
         for path in &settings.paths {
-            let mut path = path.handle_redirect();
+            let mut path = if path.is_stdin() {
+                settings.stdin_redirect.to_owned()
+            } else {
+                path.to_owned()
+            };
             if path.is_stdin() {
                 continue;
             }
@@ -376,7 +394,11 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
         } else {
             path.to_owned()
         };
-        let mut path = path.handle_redirect();
+        let path = if path.is_stdin() {
+            settings.stdin_redirect.to_owned()
+        } else {
+            path.to_owned()
+        };
         let path_is_tailable = path.is_tailable();
 
         if !path.is_stdin() && !path_is_tailable {
@@ -436,9 +458,9 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
 
         let metadata = path.metadata().ok();
 
-        if display_name.is_stdin() && path_is_tailable {
+        if display_name.is_stdin() && !path.is_file() {
             if settings.verbose {
-                files.print_header(Path::new(text::STDIN_HEADER), !first_header);
+                files.print_header(&display_name, !first_header);
                 first_header = false;
             }
 
@@ -452,7 +474,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                         PathData {
                             reader: Some(Box::new(reader)),
                             metadata: None,
-                            display_name: PathBuf::from(text::STDIN_HEADER),
+                            display_name,
                         },
                         true,
                     );
@@ -476,12 +498,17 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
             match File::open(&path) {
                 Ok(mut file) => {
                     if settings.verbose {
-                        files.print_header(&path, !first_header);
+                        files.print_header(&display_name, !first_header);
                         first_header = false;
                     }
-                    let mut reader;
 
-                    if file.is_seekable() && metadata.as_ref().unwrap().get_block_size() > 0 {
+                    let mut reader;
+                    if file.is_seekable(if display_name.is_stdin() {
+                        settings.stdin_offset
+                    } else {
+                        0
+                    }) && metadata.as_ref().unwrap().get_block_size() > 0
+                    {
                         bounded_tail(&mut file, &settings);
                         reader = BufReader::new(file);
                     } else {
@@ -513,9 +540,11 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                 }
             }
         } else if settings.retry && settings.follow.is_some() {
-            if path.is_relative() {
-                path = std::env::current_dir()?.join(&path);
-            }
+            let path = if path.is_relative() {
+                std::env::current_dir()?.join(&path)
+            } else {
+                path.to_owned()
+            };
             // Insert non-is_tailable() paths into `files.map`
             files.insert(
                 &path,
@@ -1544,14 +1573,16 @@ pub fn stdin_is_bad_fd() -> bool {
 
 trait FileExtTail {
     #[allow(clippy::wrong_self_convention)]
-    fn is_seekable(&mut self) -> bool;
+    fn is_seekable(&mut self, current_offset: u64) -> bool;
 }
 
 impl FileExtTail for File {
-    fn is_seekable(&mut self) -> bool {
+    /// Test if File is seekable.
+    /// Set the current position offset to `current_offset`.
+    fn is_seekable(&mut self, current_offset: u64) -> bool {
         self.seek(SeekFrom::Current(0)).is_ok()
             && self.seek(SeekFrom::End(0)).is_ok()
-            && self.seek(SeekFrom::Start(0)).is_ok()
+            && self.seek(SeekFrom::Start(current_offset)).is_ok()
     }
 }
 

@@ -76,6 +76,7 @@ fn test_stdin_redirect_file() {
         .set_stdin(std::fs::File::open(at.plus("f")).unwrap())
         .arg("-v")
         .run()
+        .no_stderr()
         .stdout_is("==> standard input <==\nfoo")
         .succeeded();
 
@@ -91,6 +92,53 @@ fn test_stdin_redirect_file() {
     let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
     assert!(buf_stdout.eq("foo"));
     assert!(buf_stderr.is_empty());
+}
+
+#[test]
+#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
+fn test_stdin_redirect_offset() {
+    // inspired by: "gnu/tests/tail-2/start-middle.sh"
+    use std::io::{Seek, SeekFrom};
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("k", "1\n2\n");
+    let mut fh = std::fs::File::open(at.plus("k")).unwrap();
+    fh.seek(SeekFrom::Start(2)).unwrap();
+
+    ts.ucmd()
+        .set_stdin(fh)
+        .run()
+        .no_stderr()
+        .stdout_is("2\n")
+        .succeeded();
+}
+
+#[test]
+#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
+fn test_stdin_redirect_offset2() {
+    // like test_stdin_redirect_offset but with multiple files
+    use std::io::{Seek, SeekFrom};
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("k", "1\n2\n");
+    at.write("l", "3\n4\n");
+    at.write("m", "5\n6\n");
+    let mut fh = std::fs::File::open(at.plus("k")).unwrap();
+    fh.seek(SeekFrom::Start(2)).unwrap();
+
+    ts.ucmd()
+        .set_stdin(fh)
+        .args(&["k", "-", "l", "m"])
+        .run()
+        .no_stderr()
+        .stdout_is(
+            "==> k <==\n1\n2\n\n==> standard input <==\n2\n\n==> l <==\n3\n4\n\n==> m <==\n5\n6\n",
+        )
+        .succeeded();
 }
 
 #[test]
