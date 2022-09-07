@@ -2817,6 +2817,7 @@ dependencies = [
  "memchr",
  "nix",
  "notify",
+ "same-file",
  "uucore",
  "winapi",
  "winapi-util",
