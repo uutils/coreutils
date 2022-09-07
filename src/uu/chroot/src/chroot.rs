@@ -80,7 +80,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .status()
     {
         Ok(status) => status,
-        Err(e) => return Err(ChrootError::CommandFailed(command[0].to_string(), e).into()),
+        Err(e) => {
+            return Err(if e.kind() == std::io::ErrorKind::NotFound {
+                ChrootError::CommandNotFound(command[0].to_string(), e)
+            } else {
+                ChrootError::CommandFailed(command[0].to_string(), e)
+            }
+            .into())
+        }
     };
 
     let code = if pstatus.success() {
