@@ -66,6 +66,10 @@ highlight = "all"
 skip = [
     # blake2d_simd
     { name = "arrayvec", version = "=0.7.2" },
+    # chrono
+    { name = "time", version = "=0.1.44" },
+    # chrono => time (the same as the line above)
+    { name = "wasi", "version" = "0.10.0+wasi-snapshot-preview1" },
     # bindgen 0.59.2
     { name = "clap", version = "=2.34.0" },
     { name = "strsim", version = "=0.8.0" },
