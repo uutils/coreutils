@@ -98,6 +98,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .trailing_var_arg(true)
         .arg(
             Arg::new(options::NEWROOT)
                 .value_hint(clap::ValueHint::DirPath)
