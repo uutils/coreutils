@@ -1,10 +1,14 @@
 // spell-checker:ignore (ToDO) Sdivide
+extern crate time;
 
 use crate::common::util::*;
-use chrono::offset::Local;
-use chrono::DateTime;
-use chrono::Duration;
 use std::fs::metadata;
+use time::macros::format_description;
+use time::Duration;
+use time::OffsetDateTime;
+
+const DATE_TIME_FORMAT: &[time::format_description::FormatItem] =
+    format_description!("[month repr:short] [day] [hour]:[minute] [year]");
 
 fn file_last_modified_time(ucmd: &UCommand, path: &str) -> String {
     let tmp_dir_path = ucmd.get_full_fixture_path(path);
@@ -13,28 +17,32 @@ fn file_last_modified_time(ucmd: &UCommand, path: &str) -> String {
         .map(|i| {
             i.modified()
                 .map(|x| {
-                    let date_time: DateTime<Local> = x.into();
-                    date_time.format("%b %d %H:%M %Y").to_string()
+                    let date_time: OffsetDateTime = x.into();
+                    let offset = OffsetDateTime::now_local().unwrap().offset();
+                    date_time
+                        .to_offset(offset)
+                        .format(&DATE_TIME_FORMAT)
+                        .unwrap()
                 })
                 .unwrap_or_default()
         })
         .unwrap_or_default()
 }
 
-fn all_minutes(from: DateTime<Local>, to: DateTime<Local>) -> Vec<String> {
+fn all_minutes(from: OffsetDateTime, to: OffsetDateTime) -> Vec<String> {
     let to = to + Duration::minutes(1);
-    const FORMAT: &str = "%b %d %H:%M %Y";
+    // const FORMAT: &str = "%b %d %H:%M %Y";
     let mut vec = vec![];
     let mut current = from;
     while current < to {
-        vec.push(current.format(FORMAT).to_string());
+        vec.push(current.format(&DATE_TIME_FORMAT).unwrap());
         current += Duration::minutes(1);
     }
     vec
 }
 
-fn valid_last_modified_template_vars(from: DateTime<Local>) -> Vec<Vec<(String, String)>> {
-    all_minutes(from, Local::now())
+fn valid_last_modified_template_vars(from: OffsetDateTime) -> Vec<Vec<(String, String)>> {
+    all_minutes(from, OffsetDateTime::now_local().unwrap())
         .into_iter()
         .map(|time| vec![("{last_modified_time}".to_string(), time)])
         .collect()
@@ -250,7 +258,7 @@ fn test_with_suppress_error_option() {
 fn test_with_stdin() {
     let expected_file_path = "stdin.log.expected";
     let mut scenario = new_ucmd!();
-    let start = Local::now();
+    let start = OffsetDateTime::now_local().unwrap();
     scenario
         .pipe_in_fixture("stdin.log")
         .args(&["--pages=1:2", "-n", "-"])
@@ -313,7 +321,7 @@ fn test_with_mpr() {
     let expected_test_file_path = "mpr.log.expected";
     let expected_test_file_path1 = "mpr1.log.expected";
     let expected_test_file_path2 = "mpr2.log.expected";
-    let start = Local::now();
+    let start = OffsetDateTime::now_local().unwrap();
     new_ucmd!()
         .args(&["--pages=1:2", "-m", "-n", test_file_path, test_file_path1])
         .succeeds()
@@ -322,7 +330,7 @@ fn test_with_mpr() {
             &valid_last_modified_template_vars(start),
         );
 
-    let start = Local::now();
+    let start = OffsetDateTime::now_local().unwrap();
     new_ucmd!()
         .args(&["--pages=2:4", "-m", "-n", test_file_path, test_file_path1])
         .succeeds()
@@ -331,7 +339,7 @@ fn test_with_mpr() {
             &valid_last_modified_template_vars(start),
         );
 
-    let start = Local::now();
+    let start = OffsetDateTime::now_local().unwrap();
     new_ucmd!()
         .args(&[
             "--pages=1:2",
@@ -439,7 +447,7 @@ fn test_with_join_lines_option() {
     let test_file_2 = "test.log";
     let expected_file_path = "joined.log.expected";
     let mut scenario = new_ucmd!();
-    let start = Local::now();
+    let start = OffsetDateTime::now_local().unwrap();
     scenario
         .args(&["+1:2", "-J", "-m", test_file_1, test_file_2])
         .run()
