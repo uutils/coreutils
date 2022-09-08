@@ -2485,24 +2485,28 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "3"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(test_string);
 
         new_ucmd!()
             .args(&["-n", "4"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(test_string);
 
         new_ucmd!()
             .args(&["-n", "999"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(test_string);
 
         new_ucmd!()
             .args(&["-n", "+3"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .no_stdout()
             .no_stderr();
@@ -2510,6 +2514,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "+4"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .no_stdout()
             .no_stderr();
@@ -2517,6 +2522,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "+999"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .no_stdout()
             .no_stderr();
@@ -2529,6 +2535,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "0"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .no_stdout()
             .no_stderr();
@@ -2536,12 +2543,14 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "1"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only("b");
 
         new_ucmd!()
             .args(&["-n", "2"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only("a\nb");
     }
@@ -2553,18 +2562,21 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "+0"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only("a\nb");
 
         new_ucmd!()
             .args(&["-n", "+1"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only("a\nb");
 
         new_ucmd!()
             .args(&["-n", "+2"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only("b");
     }
@@ -2577,30 +2589,35 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "+0"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(test_string);
 
         new_ucmd!()
             .args(&["-n", "+2"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only("⏻\nƒ\na");
 
         new_ucmd!()
             .args(&["-n", "+3"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only("ƒ\na");
 
         new_ucmd!()
             .args(&["-n", "+4"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only("a");
 
         new_ucmd!()
             .args(&["-n", "+5"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .no_stdout()
             .no_stderr();
@@ -2608,30 +2625,35 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "-4"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(test_string);
 
         new_ucmd!()
             .args(&["-n", "-3"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only("⏻\nƒ\na");
 
         new_ucmd!()
             .args(&["-n", "-2"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only("ƒ\na");
 
         new_ucmd!()
             .args(&["-n", "-1"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only("a");
 
         new_ucmd!()
             .args(&["-n", "-0"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .no_stdout()
             .no_stderr();
@@ -2654,6 +2676,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "+2"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(expected);
 
@@ -2661,6 +2684,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "-1"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(expected);
     }
@@ -2681,6 +2705,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "+0"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(random_string);
 
@@ -2688,12 +2713,14 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "+2"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(expected);
 
         new_ucmd!()
             .args(&["-n", "-0"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .no_stdout()
             .no_stderr();
@@ -2702,6 +2729,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "-1"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(expected);
 
@@ -2709,12 +2737,14 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "-99"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(expected);
 
         new_ucmd!()
             .args(&["-n", "-100"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(random_string);
     }
@@ -2735,6 +2765,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "+0"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(random_string);
 
@@ -2742,6 +2773,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "-1"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(expected);
 
@@ -2749,6 +2781,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "+2"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(expected);
 
@@ -2756,6 +2789,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "-99"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(expected);
     }
@@ -2776,6 +2810,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "+0"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(random_string);
 
@@ -2783,12 +2818,14 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "+2"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(expected);
 
         new_ucmd!()
             .args(&["-n", "-0"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .no_stdout()
             .no_stderr();
@@ -2797,6 +2834,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "-1"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(expected);
 
@@ -2804,12 +2842,14 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-n", "-99"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(expected);
 
         new_ucmd!()
             .args(&["-n", "-100"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(random_string);
     }
@@ -2820,24 +2860,28 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "4"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(test_string);
 
         new_ucmd!()
             .args(&["-c", "5"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(test_string);
 
         new_ucmd!()
             .args(&["-c", "999"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(test_string);
 
         new_ucmd!()
             .args(&["-c", "+4"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .no_stdout()
             .no_stderr();
@@ -2845,6 +2889,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "+5"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .no_stdout()
             .no_stderr();
@@ -2852,6 +2897,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "+999"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .no_stdout()
             .no_stderr();
@@ -2865,36 +2911,42 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "+0"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(test_string);
 
         new_ucmd!()
             .args(&["-c", "+2"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only_bytes(&test_string.as_bytes()[1..]);
 
         new_ucmd!()
             .args(&["-c", "+5"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only("⏻ƒa");
 
         new_ucmd!()
             .args(&["-c", "+8"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only("ƒa");
 
         new_ucmd!()
             .args(&["-c", "+10"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only("a");
 
         new_ucmd!()
             .args(&["-c", "+11"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .no_stdout()
             .no_stderr();
@@ -2902,30 +2954,35 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "-1"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only("a");
 
         new_ucmd!()
             .args(&["-c", "-2"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only_bytes(&"ƒa".as_bytes()[1..]);
 
         new_ucmd!()
             .args(&["-c", "-3"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only("ƒa");
 
         new_ucmd!()
             .args(&["-c", "-6"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only("⏻ƒa");
 
         new_ucmd!()
             .args(&["-c", "-10"])
             .pipe_in(test_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(test_string);
     }
@@ -2938,6 +2995,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "+0"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(random_string);
 
@@ -2945,12 +3003,14 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "+2"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only_bytes(expected);
 
         new_ucmd!()
             .args(&["-c", "-0"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .no_stdout()
             .no_stderr();
@@ -2959,18 +3019,21 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "-8191"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only_bytes(expected);
 
         new_ucmd!()
             .args(&["-c", "-8192"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only_bytes(random_string);
 
         new_ucmd!()
             .args(&["-c", "-8193"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only_bytes(random_string);
 
@@ -2978,6 +3041,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "-1"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only_bytes(expected);
     }
@@ -2990,6 +3054,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "+0"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(random_string);
 
@@ -2997,12 +3062,14 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "+2"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only_bytes(expected);
 
         new_ucmd!()
             .args(&["-c", "-0"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .no_stdout()
             .no_stderr();
@@ -3011,6 +3078,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "-1"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only_bytes(expected);
 
@@ -3018,12 +3086,14 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "-8192"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only_bytes(expected);
 
         new_ucmd!()
             .args(&["-c", "-8193"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(random_string);
     }
@@ -3036,12 +3106,14 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "+0"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(random_string);
 
         new_ucmd!()
             .args(&["-c", "-0"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .no_stdout()
             .no_stderr();
@@ -3050,6 +3122,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "+8193"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only_bytes(expected);
 
@@ -3057,6 +3130,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "+8194"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only_bytes(expected);
 
@@ -3064,6 +3138,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "+16385"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only_bytes(expected);
 
@@ -3071,6 +3146,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "+16386"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only_bytes(expected);
 
@@ -3078,6 +3154,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "-8192"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only_bytes(expected);
 
@@ -3085,6 +3162,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "-8193"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only_bytes(expected);
 
@@ -3092,6 +3170,7 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "-16384"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only_bytes(expected);
 
@@ -3099,12 +3178,14 @@ mod pipe_tests {
         new_ucmd!()
             .args(&["-c", "-16385"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only_bytes(expected);
 
         new_ucmd!()
             .args(&["-c", "-24576"])
             .pipe_in(random_string)
+            .ignore_stdin_write_error()
             .succeeds()
             .stdout_only(random_string);
     }
