@@ -545,11 +545,17 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
             )
         })?;
 
+        if source.is_dir() {
+            return Err(InstallError::OmittingDirectory(source.to_path_buf()).into());
+        }
+
         // If the -D flag was passed (target does not include filename),
         // we need to add the source name to the target_dir
         // because `copy` expects `to` to be a file, not a directory
         let target = if target.is_dir() && b.create_leading {
-            target.join(source)
+            // Some(dir) and None are handled by the
+            // InstallError::OmittingDirectory error above
+            target.join(source.file_name().unwrap())
         } else {
             target // already includes dest filename
         };
