@@ -499,18 +499,19 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
 
     let sources = &paths.iter().map(PathBuf::from).collect::<Vec<_>>();
 
-    if sources.len() > 1 || (target.exists() && target.is_dir()) {
-        copy_files_into_dir(sources, &target, b)
-    } else {
+    if b.create_leading {
         // if -t is used in combination with -D, create whole target because it does not include filename
-        let to_create: Option<&Path> = if b.target_dir.is_some() && b.create_leading {
+        let to_create: Option<&Path> = if b.target_dir.is_some() {
             Some(target.as_path())
-        } else {
+        // if source and target are filenames used in combination with -D, create target's parent
+        } else if sources.len() <= 1 && !target.is_dir() {
             target.parent()
+        } else {
+            None
         };
 
         if let Some(to_create) = to_create {
-            if !to_create.exists() && b.create_leading {
+            if !to_create.exists() {
                 if b.verbose {
                     let mut result = PathBuf::new();
                     // When creating directories with -Dv, show directory creations step by step
@@ -534,7 +535,11 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
                 }
             }
         }
+    }
 
+    if sources.len() > 1 || target.is_dir() {
+        copy_files_into_dir(sources, &target, b)
+    } else {
         let source = sources.first().ok_or_else(|| {
             UUsageError::new(
                 1,
@@ -548,17 +553,6 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
         if source.is_dir() {
             return Err(InstallError::OmittingDirectory(source.to_path_buf()).into());
         }
-
-        // If the -D flag was passed (target does not include filename),
-        // we need to add the source name to the target_dir
-        // because `copy` expects `to` to be a file, not a directory
-        let target = if target.is_dir() && b.create_leading {
-            // Some(dir) and None are handled by the
-            // InstallError::OmittingDirectory error above
-            target.join(source.file_name().unwrap())
-        } else {
-            target // already includes dest filename
-        };
 
         if target.is_file() || is_new_file_path(&target) {
             copy(source, &target, b)
