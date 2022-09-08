@@ -2471,10 +2471,7 @@ fn test_illegal_seek() {
     );
     assert_eq!(p.wait().unwrap().code().unwrap(), 1);
 }
-// FIXME: Occasionally broken pipe on macos, mostly when no output is expected.
-// Given `+0` or `-c -1` on macos the test fails because of a todo() in `tail.rs`.
-// See https://github.com/uutils/coreutils/issues/3895
-#[cfg(all(not(target_os = "macos")))]
+
 #[cfg(all(not(target_os = "android"), not(target_os = "windows")))] // FIXME: See https://github.com/uutils/coreutils/issues/3881
 mod pipe_tests {
     use super::*;
