@@ -1828,4 +1828,22 @@ mod tests {
             println!("TEST SKIPPED (cannot run inside CI)");
         }
     }
+
+    // This error was first detected when running tail so tail is used here but
+    // should fail with any command that takes piped input.
+    // See also https://github.com/uutils/coreutils/issues/3895
+    #[test]
+    fn test_when_piped_input_then_no_broken_pipe() {
+        let ts = TestScenario::new("tail");
+        for i in 0..10000 {
+            dbg!(i);
+            let test_string = "a\nb\n";
+            ts.ucmd()
+                .args(&["-n", "0"])
+                .pipe_in(test_string)
+                .succeeds()
+                .no_stdout()
+                .no_stderr();
+        }
+    }
 }
