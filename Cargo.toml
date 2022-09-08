@@ -410,7 +410,7 @@ nix = { version = "0.25", default-features = false, features = ["process", "sign
 rust-users = { version="0.11", package="users" }
 
 [build-dependencies]
-phf_codegen = "0.10.0"
+phf_codegen = "0.11.1"
 
 [[bin]]
 name = "coreutils"
