@@ -18,7 +18,7 @@ path = "src/cut.rs"
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.15", package="uucore", path="../../uucore" }
 memchr = "2"
-bstr = "0.2"
+bstr = "1.0"
 atty = "0.2"
 
 [[bin]]
