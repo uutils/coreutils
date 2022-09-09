@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile file siette ocho nueve diez
+// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile file siette ocho nueve diez MULT
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (jargon) tailable untailable
 
@@ -1090,18 +1090,6 @@ fn test_invalid_num() {
         .fails()
         .stderr_str()
         .starts_with("tail: invalid number of lines: '1Y': Value too large for defined data type");
-    #[cfg(target_pointer_width = "32")]
-    {
-        let sizes = ["1000G", "10T"];
-        for size in &sizes {
-            new_ucmd!()
-                .args(&["-c", size])
-                .fails()
-                .code_is(1)
-                .stderr_str()
-                .starts_with("tail: Insufficient addressable memory");
-        }
-    }
     new_ucmd!()
         .args(&["-c", "-³"])
         .fails()
@@ -2482,6 +2470,725 @@ fn test_illegal_seek() {
             tail: FILE: cannot seek to offset 0: Illegal seek\n"
     );
     assert_eq!(p.wait().unwrap().code().unwrap(), 1);
+}
+
+#[cfg(all(not(target_os = "android"), not(target_os = "windows")))] // FIXME: See https://github.com/uutils/coreutils/issues/3881
+mod pipe_tests {
+    use super::*;
+    use crate::common::random::*;
+    use rand::distributions::Alphanumeric;
+    use tail::chunks::BUFFER_SIZE as CHUNK_BUFFER_SIZE;
+
+    #[test]
+    fn test_pipe_when_lines_option_value_is_higher_than_contained_lines() {
+        let test_string = "a\nb\n";
+        new_ucmd!()
+            .args(&["-n", "3"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(test_string);
+
+        new_ucmd!()
+            .args(&["-n", "4"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(test_string);
+
+        new_ucmd!()
+            .args(&["-n", "999"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(test_string);
+
+        new_ucmd!()
+            .args(&["-n", "+3"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+
+        new_ucmd!()
+            .args(&["-n", "+4"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+
+        new_ucmd!()
+            .args(&["-n", "+999"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+    }
+
+    #[test]
+    fn test_pipe_when_negative_lines_option_given_no_newline_at_eof() {
+        let test_string = "a\nb";
+
+        new_ucmd!()
+            .args(&["-n", "0"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+
+        new_ucmd!()
+            .args(&["-n", "1"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only("b");
+
+        new_ucmd!()
+            .args(&["-n", "2"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only("a\nb");
+    }
+
+    #[test]
+    fn test_pipe_when_positive_lines_option_given_no_newline_at_eof() {
+        let test_string = "a\nb";
+
+        new_ucmd!()
+            .args(&["-n", "+0"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only("a\nb");
+
+        new_ucmd!()
+            .args(&["-n", "+1"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only("a\nb");
+
+        new_ucmd!()
+            .args(&["-n", "+2"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only("b");
+    }
+
+    #[test]
+    fn test_pipe_when_lines_option_given_multibyte_utf8_characters() {
+        // the test string consists of from left to right a 4-byte,3-byte,2-byte,1-byte utf-8 character
+        let test_string = "𝅘𝅥𝅮\n⏻\nƒ\na";
+
+        new_ucmd!()
+            .args(&["-n", "+0"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(test_string);
+
+        new_ucmd!()
+            .args(&["-n", "+2"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only("⏻\nƒ\na");
+
+        new_ucmd!()
+            .args(&["-n", "+3"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only("ƒ\na");
+
+        new_ucmd!()
+            .args(&["-n", "+4"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only("a");
+
+        new_ucmd!()
+            .args(&["-n", "+5"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+
+        new_ucmd!()
+            .args(&["-n", "-4"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(test_string);
+
+        new_ucmd!()
+            .args(&["-n", "-3"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only("⏻\nƒ\na");
+
+        new_ucmd!()
+            .args(&["-n", "-2"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only("ƒ\na");
+
+        new_ucmd!()
+            .args(&["-n", "-1"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only("a");
+
+        new_ucmd!()
+            .args(&["-n", "-0"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+    }
+
+    #[test]
+    fn test_pipe_when_lines_option_given_input_size_is_equal_to_buffer_size_no_newline_at_eof() {
+        let total_lines = 1;
+        let random_string = RandomString::generate_with_delimiter(
+            Alphanumeric,
+            b'\n',
+            total_lines,
+            false,
+            CHUNK_BUFFER_SIZE,
+        );
+        let random_string = random_string.as_str();
+        let lines = random_string.split_inclusive('\n');
+
+        let expected = lines.clone().skip(1).collect::<String>();
+        new_ucmd!()
+            .args(&["-n", "+2"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(expected);
+
+        let expected = lines.clone().skip(1).collect::<String>();
+        new_ucmd!()
+            .args(&["-n", "-1"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(expected);
+    }
+
+    #[test]
+    fn test_pipe_when_lines_option_given_input_size_is_equal_to_buffer_size() {
+        let total_lines = 100;
+        let random_string = RandomString::generate_with_delimiter(
+            Alphanumeric,
+            b'\n',
+            total_lines,
+            true,
+            CHUNK_BUFFER_SIZE,
+        );
+        let random_string = random_string.as_str();
+        let lines = random_string.split_inclusive('\n');
+
+        new_ucmd!()
+            .args(&["-n", "+0"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(random_string);
+
+        let expected = lines.clone().skip(1).collect::<String>();
+        new_ucmd!()
+            .args(&["-n", "+2"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(expected);
+
+        new_ucmd!()
+            .args(&["-n", "-0"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+
+        let expected = lines.clone().skip(total_lines - 1).collect::<String>();
+        new_ucmd!()
+            .args(&["-n", "-1"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(expected);
+
+        let expected = lines.clone().skip(1).collect::<String>();
+        new_ucmd!()
+            .args(&["-n", "-99"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(expected);
+
+        new_ucmd!()
+            .args(&["-n", "-100"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(random_string);
+    }
+
+    #[test]
+    fn test_pipe_when_lines_option_given_input_size_is_one_byte_greater_than_buffer_size() {
+        let total_lines = 100;
+        let random_string = RandomString::generate_with_delimiter(
+            Alphanumeric,
+            b'\n',
+            total_lines,
+            true,
+            CHUNK_BUFFER_SIZE + 1,
+        );
+        let random_string = random_string.as_str();
+        let lines = random_string.split_inclusive('\n');
+
+        new_ucmd!()
+            .args(&["-n", "+0"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(random_string);
+
+        let expected = lines.clone().skip(total_lines - 1).collect::<String>();
+        new_ucmd!()
+            .args(&["-n", "-1"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(expected);
+
+        let expected = lines.clone().skip(1).collect::<String>();
+        new_ucmd!()
+            .args(&["-n", "+2"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(expected);
+
+        let expected = lines.clone().skip(1).collect::<String>();
+        new_ucmd!()
+            .args(&["-n", "-99"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(expected);
+    }
+
+    #[test]
+    fn test_pipe_when_lines_option_given_input_size_has_multiple_size_of_buffer_size() {
+        let total_lines = 100;
+        let random_string = RandomString::generate_with_delimiter(
+            Alphanumeric,
+            b'\n',
+            total_lines,
+            true,
+            CHUNK_BUFFER_SIZE * 3 + 1,
+        );
+        let random_string = random_string.as_str();
+        let lines = random_string.split_inclusive('\n');
+
+        new_ucmd!()
+            .args(&["-n", "+0"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(random_string);
+
+        let expected = lines.clone().skip(1).collect::<String>();
+        new_ucmd!()
+            .args(&["-n", "+2"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(expected);
+
+        new_ucmd!()
+            .args(&["-n", "-0"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+
+        let expected = lines.clone().skip(total_lines - 1).collect::<String>();
+        new_ucmd!()
+            .args(&["-n", "-1"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(expected);
+
+        let expected = lines.clone().skip(1).collect::<String>();
+        new_ucmd!()
+            .args(&["-n", "-99"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(expected);
+
+        new_ucmd!()
+            .args(&["-n", "-100"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(random_string);
+    }
+
+    #[test]
+    fn test_pipe_when_bytes_option_value_is_higher_than_contained_bytes() {
+        let test_string = "a\nb";
+        new_ucmd!()
+            .args(&["-c", "4"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(test_string);
+
+        new_ucmd!()
+            .args(&["-c", "5"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(test_string);
+
+        new_ucmd!()
+            .args(&["-c", "999"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(test_string);
+
+        new_ucmd!()
+            .args(&["-c", "+4"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+
+        new_ucmd!()
+            .args(&["-c", "+5"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+
+        new_ucmd!()
+            .args(&["-c", "+999"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+    }
+
+    #[test]
+    fn test_pipe_when_bytes_option_given_multibyte_utf8_characters() {
+        // the test string consists of from left to right a 4-byte,3-byte,2-byte,1-byte utf-8 character
+        let test_string = "𝅘𝅥𝅮⏻ƒa";
+
+        new_ucmd!()
+            .args(&["-c", "+0"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(test_string);
+
+        new_ucmd!()
+            .args(&["-c", "+2"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only_bytes(&test_string.as_bytes()[1..]);
+
+        new_ucmd!()
+            .args(&["-c", "+5"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only("⏻ƒa");
+
+        new_ucmd!()
+            .args(&["-c", "+8"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only("ƒa");
+
+        new_ucmd!()
+            .args(&["-c", "+10"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only("a");
+
+        new_ucmd!()
+            .args(&["-c", "+11"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+
+        new_ucmd!()
+            .args(&["-c", "-1"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only("a");
+
+        new_ucmd!()
+            .args(&["-c", "-2"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only_bytes(&"ƒa".as_bytes()[1..]);
+
+        new_ucmd!()
+            .args(&["-c", "-3"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only("ƒa");
+
+        new_ucmd!()
+            .args(&["-c", "-6"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only("⏻ƒa");
+
+        new_ucmd!()
+            .args(&["-c", "-10"])
+            .pipe_in(test_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(test_string);
+    }
+
+    #[test]
+    fn test_pipe_when_bytes_option_given_input_size_is_equal_to_buffer_size() {
+        let random_string = RandomString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE);
+        let random_string = random_string.as_str();
+
+        new_ucmd!()
+            .args(&["-c", "+0"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(random_string);
+
+        let expected = &random_string.as_bytes()[1..];
+        new_ucmd!()
+            .args(&["-c", "+2"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only_bytes(expected);
+
+        new_ucmd!()
+            .args(&["-c", "-0"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+
+        let expected = &random_string.as_bytes()[1..];
+        new_ucmd!()
+            .args(&["-c", "-8191"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only_bytes(expected);
+
+        new_ucmd!()
+            .args(&["-c", "-8192"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only_bytes(random_string);
+
+        new_ucmd!()
+            .args(&["-c", "-8193"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only_bytes(random_string);
+
+        let expected = &random_string.as_bytes()[CHUNK_BUFFER_SIZE - 1..];
+        new_ucmd!()
+            .args(&["-c", "-1"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only_bytes(expected);
+    }
+
+    #[test]
+    fn test_pipe_when_bytes_option_given_input_size_is_one_byte_greater_than_buffer_size() {
+        let random_string = RandomString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE + 1);
+        let random_string = random_string.as_str();
+
+        new_ucmd!()
+            .args(&["-c", "+0"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(random_string);
+
+        let expected = &random_string.as_bytes()[1..];
+        new_ucmd!()
+            .args(&["-c", "+2"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only_bytes(expected);
+
+        new_ucmd!()
+            .args(&["-c", "-0"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+
+        let expected = &random_string.as_bytes()[CHUNK_BUFFER_SIZE..];
+        new_ucmd!()
+            .args(&["-c", "-1"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only_bytes(expected);
+
+        let expected = &random_string.as_bytes()[1..];
+        new_ucmd!()
+            .args(&["-c", "-8192"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only_bytes(expected);
+
+        new_ucmd!()
+            .args(&["-c", "-8193"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(random_string);
+    }
+
+    #[test]
+    fn test_pipe_when_bytes_option_given_input_size_has_multiple_size_of_buffer_size() {
+        let random_string = RandomString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE * 3);
+        let random_string = random_string.as_str();
+
+        new_ucmd!()
+            .args(&["-c", "+0"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(random_string);
+
+        new_ucmd!()
+            .args(&["-c", "-0"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+
+        let expected = &random_string.as_bytes()[8192..];
+        new_ucmd!()
+            .args(&["-c", "+8193"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only_bytes(expected);
+
+        let expected = &random_string.as_bytes()[8193..];
+        new_ucmd!()
+            .args(&["-c", "+8194"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only_bytes(expected);
+
+        let expected = &random_string.as_bytes()[16384..];
+        new_ucmd!()
+            .args(&["-c", "+16385"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only_bytes(expected);
+
+        let expected = &random_string.as_bytes()[16385..];
+        new_ucmd!()
+            .args(&["-c", "+16386"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only_bytes(expected);
+
+        let expected = &random_string.as_bytes()[16384..];
+        new_ucmd!()
+            .args(&["-c", "-8192"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only_bytes(expected);
+
+        let expected = &random_string.as_bytes()[16383..];
+        new_ucmd!()
+            .args(&["-c", "-8193"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only_bytes(expected);
+
+        let expected = &random_string.as_bytes()[8192..];
+        new_ucmd!()
+            .args(&["-c", "-16384"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only_bytes(expected);
+
+        let expected = &random_string.as_bytes()[8191..];
+        new_ucmd!()
+            .args(&["-c", "-16385"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only_bytes(expected);
+
+        new_ucmd!()
+            .args(&["-c", "-24576"])
+            .pipe_in(random_string)
+            .ignore_stdin_write_error()
+            .succeeds()
+            .stdout_only(random_string);
+    }
 }
 
 #[test]

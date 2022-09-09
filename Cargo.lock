@@ -2871,6 +2871,7 @@ version = "0.0.15"
 dependencies = [
  "clap",
  "libc",
+ "memchr",
  "nix",
  "notify",
  "same-file",
