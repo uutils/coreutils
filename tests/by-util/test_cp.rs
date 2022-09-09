@@ -1389,6 +1389,7 @@ fn test_closes_file_descriptors() {
     let limit_fd: u64 = number_file_already_opened + 9;
 
     // For debugging purposes:
+    #[cfg(not(target_os = "android"))]
     for f in me.fd().unwrap() {
         let fd = f.unwrap();
         println!("{:?} {:?}", fd, fd.mode());
