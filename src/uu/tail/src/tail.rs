@@ -451,11 +451,21 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
                 }
             } else {
                 // TODO: [2021-10; jhscheer] how to handle block device or socket?
+
+                // we're running into this todo() on macos sometimes accidentally, so here's some debug output
+                // to help identify the problem
+                dbg!(settings.paths);
+                dbg!(&path);
+                dbg!(path.to_string_lossy().to_string());
+                dbg!(path.is_file());
+                dbg!(path.exists());
+                dbg!(path.is_stdin());
+                dbg!(path_is_tailable);
+                dbg!(settings.stdin_is_pipe_or_fifo);
+                dbg!(display_name);
                 todo!();
             }
         }
-
-        let metadata = path.metadata().ok();
 
         if display_name.is_stdin() && !path.is_file() {
             if settings.verbose {
@@ -496,6 +506,7 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
         } else if path_is_tailable {
             match File::open(&path) {
                 Ok(mut file) => {
+                    let metadata = path.metadata().ok();
                     if settings.verbose {
                         files.print_header(&display_name, !first_header);
                         first_header = false;
@@ -544,6 +555,9 @@ fn uu_tail(mut settings: Settings) -> UResult<()> {
             } else {
                 path.to_owned()
             };
+
+            let metadata = path.metadata().ok(); // TODO isn't metadata always None here?
+
             // Insert non-is_tailable() paths into `files.map`
             files.insert(
                 &path,
