@@ -1650,8 +1650,9 @@ impl PathExtTail for Path {
 
     /// Return true if `path` is is a file type that can be tailed
     fn is_tailable(&self) -> bool {
-        self.is_file() || self.exists() && self.metadata().unwrap().is_tailable()
+        self.is_file() || self.exists() && self.metadata().map_or(false, |meta| meta.is_tailable())
     }
+
     /// Workaround to handle redirects, e.g. `touch f && tail -f - < f`
     fn handle_redirect(&self) -> PathBuf {
         if cfg!(unix) && self.is_stdin() {
