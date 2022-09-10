@@ -47,7 +47,7 @@ fn print_factors_str(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
     let stdout = stdout();
     // We use a smaller buffer here to pass a gnu test. 4KiB appears to be the default pipe size for bash.
     let mut w = io::BufWriter::with_capacity(4 * 1024, stdout.lock());

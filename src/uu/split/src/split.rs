@@ -53,7 +53,7 @@ const AFTER_HELP: &str = "\
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
     match Settings::from(&matches) {
         Ok(settings) => split(&settings),
         Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{}", e))),

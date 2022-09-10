@@ -81,7 +81,9 @@ fn get_long_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let long_usage = get_long_usage();
 
-    let matches = uu_app().after_help(&long_usage[..]).get_matches_from(args);
+    let matches = uu_app()
+        .after_help(&long_usage[..])
+        .try_get_matches_from(args)?;
 
     let files: Vec<String> = matches
         .get_many::<String>(ARG_FILES)

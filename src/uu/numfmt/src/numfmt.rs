@@ -229,7 +229,7 @@ fn concat_format_arg_and_value(args: &[String]) -> Vec<String> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
 
-    let matches = uu_app().get_matches_from(concat_format_arg_and_value(&args));
+    let matches = uu_app().try_get_matches_from(concat_format_arg_and_value(&args))?;
 
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
 

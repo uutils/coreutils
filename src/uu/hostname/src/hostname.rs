@@ -61,7 +61,7 @@ mod wsa {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     #[cfg(windows)]
     let _handle = wsa::start().map_err_context(|| "failed to start Winsock".to_owned())?;

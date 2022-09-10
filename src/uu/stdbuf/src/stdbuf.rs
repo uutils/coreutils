@@ -158,7 +158,7 @@ fn get_preload_env(tmp_dir: &mut TempDir) -> io::Result<(String, PathBuf)> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let options = ProgramOptions::try_from(&matches).map_err(|e| UUsageError::new(125, e.0))?;
 

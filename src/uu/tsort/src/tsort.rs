@@ -27,7 +27,7 @@ mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let input = matches
         .value_of(options::FILE)

@@ -259,9 +259,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let clap_opts = uu_app();
 
-    let clap_matches = clap_opts
-        .clone() // Clone to reuse clap_opts to print help
-        .get_matches_from(args.clone());
+    let clap_matches = clap_opts.try_get_matches_from(&args)?;
 
     let od_options = OdOptions::new(&clap_matches, &args)?;
 

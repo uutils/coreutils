@@ -49,7 +49,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     //
     // Argument parsing
     //
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     // too few arguments
     if !matches.contains_id(options::NAME) {

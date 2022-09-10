@@ -19,7 +19,7 @@ use std::io::ErrorKind;
 use std::process::{self, Child, Stdio};
 use std::time::Duration;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::error::{UClapError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::process::ChildExt;
 use uucore::signals::{signal_by_name_or_value, signal_name_by_value};
@@ -108,9 +108,7 @@ impl Config {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let command = uu_app();
-
-    let matches = command.get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
 
     let config = Config::from(&matches)?;
     timeout(

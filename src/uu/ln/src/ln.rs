@@ -136,7 +136,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             long_usage,
             backup_control::BACKUP_CONTROL_LONG_HELP
         ))
-        .get_matches_from(args);
+        .try_get_matches_from(args)?;
 
     /* the list of files */
 
