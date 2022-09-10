@@ -38,7 +38,7 @@ mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let before = matches.contains_id(options::BEFORE);
     let regex = matches.contains_id(options::REGEX);

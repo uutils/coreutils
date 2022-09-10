@@ -28,6 +28,11 @@ const NUM_PRIMES: usize = 10000;
 const NUM_TESTS: usize = 100;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_parallel() {
     use hex_literal::hex;
     use sha1::{Digest, Sha1};

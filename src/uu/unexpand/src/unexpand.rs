@@ -167,7 +167,7 @@ fn expand_shortcuts(args: &[String]) -> Vec<String> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
 
-    let matches = uu_app().get_matches_from(expand_shortcuts(&args));
+    let matches = uu_app().try_get_matches_from(expand_shortcuts(&args))?;
 
     unexpand(&Options::new(&matches)?).map_err_context(String::new)
 }

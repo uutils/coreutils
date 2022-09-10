@@ -10,6 +10,11 @@ use crate::common::util::*;
 const VERSION_MIN_MULTIPLE_USERS: &str = "8.31"; // this feature was introduced in GNU's coreutils 8.31
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 #[cfg(unix)]
 fn test_id_no_specified_user() {
     let ts = TestScenario::new(util_name!());

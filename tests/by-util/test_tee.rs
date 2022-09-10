@@ -7,6 +7,11 @@ use crate::common::util::*;
 // spell-checker:ignore nopipe
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_tee_processing_multiple_operands() {
     // POSIX says: "Processing of at least 13 file operands shall be supported."
 

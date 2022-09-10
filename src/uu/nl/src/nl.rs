@@ -86,7 +86,7 @@ pub mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     // A mutable settings object, initialized with the defaults.
     let mut settings = Settings {

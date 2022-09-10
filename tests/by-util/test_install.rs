@@ -10,6 +10,11 @@ use std::process::Command;
 use std::thread::sleep;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_install_basic() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "target_dir";

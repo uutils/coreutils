@@ -1,6 +1,11 @@
 use crate::common::util::*;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_output_is_random_permutation() {
     let input_seq = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     let input = input_seq

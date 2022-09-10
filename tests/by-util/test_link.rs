@@ -1,5 +1,10 @@
 use crate::common::util::*;
 
+#[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
 #[cfg(not(target_os = "android"))]
 #[test]
 fn test_link_existing_file() {

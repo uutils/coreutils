@@ -40,6 +40,11 @@ static COMPLEX_SEQUENCE: &TestedSequence = &TestedSequence {
 };
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_byte_sequence() {
     for param in ["-b", "--bytes", "--byt"] {
         for example_seq in EXAMPLE_SEQUENCES {

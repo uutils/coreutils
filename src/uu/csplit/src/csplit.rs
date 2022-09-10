@@ -715,7 +715,7 @@ mod tests {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     // get the file to split
     let file_name = matches.value_of(options::FILE).unwrap();

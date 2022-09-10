@@ -401,7 +401,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
 
     let delimiter_is_equal = args.contains(&"-d=".to_string()); // special case
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let complement = matches.contains_id(options::COMPLEMENT);
 

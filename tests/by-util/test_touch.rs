@@ -60,6 +60,11 @@ fn str_to_filetime(format: &str, s: &str) -> FileTime {
 }
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_touch_default() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_default_file";

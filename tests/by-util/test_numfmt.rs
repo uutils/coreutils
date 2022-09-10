@@ -3,6 +3,11 @@
 use crate::common::util::*;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_should_not_round_floats() {
     new_ucmd!()
         .args(&["0.99", "1.01", "1.1", "1.22", ".1", "-0.1"])

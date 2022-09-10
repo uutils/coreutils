@@ -134,7 +134,7 @@ fn open_file(name: &str) -> io::Result<LineReader> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
     let filename1 = matches.value_of(options::FILE_1).unwrap();
     let filename2 = matches.value_of(options::FILE_2).unwrap();
     let mut f1 = open_file(filename1).map_err_context(|| filename1.to_string())?;

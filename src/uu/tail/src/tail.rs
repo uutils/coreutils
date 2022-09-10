@@ -295,7 +295,7 @@ impl Settings {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(arg_iterate(args)?);
+    let matches = uu_app().try_get_matches_from(arg_iterate(args)?)?;
     let mut settings = Settings::from(&matches)?;
 
     // skip expensive call to fstat if PRESUME_INPUT_PIPE is selected

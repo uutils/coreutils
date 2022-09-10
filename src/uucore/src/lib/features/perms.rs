@@ -463,7 +463,7 @@ pub fn chown_base<'a>(
             .required(true)
             .min_values(1),
     );
-    let matches = command.get_matches_from(args);
+    let matches = command.try_get_matches_from(args)?;
 
     let files: Vec<String> = matches
         .get_many::<String>(options::ARG_FILES)

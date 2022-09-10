@@ -6,6 +6,11 @@ use std::thread::sleep;
 // All that can be tested is the side-effects.
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(125);
+}
+
+#[test]
 #[cfg(any(
     target_os = "linux",
     target_os = "android",

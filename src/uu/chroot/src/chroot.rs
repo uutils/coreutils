@@ -15,7 +15,7 @@ use std::ffi::CString;
 use std::io::Error;
 use std::path::Path;
 use std::process;
-use uucore::error::{set_exit_code, UResult};
+use uucore::error::{set_exit_code, UClapError, UResult};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 use uucore::{entries, format_usage};
 
@@ -35,7 +35,7 @@ mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
 
     let default_shell: &'static str = "/bin/sh";
     let default_option: &'static str = "-i";

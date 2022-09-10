@@ -31,6 +31,11 @@ static FOLLOW_NAME_SHORT_EXP: &str = "follow_name_short.expected";
 static FOLLOW_NAME_EXP: &str = "follow_name.expected";
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 #[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_stdin_default() {
     new_ucmd!()

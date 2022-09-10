@@ -154,7 +154,7 @@ impl Mode {
 
 fn arg_iterate<'a>(
     mut args: impl uucore::Args + 'a,
-) -> Result<Box<dyn Iterator<Item = OsString> + 'a>, String> {
+) -> UResult<Box<dyn Iterator<Item = OsString> + 'a>> {
     // argv[0] is always present
     let first = args.next().unwrap();
     if let Some(second) = args.next() {
@@ -162,16 +162,22 @@ fn arg_iterate<'a>(
             match parse::parse_obsolete(s) {
                 Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
                 Some(Err(e)) => match e {
-                    parse::ParseError::Syntax => Err(format!("bad argument format: {}", s.quote())),
-                    parse::ParseError::Overflow => Err(format!(
-                        "invalid argument: {} Value too large for defined datatype",
-                        s.quote()
+                    parse::ParseError::Syntax => Err(USimpleError::new(
+                        1,
+                        format!("bad argument format: {}", s.quote()),
+                    )),
+                    parse::ParseError::Overflow => Err(USimpleError::new(
+                        1,
+                        format!(
+                            "invalid argument: {} Value too large for defined datatype",
+                            s.quote()
+                        ),
                     )),
                 },
                 None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
             }
         } else {
-            Err("bad argument encoding".to_owned())
+            Err(USimpleError::new(1, "bad argument encoding".to_owned()))
         }
     } else {
         Ok(Box::new(vec![first].into_iter()))
@@ -190,9 +196,7 @@ struct HeadOptions {
 
 impl HeadOptions {
     ///Construct options from matches
-    pub fn get_from(args: impl uucore::Args) -> Result<Self, String> {
-        let matches = uu_app().get_matches_from(arg_iterate(args)?);
-
+    pub fn get_from(matches: &clap::ArgMatches) -> Result<Self, String> {
         let mut options = Self::default();
 
         options.quiet = matches.contains_id(options::QUIET_NAME);
@@ -200,7 +204,7 @@ impl HeadOptions {
         options.zeroed = matches.contains_id(options::ZERO_NAME);
         options.presume_input_pipe = matches.contains_id(options::PRESUME_INPUT_PIPE);
 
-        options.mode = Mode::from(&matches)?;
+        options.mode = Mode::from(matches)?;
 
         options.files = match matches.get_many::<String>(options::FILES_NAME) {
             Some(v) => v.map(|s| s.to_owned()).collect(),
@@ -514,7 +518,8 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = match HeadOptions::get_from(args) {
+    let matches = uu_app().try_get_matches_from(arg_iterate(args)?)?;
+    let args = match HeadOptions::get_from(&matches) {
         Ok(o) => o,
         Err(s) => {
             return Err(USimpleError::new(1, s));
@@ -531,8 +536,10 @@ mod tests {
     use super::*;
     fn options(args: &str) -> Result<HeadOptions, String> {
         let combined = "head ".to_owned() + args;
-        let args = combined.split_whitespace();
-        HeadOptions::get_from(args.map(OsString::from))
+        let args = combined.split_whitespace().map(OsString::from);
+        let matches = uu_app()
+            .get_matches_from(arg_iterate(args).map_err(|_| String::from("Arg iterate failed"))?);
+        HeadOptions::get_from(&matches)
     }
     #[test]
     fn test_args_modes() {
@@ -579,7 +586,7 @@ mod tests {
         assert_eq!(opts.mode, Mode::FirstLines(10));
         assert!(opts.files.is_empty());
     }
-    fn arg_outputs(src: &str) -> Result<String, String> {
+    fn arg_outputs(src: &str) -> Result<String, ()> {
         let split = src.split_whitespace().map(OsString::from);
         match arg_iterate(split) {
             Ok(args) => {
@@ -588,7 +595,7 @@ mod tests {
                     .collect::<Vec<_>>();
                 Ok(vec.join(" "))
             }
-            Err(e) => Err(e),
+            Err(_) => Err(()),
         }
     }
     #[test]

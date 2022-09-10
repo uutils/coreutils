@@ -1,5 +1,11 @@
 use crate::common::util::*;
 
+#[test]
+#[cfg(not(windows))]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
 #[cfg(not(windows))]
 #[test]
 fn test_mknod_help() {
