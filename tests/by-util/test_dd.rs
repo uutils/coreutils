@@ -75,6 +75,11 @@ fn build_ascii_block(n: usize) -> Vec<u8> {
     (0..=127).cycle().take(n).collect()
 }
 
+#[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
 // Sanity Tests
 #[test]
 fn version() {

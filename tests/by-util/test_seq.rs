@@ -3,6 +3,11 @@ use crate::common::util::*;
 use std::io::Read;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_hex_rejects_sign_after_identifier() {
     new_ucmd!()
         .args(&["0x-123ABC"])

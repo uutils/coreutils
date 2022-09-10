@@ -6,6 +6,11 @@
 use crate::common::util::*;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 #[cfg(unix)]
 fn test_normal() {
     let ts = TestScenario::new(util_name!());

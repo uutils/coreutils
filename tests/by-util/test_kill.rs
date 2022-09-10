@@ -46,6 +46,11 @@ impl Drop for Target {
 }
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_kill_list_all_signals() {
     // Check for a few signals.  Do not try to be comprehensive.
     new_ucmd!()

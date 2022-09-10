@@ -120,6 +120,11 @@ impl RandomFile {
 }
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_split_default() {
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "split_default";

@@ -10,6 +10,11 @@ use crate::common::util::*;
 static INPUT: &str = "lorem_ipsum.txt";
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_stdin_default() {
     new_ucmd!()
         .pipe_in_fixture(INPUT)

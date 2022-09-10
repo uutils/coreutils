@@ -6,6 +6,11 @@ use crate::common::util::*;
 use rust_users::*;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_date_email() {
     for param in ["--rfc-email", "--rfc-e", "-R"] {
         new_ucmd!().arg(param).succeeds();

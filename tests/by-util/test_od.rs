@@ -24,6 +24,11 @@ static ALPHA_OUT: &str = "
 // XXX We could do a better job of ensuring that we have a fresh temp dir to ourselves,
 // not a general one full of other process leftovers.
 
+#[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
 // Test that od can read one file and dump with default format
 #[test]
 fn test_file() {
