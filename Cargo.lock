@@ -2624,7 +2624,7 @@ dependencies = [
  "itertools",
  "quick-error",
  "regex",
- "time 0.3.14",
+ "time",
  "uucore",
 ]
 
