@@ -153,7 +153,7 @@ const DEFAULT_BLOCK_SIZE: u64 = 1024;
 enum LsError {
     InvalidLineWidth(String),
     IOError(std::io::Error),
-    IOErrorContext(std::io::Error, PathBuf),
+    IOErrorContext(std::io::Error, PathBuf, bool),
     BlockSizeParseError(String),
     AlreadyListedError(PathBuf),
 }
@@ -163,7 +163,8 @@ impl UError for LsError {
         match self {
             Self::InvalidLineWidth(_) => 2,
             Self::IOError(_) => 1,
-            Self::IOErrorContext(_, _) => 1,
+            Self::IOErrorContext(_, _, false) => 1,
+            Self::IOErrorContext(_, _, true) => 2,
             Self::BlockSizeParseError(_) => 1,
             Self::AlreadyListedError(_) => 2,
         }
@@ -180,7 +181,7 @@ impl Display for LsError {
             }
             Self::InvalidLineWidth(s) => write!(f, "invalid line width: {}", s.quote()),
             Self::IOError(e) => write!(f, "general io error: {}", e),
-            Self::IOErrorContext(e, p) => {
+            Self::IOErrorContext(e, p, _) => {
                 let error_kind = e.kind();
                 let errno = e.raw_os_error().unwrap_or(1i32);
 
@@ -1566,6 +1567,7 @@ struct PathData {
     p_buf: PathBuf,
     must_dereference: bool,
     security_context: String,
+    command_line: bool,
 }
 
 impl PathData {
@@ -1649,6 +1651,7 @@ impl PathData {
             p_buf,
             must_dereference,
             security_context,
+            command_line,
         }
     }
 
@@ -1677,7 +1680,11 @@ impl PathData {
                                 return dir_entry.metadata().ok();
                             }
                         }
-                        show!(LsError::IOErrorContext(err, self.p_buf.clone(),));
+                        show!(LsError::IOErrorContext(
+                            err,
+                            self.p_buf.clone(),
+                            self.command_line
+                        ));
                         None
                     }
                     Ok(md) => Some(md),
@@ -1739,7 +1746,11 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             Err(err) => {
                 // flush stdout buffer before the error to preserve formatting and order
                 out.flush()?;
-                show!(LsError::IOErrorContext(err, path_data.p_buf.clone()));
+                show!(LsError::IOErrorContext(
+                    err,
+                    path_data.p_buf.clone(),
+                    path_data.command_line
+                ));
                 continue;
             }
             Ok(rd) => rd,
@@ -1916,7 +1927,11 @@ fn enter_directory(
             match fs::read_dir(&e.p_buf) {
                 Err(err) => {
                     out.flush()?;
-                    show!(LsError::IOErrorContext(err, e.p_buf.clone()));
+                    show!(LsError::IOErrorContext(
+                        err,
+                        e.p_buf.clone(),
+                        e.command_line
+                    ));
                     continue;
                 }
                 Ok(rd) => {

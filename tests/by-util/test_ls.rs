@@ -385,6 +385,7 @@ fn test_ls_io_errors() {
         .arg("-1")
         .arg("some-dir1")
         .fails()
+        .code_is(2)
         .stderr_contains("cannot open directory")
         .stderr_contains("Permission denied");
 
@@ -393,6 +394,7 @@ fn test_ls_io_errors() {
         .arg("-Li")
         .arg("some-dir2")
         .fails()
+        .code_is(1)
         .stderr_contains("cannot access")
         .stderr_contains("No such file or directory")
         .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
@@ -408,6 +410,7 @@ fn test_ls_io_errors() {
         .arg("-laR")
         .arg("some-dir3")
         .fails()
+        .code_is(1)
         .stderr_contains("some-dir4")
         .stderr_contains("cannot open directory")
         .stderr_contains("Permission denied")
@@ -2987,8 +2990,18 @@ fn test_ls_dangling_symlinks() {
     at.mkdir("temp_dir");
     at.symlink_file("does_not_exist", "temp_dir/dangle");
 
-    scene.ucmd().arg("-L").arg("temp_dir/dangle").fails();
-    scene.ucmd().arg("-H").arg("temp_dir/dangle").fails();
+    scene
+        .ucmd()
+        .arg("-L")
+        .arg("temp_dir/dangle")
+        .fails()
+        .code_is(2);
+    scene
+        .ucmd()
+        .arg("-H")
+        .arg("temp_dir/dangle")
+        .fails()
+        .code_is(2);
 
     scene
         .ucmd()
@@ -3001,6 +3014,7 @@ fn test_ls_dangling_symlinks() {
         .arg("-Li")
         .arg("temp_dir")
         .fails()
+        .code_is(1)
         .stderr_contains("cannot access")
         .stderr_contains("No such file or directory")
         .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
@@ -3010,6 +3024,7 @@ fn test_ls_dangling_symlinks() {
         .arg("-Ll")
         .arg("temp_dir")
         .fails()
+        .code_is(1)
         .stdout_contains("l?????????");
 
     #[cfg(unix)]
@@ -3018,6 +3033,7 @@ fn test_ls_dangling_symlinks() {
         at.touch("temp_dir/real_file");
 
         let real_file_res = scene.ucmd().arg("-Li1").arg("temp_dir").fails();
+        real_file_res.code_is(1);
         let real_file_stdout_len = String::from_utf8(real_file_res.stdout().to_owned())
             .ok()
             .unwrap()
@@ -3029,6 +3045,7 @@ fn test_ls_dangling_symlinks() {
             .len();
 
         let dangle_file_res = scene.ucmd().arg("-Li1").arg("temp_dir").fails();
+        dangle_file_res.code_is(1);
         let dangle_stdout_len = String::from_utf8(dangle_file_res.stdout().to_owned())
             .ok()
             .unwrap()
@@ -3199,6 +3216,7 @@ fn test_ls_dereference_looped_symlinks_recursive() {
 
     ucmd.args(&["-RL", "loop"])
         .fails()
+        .code_is(2)
         .stderr_contains("not listing already-listed directory");
 }
 
