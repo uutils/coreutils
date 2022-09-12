@@ -1124,7 +1124,14 @@ fn test_tmp_files_deleted_on_sigint() {
     ]);
     let mut child = ucmd.run_no_wait();
     // wait a short amount of time so that `sort` can create a temporary directory.
-    std::thread::sleep(Duration::from_millis(100));
+    let mut timeout = Duration::from_millis(100);
+    for _ in 0..5 {
+        std::thread::sleep(timeout);
+        if read_dir(at.plus("tmp_dir")).unwrap().next().is_some() {
+            break;
+        }
+        timeout *= 2;
+    }
     // `sort` should have created a temporary directory.
     assert!(read_dir(at.plus("tmp_dir")).unwrap().next().is_some());
     // kill sort with SIGINT
