@@ -7,8 +7,6 @@ name: CICD
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rsync rustc rustfmt rustup shopt xargs
 # spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend pell runtest tempfile testsuite uutils DESTDIR multisize Swatinem
 
-# ToDO: [2021-06; rivy] change from `cargo-tree` to `cargo tree` once MSRV is >= 1.45
-
 env:
   PROJECT_NAME: coreutils
   PROJECT_DESC: "Core universal (cross-platform) utilities"
@@ -339,14 +337,6 @@ jobs:
         toolchain: ${{ env.RUST_MIN_SRV }}
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
-    - name: Install `cargo-tree` # for dependency information
-      uses: actions-rs/install@v0.1
-      with:
-        crate: cargo-tree
-        version: latest
-        use-tool-cache: true
-      env:
-        RUSTUP_TOOLCHAIN: stable
     - name: Confirm MinSRV compatible 'Cargo.lock'
       shell: bash
       run: |
@@ -374,12 +364,12 @@ jobs:
         rustup show active-toolchain
         cargo -V
         rustc -V
-        cargo-tree tree -V
+        cargo tree -V
         # dependencies
         echo "## dependency list"
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
         RUSTUP_TOOLCHAIN=stable cargo fetch --locked --quiet
-        RUSTUP_TOOLCHAIN=stable cargo-tree tree --all --locked --no-dev-dependencies --no-indent ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
+        RUSTUP_TOOLCHAIN=stable cargo tree --all --locked --no-dev-dependencies --no-indent ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
     - name: Test
       uses: actions-rs/cargo@v1
       with:
@@ -715,14 +705,6 @@ jobs:
         echo UTILITY_LIST=${UTILITY_LIST}
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
         outputs CARGO_UTILITY_LIST_OPTIONS
-    - name: Install `cargo-tree` # for dependency information
-      uses: actions-rs/install@v0.1
-      with:
-        crate: cargo-tree
-        version: latest
-        use-tool-cache: true
-      env:
-        RUSTUP_TOOLCHAIN: stable
     - name: Info
       shell: bash
       run: |
@@ -741,11 +723,11 @@ jobs:
         rustup show active-toolchain
         cargo -V
         rustc -V
-        cargo-tree tree -V
+        cargo tree -V
         # dependencies
         echo "## dependency list"
         cargo fetch --locked --quiet
-        cargo-tree tree --locked --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all --no-dev-dependencies --no-indent | grep -vE "$PWD" | sort --unique
+        cargo tree --locked --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all --no-dev-dependencies --no-indent | grep -vE "$PWD" | sort --unique
     - name: Build
       uses: actions-rs/cargo@v1
       with:
