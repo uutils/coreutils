@@ -391,7 +391,6 @@ glob = "0.3.0"
 libc = "0.2"
 pretty_assertions = "1"
 rand = "0.8"
-rand_pcg = "0.3"
 regex = "1.6"
 sha1 = { version="0.10", features=["std"] }
 tempfile = "3"
@@ -409,6 +408,7 @@ rlimit = "0.8.3"
 [target.'cfg(unix)'.dev-dependencies]
 nix = { version = "0.25", default-features = false, features = ["process", "signal", "user"] }
 rust-users = { version="0.11", package="users" }
+rand_pcg = "0.3"
 
 [build-dependencies]
 phf_codegen = "0.11.1"
