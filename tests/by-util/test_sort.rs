@@ -1117,8 +1117,23 @@ fn test_tmp_files_deleted_on_sigint() {
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("tmp_dir");
+    let file_name = "big_file_to_sort.txt";
+    {
+        use rand::Rng;
+        use std::io::Write;
+        let mut file = at.make_file(file_name);
+        // approximately 20 MB
+        for _ in 0..40 {
+            let lines = rand::thread_rng()
+                .sample_iter(rand::distributions::uniform::Uniform::new(0, 10007))
+                .take(100000)
+                .map(|x| x.to_string() + "\n")
+                .collect::<String>();
+            file.write_all(lines.as_bytes()).unwrap();
+        }
+    }
     ucmd.args(&[
-        "ext_sort.txt",
+        file_name,
         "--buffer-size=1", // with a small buffer size `sort` will be forced to create a temporary directory very soon.
         "--temporary-directory=tmp_dir",
     ]);
