@@ -90,16 +90,16 @@ fn test_ls_allocation_size() {
         // fill empty file with zeros
         scene
             .ccmd("dd")
-            .arg("--if=/dev/zero")
-            .arg("--of=some-dir1/zero-file")
+            .arg("if=/dev/zero")
+            .arg("of=some-dir1/zero-file")
             .arg("bs=1024")
             .arg("count=4096")
             .succeeds();
 
         scene
             .ccmd("dd")
-            .arg("--if=/dev/zero")
-            .arg("--of=irregular-file")
+            .arg("if=/dev/zero")
+            .arg("of=irregular-file")
             .arg("bs=1")
             .arg("count=777")
             .succeeds();
