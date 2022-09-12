@@ -18,6 +18,9 @@ pub enum ChrootError {
     /// Failed to execute the specified command.
     CommandFailed(String, Error),
 
+    /// Failed to find the specified command.
+    CommandNotFound(String, Error),
+
     /// The given user and group specification was invalid.
     InvalidUserspec(String),
 
@@ -43,12 +46,15 @@ pub enum ChrootError {
 impl std::error::Error for ChrootError {}
 
 impl UError for ChrootError {
-    // TODO: Exit status:
     // 125 if chroot itself fails
     // 126 if command is found but cannot be invoked
     // 127 if command cannot be found
     fn code(&self) -> i32 {
-        1
+        match self {
+            Self::CommandFailed(_, _) => 126,
+            Self::CommandNotFound(_, _) => 127,
+            _ => 125,
+        }
     }
 }
 
@@ -56,7 +62,7 @@ impl Display for ChrootError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::CannotEnter(s, e) => write!(f, "cannot chroot to {}: {}", s.quote(), e,),
-            Self::CommandFailed(s, e) => {
+            Self::CommandFailed(s, e) | Self::CommandNotFound(s, e) => {
                 write!(f, "failed to run command {}: {}", s.to_string().quote(), e,)
             }
             Self::InvalidUserspec(s) => write!(f, "invalid userspec: {}", s.quote(),),
