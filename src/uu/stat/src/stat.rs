@@ -74,8 +74,8 @@ fn print_adjusted(
 ) {
     let mut field_width = cmp::max(width, s.len());
     if let Some(p) = prefix {
-        if let Some(needprefix) = need_prefix {
-            if needprefix {
+        if let Some(prefix_flag) = need_prefix {
+            if prefix_flag {
                 field_width -= p.len();
             }
         }
