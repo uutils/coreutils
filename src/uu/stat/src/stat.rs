@@ -26,6 +26,27 @@ use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::{cmp, fs, iter};
 
+static ABOUT: &str = "Display file or file system status.";
+const USAGE: &str = "{} [OPTION]... FILE...";
+
+pub mod options {
+    pub static DEREFERENCE: &str = "dereference";
+    pub static FILE_SYSTEM: &str = "file-system";
+    pub static FORMAT: &str = "format";
+    pub static PRINTF: &str = "printf";
+    pub static TERSE: &str = "terse";
+}
+
+static ARG_FILES: &str = "files";
+
+pub const F_ALTER: u8 = 1;
+pub const F_ZERO: u8 = 1 << 1;
+pub const F_LEFT: u8 = 1 << 2;
+pub const F_SPACE: u8 = 1 << 3;
+pub const F_SIGN: u8 = 1 << 4;
+// unused at present
+pub const F_GROUP: u8 = 1 << 5;
+
 /// checks if the string is within the specified bound
 ///
 fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> UResult<()> {
@@ -101,28 +122,6 @@ fn print_adjusted(
         pad_and_print(s, left, field_width, padding);
     }
 }
-
-static ABOUT: &str = "Display file or file system status.";
-const USAGE: &str = "{} [OPTION]... FILE...";
-
-pub mod options {
-    pub static DEREFERENCE: &str = "dereference";
-    pub static FILE_SYSTEM: &str = "file-system";
-    pub static FORMAT: &str = "format";
-    pub static PRINTF: &str = "printf";
-    pub static TERSE: &str = "terse";
-}
-
-static ARG_FILES: &str = "files";
-
-pub const F_ALTER: u8 = 1;
-pub const F_ZERO: u8 = 1 << 1;
-pub const F_LEFT: u8 = 1 << 2;
-pub const F_SPACE: u8 = 1 << 3;
-pub const F_SIGN: u8 = 1 << 4;
-// unused at present
-pub const F_GROUP: u8 = 1 << 5;
-
 #[derive(Debug, PartialEq, Eq)]
 pub enum OutputType {
     Str,
