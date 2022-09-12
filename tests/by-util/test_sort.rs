@@ -1119,13 +1119,13 @@ fn test_tmp_files_deleted_on_sigint() {
     at.mkdir("tmp_dir");
     let file_name = "big_file_to_sort.txt";
     {
-        use rand::Rng;
+        use rand::{Rng, SeedableRng};
         use std::io::Write;
         let mut file = at.make_file(file_name);
         // approximately 20 MB
         for _ in 0..40 {
-            let lines = rand::thread_rng()
-                .sample_iter(rand::distributions::uniform::Uniform::new(0, 10007))
+            let lines = rand_pcg::Pcg32::seed_from_u64(123)
+                .sample_iter(rand::distributions::uniform::Uniform::new(0, 10000))
                 .take(100000)
                 .map(|x| x.to_string() + "\n")
                 .collect::<String>();
