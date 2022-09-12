@@ -26,6 +26,8 @@ use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::{cmp, fs, iter};
 
+/// checks if the string is within the specified bound
+///
 fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> UResult<()> {
     if end >= bound {
         return Err(USimpleError::new(
@@ -36,6 +38,9 @@ fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> UResult<()>
     Ok(())
 }
 
+/// pads the string with zeroes if supplied min is greater
+/// then the length of the string, else returns the original string
+///
 fn extend_digits(string: &str, min: usize) -> Cow<'_, str> {
     if min > string.len() {
         let mut pad = String::with_capacity(min);
@@ -55,6 +60,16 @@ enum Padding {
     Space,
 }
 
+/// pads the string with zeroes or spaces and prints it
+///
+/// # Example
+/// ```ignore
+/// uu_stat::pad_and_print("1", false, 5, Padding::Zero) == "00001";
+/// ```
+/// currently only supports '0' & ' ' as the padding character
+/// because the format specification of print! does not support general
+/// fill characters
+///
 fn pad_and_print(result: &str, left: bool, width: usize, padding: Padding) {
     match (left, padding) {
         (false, Padding::Zero) => print!("{result:0>width$}"),
@@ -64,6 +79,8 @@ fn pad_and_print(result: &str, left: bool, width: usize, padding: Padding) {
     };
 }
 
+/// prints the adjusted string after padding
+///
 fn print_adjusted(
     s: &str,
     left: bool,
