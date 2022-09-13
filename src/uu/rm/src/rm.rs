@@ -303,13 +303,30 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
             }
         } else {
             let mut dirs: VecDeque<DirEntry> = VecDeque::new();
+            let mut not_descended: Vec<PathBuf> = Vec::new();
 
-            for entry in WalkDir::new(path) {
+            'outer: for entry in WalkDir::new(path) {
                 match entry {
                     Ok(entry) => {
+                        if options.interactive == InteractiveMode::Always {
+                            for not_descend in &not_descended {
+                                if entry.path().starts_with(not_descend) {
+                                    continue 'outer
+                                }
+                            }
+                        }
                         let file_type = entry.file_type();
                         if file_type.is_dir() {
-                            dirs.push_back(entry);
+                            if options.interactive == InteractiveMode::Always {
+                                if prompt_descend(entry.path()) {
+                                    dirs.push_back(entry);
+                                } else {
+                                    not_descended.push(entry.path().to_path_buf());
+                                }
+                            } else {
+                                dirs.push_back(entry);
+                            }
+                            
                         } else {
                             had_err = remove_file(entry.path(), options).bitor(had_err);
                         }
@@ -445,6 +462,10 @@ fn prompt_write_protected(path: &Path, is_dir: bool, options: &Options) -> bool 
             }
         }
     }
+}
+
+fn prompt_descend(path: &Path) -> bool {
+    prompt(&(format!("rm: descend into directory {}? ", path.quote())))
 }
 
 fn prompt_file(path: &Path, is_dir: bool) -> bool {
