@@ -10,7 +10,7 @@
 // spell-checker:ignore (ToDO) filehandle BUFSIZ
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::{BufReader, Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, Read, Seek, SeekFrom, Write};
 use uucore::error::UResult;
 
 /// When reading files in reverse in `bounded_tail`, this is the size of each
@@ -208,7 +208,7 @@ impl BytesChunk {
     /// that number of bytes. If EOF is reached (so 0 bytes are read), then returns
     /// [`UResult<None>`] or else the result with [`Some(bytes)`] where bytes is the number of bytes
     /// read from the source.
-    pub fn fill(&mut self, filehandle: &mut BufReader<impl Read>) -> UResult<Option<usize>> {
+    pub fn fill(&mut self, filehandle: &mut impl BufRead) -> UResult<Option<usize>> {
         let num_bytes = filehandle.read(&mut self.buffer)?;
         self.bytes = num_bytes;
         if num_bytes == 0 {
@@ -283,7 +283,7 @@ impl BytesChunkBuffer {
     /// let mut chunks = BytesChunkBuffer::new(num_print);
     /// chunks.fill(&mut reader).unwrap();
     /// ```
-    pub fn fill(&mut self, reader: &mut BufReader<impl Read>) -> UResult<()> {
+    pub fn fill(&mut self, reader: &mut impl BufRead) -> UResult<()> {
         let mut chunk = Box::new(BytesChunk::new());
 
         // fill chunks with all bytes from reader and reuse already instantiated chunks if possible
@@ -322,6 +322,10 @@ impl BytesChunkBuffer {
             writer.write_all(chunk.get_buffer())?;
         }
         Ok(())
+    }
+
+    pub fn has_data(&self) -> bool {
+        !self.chunks.is_empty()
     }
 }
 
@@ -452,7 +456,7 @@ impl LinesChunk {
     /// that number of bytes. This function works like the [`BytesChunk::fill`] function besides
     /// that this function also counts and stores the number of lines encountered while reading from
     /// the `filehandle`.
-    pub fn fill(&mut self, filehandle: &mut BufReader<impl Read>) -> UResult<Option<usize>> {
+    pub fn fill(&mut self, filehandle: &mut impl BufRead) -> UResult<Option<usize>> {
         match self.chunk.fill(filehandle)? {
             None => {
                 self.lines = 0;
@@ -556,7 +560,7 @@ impl LinesChunkBuffer {
     /// in sum exactly `self.num_print` lines stored in all chunks. The method returns an iterator
     /// over these chunks. If there are no chunks, for example because the piped stdin contained no
     /// lines, or `num_print = 0` then `iterator.next` will return None.
-    pub fn fill(&mut self, reader: &mut BufReader<impl Read>) -> UResult<()> {
+    pub fn fill(&mut self, reader: &mut impl BufRead) -> UResult<()> {
         let mut chunk = Box::new(LinesChunk::new(self.delimiter));
 
         while (chunk.fill(reader)?).is_some() {
