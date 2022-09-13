@@ -311,7 +311,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
                         if options.interactive == InteractiveMode::Always {
                             for not_descend in &not_descended {
                                 if entry.path().starts_with(not_descend) {
-                                    continue 'outer
+                                    continue 'outer;
                                 }
                             }
                         }
@@ -326,7 +326,6 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
                             } else {
                                 dirs.push_back(entry);
                             }
-                            
                         } else {
                             had_err = remove_file(entry.path(), options).bitor(had_err);
                         }
