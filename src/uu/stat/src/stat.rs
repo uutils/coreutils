@@ -47,7 +47,9 @@ pub const F_SIGN: u8 = 1 << 4;
 // unused at present
 pub const F_GROUP: u8 = 1 << 5;
 
-/// checks if the string is within the specified bound
+/// checks if the string is within the specified bound,
+/// if it gets out of bound, error out by printing sub-string from index `beg` to`end`,
+/// where `beg` & `end` is the beginning and end index of sub-string, respectively
 ///
 fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> UResult<()> {
     if end >= bound {
@@ -101,7 +103,11 @@ fn pad_and_print(result: &str, left: bool, width: usize, padding: Padding) {
 }
 
 /// prints the adjusted string after padding
-///
+/// `left` flag specifies the type of alignment of the string
+/// `width` is the supplied padding width of the string needed
+/// `prefix` & `need_prefix` are Optional, which adjusts the `field_width` accordingly, where
+/// `field_width` is the max of supplied `width` and size of string
+/// `padding`, specifies type of padding, which is '0' or ' ' in this case.
 fn print_adjusted(
     s: &str,
     left: bool,
