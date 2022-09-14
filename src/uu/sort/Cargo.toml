@@ -26,7 +26,7 @@ ouroboros = "0.15.3"
 rand = "0.8"
 rayon = "1.5"
 tempfile = "3"
-unicode-width = "0.1.8"
+unicode-width = "0.1.10"
 uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["fs"] }
 
 [[bin]]

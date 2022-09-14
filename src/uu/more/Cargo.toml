@@ -19,7 +19,7 @@ clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.15", package="uucore", path="../../uucore" }
 crossterm = ">=0.19"
 atty = "0.2"
-unicode-width = "0.1.7"
+unicode-width = "0.1.10"
 unicode-segmentation = "1.9.0"
 
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]

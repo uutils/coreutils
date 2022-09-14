@@ -17,7 +17,7 @@ path = "src/df.rs"
 [dependencies]
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["libc", "fsext"] }
-unicode-width = "0.1.9"
+unicode-width = "0.1.10"
 
 [[bin]]
 name = "df"
