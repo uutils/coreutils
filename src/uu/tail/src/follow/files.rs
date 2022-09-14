@@ -13,7 +13,6 @@ use std::collections::hash_map::Keys;
 use std::collections::HashMap;
 use std::fs::{File, Metadata};
 use std::io::{stdout, BufRead, BufReader, BufWriter};
-
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
 

@@ -11,8 +11,6 @@
 // spell-checker:ignore (ToDO) stdlib, ISCHR, GETFD
 // spell-checker:ignore (options) EPERM, ENOSYS
 
-use libc::S_IFCHR;
-use nix::sys::stat::fstat;
 use std::io::Error;
 
 pub type Pid = libc::pid_t;
@@ -44,13 +42,6 @@ pub fn supports_pid_checks(pid: self::Pid) -> bool {
 #[inline]
 fn get_errno() -> i32 {
     Error::last_os_error().raw_os_error().unwrap()
-}
-#[inline]
-pub fn stdin_is_pipe_or_fifo() -> bool {
-    // IFCHR means the file (stdin) is a character input device, which is the case of a terminal.
-    // We just need to check if stdin is not a character device here, because we are not interested
-    // in the type of stdin itself.
-    fstat(libc::STDIN_FILENO).map_or(false, |file| file.st_mode as libc::mode_t & S_IFCHR == 0)
 }
 
 //pub fn stdin_is_bad_fd() -> bool {

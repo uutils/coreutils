@@ -5,23 +5,13 @@
 
 // spell-checker:ignore tailable seekable stdlib (stdlib)
 
-#[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
-
-use std::collections::VecDeque;
+use crate::text;
 use std::fs::{File, Metadata};
 use std::io::{Seek, SeekFrom};
+#[cfg(unix)]
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
-
 use uucore::error::UResult;
-
-use crate::args::Settings;
-use crate::text;
-
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
 
 #[derive(Debug, Clone)]
 pub enum InputKind {
@@ -36,6 +26,7 @@ pub struct Input {
 }
 
 impl Input {
+    // TODO: from &str may be the better choice
     pub fn from(string: String) -> Self {
         let kind = if string == text::DASH {
             InputKind::Stdin
@@ -132,44 +123,6 @@ impl HeaderPrinter {
         }
     }
 }
-
-#[derive(Debug, Clone)]
-pub struct InputService {
-    pub inputs: VecDeque<Input>,
-    pub presume_input_pipe: bool,
-    pub header_printer: HeaderPrinter,
-}
-
-impl InputService {
-    pub fn new(verbose: bool, presume_input_pipe: bool, inputs: VecDeque<Input>) -> Self {
-        Self {
-            inputs,
-            presume_input_pipe,
-            header_printer: HeaderPrinter::new(verbose, true),
-        }
-    }
-
-    pub fn from(settings: &Settings) -> Self {
-        Self::new(
-            settings.verbose,
-            settings.presume_input_pipe,
-            settings.inputs.clone(),
-        )
-    }
-
-    pub fn has_stdin(&mut self) -> bool {
-        self.inputs.iter().any(|input| input.is_stdin())
-    }
-
-    pub fn has_only_stdin(&self) -> bool {
-        self.inputs.iter().all(|input| input.is_stdin())
-    }
-
-    pub fn print_header(&mut self, input: &Input) {
-        self.header_printer.print_input(input);
-    }
-}
-
 pub trait FileExtTail {
     #[allow(clippy::wrong_self_convention)]
     fn is_seekable(&mut self, current_offset: u64) -> bool;
@@ -228,9 +181,11 @@ impl MetadataExtTail for Metadata {
         }
         #[cfg(windows)]
         {
+            // TODO: `file_index` requires unstable library feature `windows_by_handle`
             // use std::os::windows::prelude::*;
             // if let Some(self_id) = self.file_index() {
             //     if let Some(other_id) = other.file_index() {
+            //     // TODO: not sure this is the equivalent of comparing inode numbers
             //
             //         return self_id.eq(&other_id);
             //     }

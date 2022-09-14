@@ -7,7 +7,9 @@
 //! or at the end of piped stdin with [`LinesChunk`] or [`BytesChunk`].
 //!
 //! Use [`ReverseChunks::new`] to create a new iterator over chunks of bytes from the file.
+
 // spell-checker:ignore (ToDO) filehandle BUFSIZ
+
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufRead, Read, Seek, SeekFrom, Write};

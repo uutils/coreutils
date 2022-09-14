@@ -13,8 +13,7 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::collections::VecDeque;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::{self, channel, Receiver};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UResult, USimpleError};
 use uucore::show_error;
@@ -81,7 +80,7 @@ impl WatcherRx {
     }
 }
 
-pub struct WatcherService {
+pub struct Observer {
     /// Whether --retry was given on the command line
     pub retry: bool,
 
@@ -92,17 +91,21 @@ pub struct WatcherService {
     /// platform specific event driven method. Since `use_polling` is subject to
     /// change during runtime it is moved out of [`Settings`].
     pub use_polling: bool,
+
     pub watcher_rx: Option<WatcherRx>,
     pub orphans: Vec<PathBuf>,
     pub files: FileHandling,
+
+    pub pid: platform::Pid,
 }
 
-impl WatcherService {
+impl Observer {
     pub fn new(
         retry: bool,
         follow: Option<FollowMode>,
         use_polling: bool,
         files: FileHandling,
+        pid: platform::Pid,
     ) -> Self {
         Self {
             retry,
@@ -111,6 +114,7 @@ impl WatcherService {
             watcher_rx: None,
             orphans: Vec::new(),
             files,
+            pid,
         }
     }
 
@@ -120,6 +124,7 @@ impl WatcherService {
             settings.follow,
             settings.use_polling,
             FileHandling::from(settings),
+            settings.pid,
         )
     }
 
@@ -460,14 +465,12 @@ impl WatcherService {
     }
 }
 
-pub fn follow(mut watcher_service: WatcherService, settings: &Settings) -> UResult<()> {
-    if watcher_service.files.no_files_remaining(settings)
-        && !watcher_service.files.only_stdin_remaining()
-    {
+pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
+    if observer.files.no_files_remaining(settings) && !observer.files.only_stdin_remaining() {
         return Err(USimpleError::new(1, text::NO_FILES_REMAINING.to_string()));
     }
 
-    let mut process = platform::ProcessChecker::new(settings.pid);
+    let mut process = platform::ProcessChecker::new(observer.pid);
 
     let mut _event_counter = 0;
     let mut _timeout_counter = 0;
@@ -478,7 +481,7 @@ pub fn follow(mut watcher_service: WatcherService, settings: &Settings) -> UResu
 
         // If `--pid=p`, tail checks whether process p
         // is alive at least every `--sleep-interval=N` seconds
-        if settings.follow.is_some() && settings.pid != 0 && process.is_dead() {
+        if settings.follow.is_some() && observer.pid != 0 && process.is_dead() {
             // p is dead, tail will also terminate
             break;
         }
@@ -487,22 +490,20 @@ pub fn follow(mut watcher_service: WatcherService, settings: &Settings) -> UResu
         // If a path becomes an orphan during runtime, it will be added to orphans.
         // To be able to differentiate between the cases of test_retry8 and test_retry9,
         // here paths will not be removed from orphans if the path becomes available.
-        if watcher_service.follow_name_retry() {
-            for new_path in &watcher_service.orphans {
+        if observer.follow_name_retry() {
+            for new_path in &observer.orphans {
                 if new_path.exists() {
-                    let pd = watcher_service.files.get(new_path);
+                    let pd = observer.files.get(new_path);
                     let md = new_path.metadata().unwrap();
                     if md.is_tailable() && pd.reader.is_none() {
                         show_error!(
                             "{} has appeared;  following new file",
                             pd.display_name.quote()
                         );
-                        watcher_service.files.update_metadata(new_path, Some(md));
-                        watcher_service.files.update_reader(new_path)?;
-                        _read_some = watcher_service
-                            .files
-                            .tail_file(new_path, settings.verbose)?;
-                        watcher_service
+                        observer.files.update_metadata(new_path, Some(md));
+                        observer.files.update_reader(new_path)?;
+                        _read_some = observer.files.tail_file(new_path, settings.verbose)?;
+                        observer
                             .watcher_rx
                             .as_mut()
                             .unwrap()
@@ -514,7 +515,7 @@ pub fn follow(mut watcher_service: WatcherService, settings: &Settings) -> UResu
 
         // With  -f, sleep for approximately N seconds (default 1.0) between iterations;
         // We wake up if Notify sends an Event or if we wait more than `sleep_sec`.
-        let rx_result = watcher_service
+        let rx_result = observer
             .watcher_rx
             .as_mut()
             .unwrap()
@@ -529,9 +530,9 @@ pub fn follow(mut watcher_service: WatcherService, settings: &Settings) -> UResu
         match rx_result {
             Ok(Ok(event)) => {
                 if let Some(event_path) = event.paths.first() {
-                    if watcher_service.files.contains_key(event_path) {
+                    if observer.files.contains_key(event_path) {
                         // Handle Event if it is about a path that we are monitoring
-                        paths = watcher_service.handle_event(&event, settings)?;
+                        paths = observer.handle_event(&event, settings)?;
                     }
                 }
             }
@@ -540,8 +541,8 @@ pub fn follow(mut watcher_service: WatcherService, settings: &Settings) -> UResu
                 paths,
             })) if e.kind() == std::io::ErrorKind::NotFound => {
                 if let Some(event_path) = paths.first() {
-                    if watcher_service.files.contains_key(event_path) {
-                        let _ = watcher_service
+                    if observer.files.contains_key(event_path) {
+                        let _ = observer
                             .watcher_rx
                             .as_mut()
                             .unwrap()
@@ -566,16 +567,16 @@ pub fn follow(mut watcher_service: WatcherService, settings: &Settings) -> UResu
             Err(e) => return Err(USimpleError::new(1, format!("RecvTimeoutError: {}", e))),
         }
 
-        if watcher_service.use_polling && settings.follow.is_some() {
+        if observer.use_polling && settings.follow.is_some() {
             // Consider all files to potentially have new content.
             // This is a workaround because `Notify::PollWatcher`
             // does not recognize the "renaming" of files.
-            paths = watcher_service.files.keys().cloned().collect::<Vec<_>>();
+            paths = observer.files.keys().cloned().collect::<Vec<_>>();
         }
 
         // main print loop
         for path in &paths {
-            _read_some = watcher_service.files.tail_file(path, settings.verbose)?;
+            _read_some = observer.files.tail_file(path, settings.verbose)?;
         }
 
         if _timeout_counter == settings.max_unchanged_stats {

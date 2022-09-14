@@ -113,6 +113,18 @@ pub enum FollowMode {
     Name,
 }
 
+#[derive(Debug)]
+pub enum VerificationResult {
+    Ok,
+    CannotFollowStdinByName,
+    NoOutput,
+}
+
+pub enum CheckResult {
+    Ok,
+    NoPidSupport,
+}
+
 #[derive(Debug, Default)]
 pub struct Settings {
     pub follow: Option<FollowMode>,
@@ -148,10 +160,6 @@ impl Settings {
 
         settings.retry =
             matches.get_flag(options::RETRY) || matches.get_flag(options::FOLLOW_RETRY);
-
-        if settings.retry && settings.follow.is_none() {
-            show_warning!("--retry ignored; --retry is useful only when following");
-        }
 
         if let Some(s) = matches.get_one::<String>(options::SLEEP_INT) {
             settings.sleep_sec = match s.parse::<f32>() {
@@ -195,13 +203,6 @@ impl Settings {
                         ));
                     }
                     settings.pid = pid;
-                    if settings.follow.is_none() {
-                        show_warning!("PID ignored; --pid=PID is useful only when following");
-                    }
-                    if !platform::supports_pid_checks(settings.pid) {
-                        show_warning!("--pid=PID is not supported on this system");
-                        settings.pid = 0;
-                    }
                 }
                 Err(e) => {
                     return Err(USimpleError::new(
@@ -213,16 +214,6 @@ impl Settings {
         }
 
         settings.mode = FilterMode::from(matches)?;
-
-        // Mimic GNU's tail for -[nc]0 without -f and exit immediately
-        if settings.follow.is_none()
-            && matches!(
-                settings.mode,
-                FilterMode::Lines(Signum::MinusZero, _) | FilterMode::Bytes(Signum::MinusZero)
-            )
-        {
-            std::process::exit(0)
-        }
 
         let mut inputs: VecDeque<Input> = matches
             .get_many::<String>(options::ARG_FILES)
@@ -242,6 +233,54 @@ impl Settings {
         settings.presume_input_pipe = matches.get_flag(options::PRESUME_INPUT_PIPE);
 
         Ok(settings)
+    }
+
+    pub fn has_only_stdin(&self) -> bool {
+        self.inputs.iter().all(|input| input.is_stdin())
+    }
+
+    pub fn has_stdin(&self) -> bool {
+        self.inputs.iter().any(|input| input.is_stdin())
+    }
+
+    pub fn check_warnings(&self) -> CheckResult {
+        if self.retry {
+            if self.follow.is_none() {
+                show_warning!("--retry ignored; --retry is useful only when following");
+            } else if self.follow == Some(FollowMode::Descriptor) {
+                show_warning!("--retry only effective for the initial open");
+            }
+        }
+
+        if self.pid != 0 {
+            if self.follow.is_none() {
+                show_warning!("PID ignored; --pid=PID is useful only when following");
+            } else if !platform::supports_pid_checks(self.pid) {
+                show_warning!("--pid=PID is not supported on this system");
+                return CheckResult::NoPidSupport;
+            }
+        }
+
+        CheckResult::Ok
+    }
+
+    pub fn verify(&self) -> VerificationResult {
+        // Mimic GNU's tail for `tail -F`
+        if self.inputs.iter().any(|i| i.is_stdin()) && self.follow == Some(FollowMode::Name) {
+            return VerificationResult::CannotFollowStdinByName;
+        }
+
+        // Mimic GNU's tail for -[nc]0 without -f and exit immediately
+        if self.follow.is_none()
+            && matches!(
+                self.mode,
+                FilterMode::Lines(Signum::MinusZero, _) | FilterMode::Bytes(Signum::MinusZero)
+            )
+        {
+            return VerificationResult::NoOutput;
+        }
+
+        VerificationResult::Ok
     }
 }
 
@@ -296,19 +335,6 @@ fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
         (n, true) => Signum::Positive(n),
         (n, false) => Signum::Negative(n),
     })
-}
-
-pub fn stdin_is_pipe_or_fifo() -> bool {
-    #[cfg(unix)]
-    {
-        platform::stdin_is_pipe_or_fifo()
-    }
-    #[cfg(windows)]
-    {
-        winapi_util::file::typ(winapi_util::HandleRef::stdin())
-            .map(|t| t.is_disk() || t.is_pipe())
-            .unwrap_or(false)
-    }
 }
 
 pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {

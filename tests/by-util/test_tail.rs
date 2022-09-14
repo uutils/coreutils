@@ -11,6 +11,7 @@ extern crate tail;
 
 use crate::common::random::*;
 use crate::common::util::*;
+use pretty_assertions::assert_eq;
 use rand::distributions::Alphanumeric;
 use std::char::from_digit;
 use std::io::Write;
