@@ -317,7 +317,9 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
                         }
                         let file_type = entry.file_type();
                         if file_type.is_dir() {
-                            if options.interactive == InteractiveMode::Always {
+                            if options.interactive == InteractiveMode::Always
+                                && fs::read_dir(entry.path()).unwrap().count() != 0
+                            {
                                 if prompt_descend(entry.path()) {
                                     dirs.push_back(entry);
                                 } else {
