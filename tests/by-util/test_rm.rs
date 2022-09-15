@@ -354,6 +354,45 @@ fn test_rm_interactive_never() {
 }
 
 #[test]
+fn test_rm_descend_directory() {
+    use std::io::Write;
+    use std::process::Child;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_1 = "a/at.txt";
+    let file_2 = "a/b/bt.txt";
+
+    at.mkdir_all("a/b/");
+    at.touch(file_1);
+    at.touch(file_2);
+
+    let mut child: Child = scene
+        .ccmd("rm")
+        .arg("-ri")
+        .arg("a")
+        .run_no_wait();
+
+    let mut child_stdin = child.stdin.take().unwrap();
+    child_stdin.write_all("y\n".as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+    child_stdin.write_all("n\n".as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+    child_stdin.write_all("y\n".as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+    child_stdin.write_all("n\n".as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+
+    child.wait_with_output().unwrap();
+
+    assert!(at.dir_exists("a/b"));
+    assert!(at.dir_exists("a"));
+    assert!(!at.file_exists(file_1));
+    assert!(at.file_exists(file_2));
+}
+
+#[test]
 #[ignore = "issue #3722"]
 fn test_rm_directory_rights_rm1() {
     let (at, mut ucmd) = at_and_ucmd!();
