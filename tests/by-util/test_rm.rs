@@ -368,11 +368,7 @@ fn test_rm_descend_directory() {
     at.touch(file_1);
     at.touch(file_2);
 
-    let mut child: Child = scene
-        .ccmd("rm")
-        .arg("-ri")
-        .arg("a")
-        .run_no_wait();
+    let mut child: Child = scene.ccmd("rm").arg("-ri").arg("a").run_no_wait();
 
     let mut child_stdin = child.stdin.take().unwrap();
     child_stdin.write_all("y\n".as_bytes()).unwrap();
