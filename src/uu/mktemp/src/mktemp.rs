@@ -460,37 +460,60 @@ pub fn dry_exec(tmpdir: &str, prefix: &str, rand: usize, suffix: &str) -> UResul
     println_verbatim(tmpdir).map_err_context(|| "failed to print directory name".to_owned())
 }
 
-fn exec(dir: &str, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> UResult<()> {
-    let context = || {
-        format!(
-            "failed to create file via template '{}{}{}'",
-            prefix,
-            "X".repeat(rand),
-            suffix
-        )
-    };
-
+/// Create a temporary directory with the given parameters.
+///
+/// This function creates a temporary directory as a subdirectory of
+/// `dir`. The name of the directory is the concatenation of `prefix`,
+/// a string of `rand` random characters, and `suffix`. The
+/// permissions of the directory are set to `u+rwx`
+///
+/// # Errors
+///
+/// If the temporary directory could not be written to disk.
+fn make_temp_dir(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
-
-    let path = if make_dir {
-        builder
-            .tempdir_in(&dir)
-            .map_err_context(context)?
-            .into_path() // `into_path` consumes the TempDir without removing it
-    } else {
-        builder
-            .tempfile_in(&dir)
-            .map_err_context(context)?
-            .keep() // `keep` ensures that the file is not deleted
-            .map_err(|e| MkTempError::PersistError(e.file.path().to_path_buf()))?
-            .1
-    };
-
-    #[cfg(not(windows))]
-    if make_dir {
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
+    match builder.tempdir_in(&dir) {
+        Ok(d) => {
+            // `into_path` consumes the TempDir without removing it
+            let path = d.into_path();
+            #[cfg(not(windows))]
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
+            Ok(path)
+        }
+        Err(e) => Err(e.into()),
     }
+}
+
+/// Create a temporary file with the given parameters.
+///
+/// This function creates a temporary file in the directory `dir`. The
+/// name of the file is the concatenation of `prefix`, a string of
+/// `rand` random characters, and `suffix`. The permissions of the
+/// file are set to `u+rw`.
+///
+/// # Errors
+///
+/// If the file could not be written to disk.
+fn make_temp_file(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
+    let mut builder = Builder::new();
+    builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
+    match builder.tempfile_in(&dir) {
+        // `keep` ensures that the file is not deleted
+        Ok(named_tempfile) => match named_tempfile.keep() {
+            Ok((_, pathbuf)) => Ok(pathbuf),
+            Err(e) => Err(MkTempError::PersistError(e.file.path().to_path_buf()).into()),
+        },
+        Err(e) => Err(e.into()),
+    }
+}
+
+fn exec(dir: &str, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> UResult<()> {
+    let path = if make_dir {
+        make_temp_dir(dir, prefix, rand, suffix)?
+    } else {
+        make_temp_file(dir, prefix, rand, suffix)?
+    };
 
     // Get just the last component of the path to the created
     // temporary file or directory.
