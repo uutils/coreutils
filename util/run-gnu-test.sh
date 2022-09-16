@@ -53,5 +53,6 @@ else
 fi
 
 if test -z "$1" && test -n "$CI"; then
+    echo "Running check-root to run only root tests"
     sudo make -j "$(nproc)" check-root SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no gl_public_submodule_commit="" srcdir="${path_GNU}" TEST_SUITE_LOG="tests/test-suite-root.log" || :
 fi

@@ -34,6 +34,7 @@ jobs:
         outputs repo_default_branch repo_GNU_ref repo_reference_branch
         #
         SUITE_LOG_FILE="${path_GNU_tests}/test-suite.log"
+        ROOT_SUITE_LOG_FILE="${path_GNU_tests}/test-suite-root.log"
         TEST_LOGS_GLOB="${path_GNU_tests}/**/*.log" ## note: not usable at bash CLI; [why] double globstar not enabled by default b/c MacOS includes only bash v3 which doesn't have double globstar support
         TEST_FILESET_PREFIX='test-fileset-IDs.sha1#'
         TEST_FILESET_SUFFIX='.txt'
@@ -108,18 +109,17 @@ jobs:
       id: summary
       shell: bash
       run: |
+        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         ## Extract/summarize testing info
         outputs() { step_id="summary"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         #
         SUITE_LOG_FILE='${{ steps.vars.outputs.SUITE_LOG_FILE }}'
+        ROOT_SUITE_LOG_FILE='${{ steps.vars.outputs.ROOT_SUITE_LOG_FILE }}'
+        ls -al ${SUITE_LOG_FILE} ${ROOT_SUITE_LOG_FILE}
+
         if test -f "${SUITE_LOG_FILE}"
         then
-            TOTAL=$(sed -n "s/.*# TOTAL: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
-            PASS=$(sed -n "s/.*# PASS: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
-            SKIP=$(sed -n "s/.*# SKIP: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
-            FAIL=$(sed -n "s/.*# FAIL: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
-            XPASS=$(sed -n "s/.*# XPASS: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
-            ERROR=$(sed -n "s/.*# ERROR: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
+            source ${path_UUTILS}/util/analyze-gnu-results.sh ${SUITE_LOG_FILE} ${ROOT_SUITE_LOG_FILE}
             if [[ "$TOTAL" -eq 0 || "$TOTAL" -eq 1 ]]; then
               echo "::error ::Failed to parse test results from '${SUITE_LOG_FILE}'; failing early"
               exit 1
