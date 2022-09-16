@@ -16,6 +16,7 @@ use uucore::format_usage;
 use std::env;
 use std::error::Error;
 use std::fmt::Display;
+use std::io::ErrorKind;
 use std::iter;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 
@@ -54,6 +55,9 @@ enum MkTempError {
     SuffixContainsDirSeparator(String),
     InvalidTemplate(String),
     TooManyTemplates,
+
+    /// When a specified temporary directory could not be found.
+    NotFound(String, String),
 }
 
 impl UError for MkTempError {
@@ -93,6 +97,12 @@ impl Display for MkTempError {
             TooManyTemplates => {
                 write!(f, "too many templates")
             }
+            NotFound(template_type, s) => write!(
+                f,
+                "failed to create {} via template {}: No such file or directory",
+                template_type,
+                s.quote()
+            ),
         }
     }
 }
@@ -469,7 +479,8 @@ pub fn dry_exec(tmpdir: &str, prefix: &str, rand: usize, suffix: &str) -> UResul
 ///
 /// # Errors
 ///
-/// If the temporary directory could not be written to disk.
+/// If the temporary directory could not be written to disk or if the
+/// given directory `dir` does not exist.
 fn make_temp_dir(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
@@ -480,6 +491,12 @@ fn make_temp_dir(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<
             #[cfg(not(windows))]
             fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
             Ok(path)
+        }
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            let filename = format!("{}{}{}", prefix, "X".repeat(rand), suffix);
+            let path = Path::new(dir).join(filename);
+            let s = path.display().to_string();
+            Err(MkTempError::NotFound("directory".to_string(), s).into())
         }
         Err(e) => Err(e.into()),
     }
@@ -494,7 +511,8 @@ fn make_temp_dir(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<
 ///
 /// # Errors
 ///
-/// If the file could not be written to disk.
+/// If the file could not be written to disk or if the directory does
+/// not exist.
 fn make_temp_file(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
@@ -504,6 +522,12 @@ fn make_temp_file(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult
             Ok((_, pathbuf)) => Ok(pathbuf),
             Err(e) => Err(MkTempError::PersistError(e.file.path().to_path_buf()).into()),
         },
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            let filename = format!("{}{}{}", prefix, "X".repeat(rand), suffix);
+            let path = Path::new(dir).join(filename);
+            let s = path.display().to_string();
+            Err(MkTempError::NotFound("file".to_string(), s).into())
+        }
         Err(e) => Err(e.into()),
     }
 }
