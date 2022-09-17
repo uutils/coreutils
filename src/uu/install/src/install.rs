@@ -517,7 +517,7 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
                     // When creating directories with -Dv, show directory creations step by step
                     for part in to_create.components() {
                         result.push(part.as_os_str());
-                        if !Path::new(part.as_os_str()).is_dir() {
+                        if !result.is_dir() {
                             // Don't display when the directory already exists
                             println!("install: creating directory {}", result.quote());
                         }

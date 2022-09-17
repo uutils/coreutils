@@ -671,6 +671,31 @@ fn test_install_creating_leading_dirs() {
 }
 
 #[test]
+fn test_install_creating_leading_dirs_verbose() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "create_leading_test_file";
+    let target = "dir1/no-dir2/no-dir3/test_file";
+
+    at.touch(source);
+    at.mkdir("dir1");
+
+    let creating_dir1 = regex::Regex::new("(?m)^install: creating directory.*dir1'$").unwrap();
+    let creating_nodir23 = regex::Regex::new(r"(?m)^install: creating directory.*no-dir[23]'$").unwrap();
+
+    scene
+        .ucmd()
+        .arg("-Dv")
+        .arg(source)
+        .arg(at.plus(target))
+        .succeeds()
+        .stdout_matches(&creating_nodir23)
+        .stdout_does_not_match(&creating_dir1)
+        .no_stderr();
+}
+
+#[test]
 #[cfg(not(windows))]
 fn test_install_creating_leading_dir_fails_on_long_name() {
     let scene = TestScenario::new(util_name!());
