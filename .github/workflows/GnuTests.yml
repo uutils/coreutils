@@ -82,8 +82,13 @@ jobs:
         ## Some tests fail with 'cannot change locale (en_US.ISO-8859-1): No such file or directory'
         ## Some others need a French locale
         sudo locale-gen
-        sudo locale-gen fr_FR
-        sudo locale-gen fr_FR.UTF-8
+        sudo locale-gen --keep-existing fr_FR
+        sudo locale-gen --keep-existing fr_FR.UTF-8
+        sudo locale-gen --keep-existing sv_SE
+        sudo locale-gen --keep-existing sv_SE.UTF-8
+        sudo locale-gen --keep-existing en_US
+        sudo locale-gen --keep-existing ru_RU.KOI8-R
+
         sudo update-locale
         echo "After:"
         locale -a
@@ -257,8 +262,8 @@ jobs:
         ## Some tests fail with 'cannot change locale (en_US.ISO-8859-1): No such file or directory'
         ## Some others need a French locale
         sudo locale-gen
-        sudo locale-gen fr_FR
-        sudo locale-gen fr_FR.UTF-8
+        sudo locale-gen --keep-existing fr_FR
+        sudo locale-gen --keep-existing fr_FR.UTF-8
         sudo update-locale
         echo "After:"
         locale -a
