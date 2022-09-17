@@ -204,6 +204,8 @@ fn test_cp_arg_interactive() {
         .arg("-i")
         .pipe_in("N\n")
         .succeeds()
+        .no_stdout()
+        .stderr_contains(format!("overwrite '{}'?", TEST_HOW_ARE_YOU_SOURCE))
         .stderr_contains("Not overwriting");
 }
 
