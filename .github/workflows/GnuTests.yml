@@ -40,7 +40,7 @@ jobs:
         TEST_FILESET_SUFFIX='.txt'
         TEST_SUMMARY_FILE='gnu-result.json'
         TEST_FULL_SUMMARY_FILE='gnu-full-result.json'
-        outputs SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE
+        outputs SUITE_LOG_FILE ROOT_SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE
     - name: Checkout code (uutil)
       uses: actions/checkout@v3
       with:
@@ -100,6 +100,12 @@ jobs:
         path_GNU='${{ steps.vars.outputs.path_GNU }}'
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         bash "${path_UUTILS}/util/run-gnu-test.sh"
+    - name: Run GNU root tests
+      shell: bash
+      run: |
+        path_GNU='${{ steps.vars.outputs.path_GNU }}'
+        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
+        bash "${path_UUTILS}/util/run-gnu-test.sh" run-root
     - name: Extract testing info into JSON
       shell: bash
       run : |
