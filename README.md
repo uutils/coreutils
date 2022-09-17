@@ -369,6 +369,8 @@ $ bash util/build-gnu.sh
 $ bash util/run-gnu-test.sh
 # To run a single test:
 $ bash util/run-gnu-test.sh tests/touch/not-owner.sh # for example
+# To run several tests:
+$ bash util/run-gnu-test.sh tests/touch/not-owner.sh tests/rm/no-give-up.sh # for example
 # If this is a perl (.pl) test, to run in debug:
 $ DEBUG=1 bash util/run-gnu-test.sh tests/misc/sm3sum.pl
 ```
