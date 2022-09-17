@@ -7,6 +7,8 @@
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (jargon) tailable untailable
 
+// TODO: add tests for presume_input_pipe
+
 extern crate tail;
 
 use crate::common::util::*;
@@ -264,6 +266,7 @@ fn test_follow_redirect_stdin_name_retry() {
 }
 
 #[test]
+#[cfg(not(target_os = "macos"))] // See test_stdin_redirect_dir_when_target_os_is_macos
 #[cfg(all(unix, not(any(target_os = "android", target_os = "freebsd"))))] // FIXME: fix this test for Android/FreeBSD
 fn test_stdin_redirect_dir() {
     // $ mkdir dir
@@ -286,6 +289,39 @@ fn test_stdin_redirect_dir() {
         .fails()
         .no_stdout()
         .stderr_is("tail: error reading 'standard input': Is a directory")
+        .code_is(1);
+}
+
+// On macOS path.is_dir() can be false for directories if it was a redirect,
+// e.g. `$ tail < DIR. The library feature to detect the
+// std::io::ErrorKind::IsADirectory isn't stable so we currently show the a wrong
+// error message.
+// FIXME: If `std::io::ErrorKind::IsADirectory` becomes stable or macos handles
+//  redirected directories like linux show the correct message like in
+//  `test_stdin_redirect_dir`
+#[test]
+#[cfg(target_os = "macos")]
+fn test_stdin_redirect_dir_when_target_os_is_macos() {
+    // $ mkdir dir
+    // $ tail < dir, $ tail - < dir
+    // tail: error reading 'standard input': Is a directory
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("dir");
+
+    ts.ucmd()
+        .set_stdin(std::fs::File::open(at.plus("dir")).unwrap())
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory")
+        .code_is(1);
+    ts.ucmd()
+        .set_stdin(std::fs::File::open(at.plus("dir")).unwrap())
+        .arg("-")
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory")
         .code_is(1);
 }
 
