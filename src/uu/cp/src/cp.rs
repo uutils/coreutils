@@ -35,7 +35,7 @@ use std::fs;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io;
-use std::io::{stdin, stdout, Write};
+use std::io::{stderr, stdin, Write};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
@@ -118,9 +118,9 @@ macro_rules! or_continue(
 /// answered yes.
 macro_rules! prompt_yes(
     ($($args:tt)+) => ({
-        print!($($args)+);
-        print!(" [y/N]: ");
-        crash_if_err!(1, stdout().flush());
+        eprint!($($args)+);
+        eprint!(" [y/N]: ");
+        crash_if_err!(1, stderr().flush());
         let mut s = String::new();
         match stdin().read_line(&mut s) {
             Ok(_) => match s.char_indices().next() {
