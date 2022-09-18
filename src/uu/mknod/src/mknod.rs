@@ -86,7 +86,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // opts.optflag("Z", "", "set the SELinux security context to default type");
     // opts.optopt("", "context", "like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX");
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let mode = get_mode(&matches).map_err(|e| USimpleError::new(1, e))?;
 

@@ -7,7 +7,7 @@
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
-![MSRV](https://img.shields.io/badge/MSRV-1.56.1-brightgreen)
+![MSRV](https://img.shields.io/badge/MSRV-1.59.0-brightgreen)
 
 -----------------------------------------------
 
@@ -52,7 +52,7 @@ Both can also be generated locally, the instructions for that can be found in th
 ### Rust Version
 
 uutils follows Rust's release channels and is tested against stable, beta and nightly.
-The current Minimum Supported Rust Version (MSRV) is `1.56.1`.
+The current Minimum Supported Rust Version (MSRV) is `1.59.0`.
 
 ## Building
 
@@ -369,6 +369,8 @@ $ bash util/build-gnu.sh
 $ bash util/run-gnu-test.sh
 # To run a single test:
 $ bash util/run-gnu-test.sh tests/touch/not-owner.sh # for example
+# To run several tests:
+$ bash util/run-gnu-test.sh tests/touch/not-owner.sh tests/rm/no-give-up.sh # for example
 # If this is a perl (.pl) test, to run in debug:
 $ DEBUG=1 bash util/run-gnu-test.sh tests/misc/sm3sum.pl
 ```

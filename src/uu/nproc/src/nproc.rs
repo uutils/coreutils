@@ -32,7 +32,7 @@ const USAGE: &str = "{} [OPTIONS]...";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let ignore = match matches.value_of(OPT_IGNORE) {
         Some(numstr) => match numstr.trim().parse() {

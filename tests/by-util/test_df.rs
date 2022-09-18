@@ -4,6 +4,11 @@ use std::collections::HashSet;
 use crate::common::util::*;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_df_compatible_no_size_arg() {
     new_ucmd!().arg("-a").succeeds();
 }

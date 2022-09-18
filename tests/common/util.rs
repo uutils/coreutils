@@ -17,7 +17,7 @@ use std::env;
 use std::ffi::CString;
 use std::ffi::OsStr;
 use std::fs::{self, hard_link, File, OpenOptions};
-use std::io::{Read, Result, Write};
+use std::io::{BufWriter, Read, Result, Write};
 #[cfg(unix)]
 use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file};
 #[cfg(windows)]
@@ -1105,13 +1105,14 @@ impl UCommand {
         }
 
         if let Some(ref input) = self.bytes_into_stdin {
-            let write_result = child
+            let child_stdin = child
                 .stdin
                 .take()
-                .unwrap_or_else(|| panic!("Could not take child process stdin"))
-                .write_all(input);
+                .unwrap_or_else(|| panic!("Could not take child process stdin"));
+            let mut writer = BufWriter::new(child_stdin);
+            let result = writer.write_all(input);
             if !self.ignore_stdin_write_error {
-                if let Err(e) = write_result {
+                if let Err(e) = result {
                     panic!("failed to write to stdin of child: {}", e);
                 }
             }
@@ -1826,6 +1827,24 @@ mod tests {
             }
         } else {
             println!("TEST SKIPPED (cannot run inside CI)");
+        }
+    }
+
+    // This error was first detected when running tail so tail is used here but
+    // should fail with any command that takes piped input.
+    // See also https://github.com/uutils/coreutils/issues/3895
+    #[test]
+    fn test_when_piped_input_then_no_broken_pipe() {
+        let ts = TestScenario::new("tail");
+        for i in 0..10000 {
+            dbg!(i);
+            let test_string = "a\nb\n";
+            ts.ucmd()
+                .args(&["-n", "0"])
+                .pipe_in(test_string)
+                .succeeds()
+                .no_stdout()
+                .no_stderr();
         }
     }
 }

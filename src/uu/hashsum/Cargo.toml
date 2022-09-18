@@ -15,7 +15,7 @@ edition = "2021"
 path = "src/hashsum.rs"
 
 [dependencies]
-digest = "0.10.1"
+digest = "0.10.5"
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 hex = "0.4.3"
 memchr = "2"

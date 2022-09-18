@@ -735,7 +735,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app()
         //.after_help(TODO: Add note about multiplier strings here.)
-        .get_matches_from(dashed_args);
+        .try_get_matches_from(dashed_args)?;
 
     // Parse options for reading from input.
     let ibs = parseargs::parse_ibs(&matches)?;

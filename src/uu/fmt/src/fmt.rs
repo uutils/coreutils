@@ -67,7 +67,7 @@ pub struct FmtOptions {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let mut files: Vec<String> = matches
         .get_many::<String>(ARG_FILES)

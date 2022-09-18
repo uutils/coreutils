@@ -2,6 +2,11 @@ use crate::common::util::*;
 use std::env;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_normal() {
     let result = new_ucmd!().run();
     println!("env::var(CI).is_ok() = {}", env::var("CI").is_ok());

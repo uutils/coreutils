@@ -11,6 +11,11 @@ extern crate stat;
 pub use self::stat::*;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_scanners() {
     assert_eq!(Some((-5, 2)), "-5zxc".scan_num::<i32>());
     assert_eq!(Some((51, 2)), "51zxc".scan_num::<u32>());

@@ -77,9 +77,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         backup_control::BACKUP_CONTROL_LONG_HELP
     );
     let mut app = uu_app().after_help(&*help);
-    let matches = app
-        .try_get_matches_from_mut(args)
-        .unwrap_or_else(|e| e.exit());
+    let matches = app.try_get_matches_from_mut(args)?;
 
     if !matches.contains_id(OPT_TARGET_DIRECTORY)
         && matches

@@ -16,8 +16,8 @@ path = "src/pr.rs"
 
 [dependencies]
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
+time = { version = "0.3", features = ["local-offset", "macros", "formatting"] }
 uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["entries"] }
-chrono = { version="^0.4.19", default-features=false, features=["std", "alloc", "clock"]}
 quick-error = "2.0.1"
 itertools = "0.10.0"
 regex = "1.6"

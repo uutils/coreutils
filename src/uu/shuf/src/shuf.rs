@@ -58,7 +58,7 @@ mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let mode = if let Some(args) = matches.get_many::<String>(options::ECHO) {
         Mode::Echo(args.map(String::from).collect())

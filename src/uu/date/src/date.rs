@@ -144,7 +144,7 @@ impl<'a> From<&'a str> for Rfc3339Format {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let format = if let Some(form) = matches.value_of(OPT_FORMAT) {
         if !form.starts_with('+') {

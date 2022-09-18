@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) libselinux gethostid
+# spell-checker:ignore (libs) libselinux gethostid procfs
 
 [package]
 name = "coreutils"
@@ -16,6 +16,7 @@ repository = "https://github.com/uutils/coreutils"
 readme = "README.md"
 keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
+rust-version = "1.59.0"
 edition = "2021"
 
 build = "build.rs"
@@ -401,6 +402,7 @@ atty = "0.2"
 hex-literal = "0.3.1"
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dev-dependencies]
+procfs = { version = "0.14", default-features = false }
 rlimit = "0.8.3"
 
 [target.'cfg(unix)'.dev-dependencies]

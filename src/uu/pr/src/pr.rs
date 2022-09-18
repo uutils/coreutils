@@ -9,8 +9,6 @@
 #[macro_use]
 extern crate quick_error;
 
-use chrono::offset::Local;
-use chrono::DateTime;
 use clap::{AppSettings, Arg, ArgMatches, Command};
 use itertools::Itertools;
 use quick_error::ResultExt;
@@ -20,6 +18,8 @@ use std::fs::{metadata, File};
 use std::io::{stdin, stdout, BufRead, BufReader, Lines, Read, Write};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
+use time::macros::format_description;
+use time::OffsetDateTime;
 
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UResult};
@@ -62,6 +62,8 @@ const DEFAULT_COLUMN_WIDTH: usize = 72;
 const DEFAULT_COLUMN_WIDTH_WITH_S_OPTION: usize = 512;
 const DEFAULT_COLUMN_SEPARATOR: &char = &TAB;
 const FF: u8 = 0x0C_u8;
+const DATE_TIME_FORMAT: &[time::format_description::FormatItem] =
+    format_description!("[month repr:short] [day] [hour]:[minute] [year]");
 
 mod options {
     pub const HEADER: &str = "header";
@@ -575,8 +577,10 @@ fn build_options(
     let line_separator = "\n".to_string();
 
     let last_modified_time = if is_merge_mode || paths[0].eq(FILE_STDIN) {
-        let date_time = Local::now();
-        date_time.format("%b %d %H:%M %Y").to_string()
+        // let date_time = Local::now();
+        // date_time.format("%b %d %H:%M %Y").to_string()
+        let date_time = OffsetDateTime::now_local().unwrap();
+        date_time.format(&DATE_TIME_FORMAT).unwrap()
     } else {
         file_last_modified_time(paths.first().unwrap())
     };
@@ -1218,8 +1222,12 @@ fn file_last_modified_time(path: &str) -> String {
         .map(|i| {
             i.modified()
                 .map(|x| {
-                    let date_time: DateTime<Local> = x.into();
-                    date_time.format("%b %d %H:%M %Y").to_string()
+                    let date_time: OffsetDateTime = x.into();
+                    let offset = OffsetDateTime::now_local().unwrap().offset();
+                    date_time
+                        .to_offset(offset)
+                        .format(&DATE_TIME_FORMAT)
+                        .unwrap()
                 })
                 .unwrap_or_default()
         })

@@ -18,8 +18,10 @@ path = "src/tail.rs"
 [dependencies]
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 libc = "0.2.132"
-notify = { version = "=5.0.0-pre.16", features=["macos_kqueue"]}
+memchr = "2.5.0"
+notify = { version = "=5.0.0", features=["macos_kqueue"]}
 uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["ringbuffer", "lines"] }
+same-file = "1.0.6"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version="0.3", features=["fileapi", "handleapi", "processthreadsapi", "synchapi", "winbase"] }

@@ -96,7 +96,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
-    let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
+    let matches = uu_app()
+        .after_help(&after_help[..])
+        .try_get_matches_from(args)?;
 
     let dirs = matches
         .get_many::<OsString>(options::DIRS)

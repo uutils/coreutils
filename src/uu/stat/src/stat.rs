@@ -26,69 +26,6 @@ use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::{cmp, fs, iter};
 
-macro_rules! check_bound {
-    ($str: ident, $bound:expr, $beg: expr, $end: expr) => {
-        if $end >= $bound {
-            return Err(USimpleError::new(
-                1,
-                format!("{}: invalid directive", $str[$beg..$end].quote()),
-            ));
-        }
-    };
-}
-macro_rules! fill_string {
-    ($str: ident, $c: expr, $cnt: expr) => {
-        iter::repeat($c)
-            .take($cnt)
-            .map(|c| $str.push(c))
-            .all(|_| true)
-    };
-}
-macro_rules! extend_digits {
-    ($str: expr, $min: expr) => {
-        if $min > $str.len() {
-            let mut pad = String::with_capacity($min);
-            fill_string!(pad, '0', $min - $str.len());
-            pad.push_str($str);
-            pad.into()
-        } else {
-            $str.into()
-        }
-    };
-}
-macro_rules! pad_and_print {
-    ($result: ident, $str: ident, $left: expr, $width: expr, $padding: expr) => {
-        if $str.len() < $width {
-            if $left {
-                $result.push_str($str.as_ref());
-                fill_string!($result, $padding, $width - $str.len());
-            } else {
-                fill_string!($result, $padding, $width - $str.len());
-                $result.push_str($str.as_ref());
-            }
-        } else {
-            $result.push_str($str.as_ref());
-        }
-        print!("{}", $result);
-    };
-}
-macro_rules! print_adjusted {
-    ($str: ident, $left: expr, $width: expr, $padding: expr) => {
-        let field_width = cmp::max($width, $str.len());
-        let mut result = String::with_capacity(field_width);
-        pad_and_print!(result, $str, $left, field_width, $padding);
-    };
-    ($str: ident, $left: expr, $need_prefix: expr, $prefix: expr, $width: expr, $padding: expr) => {
-        let mut field_width = cmp::max($width, $str.len());
-        let mut result = String::with_capacity(field_width + $prefix.len());
-        if $need_prefix {
-            result.push_str($prefix);
-            field_width -= $prefix.len();
-        }
-        pad_and_print!(result, $str, $left, field_width, $padding);
-    };
-}
-
 static ABOUT: &str = "Display file or file system status.";
 const USAGE: &str = "{} [OPTION]... FILE...";
 
@@ -110,6 +47,87 @@ pub const F_SIGN: u8 = 1 << 4;
 // unused at present
 pub const F_GROUP: u8 = 1 << 5;
 
+/// checks if the string is within the specified bound,
+/// if it gets out of bound, error out by printing sub-string from index `beg` to`end`,
+/// where `beg` & `end` is the beginning and end index of sub-string, respectively
+///
+fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> UResult<()> {
+    if end >= bound {
+        return Err(USimpleError::new(
+            1,
+            format!("{}: invalid directive", slice[beg..end].quote()),
+        ));
+    }
+    Ok(())
+}
+
+/// pads the string with zeroes if supplied min is greater
+/// then the length of the string, else returns the original string
+///
+fn extend_digits(string: &str, min: usize) -> Cow<'_, str> {
+    if min > string.len() {
+        let mut pad = String::with_capacity(min);
+        iter::repeat('0')
+            .take(min - string.len())
+            .map(|_| pad.push('0'))
+            .all(|_| true);
+        pad.push_str(string);
+        pad.into()
+    } else {
+        string.into()
+    }
+}
+
+enum Padding {
+    Zero,
+    Space,
+}
+
+/// pads the string with zeroes or spaces and prints it
+///
+/// # Example
+/// ```ignore
+/// uu_stat::pad_and_print("1", false, 5, Padding::Zero) == "00001";
+/// ```
+/// currently only supports '0' & ' ' as the padding character
+/// because the format specification of print! does not support general
+/// fill characters
+///
+fn pad_and_print(result: &str, left: bool, width: usize, padding: Padding) {
+    match (left, padding) {
+        (false, Padding::Zero) => print!("{result:0>width$}"),
+        (false, Padding::Space) => print!("{result:>width$}"),
+        (true, Padding::Zero) => print!("{result:0<width$}"),
+        (true, Padding::Space) => print!("{result:<width$}"),
+    };
+}
+
+/// prints the adjusted string after padding
+/// `left` flag specifies the type of alignment of the string
+/// `width` is the supplied padding width of the string needed
+/// `prefix` & `need_prefix` are Optional, which adjusts the `field_width` accordingly, where
+/// `field_width` is the max of supplied `width` and size of string
+/// `padding`, specifies type of padding, which is '0' or ' ' in this case.
+fn print_adjusted(
+    s: &str,
+    left: bool,
+    need_prefix: Option<bool>,
+    prefix: Option<&str>,
+    width: usize,
+    padding: Padding,
+) {
+    let mut field_width = cmp::max(width, s.len());
+    if let Some(p) = prefix {
+        if let Some(prefix_flag) = need_prefix {
+            if prefix_flag {
+                field_width -= p.len();
+            }
+        }
+        pad_and_print(s, left, field_width, padding);
+    } else {
+        pad_and_print(s, left, field_width, padding);
+    }
+}
 #[derive(Debug, PartialEq, Eq)]
 pub enum OutputType {
     Str,
@@ -267,10 +285,10 @@ fn print_it(arg: &str, output_type: &OutputType, flag: u8, width: usize, precisi
     }
 
     let left_align = has!(flag, F_LEFT);
-    let padding_char = if has!(flag, F_ZERO) && !left_align && precision == -1 {
-        '0'
+    let padding_char: Padding = if has!(flag, F_ZERO) && !left_align && precision == -1 {
+        Padding::Zero
     } else {
-        ' '
+        Padding::Space
     };
 
     let has_sign = has!(flag, F_SIGN) || has!(flag, F_SPACE);
@@ -297,7 +315,7 @@ fn print_it(arg: &str, output_type: &OutputType, flag: u8, width: usize, precisi
             } else {
                 arg
             };
-            print_adjusted!(s, left_align, width, ' ');
+            print_adjusted(s, left_align, None, None, width, Padding::Space);
         }
         OutputType::Integer => {
             let arg = if has!(flag, F_GROUP) {
@@ -306,8 +324,15 @@ fn print_it(arg: &str, output_type: &OutputType, flag: u8, width: usize, precisi
                 Cow::Borrowed(arg)
             };
             let min_digits = cmp::max(precision, arg.len() as i32) as usize;
-            let extended: Cow<str> = extend_digits!(arg.as_ref(), min_digits);
-            print_adjusted!(extended, left_align, has_sign, prefix, width, padding_char);
+            let extended: Cow<str> = extend_digits(arg.as_ref(), min_digits);
+            print_adjusted(
+                extended.as_ref(),
+                left_align,
+                Some(has_sign),
+                Some(prefix),
+                width,
+                padding_char,
+            );
         }
         OutputType::Unsigned => {
             let arg = if has!(flag, F_GROUP) {
@@ -316,31 +341,38 @@ fn print_it(arg: &str, output_type: &OutputType, flag: u8, width: usize, precisi
                 Cow::Borrowed(arg)
             };
             let min_digits = cmp::max(precision, arg.len() as i32) as usize;
-            let extended: Cow<str> = extend_digits!(arg.as_ref(), min_digits);
-            print_adjusted!(extended, left_align, width, padding_char);
+            let extended: Cow<str> = extend_digits(arg.as_ref(), min_digits);
+            print_adjusted(
+                extended.as_ref(),
+                left_align,
+                None,
+                None,
+                width,
+                padding_char,
+            );
         }
         OutputType::UnsignedOct => {
             let min_digits = cmp::max(precision, arg.len() as i32) as usize;
-            let extended: Cow<str> = extend_digits!(arg, min_digits);
-            print_adjusted!(
-                extended,
+            let extended: Cow<str> = extend_digits(arg, min_digits);
+            print_adjusted(
+                extended.as_ref(),
                 left_align,
-                should_alter,
-                prefix,
+                Some(should_alter),
+                Some(prefix),
                 width,
-                padding_char
+                padding_char,
             );
         }
         OutputType::UnsignedHex => {
             let min_digits = cmp::max(precision, arg.len() as i32) as usize;
-            let extended: Cow<str> = extend_digits!(arg, min_digits);
-            print_adjusted!(
-                extended,
+            let extended: Cow<str> = extend_digits(arg, min_digits);
+            print_adjusted(
+                extended.as_ref(),
                 left_align,
-                should_alter,
-                prefix,
+                Some(should_alter),
+                Some(prefix),
                 width,
-                padding_char
+                padding_char,
             );
         }
         _ => unreachable!(),
@@ -384,7 +416,7 @@ impl Stater {
                         }
                         i += 1;
                     }
-                    check_bound!(format_str, bound, old, i);
+                    check_bound(format_str, bound, old, i)?;
 
                     let mut width = 0_usize;
                     let mut precision = -1_i32;
@@ -394,11 +426,11 @@ impl Stater {
                         width = field_width;
                         j += offset;
                     }
-                    check_bound!(format_str, bound, old, j);
+                    check_bound(format_str, bound, old, j)?;
 
                     if chars[j] == '.' {
                         j += 1;
-                        check_bound!(format_str, bound, old, j);
+                        check_bound(format_str, bound, old, j)?;
 
                         match format_str[j..].scan_num::<i32>() {
                             Some((value, offset)) => {
@@ -409,7 +441,7 @@ impl Stater {
                             }
                             None => precision = 0,
                         }
-                        check_bound!(format_str, bound, old, j);
+                        check_bound(format_str, bound, old, j)?;
                     }
 
                     i = j;
@@ -985,7 +1017,9 @@ for details about the options it supports.
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let long_usage = get_long_usage();
 
-    let matches = uu_app().after_help(&long_usage[..]).get_matches_from(args);
+    let matches = uu_app()
+        .after_help(&long_usage[..])
+        .try_get_matches_from(args)?;
 
     let stater = Stater::new(&matches)?;
     let exit_status = stater.exec();

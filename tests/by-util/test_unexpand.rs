@@ -1,6 +1,11 @@
 use crate::common::util::*;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn unexpand_init_0() {
     new_ucmd!()
         .args(&["-t4"])

@@ -18,7 +18,7 @@ path = "src/expr.rs"
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 num-bigint = "0.4.0"
 num-traits = "0.2.15"
-onig = { version = "~6.3", default-features = false }
+onig = { version = "~6.4", default-features = false }
 uucore = { version=">=0.0.15", package="uucore", path="../../uucore" }
 
 [[bin]]
