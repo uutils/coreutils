@@ -1,4 +1,4 @@
-// spell-checker:ignore (words) helloworld objdump n'source
+// spell-checker:ignore (words) helloworld nodir objdump n'source
 
 use crate::common::util::*;
 use filetime::FileTime;
@@ -668,6 +668,8 @@ fn test_install_creating_leading_dirs() {
         .arg(at.plus(target))
         .succeeds()
         .no_stderr();
+
+    assert!(at.file_exists(target));
 }
 
 #[test]
@@ -682,7 +684,8 @@ fn test_install_creating_leading_dirs_verbose() {
     at.mkdir("dir1");
 
     let creating_dir1 = regex::Regex::new("(?m)^install: creating directory.*dir1'$").unwrap();
-    let creating_nodir23 = regex::Regex::new(r"(?m)^install: creating directory.*no-dir[23]'$").unwrap();
+    let creating_nodir23 =
+        regex::Regex::new(r"(?m)^install: creating directory.*no-dir[23]'$").unwrap();
 
     scene
         .ucmd()
@@ -693,6 +696,78 @@ fn test_install_creating_leading_dirs_verbose() {
         .stdout_matches(&creating_nodir23)
         .stdout_does_not_match(&creating_dir1)
         .no_stderr();
+
+    assert!(at.file_exists(target));
+}
+
+#[test]
+fn test_install_creating_leading_dirs_with_single_source_and_target_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source1 = "source_file_1";
+    let target_dir = "missing_target_dir/";
+
+    at.touch(source1);
+
+    // installing a single file into a missing directory will fail, when -D is used w/o -t parameter
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(source1)
+        .arg(at.plus(target_dir))
+        .fails()
+        .stderr_contains("missing_target_dir/' is not a directory");
+
+    assert!(!at.dir_exists(target_dir));
+
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(source1)
+        .arg("-t")
+        .arg(at.plus(target_dir))
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(&format!("{target_dir}/{source1}")));
+}
+
+#[test]
+fn test_install_creating_leading_dirs_with_multiple_sources_and_target_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source1 = "source_file_1";
+    let source2 = "source_file_2";
+    let target_dir = "missing_target_dir";
+
+    at.touch(source1);
+    at.touch(source2);
+
+    // installing multiple files into a missing directory will fail, when -D is used w/o -t parameter
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(source1)
+        .arg(source2)
+        .arg(at.plus(target_dir))
+        .fails()
+        .stderr_contains("missing_target_dir' is not a directory");
+
+    assert!(!at.dir_exists(target_dir));
+
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(source1)
+        .arg(source2)
+        .arg("-t")
+        .arg(at.plus(target_dir))
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.dir_exists(target_dir));
 }
 
 #[test]
