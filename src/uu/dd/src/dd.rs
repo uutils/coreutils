@@ -5,13 +5,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable canonicalized Canonicalized icflags ocflags ifname ofname
 
 mod datastructures;
 use datastructures::*;
 
 mod parseargs;
-use parseargs::Matches;
 
 mod conversion_tables;
 use conversion_tables::*;
@@ -24,8 +23,9 @@ use blocks::conv_block_unblock_helper;
 
 use std::cmp;
 use std::env;
+use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Seek, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
@@ -52,16 +52,14 @@ struct Input<R: Read> {
 }
 
 impl Input<io::Stdin> {
-    fn new(matches: &Matches) -> UResult<Self> {
-        let ibs = parseargs::parse_ibs(matches)?;
-        let print_level = parseargs::parse_status_level(matches)?;
-        let cflags = parseargs::parse_conv_flag_input(matches)?;
-        let iflags = parseargs::parse_iflags(matches)?;
-        let skip = parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::SKIP)?;
-        let iseek =
-            parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::ISEEK)?;
-        let count = parseargs::parse_count(&iflags, matches)?;
-
+    fn new(
+        ibs: usize,
+        print_level: Option<StatusLevel>,
+        count: Option<CountType>,
+        cflags: IConvFlags,
+        iflags: IFlags,
+        skip_amount: u64,
+    ) -> UResult<Self> {
         let mut i = Self {
             src: io::stdin(),
             ibs,
@@ -71,10 +69,8 @@ impl Input<io::Stdin> {
             iflags,
         };
 
-        // The --skip and --iseek flags are additive. On a stream, they discard bytes.
-        let amt = skip.unwrap_or(0) + iseek.unwrap_or(0);
-        if amt > 0 {
-            if let Err(e) = i.read_skip(amt) {
+        if skip_amount > 0 {
+            if let Err(e) = i.read_skip(skip_amount) {
                 if let io::ErrorKind::UnexpectedEof = e.kind() {
                     show_error!("'standard input': cannot skip to specified offset");
                 } else {
@@ -125,50 +121,41 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
 }
 
 impl Input<File> {
-    fn new(matches: &Matches) -> UResult<Self> {
-        let ibs = parseargs::parse_ibs(matches)?;
-        let print_level = parseargs::parse_status_level(matches)?;
-        let cflags = parseargs::parse_conv_flag_input(matches)?;
-        let iflags = parseargs::parse_iflags(matches)?;
-        let skip = parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::SKIP)?;
-        let iseek =
-            parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::ISEEK)?;
-        let count = parseargs::parse_count(&iflags, matches)?;
+    fn new(
+        ibs: usize,
+        print_level: Option<StatusLevel>,
+        count: Option<CountType>,
+        cflags: IConvFlags,
+        iflags: IFlags,
+        fname: &str,
+        skip_amount: u64,
+    ) -> UResult<Self> {
+        let mut src = {
+            let mut opts = OpenOptions::new();
+            opts.read(true);
 
-        if let Some(fname) = matches.value_of(options::INFILE) {
-            let mut src = {
-                let mut opts = OpenOptions::new();
-                opts.read(true);
-
-                #[cfg(any(target_os = "linux", target_os = "android"))]
-                if let Some(libc_flags) = make_linux_iflags(&iflags) {
-                    opts.custom_flags(libc_flags);
-                }
-
-                opts.open(fname)
-                    .map_err_context(|| format!("failed to open {}", fname.quote()))?
-            };
-
-            // The --skip and --iseek flags are additive. On a file, they seek.
-            let amt = skip.unwrap_or(0) + iseek.unwrap_or(0);
-            if amt > 0 {
-                src.seek(io::SeekFrom::Start(amt))
-                    .map_err_context(|| "failed to seek in input file".to_string())?;
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            if let Some(libc_flags) = make_linux_iflags(&iflags) {
+                opts.custom_flags(libc_flags);
             }
 
-            let i = Self {
-                src,
-                ibs,
-                print_level,
-                count,
-                cflags,
-                iflags,
-            };
+            opts.open(fname)
+                .map_err_context(|| format!("failed to open {}", fname.quote()))?
+        };
 
-            Ok(i)
-        } else {
-            Err(Box::new(InternalError::WrongInputType))
+        if skip_amount > 0 {
+            src.seek(io::SeekFrom::Start(skip_amount))
+                .map_err_context(|| "failed to seek in input file".to_string())?;
         }
+
+        Ok(Self {
+            src,
+            ibs,
+            print_level,
+            count,
+            cflags,
+            iflags,
+        })
     }
 }
 
@@ -278,7 +265,13 @@ impl<R: Read> Input<R> {
 }
 
 trait OutputTrait: Sized + Write {
-    fn new(matches: &Matches) -> UResult<Self>;
+    fn new(
+        obs: usize,
+        oflags: OFlags,
+        cflags: OConvFlags,
+        seek_amount: u64,
+        fname: &str,
+    ) -> UResult<Self>;
     fn fsync(&mut self) -> io::Result<()>;
     fn fdatasync(&mut self) -> io::Result<()>;
 }
@@ -290,21 +283,18 @@ struct Output<W: Write> {
 }
 
 impl OutputTrait for Output<io::Stdout> {
-    fn new(matches: &Matches) -> UResult<Self> {
-        let obs = parseargs::parse_obs(matches)?;
-        let cflags = parseargs::parse_conv_flag_output(matches)?;
-        let oflags = parseargs::parse_oflags(matches)?;
-        let seek = parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::SEEK)?;
-        let oseek =
-            parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::OSEEK)?;
-
+    fn new(
+        obs: usize,
+        _oflags: OFlags,
+        cflags: OConvFlags,
+        seek_amount: u64,
+        _fname: &str,
+    ) -> UResult<Self> {
         let mut dst = io::stdout();
 
-        // The --seek and --oseek flags are additive.
-        let amt = seek.unwrap_or(0) + oseek.unwrap_or(0);
         // stdout is not seekable, so we just write null bytes.
-        if amt > 0 {
-            io::copy(&mut io::repeat(0u8).take(amt as u64), &mut dst)
+        if seek_amount > 0 {
+            io::copy(&mut io::repeat(0u8).take(seek_amount), &mut dst)
                 .map_err_context(|| String::from("write error"))?;
         }
 
@@ -500,7 +490,13 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
 }
 
 impl OutputTrait for Output<File> {
-    fn new(matches: &Matches) -> UResult<Self> {
+    fn new(
+        obs: usize,
+        oflags: OFlags,
+        cflags: OConvFlags,
+        seek_amount: u64,
+        fname: &str,
+    ) -> UResult<Self> {
         fn open_dst(path: &Path, cflags: &OConvFlags, oflags: &OFlags) -> Result<File, io::Error> {
             let mut opts = OpenOptions::new();
             opts.write(true)
@@ -515,42 +511,26 @@ impl OutputTrait for Output<File> {
 
             opts.open(path)
         }
-        let obs = parseargs::parse_obs(matches)?;
-        let cflags = parseargs::parse_conv_flag_output(matches)?;
-        let oflags = parseargs::parse_oflags(matches)?;
-        let seek = parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::SEEK)?;
-        let oseek =
-            parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::OSEEK)?;
 
-        if let Some(fname) = matches.value_of(options::OUTFILE) {
-            let mut dst = open_dst(Path::new(&fname), &cflags, &oflags)
-                .map_err_context(|| format!("failed to open {}", fname.quote()))?;
+        let mut dst = open_dst(Path::new(&fname), &cflags, &oflags)
+            .map_err_context(|| format!("failed to open {}", fname.quote()))?;
 
-            // Seek to the index in the output file, truncating if requested.
-            //
-            // Calling `set_len()` may result in an error (for
-            // example, when calling it on `/dev/null`), but we don't
-            // want to terminate the process when that happens.
-            // Instead, we suppress the error by calling
-            // `Result::ok()`. This matches the behavior of GNU `dd`
-            // when given the command-line argument `of=/dev/null`.
+        // Seek to the index in the output file, truncating if requested.
+        //
+        // Calling `set_len()` may result in an error (for example,
+        // when calling it on `/dev/null`), but we don't want to
+        // terminate the process when that happens.  Instead, we
+        // suppress the error by calling `Result::ok()`. This matches
+        // the behavior of GNU `dd` when given the command-line
+        // argument `of=/dev/null`.
 
-            // The --seek and --oseek flags are additive.
-            let i = seek.unwrap_or(0) + oseek.unwrap_or(0);
-            if !cflags.notrunc {
-                dst.set_len(i).ok();
-            }
-            dst.seek(io::SeekFrom::Start(i))
-                .map_err_context(|| "failed to seek in output file".to_string())?;
-
-            Ok(Self { dst, obs, cflags })
-        } else {
-            // The following error should only occur if someone
-            // mistakenly calls Output::<File>::new() without checking
-            // if 'of' has been provided. In this case,
-            // Output::<io::stdout>::new() is probably intended.
-            Err(Box::new(InternalError::WrongOutputType))
+        if !cflags.notrunc {
+            dst.set_len(seek_amount).ok();
         }
+        dst.seek(io::SeekFrom::Start(seek_amount))
+            .map_err_context(|| "failed to seek in output file".to_string())?;
+
+        Ok(Self { dst, obs, cflags })
     }
 
     fn fsync(&mut self) -> io::Result<()> {
@@ -703,6 +683,49 @@ fn append_dashes_if_not_present(mut acc: Vec<String>, mut s: String) -> Vec<Stri
     acc
 }
 
+/// Canonicalized file name of `/dev/stdout`.
+///
+/// For example, if this process were invoked from the command line as
+/// `dd`, then this function returns the [`OsString`] form of
+/// `"/dev/stdout"`. However, if this process were invoked as `dd >
+/// outfile`, then this function returns the canonicalized path to
+/// `outfile`, something like `"/path/to/outfile"`.
+fn stdout_canonicalized() -> OsString {
+    match Path::new("/dev/stdout").canonicalize() {
+        Ok(p) => p.into_os_string(),
+        Err(_) => OsString::from("/dev/stdout"),
+    }
+}
+
+/// Decide whether stdout is being redirected to a seekable file.
+///
+/// For example, if this process were invoked from the command line as
+///
+/// ```sh
+/// dd if=/dev/zero bs=1 count=10 seek=5 > /dev/sda1
+/// ```
+///
+/// where `/dev/sda1` is a seekable block device then this function
+/// would return true. If invoked as
+///
+/// ```sh
+/// dd if=/dev/zero bs=1 count=10 seek=5
+/// ```
+///
+/// then this function would return false.
+fn is_stdout_redirected_to_seekable_file() -> bool {
+    let s = stdout_canonicalized();
+    let p = Path::new(&s);
+    match File::open(p) {
+        Ok(mut f) => {
+            f.seek(SeekFrom::Current(0)).is_ok()
+                && f.seek(SeekFrom::End(0)).is_ok()
+                && f.seek(SeekFrom::Start(0)).is_ok()
+        }
+        Err(_) => false,
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let dashed_args = args
@@ -714,29 +737,75 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         //.after_help(TODO: Add note about multiplier strings here.)
         .try_get_matches_from(dashed_args)?;
 
+    // Parse options for reading from input.
+    let ibs = parseargs::parse_ibs(&matches)?;
+    let print_level = parseargs::parse_status_level(&matches)?;
+    let icflags = parseargs::parse_conv_flag_input(&matches)?;
+    let iflags = parseargs::parse_iflags(&matches)?;
+    let skip = parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, &matches, options::SKIP)?;
+    let iseek = parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, &matches, options::ISEEK)?;
+    let count = parseargs::parse_count(&iflags, &matches)?;
+    // The --skip and --iseek flags are additive. On a file, they seek.
+    let skip_amount = skip.unwrap_or(0) + iseek.unwrap_or(0);
+
+    // Parse options for writing to the output.
+    let obs = parseargs::parse_obs(&matches)?;
+    let ocflags = parseargs::parse_conv_flag_output(&matches)?;
+    let oflags = parseargs::parse_oflags(&matches)?;
+    let seek = parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, &matches, options::SEEK)?;
+    let oseek = parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, &matches, options::OSEEK)?;
+    // The --seek and --oseek flags are additive.
+    let seek_amount = seek.unwrap_or(0) + oseek.unwrap_or(0);
+
     match (
         matches.contains_id(options::INFILE),
         matches.contains_id(options::OUTFILE),
     ) {
         (true, true) => {
-            let i = Input::<File>::new(&matches)?;
-            let o = Output::<File>::new(&matches)?;
+            let ifname = matches.value_of(options::INFILE).unwrap();
+            let ofname = matches.value_of(options::OUTFILE).unwrap();
+
+            let i = Input::<File>::new(
+                ibs,
+                print_level,
+                count,
+                icflags,
+                iflags,
+                ifname,
+                skip_amount,
+            )?;
+            let o = Output::<File>::new(obs, oflags, ocflags, seek_amount, ofname)?;
             o.dd_out(i).map_err_context(|| "IO error".to_string())
         }
         (false, true) => {
-            let i = Input::<io::Stdin>::new(&matches)?;
-            let o = Output::<File>::new(&matches)?;
+            let ofname = matches.value_of(options::OUTFILE).unwrap();
+            let i = Input::<io::Stdin>::new(ibs, print_level, count, icflags, iflags, skip_amount)?;
+            let o = Output::<File>::new(obs, oflags, ocflags, seek_amount, ofname)?;
             o.dd_out(i).map_err_context(|| "IO error".to_string())
         }
         (true, false) => {
-            let i = Input::<File>::new(&matches)?;
-            let o = Output::<io::Stdout>::new(&matches)?;
-            o.dd_out(i).map_err_context(|| "IO error".to_string())
+            let fname = matches.value_of(options::INFILE).unwrap();
+            let i =
+                Input::<File>::new(ibs, print_level, count, icflags, iflags, fname, skip_amount)?;
+            if is_stdout_redirected_to_seekable_file() {
+                let ofname = stdout_canonicalized().into_string().unwrap();
+                let o = Output::<File>::new(obs, oflags, ocflags, seek_amount, &ofname)?;
+                o.dd_out(i).map_err_context(|| "IO error".to_string())
+            } else {
+                let o = Output::<io::Stdout>::new(obs, oflags, ocflags, seek_amount, "-")?;
+                o.dd_out(i).map_err_context(|| "IO error".to_string())
+            }
         }
         (false, false) => {
-            let i = Input::<io::Stdin>::new(&matches)?;
-            let o = Output::<io::Stdout>::new(&matches)?;
-            o.dd_out(i).map_err_context(|| "IO error".to_string())
+            let i = Input::<io::Stdin>::new(ibs, print_level, count, icflags, iflags, skip_amount)?;
+            if is_stdout_redirected_to_seekable_file() {
+                let ofname = stdout_canonicalized().into_string().unwrap();
+                let o = Output::<File>::new(obs, oflags, ocflags, seek_amount, &ofname)?;
+                o.dd_out(i).map_err_context(|| "IO error".to_string())
+            } else {
+                let o = Output::<io::Stdout>::new(obs, oflags, ocflags, seek_amount, "-")?;
+                o.dd_out(i).map_err_context(|| "IO error".to_string())
+            }
         }
     }
 }
@@ -977,8 +1046,8 @@ General-Flags
 #[cfg(test)]
 mod tests {
 
-    use crate::datastructures::{IConvFlags, IFlags, OConvFlags};
-    use crate::{calc_bsize, uu_app, Input, Output, OutputTrait};
+    use crate::datastructures::{IConvFlags, IFlags, OConvFlags, OFlags};
+    use crate::{calc_bsize, Input, Output, OutputTrait};
 
     use std::cmp;
     use std::fs;
@@ -1070,14 +1139,16 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_nocreat_causes_failure_when_ofile_doesnt_exist() {
-        let args = vec![
-            String::from("dd"),
-            String::from("--conv=nocreat"),
-            String::from("--of=not-a-real.file"),
-        ];
+        let obs = 1;
+        let oflags = OFlags::default();
+        let ocflags = OConvFlags {
+            nocreat: true,
+            ..Default::default()
+        };
+        let seek_amount = 0;
+        let ofname = "not-a-real.file";
 
-        let matches = uu_app().try_get_matches_from(args).unwrap();
-        let _ = Output::<File>::new(&matches).unwrap();
+        let _ = Output::<File>::new(obs, oflags, ocflags, seek_amount, ofname).unwrap();
     }
 
     #[test]

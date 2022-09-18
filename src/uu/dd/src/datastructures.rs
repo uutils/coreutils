@@ -6,10 +6,6 @@
 // file that was distributed with this source code.
 // spell-checker:ignore ctable, outfile, iseek, oseek
 
-use std::error::Error;
-
-use uucore::error::UError;
-
 use crate::conversion_tables::*;
 
 type Cbs = usize;
@@ -101,21 +97,6 @@ pub enum CountType {
     Reads(u64),
     Bytes(u64),
 }
-
-#[derive(Debug)]
-pub enum InternalError {
-    WrongInputType,
-    WrongOutputType,
-}
-
-impl std::fmt::Display for InternalError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Internal dd error: Wrong Input/Output data type")
-    }
-}
-
-impl Error for InternalError {}
-impl UError for InternalError {}
 
 pub mod options {
     pub const INFILE: &str = "if";
