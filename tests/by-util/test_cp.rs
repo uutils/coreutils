@@ -2532,3 +2532,14 @@ fn test_src_base_dot() {
         .no_stdout();
     assert!(!at.dir_exists("y/x"));
 }
+
+#[test]
+#[cfg(not(windows))]
+fn test_cp_archive_on_directory_ending_dot() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir1");
+    at.mkdir("dir2");
+    at.touch("dir1/file");
+    ucmd.args(&["-a", "dir1/.", "dir2"]).succeeds();
+    assert!(at.file_exists("dir2/file"));
+}
