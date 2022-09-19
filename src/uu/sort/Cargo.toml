@@ -22,7 +22,7 @@ ctrlc = { version = "3.0", features = ["termination"] }
 fnv = "1.0.7"
 itertools = "0.10.0"
 memchr = "2.5.0"
-ouroboros = "0.15.3"
+ouroboros = "0.15.5"
 rand = "0.8"
 rayon = "1.5"
 tempfile = "3"
