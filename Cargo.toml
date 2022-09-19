@@ -265,7 +265,7 @@ clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 clap_complete = "3.1"
 once_cell = "1.13.1"
 phf = "0.10.1"
-selinux = { version="0.2", optional = true }
+selinux = { version="0.3", optional = true }
 textwrap = { version="0.15", features=["terminal_size"] }
 uucore = { version=">=0.0.15", package="uucore", path="src/uucore" }
 zip = { version = "0.6.0", optional=true, default_features=false, features=["deflate"] }
