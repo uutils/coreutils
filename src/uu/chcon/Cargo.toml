@@ -16,7 +16,7 @@ path = "src/chcon.rs"
 [dependencies]
 clap         = { version = "3.2", features = ["wrap_help", "cargo"] }
 uucore       = { version = ">=0.0.9", package="uucore", path="../../uucore", features=["entries", "fs", "perms"] }
-selinux      = { version = "0.2"   }
+selinux      = { version = "0.3"   }
 fts-sys      = { version = "0.2"   }
 thiserror    = { version = "1.0"   }
 libc         = { version = "0.2"   }
