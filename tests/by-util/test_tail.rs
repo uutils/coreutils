@@ -7,10 +7,9 @@
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (jargon) tailable untailable
 
-// TODO: add tests for presume_input_pipe
-
 extern crate tail;
 
+use crate::common::random::*;
 use crate::common::util::*;
 use std::char::from_digit;
 #[cfg(unix)]
@@ -2516,7 +2515,6 @@ fn test_illegal_seek() {
 #[cfg(all(not(target_os = "android"), not(target_os = "windows")))] // FIXME: See https://github.com/uutils/coreutils/issues/3881
 mod pipe_tests {
     use super::*;
-    use crate::common::random::*;
     use rand::distributions::Alphanumeric;
     use tail::chunks::BUFFER_SIZE as CHUNK_BUFFER_SIZE;
 
@@ -3250,4 +3248,76 @@ fn test_seek_bytes_forward_outside_file() {
         .arg(FOOBAR_TXT)
         .run()
         .stdout_is("");
+}
+
+// Some basic tests for ---presume-input-pipe. These tests build upon the
+// debug_assert in bounded tail to detect that we're using the bounded_tail in
+// case the option is given on command line.
+#[cfg(all(not(target_os = "android"), not(target_os = "windows")))] // FIXME:
+#[test]
+fn test_args_when_presume_input_pipe_given_input_is_pipe() {
+    let random_string = RandomString::generate(AlphanumericNewline, 1000);
+    let random_string = random_string.as_str();
+
+    new_ucmd!()
+        .args(&["---presume-input-pipe", "-c", "-0"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+
+    new_ucmd!()
+        .args(&["---presume-input-pipe", "-c", "+0"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(random_string);
+
+    new_ucmd!()
+        .args(&["---presume-input-pipe", "-n", "-0"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+
+    new_ucmd!()
+        .args(&["---presume-input-pipe", "-n", "+0"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(random_string);
+}
+
+#[test]
+fn test_args_when_presume_input_pipe_given_input_is_file() {
+    let random_string = RandomString::generate(AlphanumericNewline, 1000);
+    let random_string = random_string.as_str();
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("data", random_string);
+
+    ts.ucmd()
+        .args(&["---presume-input-pipe", "-c", "-0", "data"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+
+    ts.ucmd()
+        .args(&["---presume-input-pipe", "-c", "+0", "data"])
+        .succeeds()
+        .stdout_only(random_string);
+
+    ts.ucmd()
+        .args(&["---presume-input-pipe", "-n", "-0", "data"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+
+    ts.ucmd()
+        .args(&["---presume-input-pipe", "-n", "+0", "data"])
+        .succeeds()
+        .stdout_only(random_string);
 }

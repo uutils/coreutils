@@ -380,9 +380,9 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
 fn bounded_tail(file: &mut File, settings: &Settings) {
+    debug_assert!(!settings.presume_input_pipe);
+
     // Find the position in the file to start printing from.
-    // dbg!("bounded");
-    // dbg!(&settings.mode);
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), delimiter) => {
             backwards_thru_file(file, *count, *delimiter);
@@ -419,8 +419,6 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
 fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
     let stdout = stdout();
     let mut writer = BufWriter::new(stdout.lock());
-    // dbg!("unbounded");
-    // dbg!(&settings.mode);
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), sep) => {
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, *count);
