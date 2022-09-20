@@ -112,15 +112,34 @@ fn test_default_shell() {
     at.mkdir(dir);
 
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-    let _expected = format!(
+    let expected = format!(
         "chroot: failed to run command '{}': No such file or directory",
         shell
     );
 
-    // TODO: [2021-09; jhscheer] uncomment if/when #2692 gets merged
-    // if let Ok(result) = run_ucmd_as_root(&ts, &[dir]) {
-    //     result.stderr_contains(expected);
-    // } else {
-    //     print!("TEST SKIPPED");
-    // }
+    if let Ok(result) = run_ucmd_as_root(&ts, &[dir]) {
+        result.stderr_contains(expected);
+    } else {
+        print!("TEST SKIPPED");
+    }
+}
+
+#[test]
+fn test_chroot() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let dir = "CHROOT_DIR";
+    at.mkdir(dir);
+    if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "whoami"]) {
+        result.success().no_stderr().stdout_is("root");
+    } else {
+        print!("Test skipped; requires root user");
+    }
+
+    if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "pwd"]) {
+        result.success().no_stderr().stdout_is("/");
+    } else {
+        print!("Test skipped; requires root user");
+    }
 }
