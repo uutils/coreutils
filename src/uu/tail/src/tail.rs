@@ -159,7 +159,8 @@ fn tail_file(
             Ok(mut file) => {
                 input_service.print_header(input);
                 let mut reader;
-                if file.is_seekable(if input.is_stdin() { offset } else { 0 })
+                if !settings.presume_input_pipe
+                    && file.is_seekable(if input.is_stdin() { offset } else { 0 })
                     && metadata.as_ref().unwrap().get_block_size() > 0
                 {
                     bounded_tail(&mut file, settings);
