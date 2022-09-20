@@ -15,7 +15,7 @@ edition = "2021"
 path = "src/nproc.rs"
 
 [dependencies]
-libc = "0.2.132"
+libc = "0.2.133"
 num_cpus = "1.10"
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["fs"] }

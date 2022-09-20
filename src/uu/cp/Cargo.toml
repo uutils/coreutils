@@ -21,7 +21,7 @@ path = "src/cp.rs"
 [dependencies]
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 filetime = "0.2"
-libc = "0.2.132"
+libc = "0.2.133"
 quick-error = "2.0.1"
 selinux = { version="0.3", optional=true }
 uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["entries", "fs", "perms", "mode"] }
