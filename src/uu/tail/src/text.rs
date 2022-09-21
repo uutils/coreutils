@@ -18,3 +18,4 @@ pub static BACKEND: &str = "inotify";
 pub static BACKEND: &str = "kqueue";
 #[cfg(target_os = "windows")]
 pub static BACKEND: &str = "ReadDirectoryChanges";
+pub static FD0: &str = "/dev/fd/0";
