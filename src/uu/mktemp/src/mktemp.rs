@@ -10,7 +10,7 @@
 
 use clap::{crate_version, Arg, ArgMatches, Command};
 use uucore::display::{println_verbatim, Quotable};
-use uucore::error::{FromIo, UError, UResult};
+use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::format_usage;
 
 use std::env;
@@ -327,7 +327,15 @@ impl Params {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let matches = uu_app().try_get_matches_from(&args)?;
+    let matches = match uu_app().try_get_matches_from(&args) {
+        Ok(m) => m,
+        Err(e) => {
+            if e.kind == clap::error::ErrorKind::TooManyValues && e.info[0] == "<template>..." {
+                return Err(UUsageError::new(1, "too many templates"));
+            }
+            return Err(e.into());
+        }
+    };
 
     // Parse command-line options into a format suitable for the
     // application logic.
