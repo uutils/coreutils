@@ -11,24 +11,23 @@ extern crate tail;
 
 use crate::common::random::*;
 use crate::common::util::*;
+use rand::distributions::Alphanumeric;
 use std::char::from_digit;
-#[cfg(unix)]
 use std::io::Read;
 use std::io::Write;
 use std::process::Stdio;
-#[cfg(unix)]
 use std::thread::sleep;
-#[cfg(unix)]
 use std::time::Duration;
+use tail::chunks::BUFFER_SIZE as CHUNK_BUFFER_SIZE;
 
 static FOOBAR_TXT: &str = "foobar.txt";
 static FOOBAR_2_TXT: &str = "foobar2.txt";
 static FOOBAR_WITH_NULL_TXT: &str = "foobar_with_null.txt";
-#[cfg(unix)]
+#[allow(dead_code)]
 static FOLLOW_NAME_TXT: &str = "follow_name.txt";
-#[cfg(unix)]
+#[allow(dead_code)]
 static FOLLOW_NAME_SHORT_EXP: &str = "follow_name_short.expected";
-#[cfg(target_os = "linux")]
+#[allow(dead_code)]
 static FOLLOW_NAME_EXP: &str = "follow_name.expected";
 
 #[test]
@@ -37,7 +36,6 @@ fn test_invalid_arg() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_stdin_default() {
     new_ucmd!()
         .pipe_in_fixture(FOOBAR_TXT)
@@ -47,7 +45,6 @@ fn test_stdin_default() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_stdin_explicit() {
     new_ucmd!()
         .pipe_in_fixture(FOOBAR_TXT)
@@ -58,7 +55,7 @@ fn test_stdin_explicit() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
+#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_file() {
     // $ echo foo > f
 
@@ -93,7 +90,12 @@ fn test_stdin_redirect_file() {
         .run_no_wait();
 
     sleep(Duration::from_millis(500));
-    p.kill().unwrap();
+
+    // Cleanup the process if it is still running. The result isn't important
+    // for the test, so it is ignored.
+    // NOTE: The result may be Error on windows with an Os error `Permission
+    // Denied` if the process already terminated:
+    let _ = p.kill();
 
     let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
     assert!(buf_stdout.eq("foo"));
@@ -101,7 +103,7 @@ fn test_stdin_redirect_file() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
+#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_offset() {
     // inspired by: "gnu/tests/tail-2/start-middle.sh"
     use std::io::{Seek, SeekFrom};
@@ -122,8 +124,12 @@ fn test_stdin_redirect_offset() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
+#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_offset2() {
+    // FIXME: windows: Failed because of difference in printed header. See below.
+    // actual  : ==> - <==
+    // expected: ==> standard input <==
+
     // like test_stdin_redirect_offset but with multiple files
     use std::io::{Seek, SeekFrom};
 
@@ -197,8 +203,9 @@ fn test_nc_0_wo_follow2() {
         .succeeded();
 }
 
+// TODO: Add similar test for windows
 #[test]
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(unix)]
 fn test_permission_denied() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -217,8 +224,9 @@ fn test_permission_denied() {
         .code_is(1);
 }
 
+// TODO: Add similar test for windows
 #[test]
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(unix)]
 fn test_permission_denied_multiple() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -241,7 +249,6 @@ fn test_permission_denied_multiple() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
 fn test_follow_redirect_stdin_name_retry() {
     // $ touch f && tail -F - < f
     // tail: cannot follow '-' by name
@@ -265,8 +272,12 @@ fn test_follow_redirect_stdin_name_retry() {
 }
 
 #[test]
-#[cfg(not(target_os = "macos"))] // See test_stdin_redirect_dir_when_target_os_is_macos
-#[cfg(all(unix, not(any(target_os = "android", target_os = "freebsd"))))] // FIXME: fix this test for Android/FreeBSD
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_dir() {
     // $ mkdir dir
     // $ tail < dir, $ tail - < dir
@@ -299,7 +310,7 @@ fn test_stdin_redirect_dir() {
 //  redirected directories like linux show the correct message like in
 //  `test_stdin_redirect_dir`
 #[test]
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 fn test_stdin_redirect_dir_when_target_os_is_macos() {
     // $ mkdir dir
     // $ tail < dir, $ tail - < dir
@@ -325,7 +336,6 @@ fn test_stdin_redirect_dir_when_target_os_is_macos() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
 fn test_follow_stdin_descriptor() {
     let ts = TestScenario::new(util_name!());
 
@@ -345,7 +355,6 @@ fn test_follow_stdin_descriptor() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
 fn test_follow_stdin_name_retry() {
     // $ tail -F -
     // tail: cannot follow '-' by name
@@ -417,8 +426,6 @@ fn test_follow_stdin_explicit_indefinitely() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
-#[cfg(disable_until_fixed)]
 fn test_follow_bad_fd() {
     // Provoke a "bad file descriptor" error by closing the fd
     // inspired by: "gnu/tests/tail-2/follow-stdin.sh"
@@ -465,7 +472,7 @@ fn test_null_default() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(not(target_os = "windows"))] // FIXME: test times out
 fn test_follow_single() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -489,7 +496,7 @@ fn test_follow_single() {
 
 /// Test for following when bytes are written that are not valid UTF-8.
 #[test]
-#[cfg(unix)]
+#[cfg(not(target_os = "windows"))] // FIXME: test times out
 fn test_follow_non_utf8_bytes() {
     // Tail the test file and start following it.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -521,7 +528,7 @@ fn test_follow_non_utf8_bytes() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(not(target_os = "windows"))] // FIXME: test times out
 fn test_follow_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut child = ucmd
@@ -547,7 +554,7 @@ fn test_follow_multiple() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(not(target_os = "windows"))] // FIXME: test times out
 fn test_follow_name_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut child = ucmd
@@ -573,7 +580,6 @@ fn test_follow_name_multiple() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_follow_multiple_untailable() {
     // $ tail -f DIR1 DIR2
     // ==> DIR1 <==
@@ -606,7 +612,6 @@ fn test_follow_multiple_untailable() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_follow_stdin_pipe() {
     new_ucmd!()
         .arg("-f")
@@ -617,7 +622,7 @@ fn test_follow_stdin_pipe() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(not(target_os = "windows"))] // FIXME: for currently not working platforms
 fn test_follow_invalid_pid() {
     new_ucmd!()
         .args(&["-f", "--pid=-1234"])
@@ -641,8 +646,12 @@ fn test_follow_invalid_pid() {
 }
 
 // FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort')  This test also breaks tty settings under bash requiring a 'stty sane' or reset. // spell-checker:disable-line
-#[cfg(disable_until_fixed)]
 #[test]
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android")
+))] // FIXME: for currently not working platforms
 fn test_follow_with_pid() {
     use std::process::{Command, Stdio};
     use std::thread::sleep;
@@ -652,6 +661,7 @@ fn test_follow_with_pid() {
 
     #[cfg(unix)]
     let dummy_cmd = "sh";
+
     #[cfg(windows)]
     let dummy_cmd = "cmd";
 
@@ -687,13 +697,18 @@ fn test_follow_with_pid() {
 
     let third_append = "should\nbe\nignored\n";
     at.append(FOOBAR_TXT, third_append);
-    assert_eq!(read_size(&mut child, 1), "\u{0}");
+    let mut buffer: [u8; 1] = [0; 1];
+    let result = child.stdout.as_mut().unwrap().read(&mut buffer);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), 0);
 
     // On Unix, trying to kill a process that's already dead is fine; on Windows it's an error.
-    #[cfg(unix)]
-    child.kill().unwrap();
-    #[cfg(windows)]
-    assert_eq!(child.kill().is_err(), true);
+    let result = child.kill();
+    if cfg!(windows) {
+        assert!(result.is_err());
+    } else {
+        assert!(result.is_ok());
+    }
 }
 
 #[test]
@@ -735,7 +750,6 @@ fn test_bytes_single() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_bytes_stdin() {
     new_ucmd!()
         .pipe_in_fixture(FOOBAR_TXT)
@@ -984,7 +998,6 @@ fn test_sleep_interval() {
 
 /// Test for reading all but the first NUM bytes: `tail -c +3`.
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_positive_bytes() {
     new_ucmd!()
         .args(&["-c", "+3"])
@@ -995,7 +1008,6 @@ fn test_positive_bytes() {
 
 /// Test for reading all bytes, specified by `tail -c +0`.
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_positive_zero_bytes() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd()
@@ -1013,7 +1025,6 @@ fn test_positive_zero_bytes() {
 
 /// Test for reading all but the first NUM lines: `tail -n +3`.
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_positive_lines() {
     new_ucmd!()
         .args(&["-n", "+3"])
@@ -1055,7 +1066,6 @@ once
 
 /// Test for reading all but the first NUM lines: `tail -3`.
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_obsolete_syntax_positive_lines() {
     new_ucmd!()
         .args(&["-3"])
@@ -1066,7 +1076,6 @@ fn test_obsolete_syntax_positive_lines() {
 
 /// Test for reading all but the first NUM lines: `tail -n -10`.
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_small_file() {
     new_ucmd!()
         .args(&["-n -10"])
@@ -1077,7 +1086,6 @@ fn test_small_file() {
 
 /// Test for reading all but the first NUM lines: `tail -10`.
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_obsolete_syntax_small_file() {
     new_ucmd!()
         .args(&["-10"])
@@ -1088,7 +1096,6 @@ fn test_obsolete_syntax_small_file() {
 
 /// Test for reading all lines, specified by `tail -n +0`.
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_positive_zero_lines() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd()
@@ -1106,7 +1113,6 @@ fn test_positive_zero_lines() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_invalid_num() {
     new_ucmd!()
         .args(&["-c", "1024R", "emptyfile.txt"])
@@ -1138,7 +1144,6 @@ fn test_invalid_num() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_num_with_undocumented_sign_bytes() {
     // tail: '-' is not documented (8.32 man pages)
     // head: '+' is not documented (8.32 man pages)
@@ -1162,7 +1167,7 @@ fn test_num_with_undocumented_sign_bytes() {
 
 #[test]
 #[cfg(unix)]
-fn test_bytes_for_funny_files() {
+fn test_bytes_for_funny_unix_files() {
     // inspired by: gnu/tests/tail-2/tail-c.sh
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1181,7 +1186,6 @@ fn test_bytes_for_funny_files() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_retry1() {
     // inspired by: gnu/tests/tail-2/retry.sh
     // Ensure --retry without --follow results in a warning.
@@ -1198,7 +1202,6 @@ fn test_retry1() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_retry2() {
     // inspired by: gnu/tests/tail-2/retry.sh
     // The same as test_retry2 with a missing file: expect error message and exit 1.
@@ -1221,7 +1224,12 @@ fn test_retry2() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))] // FIXME: for currently not working platforms
 fn test_retry3() {
     // inspired by: gnu/tests/tail-2/retry.sh
     // Ensure that `tail --retry --follow=name` waits for the file to appear.
@@ -1259,7 +1267,12 @@ fn test_retry3() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))] // FIXME: for currently not working platforms
 fn test_retry4() {
     // inspired by: gnu/tests/tail-2/retry.sh
     // Ensure that `tail --retry --follow=descriptor` waits for the file to appear.
@@ -1309,7 +1322,12 @@ fn test_retry4() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))] // FIXME: for currently not working platforms
 fn test_retry5() {
     // inspired by: gnu/tests/tail-2/retry.sh
     // Ensure that `tail --follow=descriptor --retry` exits when the file appears untailable.
@@ -1345,7 +1363,7 @@ fn test_retry5() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
+#[cfg(not(target_os = "windows"))] // FIXME: for currently not working platforms
 fn test_retry6() {
     // inspired by: gnu/tests/tail-2/retry.sh
     // Ensure that --follow=descriptor (without --retry) does *not* try
@@ -1383,7 +1401,12 @@ fn test_retry6() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))] // FIXME: for currently not working platforms
 fn test_retry7() {
     // inspired by: gnu/tests/tail-2/retry.sh
     // Ensure that `tail -F` retries when the file is initially untailable.
@@ -1450,7 +1473,12 @@ fn test_retry7() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))] // FIXME: for currently not working platforms
 fn test_retry8() {
     // Ensure that inotify will switch to polling mode if directory
     // of the watched file was initially missing and later created.
@@ -1512,7 +1540,11 @@ fn test_retry8() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))] // FIXME: make this work not just on Linux
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))] // FIXME: for currently not working platforms
 fn test_retry9() {
     // inspired by: gnu/tests/tail-2/inotify-dir-recreate.sh
     // Ensure that inotify will switch to polling mode if directory
@@ -1589,7 +1621,11 @@ fn test_retry9() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))] // FIXME: for currently not working platforms
 fn test_follow_descriptor_vs_rename1() {
     // inspired by: gnu/tests/tail-2/descriptor-vs-rename.sh
     // $ ((rm -f A && touch A && sleep 1 && echo -n "A\n" >> A && sleep 1 && \
@@ -1646,7 +1682,11 @@ fn test_follow_descriptor_vs_rename1() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))] // FIXME: for currently not working platforms
 fn test_follow_descriptor_vs_rename2() {
     // Ensure the headers are correct for --verbose.
     // NOTE: GNU's tail does not update the header from FILE_A to FILE_C after `mv FILE_A FILE_C`
@@ -1695,7 +1735,12 @@ fn test_follow_descriptor_vs_rename2() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))] // FIXME: for currently not working platforms
 fn test_follow_name_retry_headers() {
     // inspired by: "gnu/tests/tail-2/F-headers.sh"
     // Ensure tail -F distinguishes output with the
@@ -1756,7 +1801,7 @@ fn test_follow_name_retry_headers() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: make this work not just on Linux
+#[cfg(all(not(target_os = "windows"), not(target_os = "android")))] // FIXME: for currently not working platforms
 fn test_follow_name_remove() {
     // This test triggers a remove event while `tail --follow=name file` is running.
     // ((sleep 2 && rm file &)>/dev/null 2>&1 &) ; tail --follow=name file
@@ -1805,7 +1850,11 @@ fn test_follow_name_remove() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
+#[cfg(all(
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))] // FIXME: for currently not working platforms
 fn test_follow_name_truncate1() {
     // This test triggers a truncate event while `tail --follow=name file` is running.
     // $ cp file backup && head file > file && sleep 1 && cp backup file
@@ -1839,7 +1888,11 @@ fn test_follow_name_truncate1() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
+#[cfg(all(
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))] // FIXME: for currently not working platforms
 fn test_follow_name_truncate2() {
     // This test triggers a truncate event while `tail --follow=name file` is running.
     // $ ((sleep 1 && echo -n "x\nx\nx\n" >> file && sleep 1 && \
@@ -1876,7 +1929,7 @@ fn test_follow_name_truncate2() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
+#[cfg(not(target_os = "windows"))] // FIXME: for currently not working platforms
 fn test_follow_name_truncate3() {
     // Opening an empty file in truncate mode should not trigger a truncate event while
     // `tail --follow=name file` is running.
@@ -1907,7 +1960,7 @@ fn test_follow_name_truncate3() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))] // FIXME: for currently not working platforms
 fn test_follow_name_truncate4() {
     // Truncating a file with the same content it already has should not trigger a truncate event
 
@@ -1939,7 +1992,7 @@ fn test_follow_name_truncate4() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(not(target_os = "windows"))] // FIXME: for currently not working platforms
 fn test_follow_truncate_fast() {
     // inspired by: "gnu/tests/tail-2/truncate.sh"
     // Ensure all logs are output upon file truncation
@@ -1989,7 +2042,12 @@ fn test_follow_truncate_fast() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // FIXME: make this work not just on Linux
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))] // FIXME: for currently not working platforms
 fn test_follow_name_move_create1() {
     // This test triggers a move/create event while `tail --follow=name file` is running.
     // ((sleep 2 && mv file backup && sleep 2 && cp backup file &)>/dev/null 2>&1 &) ; tail --follow=name file
@@ -2002,6 +2060,7 @@ fn test_follow_name_move_create1() {
 
     #[cfg(target_os = "linux")]
     let expected_stdout = at.read(FOLLOW_NAME_EXP);
+
     #[cfg(target_os = "linux")]
     let expected_stderr = format!(
         "{}: {}: No such file or directory\n{0}: '{1}' has appeared;  following new file\n",
@@ -2009,8 +2068,10 @@ fn test_follow_name_move_create1() {
     );
 
     // NOTE: We are less strict if not on Linux (inotify backend).
+
     #[cfg(not(target_os = "linux"))]
     let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
+
     #[cfg(not(target_os = "linux"))]
     let expected_stderr = format!("{}: {}: No such file or directory\n", ts.util_name, source);
 
@@ -2034,7 +2095,11 @@ fn test_follow_name_move_create1() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // FIXME: make this work not just on Linux
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))] // FIXME: for currently not working platforms
 fn test_follow_name_move_create2() {
     // inspired by: "gnu/tests/tail-2/inotify-hash-abuse.sh"
     // Exercise an abort-inducing flaw in inotify-enabled tail -F
@@ -2105,7 +2170,12 @@ fn test_follow_name_move_create2() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // FIXME: make this work not just on Linux
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))] // FIXME: for currently not working platforms
 fn test_follow_name_move1() {
     // This test triggers a move event while `tail --follow=name file` is running.
     // ((sleep 2 && mv file backup &)>/dev/null 2>&1 &) ; tail --follow=name file
@@ -2150,7 +2220,12 @@ fn test_follow_name_move1() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // FIXME: make this work not just on Linux
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))] // FIXME: for currently not working platforms
 fn test_follow_name_move2() {
     // Like test_follow_name_move1, but move to a name that's already monitored.
 
@@ -2231,7 +2306,12 @@ fn test_follow_name_move2() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // FIXME: make this work not just on Linux
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))] // FIXME: for currently not working platforms
 fn test_follow_name_move_retry1() {
     // Similar to test_follow_name_move1 but with `--retry` (`-F`)
     // This test triggers two move/rename events while `tail --follow=name --retry file` is running.
@@ -2281,8 +2361,14 @@ fn test_follow_name_move_retry1() {
         delay /= 3;
     }
 }
+
 #[test]
-#[cfg(target_os = "linux")] // FIXME: make this work not just on Linux
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))] // FIXME: for currently not working platforms
 fn test_follow_name_move_retry2() {
     // inspired by: "gnu/tests/tail-2/F-vs-rename.sh"
     // Similar to test_follow_name_move2 (move to a name that's already monitored)
@@ -2380,7 +2466,7 @@ fn test_follow_name_move_retry2() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "freebsd")))] // FIXME: fix this test for FreeBSD
+#[cfg(not(target_os = "windows"))] // FIXME: for currently not working platforms
 fn test_follow_inotify_only_regular() {
     // The GNU test inotify-only-regular.sh uses strace to ensure that `tail -f`
     // doesn't make inotify syscalls and only uses inotify for regular files or fifos.
@@ -2403,7 +2489,6 @@ fn test_follow_inotify_only_regular() {
     assert_eq!(buf_stderr, "".to_string());
 }
 
-#[cfg(unix)]
 fn take_stdout_stderr(p: &mut std::process::Child) -> (String, String) {
     let mut buf_stdout = String::new();
     let mut p_stdout = p.stdout.take().unwrap();
@@ -2426,13 +2511,11 @@ fn test_no_such_file() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_no_trailing_newline() {
     new_ucmd!().pipe_in("x").succeeds().stdout_only("x");
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_lines_zero_terminated() {
     new_ucmd!()
         .args(&["-z", "-n", "2"])
@@ -2447,7 +2530,6 @@ fn test_lines_zero_terminated() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))] // FIXME: fix this test for Android
 fn test_presume_input_pipe_default() {
     new_ucmd!()
         .arg("---presume-input-pipe")
@@ -2458,7 +2540,7 @@ fn test_presume_input_pipe_default() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(not(windows))]
 fn test_fifo() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -2512,722 +2594,721 @@ fn test_illegal_seek() {
     assert_eq!(p.wait().unwrap().code().unwrap(), 1);
 }
 
-#[cfg(all(not(target_os = "android"), not(target_os = "windows")))] // FIXME: See https://github.com/uutils/coreutils/issues/3881
-mod pipe_tests {
-    use super::*;
-    use rand::distributions::Alphanumeric;
-    use tail::chunks::BUFFER_SIZE as CHUNK_BUFFER_SIZE;
-
-    #[test]
-    fn test_pipe_when_lines_option_value_is_higher_than_contained_lines() {
-        let test_string = "a\nb\n";
-        new_ucmd!()
-            .args(&["-n", "3"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(test_string);
-
-        new_ucmd!()
-            .args(&["-n", "4"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(test_string);
-
-        new_ucmd!()
-            .args(&["-n", "999"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(test_string);
-
-        new_ucmd!()
-            .args(&["-n", "+3"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .no_stdout()
-            .no_stderr();
-
-        new_ucmd!()
-            .args(&["-n", "+4"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .no_stdout()
-            .no_stderr();
-
-        new_ucmd!()
-            .args(&["-n", "+999"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .no_stdout()
-            .no_stderr();
-    }
-
-    #[test]
-    fn test_pipe_when_negative_lines_option_given_no_newline_at_eof() {
-        let test_string = "a\nb";
-
-        new_ucmd!()
-            .args(&["-n", "0"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .no_stdout()
-            .no_stderr();
-
-        new_ucmd!()
-            .args(&["-n", "1"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only("b");
-
-        new_ucmd!()
-            .args(&["-n", "2"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only("a\nb");
-    }
-
-    #[test]
-    fn test_pipe_when_positive_lines_option_given_no_newline_at_eof() {
-        let test_string = "a\nb";
-
-        new_ucmd!()
-            .args(&["-n", "+0"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only("a\nb");
-
-        new_ucmd!()
-            .args(&["-n", "+1"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only("a\nb");
-
-        new_ucmd!()
-            .args(&["-n", "+2"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only("b");
-    }
-
-    #[test]
-    fn test_pipe_when_lines_option_given_multibyte_utf8_characters() {
-        // the test string consists of from left to right a 4-byte,3-byte,2-byte,1-byte utf-8 character
-        let test_string = "𝅘𝅥𝅮\n⏻\nƒ\na";
-
-        new_ucmd!()
-            .args(&["-n", "+0"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(test_string);
-
-        new_ucmd!()
-            .args(&["-n", "+2"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only("⏻\nƒ\na");
-
-        new_ucmd!()
-            .args(&["-n", "+3"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only("ƒ\na");
-
-        new_ucmd!()
-            .args(&["-n", "+4"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only("a");
-
-        new_ucmd!()
-            .args(&["-n", "+5"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .no_stdout()
-            .no_stderr();
-
-        new_ucmd!()
-            .args(&["-n", "-4"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(test_string);
-
-        new_ucmd!()
-            .args(&["-n", "-3"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only("⏻\nƒ\na");
-
-        new_ucmd!()
-            .args(&["-n", "-2"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only("ƒ\na");
-
-        new_ucmd!()
-            .args(&["-n", "-1"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only("a");
-
-        new_ucmd!()
-            .args(&["-n", "-0"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .no_stdout()
-            .no_stderr();
-    }
-
-    #[test]
-    fn test_pipe_when_lines_option_given_input_size_is_equal_to_buffer_size_no_newline_at_eof() {
-        let total_lines = 1;
-        let random_string = RandomString::generate_with_delimiter(
-            Alphanumeric,
-            b'\n',
-            total_lines,
-            false,
-            CHUNK_BUFFER_SIZE,
-        );
-        let random_string = random_string.as_str();
-        let lines = random_string.split_inclusive('\n');
-
-        let expected = lines.clone().skip(1).collect::<String>();
-        new_ucmd!()
-            .args(&["-n", "+2"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(expected);
-
-        let expected = lines.clone().skip(1).collect::<String>();
-        new_ucmd!()
-            .args(&["-n", "-1"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(expected);
-    }
-
-    #[test]
-    fn test_pipe_when_lines_option_given_input_size_is_equal_to_buffer_size() {
-        let total_lines = 100;
-        let random_string = RandomString::generate_with_delimiter(
-            Alphanumeric,
-            b'\n',
-            total_lines,
-            true,
-            CHUNK_BUFFER_SIZE,
-        );
-        let random_string = random_string.as_str();
-        let lines = random_string.split_inclusive('\n');
-
-        new_ucmd!()
-            .args(&["-n", "+0"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(random_string);
-
-        let expected = lines.clone().skip(1).collect::<String>();
-        new_ucmd!()
-            .args(&["-n", "+2"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(expected);
-
-        new_ucmd!()
-            .args(&["-n", "-0"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .no_stdout()
-            .no_stderr();
-
-        let expected = lines.clone().skip(total_lines - 1).collect::<String>();
-        new_ucmd!()
-            .args(&["-n", "-1"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(expected);
-
-        let expected = lines.clone().skip(1).collect::<String>();
-        new_ucmd!()
-            .args(&["-n", "-99"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(expected);
-
-        new_ucmd!()
-            .args(&["-n", "-100"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(random_string);
-    }
-
-    #[test]
-    fn test_pipe_when_lines_option_given_input_size_is_one_byte_greater_than_buffer_size() {
-        let total_lines = 100;
-        let random_string = RandomString::generate_with_delimiter(
-            Alphanumeric,
-            b'\n',
-            total_lines,
-            true,
-            CHUNK_BUFFER_SIZE + 1,
-        );
-        let random_string = random_string.as_str();
-        let lines = random_string.split_inclusive('\n');
-
-        new_ucmd!()
-            .args(&["-n", "+0"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(random_string);
-
-        let expected = lines.clone().skip(total_lines - 1).collect::<String>();
-        new_ucmd!()
-            .args(&["-n", "-1"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(expected);
-
-        let expected = lines.clone().skip(1).collect::<String>();
-        new_ucmd!()
-            .args(&["-n", "+2"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(expected);
-
-        let expected = lines.clone().skip(1).collect::<String>();
-        new_ucmd!()
-            .args(&["-n", "-99"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(expected);
-    }
-
-    #[test]
-    fn test_pipe_when_lines_option_given_input_size_has_multiple_size_of_buffer_size() {
-        let total_lines = 100;
-        let random_string = RandomString::generate_with_delimiter(
-            Alphanumeric,
-            b'\n',
-            total_lines,
-            true,
-            CHUNK_BUFFER_SIZE * 3 + 1,
-        );
-        let random_string = random_string.as_str();
-        let lines = random_string.split_inclusive('\n');
-
-        new_ucmd!()
-            .args(&["-n", "+0"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(random_string);
-
-        let expected = lines.clone().skip(1).collect::<String>();
-        new_ucmd!()
-            .args(&["-n", "+2"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(expected);
-
-        new_ucmd!()
-            .args(&["-n", "-0"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .no_stdout()
-            .no_stderr();
-
-        let expected = lines.clone().skip(total_lines - 1).collect::<String>();
-        new_ucmd!()
-            .args(&["-n", "-1"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(expected);
-
-        let expected = lines.clone().skip(1).collect::<String>();
-        new_ucmd!()
-            .args(&["-n", "-99"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(expected);
-
-        new_ucmd!()
-            .args(&["-n", "-100"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(random_string);
-    }
-
-    #[test]
-    fn test_pipe_when_bytes_option_value_is_higher_than_contained_bytes() {
-        let test_string = "a\nb";
-        new_ucmd!()
-            .args(&["-c", "4"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(test_string);
-
-        new_ucmd!()
-            .args(&["-c", "5"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(test_string);
-
-        new_ucmd!()
-            .args(&["-c", "999"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(test_string);
-
-        new_ucmd!()
-            .args(&["-c", "+4"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .no_stdout()
-            .no_stderr();
-
-        new_ucmd!()
-            .args(&["-c", "+5"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .no_stdout()
-            .no_stderr();
-
-        new_ucmd!()
-            .args(&["-c", "+999"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .no_stdout()
-            .no_stderr();
-    }
-
-    #[test]
-    fn test_pipe_when_bytes_option_given_multibyte_utf8_characters() {
-        // the test string consists of from left to right a 4-byte,3-byte,2-byte,1-byte utf-8 character
-        let test_string = "𝅘𝅥𝅮⏻ƒa";
-
-        new_ucmd!()
-            .args(&["-c", "+0"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(test_string);
-
-        new_ucmd!()
-            .args(&["-c", "+2"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only_bytes(&test_string.as_bytes()[1..]);
-
-        new_ucmd!()
-            .args(&["-c", "+5"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only("⏻ƒa");
-
-        new_ucmd!()
-            .args(&["-c", "+8"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only("ƒa");
-
-        new_ucmd!()
-            .args(&["-c", "+10"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only("a");
-
-        new_ucmd!()
-            .args(&["-c", "+11"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .no_stdout()
-            .no_stderr();
-
-        new_ucmd!()
-            .args(&["-c", "-1"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only("a");
-
-        new_ucmd!()
-            .args(&["-c", "-2"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only_bytes(&"ƒa".as_bytes()[1..]);
-
-        new_ucmd!()
-            .args(&["-c", "-3"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only("ƒa");
-
-        new_ucmd!()
-            .args(&["-c", "-6"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only("⏻ƒa");
-
-        new_ucmd!()
-            .args(&["-c", "-10"])
-            .pipe_in(test_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(test_string);
-    }
-
-    #[test]
-    fn test_pipe_when_bytes_option_given_input_size_is_equal_to_buffer_size() {
-        let random_string = RandomString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE);
-        let random_string = random_string.as_str();
-
-        new_ucmd!()
-            .args(&["-c", "+0"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(random_string);
-
-        let expected = &random_string.as_bytes()[1..];
-        new_ucmd!()
-            .args(&["-c", "+2"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only_bytes(expected);
-
-        new_ucmd!()
-            .args(&["-c", "-0"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .no_stdout()
-            .no_stderr();
-
-        let expected = &random_string.as_bytes()[1..];
-        new_ucmd!()
-            .args(&["-c", "-8191"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only_bytes(expected);
-
-        new_ucmd!()
-            .args(&["-c", "-8192"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only_bytes(random_string);
-
-        new_ucmd!()
-            .args(&["-c", "-8193"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only_bytes(random_string);
-
-        let expected = &random_string.as_bytes()[CHUNK_BUFFER_SIZE - 1..];
-        new_ucmd!()
-            .args(&["-c", "-1"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only_bytes(expected);
-    }
-
-    #[test]
-    fn test_pipe_when_bytes_option_given_input_size_is_one_byte_greater_than_buffer_size() {
-        let random_string = RandomString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE + 1);
-        let random_string = random_string.as_str();
-
-        new_ucmd!()
-            .args(&["-c", "+0"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(random_string);
-
-        let expected = &random_string.as_bytes()[1..];
-        new_ucmd!()
-            .args(&["-c", "+2"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only_bytes(expected);
-
-        new_ucmd!()
-            .args(&["-c", "-0"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .no_stdout()
-            .no_stderr();
-
-        let expected = &random_string.as_bytes()[CHUNK_BUFFER_SIZE..];
-        new_ucmd!()
-            .args(&["-c", "-1"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only_bytes(expected);
-
-        let expected = &random_string.as_bytes()[1..];
-        new_ucmd!()
-            .args(&["-c", "-8192"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only_bytes(expected);
-
-        new_ucmd!()
-            .args(&["-c", "-8193"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(random_string);
-    }
-
-    #[test]
-    fn test_pipe_when_bytes_option_given_input_size_has_multiple_size_of_buffer_size() {
-        let random_string = RandomString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE * 3);
-        let random_string = random_string.as_str();
-
-        new_ucmd!()
-            .args(&["-c", "+0"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(random_string);
-
-        new_ucmd!()
-            .args(&["-c", "-0"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .no_stdout()
-            .no_stderr();
-
-        let expected = &random_string.as_bytes()[8192..];
-        new_ucmd!()
-            .args(&["-c", "+8193"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only_bytes(expected);
-
-        let expected = &random_string.as_bytes()[8193..];
-        new_ucmd!()
-            .args(&["-c", "+8194"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only_bytes(expected);
-
-        let expected = &random_string.as_bytes()[16384..];
-        new_ucmd!()
-            .args(&["-c", "+16385"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only_bytes(expected);
-
-        let expected = &random_string.as_bytes()[16385..];
-        new_ucmd!()
-            .args(&["-c", "+16386"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only_bytes(expected);
-
-        let expected = &random_string.as_bytes()[16384..];
-        new_ucmd!()
-            .args(&["-c", "-8192"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only_bytes(expected);
-
-        let expected = &random_string.as_bytes()[16383..];
-        new_ucmd!()
-            .args(&["-c", "-8193"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only_bytes(expected);
-
-        let expected = &random_string.as_bytes()[8192..];
-        new_ucmd!()
-            .args(&["-c", "-16384"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only_bytes(expected);
-
-        let expected = &random_string.as_bytes()[8191..];
-        new_ucmd!()
-            .args(&["-c", "-16385"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only_bytes(expected);
-
-        new_ucmd!()
-            .args(&["-c", "-24576"])
-            .pipe_in(random_string)
-            .ignore_stdin_write_error()
-            .succeeds()
-            .stdout_only(random_string);
-    }
+#[test]
+fn test_pipe_when_lines_option_value_is_higher_than_contained_lines() {
+    let test_string = "a\nb\n";
+    new_ucmd!()
+        .args(&["-n", "3"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(test_string);
+
+    new_ucmd!()
+        .args(&["-n", "4"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(test_string);
+
+    new_ucmd!()
+        .args(&["-n", "999"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(test_string);
+
+    new_ucmd!()
+        .args(&["-n", "+3"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+
+    new_ucmd!()
+        .args(&["-n", "+4"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+
+    new_ucmd!()
+        .args(&["-n", "+999"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+}
+
+#[test]
+fn test_pipe_when_negative_lines_option_given_no_newline_at_eof() {
+    let test_string = "a\nb";
+
+    new_ucmd!()
+        .args(&["-n", "0"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+
+    new_ucmd!()
+        .args(&["-n", "1"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only("b");
+
+    new_ucmd!()
+        .args(&["-n", "2"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only("a\nb");
+}
+
+#[test]
+fn test_pipe_when_positive_lines_option_given_no_newline_at_eof() {
+    let test_string = "a\nb";
+
+    new_ucmd!()
+        .args(&["-n", "+0"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only("a\nb");
+
+    new_ucmd!()
+        .args(&["-n", "+1"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only("a\nb");
+
+    new_ucmd!()
+        .args(&["-n", "+2"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only("b");
+}
+
+#[test]
+fn test_pipe_when_lines_option_given_multibyte_utf8_characters() {
+    // the test string consists of from left to right a 4-byte,3-byte,2-byte,1-byte utf-8 character
+    let test_string = "𝅘𝅥𝅮\n⏻\nƒ\na";
+
+    new_ucmd!()
+        .args(&["-n", "+0"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(test_string);
+
+    new_ucmd!()
+        .args(&["-n", "+2"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only("⏻\nƒ\na");
+
+    new_ucmd!()
+        .args(&["-n", "+3"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only("ƒ\na");
+
+    new_ucmd!()
+        .args(&["-n", "+4"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only("a");
+
+    new_ucmd!()
+        .args(&["-n", "+5"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+
+    new_ucmd!()
+        .args(&["-n", "-4"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(test_string);
+
+    new_ucmd!()
+        .args(&["-n", "-3"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only("⏻\nƒ\na");
+
+    new_ucmd!()
+        .args(&["-n", "-2"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only("ƒ\na");
+
+    new_ucmd!()
+        .args(&["-n", "-1"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only("a");
+
+    new_ucmd!()
+        .args(&["-n", "-0"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+}
+
+#[test]
+fn test_pipe_when_lines_option_given_input_size_is_equal_to_buffer_size_no_newline_at_eof() {
+    let total_lines = 1;
+    let random_string = RandomString::generate_with_delimiter(
+        Alphanumeric,
+        b'\n',
+        total_lines,
+        false,
+        CHUNK_BUFFER_SIZE,
+    );
+    let random_string = random_string.as_str();
+    let lines = random_string.split_inclusive('\n');
+
+    let expected = lines.clone().skip(1).collect::<String>();
+    new_ucmd!()
+        .args(&["-n", "+2"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(expected);
+
+    let expected = lines.clone().skip(1).collect::<String>();
+    new_ucmd!()
+        .args(&["-n", "-1"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
+fn test_pipe_when_lines_option_given_input_size_is_equal_to_buffer_size() {
+    let total_lines = 100;
+    let random_string = RandomString::generate_with_delimiter(
+        Alphanumeric,
+        b'\n',
+        total_lines,
+        true,
+        CHUNK_BUFFER_SIZE,
+    );
+    let random_string = random_string.as_str();
+    let lines = random_string.split_inclusive('\n');
+
+    new_ucmd!()
+        .args(&["-n", "+0"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(random_string);
+
+    let expected = lines.clone().skip(1).collect::<String>();
+    new_ucmd!()
+        .args(&["-n", "+2"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(expected);
+
+    new_ucmd!()
+        .args(&["-n", "-0"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+
+    let expected = lines.clone().skip(total_lines - 1).collect::<String>();
+    new_ucmd!()
+        .args(&["-n", "-1"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(expected);
+
+    let expected = lines.clone().skip(1).collect::<String>();
+    new_ucmd!()
+        .args(&["-n", "-99"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(expected);
+
+    new_ucmd!()
+        .args(&["-n", "-100"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(random_string);
+}
+
+#[test]
+fn test_pipe_when_lines_option_given_input_size_is_one_byte_greater_than_buffer_size() {
+    let total_lines = 100;
+    let random_string = RandomString::generate_with_delimiter(
+        Alphanumeric,
+        b'\n',
+        total_lines,
+        true,
+        CHUNK_BUFFER_SIZE + 1,
+    );
+    let random_string = random_string.as_str();
+    let lines = random_string.split_inclusive('\n');
+
+    new_ucmd!()
+        .args(&["-n", "+0"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(random_string);
+
+    let expected = lines.clone().skip(total_lines - 1).collect::<String>();
+    new_ucmd!()
+        .args(&["-n", "-1"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(expected);
+
+    let expected = lines.clone().skip(1).collect::<String>();
+    new_ucmd!()
+        .args(&["-n", "+2"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(expected);
+
+    let expected = lines.clone().skip(1).collect::<String>();
+    new_ucmd!()
+        .args(&["-n", "-99"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(expected);
+}
+
+// FIXME: windows: this test failed with timeout in the CI. Running this test in
+// a Windows VirtualBox image produces no errors.
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_pipe_when_lines_option_given_input_size_has_multiple_size_of_buffer_size() {
+    let total_lines = 100;
+    let random_string = RandomString::generate_with_delimiter(
+        Alphanumeric,
+        b'\n',
+        total_lines,
+        true,
+        CHUNK_BUFFER_SIZE * 3 + 1,
+    );
+    let random_string = random_string.as_str();
+    let lines = random_string.split_inclusive('\n');
+
+    new_ucmd!()
+        .args(&["-n", "+0"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(random_string);
+
+    let expected = lines.clone().skip(1).collect::<String>();
+    new_ucmd!()
+        .args(&["-n", "+2"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(expected);
+
+    new_ucmd!()
+        .args(&["-n", "-0"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+
+    let expected = lines.clone().skip(total_lines - 1).collect::<String>();
+    new_ucmd!()
+        .args(&["-n", "-1"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(expected);
+
+    let expected = lines.clone().skip(1).collect::<String>();
+    new_ucmd!()
+        .args(&["-n", "-99"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(expected);
+
+    new_ucmd!()
+        .args(&["-n", "-100"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(random_string);
+}
+
+#[test]
+fn test_pipe_when_bytes_option_value_is_higher_than_contained_bytes() {
+    let test_string = "a\nb";
+    new_ucmd!()
+        .args(&["-c", "4"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(test_string);
+
+    new_ucmd!()
+        .args(&["-c", "5"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(test_string);
+
+    new_ucmd!()
+        .args(&["-c", "999"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(test_string);
+
+    new_ucmd!()
+        .args(&["-c", "+4"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+
+    new_ucmd!()
+        .args(&["-c", "+5"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+
+    new_ucmd!()
+        .args(&["-c", "+999"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+}
+
+#[test]
+fn test_pipe_when_bytes_option_given_multibyte_utf8_characters() {
+    // the test string consists of from left to right a 4-byte,3-byte,2-byte,1-byte utf-8 character
+    let test_string = "𝅘𝅥𝅮⏻ƒa";
+
+    new_ucmd!()
+        .args(&["-c", "+0"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(test_string);
+
+    new_ucmd!()
+        .args(&["-c", "+2"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only_bytes(&test_string.as_bytes()[1..]);
+
+    new_ucmd!()
+        .args(&["-c", "+5"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only("⏻ƒa");
+
+    new_ucmd!()
+        .args(&["-c", "+8"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only("ƒa");
+
+    new_ucmd!()
+        .args(&["-c", "+10"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only("a");
+
+    new_ucmd!()
+        .args(&["-c", "+11"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+
+    new_ucmd!()
+        .args(&["-c", "-1"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only("a");
+
+    new_ucmd!()
+        .args(&["-c", "-2"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only_bytes(&"ƒa".as_bytes()[1..]);
+
+    new_ucmd!()
+        .args(&["-c", "-3"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only("ƒa");
+
+    new_ucmd!()
+        .args(&["-c", "-6"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only("⏻ƒa");
+
+    new_ucmd!()
+        .args(&["-c", "-10"])
+        .pipe_in(test_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(test_string);
+}
+
+#[test]
+fn test_pipe_when_bytes_option_given_input_size_is_equal_to_buffer_size() {
+    let random_string = RandomString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE);
+    let random_string = random_string.as_str();
+
+    new_ucmd!()
+        .args(&["-c", "+0"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(random_string);
+
+    let expected = &random_string.as_bytes()[1..];
+    new_ucmd!()
+        .args(&["-c", "+2"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only_bytes(expected);
+
+    new_ucmd!()
+        .args(&["-c", "-0"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+
+    let expected = &random_string.as_bytes()[1..];
+    new_ucmd!()
+        .args(&["-c", "-8191"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only_bytes(expected);
+
+    new_ucmd!()
+        .args(&["-c", "-8192"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only_bytes(random_string);
+
+    new_ucmd!()
+        .args(&["-c", "-8193"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only_bytes(random_string);
+
+    let expected = &random_string.as_bytes()[CHUNK_BUFFER_SIZE - 1..];
+    new_ucmd!()
+        .args(&["-c", "-1"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only_bytes(expected);
+}
+
+#[test]
+fn test_pipe_when_bytes_option_given_input_size_is_one_byte_greater_than_buffer_size() {
+    let random_string = RandomString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE + 1);
+    let random_string = random_string.as_str();
+
+    new_ucmd!()
+        .args(&["-c", "+0"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(random_string);
+
+    let expected = &random_string.as_bytes()[1..];
+    new_ucmd!()
+        .args(&["-c", "+2"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only_bytes(expected);
+
+    new_ucmd!()
+        .args(&["-c", "-0"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+
+    let expected = &random_string.as_bytes()[CHUNK_BUFFER_SIZE..];
+    new_ucmd!()
+        .args(&["-c", "-1"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only_bytes(expected);
+
+    let expected = &random_string.as_bytes()[1..];
+    new_ucmd!()
+        .args(&["-c", "-8192"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only_bytes(expected);
+
+    new_ucmd!()
+        .args(&["-c", "-8193"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(random_string);
+}
+
+// FIXME: windows: this test failed with timeout in the CI. Running this test in
+// a Windows VirtualBox image produces no errors.
+#[test]
+#[cfg(not(target_os = "windows"))]
+fn test_pipe_when_bytes_option_given_input_size_has_multiple_size_of_buffer_size() {
+    let random_string = RandomString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE * 3);
+    let random_string = random_string.as_str();
+
+    new_ucmd!()
+        .args(&["-c", "+0"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(random_string);
+
+    new_ucmd!()
+        .args(&["-c", "-0"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+
+    let expected = &random_string.as_bytes()[8192..];
+    new_ucmd!()
+        .args(&["-c", "+8193"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only_bytes(expected);
+
+    let expected = &random_string.as_bytes()[8193..];
+    new_ucmd!()
+        .args(&["-c", "+8194"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only_bytes(expected);
+
+    let expected = &random_string.as_bytes()[16384..];
+    new_ucmd!()
+        .args(&["-c", "+16385"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only_bytes(expected);
+
+    let expected = &random_string.as_bytes()[16385..];
+    new_ucmd!()
+        .args(&["-c", "+16386"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only_bytes(expected);
+
+    let expected = &random_string.as_bytes()[16384..];
+    new_ucmd!()
+        .args(&["-c", "-8192"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only_bytes(expected);
+
+    let expected = &random_string.as_bytes()[16383..];
+    new_ucmd!()
+        .args(&["-c", "-8193"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only_bytes(expected);
+
+    let expected = &random_string.as_bytes()[8192..];
+    new_ucmd!()
+        .args(&["-c", "-16384"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only_bytes(expected);
+
+    let expected = &random_string.as_bytes()[8191..];
+    new_ucmd!()
+        .args(&["-c", "-16385"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only_bytes(expected);
+
+    new_ucmd!()
+        .args(&["-c", "-24576"])
+        .pipe_in(random_string)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .stdout_only(random_string);
 }
 
 #[test]
