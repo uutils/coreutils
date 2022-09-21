@@ -25,7 +25,7 @@ dunce = "1.0.0"
 wild = "2.0"
 glob = "0.3.0"
 # * optional
-itertools = { version="0.10.0", optional=true }
+itertools = { version="0.10.5", optional=true }
 thiserror = { version="1.0", optional=true }
 time = { version="0.3", optional=true, features = ["formatting", "local-offset", "macros"] }
 # * "problem" dependencies (pinned)
