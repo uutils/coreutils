@@ -19,7 +19,7 @@ digest = "0.10.5"
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 hex = "0.4.3"
 memchr = "2"
-md-5 = "0.10.1"
+md-5 = "0.10.5"
 regex = "1.6.0"
 sha1 = "0.10.1"
 sha2 = "0.10.2"
