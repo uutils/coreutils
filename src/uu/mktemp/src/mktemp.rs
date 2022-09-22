@@ -16,6 +16,7 @@ use uucore::format_usage;
 use std::env;
 use std::error::Error;
 use std::fmt::Display;
+use std::io::ErrorKind;
 use std::iter;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 
@@ -54,6 +55,9 @@ enum MkTempError {
     SuffixContainsDirSeparator(String),
     InvalidTemplate(String),
     TooManyTemplates,
+
+    /// When a specified temporary directory could not be found.
+    NotFound(String, String),
 }
 
 impl UError for MkTempError {
@@ -93,6 +97,12 @@ impl Display for MkTempError {
             TooManyTemplates => {
                 write!(f, "too many templates")
             }
+            NotFound(template_type, s) => write!(
+                f,
+                "failed to create {} via template {}: No such file or directory",
+                template_type,
+                s.quote()
+            ),
         }
     }
 }
@@ -460,37 +470,74 @@ pub fn dry_exec(tmpdir: &str, prefix: &str, rand: usize, suffix: &str) -> UResul
     println_verbatim(tmpdir).map_err_context(|| "failed to print directory name".to_owned())
 }
 
-fn exec(dir: &str, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> UResult<()> {
-    let context = || {
-        format!(
-            "failed to create file via template '{}{}{}'",
-            prefix,
-            "X".repeat(rand),
-            suffix
-        )
-    };
-
+/// Create a temporary directory with the given parameters.
+///
+/// This function creates a temporary directory as a subdirectory of
+/// `dir`. The name of the directory is the concatenation of `prefix`,
+/// a string of `rand` random characters, and `suffix`. The
+/// permissions of the directory are set to `u+rwx`
+///
+/// # Errors
+///
+/// If the temporary directory could not be written to disk or if the
+/// given directory `dir` does not exist.
+fn make_temp_dir(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
-
-    let path = if make_dir {
-        builder
-            .tempdir_in(&dir)
-            .map_err_context(context)?
-            .into_path() // `into_path` consumes the TempDir without removing it
-    } else {
-        builder
-            .tempfile_in(&dir)
-            .map_err_context(context)?
-            .keep() // `keep` ensures that the file is not deleted
-            .map_err(|e| MkTempError::PersistError(e.file.path().to_path_buf()))?
-            .1
-    };
-
-    #[cfg(not(windows))]
-    if make_dir {
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
+    match builder.tempdir_in(&dir) {
+        Ok(d) => {
+            // `into_path` consumes the TempDir without removing it
+            let path = d.into_path();
+            #[cfg(not(windows))]
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
+            Ok(path)
+        }
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            let filename = format!("{}{}{}", prefix, "X".repeat(rand), suffix);
+            let path = Path::new(dir).join(filename);
+            let s = path.display().to_string();
+            Err(MkTempError::NotFound("directory".to_string(), s).into())
+        }
+        Err(e) => Err(e.into()),
     }
+}
+
+/// Create a temporary file with the given parameters.
+///
+/// This function creates a temporary file in the directory `dir`. The
+/// name of the file is the concatenation of `prefix`, a string of
+/// `rand` random characters, and `suffix`. The permissions of the
+/// file are set to `u+rw`.
+///
+/// # Errors
+///
+/// If the file could not be written to disk or if the directory does
+/// not exist.
+fn make_temp_file(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
+    let mut builder = Builder::new();
+    builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
+    match builder.tempfile_in(&dir) {
+        // `keep` ensures that the file is not deleted
+        Ok(named_tempfile) => match named_tempfile.keep() {
+            Ok((_, pathbuf)) => Ok(pathbuf),
+            Err(e) => Err(MkTempError::PersistError(e.file.path().to_path_buf()).into()),
+        },
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            let filename = format!("{}{}{}", prefix, "X".repeat(rand), suffix);
+            let path = Path::new(dir).join(filename);
+            let s = path.display().to_string();
+            Err(MkTempError::NotFound("file".to_string(), s).into())
+        }
+        Err(e) => Err(e.into()),
+    }
+}
+
+fn exec(dir: &str, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> UResult<()> {
+    let path = if make_dir {
+        make_temp_dir(dir, prefix, rand, suffix)?
+    } else {
+        make_temp_file(dir, prefix, rand, suffix)?
+    };
 
     // Get just the last component of the path to the created
     // temporary file or directory.

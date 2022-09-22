@@ -739,3 +739,89 @@ fn test_tmpdir_env_var() {
     assert_matches_template!(template, filename);
     assert!(at.file_exists(filename));
 }
+
+#[test]
+fn test_nonexistent_tmpdir_env_var() {
+    #[cfg(not(windows))]
+    new_ucmd!().env(TMPDIR, "no/such/dir").fails().stderr_only("mktemp: failed to create file via template 'no/such/dir/tmp.XXXXXXXXXX': No such file or directory\n");
+    #[cfg(windows)]
+    {
+        let result = new_ucmd!().env(TMPDIR, r"no\such\dir").fails();
+        result.no_stdout();
+        let stderr = result.stderr_str();
+        assert!(
+            stderr.starts_with("mktemp: failed to create file via template"),
+            "{}",
+            stderr
+        );
+        assert!(
+            stderr.ends_with("no\\such\\dir\\tmp.XXXXXXXXXX': No such file or directory\n"),
+            "{}",
+            stderr
+        );
+    }
+
+    #[cfg(not(windows))]
+    new_ucmd!().env(TMPDIR, "no/such/dir").arg("-d").fails().stderr_only("mktemp: failed to create directory via template 'no/such/dir/tmp.XXXXXXXXXX': No such file or directory\n");
+    #[cfg(windows)]
+    {
+        let result = new_ucmd!().env(TMPDIR, r"no\such\dir").arg("-d").fails();
+        result.no_stdout();
+        let stderr = result.stderr_str();
+        assert!(
+            stderr.starts_with("mktemp: failed to create directory via template"),
+            "{}",
+            stderr
+        );
+        assert!(
+            stderr.ends_with("no\\such\\dir\\tmp.XXXXXXXXXX': No such file or directory\n"),
+            "{}",
+            stderr
+        );
+    }
+}
+
+#[test]
+fn test_nonexistent_dir_prefix() {
+    #[cfg(not(windows))]
+    new_ucmd!().arg("d/XXX").fails().stderr_only(
+        "mktemp: failed to create file via template 'd/XXX': No such file or directory\n",
+    );
+    #[cfg(windows)]
+    {
+        let result = new_ucmd!().arg(r"d\XXX").fails();
+        result.no_stdout();
+        let stderr = result.stderr_str();
+        assert!(
+            stderr.starts_with("mktemp: failed to create file via template"),
+            "{}",
+            stderr
+        );
+        assert!(
+            stderr.ends_with("d\\XXX': No such file or directory\n"),
+            "{}",
+            stderr
+        );
+    }
+
+    #[cfg(not(windows))]
+    new_ucmd!().arg("-d").arg("d/XXX").fails().stderr_only(
+        "mktemp: failed to create directory via template 'd/XXX': No such file or directory\n",
+    );
+    #[cfg(windows)]
+    {
+        let result = new_ucmd!().arg("-d").arg(r"d\XXX").fails();
+        result.no_stdout();
+        let stderr = result.stderr_str();
+        assert!(
+            stderr.starts_with("mktemp: failed to create directory via template"),
+            "{}",
+            stderr
+        );
+        assert!(
+            stderr.ends_with("d\\XXX': No such file or directory\n"),
+            "{}",
+            stderr
+        );
+    }
+}
