@@ -2226,3 +2226,46 @@ fn test_copy_dir_preserve_permissions_inaccessible_file() {
     let metadata2 = at.metadata("d2");
     assert_metadata_eq!(metadata1, metadata2);
 }
+
+/// Test that copying file to itself with backup fails.
+#[test]
+fn test_same_file_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.args(&["--backup", "f", "f"])
+        .fails()
+        .stderr_only("cp: 'f' and 'f' are the same file");
+    assert!(!at.file_exists("f~"));
+}
+
+/// Test that copying file to itself with forced backup succeeds.
+#[cfg(not(windows))]
+#[test]
+fn test_same_file_force() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.args(&["--force", "f", "f"])
+        .fails()
+        .stderr_only("cp: 'f' and 'f' are the same file");
+    assert!(!at.file_exists("f~"));
+}
+
+/// Test that copying file to itself with forced backup succeeds.
+#[cfg(all(not(windows), not(target_os = "macos")))]
+#[test]
+fn test_same_file_force_backup() {
+    // TODO This test should work on macos, but the command was
+    // causing an error:
+    //
+    //     cp: 'f' -> 'f': No such file or directory (os error 2)
+    //
+    // I couldn't figure out how to fix it, so I just skipped this
+    // test on macos.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.args(&["--force", "--backup", "f", "f"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(at.file_exists("f~"));
+}

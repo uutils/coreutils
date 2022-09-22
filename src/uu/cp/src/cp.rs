@@ -835,6 +835,11 @@ impl Options {
         }
         false
     }
+
+    /// Whether to force overwriting the destination file.
+    fn force(&self) -> bool {
+        matches!(self.overwrite, OverwriteMode::Clobber(ClobberMode::Force))
+    }
 }
 
 impl TargetType {
@@ -1194,16 +1199,36 @@ fn backup_dest(dest: &Path, backup_path: &Path) -> CopyResult<PathBuf> {
     Ok(backup_path.into())
 }
 
+/// Decide whether source and destination files are the same and
+/// copying is forbidden.
+///
+/// Copying to the same file is only allowed if both `--backup` and
+/// `--force` are specified and the file is a regular file.
+fn is_forbidden_copy_to_same_file(
+    source: &Path,
+    dest: &Path,
+    options: &Options,
+    source_in_command_line: bool,
+) -> bool {
+    // TODO To match the behavior of GNU cp, we also need to check
+    // that the file is a regular file.
+    let dereference_to_compare =
+        options.dereference(source_in_command_line) || !source.is_symlink();
+    paths_refer_to_same_file(source, dest, dereference_to_compare)
+        && !(options.force() && options.backup != BackupMode::NoBackup)
+}
+
+/// Back up, remove, or leave intact the destination file, depending on the options.
 fn handle_existing_dest(
     source: &Path,
     dest: &Path,
     options: &Options,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
-    let dereference_to_compare =
-        options.dereference(source_in_command_line) || !source.is_symlink();
-    if paths_refer_to_same_file(source, dest, dereference_to_compare) {
-        return Err(format!("{}: same file", context_for(source, dest)).into());
+    // Disallow copying a file to itself, unless `--force` and
+    // `--backup` are both specified.
+    if is_forbidden_copy_to_same_file(source, dest, options, source_in_command_line) {
+        return Err(format!("{} and {} are the same file", source.quote(), dest.quote()).into());
     }
 
     options.overwrite.verify(dest)?;
