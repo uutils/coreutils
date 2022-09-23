@@ -498,6 +498,11 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help("always follow symbolic links in SOURCE"),
         )
         .arg(
+            Arg::new(options::CLI_SYMBOLIC_LINKS)
+                .short('H')
+                .help("follow command-line symbolic links in SOURCE"),
+        )
+        .arg(
             Arg::new(options::ARCHIVE)
                 .short('a')
                 .long(options::ARCHIVE)
@@ -543,11 +548,6 @@ pub fn uu_app<'a>() -> Command<'a> {
                     "NotImplemented: set SELinux security context of destination file to \
                     default type",
                 ),
-        )
-        .arg(
-            Arg::new(options::CLI_SYMBOLIC_LINKS)
-                .short('H')
-                .help("NotImplemented: follow command-line symbolic links in SOURCE"),
         )
         // END TODO
         .arg(
