@@ -47,7 +47,7 @@ use std::str::FromStr;
 use std::string::ToString;
 use uucore::backup_control::{self, BackupMode};
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
-use uucore::fs::{canonicalize, is_symlink, MissingHandling, ResolveMode};
+use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use walkdir::WalkDir;
 
 quick_error! {
@@ -1141,7 +1141,7 @@ fn copy_directory(
         };
 
         let local_to_target = target.join(&local_to_root_parent);
-        if is_symlink(p.path()) && !options.dereference {
+        if p.path().is_symlink() && !options.dereference {
             copy_link(&path, &local_to_target, symlinked_files)?;
         } else if path.is_dir() && !local_to_target.exists() {
             if target.is_file() {
@@ -1164,7 +1164,7 @@ fn copy_directory(
                     ) {
                         Ok(_) => Ok(()),
                         Err(err) => {
-                            if is_symlink(source) {
+                            if source.is_symlink() {
                                 // silent the error with a symlink
                                 // In case we do --archive, we might copy the symlink
                                 // before the file itself
@@ -1219,7 +1219,7 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
             // permissions of a symbolic link. In that case, we just
             // do nothing, since every symbolic link has the same
             // permissions.
-            if !is_symlink(dest) {
+            if !dest.is_symlink() {
                 fs::set_permissions(dest, source_metadata.permissions()).context(context)?;
                 // FIXME: Implement this for windows as well
                 #[cfg(feature = "feat_acl")]
@@ -1254,7 +1254,7 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
         Attribute::Timestamps => {
             let atime = FileTime::from_last_access_time(&source_metadata);
             let mtime = FileTime::from_last_modification_time(&source_metadata);
-            if is_symlink(dest) {
+            if dest.is_symlink() {
                 filetime::set_symlink_file_times(dest, atime, mtime)?;
             } else {
                 filetime::set_file_times(dest, atime, mtime)?;
@@ -1397,7 +1397,7 @@ fn copy_file(
     }
 
     // Fail if dest is a dangling symlink or a symlink this program created previously
-    if is_symlink(dest) {
+    if dest.is_symlink() {
         if FileInformation::from_path(dest, false)
             .map(|info| symlinked_files.contains(&info))
             .unwrap_or(false)
@@ -1539,7 +1539,7 @@ fn copy_file(
     };
 
     // TODO: implement something similar to gnu's lchown
-    if !is_symlink(&dest) {
+    if !dest.is_symlink() {
         // Here, to match GNU semantics, we quietly ignore an error
         // if a user does not have the correct ownership to modify
         // the permissions of a file.
@@ -1648,7 +1648,7 @@ fn copy_link(
     } else {
         // we always need to remove the file to be able to create a symlink,
         // even if it is writeable.
-        if is_symlink(dest) || dest.is_file() {
+        if dest.is_symlink() || dest.is_file() {
             fs::remove_file(dest)?;
         }
         dest.into()
