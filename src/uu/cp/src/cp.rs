@@ -1206,6 +1206,14 @@ impl OverwriteMode {
     }
 }
 
+/// Copy the specified attributes from one path to another.
+fn copy_attributes(source: &Path, dest: &Path, attributes: &[Attribute]) -> CopyResult<()> {
+    for attribute in attributes {
+        copy_attribute(source, dest, attribute)?;
+    }
+    Ok(())
+}
+
 fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResult<()> {
     let context = &*format!("{} -> {}", source.quote(), dest.quote());
     let source_metadata = fs::symlink_metadata(source).context(context)?;
@@ -1545,9 +1553,7 @@ fn copy_file(
         // the user does not have permission to write to the file.
         fs::set_permissions(dest, dest_permissions).ok();
     }
-    for attribute in &options.preserve_attributes {
-        copy_attribute(source, dest, attribute)?;
-    }
+    copy_attributes(source, dest, &options.preserve_attributes)?;
     Ok(())
 }
 
