@@ -751,6 +751,15 @@ impl AtPath {
         }
     }
 
+    pub fn read_symlink(&self, path: &str) -> String {
+        log_info("read_symlink", self.plus_as_string(path));
+        fs::read_link(&self.plus(path))
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned()
+    }
+
     pub fn symlink_metadata(&self, path: &str) -> fs::Metadata {
         match fs::symlink_metadata(&self.plus(path)) {
             Ok(m) => m,

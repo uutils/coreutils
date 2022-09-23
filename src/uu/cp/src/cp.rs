@@ -207,6 +207,7 @@ pub struct Options {
     attributes_only: bool,
     backup: BackupMode,
     copy_contents: bool,
+    cli_dereference: bool,
     copy_mode: CopyMode,
     dereference: bool,
     no_target_dir: bool,
@@ -760,6 +761,7 @@ impl Options {
         let options = Self {
             attributes_only: matches.contains_id(options::ATTRIBUTES_ONLY),
             copy_contents: matches.contains_id(options::COPY_CONTENTS),
+            cli_dereference: matches.contains_id(options::CLI_SYMBOLIC_LINKS),
             copy_mode: CopyMode::from_matches(matches),
             // No dereference is set with -p, -d and --archive
             dereference: !(matches.contains_id(options::NO_DEREFERENCE)
@@ -822,6 +824,10 @@ impl Options {
         };
 
         Ok(options)
+    }
+
+    fn dereference(&self, in_command_line: bool) -> bool {
+        self.dereference || (in_command_line && self.cli_dereference)
     }
 }
 
@@ -1017,11 +1023,11 @@ fn copy_source(
     let source_path = Path::new(&source);
     if source_path.is_dir() {
         // Copy as directory
-        copy_directory(source, target, options, symlinked_files)
+        copy_directory(source, target, options, symlinked_files, true)
     } else {
         // Copy as file
         let dest = construct_dest_path(source_path, target, target_type, options)?;
-        copy_file(source_path, dest.as_path(), options, symlinked_files)
+        copy_file(source_path, dest.as_path(), options, symlinked_files, true)
     }
 }
 
@@ -1056,14 +1062,21 @@ fn copy_directory(
     target: &TargetSlice,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
+    source_in_command_line: bool,
 ) -> CopyResult<()> {
     if !options.recursive {
         return Err(format!("omitting directory {}", root.quote()).into());
     }
 
     // if no-dereference is enabled and this is a symlink, copy it as a file
-    if !options.dereference && is_symlink(root) {
-        return copy_file(root, target, options, symlinked_files);
+    if !options.dereference(source_in_command_line) && root.is_symlink() {
+        return copy_file(
+            root,
+            target,
+            options,
+            symlinked_files,
+            source_in_command_line,
+        );
     }
 
     // check if root is a prefix of target
@@ -1147,6 +1160,7 @@ fn copy_directory(
                         local_to_target.as_path(),
                         options,
                         symlinked_files,
+                        false,
                     ) {
                         Ok(_) => Ok(()),
                         Err(err) => {
@@ -1167,6 +1181,7 @@ fn copy_directory(
                     local_to_target.as_path(),
                     options,
                     symlinked_files,
+                    false,
                 )?;
             }
         }
@@ -1316,8 +1331,14 @@ fn backup_dest(dest: &Path, backup_path: &Path) -> CopyResult<PathBuf> {
     Ok(backup_path.into())
 }
 
-fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
-    let dereference_to_compare = options.dereference || !is_symlink(source);
+fn handle_existing_dest(
+    source: &Path,
+    dest: &Path,
+    options: &Options,
+    source_in_command_line: bool,
+) -> CopyResult<()> {
+    let dereference_to_compare =
+        options.dereference(source_in_command_line) || !source.is_symlink();
     if paths_refer_to_same_file(source, dest, dereference_to_compare) {
         return Err(format!("{}: same file", context_for(source, dest)).into());
     }
@@ -1369,9 +1390,10 @@ fn copy_file(
     dest: &Path,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
+    source_in_command_line: bool,
 ) -> CopyResult<()> {
     if dest.exists() {
-        handle_existing_dest(source, dest, options)?;
+        handle_existing_dest(source, dest, options, source_in_command_line)?;
     }
 
     // Fail if dest is a dangling symlink or a symlink this program created previously
@@ -1386,7 +1408,7 @@ fn copy_file(
                 dest.display()
             )));
         }
-        let copy_contents = options.dereference || !is_symlink(source);
+        let copy_contents = options.dereference(source_in_command_line) || !source.is_symlink();
         if copy_contents && !dest.exists() {
             return Err(Error::Error(format!(
                 "not writing through dangling symlink '{}'",
@@ -1403,14 +1425,15 @@ fn copy_file(
     let context = context_for(source, dest);
     let context = context.as_str();
 
-    // canonicalize dest and source so that later steps can work with the paths directly
-    let source = if options.dereference {
-        canonicalize(source, MissingHandling::Missing, ResolveMode::Physical).unwrap()
-    } else {
-        source.to_owned()
+    let source_metadata = {
+        let result = if options.dereference(source_in_command_line) {
+            fs::metadata(source)
+        } else {
+            fs::symlink_metadata(source)
+        };
+        result.context(context)?
     };
-
-    let source_file_type = fs::symlink_metadata(&source).context(context)?.file_type();
+    let source_file_type = source_metadata.file_type();
     let source_is_symlink = source_file_type.is_symlink();
 
     #[cfg(unix)]
@@ -1418,21 +1441,11 @@ fn copy_file(
     #[cfg(not(unix))]
     let source_is_fifo = false;
 
-    let dest_already_exists_as_symlink = is_symlink(dest);
-
-    let dest = if !(source_is_symlink && dest_already_exists_as_symlink) {
-        canonicalize(dest, MissingHandling::Missing, ResolveMode::Physical).unwrap()
-    } else {
-        // Don't canonicalize a symlink copied over another symlink, because
-        // then we'll end up overwriting the destination's target.
-        dest.to_path_buf()
-    };
-
     let dest_permissions = if dest.exists() {
         dest.symlink_metadata().context(context)?.permissions()
     } else {
         #[allow(unused_mut)]
-        let mut permissions = source.symlink_metadata().context(context)?.permissions();
+        let mut permissions = source_metadata.permissions();
         #[cfg(unix)]
         {
             use uucore::mode::get_umask;
@@ -1455,19 +1468,25 @@ fn copy_file(
         CopyMode::Link => {
             if dest.exists() {
                 let backup_path =
-                    backup_control::get_backup_path(options.backup, &dest, &options.backup_suffix);
+                    backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
                 if let Some(backup_path) = backup_path {
-                    backup_dest(&dest, &backup_path)?;
-                    fs::remove_file(&dest)?;
+                    backup_dest(dest, &backup_path)?;
+                    fs::remove_file(dest)?;
                 }
             }
-
-            fs::hard_link(&source, &dest).context(context)?;
+            if options.dereference(source_in_command_line) && source.is_symlink() {
+                let resolved =
+                    canonicalize(source, MissingHandling::Missing, ResolveMode::Physical).unwrap();
+                fs::hard_link(resolved, dest)
+            } else {
+                fs::hard_link(source, dest)
+            }
+            .context(context)?;
         }
         CopyMode::Copy => {
             copy_helper(
-                &source,
-                &dest,
+                source,
+                dest,
                 options,
                 context,
                 source_is_symlink,
@@ -1476,21 +1495,20 @@ fn copy_file(
             )?;
         }
         CopyMode::SymLink => {
-            symlink_file(&source, &dest, context, symlinked_files)?;
+            symlink_file(source, dest, context, symlinked_files)?;
         }
         CopyMode::Update => {
             if dest.exists() {
-                let src_metadata = fs::symlink_metadata(&source)?;
-                let dest_metadata = fs::symlink_metadata(&dest)?;
+                let dest_metadata = fs::symlink_metadata(dest)?;
 
-                let src_time = src_metadata.modified()?;
+                let src_time = source_metadata.modified()?;
                 let dest_time = dest_metadata.modified()?;
                 if src_time <= dest_time {
                     return Ok(());
                 } else {
                     copy_helper(
-                        &source,
-                        &dest,
+                        source,
+                        dest,
                         options,
                         context,
                         source_is_symlink,
@@ -1500,8 +1518,8 @@ fn copy_file(
                 }
             } else {
                 copy_helper(
-                    &source,
-                    &dest,
+                    source,
+                    dest,
                     options,
                     context,
                     source_is_symlink,
@@ -1528,10 +1546,10 @@ fn copy_file(
         //
         // FWIW, the OS will throw an error later, on the write op, if
         // the user does not have permission to write to the file.
-        fs::set_permissions(&dest, dest_permissions).ok();
+        fs::set_permissions(dest, dest_permissions).ok();
     }
     for attribute in &options.preserve_attributes {
-        copy_attribute(&source, &dest, attribute)?;
+        copy_attribute(source, dest, attribute)?;
     }
     Ok(())
 }
