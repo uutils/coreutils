@@ -2131,3 +2131,32 @@ fn test_copy_nested_directory_to_itself_disallowed() {
         .fails()
         .stderr_only(expected);
 }
+
+/// Test for preserving permissions when copying a directory.
+#[cfg(not(windows))]
+#[test]
+fn test_copy_dir_preserve_permissions() {
+    // Create a directory that has some non-default permissions.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d1");
+    at.set_mode("d1", 0o0500);
+
+    // Copy the directory, preserving those permissions.
+    //
+    //         preserve permissions (mode, ownership, timestamps)
+    //            |    copy directories recursively
+    //            |      |   from this source directory
+    //            |      |    |   to this destination
+    //            |      |    |     |
+    //            V      V    V     V
+    ucmd.args(&["-p", "-R", "d1", "d2"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert!(at.dir_exists("d2"));
+
+    // Assert that the permissions are preserved.
+    let metadata1 = at.metadata("d1");
+    let metadata2 = at.metadata("d2");
+    assert_metadata_eq!(metadata1, metadata2);
+}
