@@ -48,6 +48,27 @@ static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
 #[cfg(unix)]
 static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
 
+/// Assert that mode, ownership, and permissions of two metadata objects match.
+#[cfg(not(windows))]
+macro_rules! assert_metadata_eq {
+    ($m1:expr, $m2:expr) => {{
+        assert_eq!($m1.mode(), $m2.mode(), "mode is different");
+        assert_eq!($m1.uid(), $m2.uid(), "uid is different");
+        assert_eq!($m1.atime(), $m2.atime(), "atime is different");
+        assert_eq!(
+            $m1.atime_nsec(),
+            $m2.atime_nsec(),
+            "atime_nsec is different"
+        );
+        assert_eq!($m1.mtime(), $m2.mtime(), "mtime is different");
+        assert_eq!(
+            $m1.mtime_nsec(),
+            $m2.mtime_nsec(),
+            "mtime_nsec is different"
+        );
+    }};
+}
+
 #[test]
 fn test_cp_cp() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1787,20 +1808,7 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     {
         let metadata1 = at.symlink_metadata("dangle");
         let metadata2 = at.symlink_metadata("d2");
-        assert_eq!(metadata1.mode(), metadata2.mode(), "mode is different");
-        assert_eq!(metadata1.uid(), metadata2.uid(), "uid is different");
-        assert_eq!(metadata1.atime(), metadata2.atime(), "atime is different");
-        assert_eq!(
-            metadata1.atime_nsec(),
-            metadata2.atime_nsec(),
-            "atime_nsec is different"
-        );
-        assert_eq!(metadata1.mtime(), metadata2.mtime(), "mtime is different");
-        assert_eq!(
-            metadata1.mtime_nsec(),
-            metadata2.mtime_nsec(),
-            "mtime_nsec is different"
-        );
+        assert_metadata_eq!(metadata1, metadata2);
     }
 }
 
