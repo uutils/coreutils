@@ -19,7 +19,7 @@ use std::ffi::OsStr;
 use std::fs::{self, hard_link, File, OpenOptions};
 use std::io::{BufWriter, Read, Result, Write};
 #[cfg(unix)]
-use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file};
+use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file, PermissionsExt};
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 #[cfg(windows)]
@@ -820,6 +820,20 @@ impl AtPath {
         } else {
             s
         }
+    }
+
+    /// Set the permissions of the specified file.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if there is an error loading the metadata
+    /// or setting the permissions of the file.
+    #[cfg(not(windows))]
+    pub fn set_mode(&self, filename: &str, mode: u32) {
+        let path = self.plus(filename);
+        let mut perms = std::fs::metadata(&path).unwrap().permissions();
+        perms.set_mode(mode);
+        std::fs::set_permissions(&path, perms).unwrap();
     }
 }
 
