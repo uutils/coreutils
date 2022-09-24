@@ -52,3 +52,32 @@ fn test_sync_data_but_not_file() {
         .fails()
         .stderr_contains("sync: --data needs at least one argument");
 }
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(feature = "chmod")]
+#[test]
+fn test_sync_no_permission_dir() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "foo";
+    at.mkdir_all(dir);
+
+    ts.ccmd("chmod").arg("0").arg(dir).succeeds();
+    let result = ts.ucmd().arg("--data").arg(dir).fails();
+    result.stderr_contains("sync: error opening 'foo': Permission denied");
+    let result = ts.ucmd().arg(dir).fails();
+    result.stderr_contains("sync: error opening 'foo': Permission denied");
+}
+
+#[cfg(not(target_os = "windows"))]
+#[cfg(feature = "chmod")]
+#[test]
+fn test_sync_no_permission_file() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let f = "file";
+    at.touch(f);
+
+    ts.ccmd("chmod").arg("0200").arg(f).succeeds();
+    ts.ucmd().arg(f).succeeds();
+}
