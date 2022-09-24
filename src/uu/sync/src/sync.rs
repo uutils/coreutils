@@ -169,6 +169,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
+    if matches.is_present(options::DATA) && files.is_empty() {
+        return Err(USimpleError::new(1, "--data needs at least one argument"));
+    }
+
     for f in &files {
         if !Path::new(&f).exists() {
             return Err(USimpleError::new(

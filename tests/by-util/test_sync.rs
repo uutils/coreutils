@@ -44,3 +44,11 @@ fn test_sync_no_existing_files() {
         .fails()
         .stderr_contains("cannot stat");
 }
+
+#[test]
+fn test_sync_data_but_not_file() {
+    new_ucmd!()
+        .arg("--data")
+        .fails()
+        .stderr_contains("sync: --data needs at least one argument");
+}
