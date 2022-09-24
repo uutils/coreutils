@@ -368,10 +368,20 @@ fn parse_date(s: &str) -> UResult<FileTime> {
 
     // "Equivalent to %Y-%m-%d (the ISO 8601 date format). (C99)"
     // ("%F", ISO_8601_FORMAT),
-    if let Ok(parsed) = time::Date::parse(s, &ISO_8601_FORMAT) {
-        return Ok(local_dt_to_filetime(to_local(
-            time::PrimitiveDateTime::new(parsed, time!(00:00)),
-        )));
+    match s {
+        "now" => {
+            let current = time::OffsetDateTime::now_local().unwrap();
+            return Ok(local_dt_to_filetime(to_local(
+                time::PrimitiveDateTime::new(current.date(), current.time()),
+            )));
+        }
+        date_str => {
+            if let Ok(parsed) = time::Date::parse(date_str, &ISO_8601_FORMAT) {
+                return Ok(local_dt_to_filetime(to_local(
+                    time::PrimitiveDateTime::new(parsed, time!(00:00)),
+                )));
+            }
+        }
     }
 
     // "@%s" is "The number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC). (TZ) (Calculated from mktime(tm).)"

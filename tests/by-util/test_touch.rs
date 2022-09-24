@@ -285,6 +285,14 @@ fn test_touch_set_both_time_and_date() {
 }
 
 #[test]
+fn test_touch_d_now_should_work() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_d_now_should_work";
+
+    ucmd.args(&["-d", "now", file]).succeeds();
+}
+
+#[test]
 fn test_touch_set_only_mtime() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_only_mtime";
