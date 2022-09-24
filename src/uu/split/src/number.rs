@@ -100,10 +100,10 @@ impl Number {
     /// differently and we only intend to use these numbers for display
     /// purposes and not for mathematical purposes.
     #[allow(dead_code)]
-    fn digits(&self) -> &Vec<u8> {
+    fn digits(&self) -> Vec<u8> {
         match self {
-            Self::FixedWidth(number) => &number.digits,
-            Self::DynamicWidth(number) => &number.digits,
+            Self::FixedWidth(number) => number.digits.clone(),
+            Self::DynamicWidth(number) => number.digits(),
         }
     }
 
@@ -175,7 +175,7 @@ impl Display for Number {
 ///
 /// # Displaying
 ///
-/// This number is only displayable if `radix` is 10, 26, or 26. If
+/// This number is only displayable if `radix` is 10, 16, or 26. If
 /// `radix` is 10 or 16, then the digits are concatenated and
 /// displayed as a fixed-width decimal or hexadecimal number,
 /// respectively. If `radix` is 26, then each digit is translated to
@@ -189,10 +189,21 @@ pub struct FixedWidthNumber {
 
 impl FixedWidthNumber {
     /// Instantiate a number of the given radix and width.
-    pub fn new(radix: u8, width: usize) -> Self {
-        Self {
-            radix,
-            digits: vec![0; width],
+    pub fn new(radix: u8, width: usize, mut suffix_start: usize) -> Result<Self, Overflow> {
+        let mut digits = vec![0_u8; width];
+
+        for i in (0..digits.len()).rev() {
+            let remainder = (suffix_start % (radix as usize)) as u8;
+            suffix_start /= radix as usize;
+            digits[i] = remainder;
+            if suffix_start == 0 {
+                break;
+            }
+        }
+        if suffix_start != 0 {
+            Err(Overflow)
+        } else {
+            Ok(Self { radix, digits })
         }
     }
 
@@ -229,25 +240,12 @@ impl FixedWidthNumber {
 
 impl Display for FixedWidthNumber {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self.radix {
-            10 => {
-                let digits: String = self.digits.iter().map(|d| (b'0' + d) as char).collect();
-                write!(f, "{}", digits)
-            }
-            16 => {
-                let digits: String = self
-                    .digits
-                    .iter()
-                    .map(|d| (if *d < 10 { b'0' + d } else { b'a' + (d - 10) }) as char)
-                    .collect();
-                write!(f, "{}", digits)
-            }
-            26 => {
-                let digits: String = self.digits.iter().map(|d| (b'a' + d) as char).collect();
-                write!(f, "{}", digits)
-            }
-            _ => Err(fmt::Error),
-        }
+        let digits: String = self
+            .digits
+            .iter()
+            .map(|d| map_digit(self.radix, *d))
+            .collect();
+        write!(f, "{}", digits)
     }
 }
 
@@ -293,105 +291,74 @@ impl Display for FixedWidthNumber {
 #[derive(Clone)]
 pub struct DynamicWidthNumber {
     radix: u8,
-    digits: Vec<u8>,
+    current: usize,
 }
 
 impl DynamicWidthNumber {
-    /// Instantiate a number of the given radix, starting with width 2.
-    ///
-    /// This associated function returns a new instance of the struct
-    /// with the given radix and a width of two digits, both 0.
-    pub fn new(radix: u8) -> Self {
+    pub fn new(radix: u8, suffix_start: usize) -> Self {
         Self {
             radix,
-            digits: vec![0, 0],
+            current: suffix_start,
         }
     }
 
-    /// Set all digits to zero.
-    fn reset(&mut self) {
-        for i in 0..self.digits.len() {
-            self.digits[i] = 0;
-        }
-    }
-
-    /// Increment this number.
-    ///
-    /// This method adds one to this number. The first time that the
-    /// most significant digit would achieve its highest possible
-    /// value (that is, `radix - 1`), then all the digits get reset to
-    /// 0 and the number of digits increases by one.
-    ///
-    /// This method never returns an error.
     fn increment(&mut self) -> Result<(), Overflow> {
-        for i in (0..self.digits.len()).rev() {
-            // Increment the current digit.
-            self.digits[i] += 1;
-
-            // If the digit overflows, then set it to 0 and continue
-            // to the next iteration to increment the next most
-            // significant digit. Otherwise, terminate the loop, since
-            // there will be no further changes to any higher order
-            // digits.
-            if self.digits[i] == self.radix {
-                self.digits[i] = 0;
-            } else {
-                break;
-            }
-        }
-
-        // If the most significant digit is at its maximum value, then
-        // add another digit and reset all digits zero.
-        if self.digits[0] == self.radix - 1 {
-            self.digits.push(0);
-            self.reset();
-        }
+        self.current += 1;
         Ok(())
     }
+
+    fn digits(&self) -> Vec<u8> {
+        let radix = self.radix as usize;
+        let mut remaining = self.current;
+        let mut sub_value = (radix - 1) * radix;
+        let mut num_fill_chars = 2;
+
+        // Convert the number into "num_fill_chars" and "remaining"
+        while remaining >= sub_value {
+            remaining -= sub_value;
+            sub_value *= radix;
+            num_fill_chars += 1;
+        }
+
+        // Convert the "remainder" to digits
+        let mut digits = Vec::new();
+        while remaining > 0 {
+            digits.push((remaining % radix) as u8);
+            remaining /= radix;
+        }
+        // Left pad the vec
+        digits.resize(num_fill_chars, 0);
+        digits.reverse();
+        digits
+    }
+}
+
+fn map_digit(radix: u8, d: u8) -> char {
+    (match radix {
+        10 => b'0' + d,
+        16 => {
+            if d < 10 {
+                b'0' + d
+            } else {
+                b'a' + (d - 10)
+            }
+        }
+        26 => b'a' + d,
+        _ => 0,
+    }) as char
 }
 
 impl Display for DynamicWidthNumber {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self.radix {
-            10 => {
-                let num_fill_chars = self.digits.len() - 2;
-                let digits: String = self.digits.iter().map(|d| (b'0' + d) as char).collect();
-                write!(
-                    f,
-                    "{empty:9<num_fill_chars$}{digits}",
-                    empty = "",
-                    num_fill_chars = num_fill_chars,
-                    digits = digits,
-                )
-            }
-            16 => {
-                let num_fill_chars = self.digits.len() - 2;
-                let digits: String = self
-                    .digits
-                    .iter()
-                    .map(|d| (if *d < 10 { b'0' + d } else { b'a' + (d - 10) }) as char)
-                    .collect();
-                write!(
-                    f,
-                    "{empty:f<num_fill_chars$}{digits}",
-                    empty = "",
-                    num_fill_chars = num_fill_chars,
-                    digits = digits,
-                )
-            }
-            26 => {
-                let num_fill_chars = self.digits.len() - 2;
-                let digits: String = self.digits.iter().map(|d| (b'a' + d) as char).collect();
-                write!(
-                    f,
-                    "{empty:z<num_fill_chars$}{digits}",
-                    empty = "",
-                    num_fill_chars = num_fill_chars,
-                    digits = digits,
-                )
-            }
-            _ => Err(fmt::Error),
-        }
+        let digits: String = self
+            .digits()
+            .iter()
+            .map(|d| map_digit(self.radix, *d))
+            .collect();
+        let fill: String = (0..digits.len() - 2)
+            .map(|_| map_digit(self.radix, self.radix - 1))
+            .collect();
+        write!(f, "{fill}{digits}")
     }
 }
 
@@ -404,35 +371,36 @@ mod tests {
 
     #[test]
     fn test_dynamic_width_number_increment() {
-        let mut n = Number::DynamicWidth(DynamicWidthNumber::new(3));
-        assert_eq!(n.digits(), &vec![0, 0]);
+        println!("Here");
+        let mut n = Number::DynamicWidth(DynamicWidthNumber::new(3, 0));
+        assert_eq!(n.digits(), vec![0, 0]);
 
         n.increment().unwrap();
-        assert_eq!(n.digits(), &vec![0, 1]);
+        assert_eq!(n.digits(), vec![0, 1]);
 
         n.increment().unwrap();
-        assert_eq!(n.digits(), &vec![0, 2]);
+        assert_eq!(n.digits(), vec![0, 2]);
 
         n.increment().unwrap();
-        assert_eq!(n.digits(), &vec![1, 0]);
+        assert_eq!(n.digits(), vec![1, 0]);
 
         n.increment().unwrap();
-        assert_eq!(n.digits(), &vec![1, 1]);
+        assert_eq!(n.digits(), vec![1, 1]);
 
         n.increment().unwrap();
-        assert_eq!(n.digits(), &vec![1, 2]);
+        assert_eq!(n.digits(), vec![1, 2]);
 
         n.increment().unwrap();
-        assert_eq!(n.digits(), &vec![0, 0, 0]);
+        assert_eq!(n.digits(), vec![0, 0, 0]);
 
         n.increment().unwrap();
-        assert_eq!(n.digits(), &vec![0, 0, 1]);
+        assert_eq!(n.digits(), vec![0, 0, 1]);
     }
 
     #[test]
     fn test_dynamic_width_number_display_alphabetic() {
         fn num(n: usize) -> Number {
-            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(26));
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(26, 0));
             for _ in 0..n {
                 number.increment().unwrap();
             }
@@ -456,7 +424,7 @@ mod tests {
     #[test]
     fn test_dynamic_width_number_display_numeric_decimal() {
         fn num(n: usize) -> Number {
-            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(10));
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(10, 0));
             for _ in 0..n {
                 number.increment().unwrap();
             }
@@ -477,7 +445,7 @@ mod tests {
     #[test]
     fn test_dynamic_width_number_display_numeric_hexadecimal() {
         fn num(n: usize) -> Number {
-            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(16));
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(16, 0));
             for _ in 0..n {
                 number.increment().unwrap();
             }
@@ -500,31 +468,31 @@ mod tests {
 
     #[test]
     fn test_fixed_width_number_increment() {
-        let mut n = Number::FixedWidth(FixedWidthNumber::new(3, 2));
-        assert_eq!(n.digits(), &vec![0, 0]);
+        let mut n = Number::FixedWidth(FixedWidthNumber::new(3, 2, 0).unwrap());
+        assert_eq!(n.digits(), vec![0, 0]);
         n.increment().unwrap();
-        assert_eq!(n.digits(), &vec![0, 1]);
+        assert_eq!(n.digits(), vec![0, 1]);
         n.increment().unwrap();
-        assert_eq!(n.digits(), &vec![0, 2]);
+        assert_eq!(n.digits(), vec![0, 2]);
         n.increment().unwrap();
-        assert_eq!(n.digits(), &vec![1, 0]);
+        assert_eq!(n.digits(), vec![1, 0]);
         n.increment().unwrap();
-        assert_eq!(n.digits(), &vec![1, 1]);
+        assert_eq!(n.digits(), vec![1, 1]);
         n.increment().unwrap();
-        assert_eq!(n.digits(), &vec![1, 2]);
+        assert_eq!(n.digits(), vec![1, 2]);
         n.increment().unwrap();
-        assert_eq!(n.digits(), &vec![2, 0]);
+        assert_eq!(n.digits(), vec![2, 0]);
         n.increment().unwrap();
-        assert_eq!(n.digits(), &vec![2, 1]);
+        assert_eq!(n.digits(), vec![2, 1]);
         n.increment().unwrap();
-        assert_eq!(n.digits(), &vec![2, 2]);
+        assert_eq!(n.digits(), vec![2, 2]);
         assert!(n.increment().is_err());
     }
 
     #[test]
     fn test_fixed_width_number_display_alphabetic() {
         fn num(n: usize) -> Result<Number, Overflow> {
-            let mut number = Number::FixedWidth(FixedWidthNumber::new(26, 2));
+            let mut number = Number::FixedWidth(FixedWidthNumber::new(26, 2, 0).unwrap());
             for _ in 0..n {
                 number.increment()?;
             }
@@ -549,7 +517,7 @@ mod tests {
     #[test]
     fn test_fixed_width_number_display_numeric_decimal() {
         fn num(n: usize) -> Result<Number, Overflow> {
-            let mut number = Number::FixedWidth(FixedWidthNumber::new(10, 2));
+            let mut number = Number::FixedWidth(FixedWidthNumber::new(10, 2, 0).unwrap());
             for _ in 0..n {
                 number.increment()?;
             }
@@ -568,7 +536,7 @@ mod tests {
     #[test]
     fn test_fixed_width_number_display_numeric_hexadecimal() {
         fn num(n: usize) -> Result<Number, Overflow> {
-            let mut number = Number::FixedWidth(FixedWidthNumber::new(16, 2));
+            let mut number = Number::FixedWidth(FixedWidthNumber::new(16, 2, 0).unwrap());
             for _ in 0..n {
                 number.increment()?;
             }
@@ -582,5 +550,33 @@ mod tests {
         assert_eq!(format!("{}", num(16 * 15).unwrap()), "f0");
         assert_eq!(format!("{}", num(16 * 16 - 1).unwrap()), "ff");
         assert!(num(16 * 16).is_err());
+    }
+
+    #[test]
+    fn test_fixed_width_number_start_suffix() {
+        fn num(n: usize) -> Result<Number, Overflow> {
+            let mut number = Number::FixedWidth(FixedWidthNumber::new(16, 2, 0x14)?);
+            for _ in 0..n {
+                number.increment()?;
+            }
+            Ok(number)
+        }
+
+        assert_eq!(format!("{}", num(0).unwrap()), "14");
+        assert_eq!(format!("{}", num(0xf).unwrap()), "23");
+    }
+
+    #[test]
+    fn test_dynamic_width_number_start_suffix() {
+        fn num(n: usize) -> Result<Number, Overflow> {
+            let mut number = Number::DynamicWidth(DynamicWidthNumber::new(10, 8));
+            for _ in 0..n {
+                number.increment()?;
+            }
+            Ok(number)
+        }
+
+        assert_eq!(format!("{}", num(0).unwrap()), "08");
+        assert_eq!(format!("{}", num(8).unwrap()), "16");
     }
 }
