@@ -38,7 +38,7 @@ use libc::mkfifo;
 use quick_error::ResultExt;
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
+use uucore::error::{set_exit_code, UClapError, UError, UIoError, UResult, UUsageError};
 use uucore::format_usage;
 use uucore::fs::{
     canonicalize, paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
@@ -1173,13 +1173,31 @@ fn copy_directory(
                     }?;
                 }
             } else {
-                copy_file(
+                // At this point, `path` is just a plain old file.
+                // Terminate this function immediately if there is any
+                // kind of error *except* a "permission denied" error.
+                //
+                // TODO What other kinds of errors, if any, should
+                // cause us to continue walking the directory?
+                match copy_file(
                     path.as_path(),
                     local_to_target.as_path(),
                     options,
                     symlinked_files,
                     false,
-                )?;
+                ) {
+                    Ok(_) => {}
+                    Err(Error::IoErrContext(e, _))
+                        if e.kind() == std::io::ErrorKind::PermissionDenied =>
+                    {
+                        show!(uio_error!(
+                            e,
+                            "cannot open {} for reading",
+                            p.path().quote()
+                        ));
+                    }
+                    Err(e) => return Err(e),
+                }
             }
         }
     }

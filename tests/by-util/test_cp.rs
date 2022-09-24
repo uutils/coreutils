@@ -2160,3 +2160,38 @@ fn test_copy_dir_preserve_permissions() {
     let metadata2 = at.metadata("d2");
     assert_metadata_eq!(metadata1, metadata2);
 }
+
+/// Test for preserving permissions when copying a directory, even in
+/// the face of an inaccessible file in that directory.
+#[cfg(not(windows))]
+#[test]
+fn test_copy_dir_preserve_permissions_inaccessible_file() {
+    // Create a directory that has some non-default permissions and
+    // contains an inaccessible file.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d1");
+    at.touch("d1/f");
+    at.set_mode("d1/f", 0);
+    at.set_mode("d1", 0o0500);
+
+    // Copy the directory, preserving those permissions. There should
+    // be an error message that the file `d1/f` is inaccessible.
+    //
+    //         preserve permissions (mode, ownership, timestamps)
+    //            |    copy directories recursively
+    //            |      |   from this source directory
+    //            |      |    |   to this destination
+    //            |      |    |     |
+    //            V      V    V     V
+    ucmd.args(&["-p", "-R", "d1", "d2"])
+        .fails()
+        .status_code(1)
+        .stderr_only("cp: cannot open 'd1/f' for reading: Permission denied");
+    assert!(at.dir_exists("d2"));
+    assert!(!at.file_exists("d2/f"));
+
+    // Assert that the permissions are preserved.
+    let metadata1 = at.metadata("d1");
+    let metadata2 = at.metadata("d2");
+    assert_metadata_eq!(metadata1, metadata2);
+}
