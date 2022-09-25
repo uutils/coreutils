@@ -235,16 +235,6 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     ret
 }
 
-/// Decide whether the given path is a symbolic link.
-///
-/// This function is essentially a backport of the
-/// [`std::path::Path::is_symlink`] function that exists in Rust
-/// version 1.58 and greater. This can be removed when the minimum
-/// supported version of Rust is 1.58.
-pub fn is_symlink<P: AsRef<Path>>(path: P) -> bool {
-    fs::symlink_metadata(path).map_or(false, |m| m.file_type().is_symlink())
-}
-
 fn resolve_symlink<P: AsRef<Path>>(path: P) -> IOResult<Option<PathBuf>> {
     let result = if fs::symlink_metadata(&path)?.file_type().is_symlink() {
         Some(fs::read_link(&path)?)

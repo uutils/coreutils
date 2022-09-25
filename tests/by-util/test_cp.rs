@@ -7,8 +7,6 @@ use std::fs::set_permissions;
 #[cfg(not(windows))]
 use std::os::unix::fs;
 
-#[cfg(unix)]
-use std::os::unix::fs::symlink as symlink_file;
 #[cfg(all(unix, not(target_os = "freebsd")))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(all(unix, not(target_os = "freebsd")))]
@@ -1684,7 +1682,7 @@ fn test_canonicalize_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
     at.touch("dir/file");
-    symlink_file("../dir/file", at.plus("dir/file-ln")).unwrap();
+    at.relative_symlink_file("../dir/file", "dir/file-ln");
     ucmd.arg("dir/file-ln")
         .arg(".")
         .succeeds()
@@ -2012,4 +2010,70 @@ fn test_cp_parents_2_link() {
         ));
     assert!(at.dir_exists("d/a/link") && !at.symlink_exists("d/a/link"));
     assert!(at.file_exists("d/a/link/c"));
+}
+
+#[test]
+fn test_cp_copy_symlink_contents_recursive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("src-dir");
+    at.mkdir("dest-dir");
+    at.touch("f");
+    at.write("f", "f");
+    at.relative_symlink_file("f", "slink");
+    at.relative_symlink_file("no-file", &path_concat!("src-dir", "slink"));
+    ucmd.args(&["-H", "-R", "slink", "src-dir", "dest-dir"])
+        .succeeds();
+    assert!(at.dir_exists("src-dir"));
+    assert!(at.dir_exists("dest-dir"));
+    assert!(at.dir_exists(&path_concat!("dest-dir", "src-dir")));
+    let regular_file = path_concat!("dest-dir", "slink");
+    assert!(!at.symlink_exists(&regular_file) && at.file_exists(&regular_file));
+    assert_eq!(at.read(&regular_file), "f");
+}
+
+#[test]
+fn test_cp_mode_symlink() {
+    for from in ["file", "slink", "slink2"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("file");
+        at.write("file", "f");
+        at.relative_symlink_file("file", "slink");
+        at.relative_symlink_file("slink", "slink2");
+        ucmd.args(&["-s", "-L", from, "z"]).succeeds();
+        assert!(at.symlink_exists("z"));
+        assert_eq!(at.read_symlink("z"), from);
+    }
+}
+
+// Android doesn't allow creating hard links
+#[cfg(not(target_os = "android"))]
+#[test]
+fn test_cp_mode_hardlink() {
+    for from in ["file", "slink", "slink2"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("file");
+        at.write("file", "f");
+        at.relative_symlink_file("file", "slink");
+        at.relative_symlink_file("slink", "slink2");
+        ucmd.args(&["--link", "-L", from, "z"]).succeeds();
+        assert!(at.file_exists("z") && !at.symlink_exists("z"));
+        assert_eq!(at.read("z"), "f");
+        // checking that it's the same hard link
+        at.append("z", "g");
+        assert_eq!(at.read("file"), "fg");
+    }
+}
+
+// Android doesn't allow creating hard links
+#[cfg(not(target_os = "android"))]
+#[test]
+fn test_cp_mode_hardlink_no_dereference() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.write("file", "f");
+    at.relative_symlink_file("file", "slink");
+    at.relative_symlink_file("slink", "slink2");
+    ucmd.args(&["--link", "-P", "slink2", "z"]).succeeds();
+    assert!(at.symlink_exists("z"));
+    assert_eq!(at.read_symlink("z"), "slink");
 }

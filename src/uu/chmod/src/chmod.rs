@@ -14,7 +14,6 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{ExitCode, UResult, USimpleError, UUsageError};
 use uucore::fs::display_permissions_unix;
-use uucore::fs::is_symlink;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
@@ -195,7 +194,7 @@ impl Chmoder {
             let filename = &filename[..];
             let file = Path::new(filename);
             if !file.exists() {
-                if is_symlink(file) {
+                if file.is_symlink() {
                     println!(
                         "failed to change mode of {} from 0000 (---------) to 0000 (---------)",
                         filename.quote()
@@ -237,10 +236,10 @@ impl Chmoder {
 
     fn walk_dir(&self, file_path: &Path) -> UResult<()> {
         let mut r = self.chmod_file(file_path);
-        if !is_symlink(file_path) && file_path.is_dir() {
+        if !file_path.is_symlink() && file_path.is_dir() {
             for dir_entry in file_path.read_dir()? {
                 let path = dir_entry?.path();
-                if !is_symlink(&path) {
+                if !path.is_symlink() {
                     r = self.walk_dir(path.as_path());
                 }
             }
@@ -262,7 +261,7 @@ impl Chmoder {
         let fperm = match fs::metadata(file) {
             Ok(meta) => meta.mode() & 0o7777,
             Err(err) => {
-                if is_symlink(file) {
+                if file.is_symlink() {
                     if self.verbose {
                         println!(
                             "neither symbolic link {} nor referent has been changed",
