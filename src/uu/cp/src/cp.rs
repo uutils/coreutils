@@ -1092,7 +1092,7 @@ fn copy_directory(
         return Err(format!(
             "cannot copy a directory, {}, into itself, {}",
             root.quote(),
-            target.quote()
+            target.join(root.file_name().unwrap()).quote()
         )
         .into());
     }
