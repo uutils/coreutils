@@ -882,3 +882,16 @@ fn test_bracket_syntax_version() {
         .succeeds()
         .stdout_matches(&r"\[ \d+\.\d+\.\d+".parse().unwrap());
 }
+
+#[test]
+#[allow(non_snake_case)]
+fn test_file_N() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    scene.ucmd().args(&["-N", "regular_file"]).fails();
+    // The file will have different create/modified data
+    // so, test -N will return 0
+    sleep(std::time::Duration::from_millis(1000));
+    at.touch("regular_file");
+    scene.ucmd().args(&["-N", "regular_file"]).succeeds();
+}

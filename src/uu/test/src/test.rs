@@ -205,6 +205,7 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
                 "-h" => path(&f, &PathCondition::SymLink),
                 "-k" => path(&f, &PathCondition::Sticky),
                 "-L" => path(&f, &PathCondition::SymLink),
+                "-N" => path(&f, &PathCondition::ExistsModifiedLastRead),
                 "-O" => path(&f, &PathCondition::UserOwns),
                 "-p" => path(&f, &PathCondition::Fifo),
                 "-r" => path(&f, &PathCondition::Readable),
@@ -273,6 +274,7 @@ enum PathCondition {
     CharacterSpecial,
     Directory,
     Exists,
+    ExistsModifiedLastRead,
     Regular,
     GroupIdFlag,
     GroupOwns,
@@ -351,6 +353,9 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         PathCondition::CharacterSpecial => file_type.is_char_device(),
         PathCondition::Directory => file_type.is_dir(),
         PathCondition::Exists => true,
+        PathCondition::ExistsModifiedLastRead => {
+            metadata.accessed().unwrap() < metadata.modified().unwrap()
+        }
         PathCondition::Regular => file_type.is_file(),
         PathCondition::GroupIdFlag => metadata.mode() & S_ISGID != 0,
         PathCondition::GroupOwns => metadata.gid() == getegid(),
