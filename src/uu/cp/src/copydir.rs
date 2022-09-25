@@ -12,29 +12,19 @@ use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf, StripPrefixError};
 
 use uucore::display::Quotable;
 use uucore::error::UIoError;
 use uucore::fs::{canonicalize, FileInformation, MissingHandling, ResolveMode};
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 
 use crate::{
     copy_attributes, copy_file, copy_link, preserve_hardlinks, CopyResult, Error, Options,
     TargetSlice,
 };
 
-/// Continue next iteration of loop if result of expression is error
-macro_rules! or_continue(
-    ($expr:expr) => (match $expr {
-        Ok(temp) => temp,
-        Err(error) => {
-            show_error!("{}", error);
-            continue
-        },
-    })
-);
-
+/// Ensure a Windows path starts with a `\\?`.
 #[cfg(target_os = "windows")]
 fn adjust_canonicalization(p: &Path) -> Cow<Path> {
     // In some cases, \\? can be missing on some Windows paths.  Add it at the
@@ -54,6 +44,226 @@ fn adjust_canonicalization(p: &Path) -> Cow<Path> {
     } else {
         Path::new(VERBATIM_PREFIX).join(p).into()
     }
+}
+
+/// Get a descendant path relative to the given parent directory.
+///
+/// If `root_parent` is `None`, then this just returns the `path`
+/// itself. Otherwise, this function strips the parent prefix from the
+/// given `path`, leaving only the portion of the path relative to the
+/// parent.
+fn get_local_to_root_parent(
+    path: &Path,
+    root_parent: Option<&Path>,
+) -> Result<PathBuf, StripPrefixError> {
+    match root_parent {
+        Some(parent) => {
+            // On Windows, some paths are starting with \\?
+            // but not always, so, make sure that we are consistent for strip_prefix
+            // See https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file for more info
+            #[cfg(windows)]
+            let (path, parent) = (
+                adjust_canonicalization(path),
+                adjust_canonicalization(parent),
+            );
+            let path = path.strip_prefix(&parent)?;
+            Ok(path.to_path_buf())
+        }
+        None => Ok(path.to_path_buf()),
+    }
+}
+
+/// Paths that are invariant throughout the traversal when copying a directory.
+struct Context<'a> {
+    /// The current working directory at the time of starting the traversal.
+    current_dir: PathBuf,
+
+    /// The path to the parent of the source directory, if any.
+    root_parent: Option<PathBuf>,
+
+    /// The target path to which the directory will be copied.
+    target: &'a Path,
+}
+
+impl<'a> Context<'a> {
+    fn new(root: &'a Path, target: &'a Path) -> std::io::Result<Self> {
+        let current_dir = env::current_dir()?;
+        let root_path = current_dir.join(root);
+        let root_parent = if target.exists() {
+            root_path.parent().map(|p| p.to_path_buf())
+        } else {
+            Some(root_path)
+        };
+        Ok(Self {
+            current_dir,
+            root_parent,
+            target,
+        })
+    }
+}
+
+/// Data needed to perform a single copy operation while traversing a directory.
+///
+/// For convenience while traversing a directory, the [`Entry::new`]
+/// function allows creating an entry from a [`Context`] and a
+/// [`walkdir::DirEntry`].
+///
+/// # Examples
+///
+/// For example, if the source directory structure is `a/b/c`, the
+/// target is `d/`, a directory that already exists, and the copy
+/// command is `cp -r a/b/c d`, then the overall set of copy
+/// operations could be represented as three entries,
+///
+/// ```rust,ignore
+/// let operations = [
+///     Entry {
+///         source_absolute: "/tmp/a".into(),
+///         source_relative: "a".into(),
+///         local_to_target: "d/a".into(),
+///         target_is_file: false,
+///     }
+///     Entry {
+///         source_absolute: "/tmp/a/b".into(),
+///         source_relative: "a/b".into(),
+///         local_to_target: "d/a/b".into(),
+///         target_is_file: false,
+///     }
+///     Entry {
+///         source_absolute: "/tmp/a/b/c".into(),
+///         source_relative: "a/b/c".into(),
+///         local_to_target: "d/a/b/c".into(),
+///         target_is_file: false,
+///     }
+/// ];
+/// ```
+struct Entry {
+    /// The absolute path to file or directory to copy.
+    source_absolute: PathBuf,
+
+    /// The relative path to file or directory to copy.
+    source_relative: PathBuf,
+
+    /// The path to the destination, relative to the target.
+    local_to_target: PathBuf,
+
+    /// Whether the destination is a file.
+    target_is_file: bool,
+}
+
+impl Entry {
+    fn new(context: &Context, direntry: &DirEntry) -> Result<Self, StripPrefixError> {
+        let source_relative = direntry.path().to_path_buf();
+        let source_absolute = context.current_dir.join(&source_relative);
+        let descendant =
+            get_local_to_root_parent(&source_absolute, context.root_parent.as_deref())?;
+        let local_to_target = context.target.join(descendant);
+        let target_is_file = context.target.is_file();
+        Ok(Self {
+            source_absolute,
+            source_relative,
+            local_to_target,
+            target_is_file,
+        })
+    }
+}
+
+/// Copy a single entry during a directory traversal.
+fn copy_direntry(
+    entry: Entry,
+    options: &Options,
+    symlinked_files: &mut HashSet<FileInformation>,
+    preserve_hard_links: bool,
+    hard_links: &mut Vec<(String, u64)>,
+) -> CopyResult<()> {
+    let Entry {
+        source_absolute,
+        source_relative,
+        local_to_target,
+        target_is_file,
+    } = entry;
+
+    // If the source is a symbolic link and the options tell us not to
+    // dereference the link, then copy the link object itself.
+    if source_absolute.is_symlink() && !options.dereference {
+        return copy_link(&source_absolute, &local_to_target, symlinked_files);
+    }
+
+    // If the source is a directory and the destination does not
+    // exist, ...
+    if source_absolute.is_dir() && !local_to_target.exists() {
+        if target_is_file {
+            return Err("cannot overwrite non-directory with directory".into());
+        } else {
+            // TODO Since the calling code is traversing from the root
+            // of the directory structure, I don't think
+            // `create_dir_all()` will have any benefit over
+            // `create_dir()`, since all the ancestor directories
+            // should have already been created.
+            fs::create_dir_all(local_to_target)?;
+            return Ok(());
+        }
+    }
+
+    // If the source is not a directory, then we need to copy the file.
+    if !source_absolute.is_dir() {
+        if preserve_hard_links {
+            let mut found_hard_link = false;
+            let dest = local_to_target.as_path().to_path_buf();
+            preserve_hardlinks(hard_links, &source_absolute, &dest, &mut found_hard_link)?;
+            if !found_hard_link {
+                match copy_file(
+                    &source_absolute,
+                    local_to_target.as_path(),
+                    options,
+                    symlinked_files,
+                    false,
+                ) {
+                    Ok(_) => Ok(()),
+                    Err(err) => {
+                        if source_absolute.is_symlink() {
+                            // silent the error with a symlink
+                            // In case we do --archive, we might copy the symlink
+                            // before the file itself
+                            Ok(())
+                        } else {
+                            Err(err)
+                        }
+                    }
+                }?;
+            }
+        } else {
+            // At this point, `path` is just a plain old file.
+            // Terminate this function immediately if there is any
+            // kind of error *except* a "permission denied" error.
+            //
+            // TODO What other kinds of errors, if any, should
+            // cause us to continue walking the directory?
+            match copy_file(
+                &source_absolute,
+                local_to_target.as_path(),
+                options,
+                symlinked_files,
+                false,
+            ) {
+                Ok(_) => {}
+                Err(Error::IoErrContext(e, _))
+                    if e.kind() == std::io::ErrorKind::PermissionDenied =>
+                {
+                    show!(uio_error!(
+                        e,
+                        "cannot open {} for reading",
+                        source_relative.quote(),
+                    ));
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    // In any other case, there is nothing to do, so we just return to
+    // continue the traversal.
+    Ok(())
 }
 
 /// Read the contents of the directory `root` and recursively copy the
@@ -93,114 +303,35 @@ pub(crate) fn copy_directory(
         .into());
     }
 
-    let current_dir =
-        env::current_dir().unwrap_or_else(|e| crash!(1, "failed to get current directory {}", e));
-
-    let root_path = current_dir.join(root);
-
-    let root_parent = if target.exists() {
-        root_path.parent()
-    } else {
-        Some(root_path.as_path())
-    };
-
-    #[cfg(unix)]
     let mut hard_links: Vec<(String, u64)> = vec![];
     let preserve_hard_links = options.preserve_hard_links();
 
-    // This should be changed once Redox supports hardlinks
-    #[cfg(any(windows, target_os = "redox"))]
-    let mut hard_links: Vec<(String, u64)> = vec![];
+    // Collect some paths here that are invariant during the traversal
+    // of the given directory, like the current working directory and
+    // the target directory.
+    let context = match Context::new(root, target) {
+        Ok(c) => c,
+        Err(e) => return Err(format!("failed to get current directory {}", e).into()),
+    };
 
-    for path in WalkDir::new(root)
+    // Traverse the contents of the directory, copying each one.
+    for direntry_result in WalkDir::new(root)
         .same_file_system(options.one_file_system)
         .follow_links(options.dereference)
     {
-        let p = or_continue!(path);
-        let path = current_dir.join(p.path());
-
-        let local_to_root_parent = match root_parent {
-            Some(parent) => {
-                #[cfg(windows)]
-                {
-                    // On Windows, some paths are starting with \\?
-                    // but not always, so, make sure that we are consistent for strip_prefix
-                    // See https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file for more info
-                    let parent_can = adjust_canonicalization(parent);
-                    let path_can = adjust_canonicalization(&path);
-
-                    or_continue!(&path_can.strip_prefix(&parent_can)).to_path_buf()
-                }
-                #[cfg(not(windows))]
-                {
-                    or_continue!(path.strip_prefix(parent)).to_path_buf()
-                }
-            }
-            None => path.clone(),
-        };
-
-        let local_to_target = target.join(&local_to_root_parent);
-        if p.path().is_symlink() && !options.dereference {
-            copy_link(&path, &local_to_target, symlinked_files)?;
-        } else if path.is_dir() && !local_to_target.exists() {
-            if target.is_file() {
-                return Err("cannot overwrite non-directory with directory".into());
-            }
-            fs::create_dir_all(local_to_target)?;
-        } else if !path.is_dir() {
-            if preserve_hard_links {
-                let mut found_hard_link = false;
-                let source = path.to_path_buf();
-                let dest = local_to_target.as_path().to_path_buf();
-                preserve_hardlinks(&mut hard_links, &source, &dest, &mut found_hard_link)?;
-                if !found_hard_link {
-                    match copy_file(
-                        path.as_path(),
-                        local_to_target.as_path(),
-                        options,
-                        symlinked_files,
-                        false,
-                    ) {
-                        Ok(_) => Ok(()),
-                        Err(err) => {
-                            if source.is_symlink() {
-                                // silent the error with a symlink
-                                // In case we do --archive, we might copy the symlink
-                                // before the file itself
-                                Ok(())
-                            } else {
-                                Err(err)
-                            }
-                        }
-                    }?;
-                }
-            } else {
-                // At this point, `path` is just a plain old file.
-                // Terminate this function immediately if there is any
-                // kind of error *except* a "permission denied" error.
-                //
-                // TODO What other kinds of errors, if any, should
-                // cause us to continue walking the directory?
-                match copy_file(
-                    path.as_path(),
-                    local_to_target.as_path(),
+        match direntry_result {
+            Ok(direntry) => {
+                let entry = Entry::new(&context, &direntry)?;
+                copy_direntry(
+                    entry,
                     options,
                     symlinked_files,
-                    false,
-                ) {
-                    Ok(_) => {}
-                    Err(Error::IoErrContext(e, _))
-                        if e.kind() == std::io::ErrorKind::PermissionDenied =>
-                    {
-                        show!(uio_error!(
-                            e,
-                            "cannot open {} for reading",
-                            p.path().quote()
-                        ));
-                    }
-                    Err(e) => return Err(e),
-                }
+                    preserve_hard_links,
+                    &mut hard_links,
+                )?;
             }
+            // Print an error message, but continue traversing the directory.
+            Err(e) => show_error!("{}", e),
         }
     }
     // Copy the attributes from the root directory to the target directory.
