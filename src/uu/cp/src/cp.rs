@@ -16,26 +16,13 @@ extern crate quick_error;
 #[macro_use]
 extern crate uucore;
 
-use uucore::display::Quotable;
-use uucore::format_usage;
-use uucore::fs::{paths_refer_to_same_file, FileInformation};
-
 use std::borrow::Cow;
-
-use clap::{crate_version, Arg, ArgMatches, Command};
-use filetime::FileTime;
-#[cfg(unix)]
-use libc::mkfifo;
-use quick_error::ResultExt;
 use std::collections::HashSet;
 use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
-use std::fs;
-use std::fs::File;
-use std::fs::OpenOptions;
-use std::io;
-use std::io::{stderr, stdin, Write};
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, stderr, stdin, Read, Write};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
@@ -45,9 +32,19 @@ use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use std::string::ToString;
+
+use clap::{crate_version, Arg, ArgMatches, Command};
+use filetime::FileTime;
+#[cfg(unix)]
+use libc::mkfifo;
+use quick_error::ResultExt;
 use uucore::backup_control::{self, BackupMode};
+use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
-use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
+use uucore::format_usage;
+use uucore::fs::{
+    canonicalize, paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
+};
 use walkdir::WalkDir;
 
 quick_error! {
@@ -1679,6 +1676,73 @@ fn copy_no_cow_fallback(
     Ok(())
 }
 
+/// Use the Linux `ioctl_ficlone` API to do a copy-on-write clone.
+///
+/// If `fallback` is true and there is a failure performing the clone,
+/// then this function performs a standard [`std::fs::copy`]. Otherwise,
+/// this function returns an error.
+#[cfg(unix)]
+fn clone<P>(source: P, dest: P, fallback: bool) -> std::io::Result<()>
+where
+    P: AsRef<Path>,
+{
+    let src_file = File::open(&source)?;
+    let dst_file = File::create(&dest)?;
+    let src_fd = src_file.as_raw_fd();
+    let dst_fd = dst_file.as_raw_fd();
+    let result = unsafe { libc::ioctl(dst_fd, FICLONE!(), src_fd) };
+    if result != 0 {
+        if fallback {
+            std::fs::copy(source, dest).map(|_| ())
+        } else {
+            Err(std::io::Error::last_os_error())
+        }
+    } else {
+        Ok(())
+    }
+}
+
+/// Perform a sparse copy from one file to another.
+#[cfg(unix)]
+fn sparse_copy<P>(source: P, dest: P) -> std::io::Result<()>
+where
+    P: AsRef<Path>,
+{
+    use std::os::unix::prelude::MetadataExt;
+
+    let mut src_file = File::open(source)?;
+    let dst_file = File::create(dest)?;
+    let dst_fd = dst_file.as_raw_fd();
+
+    let size: usize = src_file.metadata()?.size().try_into().unwrap();
+    if unsafe { libc::ftruncate(dst_fd, size.try_into().unwrap()) } < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    let blksize = dst_file.metadata()?.blksize();
+    let mut buf: Vec<u8> = vec![0; blksize.try_into().unwrap()];
+    let mut current_offset: usize = 0;
+
+    // TODO Perhaps we can employ the "fiemap ioctl" API to get the
+    // file extent mappings:
+    // https://www.kernel.org/doc/html/latest/filesystems/fiemap.html
+    while current_offset < size {
+        let this_read = src_file.read(&mut buf)?;
+        if buf.iter().any(|&x| x != 0) {
+            unsafe {
+                libc::pwrite(
+                    dst_fd,
+                    buf.as_ptr() as *const libc::c_void,
+                    this_read,
+                    current_offset.try_into().unwrap(),
+                )
+            };
+        }
+        current_offset += this_read;
+    }
+    Ok(())
+}
+
 /// Copies `source` to `dest` using copy-on-write if possible.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn copy_on_write_linux(
@@ -1688,81 +1752,17 @@ fn copy_on_write_linux(
     sparse_mode: SparseMode,
     context: &str,
 ) -> CopyResult<()> {
-    use std::os::unix::prelude::MetadataExt;
-
-    let mut src_file = File::open(source).context(context)?;
-    let dst_file = OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(dest)
-        .context(context)?;
-
-    match (reflink_mode, sparse_mode) {
-        (ReflinkMode::Always, SparseMode::Auto) => unsafe {
-            let result = libc::ioctl(dst_file.as_raw_fd(), FICLONE!(), src_file.as_raw_fd());
-
-            if result != 0 {
-                Err(format!(
-                    "failed to clone {:?} from {:?}: {}",
-                    source,
-                    dest,
-                    std::io::Error::last_os_error()
-                )
-                .into())
-            } else {
-                Ok(())
-            }
-        },
-        (ReflinkMode::Always, SparseMode::Always) | (ReflinkMode::Always, SparseMode::Never) => {
-            Err("`--reflink=always` can be used only with --sparse=auto".into())
+    let result = match (reflink_mode, sparse_mode) {
+        (ReflinkMode::Never, _) => std::fs::copy(source, dest).map(|_| ()),
+        (ReflinkMode::Auto, SparseMode::Always) => sparse_copy(source, dest),
+        (ReflinkMode::Auto, _) => clone(source, dest, true),
+        (ReflinkMode::Always, SparseMode::Auto) => {
+            return Err("`--reflink=always` can be used only with --sparse=auto".into())
         }
-        (_, SparseMode::Always) => unsafe {
-            let size: usize = src_file.metadata()?.size().try_into().unwrap();
-            if libc::ftruncate(dst_file.as_raw_fd(), size.try_into().unwrap()) < 0 {
-                return Err(format!(
-                    "failed to ftruncate {:?} to size {}: {}",
-                    dest,
-                    size,
-                    std::io::Error::last_os_error()
-                )
-                .into());
-            }
-
-            let blksize = dst_file.metadata()?.blksize();
-            let mut buf: Vec<u8> = vec![0; blksize.try_into().unwrap()];
-            let mut current_offset: usize = 0;
-
-            while current_offset < size {
-                use std::io::Read;
-
-                let this_read = src_file.read(&mut buf)?;
-
-                if buf.iter().any(|&x| x != 0) {
-                    libc::pwrite(
-                        dst_file.as_raw_fd(),
-                        buf.as_ptr() as *const libc::c_void,
-                        this_read,
-                        current_offset.try_into().unwrap(),
-                    );
-                }
-                current_offset += this_read;
-            }
-            Ok(())
-        },
-        (ReflinkMode::Auto, SparseMode::Auto) | (ReflinkMode::Auto, SparseMode::Never) => unsafe {
-            let result = libc::ioctl(dst_file.as_raw_fd(), FICLONE!(), src_file.as_raw_fd());
-
-            if result != 0 {
-                fs::copy(source, dest).context(context)?;
-            }
-            Ok(())
-        },
-        (ReflinkMode::Never, _) => {
-            fs::copy(source, dest).context(context)?;
-            Ok(())
-        }
-    }
+        (ReflinkMode::Always, _) => clone(source, dest, false),
+    };
+    result.context(context)?;
+    Ok(())
 }
 
 /// Copies `source` to `dest` using copy-on-write if possible.
