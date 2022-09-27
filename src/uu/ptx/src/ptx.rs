@@ -78,7 +78,7 @@ fn read_word_filter_file(
     option: &str,
 ) -> std::io::Result<HashSet<String>> {
     let filename = matches
-        .value_of(option)
+        .get_one::<String>(option)
         .expect("parsing options failed!")
         .to_string();
     let file = File::open(filename)?;
@@ -95,7 +95,9 @@ fn read_char_filter_file(
     matches: &clap::ArgMatches,
     option: &str,
 ) -> std::io::Result<HashSet<char>> {
-    let filename = matches.value_of(option).expect("parsing options failed!");
+    let filename = matches
+        .get_one::<String>(option)
+        .expect("parsing options failed!");
     let mut reader = File::open(filename)?;
     let mut buffer = String::new();
     reader.read_to_string(&mut buffer)?;
@@ -146,7 +148,7 @@ impl WordFilter {
         };
         // Ignore empty string regex from cmd-line-args
         let arg_reg: Option<String> = if matches.contains_id(options::WORD_REGEXP) {
-            match matches.value_of(options::WORD_REGEXP) {
+            match matches.get_one::<String>(options::WORD_REGEXP) {
                 Some(v) => {
                     if v.is_empty() {
                         None
@@ -244,26 +246,26 @@ fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
     config.ignore_case = matches.contains_id(options::IGNORE_CASE);
     if matches.contains_id(options::MACRO_NAME) {
         config.macro_name = matches
-            .value_of(options::MACRO_NAME)
+            .get_one::<String>(options::MACRO_NAME)
             .expect(err_msg)
             .to_string();
     }
     if matches.contains_id(options::FLAG_TRUNCATION) {
         config.trunc_str = matches
-            .value_of(options::FLAG_TRUNCATION)
+            .get_one::<String>(options::FLAG_TRUNCATION)
             .expect(err_msg)
             .to_string();
     }
     if matches.contains_id(options::WIDTH) {
         config.line_width = matches
-            .value_of(options::WIDTH)
+            .get_one::<String>(options::WIDTH)
             .expect(err_msg)
             .parse()
             .map_err(PtxError::ParseError)?;
     }
     if matches.contains_id(options::GAP_SIZE) {
         config.gap_size = matches
-            .value_of(options::GAP_SIZE)
+            .get_one::<String>(options::GAP_SIZE)
             .expect(err_msg)
             .parse()
             .map_err(PtxError::ParseError)?;

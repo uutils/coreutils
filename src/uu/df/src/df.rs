@@ -188,7 +188,10 @@ impl Options {
             block_size: read_block_size(matches).map_err(|e| match e {
                 ParseSizeError::InvalidSuffix(s) => OptionsError::InvalidSuffix(s),
                 ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
-                    matches.value_of(OPT_BLOCKSIZE).unwrap().to_string(),
+                    matches
+                        .get_one::<String>(OPT_BLOCKSIZE)
+                        .unwrap()
+                        .to_string(),
                 ),
                 ParseSizeError::ParseFailure(s) => OptionsError::InvalidBlockSize(s),
             })?,

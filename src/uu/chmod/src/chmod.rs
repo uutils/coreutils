@@ -62,7 +62,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let verbose = matches.contains_id(options::VERBOSE);
     let preserve_root = matches.contains_id(options::PRESERVE_ROOT);
     let recursive = matches.contains_id(options::RECURSIVE);
-    let fmode = match matches.value_of(options::REFERENCE) {
+    let fmode = match matches.get_one::<String>(options::REFERENCE) {
         Some(fref) => match fs::metadata(fref) {
             Ok(meta) => Some(meta.mode()),
             Err(err) => {
@@ -74,7 +74,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
         None => None,
     };
-    let modes = matches.value_of(options::MODE).unwrap(); // should always be Some because required
+    let modes = matches.get_one::<String>(options::MODE).unwrap(); // should always be Some because required
     let cmode = if mode_had_minus_prefix {
         // clap parsing is finished, now put prefix back
         format!("-{}", modes)

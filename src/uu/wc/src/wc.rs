@@ -55,7 +55,7 @@ impl Settings {
             show_control: false,
         };
 
-        let files0_from_stdin_mode = match matches.value_of(options::FILES0_FROM) {
+        let files0_from_stdin_mode = match matches.get_one::<String>(options::FILES0_FROM) {
             Some(files_0_from) => files_0_from == STDIN_REPR,
             None => false,
         };
@@ -274,7 +274,7 @@ fn inputs(matches: &ArgMatches) -> UResult<Vec<Input>> {
 
             Ok(os_values.map(|s| Input::from(s.as_os_str())).collect())
         }
-        None => match matches.value_of(options::FILES0_FROM) {
+        None => match matches.get_one::<String>(options::FILES0_FROM) {
             Some(files_0_from) => create_paths_from_files0(files_0_from),
             None => Ok(vec![Input::Stdin(StdinKind::Implicit)]),
         },

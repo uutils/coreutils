@@ -105,7 +105,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 } else if matches.contains_id(OPT_PROMPT_MORE) {
                     InteractiveMode::Once
                 } else if matches.contains_id(OPT_INTERACTIVE) {
-                    match matches.value_of(OPT_INTERACTIVE).unwrap() {
+                    match matches.get_one::<String>(OPT_INTERACTIVE).unwrap().as_str() {
                         "never" => InteractiveMode::Never,
                         "once" => InteractiveMode::Once,
                         "always" => InteractiveMode::Always,

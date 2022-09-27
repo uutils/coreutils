@@ -102,7 +102,7 @@ impl<'a> Options<'a> {
         Ok(Self {
             all: matches.is_present(options::ALL),
             save: matches.is_present(options::SAVE),
-            file: match matches.value_of(options::FILE) {
+            file: match matches.get_one::<String>(options::FILE) {
                 Some(_f) => todo!(),
                 None => stdout().as_raw_fd(),
             },

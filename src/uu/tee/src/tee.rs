@@ -64,8 +64,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if matches.contains_id(options::IGNORE_PIPE_ERRORS) {
                 Some(OutputErrorMode::WarnNoPipe)
             } else if matches.contains_id(options::OUTPUT_ERROR) {
-                if let Some(v) = matches.value_of(options::OUTPUT_ERROR) {
-                    match v {
+                if let Some(v) = matches.get_one::<String>(options::OUTPUT_ERROR) {
+                    match v.as_str() {
                         "warn" => Some(OutputErrorMode::Warn),
                         "warn-nopipe" => Some(OutputErrorMode::WarnNoPipe),
                         "exit" => Some(OutputErrorMode::Exit),

@@ -60,7 +60,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Mode::Kill => {
             let sig = if let Some(signal) = obs_signal {
                 signal
-            } else if let Some(signal) = matches.value_of(options::SIGNAL) {
+            } else if let Some(signal) = matches.get_one::<String>(options::SIGNAL) {
                 parse_signal_value(signal)?
             } else {
                 15_usize //SIGTERM

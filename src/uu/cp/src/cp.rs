@@ -722,7 +722,7 @@ impl Options {
         // Parse target directory options
         let no_target_dir = matches.contains_id(options::NO_TARGET_DIRECTORY);
         let target_dir = matches
-            .value_of(options::TARGET_DIRECTORY)
+            .get_one::<String>(options::TARGET_DIRECTORY)
             .map(ToString::to_string);
 
         // Parse attributes to preserve
@@ -775,8 +775,8 @@ impl Options {
             verbose: matches.contains_id(options::VERBOSE),
             strip_trailing_slashes: matches.contains_id(options::STRIP_TRAILING_SLASHES),
             reflink_mode: {
-                if let Some(reflink) = matches.value_of(options::REFLINK) {
-                    match reflink {
+                if let Some(reflink) = matches.get_one::<String>(options::REFLINK) {
+                    match reflink.as_str() {
                         "always" => ReflinkMode::Always,
                         "auto" => ReflinkMode::Auto,
                         "never" => ReflinkMode::Never,
@@ -802,17 +802,22 @@ impl Options {
                     }
                 }
             },
-            sparse_mode: match matches.value_of(options::SPARSE) {
-                Some("always") => SparseMode::Always,
-                Some("auto") => SparseMode::Auto,
-                Some("never") => SparseMode::Never,
-                Some(val) => {
-                    return Err(Error::InvalidArgument(format!(
-                        "invalid argument {} for \'sparse\'",
-                        val
-                    )));
+            sparse_mode: {
+                if let Some(val) = matches.get_one::<String>(options::SPARSE) {
+                    match val.as_str() {
+                        "always" => SparseMode::Always,
+                        "auto" => SparseMode::Auto,
+                        "never" => SparseMode::Never,
+                        _ => {
+                            return Err(Error::InvalidArgument(format!(
+                                "invalid argument {} for \'sparse\'",
+                                val
+                            )))
+                        }
+                    }
+                } else {
+                    SparseMode::Auto
                 }
-                None => SparseMode::Auto,
             },
             backup: backup_mode,
             backup_suffix,

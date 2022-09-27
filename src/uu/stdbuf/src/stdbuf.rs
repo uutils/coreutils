@@ -105,8 +105,8 @@ fn preload_strings() -> (&'static str, &'static str) {
 }
 
 fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramOptionsError> {
-    match matches.value_of(name) {
-        Some(value) => match value {
+    match matches.get_one::<String>(name) {
+        Some(value) => match value.as_str() {
             "L" => {
                 if name == options::INPUT {
                     Err(ProgramOptionsError(

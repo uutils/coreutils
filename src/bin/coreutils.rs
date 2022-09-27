@@ -152,7 +152,7 @@ fn gen_completions<T: uucore::Args>(
         )
         .get_matches_from(std::iter::once(OsString::from("completion")).chain(args));
 
-    let utility = matches.value_of("utility").unwrap();
+    let utility = matches.get_one::<String>("utility").unwrap();
     let shell = matches.get_one::<Shell>("shell").unwrap().to_owned();
 
     let mut command = if utility == "coreutils" {

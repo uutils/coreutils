@@ -80,7 +80,7 @@ fn detect_algo(
             Box::new(blake3::Hasher::new()) as Box<dyn Digest>,
             256,
         ),
-        "sha3sum" => match matches.value_of("bits") {
+        "sha3sum" => match matches.get_one::<String>("bits") {
             Some(bits_str) => match (bits_str).parse::<usize>() {
                 Ok(224) => (
                     "SHA3-224",
@@ -130,7 +130,7 @@ fn detect_algo(
             Box::new(Sha3_512::new()) as Box<dyn Digest>,
             512,
         ),
-        "shake128sum" => match matches.value_of("bits") {
+        "shake128sum" => match matches.get_one::<String>("bits") {
             Some(bits_str) => match (bits_str).parse::<usize>() {
                 Ok(bits) => (
                     "SHAKE128",
@@ -141,7 +141,7 @@ fn detect_algo(
             },
             None => crash!(1, "--bits required for SHAKE-128"),
         },
-        "shake256sum" => match matches.value_of("bits") {
+        "shake256sum" => match matches.get_one::<String>("bits") {
             Some(bits_str) => match (bits_str).parse::<usize>() {
                 Ok(bits) => (
                     "SHAKE256",
@@ -187,7 +187,7 @@ fn detect_algo(
                     set_or_crash("BLAKE3", Box::new(blake3::Hasher::new()), 256);
                 }
                 if matches.contains_id("sha3") {
-                    match matches.value_of("bits") {
+                    match matches.get_one::<String>("bits") {
                         Some(bits_str) => match (bits_str).parse::<usize>() {
                             Ok(224) => set_or_crash(
                                 "SHA3-224",
@@ -231,7 +231,7 @@ fn detect_algo(
                     set_or_crash("SHA3-512", Box::new(Sha3_512::new()), 512);
                 }
                 if matches.contains_id("shake128") {
-                    match matches.value_of("bits") {
+                    match matches.get_one::<String>("bits") {
                         Some(bits_str) => match (bits_str).parse::<usize>() {
                             Ok(bits) => set_or_crash("SHAKE128", Box::new(Shake128::new()), bits),
                             Err(err) => crash!(1, "{}", err),
@@ -240,7 +240,7 @@ fn detect_algo(
                     }
                 }
                 if matches.contains_id("shake256") {
-                    match matches.value_of("bits") {
+                    match matches.get_one::<String>("bits") {
                         Some(bits_str) => match (bits_str).parse::<usize>() {
                             Ok(bits) => set_or_crash("SHAKE256", Box::new(Shake256::new()), bits),
                             Err(err) => crash!(1, "{}", err),
