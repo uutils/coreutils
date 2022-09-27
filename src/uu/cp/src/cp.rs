@@ -9,7 +9,7 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ficlone ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked
+// spell-checker:ignore (ToDO) ficlone ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked fiemap
 
 #[macro_use]
 extern crate quick_error;
@@ -22,7 +22,9 @@ use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, stderr, stdin, Read, Write};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::io::Read;
+use std::io::{self, stderr, stdin, Write};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
@@ -1681,7 +1683,7 @@ fn copy_no_cow_fallback(
 /// If `fallback` is true and there is a failure performing the clone,
 /// then this function performs a standard [`std::fs::copy`]. Otherwise,
 /// this function returns an error.
-#[cfg(unix)]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn clone<P>(source: P, dest: P, fallback: bool) -> std::io::Result<()>
 where
     P: AsRef<Path>,
@@ -1703,7 +1705,7 @@ where
 }
 
 /// Perform a sparse copy from one file to another.
-#[cfg(unix)]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn sparse_copy<P>(source: P, dest: P) -> std::io::Result<()>
 where
     P: AsRef<Path>,
@@ -1756,10 +1758,10 @@ fn copy_on_write_linux(
         (ReflinkMode::Never, _) => std::fs::copy(source, dest).map(|_| ()),
         (ReflinkMode::Auto, SparseMode::Always) => sparse_copy(source, dest),
         (ReflinkMode::Auto, _) => clone(source, dest, true),
-        (ReflinkMode::Always, SparseMode::Auto) => {
+        (ReflinkMode::Always, SparseMode::Auto) => clone(source, dest, false),
+        (ReflinkMode::Always, _) => {
             return Err("`--reflink=always` can be used only with --sparse=auto".into())
         }
-        (ReflinkMode::Always, _) => clone(source, dest, false),
     };
     result.context(context)?;
     Ok(())
