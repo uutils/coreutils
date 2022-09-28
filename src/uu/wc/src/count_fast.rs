@@ -1,22 +1,24 @@
+// cSpell:ignore lseek
+
 use crate::word_count::WordCount;
 
 use super::WordCountable;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::fs::OpenOptions;
 use std::io::{self, ErrorKind, Read};
-
-#[cfg(unix)]
-use libc::S_IFREG;
-#[cfg(unix)]
-use nix::sys::stat;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::os::unix::io::AsRawFd;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use libc::S_IFIFO;
 #[cfg(any(target_os = "linux", target_os = "android"))]
+use std::{fs::OpenOptions, os::unix::io::AsRawFd};
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::pipes::{pipe, splice, splice_exact};
+
+#[cfg(unix)]
+use libc::S_IFREG;
+#[cfg(unix)]
+use nix::{sys::stat, unistd::lseek};
+#[cfg(unix)]
+use std::ops::Sub;
 
 const BUF_SIZE: usize = 16 * 1024;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -71,7 +73,10 @@ fn count_bytes_using_splice(fd: &impl AsRawFd) -> Result<usize, usize> {
 ///   3. Otherwise, we just read normally, but without the overhead of counting
 ///      other things such as lines and words.
 #[inline]
-pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Option<io::Error>) {
+pub(crate) fn count_bytes_fast<T: WordCountable>(
+    handle: &mut T,
+    #[cfg(unix)] is_stdin: bool,
+) -> (usize, Option<io::Error>) {
     let mut byte_count = 0;
 
     #[cfg(unix)]
@@ -87,7 +92,28 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
             // example with /proc/version and /sys/kernel/profiling. So,
             // if it is 0 we don't report that and instead do a full read.
             if (stat.st_mode as libc::mode_t & S_IFREG) != 0 && stat.st_size > 0 {
-                return (stat.st_size as usize, None);
+                // We perform an lseek here because its possible that we are given a fd that starts
+                // somewhere further like so:
+                //
+                // ```bash
+                // ~$ stat --format='%s' /etc/group
+                // 1088
+                // ~$ (dd ibs=2 skip=1 count=0; wc -c) < /etc/group
+                // 1086
+                // ```
+                //
+                // Therefore, we perform a lseek with 0 offset to know where we actually starts.
+                // Note that GNU currently returns 0 if lseek fails but I am not sure how that can
+                // happen.
+                let offset = is_stdin
+                    .then(|| lseek(fd, 0, nix::unistd::Whence::SeekCur).ok())
+                    .flatten()
+                    .unwrap_or(0);
+
+                #[cfg(target_os = "android")]
+                let offset = offset as i64;
+
+                return (stat.st_size.sub(offset).max(0) as usize, None);
             }
             #[cfg(any(target_os = "linux", target_os = "android"))]
             {

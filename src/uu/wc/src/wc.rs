@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// cSpell:ignore wc wc's
+// cSpell:ignore wc wc's lseek
 
 mod count_fast;
 mod countable;
@@ -306,6 +306,7 @@ fn create_paths_from_files0(files_0_from: &str) -> UResult<Vec<Input>> {
 fn word_count_from_reader<T: WordCountable>(
     mut reader: T,
     settings: &Settings,
+    #[cfg(unix)] is_stdin: bool,
 ) -> (WordCount, Option<io::Error>) {
     match (
         settings.show_bytes,
@@ -320,7 +321,11 @@ fn word_count_from_reader<T: WordCountable>(
         // show_bytes
         (true, false, false, false, false) => {
             // Fast path when only show_bytes is true.
-            let (bytes, error) = count_bytes_fast(&mut reader);
+            let (bytes, error) = count_bytes_fast(
+                &mut reader,
+                #[cfg(unix)]
+                is_stdin,
+            );
             (
                 WordCount {
                     bytes,
@@ -493,7 +498,12 @@ fn word_count_from_input(input: &Input, settings: &Settings) -> CountResult {
         Input::Stdin(_) => {
             let stdin = io::stdin();
             let stdin_lock = stdin.lock();
-            let count = word_count_from_reader(stdin_lock, settings);
+            let count = word_count_from_reader(
+                stdin_lock,
+                settings,
+                #[cfg(unix)]
+                true,
+            );
             match count {
                 (total, Some(error)) => CountResult::Interrupted(total, error),
                 (total, None) => CountResult::Success(total),
@@ -501,7 +511,12 @@ fn word_count_from_input(input: &Input, settings: &Settings) -> CountResult {
         }
         Input::Path(path) => match File::open(path) {
             Err(error) => CountResult::Failure(error),
-            Ok(file) => match word_count_from_reader(file, settings) {
+            Ok(file) => match word_count_from_reader(
+                file,
+                settings,
+                #[cfg(unix)]
+                false,
+            ) {
                 (total, Some(error)) => CountResult::Interrupted(total, error),
                 (total, None) => CountResult::Success(total),
             },
