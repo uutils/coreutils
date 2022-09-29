@@ -26,7 +26,7 @@ use uucore::{
     format_usage,
 };
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 
 mod options {
     pub const USERS: &str = "USERNAME";
@@ -102,7 +102,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -110,8 +110,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .infer_long_args(true)
         .arg(
             Arg::new(options::USERS)
-                .multiple_occurrences(true)
-                .takes_value(true)
+                .action(ArgAction::Append)
                 .value_name(options::USERS)
                 .value_hint(clap::ValueHint::Username),
         )
