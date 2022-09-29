@@ -7,11 +7,10 @@
 
 // spell-checker:ignore (ToDO) parsemode makedev sysmacros perror IFBLK IFCHR IFIFO
 
-use std::ffi::CString;
-
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, value_parser, Arg, ArgMatches, Command};
 use libc::{dev_t, mode_t};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
+use std::ffi::CString;
 
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UResult, USimpleError, UUsageError};
@@ -49,6 +48,13 @@ fn makedev(maj: u64, min: u64) -> dev_t {
 #[cfg(windows)]
 fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
     panic!("Unsupported for windows platform")
+}
+
+#[derive(Clone, PartialEq)]
+enum FileType {
+    Block,
+    Character,
+    Fifo,
 }
 
 #[cfg(unix)]
@@ -94,16 +100,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_one::<String>("name")
         .expect("Missing argument 'NAME'");
 
-    // Only check the first character, to allow mnemonic usage like
-    // 'mknod /dev/rst0 character 18 0'.
-    let ch = matches
-        .get_one::<String>("type")
-        .expect("Missing argument 'TYPE'")
-        .chars()
-        .next()
-        .expect("Failed to get the first char");
+    let file_type = matches.get_one::<FileType>("type").unwrap();
 
-    if ch == 'p' {
+    if *file_type == FileType::Fifo {
         if matches.contains_id("major") || matches.contains_id("minor") {
             Err(UUsageError::new(
                 1,
@@ -116,28 +115,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     } else {
         match (
-            matches.get_one::<String>("major"),
-            matches.get_one::<String>("minor"),
+            matches.get_one::<u64>("major"),
+            matches.get_one::<u64>("minor"),
         ) {
-            (None, None) | (_, None) | (None, _) => {
+            (_, None) | (None, _) => {
                 return Err(UUsageError::new(
                     1,
                     "Special files require major and minor device numbers.",
                 ));
             }
-            (Some(major), Some(minor)) => {
-                let major = major.parse::<u64>().expect("validated by clap");
-                let minor = minor.parse::<u64>().expect("validated by clap");
-
+            (Some(&major), Some(&minor)) => {
                 let dev = makedev(major, minor);
-                let exit_code = if ch == 'b' {
-                    // block special file
-                    _mknod(file_name, S_IFBLK | mode, dev)
-                } else if ch == 'c' || ch == 'u' {
-                    // char special file
-                    _mknod(file_name, S_IFCHR | mode, dev)
-                } else {
-                    unreachable!("{} was validated to be only b, c or u", ch);
+                let exit_code = match file_type {
+                    FileType::Block => _mknod(file_name, S_IFBLK | mode, dev),
+                    FileType::Character => _mknod(file_name, S_IFCHR | mode, dev),
+                    _ => unreachable!("file_type was validated to be only block or character"),
                 };
                 set_exit_code(exit_code);
                 Ok(())
@@ -146,7 +138,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
@@ -165,7 +157,6 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .value_name("NAME")
                 .help("name of the new file")
                 .required(true)
-                .index(1)
                 .value_hint(clap::ValueHint::AnyPath),
         )
         .arg(
@@ -173,22 +164,19 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .value_name("TYPE")
                 .help("type of the new file (b, c, u or p)")
                 .required(true)
-                .validator(valid_type)
-                .index(2),
+                .value_parser(parse_type),
         )
         .arg(
             Arg::new("major")
                 .value_name("MAJOR")
                 .help("major file type")
-                .validator(valid_u64)
-                .index(3),
+                .value_parser(value_parser!(u64)),
         )
         .arg(
             Arg::new("minor")
                 .value_name("MINOR")
                 .help("minor file type")
-                .validator(valid_u64)
-                .index(4),
+                .value_parser(value_parser!(u64)),
         )
 }
 
@@ -207,21 +195,16 @@ fn get_mode(matches: &ArgMatches) -> Result<mode_t, String> {
     }
 }
 
-fn valid_type(tpe: &str) -> Result<(), String> {
+fn parse_type(tpe: &str) -> Result<FileType, String> {
     // Only check the first character, to allow mnemonic usage like
     // 'mknod /dev/rst0 character 18 0'.
     tpe.chars()
         .next()
         .ok_or_else(|| "missing device type".to_string())
-        .and_then(|first_char| {
-            if vec!['b', 'c', 'u', 'p'].contains(&first_char) {
-                Ok(())
-            } else {
-                Err(format!("invalid device type {}", tpe.quote()))
-            }
+        .and_then(|first_char| match first_char {
+            'b' => Ok(FileType::Block),
+            'c' | 'u' => Ok(FileType::Character),
+            'p' => Ok(FileType::Fifo),
+            _ => Err(format!("invalid device type {}", tpe.quote())),
         })
-}
-
-fn valid_u64(num: &str) -> Result<(), String> {
-    num.parse::<u64>().map(|_| ()).map_err(|_| num.into())
 }
