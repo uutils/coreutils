@@ -426,6 +426,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .takes_value(true)
                 .value_name("WHEN")
                 .overrides_with_all(MODE_ARGS)
+                .default_missing_value("auto")
                 .help("control clone/CoW copies. See below"),
         )
         .arg(
