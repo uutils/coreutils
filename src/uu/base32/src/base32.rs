@@ -35,6 +35,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     )
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     base_common::base_app(ABOUT, USAGE)
 }

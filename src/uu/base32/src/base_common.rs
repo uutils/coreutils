@@ -18,7 +18,7 @@ use std::fs::File;
 use std::io::{BufReader, Stdin};
 use std::path::Path;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 
 pub static BASE_CMD_PARSE_ERROR: i32 = 1;
 
@@ -77,21 +77,25 @@ impl Config {
             .transpose()?;
 
         Ok(Self {
-            decode: options.contains_id(options::DECODE),
-            ignore_garbage: options.contains_id(options::IGNORE_GARBAGE),
+            decode: options.get_flag(options::DECODE),
+            ignore_garbage: options.get_flag(options::IGNORE_GARBAGE),
             wrap_cols: cols,
             to_read: file,
         })
     }
 }
 
-pub fn parse_base_cmd_args(args: impl uucore::Args, about: &str, usage: &str) -> UResult<Config> {
+pub fn parse_base_cmd_args(
+    args: impl uucore::Args,
+    about: &'static str,
+    usage: &str,
+) -> UResult<Config> {
     let command = base_app(about, usage);
     let arg_list = args.collect_lossy();
     Config::from(&command.try_get_matches_from(arg_list)?)
 }
 
-pub fn base_app<'a>(about: &'a str, usage: &'a str) -> Command<'a> {
+pub fn base_app(about: &'static str, usage: &str) -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(about)
@@ -102,19 +106,21 @@ pub fn base_app<'a>(about: &'a str, usage: &'a str) -> Command<'a> {
             Arg::new(options::DECODE)
                 .short('d')
                 .long(options::DECODE)
-                .help("decode data"),
+                .help("decode data")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::IGNORE_GARBAGE)
                 .short('i')
                 .long(options::IGNORE_GARBAGE)
-                .help("when decoding, ignore non-alphabetic characters"),
+                .help("when decoding, ignore non-alphabetic characters")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WRAP)
                 .short('w')
                 .long(options::WRAP)
-                .takes_value(true)
+                .value_name("COLS")
                 .help(
                     "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)",
                 ),
@@ -124,7 +130,7 @@ pub fn base_app<'a>(about: &'a str, usage: &'a str) -> Command<'a> {
         .arg(
             Arg::new(options::FILE)
                 .index(1)
-                .multiple_occurrences(true)
+                .action(clap::ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
