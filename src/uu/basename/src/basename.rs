@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) fullname
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::path::{is_separator, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError};
@@ -56,9 +56,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(UUsageError::new(1, "missing operand".to_string()));
     }
 
-    let opt_suffix = matches.contains_id(options::SUFFIX);
-    let opt_multiple = matches.contains_id(options::MULTIPLE);
-    let opt_zero = matches.contains_id(options::ZERO);
+    let opt_suffix = matches.get_one::<String>(options::SUFFIX).is_some();
+    let opt_multiple = matches.get_flag(options::MULTIPLE);
+    let opt_zero = matches.get_flag(options::ZERO);
     let multiple_paths = opt_suffix || opt_multiple;
     let name_args_count = matches
         .get_many::<String>(options::NAME)
@@ -115,7 +115,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -125,11 +125,12 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::MULTIPLE)
                 .short('a')
                 .long(options::MULTIPLE)
-                .help("support multiple arguments and treat each as a NAME"),
+                .help("support multiple arguments and treat each as a NAME")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NAME)
-                .multiple_occurrences(true)
+                .action(clap::ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath)
                 .hide(true),
         )
@@ -144,7 +145,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::ZERO)
                 .short('z')
                 .long(options::ZERO)
-                .help("end each output line with NUL, not newline"),
+                .help("end each output line with NUL, not newline")
+                .action(ArgAction::SetTrue),
         )
 }
 

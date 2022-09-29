@@ -11,7 +11,7 @@ fn test_help() {
             .arg(help_flg)
             .succeeds()
             .no_stderr()
-            .stdout_contains("USAGE:");
+            .stdout_contains("Usage:");
     }
 }
 
