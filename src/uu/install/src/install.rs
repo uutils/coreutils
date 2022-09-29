@@ -12,7 +12,7 @@ mod mode;
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use file_diff::diff;
 use filetime::{set_file_times, FileTime};
 use uucore::backup_control::{self, BackupMode};
@@ -188,57 +188,63 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
-        .arg(
-            backup_control::arguments::backup()
-        )
-        .arg(
-            backup_control::arguments::backup_no_args()
-        )
+        .arg(backup_control::arguments::backup())
+        .arg(backup_control::arguments::backup_no_args())
         .arg(
             Arg::new(OPT_IGNORED)
-            .short('c')
-            .help("ignored")
+                .short('c')
+                .help("ignored")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_COMPARE)
-            .short('C')
-            .long(OPT_COMPARE)
-            .help("compare each pair of source and destination files, and in some cases, do not modify the destination at all")
+                .short('C')
+                .long(OPT_COMPARE)
+                .help(
+                    "compare each pair of source and destination files, and in some cases, \
+                    do not modify the destination at all",
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_DIRECTORY)
                 .short('d')
                 .long(OPT_DIRECTORY)
-                .help("treat all arguments as directory names. create all components of the specified directories")
+                .help(
+                    "treat all arguments as directory names. create all components of \
+                        the specified directories",
+                )
+                .action(ArgAction::SetTrue),
         )
-
         .arg(
             // TODO implement flag
             Arg::new(OPT_CREATE_LEADING)
                 .short('D')
-                .help("create all leading components of DEST except the last, then copy SOURCE to DEST")
+                .help(
+                    "create all leading components of DEST except the last, then copy \
+                        SOURCE to DEST",
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_GROUP)
                 .short('g')
                 .long(OPT_GROUP)
                 .help("set group ownership, instead of process's current group")
-                .value_name("GROUP")
-                .takes_value(true)
+                .value_name("GROUP"),
         )
         .arg(
             Arg::new(OPT_MODE)
                 .short('m')
                 .long(OPT_MODE)
                 .help("set permission mode (as in chmod), instead of rwxr-xr-x")
-                .value_name("MODE")
-                .takes_value(true)
+                .value_name("MODE"),
         )
         .arg(
             Arg::new(OPT_OWNER)
@@ -246,31 +252,33 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(OPT_OWNER)
                 .help("set ownership (super-user only)")
                 .value_name("OWNER")
-                .takes_value(true)
-                .value_hint(clap::ValueHint::Username)
+                .value_hint(clap::ValueHint::Username),
         )
         .arg(
             Arg::new(OPT_PRESERVE_TIMESTAMPS)
                 .short('p')
                 .long(OPT_PRESERVE_TIMESTAMPS)
-                .help("apply access/modification times of SOURCE files to corresponding destination files")
+                .help(
+                    "apply access/modification times of SOURCE files to \
+                    corresponding destination files",
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_STRIP)
                 .short('s')
                 .long(OPT_STRIP)
                 .help("strip symbol tables (no action Windows)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_STRIP_PROGRAM)
                 .long(OPT_STRIP_PROGRAM)
                 .help("program used to strip binaries (no action Windows)")
                 .value_name("PROGRAM")
-                .value_hint(clap::ValueHint::CommandName)
+                .value_hint(clap::ValueHint::CommandName),
         )
-        .arg(
-            backup_control::arguments::suffix()
-        )
+        .arg(backup_control::arguments::suffix())
         .arg(
             // TODO implement flag
             Arg::new(OPT_TARGET_DIRECTORY)
@@ -278,7 +286,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(OPT_TARGET_DIRECTORY)
                 .help("move all SOURCE arguments into DIRECTORY")
                 .value_name("DIRECTORY")
-                .value_hint(clap::ValueHint::DirPath)
+                .value_hint(clap::ValueHint::DirPath),
         )
         .arg(
             // TODO implement flag
@@ -286,13 +294,14 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('T')
                 .long(OPT_NO_TARGET_DIRECTORY)
                 .help("(unimplemented) treat DEST as a normal file")
-
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
-            .short('v')
-            .long(OPT_VERBOSE)
-            .help("explain what is being done")
+                .short('v')
+                .long(OPT_VERBOSE)
+                .help("explain what is being done")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             // TODO implement flag
@@ -300,6 +309,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('P')
                 .long(OPT_PRESERVE_CONTEXT)
                 .help("(unimplemented) preserve security context")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             // TODO implement flag
@@ -308,13 +318,13 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(OPT_CONTEXT)
                 .help("(unimplemented) set security context of files and directories")
                 .value_name("CONTEXT")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(ARG_FILES)
-                .multiple_occurrences(true)
-                .takes_value(true)
-                .min_values(1)
-                .value_hint(clap::ValueHint::AnyPath)
+                .action(ArgAction::Append)
+                .num_args(1..)
+                .value_hint(clap::ValueHint::AnyPath),
         )
 }
 
@@ -328,11 +338,11 @@ pub fn uu_app<'a>() -> Command<'a> {
 ///
 ///
 fn check_unimplemented(matches: &ArgMatches) -> UResult<()> {
-    if matches.contains_id(OPT_NO_TARGET_DIRECTORY) {
+    if matches.get_flag(OPT_NO_TARGET_DIRECTORY) {
         Err(InstallError::Unimplemented(String::from("--no-target-directory, -T")).into())
-    } else if matches.contains_id(OPT_PRESERVE_CONTEXT) {
+    } else if matches.get_flag(OPT_PRESERVE_CONTEXT) {
         Err(InstallError::Unimplemented(String::from("--preserve-context, -P")).into())
-    } else if matches.contains_id(OPT_CONTEXT) {
+    } else if matches.get_flag(OPT_CONTEXT) {
         Err(InstallError::Unimplemented(String::from("--context, -Z")).into())
     } else {
         Ok(())
@@ -348,7 +358,7 @@ fn check_unimplemented(matches: &ArgMatches) -> UResult<()> {
 /// In event of failure, returns an integer intended as a program return code.
 ///
 fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
-    let main_function = if matches.contains_id(OPT_DIRECTORY) {
+    let main_function = if matches.get_flag(OPT_DIRECTORY) {
         MainFunction::Directory
     } else {
         MainFunction::Standard
@@ -371,9 +381,9 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         .get_one::<String>(OPT_TARGET_DIRECTORY)
         .map(|d| d.to_owned());
 
-    let preserve_timestamps = matches.contains_id(OPT_PRESERVE_TIMESTAMPS);
-    let compare = matches.contains_id(OPT_COMPARE);
-    let strip = matches.contains_id(OPT_STRIP);
+    let preserve_timestamps = matches.get_flag(OPT_PRESERVE_TIMESTAMPS);
+    let compare = matches.get_flag(OPT_COMPARE);
+    let strip = matches.get_flag(OPT_STRIP);
     if preserve_timestamps && compare {
         show_error!("Options --compare and --preserve-timestamps are mutually exclusive");
         return Err(1.into());
@@ -397,7 +407,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
             .map(|s| s.as_str())
             .unwrap_or("")
             .to_string(),
-        verbose: matches.contains_id(OPT_VERBOSE),
+        verbose: matches.get_flag(OPT_VERBOSE),
         preserve_timestamps,
         compare,
         strip,
@@ -407,7 +417,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
                 .map(|s| s.as_str())
                 .unwrap_or(DEFAULT_STRIP_PROGRAM),
         ),
-        create_leading: matches.contains_id(OPT_CREATE_LEADING),
+        create_leading: matches.get_flag(OPT_CREATE_LEADING),
         target_dir,
     })
 }
