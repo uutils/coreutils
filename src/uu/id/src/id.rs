@@ -39,7 +39,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::ffi::CStr;
 use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
@@ -79,15 +79,13 @@ mod options {
     pub const ARG_USERS: &str = "USER";
 }
 
-fn get_description() -> String {
-    String::from(
-        "The id utility displays the user and group names and numeric IDs, of the \
-                      calling process, to the standard output. If the real and effective IDs are \
-                      different, both are displayed, otherwise only the real ID is displayed.\n\n\
-                      If a user (login name or user ID) is specified, the user and group IDs of \
-                      that user are displayed. In this case, the real and effective IDs are \
-                      assumed to be the same.",
-    )
+fn get_description() -> &'static str {
+    "The id utility displays the user and group names and numeric IDs, of the \
+    calling process, to the standard output. If the real and effective IDs are \
+    different, both are displayed, otherwise only the real ID is displayed.\n\n\
+    If a user (login name or user ID) is specified, the user and group IDs of \
+    that user are displayed. In this case, the real and effective IDs are \
+    assumed to be the same."
 }
 
 struct Ids {
@@ -126,10 +124,8 @@ struct State {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let after_help = get_description();
-
     let matches = uu_app()
-        .after_help(&after_help[..])
+        .after_help(get_description())
         .try_get_matches_from(args)?;
 
     let users: Vec<String> = matches
@@ -138,13 +134,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_default();
 
     let mut state = State {
-        nflag: matches.contains_id(options::OPT_NAME),
-        uflag: matches.contains_id(options::OPT_EFFECTIVE_USER),
-        gflag: matches.contains_id(options::OPT_GROUP),
-        gsflag: matches.contains_id(options::OPT_GROUPS),
-        rflag: matches.contains_id(options::OPT_REAL_ID),
-        zflag: matches.contains_id(options::OPT_ZERO),
-        cflag: matches.contains_id(options::OPT_CONTEXT),
+        nflag: matches.get_flag(options::OPT_NAME),
+        uflag: matches.get_flag(options::OPT_EFFECTIVE_USER),
+        gflag: matches.get_flag(options::OPT_GROUP),
+        gsflag: matches.get_flag(options::OPT_GROUPS),
+        rflag: matches.get_flag(options::OPT_REAL_ID),
+        zflag: matches.get_flag(options::OPT_ZERO),
+        cflag: matches.get_flag(options::OPT_CONTEXT),
 
         selinux_supported: {
             #[cfg(feature = "selinux")]
@@ -239,17 +235,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         };
 
         // GNU's `id` does not support the flags: -p/-P/-A.
-        if matches.contains_id(options::OPT_PASSWORD) {
+        if matches.get_flag(options::OPT_PASSWORD) {
             // BSD's `id` ignores all but the first specified user
             pline(possible_pw.as_ref().map(|v| v.uid));
             return Ok(());
         };
-        if matches.contains_id(options::OPT_HUMAN_READABLE) {
+        if matches.get_flag(options::OPT_HUMAN_READABLE) {
             // BSD's `id` ignores all but the first specified user
             pretty(possible_pw);
             return Ok(());
         }
-        if matches.contains_id(options::OPT_AUDIT) {
+        if matches.get_flag(options::OPT_AUDIT) {
             // BSD's `id` ignores specified users
             auditid();
             return Ok(());
@@ -343,7 +339,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -363,21 +359,24 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "Display the process audit user ID and other process audit properties,\n\
                       which requires privilege (not available on Linux).",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OPT_EFFECTIVE_USER)
                 .short('u')
                 .long(options::OPT_EFFECTIVE_USER)
                 .conflicts_with(options::OPT_GROUP)
-                .help("Display only the effective user ID as a number."),
+                .help("Display only the effective user ID as a number.")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OPT_GROUP)
                 .short('g')
                 .long(options::OPT_GROUP)
                 .conflicts_with(options::OPT_EFFECTIVE_USER)
-                .help("Display only the effective group ID as a number"),
+                .help("Display only the effective group ID as a number")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OPT_GROUPS)
@@ -394,12 +393,14 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "Display only the different group IDs as white-space separated numbers, \
                       in no particular order.",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OPT_HUMAN_READABLE)
                 .short('p')
-                .help("Make the output human-readable. Each display is on a separate line."),
+                .help("Make the output human-readable. Each display is on a separate line.")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OPT_NAME)
@@ -409,12 +410,14 @@ pub fn uu_app<'a>() -> Command<'a> {
                     "Display the name of the user or group ID for the -G, -g and -u options \
                       instead of the number.\nIf any of the ID numbers cannot be mapped into \
                       names, the number will be displayed as usual.",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OPT_PASSWORD)
                 .short('P')
-                .help("Display the id as a password file entry."),
+                .help("Display the id as a password file entry.")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OPT_REAL_ID)
@@ -423,7 +426,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "Display the real ID for the -G, -g and -u options instead of \
                       the effective ID.",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OPT_ZERO)
@@ -432,19 +436,20 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "delimit entries with NUL characters, not whitespace;\n\
                       not permitted in default format",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OPT_CONTEXT)
                 .short('Z')
                 .long(options::OPT_CONTEXT)
                 .conflicts_with_all(&[options::OPT_GROUP, options::OPT_EFFECTIVE_USER])
-                .help(CONTEXT_HELP_TEXT),
+                .help(CONTEXT_HELP_TEXT)
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ARG_USERS)
-                .multiple_occurrences(true)
-                .takes_value(true)
+                .action(ArgAction::Append)
                 .value_name(options::ARG_USERS)
                 .value_hint(clap::ValueHint::Username),
         )
