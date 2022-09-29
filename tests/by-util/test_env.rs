@@ -16,7 +16,7 @@ fn test_env_help() {
         .arg("--help")
         .succeeds()
         .no_stderr()
-        .stdout_contains("OPTIONS:");
+        .stdout_contains("Options:");
 }
 
 #[test]

@@ -16,7 +16,7 @@ extern crate clap;
 #[macro_use]
 extern crate uucore;
 
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command};
 use ini::Ini;
 #[cfg(unix)]
 use nix::sys::signal::{raise, sigaction, SaFlags, SigAction, SigHandler, SigSet, Signal};
@@ -126,57 +126,69 @@ fn build_command<'a, 'b>(args: &'a mut Vec<&'b str>) -> (Cow<'b, str>, &'a [&'b 
     (progname, &args[..])
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(crate_name!())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)
-        .allow_external_subcommands(true)
         .infer_long_args(true)
-        .arg(Arg::new("ignore-environment")
-            .short('i')
-            .long("ignore-environment")
-            .help("start with an empty environment"))
-        .arg(Arg::new("chdir")
-            .short('C') // GNU env compatibility
-            .long("chdir")
-            .takes_value(true)
-            .number_of_values(1)
-            .value_name("DIR")
-            .value_hint(clap::ValueHint::DirPath)
-            .help("change working directory to DIR"))
-        .arg(Arg::new("null")
-            .short('0')
-            .long("null")
-            .help("end each output line with a 0 byte rather than a newline (only valid when \
-                    printing the environment)"))
-        .arg(Arg::new("file")
-            .short('f')
-            .long("file")
-            .takes_value(true)
-            .number_of_values(1)
-            .value_name("PATH")
-            .value_hint(clap::ValueHint::FilePath)
-            .multiple_occurrences(true)
-            .help("read and set variables from a \".env\"-style configuration file (prior to any \
-                    unset and/or set)"))
-        .arg(Arg::new("unset")
-            .short('u')
-            .long("unset")
-            .takes_value(true)
-            .number_of_values(1)
-            .value_name("NAME")
-            .multiple_occurrences(true)
-            .help("remove variable from the environment"))
+        .trailing_var_arg(true)
+        .arg(
+            Arg::new("ignore-environment")
+                .short('i')
+                .long("ignore-environment")
+                .help("start with an empty environment")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("chdir")
+                .short('C') // GNU env compatibility
+                .long("chdir")
+                .number_of_values(1)
+                .value_name("DIR")
+                .value_hint(clap::ValueHint::DirPath)
+                .help("change working directory to DIR"),
+        )
+        .arg(
+            Arg::new("null")
+                .short('0')
+                .long("null")
+                .help(
+                    "end each output line with a 0 byte rather than a newline (only \
+                valid when printing the environment)",
+                )
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("file")
+                .short('f')
+                .long("file")
+                .value_name("PATH")
+                .value_hint(clap::ValueHint::FilePath)
+                .action(ArgAction::Append)
+                .help(
+                    "read and set variables from a \".env\"-style configuration file \
+                (prior to any unset and/or set)",
+                ),
+        )
+        .arg(
+            Arg::new("unset")
+                .short('u')
+                .long("unset")
+                .value_name("NAME")
+                .action(ArgAction::Append)
+                .help("remove variable from the environment"),
+        )
+        .arg(Arg::new("vars").action(ArgAction::Append))
 }
 
 fn run_env(args: impl uucore::Args) -> UResult<()> {
     let app = uu_app();
     let matches = app.try_get_matches_from(args).with_exit_code(125)?;
 
-    let ignore_env = matches.contains_id("ignore-environment");
-    let null = matches.contains_id("null");
+    let ignore_env = matches.get_flag("ignore-environment");
+    let null = matches.get_flag("null");
     let running_directory = matches.get_one::<String>("chdir").map(|s| s.as_str());
     let files = match matches.get_many::<String>("file") {
         Some(v) => v.map(|s| s.as_str()).collect(),
@@ -210,32 +222,20 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
         };
     }
 
-    // we handle the name, value pairs and the program to be executed by treating them as external
-    // subcommands in clap
-    if let Some((external, matches)) = matches.subcommand() {
-        let mut begin_prog_opts = false;
-
-        if external == "-" {
-            // "-" implies -i and stop parsing opts
-            opts.ignore_env = true;
-        } else {
-            begin_prog_opts = parse_name_value_opt(&mut opts, external)?;
+    let mut begin_prog_opts = false;
+    if let Some(mut iter) = matches.get_many::<String>("vars") {
+        // read NAME=VALUE arguments (and up to a single program argument)
+        while !begin_prog_opts {
+            if let Some(opt) = iter.next() {
+                begin_prog_opts = parse_name_value_opt(&mut opts, opt)?;
+            } else {
+                break;
+            }
         }
 
-        if let Some(mut iter) = matches.get_many::<String>("") {
-            // read NAME=VALUE arguments (and up to a single program argument)
-            while !begin_prog_opts {
-                if let Some(opt) = iter.next() {
-                    begin_prog_opts = parse_name_value_opt(&mut opts, opt)?;
-                } else {
-                    break;
-                }
-            }
-
-            // read any leftover program arguments
-            for opt in iter {
-                parse_program_opt(&mut opts, opt)?;
-            }
+        // read any leftover program arguments
+        for opt in iter {
+            parse_program_opt(&mut opts, opt)?;
         }
     }
 
