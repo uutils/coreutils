@@ -8,10 +8,8 @@
 
 // spell-checker:ignore (methods) hexdigest
 
-use tempfile::TempDir;
-
 use crate::common::util::*;
-use std::fs::OpenOptions;
+
 use std::time::SystemTime;
 
 #[path = "../../src/uu/factor/sieve.rs"]
@@ -33,9 +31,12 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(feature = "sort")]
 fn test_parallel() {
     use hex_literal::hex;
     use sha1::{Digest, Sha1};
+    use std::fs::OpenOptions;
+    use tempfile::TempDir;
     // factor should only flush the buffer at line breaks
     let n_integers = 100_000;
     let mut input_string = String::new();
