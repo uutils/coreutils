@@ -21,6 +21,7 @@ use self::digest::Digest;
 use self::digest::DigestWriter;
 
 use clap::builder::ValueParser;
+use clap::ArgAction;
 use clap::{Arg, ArgMatches, Command};
 use hex::encode;
 use md5::Md5;
@@ -80,34 +81,31 @@ fn detect_algo(
             Box::new(blake3::Hasher::new()) as Box<dyn Digest>,
             256,
         ),
-        "sha3sum" => match matches.get_one::<String>("bits") {
-            Some(bits_str) => match (bits_str).parse::<usize>() {
-                Ok(224) => (
-                    "SHA3-224",
-                    Box::new(Sha3_224::new()) as Box<dyn Digest>,
-                    224,
-                ),
-                Ok(256) => (
-                    "SHA3-256",
-                    Box::new(Sha3_256::new()) as Box<dyn Digest>,
-                    256,
-                ),
-                Ok(384) => (
-                    "SHA3-384",
-                    Box::new(Sha3_384::new()) as Box<dyn Digest>,
-                    384,
-                ),
-                Ok(512) => (
-                    "SHA3-512",
-                    Box::new(Sha3_512::new()) as Box<dyn Digest>,
-                    512,
-                ),
-                Ok(_) => crash!(
-                    1,
-                    "Invalid output size for SHA3 (expected 224, 256, 384, or 512)"
-                ),
-                Err(err) => crash!(1, "{}", err),
-            },
+        "sha3sum" => match matches.get_one::<usize>("bits") {
+            Some(224) => (
+                "SHA3-224",
+                Box::new(Sha3_224::new()) as Box<dyn Digest>,
+                224,
+            ),
+            Some(256) => (
+                "SHA3-256",
+                Box::new(Sha3_256::new()) as Box<dyn Digest>,
+                256,
+            ),
+            Some(384) => (
+                "SHA3-384",
+                Box::new(Sha3_384::new()) as Box<dyn Digest>,
+                384,
+            ),
+            Some(512) => (
+                "SHA3-512",
+                Box::new(Sha3_512::new()) as Box<dyn Digest>,
+                512,
+            ),
+            Some(_) => crash!(
+                1,
+                "Invalid output size for SHA3 (expected 224, 256, 384, or 512)"
+            ),
             None => crash!(1, "--bits required for SHA3"),
         },
         "sha3-224sum" => (
@@ -130,26 +128,20 @@ fn detect_algo(
             Box::new(Sha3_512::new()) as Box<dyn Digest>,
             512,
         ),
-        "shake128sum" => match matches.get_one::<String>("bits") {
-            Some(bits_str) => match (bits_str).parse::<usize>() {
-                Ok(bits) => (
-                    "SHAKE128",
-                    Box::new(Shake128::new()) as Box<dyn Digest>,
-                    bits,
-                ),
-                Err(err) => crash!(1, "{}", err),
-            },
+        "shake128sum" => match matches.get_one::<usize>("bits") {
+            Some(bits) => (
+                "SHAKE128",
+                Box::new(Shake128::new()) as Box<dyn Digest>,
+                *bits,
+            ),
             None => crash!(1, "--bits required for SHAKE-128"),
         },
-        "shake256sum" => match matches.get_one::<String>("bits") {
-            Some(bits_str) => match (bits_str).parse::<usize>() {
-                Ok(bits) => (
-                    "SHAKE256",
-                    Box::new(Shake256::new()) as Box<dyn Digest>,
-                    bits,
-                ),
-                Err(err) => crash!(1, "{}", err),
-            },
+        "shake256sum" => match matches.get_one::<usize>("bits") {
+            Some(bits) => (
+                "SHAKE256",
+                Box::new(Shake256::new()) as Box<dyn Digest>,
+                *bits,
+            ),
             None => crash!(1, "--bits required for SHAKE-256"),
         },
         _ => {
@@ -162,89 +154,80 @@ fn detect_algo(
                     alg = Some(val);
                     output_bits = bits;
                 };
-                if matches.contains_id("md5") {
+                if matches.get_flag("md5") {
                     set_or_crash("MD5", Box::new(Md5::new()), 128);
                 }
-                if matches.contains_id("sha1") {
+                if matches.get_flag("sha1") {
                     set_or_crash("SHA1", Box::new(Sha1::new()), 160);
                 }
-                if matches.contains_id("sha224") {
+                if matches.get_flag("sha224") {
                     set_or_crash("SHA224", Box::new(Sha224::new()), 224);
                 }
-                if matches.contains_id("sha256") {
+                if matches.get_flag("sha256") {
                     set_or_crash("SHA256", Box::new(Sha256::new()), 256);
                 }
-                if matches.contains_id("sha384") {
+                if matches.get_flag("sha384") {
                     set_or_crash("SHA384", Box::new(Sha384::new()), 384);
                 }
-                if matches.contains_id("sha512") {
+                if matches.get_flag("sha512") {
                     set_or_crash("SHA512", Box::new(Sha512::new()), 512);
                 }
-                if matches.contains_id("b2sum") {
+                if matches.get_flag("b2sum") {
                     set_or_crash("BLAKE2", Box::new(blake2b_simd::State::new()), 512);
                 }
-                if matches.contains_id("b3sum") {
+                if matches.get_flag("b3sum") {
                     set_or_crash("BLAKE3", Box::new(blake3::Hasher::new()), 256);
                 }
-                if matches.contains_id("sha3") {
-                    match matches.get_one::<String>("bits") {
-                        Some(bits_str) => match (bits_str).parse::<usize>() {
-                            Ok(224) => set_or_crash(
-                                "SHA3-224",
-                                Box::new(Sha3_224::new()) as Box<dyn Digest>,
-                                224,
-                            ),
-                            Ok(256) => set_or_crash(
-                                "SHA3-256",
-                                Box::new(Sha3_256::new()) as Box<dyn Digest>,
-                                256,
-                            ),
-                            Ok(384) => set_or_crash(
-                                "SHA3-384",
-                                Box::new(Sha3_384::new()) as Box<dyn Digest>,
-                                384,
-                            ),
-                            Ok(512) => set_or_crash(
-                                "SHA3-512",
-                                Box::new(Sha3_512::new()) as Box<dyn Digest>,
-                                512,
-                            ),
-                            Ok(_) => crash!(
-                                1,
-                                "Invalid output size for SHA3 (expected 224, 256, 384, or 512)"
-                            ),
-                            Err(err) => crash!(1, "{}", err),
-                        },
+                if matches.get_flag("sha3") {
+                    match matches.get_one::<usize>("bits") {
+                        Some(224) => set_or_crash(
+                            "SHA3-224",
+                            Box::new(Sha3_224::new()) as Box<dyn Digest>,
+                            224,
+                        ),
+                        Some(256) => set_or_crash(
+                            "SHA3-256",
+                            Box::new(Sha3_256::new()) as Box<dyn Digest>,
+                            256,
+                        ),
+                        Some(384) => set_or_crash(
+                            "SHA3-384",
+                            Box::new(Sha3_384::new()) as Box<dyn Digest>,
+                            384,
+                        ),
+                        Some(512) => set_or_crash(
+                            "SHA3-512",
+                            Box::new(Sha3_512::new()) as Box<dyn Digest>,
+                            512,
+                        ),
+                        Some(_) => crash!(
+                            1,
+                            "Invalid output size for SHA3 (expected 224, 256, 384, or 512)"
+                        ),
                         None => crash!(1, "--bits required for SHA3"),
                     }
                 }
-                if matches.contains_id("sha3-224") {
+                if matches.get_flag("sha3-224") {
                     set_or_crash("SHA3-224", Box::new(Sha3_224::new()), 224);
                 }
-                if matches.contains_id("sha3-256") {
+                if matches.get_flag("sha3-256") {
                     set_or_crash("SHA3-256", Box::new(Sha3_256::new()), 256);
                 }
-                if matches.contains_id("sha3-384") {
+                if matches.get_flag("sha3-384") {
                     set_or_crash("SHA3-384", Box::new(Sha3_384::new()), 384);
                 }
-                if matches.contains_id("sha3-512") {
+                if matches.get_flag("sha3-512") {
                     set_or_crash("SHA3-512", Box::new(Sha3_512::new()), 512);
                 }
-                if matches.contains_id("shake128") {
-                    match matches.get_one::<String>("bits") {
-                        Some(bits_str) => match (bits_str).parse::<usize>() {
-                            Ok(bits) => set_or_crash("SHAKE128", Box::new(Shake128::new()), bits),
-                            Err(err) => crash!(1, "{}", err),
-                        },
+                if matches.get_flag("shake128") {
+                    match matches.get_one::<usize>("bits") {
+                        Some(bits) => set_or_crash("SHAKE128", Box::new(Shake128::new()), *bits),
                         None => crash!(1, "--bits required for SHAKE-128"),
                     }
                 }
-                if matches.contains_id("shake256") {
-                    match matches.get_one::<String>("bits") {
-                        Some(bits_str) => match (bits_str).parse::<usize>() {
-                            Ok(bits) => set_or_crash("SHAKE256", Box::new(Shake256::new()), bits),
-                            Err(err) => crash!(1, "{}", err),
-                        },
+                if matches.get_flag("shake256") {
+                    match matches.get_one::<usize>("bits") {
+                        Some(bits) => set_or_crash("SHAKE256", Box::new(Shake256::new()), *bits),
                         None => crash!(1, "--bits required for SHAKE-256"),
                     }
                 }
@@ -258,10 +241,6 @@ fn detect_algo(
 // TODO: return custom error type
 fn parse_bit_num(arg: &str) -> Result<usize, ParseIntError> {
     arg.parse()
-}
-
-fn is_valid_bit_num(arg: &str) -> Result<(), String> {
-    parse_bit_num(arg).map(|_| ()).map_err(|e| format!("{}", e))
 }
 
 #[uucore::main]
@@ -288,24 +267,24 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
 
     let (name, algo, bits) = detect_algo(&binary_name, &matches);
 
-    let binary = if matches.contains_id("binary") {
+    let binary = if matches.get_flag("binary") {
         true
-    } else if matches.contains_id("text") {
+    } else if matches.get_flag("text") {
         false
     } else {
         binary_flag_default
     };
-    let check = matches.contains_id("check");
-    let tag = matches.contains_id("tag");
+    let check = matches.get_flag("check");
+    let tag = matches.get_flag("tag");
     let nonames = if binary_name == "b3sum" {
-        matches.contains_id("no-names")
+        matches.get_flag("no-names")
     } else {
         false
     };
-    let status = matches.contains_id("status");
-    let quiet = matches.contains_id("quiet") || status;
-    let strict = matches.contains_id("strict");
-    let warn = matches.contains_id("warn") && !status;
+    let status = matches.get_flag("status");
+    let quiet = matches.get_flag("quiet") || status;
+    let strict = matches.get_flag("strict");
+    let warn = matches.get_flag("warn") && !status;
 
     let opts = Options {
         algoname: name,
@@ -327,7 +306,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app_common<'a>() -> Command<'a> {
+pub fn uu_app_common() -> Command {
     #[cfg(windows)]
     const BINARY_HELP: &str = "read in binary mode (default)";
     #[cfg(not(windows))]
@@ -344,60 +323,68 @@ pub fn uu_app_common<'a>() -> Command<'a> {
             Arg::new("binary")
                 .short('b')
                 .long("binary")
-                .help(BINARY_HELP),
+                .help(BINARY_HELP)
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("check")
                 .short('c')
                 .long("check")
-                .help("read hashsums from the FILEs and check them"),
+                .help("read hashsums from the FILEs and check them")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("tag")
                 .long("tag")
-                .help("create a BSD-style checksum"),
+                .help("create a BSD-style checksum")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("text")
                 .short('t')
                 .long("text")
                 .help(TEXT_HELP)
-                .conflicts_with("binary"),
+                .conflicts_with("binary")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("quiet")
                 .short('q')
                 .long("quiet")
-                .help("don't print OK for each successfully verified file"),
+                .help("don't print OK for each successfully verified file")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("status")
                 .short('s')
                 .long("status")
-                .help("don't output anything, status code shows success"),
+                .help("don't output anything, status code shows success")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("strict")
                 .long("strict")
-                .help("exit non-zero for improperly formatted checksum lines"),
+                .help("exit non-zero for improperly formatted checksum lines")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("warn")
                 .short('w')
                 .long("warn")
-                .help("warn about improperly formatted checksum lines"),
+                .help("warn about improperly formatted checksum lines")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("FILE")
                 .index(1)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::FilePath)
                 .value_parser(ValueParser::os_string()),
         )
 }
 
-pub fn uu_app_b3sum<'a>() -> Command<'a> {
+pub fn uu_app_b3sum() -> Command {
     uu_app_b3sum_opts(uu_app_common())
 }
 
@@ -405,11 +392,12 @@ fn uu_app_b3sum_opts(command: Command) -> Command {
     command.arg(
         Arg::new("no-names")
             .long("no-names")
-            .help("Omits filenames in the output (option not present in GNU/Coreutils)"),
+            .help("Omits filenames in the output (option not present in GNU/Coreutils)")
+            .action(ArgAction::SetTrue),
     )
 }
 
-pub fn uu_app_bits<'a>() -> Command<'a> {
+pub fn uu_app_bits() -> Command {
     uu_app_opt_bits(uu_app_common())
 }
 
@@ -419,14 +407,13 @@ fn uu_app_opt_bits(command: Command) -> Command {
         Arg::new("bits")
             .long("bits")
             .help("set the size of the output (only for SHAKE)")
-            .takes_value(true)
             .value_name("BITS")
             // XXX: should we actually use validators?  they're not particularly efficient
-            .validator(is_valid_bit_num),
+            .value_parser(parse_bit_num),
     )
 }
 
-pub fn uu_app_custom<'a>() -> Command<'a> {
+pub fn uu_app_custom() -> Command {
     let mut command = uu_app_b3sum_opts(uu_app_opt_bits(uu_app_common()));
     let algorithms = &[
         ("md5", "work with MD5"),
@@ -453,14 +440,19 @@ pub fn uu_app_custom<'a>() -> Command<'a> {
     ];
 
     for (name, desc) in algorithms {
-        command = command.arg(Arg::new(*name).long(name).help(*desc));
+        command = command.arg(
+            Arg::new(*name)
+                .long(name)
+                .help(*desc)
+                .action(ArgAction::SetTrue),
+        );
     }
     command
 }
 
 // hashsum is handled differently in build.rs, therefore this is not the same
 // as in other utilities.
-fn uu_app<'a>(binary_name: &str) -> Command<'a> {
+fn uu_app(binary_name: &str) -> Command {
     match binary_name {
         // These all support the same options.
         "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum" => {
