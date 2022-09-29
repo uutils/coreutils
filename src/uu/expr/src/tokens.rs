@@ -69,12 +69,12 @@ impl Token {
     }
 }
 
-pub fn strings_to_tokens(strings: &[String]) -> Result<Vec<(usize, Token)>, String> {
+pub fn strings_to_tokens(strings: &[&str]) -> Result<Vec<(usize, Token)>, String> {
     let mut tokens_acc = Vec::with_capacity(strings.len());
     let mut tok_idx = 1;
 
     for s in strings {
-        let token_if_not_escaped = match s.as_ref() {
+        let token_if_not_escaped = match *s {
             "(" => Token::ParOpen,
             ")" => Token::ParClose,
 
@@ -94,15 +94,15 @@ pub fn strings_to_tokens(strings: &[String]) -> Result<Vec<(usize, Token)>, Stri
 
             "match" | "index" => Token::PrefixOp {
                 arity: 2,
-                value: s.clone(),
+                value: s.to_string(),
             },
             "substr" => Token::PrefixOp {
                 arity: 3,
-                value: s.clone(),
+                value: s.to_string(),
             },
             "length" => Token::PrefixOp {
                 arity: 1,
-                value: s.clone(),
+                value: s.to_string(),
             },
 
             _ => Token::new_value(s),
