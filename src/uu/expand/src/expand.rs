@@ -12,7 +12,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
@@ -216,8 +216,8 @@ impl Options {
             None => (RemainingMode::None, vec![DEFAULT_TABSTOP]),
         };
 
-        let iflag = matches.contains_id(options::INITIAL);
-        let uflag = !matches.contains_id(options::NO_UTF8);
+        let iflag = matches.get_flag(options::INITIAL);
+        let uflag = !matches.get_flag(options::NO_UTF8);
 
         // avoid allocations when dumping out long sequences of spaces
         // by precomputing the longest string of spaces we will ever need
@@ -276,7 +276,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     expand(&Options::new(&matches)?).map_err_context(|| "failed to write output".to_string())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -287,15 +287,15 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::INITIAL)
                 .long(options::INITIAL)
                 .short('i')
-                .help("do not convert tabs after non blanks"),
+                .help("do not convert tabs after non blanks")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TABS)
                 .long(options::TABS)
                 .short('t')
                 .value_name("N, LIST")
-                .takes_value(true)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .help(
                     "have tabs N characters apart, not 8 or use comma separated list \
                     of explicit tab positions",
@@ -305,13 +305,13 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::NO_UTF8)
                 .long(options::NO_UTF8)
                 .short('U')
-                .help("interpret input file as 8-bit ASCII rather than UTF-8"),
+                .help("interpret input file as 8-bit ASCII rather than UTF-8")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILES)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .hide(true)
-                .takes_value(true)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
