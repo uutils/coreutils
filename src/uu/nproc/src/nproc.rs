@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) NPROCESSORS nprocs numstr threadstr sysconf
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::env;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
@@ -60,7 +60,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Err(_) => usize::MAX,
     };
 
-    let mut cores = if matches.contains_id(OPT_ALL) {
+    let mut cores = if matches.get_flag(OPT_ALL) {
         num_cpus_all()
     } else {
         // OMP_NUM_THREADS doesn't have an impact on --all
@@ -96,7 +96,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -105,12 +105,13 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(OPT_ALL)
                 .long(OPT_ALL)
-                .help("print the number of cores available to the system"),
+                .help("print the number of cores available to the system")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_IGNORE)
                 .long(OPT_IGNORE)
-                .takes_value(true)
+                .value_name("N")
                 .help("ignore up to N cores"),
         )
 }
