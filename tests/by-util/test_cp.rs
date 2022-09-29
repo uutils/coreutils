@@ -1395,7 +1395,7 @@ fn test_cp_reflink_bad() {
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_contains("error: \"bad\" isn't a valid value for '--reflink[=<WHEN>...]'");
+        .stderr_contains("error: \"bad\" isn't a valid value for '--reflink[=<WHEN>]'");
 }
 
 #[test]
@@ -1551,6 +1551,7 @@ fn test_cp_sparse_never_reflink_always() {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(feature = "truncate")]
 #[test]
 fn test_cp_reflink_always_override() {
     let scene = TestScenario::new(util_name!());
@@ -1639,6 +1640,7 @@ fn test_copy_dir_symlink() {
 
 #[test]
 #[cfg(not(target_os = "freebsd"))] // FIXME: fix this test for FreeBSD
+#[cfg(feature = "ln")]
 fn test_copy_dir_with_symlinks() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");

@@ -94,7 +94,7 @@ pub static BACKUP_CONTROL_VALUES: &[&str] = &[
     "simple", "never", "numbered", "t", "existing", "nil", "none", "off",
 ];
 
-pub static BACKUP_CONTROL_LONG_HELP: &str =
+pub const BACKUP_CONTROL_LONG_HELP: &str =
     "The backup suffix is '~', unless set with --suffix or SIMPLE_BACKUP_SUFFIX.
 The version control method may be selected via the --backup option or through
 the VERSION_CONTROL environment variable.  Here are the values:
@@ -198,6 +198,8 @@ impl Display for BackupError {
 /// This way the backup-specific arguments are handled uniformly across
 /// utilities and can be maintained in one central place.
 pub mod arguments {
+    use clap::ArgAction;
+
     extern crate clap;
 
     pub static OPT_BACKUP: &str = "backupopt_backup";
@@ -220,6 +222,7 @@ pub mod arguments {
         clap::Arg::new(OPT_BACKUP_NO_ARG)
             .short('b')
             .help("like --backup but does not accept an argument")
+            .action(ArgAction::SetTrue)
     }
 
     /// '-S, --suffix' argument
@@ -347,7 +350,7 @@ pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
             // Default if no argument is provided to '--backup'
             Ok(BackupMode::ExistingBackup)
         }
-    } else if matches.contains_id(arguments::OPT_BACKUP_NO_ARG) {
+    } else if matches.get_flag(arguments::OPT_BACKUP_NO_ARG) {
         // the short form of this option, -b does not accept any argument.
         // Using -b is equivalent to using --backup=existing.
         Ok(BackupMode::ExistingBackup)
