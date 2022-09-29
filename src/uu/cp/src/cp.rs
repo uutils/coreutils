@@ -428,6 +428,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .overrides_with_all(MODE_ARGS)
                 .require_equals(true)
                 .default_missing_value("auto")
+                .value_parser(["auto", "always", "never"])
+                .min_values(0)
                 .help("control clone/CoW copies. See below"),
         )
         .arg(
