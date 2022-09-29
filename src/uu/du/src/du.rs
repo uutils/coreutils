@@ -501,7 +501,7 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
 
     let mut exclude_patterns = Vec::new();
     for f in excludes_iterator.chain(exclude_from_iterator) {
-        if matches.is_present(options::VERBOSE) {
+        if matches.contains_id(options::VERBOSE) {
             println!("adding {:?} to the exclude list ", &f);
         }
         match parse_glob::from_str(&f) {
@@ -637,7 +637,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     continue;
                 }
 
-                if matches.is_present(options::TIME) {
+                if matches.contains_id(options::TIME) {
                     let tm = {
                         let secs = {
                             match matches.get_one::<String>(options::TIME) {
