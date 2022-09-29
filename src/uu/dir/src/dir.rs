@@ -25,21 +25,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // If not, we will use dir default formatting and quoting style options
 
     if !matches.contains_id(options::QUOTING_STYLE)
-        && !matches.contains_id(options::quoting::C)
-        && !matches.contains_id(options::quoting::ESCAPE)
-        && !matches.contains_id(options::quoting::LITERAL)
+        && !matches.get_flag(options::quoting::C)
+        && !matches.get_flag(options::quoting::ESCAPE)
+        && !matches.get_flag(options::quoting::LITERAL)
     {
         default_quoting_style = true;
     }
     if !matches.contains_id(options::FORMAT)
-        && !matches.contains_id(options::format::ACROSS)
-        && !matches.contains_id(options::format::COLUMNS)
-        && !matches.contains_id(options::format::COMMAS)
-        && !matches.contains_id(options::format::LONG)
-        && !matches.contains_id(options::format::LONG_NO_GROUP)
-        && !matches.contains_id(options::format::LONG_NO_OWNER)
-        && !matches.contains_id(options::format::LONG_NUMERIC_UID_GID)
-        && !matches.contains_id(options::format::ONE_LINE)
+        && !matches.get_flag(options::format::ACROSS)
+        && !matches.get_flag(options::format::COLUMNS)
+        && !matches.get_flag(options::format::COMMAS)
+        && !matches.get_flag(options::format::LONG)
+        && !matches.get_flag(options::format::LONG_NO_GROUP)
+        && !matches.get_flag(options::format::LONG_NO_OWNER)
+        && !matches.get_flag(options::format::LONG_NUMERIC_UID_GID)
+        && !matches.get_flag(options::format::ONE_LINE)
     {
         default_format_style = true;
     }
@@ -66,6 +66,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 // To avoid code duplication, we reuse ls uu_app function which has the same
 // arguments. However, coreutils won't compile if one of the utils is missing
 // an uu_app function, so we return the `ls` app.
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     uu_ls::uu_app()
 }
