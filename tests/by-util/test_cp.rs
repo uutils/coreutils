@@ -1336,6 +1336,19 @@ fn test_cp_reflink_auto() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+fn test_cp_reflink_none() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("--reflink")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_EXISTING_FILE)
+        .succeeds();
+
+    // Check the content of the destination file
+    assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 fn test_cp_reflink_never() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg("--reflink=never")
