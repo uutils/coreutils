@@ -17,7 +17,7 @@ path = "src/rmdir.rs"
 [dependencies]
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["fs"] }
-libc = "0.2.132"
+libc = "0.2.134"
 
 [[bin]]
 name = "rmdir"

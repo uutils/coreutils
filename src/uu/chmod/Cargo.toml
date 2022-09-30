@@ -16,7 +16,7 @@ path = "src/chmod.rs"
 
 [dependencies]
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-libc = "0.2.132"
+libc = "0.2.134"
 uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["fs", "mode"] }
 
 [[bin]]

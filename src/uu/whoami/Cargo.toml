@@ -22,7 +22,7 @@ uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=[
 winapi = { version = "0.3", features = ["lmcons"] }
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2.132"
+libc = "0.2.134"
 
 [[bin]]
 name = "whoami"
