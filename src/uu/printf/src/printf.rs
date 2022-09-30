@@ -2,7 +2,7 @@
 // spell-checker:ignore (change!) each's
 // spell-checker:ignore (ToDO) LONGHELP FORMATSTRING templating parameterizing formatstr
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::error::{UResult, UUsageError};
 use uucore::{format_usage, memo};
 
@@ -285,19 +285,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .allow_hyphen_values(true)
         .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
-        .arg(Arg::new(HELP).long(HELP).help("Print help information"))
+        .disable_help_flag(true)
+        .disable_version_flag(true)
+        .arg(
+            Arg::new(HELP)
+                .long(HELP)
+                .help("Print help information")
+                .action(ArgAction::Help),
+        )
         .arg(
             Arg::new(VERSION)
                 .long(VERSION)
-                .help("Print version information"),
+                .help("Print version information")
+                .action(ArgAction::Version),
         )
         .arg(Arg::new(options::FORMATSTRING))
-        .arg(Arg::new(options::ARGUMENT).multiple_occurrences(true))
+        .arg(Arg::new(options::ARGUMENT).action(ArgAction::Append))
 }
