@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) cmdline evec seps rvec fdata
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use memchr::memchr_iter;
 use rand::prelude::SliceRandom;
 use rand::RngCore;
@@ -95,8 +95,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         random_source: matches
             .get_one::<String>(options::RANDOM_SOURCE)
             .map(String::from),
-        repeat: matches.contains_id(options::REPEAT),
-        sep: if matches.contains_id(options::ZERO_TERMINATED) {
+        repeat: matches.get_flag(options::REPEAT),
+        sep: if matches.get_flag(options::ZERO_TERMINATED) {
             0x00_u8
         } else {
             0x0a_u8
@@ -125,30 +125,28 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .name(NAME)
         .about(ABOUT)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::ECHO)
                 .short('e')
                 .long(options::ECHO)
-                .takes_value(true)
                 .value_name("ARG")
                 .help("treat each ARG as an input line")
-                .multiple_occurrences(true)
                 .use_value_delimiter(false)
-                .min_values(0)
+                .num_args(0..)
                 .conflicts_with(options::INPUT_RANGE),
         )
         .arg(
             Arg::new(options::INPUT_RANGE)
                 .short('i')
                 .long(options::INPUT_RANGE)
-                .takes_value(true)
                 .value_name("LO-HI")
                 .help("treat each number LO through HI as an input line")
                 .conflicts_with(options::FILE),
@@ -157,8 +155,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::HEAD_COUNT)
                 .short('n')
                 .long(options::HEAD_COUNT)
-                .takes_value(true)
-                .multiple_occurrences(true)
                 .value_name("COUNT")
                 .help("output at most COUNT lines"),
         )
@@ -166,7 +162,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::OUTPUT)
                 .short('o')
                 .long(options::OUTPUT)
-                .takes_value(true)
                 .value_name("FILE")
                 .help("write result to FILE instead of standard output")
                 .value_hint(clap::ValueHint::FilePath),
@@ -174,7 +169,6 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::RANDOM_SOURCE)
                 .long(options::RANDOM_SOURCE)
-                .takes_value(true)
                 .value_name("FILE")
                 .help("get random bytes from FILE")
                 .value_hint(clap::ValueHint::FilePath),
@@ -183,19 +177,17 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::REPEAT)
                 .short('r')
                 .long(options::REPEAT)
-                .help("output lines can be repeated"),
+                .help("output lines can be repeated")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO_TERMINATED)
                 .short('z')
                 .long(options::ZERO_TERMINATED)
-                .help("line delimiter is NUL, not newline"),
+                .help("line delimiter is NUL, not newline")
+                .action(ArgAction::SetTrue),
         )
-        .arg(
-            Arg::new(options::FILE)
-                .takes_value(true)
-                .value_hint(clap::ValueHint::FilePath),
-        )
+        .arg(Arg::new(options::FILE).value_hint(clap::ValueHint::FilePath))
 }
 
 fn read_input_file(filename: &str) -> UResult<Vec<u8>> {
