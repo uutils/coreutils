@@ -18,7 +18,7 @@ use std::io::BufReader;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::path::PathBuf;
 use uucore::format_usage;
 
@@ -51,10 +51,8 @@ fn get_long_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
 
-    let after_help = get_long_usage();
-
     let matches = uu_app()
-        .after_help(&after_help[..])
+        .after_help(get_long_usage())
         .try_get_matches_from(args)?;
 
     let users: Vec<String> = matches
@@ -68,35 +66,35 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut include_idle = true;
 
     // If true, display a line at the top describing each field.
-    let include_heading = !matches.contains_id(options::OMIT_HEADINGS);
+    let include_heading = !matches.get_flag(options::OMIT_HEADINGS);
 
     // if true, display the user's full name from pw_gecos.
     let mut include_fullname = true;
 
     // if true, display the user's ~/.project file when doing long format.
-    let include_project = !matches.contains_id(options::OMIT_PROJECT_FILE);
+    let include_project = !matches.get_flag(options::OMIT_PROJECT_FILE);
 
     // if true, display the user's ~/.plan file when doing long format.
-    let include_plan = !matches.contains_id(options::OMIT_PLAN_FILE);
+    let include_plan = !matches.get_flag(options::OMIT_PLAN_FILE);
 
     // if true, display the user's home directory and shell
     // when doing long format.
-    let include_home_and_shell = !matches.contains_id(options::OMIT_HOME_DIR);
+    let include_home_and_shell = !matches.get_flag(options::OMIT_HOME_DIR);
 
     // if true, use the "short" output format.
-    let do_short_format = !matches.contains_id(options::LONG_FORMAT);
+    let do_short_format = !matches.get_flag(options::LONG_FORMAT);
 
     /* if true, display the ut_host field. */
     let mut include_where = true;
 
-    if matches.contains_id(options::OMIT_NAME) {
+    if matches.get_flag(options::OMIT_NAME) {
         include_fullname = false;
     }
-    if matches.contains_id(options::OMIT_NAME_HOST) {
+    if matches.get_flag(options::OMIT_NAME_HOST) {
         include_fullname = false;
         include_where = false;
     }
-    if matches.contains_id(options::OMIT_NAME_HOST_TIME) {
+    if matches.get_flag(options::OMIT_NAME_HOST_TIME) {
         include_fullname = false;
         include_idle = false;
         include_where = false;
@@ -124,62 +122,71 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .disable_help_flag(true)
         .arg(
             Arg::new(options::LONG_FORMAT)
                 .short('l')
                 .requires(options::USER)
-                .help("produce long format output for the specified USERs"),
+                .help("produce long format output for the specified USERs")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_HOME_DIR)
                 .short('b')
-                .help("omit the user's home directory and shell in long format"),
+                .help("omit the user's home directory and shell in long format")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_PROJECT_FILE)
                 .short('h')
-                .help("omit the user's project file in long format"),
+                .help("omit the user's project file in long format")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_PLAN_FILE)
                 .short('p')
-                .help("omit the user's plan file in long format"),
+                .help("omit the user's plan file in long format")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHORT_FORMAT)
                 .short('s')
-                .help("do short format output, this is the default"),
+                .help("do short format output, this is the default")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_HEADINGS)
                 .short('f')
-                .help("omit the line of column headings in short format"),
+                .help("omit the line of column headings in short format")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_NAME)
                 .short('w')
-                .help("omit the user's full name in short format"),
+                .help("omit the user's full name in short format")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_NAME_HOST)
                 .short('i')
-                .help("omit the user's full name and remote host in short format"),
+                .help("omit the user's full name and remote host in short format")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OMIT_NAME_HOST_TIME)
                 .short('q')
-                .help("omit the user's full name, remote host and idle time in short format"),
+                .help("omit the user's full name, remote host and idle time in short format")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::USER)
-                .takes_value(true)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::Username),
         )
         .arg(
@@ -187,7 +194,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             // since that conflicts with omit_project_file.
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help("Print help information"),
+                .help("Print help information")
+                .action(ArgAction::Help),
         )
 }
 
