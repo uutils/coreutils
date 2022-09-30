@@ -11,7 +11,7 @@
 extern crate uucore;
 
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::{read_dir, remove_dir};
 use std::io;
@@ -34,9 +34,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
     let opts = Opts {
-        ignore: matches.contains_id(OPT_IGNORE_FAIL_NON_EMPTY),
-        parents: matches.contains_id(OPT_PARENTS),
-        verbose: matches.contains_id(OPT_VERBOSE),
+        ignore: matches.get_flag(OPT_IGNORE_FAIL_NON_EMPTY),
+        parents: matches.get_flag(OPT_PARENTS),
+        verbose: matches.get_flag(OPT_VERBOSE),
     };
 
     for path in matches
@@ -167,7 +167,7 @@ struct Opts {
     verbose: bool,
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -176,24 +176,30 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(OPT_IGNORE_FAIL_NON_EMPTY)
                 .long(OPT_IGNORE_FAIL_NON_EMPTY)
-                .help("ignore each failure that is solely because a directory is non-empty"),
+                .help("ignore each failure that is solely because a directory is non-empty")
+                .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(OPT_PARENTS).short('p').long(OPT_PARENTS).help(
-            "remove DIRECTORY and its ancestors; e.g.,
+        .arg(
+            Arg::new(OPT_PARENTS)
+                .short('p')
+                .long(OPT_PARENTS)
+                .help(
+                    "remove DIRECTORY and its ancestors; e.g.,
                   'rmdir -p a/b/c' is similar to rmdir a/b/c a/b a",
-        ))
+                )
+                .action(ArgAction::SetTrue),
+        )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .short('v')
                 .long(OPT_VERBOSE)
-                .help("output a diagnostic for every directory processed"),
+                .help("output a diagnostic for every directory processed")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(ARG_DIRS)
-                .multiple_occurrences(true)
-                .takes_value(true)
-                .min_values(1)
-                .required(true)
+                .action(ArgAction::Append)
+                .num_args(1..)
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::DirPath),
         )
