@@ -358,11 +358,7 @@ fn test_rm_descend_directory() {
     use std::io::Write;
     use std::process::Child;
 
-    const END_OF_LINE: &str = if cfg!(windows) {
-        "\r\n"
-    } else {
-        "\n"
-    };
+    const END_OF_LINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
 
     let yes = format!("y{}", END_OF_LINE);
     let no = format!("n{}", END_OF_LINE);
