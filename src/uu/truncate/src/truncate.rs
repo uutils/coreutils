@@ -6,7 +6,7 @@
 //  * file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) RFILE refsize rfilename fsize tsize
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::{metadata, OpenOptions};
 use std::io::ErrorKind;
 #[cfg(unix)]
@@ -108,15 +108,13 @@ fn get_long_usage() -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let long_usage = get_long_usage();
-
     let matches = uu_app()
-        .after_help(&long_usage[..])
+        .after_help(get_long_usage())
         .try_get_matches_from(args)
         .map_err(|e| {
             e.print().expect("Error writing clap::Error");
             match e.kind() {
-                clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion => 0,
+                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => 0,
                 _ => 1,
             }
         })?;
@@ -129,8 +127,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if files.is_empty() {
         return Err(UUsageError::new(1, "missing file operand"));
     } else {
-        let io_blocks = matches.contains_id(options::IO_BLOCKS);
-        let no_create = matches.contains_id(options::NO_CREATE);
+        let io_blocks = matches.get_flag(options::IO_BLOCKS);
+        let no_create = matches.get_flag(options::NO_CREATE);
         let reference = matches
             .get_one::<String>(options::REFERENCE)
             .map(String::from);
@@ -139,7 +137,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -147,40 +145,48 @@ pub fn uu_app<'a>() -> Command<'a> {
         .infer_long_args(true)
         .arg(
             Arg::new(options::IO_BLOCKS)
-            .short('o')
-            .long(options::IO_BLOCKS)
-            .help("treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)")
+                .short('o')
+                .long(options::IO_BLOCKS)
+                .help(
+                    "treat SIZE as the number of I/O blocks of the file rather than bytes \
+            (NOT IMPLEMENTED)",
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_CREATE)
-            .short('c')
-            .long(options::NO_CREATE)
-            .help("do not create files that do not exist")
+                .short('c')
+                .long(options::NO_CREATE)
+                .help("do not create files that do not exist")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REFERENCE)
-            .short('r')
-            .long(options::REFERENCE)
-            .required_unless_present(options::SIZE)
-            .help("base the size of each file on the size of RFILE")
-            .value_name("RFILE")
-            .value_hint(clap::ValueHint::FilePath)
+                .short('r')
+                .long(options::REFERENCE)
+                .required_unless_present(options::SIZE)
+                .help("base the size of each file on the size of RFILE")
+                .value_name("RFILE")
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::SIZE)
-            .short('s')
-            .long(options::SIZE)
-            .required_unless_present(options::REFERENCE)
-            .help("set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified")
-            .value_name("SIZE")
+                .short('s')
+                .long(options::SIZE)
+                .required_unless_present(options::REFERENCE)
+                .help(
+                    "set or adjust the size of each file according to SIZE, which is in \
+            bytes unless --io-blocks is specified",
+                )
+                .value_name("SIZE"),
         )
-        .arg(Arg::new(options::ARG_FILES)
-             .value_name("FILE")
-             .multiple_occurrences(true)
-             .takes_value(true)
-             .required(true)
-             .min_values(1)
-             .value_hint(clap::ValueHint::FilePath))
+        .arg(
+            Arg::new(options::ARG_FILES)
+                .value_name("FILE")
+                .action(ArgAction::Append)
+                .required(true)
+                .value_hint(clap::ValueHint::FilePath),
+        )
 }
 
 /// Truncate the named file to the specified size.
