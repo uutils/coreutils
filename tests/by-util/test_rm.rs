@@ -358,6 +358,15 @@ fn test_rm_descend_directory() {
     use std::io::Write;
     use std::process::Child;
 
+    const END_OF_LINE: &str = if cfg!(windows) {
+        "\r\n"
+    } else {
+        "\n"
+    };
+
+    let yes = format!("y{}", END_OF_LINE);
+    let no = format!("n{}", END_OF_LINE);
+
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -371,13 +380,13 @@ fn test_rm_descend_directory() {
     let mut child: Child = scene.ucmd().arg("-ri").arg("a").run_no_wait();
 
     let mut child_stdin = child.stdin.take().unwrap();
-    child_stdin.write_all("y\n".as_bytes()).unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
     child_stdin.flush().unwrap();
-    child_stdin.write_all("n\n".as_bytes()).unwrap();
+    child_stdin.write_all(no.as_bytes()).unwrap();
     child_stdin.flush().unwrap();
-    child_stdin.write_all("y\n".as_bytes()).unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
     child_stdin.flush().unwrap();
-    child_stdin.write_all("n\n".as_bytes()).unwrap();
+    child_stdin.write_all(no.as_bytes()).unwrap();
     child_stdin.flush().unwrap();
 
     child.wait_with_output().unwrap();
