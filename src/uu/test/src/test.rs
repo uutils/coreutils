@@ -93,7 +93,7 @@ for details about the options it supports.";
 
 const ABOUT: &str = "Check file types and compare values.";
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
