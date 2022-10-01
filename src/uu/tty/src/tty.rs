@@ -9,7 +9,7 @@
 
 // spell-checker:ignore (ToDO) ttyname filedesc
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::io::Write;
 use std::os::unix::io::AsRawFd;
 use uucore::error::{set_exit_code, UResult};
@@ -26,7 +26,7 @@ mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
-    let silent = matches.contains_id(options::SILENT);
+    let silent = matches.get_flag(options::SILENT);
 
     // If silent, we don't need the name, only whether or not stdin is a tty.
     if silent {
@@ -59,7 +59,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -71,6 +71,6 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .visible_alias("quiet")
                 .short('s')
                 .help("print nothing, only return an exit status")
-                .required(false),
+                .action(ArgAction::SetTrue),
         )
 }
