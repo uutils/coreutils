@@ -361,7 +361,6 @@ fn test_rm_descend_directory() {
     const END_OF_LINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
 
     let yes = format!("y{}", END_OF_LINE);
-    let no = format!("n{}", END_OF_LINE);
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -378,19 +377,23 @@ fn test_rm_descend_directory() {
     let mut child_stdin = child.stdin.take().unwrap();
     child_stdin.write_all(yes.as_bytes()).unwrap();
     child_stdin.flush().unwrap();
-    child_stdin.write_all(no.as_bytes()).unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
     child_stdin.flush().unwrap();
     child_stdin.write_all(yes.as_bytes()).unwrap();
     child_stdin.flush().unwrap();
-    child_stdin.write_all(no.as_bytes()).unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
     child_stdin.flush().unwrap();
 
     child.wait_with_output().unwrap();
 
-    assert!(at.dir_exists("a/b"));
-    assert!(at.dir_exists("a"));
+    assert!(!at.dir_exists("a/b"));
+    assert!(!at.dir_exists("a"));
     assert!(!at.file_exists(file_1));
-    assert!(at.file_exists(file_2));
+    assert!(!at.file_exists(file_2));
 }
 
 #[test]
