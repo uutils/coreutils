@@ -245,12 +245,12 @@ fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> Result<bool, String> {
     let format_err = |value: &OsStr| format!("invalid integer {}", value.quote());
 
     // Parse the two inputs
-    let a: i64 = a
+    let a: i128 = a
         .to_str()
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| format_err(a))?;
 
-    let b: i64 = b
+    let b: i128 = b
         .to_str()
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| format_err(b))?;
@@ -440,5 +440,30 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         PathCondition::UserIdFlag => false,
         PathCondition::Writable => false,   // TODO
         PathCondition::Executable => false, // TODO
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::integers;
+    use std::ffi::OsStr;
+
+    #[test]
+    fn test_integer_op() {
+        let a = OsStr::new("18446744073709551616");
+        let b = OsStr::new("0");
+        assert_eq!(integers(a, b, OsStr::new("-lt")).unwrap(), false);
+        let a = OsStr::new("18446744073709551616");
+        let b = OsStr::new("0");
+        assert_eq!(integers(a, b, OsStr::new("-gt")).unwrap(), true);
+        let a = OsStr::new("-1");
+        let b = OsStr::new("0");
+        assert_eq!(integers(a, b, OsStr::new("-lt")).unwrap(), true);
+        let a = OsStr::new("42");
+        let b = OsStr::new("42");
+        assert_eq!(integers(a, b, OsStr::new("-eq")).unwrap(), true);
+        let a = OsStr::new("42");
+        let b = OsStr::new("42");
+        assert_eq!(integers(a, b, OsStr::new("-ne")).unwrap(), false);
     }
 }

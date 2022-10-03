@@ -929,3 +929,26 @@ fn test_file_N() {
     at.touch("regular_file");
     scene.ucmd().args(&["-N", "regular_file"]).succeeds();
 }
+
+#[test]
+fn test_long_integer() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .args(&["18446744073709551616", "-eq", "0"])
+        .fails();
+    scene
+        .ucmd()
+        .args(&["-9223372036854775809", "-ge", "18446744073709551616"])
+        .fails();
+    scene
+        .ucmd()
+        .args(&[
+            "'('",
+            "-9223372036854775809",
+            "-ge",
+            "18446744073709551616",
+            "')'",
+        ])
+        .fails();
+}
