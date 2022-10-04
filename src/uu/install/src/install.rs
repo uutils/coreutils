@@ -30,6 +30,7 @@ use std::fmt::{Debug, Display};
 use std::fs;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
+#[cfg(unix)]
 use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::process;
@@ -488,13 +489,16 @@ fn is_new_file_path(path: &Path) -> bool {
 ///
 /// Returns true, if one of the conditions above is met; else false.
 ///
+#[cfg(unix)]
 fn is_potential_directory_path(path: &Path) -> bool {
     let seperator = MAIN_SEPARATOR as u8;
-    if path.as_os_str().as_bytes().last() == Some(&seperator) {
-        true
-    } else {
-        path.is_dir()
-    }
+    path.as_os_str().as_bytes().last() == Some(&seperator) || path.is_dir()
+}
+
+#[cfg(not(unix))]
+fn is_potential_directory_path(path: &Path) -> bool {
+    let path_str = path.to_string_lossy();
+    path_str.ends_with(MAIN_SEPARATOR) || path_str.ends_with('/') || path.is_dir()
 }
 
 /// Perform an install, given a list of paths and behavior.
