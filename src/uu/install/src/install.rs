@@ -30,7 +30,8 @@ use std::fmt::{Debug, Display};
 use std::fs;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
-use std::path::{Path, PathBuf};
+use std::os::unix::prelude::OsStrExt;
+use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::process;
 
 const DEFAULT_MODE: u32 = 0o755;
@@ -483,6 +484,19 @@ fn is_new_file_path(path: &Path) -> bool {
             || path.parent().unwrap().as_os_str().is_empty()) // In case of a simple file
 }
 
+/// Test if the path is an existing directory or ends with a trailing seperator.
+///
+/// Returns true, if one of the conditions above is met; else false.
+///
+fn is_potential_directory_path(path: &Path) -> bool {
+    let seperator = MAIN_SEPARATOR as u8;
+    if path.as_os_str().as_bytes().last() == Some(&seperator) {
+        true
+    } else {
+        path.is_dir()
+    }
+}
+
 /// Perform an install, given a list of paths and behavior.
 ///
 /// Returns a Result type with the Err variant containing the error message.
@@ -504,7 +518,7 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
         let to_create: Option<&Path> = if b.target_dir.is_some() {
             Some(target.as_path())
         // if source and target are filenames used in combination with -D, create target's parent
-        } else if sources.len() <= 1 && !target.is_dir() {
+        } else if !(sources.len() > 1 || is_potential_directory_path(&target)) {
             target.parent()
         } else {
             None
@@ -537,7 +551,7 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
         }
     }
 
-    if sources.len() > 1 || target.is_dir() {
+    if sources.len() > 1 || is_potential_directory_path(&target) {
         copy_files_into_dir(sources, &target, b)
     } else {
         let source = sources.first().ok_or_else(|| {
