@@ -11,6 +11,7 @@
 // spell-checker:ignore (words) egid euid pseudofloat
 
 use crate::common::util::*;
+use std::thread::sleep;
 
 #[test]
 fn test_empty_test_equivalent_to_false() {
@@ -332,7 +333,7 @@ fn test_invalid_utf8_integer_compare() {
 }
 
 #[test]
-#[ignore = "fixme: parse/evaluation error (code 2); GNU returns 1"]
+#[cfg(unix)]
 fn test_file_is_itself() {
     new_ucmd!()
         .args(&["regular_file", "-ef", "regular_file"])
@@ -340,7 +341,7 @@ fn test_file_is_itself() {
 }
 
 #[test]
-#[ignore = "fixme: parse/evaluation error (code 2); GNU returns 1"]
+#[cfg(not(target_env = "musl"))]
 fn test_file_is_newer_than_and_older_than_itself() {
     // odd but matches GNU
     new_ucmd!()
@@ -354,15 +355,47 @@ fn test_file_is_newer_than_and_older_than_itself() {
 }
 
 #[test]
-#[ignore = "todo: implement these"]
+fn test_non_existing_files() {
+    let scenario = TestScenario::new(util_name!());
+
+    let result = scenario
+        .ucmd()
+        .args(&["newer_file", "-nt", "regular_file"])
+        .fails();
+    assert!(result.stderr().is_empty());
+}
+
+#[test]
+#[cfg(unix)]
+fn test_same_device_inode() {
+    let scenario = TestScenario::new(util_name!());
+    let at = &scenario.fixtures;
+
+    scenario.cmd("touch").arg("regular_file").succeeds();
+    scenario.cmd("touch").arg("regular_file_second").succeeds();
+
+    at.symlink_file("regular_file", "symlink");
+
+    scenario
+        .ucmd()
+        .args(&["regular_file", "-ef", "regular_file_second"])
+        .fails();
+
+    scenario
+        .ucmd()
+        .args(&["regular_file", "-ef", "symlink"])
+        .succeeds();
+}
+
+#[test]
+#[cfg(not(target_env = "musl"))]
+// musl: creation time is not available on this platform currently
 fn test_newer_file() {
     let scenario = TestScenario::new(util_name!());
 
+    scenario.cmd("touch").arg("regular_file").succeeds();
+    sleep(std::time::Duration::from_millis(1000));
     scenario.cmd("touch").arg("newer_file").succeeds();
-    scenario
-        .cmd("touch")
-        .args(&["-m", "-d", "last Thursday", "regular_file"])
-        .succeeds();
 
     scenario
         .ucmd()
@@ -370,7 +403,7 @@ fn test_newer_file() {
         .succeeds();
     scenario
         .ucmd()
-        .args(&["regular_file", "-ot", "newer_file"])
+        .args(&["newer_file", "-ot", "regular_file"])
         .succeeds();
 }
 
@@ -881,4 +914,41 @@ fn test_bracket_syntax_version() {
     ucmd.arg("--version")
         .succeeds()
         .stdout_matches(&r"\[ \d+\.\d+\.\d+".parse().unwrap());
+}
+
+#[test]
+#[allow(non_snake_case)]
+#[cfg(unix)]
+fn test_file_N() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    scene.ucmd().args(&["-N", "regular_file"]).fails();
+    // The file will have different create/modified data
+    // so, test -N will return 0
+    sleep(std::time::Duration::from_millis(1000));
+    at.touch("regular_file");
+    scene.ucmd().args(&["-N", "regular_file"]).succeeds();
+}
+
+#[test]
+fn test_long_integer() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .args(&["18446744073709551616", "-eq", "0"])
+        .fails();
+    scene
+        .ucmd()
+        .args(&["-9223372036854775809", "-ge", "18446744073709551616"])
+        .fails();
+    scene
+        .ucmd()
+        .args(&[
+            "'('",
+            "-9223372036854775809",
+            "-ge",
+            "18446744073709551616",
+            "')'",
+        ])
+        .fails();
 }
