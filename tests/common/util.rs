@@ -1843,6 +1843,7 @@ mod tests {
     // should fail with any command that takes piped input.
     // See also https://github.com/uutils/coreutils/issues/3895
     #[test]
+    #[cfg_attr(not(feature = "expensive_tests"), ignore)]
     fn test_when_piped_input_then_no_broken_pipe() {
         let ts = TestScenario::new("tail");
         for i in 0..10000 {
