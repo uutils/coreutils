@@ -59,6 +59,7 @@ fn test_invalid_user_spec() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_preference_of_userspec() {
     let scene = TestScenario::new(util_name!());
     let result = scene.cmd("whoami").run();
