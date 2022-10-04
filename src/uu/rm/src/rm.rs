@@ -303,6 +303,8 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
             }
         } else {
             let mut dirs: VecDeque<DirEntry> = VecDeque::new();
+            // The Paths to not descend into. We need to this because WalkDir doesn't have a way, afaik, to not descend into a directory
+            // So we have to just ignore paths as they come up if they start with a path we aren't descending into
             let mut not_descended: Vec<PathBuf> = Vec::new();
 
             'outer: for entry in WalkDir::new(path) {
@@ -311,15 +313,18 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
                         if options.interactive == InteractiveMode::Always {
                             for not_descend in &not_descended {
                                 if entry.path().starts_with(not_descend) {
+                                    // We don't need to continue the rest of code in this loop if we are in a directory we don't want to descend into
                                     continue 'outer;
                                 }
                             }
                         }
                         let file_type = entry.file_type();
                         if file_type.is_dir() {
+                            // If we are in Interactive Mode Always and the directory isn't empty we ask if we should descend else we push this directory onto dirs vector
                             if options.interactive == InteractiveMode::Always
                                 && fs::read_dir(entry.path()).unwrap().count() != 0
                             {
+                                // If we don't descend we push this directory onto our not_descended vector else we push this directory onto dirs vector
                                 if prompt_descend(entry.path()) {
                                     dirs.push_back(entry);
                                 } else {
