@@ -242,7 +242,7 @@ jobs:
         script: |
           const fs = require('fs');
           const body = fs.readFileSync('${{ steps.vars.outputs.path_reference }}/comment.txt', {encoding: 'utf8'});
-          if body.trim().len != 0 {
+          if (body.trim().len != 0) {
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
