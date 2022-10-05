@@ -354,6 +354,53 @@ fn test_rm_interactive_never() {
 }
 
 #[test]
+fn test_rm_descend_directory() {
+    // This test descends into each directory and deletes the files and folders inside of them
+    // This test will have the rm process asks 6 question and us answering Y to them will delete all the files and folders
+    use std::io::Write;
+    use std::process::Child;
+
+    // Needed for talking with stdin on platforms where CRLF or LF matters
+    const END_OF_LINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
+
+    let yes = format!("y{}", END_OF_LINE);
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_1 = "a/at.txt";
+    let file_2 = "a/b/bt.txt";
+
+    at.mkdir_all("a/b/");
+    at.touch(file_1);
+    at.touch(file_2);
+
+    let mut child: Child = scene.ucmd().arg("-ri").arg("a").run_no_wait();
+
+    // Needed so that we can talk to the rm program
+    let mut child_stdin = child.stdin.take().unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+
+    child.wait_with_output().unwrap();
+
+    assert!(!at.dir_exists("a/b"));
+    assert!(!at.dir_exists("a"));
+    assert!(!at.file_exists(file_1));
+    assert!(!at.file_exists(file_2));
+}
+
+#[test]
 #[ignore = "issue #3722"]
 fn test_rm_directory_rights_rm1() {
     let (at, mut ucmd) = at_and_ucmd!();
