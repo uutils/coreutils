@@ -235,18 +235,6 @@ jobs:
           echo "::warning ::Skipping test failure comparison; no prior reference test logs are available."
         fi
         if test -n "${have_new_failures}" ; then exit -1 ; fi
-    - name: Compare test summary VS reference
-      if: success() || failure() # run regardless of prior step success/failure
-      shell: bash
-      run: |
-        REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
-        if test -f "${REF_SUMMARY_FILE}"; then
-          echo "Reference SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
-          mv "${REF_SUMMARY_FILE}" main-gnu-result.json
-          python uutils/util/compare_gnu_result.py
-        else
-          echo "::warning ::Skipping test summary comparison; no prior reference summary is available."
-        fi
     - name: Publish the result if any change
       if: github.event_name == 'pull_request'
       uses: actions/github-script@v6
@@ -262,6 +250,18 @@ jobs:
               body: 'GNU comparison results: ' + body
             })
           }
+    - name: Compare test summary VS reference
+      if: success() || failure() # run regardless of prior step success/failure
+      shell: bash
+      run: |
+        REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
+        if test -f "${REF_SUMMARY_FILE}"; then
+          echo "Reference SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
+          mv "${REF_SUMMARY_FILE}" main-gnu-result.json
+          python uutils/util/compare_gnu_result.py
+        else
+          echo "::warning ::Skipping test summary comparison; no prior reference summary is available."
+        fi
 
   gnu_coverage:
     name: Run GNU tests with coverage
