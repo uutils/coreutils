@@ -75,7 +75,10 @@ impl Input {
             }
             InputKind::File(_) | InputKind::Stdin => {
                 if cfg!(unix) {
-                    PathBuf::from(text::DEV_STDIN).canonicalize().ok()
+                    match PathBuf::from(text::DEV_STDIN).canonicalize().ok() {
+                        Some(path) if path != PathBuf::from(text::FD0) => Some(path),
+                        Some(_) | None => None,
+                    }
                 } else {
                     None
                 }

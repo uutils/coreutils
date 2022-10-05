@@ -10,12 +10,13 @@
 
 use clap::{crate_version, Arg, ArgMatches, Command};
 use uucore::display::{println_verbatim, Quotable};
-use uucore::error::{FromIo, UError, UResult};
+use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::format_usage;
 
 use std::env;
 use std::error::Error;
 use std::fmt::Display;
+use std::io::ErrorKind;
 use std::iter;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 
@@ -54,6 +55,9 @@ enum MkTempError {
     SuffixContainsDirSeparator(String),
     InvalidTemplate(String),
     TooManyTemplates,
+
+    /// When a specified temporary directory could not be found.
+    NotFound(String, String),
 }
 
 impl UError for MkTempError {
@@ -93,6 +97,12 @@ impl Display for MkTempError {
             TooManyTemplates => {
                 write!(f, "too many templates")
             }
+            NotFound(template_type, s) => write!(
+                f,
+                "failed to create {} via template {}: No such file or directory",
+                template_type,
+                s.quote()
+            ),
         }
     }
 }
@@ -148,7 +158,7 @@ struct Options {
 /// in all other cases.
 fn is_tmpdir_argument_actually_the_template(matches: &ArgMatches) -> bool {
     if !matches.contains_id(ARG_TEMPLATE) {
-        if let Some(tmpdir) = matches.value_of(OPT_TMPDIR) {
+        if let Some(tmpdir) = matches.get_one::<String>(OPT_TMPDIR) {
             if !Path::new(tmpdir).is_dir() && tmpdir.contains("XXX") {
                 return true;
             }
@@ -167,13 +177,13 @@ impl Options {
         // See https://github.com/clap-rs/clap/pull/1587
         let (tmpdir, template) = if is_tmpdir_argument_actually_the_template(matches) {
             let tmpdir = Some(env::temp_dir().display().to_string());
-            let template = matches.value_of(OPT_TMPDIR).unwrap().to_string();
+            let template = matches.get_one::<String>(OPT_TMPDIR).unwrap().to_string();
             (tmpdir, template)
         } else {
             // If no template argument is given, `--tmpdir` is implied.
-            match matches.value_of(ARG_TEMPLATE) {
+            match matches.get_one::<String>(ARG_TEMPLATE) {
                 None => {
-                    let tmpdir = match matches.value_of(OPT_TMPDIR) {
+                    let tmpdir = match matches.get_one::<String>(OPT_TMPDIR) {
                         None => Some(env::temp_dir().display().to_string()),
                         Some(tmpdir) => Some(tmpdir.to_string()),
                     };
@@ -181,7 +191,7 @@ impl Options {
                     (tmpdir, template.to_string())
                 }
                 Some(template) => {
-                    let tmpdir = matches.value_of(OPT_TMPDIR).map(String::from);
+                    let tmpdir = matches.get_one::<String>(OPT_TMPDIR).map(String::from);
                     (tmpdir, template.to_string())
                 }
             }
@@ -191,7 +201,7 @@ impl Options {
             dry_run: matches.contains_id(OPT_DRY_RUN),
             quiet: matches.contains_id(OPT_QUIET),
             tmpdir,
-            suffix: matches.value_of(OPT_SUFFIX).map(String::from),
+            suffix: matches.get_one::<String>(OPT_SUFFIX).map(String::from),
             treat_as_template: matches.contains_id(OPT_T),
             template,
         }
@@ -327,7 +337,15 @@ impl Params {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let matches = uu_app().try_get_matches_from(&args)?;
+    let matches = match uu_app().try_get_matches_from(&args) {
+        Ok(m) => m,
+        Err(e) => {
+            if e.kind == clap::error::ErrorKind::TooManyValues && e.info[0] == "<template>..." {
+                return Err(UUsageError::new(1, "too many templates"));
+            }
+            return Err(e.into());
+        }
+    };
 
     // Parse command-line options into a format suitable for the
     // application logic.
@@ -452,37 +470,74 @@ pub fn dry_exec(tmpdir: &str, prefix: &str, rand: usize, suffix: &str) -> UResul
     println_verbatim(tmpdir).map_err_context(|| "failed to print directory name".to_owned())
 }
 
-fn exec(dir: &str, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> UResult<()> {
-    let context = || {
-        format!(
-            "failed to create file via template '{}{}{}'",
-            prefix,
-            "X".repeat(rand),
-            suffix
-        )
-    };
-
+/// Create a temporary directory with the given parameters.
+///
+/// This function creates a temporary directory as a subdirectory of
+/// `dir`. The name of the directory is the concatenation of `prefix`,
+/// a string of `rand` random characters, and `suffix`. The
+/// permissions of the directory are set to `u+rwx`
+///
+/// # Errors
+///
+/// If the temporary directory could not be written to disk or if the
+/// given directory `dir` does not exist.
+fn make_temp_dir(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
-
-    let path = if make_dir {
-        builder
-            .tempdir_in(&dir)
-            .map_err_context(context)?
-            .into_path() // `into_path` consumes the TempDir without removing it
-    } else {
-        builder
-            .tempfile_in(&dir)
-            .map_err_context(context)?
-            .keep() // `keep` ensures that the file is not deleted
-            .map_err(|e| MkTempError::PersistError(e.file.path().to_path_buf()))?
-            .1
-    };
-
-    #[cfg(not(windows))]
-    if make_dir {
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
+    match builder.tempdir_in(&dir) {
+        Ok(d) => {
+            // `into_path` consumes the TempDir without removing it
+            let path = d.into_path();
+            #[cfg(not(windows))]
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
+            Ok(path)
+        }
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            let filename = format!("{}{}{}", prefix, "X".repeat(rand), suffix);
+            let path = Path::new(dir).join(filename);
+            let s = path.display().to_string();
+            Err(MkTempError::NotFound("directory".to_string(), s).into())
+        }
+        Err(e) => Err(e.into()),
     }
+}
+
+/// Create a temporary file with the given parameters.
+///
+/// This function creates a temporary file in the directory `dir`. The
+/// name of the file is the concatenation of `prefix`, a string of
+/// `rand` random characters, and `suffix`. The permissions of the
+/// file are set to `u+rw`.
+///
+/// # Errors
+///
+/// If the file could not be written to disk or if the directory does
+/// not exist.
+fn make_temp_file(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
+    let mut builder = Builder::new();
+    builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
+    match builder.tempfile_in(&dir) {
+        // `keep` ensures that the file is not deleted
+        Ok(named_tempfile) => match named_tempfile.keep() {
+            Ok((_, pathbuf)) => Ok(pathbuf),
+            Err(e) => Err(MkTempError::PersistError(e.file.path().to_path_buf()).into()),
+        },
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            let filename = format!("{}{}{}", prefix, "X".repeat(rand), suffix);
+            let path = Path::new(dir).join(filename);
+            let s = path.display().to_string();
+            Err(MkTempError::NotFound("file".to_string(), s).into())
+        }
+        Err(e) => Err(e.into()),
+    }
+}
+
+fn exec(dir: &str, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> UResult<()> {
+    let path = if make_dir {
+        make_temp_dir(dir, prefix, rand, suffix)?
+    } else {
+        make_temp_file(dir, prefix, rand, suffix)?
+    };
 
     // Get just the last component of the path to the created
     // temporary file or directory.

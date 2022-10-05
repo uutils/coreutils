@@ -55,8 +55,8 @@ impl Symbol {
                     "-eq" | "-ge" | "-gt" | "-le" | "-lt" | "-ne" => Self::Op(Operator::Int(s)),
                     "-ef" | "-nt" | "-ot" => Self::Op(Operator::File(s)),
                     "-n" | "-z" => Self::UnaryOp(UnaryOperator::StrlenOp(s)),
-                    "-b" | "-c" | "-d" | "-e" | "-f" | "-g" | "-G" | "-h" | "-k" | "-L" | "-O"
-                    | "-p" | "-r" | "-s" | "-S" | "-t" | "-u" | "-w" | "-x" => {
+                    "-b" | "-c" | "-d" | "-e" | "-f" | "-g" | "-G" | "-h" | "-k" | "-L" | "-N"
+                    | "-O" | "-p" | "-r" | "-s" | "-S" | "-t" | "-u" | "-w" | "-x" => {
                         Self::UnaryOp(UnaryOperator::FiletestOp(s))
                     }
                     _ => Self::Literal(s),
@@ -108,7 +108,7 @@ impl Symbol {
 ///   INTOP → -eq | -ge | -gt | -le | -lt | -ne
 ///   FILEOP → -ef | -nt | -ot
 ///   STRLEN → -n | -z
-///   FILETEST → -b | -c | -d | -e | -f | -g | -G | -h | -k | -L | -O | -p |
+///   FILETEST → -b | -c | -d | -e | -f | -g | -G | -h | -k | -L | -N | -O | -p |
 ///               -r | -s | -S | -t | -u | -w | -x
 ///   BOOLOP → -a | -o
 ///

@@ -432,12 +432,21 @@ impl fmt::Display for Table {
         while let Some(row) = row_iter.next() {
             let mut col_iter = row.iter().enumerate().peekable();
             while let Some((i, elem)) = col_iter.next() {
+                let is_last_col = col_iter.peek().is_none();
+
                 match self.alignments[i] {
-                    Alignment::Left => write!(f, "{:<width$}", elem, width = self.widths[i])?,
+                    Alignment::Left => {
+                        if is_last_col {
+                            // no trailing spaces in last column
+                            write!(f, "{}", elem)?;
+                        } else {
+                            write!(f, "{:<width$}", elem, width = self.widths[i])?;
+                        }
+                    }
                     Alignment::Right => write!(f, "{:>width$}", elem, width = self.widths[i])?,
                 }
 
-                if col_iter.peek().is_some() {
+                if !is_last_col {
                     // column separator
                     write!(f, " ")?;
                 }

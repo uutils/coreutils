@@ -56,7 +56,7 @@ impl Settings {
             show_control: false,
         };
         #[cfg(unix)]
-        let files0_from_stdin_mode = match matches.value_of(options::FILES0_FROM) {
+        let files0_from_stdin_mode = match matches.get_one::<String>(options::FILES0_FROM) {
             Some(files_0_from) => files_0_from == STDIN_REPR,
             None => false,
         };
@@ -277,7 +277,7 @@ fn inputs(matches: &ArgMatches) -> UResult<Vec<Input>> {
 
             Ok(os_values.map(|s| Input::from(s.as_os_str())).collect())
         }
-        None => match matches.value_of(options::FILES0_FROM) {
+        None => match matches.get_one::<String>(options::FILES0_FROM) {
             Some(files_0_from) => create_paths_from_files0(files_0_from),
             None => Ok(vec![Input::Stdin(StdinKind::Implicit)]),
         },
@@ -320,6 +320,7 @@ fn word_count_from_reader<T: WordCountable>(
         // Specialize scanning loop to improve the performance.
         (false, false, false, false, false) => unreachable!(),
 
+        // show_bytes
         (true, false, false, false, false) => {
             // Fast path when only show_bytes is true.
             let (bytes, error) = count_bytes_fast(&mut reader);
@@ -333,58 +334,75 @@ fn word_count_from_reader<T: WordCountable>(
         }
 
         // Fast paths that can be computed without Unicode decoding.
+        // show_lines
         (false, false, true, false, false) => {
             count_bytes_chars_and_lines_fast::<_, false, false, true>(&mut reader)
         }
+        // show_chars
         (false, true, false, false, false) => {
             count_bytes_chars_and_lines_fast::<_, false, true, false>(&mut reader)
         }
+        // show_chars, show_lines
         (false, true, true, false, false) => {
             count_bytes_chars_and_lines_fast::<_, false, true, true>(&mut reader)
         }
+        // show_bytes, show_lines
         (true, false, true, false, false) => {
             count_bytes_chars_and_lines_fast::<_, true, false, true>(&mut reader)
         }
+        // show_bytes, show_chars
         (true, true, false, false, false) => {
             count_bytes_chars_and_lines_fast::<_, true, true, false>(&mut reader)
         }
+        // show_bytes, show_chars, show_lines
         (true, true, true, false, false) => {
             count_bytes_chars_and_lines_fast::<_, true, true, true>(&mut reader)
         }
-
+        // show_words
         (_, false, false, false, true) => {
             word_count_from_reader_specialized::<_, false, false, false, true>(reader)
         }
+        // show_max_line_length
         (_, false, false, true, false) => {
             word_count_from_reader_specialized::<_, false, false, true, false>(reader)
         }
+        // show_max_line_length, show_words
         (_, false, false, true, true) => {
             word_count_from_reader_specialized::<_, false, false, true, true>(reader)
         }
+        // show_chars, show_words
         (_, false, true, false, true) => {
             word_count_from_reader_specialized::<_, false, true, false, true>(reader)
         }
+        // show_chars, show_lines
         (_, false, true, true, false) => {
             word_count_from_reader_specialized::<_, false, true, true, false>(reader)
         }
+        // show_lines, show_max_line_length, show_words
         (_, false, true, true, true) => {
             word_count_from_reader_specialized::<_, false, true, true, true>(reader)
         }
+        // show_chars, show_words
         (_, true, false, false, true) => {
             word_count_from_reader_specialized::<_, true, false, false, true>(reader)
         }
+        // show_chars, show_max_line_length
         (_, true, false, true, false) => {
             word_count_from_reader_specialized::<_, true, false, true, false>(reader)
         }
+        // show_chars, show_max_line_length, show_words
         (_, true, false, true, true) => {
             word_count_from_reader_specialized::<_, true, false, true, true>(reader)
         }
+        // show_chars, show_lines, show_words
         (_, true, true, false, true) => {
             word_count_from_reader_specialized::<_, true, true, false, true>(reader)
         }
+        // show_chars, show_lines, show_max_line_length
         (_, true, true, true, false) => {
             word_count_from_reader_specialized::<_, true, true, true, false>(reader)
         }
+        // show_chars, show_lines, show_max_line_length, show_words
         (_, true, true, true, true) => {
             word_count_from_reader_specialized::<_, true, true, true, true>(reader)
         }

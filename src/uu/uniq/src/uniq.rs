@@ -229,7 +229,7 @@ fn get_line_string(io_line: io::Result<Vec<u8>>) -> UResult<String> {
 }
 
 fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> UResult<Option<T>> {
-    Ok(match matches.value_of(opt_name) {
+    Ok(match matches.get_one::<String>(opt_name) {
         Some(arg_str) => Some(arg_str.parse().map_err(|_| {
             USimpleError::new(
                 1,
@@ -408,8 +408,8 @@ pub fn uu_app<'a>() -> Command<'a> {
 
 fn get_delimiter(matches: &ArgMatches) -> Delimiters {
     let value = matches
-        .value_of(options::ALL_REPEATED)
-        .or_else(|| matches.value_of(options::GROUP));
+        .get_one::<String>(options::ALL_REPEATED)
+        .or_else(|| matches.get_one::<String>(options::GROUP));
     if let Some(delimiter_arg) = value {
         Delimiters::from_str(delimiter_arg).unwrap() // All possible values for ALL_REPEATED are Delimiters (of type `&str`)
     } else if matches.contains_id(options::GROUP) {

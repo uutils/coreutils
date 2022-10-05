@@ -63,7 +63,7 @@ pub enum FilterMode {
 impl FilterMode {
     fn from(matches: &ArgMatches) -> UResult<Self> {
         let zero_term = matches.contains_id(options::ZERO_TERM);
-        let mode = if let Some(arg) = matches.value_of(options::BYTES) {
+        let mode = if let Some(arg) = matches.get_one::<String>(options::BYTES) {
             match parse_num(arg) {
                 Ok(signum) => Self::Bytes(signum),
                 Err(e) => {
@@ -73,7 +73,7 @@ impl FilterMode {
                     ))
                 }
             }
-        } else if let Some(arg) = matches.value_of(options::LINES) {
+        } else if let Some(arg) = matches.get_one::<String>(options::LINES) {
             match parse_num(arg) {
                 Ok(signum) => {
                     let delimiter = if zero_term { 0 } else { b'\n' };
@@ -138,7 +138,8 @@ impl Settings {
             Some(FollowMode::Name)
         } else if matches.value_source(options::FOLLOW) != Some(ValueSource::CommandLine) {
             None
-        } else if matches.value_of(options::FOLLOW) == Some("name") {
+        } else if matches.get_one::<String>(options::FOLLOW) == Some(String::from("name")).as_ref()
+        {
             Some(FollowMode::Name)
         } else {
             Some(FollowMode::Descriptor)
@@ -151,7 +152,7 @@ impl Settings {
             show_warning!("--retry ignored; --retry is useful only when following");
         }
 
-        if let Some(s) = matches.value_of(options::SLEEP_INT) {
+        if let Some(s) = matches.get_one::<String>(options::SLEEP_INT) {
             settings.sleep_sec = match s.parse::<f32>() {
                 Ok(s) => Duration::from_secs_f32(s),
                 Err(_) => {
@@ -165,7 +166,7 @@ impl Settings {
 
         settings.use_polling = matches.contains_id(options::USE_POLLING);
 
-        if let Some(s) = matches.value_of(options::MAX_UNCHANGED_STATS) {
+        if let Some(s) = matches.get_one::<String>(options::MAX_UNCHANGED_STATS) {
             settings.max_unchanged_stats = match s.parse::<u32>() {
                 Ok(s) => s,
                 Err(_) => {
@@ -180,7 +181,7 @@ impl Settings {
             }
         }
 
-        if let Some(pid_str) = matches.value_of(options::PID) {
+        if let Some(pid_str) = matches.get_one::<String>(options::PID) {
             match pid_str.parse() {
                 Ok(pid) => {
                     // NOTE: on unix platform::Pid is i32, on windows platform::Pid is u32

@@ -13,6 +13,9 @@ mod parser;
 use clap::{crate_version, Command};
 use parser::{parse, Operator, Symbol, UnaryOperator};
 use std::ffi::{OsStr, OsString};
+use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
@@ -170,7 +173,11 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
 
             Ok(integers(&a, &b, &op)?)
         }
-        Some(Symbol::Op(Operator::File(_op))) => unimplemented!(),
+        Some(Symbol::Op(Operator::File(op))) => {
+            let b = pop_literal!();
+            let a = pop_literal!();
+            Ok(files(&a, &b, &op)?)
+        }
         Some(Symbol::UnaryOp(UnaryOperator::StrlenOp(op))) => {
             let s = match stack.pop() {
                 Some(Symbol::Literal(s)) => s,
@@ -205,6 +212,7 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
                 "-h" => path(&f, &PathCondition::SymLink),
                 "-k" => path(&f, &PathCondition::Sticky),
                 "-L" => path(&f, &PathCondition::SymLink),
+                "-N" => path(&f, &PathCondition::ExistsModifiedLastRead),
                 "-O" => path(&f, &PathCondition::UserOwns),
                 "-p" => path(&f, &PathCondition::Fifo),
                 "-r" => path(&f, &PathCondition::Readable),
@@ -229,19 +237,25 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
     }
 }
 
+/// Operations to compare integers
+/// `a` is the left hand side
+/// `b` is the left hand side
+/// `op` the operation (ex: -eq, -lt, etc)
 fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> Result<bool, String> {
     let format_err = |value: &OsStr| format!("invalid integer {}", value.quote());
 
-    let a: i64 = a
+    // Parse the two inputs
+    let a: i128 = a
         .to_str()
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| format_err(a))?;
 
-    let b: i64 = b
+    let b: i128 = b
         .to_str()
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| format_err(b))?;
 
+    // Do the maths
     Ok(match op.to_str() {
         Some("-eq") => a == b,
         Some("-ne") => a != b,
@@ -249,6 +263,33 @@ fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> Result<bool, String> {
         Some("-ge") => a >= b,
         Some("-lt") => a < b,
         Some("-le") => a <= b,
+        _ => return Err(format!("unknown operator {}", op.quote())),
+    })
+}
+
+/// Operations to compare files metadata
+/// `a` is the left hand side
+/// `b` is the left hand side
+/// `op` the operation (ex: -ef, -nt, etc)
+fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> Result<bool, String> {
+    // Don't manage the error. GNU doesn't show error when doing
+    // test foo -nt bar
+    let f_a = match fs::metadata(a) {
+        Ok(f) => f,
+        Err(_) => return Ok(false),
+    };
+    let f_b = match fs::metadata(b) {
+        Ok(f) => f,
+        Err(_) => return Ok(false),
+    };
+
+    Ok(match op.to_str() {
+        #[cfg(unix)]
+        Some("-ef") => f_a.ino() == f_b.ino() && f_a.dev() == f_b.dev(),
+        #[cfg(not(unix))]
+        Some("-ef") => unimplemented!(),
+        Some("-nt") => f_a.modified().unwrap() > f_b.modified().unwrap(),
+        Some("-ot") => f_a.created().unwrap() > f_b.created().unwrap(),
         _ => return Err(format!("unknown operator {}", op.quote())),
     })
 }
@@ -273,6 +314,7 @@ enum PathCondition {
     CharacterSpecial,
     Directory,
     Exists,
+    ExistsModifiedLastRead,
     Regular,
     GroupIdFlag,
     GroupOwns,
@@ -290,8 +332,8 @@ enum PathCondition {
 
 #[cfg(not(windows))]
 fn path(path: &OsStr, condition: &PathCondition) -> bool {
-    use std::fs::{self, Metadata};
-    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+    use std::fs::Metadata;
+    use std::os::unix::fs::FileTypeExt;
 
     const S_ISUID: u32 = 0o4000;
     const S_ISGID: u32 = 0o2000;
@@ -351,6 +393,9 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         PathCondition::CharacterSpecial => file_type.is_char_device(),
         PathCondition::Directory => file_type.is_dir(),
         PathCondition::Exists => true,
+        PathCondition::ExistsModifiedLastRead => {
+            metadata.accessed().unwrap() < metadata.modified().unwrap()
+        }
         PathCondition::Regular => file_type.is_file(),
         PathCondition::GroupIdFlag => metadata.mode() & S_ISGID != 0,
         PathCondition::GroupOwns => metadata.gid() == getegid(),
@@ -381,6 +426,7 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         PathCondition::CharacterSpecial => false,
         PathCondition::Directory => stat.is_dir(),
         PathCondition::Exists => true,
+        PathCondition::ExistsModifiedLastRead => unimplemented!(),
         PathCondition::Regular => stat.is_file(),
         PathCondition::GroupIdFlag => false,
         PathCondition::GroupOwns => unimplemented!(),
@@ -394,5 +440,30 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         PathCondition::UserIdFlag => false,
         PathCondition::Writable => false,   // TODO
         PathCondition::Executable => false, // TODO
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::integers;
+    use std::ffi::OsStr;
+
+    #[test]
+    fn test_integer_op() {
+        let a = OsStr::new("18446744073709551616");
+        let b = OsStr::new("0");
+        assert_eq!(integers(a, b, OsStr::new("-lt")).unwrap(), false);
+        let a = OsStr::new("18446744073709551616");
+        let b = OsStr::new("0");
+        assert_eq!(integers(a, b, OsStr::new("-gt")).unwrap(), true);
+        let a = OsStr::new("-1");
+        let b = OsStr::new("0");
+        assert_eq!(integers(a, b, OsStr::new("-lt")).unwrap(), true);
+        let a = OsStr::new("42");
+        let b = OsStr::new("42");
+        assert_eq!(integers(a, b, OsStr::new("-eq")).unwrap(), true);
+        let a = OsStr::new("42");
+        let b = OsStr::new("42");
+        assert_eq!(integers(a, b, OsStr::new("-ne")).unwrap(), false);
     }
 }

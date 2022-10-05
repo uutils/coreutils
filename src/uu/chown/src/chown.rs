@@ -26,7 +26,7 @@ const USAGE: &str = "\
     {} [OPTION]... --reference=RFILE FILE...";
 
 fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>, IfFrom)> {
-    let filter = if let Some(spec) = matches.value_of(options::FROM) {
+    let filter = if let Some(spec) = matches.get_one::<String>(options::FROM) {
         match parse_spec(spec, ':')? {
             (Some(uid), None) => IfFrom::User(uid),
             (None, Some(gid)) => IfFrom::Group(gid),
@@ -39,13 +39,13 @@ fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<(Option<u32>, Optio
 
     let dest_uid: Option<u32>;
     let dest_gid: Option<u32>;
-    if let Some(file) = matches.value_of(options::REFERENCE) {
+    if let Some(file) = matches.get_one::<String>(options::REFERENCE) {
         let meta = fs::metadata(&file)
             .map_err_context(|| format!("failed to get attributes of {}", file.quote()))?;
         dest_gid = Some(meta.gid());
         dest_uid = Some(meta.uid());
     } else {
-        let (u, g) = parse_spec(matches.value_of(options::ARG_OWNER).unwrap(), ':')?;
+        let (u, g) = parse_spec(matches.get_one::<String>(options::ARG_OWNER).unwrap(), ':')?;
         dest_uid = u;
         dest_gid = g;
     }

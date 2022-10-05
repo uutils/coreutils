@@ -17,6 +17,9 @@ env:
 
 on: [push, pull_request]
 
+permissions:
+  contents: read # to fetch code (actions/checkout)
+
 jobs:
   cargo-deny:
     name: Style/cargo-deny
@@ -532,6 +535,9 @@ jobs:
         path: size-result.json
 
   build:
+    permissions:
+      contents: write # to create GitHub release (softprops/action-gh-release)
+
     name: Build
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
@@ -905,7 +911,7 @@ jobs:
     - uses: Swatinem/rust-cache@v1
     - name: Prepare, build and test
       ## spell-checker:ignore (ToDO) sshfs usesh vmactions
-      uses: vmactions/freebsd-vm@v0.2.6
+      uses: vmactions/freebsd-vm@v0.2.9
       with:
         usesh: true
         # sync: sshfs

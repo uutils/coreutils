@@ -108,17 +108,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     fmt_opts.xprefix = matches.contains_id(OPT_EXACT_PREFIX);
     fmt_opts.xanti_prefix = matches.contains_id(OPT_SKIP_PREFIX);
 
-    if let Some(s) = matches.value_of(OPT_PREFIX).map(String::from) {
+    if let Some(s) = matches.get_one::<String>(OPT_PREFIX).map(String::from) {
         fmt_opts.prefix = s;
         fmt_opts.use_prefix = true;
     };
 
-    if let Some(s) = matches.value_of(OPT_SKIP_PREFIX).map(String::from) {
+    if let Some(s) = matches.get_one::<String>(OPT_SKIP_PREFIX).map(String::from) {
         fmt_opts.anti_prefix = s;
         fmt_opts.use_anti_prefix = true;
     };
 
-    if let Some(s) = matches.value_of(OPT_WIDTH) {
+    if let Some(s) = matches.get_one::<String>(OPT_WIDTH) {
         fmt_opts.width = match s.parse::<usize>() {
             Ok(t) => t,
             Err(e) => {
@@ -140,7 +140,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         fmt_opts.goal = cmp::min(fmt_opts.width * 94 / 100, fmt_opts.width - 3);
     };
 
-    if let Some(s) = matches.value_of(OPT_GOAL) {
+    if let Some(s) = matches.get_one::<String>(OPT_GOAL) {
         fmt_opts.goal = match s.parse::<usize>() {
             Ok(t) => t,
             Err(e) => {
@@ -157,7 +157,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    if let Some(s) = matches.value_of(OPT_TAB_WIDTH) {
+    if let Some(s) = matches.get_one::<String>(OPT_TAB_WIDTH) {
         fmt_opts.tabwidth = match s.parse::<usize>() {
             Ok(t) => t,
             Err(e) => {

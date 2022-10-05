@@ -30,7 +30,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
     let input = matches
-        .value_of(options::FILE)
+        .get_one::<String>(options::FILE)
         .expect("Value is required by clap");
 
     let mut stdin_buf;

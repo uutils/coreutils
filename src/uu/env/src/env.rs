@@ -177,7 +177,7 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
 
     let ignore_env = matches.contains_id("ignore-environment");
     let null = matches.contains_id("null");
-    let running_directory = matches.value_of("chdir");
+    let running_directory = matches.get_one::<String>("chdir").map(|s| s.as_str());
     let files = match matches.get_many::<String>("file") {
         Some(v) => v.map(|s| s.as_str()).collect(),
         None => Vec::with_capacity(0),

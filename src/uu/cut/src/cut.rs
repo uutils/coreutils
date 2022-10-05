@@ -406,9 +406,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let complement = matches.contains_id(options::COMPLEMENT);
 
     let mode_parse = match (
-        matches.value_of(options::BYTES),
-        matches.value_of(options::CHARACTERS),
-        matches.value_of(options::FIELDS),
+        matches.get_one::<String>(options::BYTES),
+        matches.get_one::<String>(options::CHARACTERS),
+        matches.get_one::<String>(options::FIELDS),
     ) {
         (Some(byte_ranges), None, None) => list_to_ranges(byte_ranges, complement).map(|ranges| {
             Mode::Bytes(
@@ -416,7 +416,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Options {
                     out_delim: Some(
                         matches
-                            .value_of(options::OUTPUT_DELIMITER)
+                            .get_one::<String>(options::OUTPUT_DELIMITER)
+                            .map(|s| s.as_str())
                             .unwrap_or_default()
                             .to_owned(),
                     ),
@@ -430,7 +431,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Options {
                     out_delim: Some(
                         matches
-                            .value_of(options::OUTPUT_DELIMITER)
+                            .get_one::<String>(options::OUTPUT_DELIMITER)
+                            .map(|s| s.as_str())
                             .unwrap_or_default()
                             .to_owned(),
                     ),
@@ -440,7 +442,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }),
         (None, None, Some(field_ranges)) => {
             list_to_ranges(field_ranges, complement).and_then(|ranges| {
-                let out_delim = match matches.value_of(options::OUTPUT_DELIMITER) {
+                let out_delim = match matches.get_one::<String>(options::OUTPUT_DELIMITER) {
                     Some(s) => {
                         if s.is_empty() {
                             Some("\0".to_owned())
@@ -454,7 +456,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let only_delimited = matches.contains_id(options::ONLY_DELIMITED);
                 let zero_terminated = matches.contains_id(options::ZERO_TERMINATED);
 
-                match matches.value_of(options::DELIMITER) {
+                match matches.get_one::<String>(options::DELIMITER).map(|s| s.as_str()) {
                     Some(mut delim) => {
                         // GNU's `cut` supports `-d=` to set the delimiter to `=`.
                         // Clap parsing is limited in this situation, see:

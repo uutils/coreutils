@@ -751,6 +751,15 @@ impl AtPath {
         }
     }
 
+    pub fn read_symlink(&self, path: &str) -> String {
+        log_info("read_symlink", self.plus_as_string(path));
+        fs::read_link(&self.plus(path))
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned()
+    }
+
     pub fn symlink_metadata(&self, path: &str) -> fs::Metadata {
         match fs::symlink_metadata(&self.plus(path)) {
             Ok(m) => m,
@@ -1834,6 +1843,7 @@ mod tests {
     // should fail with any command that takes piped input.
     // See also https://github.com/uutils/coreutils/issues/3895
     #[test]
+    #[cfg_attr(not(feature = "expensive_tests"), ignore)]
     fn test_when_piped_input_then_no_broken_pipe() {
         let ts = TestScenario::new("tail");
         for i in 0..10000 {

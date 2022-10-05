@@ -14,7 +14,7 @@ use clap::{crate_version, Arg, Command};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::format_usage;
-use uucore::fs::{is_symlink, make_path_relative_to, paths_refer_to_same_file};
+use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
 
 use std::borrow::Cow;
 use std::error::Error;
@@ -170,7 +170,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         logical,
         relative: matches.contains_id(options::RELATIVE),
         target_dir: matches
-            .value_of(options::TARGET_DIRECTORY)
+            .get_one::<String>(options::TARGET_DIRECTORY)
             .map(String::from),
         no_target_dir: matches.contains_id(options::NO_TARGET_DIRECTORY),
         no_dereference: matches.contains_id(options::NO_DEREFERENCE),
@@ -318,7 +318,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             if settings.no_dereference && matches!(settings.overwrite, OverwriteMode::Force) {
                 // In that case, we don't want to do link resolution
                 // We need to clean the target
-                if is_symlink(target_dir) {
+                if target_dir.is_symlink() {
                     if target_dir.is_file() {
                         if let Err(e) = fs::remove_file(target_dir) {
                             show_error!("Could not update {}: {}", target_dir.quote(), e);
@@ -387,7 +387,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         src.into()
     };
 
-    if is_symlink(dst) || dst.exists() {
+    if dst.is_symlink() || dst.exists() {
         backup_path = match settings.backup {
             BackupMode::NoBackup => None,
             BackupMode::SimpleBackup => Some(simple_backup_path(dst, &settings.suffix)),
@@ -415,7 +415,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                 // In case of error, don't do anything
             }
             OverwriteMode::Force => {
-                if !is_symlink(dst) && paths_refer_to_same_file(src, dst, true) {
+                if !dst.is_symlink() && paths_refer_to_same_file(src, dst, true) {
                     return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
                 }
                 if fs::remove_file(dst).is_ok() {};
@@ -427,7 +427,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     if settings.symbolic {
         symlink(&source, dst)?;
     } else {
-        let p = if settings.logical && is_symlink(&source) {
+        let p = if settings.logical && source.is_symlink() {
             // if we want to have an hard link,
             // source is a symlink and -L is passed
             // we want to resolve the symlink to create the hardlink

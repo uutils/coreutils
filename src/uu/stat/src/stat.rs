@@ -512,10 +512,13 @@ impl Stater {
             .unwrap_or_default();
         let format_str = if matches.contains_id(options::PRINTF) {
             matches
-                .value_of(options::PRINTF)
+                .get_one::<String>(options::PRINTF)
                 .expect("Invalid format string")
         } else {
-            matches.value_of(options::FORMAT).unwrap_or("")
+            matches
+                .get_one::<String>(options::FORMAT)
+                .map(|s| s.as_str())
+                .unwrap_or("")
         };
 
         let use_printf = matches.contains_id(options::PRINTF);

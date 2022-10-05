@@ -375,22 +375,22 @@ impl Strategy {
         ) {
             (false, false, false, false) => Ok(Self::Lines(1000)),
             (true, false, false, false) => {
-                let s = matches.value_of(OPT_LINES).unwrap();
+                let s = matches.get_one::<String>(OPT_LINES).unwrap();
                 let n = parse_size(s).map_err(StrategyError::Lines)?;
                 Ok(Self::Lines(n))
             }
             (false, true, false, false) => {
-                let s = matches.value_of(OPT_BYTES).unwrap();
+                let s = matches.get_one::<String>(OPT_BYTES).unwrap();
                 let n = parse_size(s).map_err(StrategyError::Bytes)?;
                 Ok(Self::Bytes(n))
             }
             (false, false, true, false) => {
-                let s = matches.value_of(OPT_LINE_BYTES).unwrap();
+                let s = matches.get_one::<String>(OPT_LINE_BYTES).unwrap();
                 let n = parse_size(s).map_err(StrategyError::Bytes)?;
                 Ok(Self::LineBytes(n))
             }
             (false, false, false, true) => {
-                let s = matches.value_of(OPT_NUMBER).unwrap();
+                let s = matches.get_one::<String>(OPT_NUMBER).unwrap();
                 let number_type = NumberType::from(s).map_err(StrategyError::NumberType)?;
                 Ok(Self::Number(number_type))
             }
@@ -489,13 +489,16 @@ impl fmt::Display for SettingsError {
 impl Settings {
     /// Parse a strategy from the command-line arguments.
     fn from(matches: &ArgMatches) -> Result<Self, SettingsError> {
-        let additional_suffix = matches.value_of(OPT_ADDITIONAL_SUFFIX).unwrap().to_string();
+        let additional_suffix = matches
+            .get_one::<String>(OPT_ADDITIONAL_SUFFIX)
+            .unwrap()
+            .to_string();
         if additional_suffix.contains('/') {
             return Err(SettingsError::SuffixContainsSeparator(additional_suffix));
         }
         let strategy = Strategy::from(matches).map_err(SettingsError::Strategy)?;
         let suffix_type = suffix_type_from(matches);
-        let suffix_length_str = matches.value_of(OPT_SUFFIX_LENGTH).unwrap();
+        let suffix_length_str = matches.get_one::<String>(OPT_SUFFIX_LENGTH).unwrap();
         let suffix_length: usize = suffix_length_str
             .parse()
             .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?;
@@ -517,9 +520,9 @@ impl Settings {
             additional_suffix,
             verbose: matches.value_source("verbose") == Some(ValueSource::CommandLine),
             strategy,
-            input: matches.value_of(ARG_INPUT).unwrap().to_owned(),
-            prefix: matches.value_of(ARG_PREFIX).unwrap().to_owned(),
-            filter: matches.value_of(OPT_FILTER).map(|s| s.to_owned()),
+            input: matches.get_one::<String>(ARG_INPUT).unwrap().to_owned(),
+            prefix: matches.get_one::<String>(ARG_PREFIX).unwrap().to_owned(),
+            filter: matches.get_one::<String>(OPT_FILTER).map(|s| s.to_owned()),
             elide_empty_files: matches.contains_id(OPT_ELIDE_EMPTY_FILES),
         };
         #[cfg(windows)]
