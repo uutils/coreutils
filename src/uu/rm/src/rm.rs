@@ -451,17 +451,17 @@ fn prompt_write_protected(path: &Path, is_dir: bool, options: &Options) -> bool 
         Err(err) => {
             if err.kind() == ErrorKind::PermissionDenied {
                 if is_dir {
-                    prompt(&(format!("rm: remove write-protected directory {}? ", path.quote())))
+                    prompt(&(format!("remove write-protected directory {}? ", path.quote())))
                 } else {
                     if fs::metadata(path).unwrap().len() == 0 {
                         return prompt(
                             &(format!(
-                                "rm: remove write-protected regular empty file {}? ",
+                                "remove write-protected regular empty file {}? ",
                                 path.quote()
                             )),
                         );
                     }
-                    prompt(&(format!("rm: remove write-protected regular file {}? ", path.quote())))
+                    prompt(&(format!("remove write-protected regular file {}? ", path.quote())))
                 }
             } else {
                 true
@@ -471,14 +471,14 @@ fn prompt_write_protected(path: &Path, is_dir: bool, options: &Options) -> bool 
 }
 
 fn prompt_descend(path: &Path) -> bool {
-    prompt(&(format!("rm: descend into directory {}? ", path.quote())))
+    prompt(&(format!("descend into directory {}? ", path.quote())))
 }
 
 fn prompt_file(path: &Path, is_dir: bool) -> bool {
     if is_dir {
-        prompt(&(format!("rm: remove directory {}? ", path.quote())))
+        prompt(&(format!("remove directory {}? ", path.quote())))
     } else {
-        prompt(&(format!("rm: remove file {}? ", path.quote())))
+        prompt(&(format!("remove file {}? ", path.quote())))
     }
 }
 
@@ -491,7 +491,7 @@ fn normalize(path: &Path) -> PathBuf {
 }
 
 fn prompt(msg: &str) -> bool {
-    let _ = stderr().write_all(msg.as_bytes());
+    let _ = stderr().write_all(format!("{}:{}", uucore::util_name(), msg).as_bytes());
     let _ = stderr().flush();
 
     let mut buf = Vec::new();
