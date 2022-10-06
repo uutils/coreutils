@@ -15,7 +15,7 @@ env:
   # * style job configuration
   STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
 
-on: [push, pull_request]
+on: [push, pull_request_target]
 
 permissions:
   contents: read
