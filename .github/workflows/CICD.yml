@@ -18,7 +18,8 @@ env:
 on: [push, pull_request]
 
 permissions:
-  PullRequests: write
+  contents: read
+  pull-requests: write
 
 jobs:
 
