@@ -4,10 +4,7 @@ name: GnuTests
 
 # * note: to run a single test => `REPO/util/run-gnu-test.sh PATH/TO/TEST/SCRIPT`
 
-on: [push, pull_request]
-
-permissions:
-  contents: read
+on: [push, pull_request_target]
 
 jobs:
   gnu:
