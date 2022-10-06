@@ -2,7 +2,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-// spell-checker:ignore ficlone reflink ftruncate pwrite
+// spell-checker:ignore ficlone reflink ftruncate pwrite fiemap
 use std::fs::File;
 use std::io::Read;
 use std::os::unix::io::AsRawFd;
