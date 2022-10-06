@@ -17,11 +17,7 @@ env:
 
 on: [push, pull_request]
 
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write
-
+permissions: write-all
 
 jobs:
 
@@ -206,11 +202,7 @@ jobs:
 
   style_spellcheck:
     name: Style/spelling
-
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
+    permissions: write-all
     runs-on: ${{ matrix.job.os }}
     # env:
     #   STYLE_FAIL_ON_FAULT: false # overrides workflow default
