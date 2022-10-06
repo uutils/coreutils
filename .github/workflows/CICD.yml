@@ -17,6 +17,9 @@ env:
 
 on: [push, pull_request]
 
+permissions:
+  PullRequests: write
+
 jobs:
 
   cargo-deny:
