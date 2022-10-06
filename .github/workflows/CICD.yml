@@ -18,9 +18,7 @@ env:
 on: [push, pull_request]
 
 jobs:
-  permissions:
-    contents: write
-    pull-requests: write  # for dawidd6/action-download-artifact to query commit hash & write for comments
+
   cargo-deny:
     name: Style/cargo-deny
     runs-on: ubuntu-latest
@@ -216,9 +214,7 @@ jobs:
 
   style_spellcheck:
     name: Style/spelling
-    permissions:
-      contents: write
-      pull-requests: write  # for dawidd6/action-download-artifact to query commit hash & write for comments
+    permissions: write-all
     runs-on: ${{ matrix.job.os }}
     # env:
     #   STYLE_FAIL_ON_FAULT: false # overrides workflow default
