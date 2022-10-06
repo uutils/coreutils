@@ -17,7 +17,10 @@ env:
 
 on: [push, pull_request]
 
-permissions: write-all
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
 
 jobs:
 
@@ -202,7 +205,6 @@ jobs:
 
   style_spellcheck:
     name: Style/spelling
-    permissions: write-all
     runs-on: ${{ matrix.job.os }}
     # env:
     #   STYLE_FAIL_ON_FAULT: false # overrides workflow default
@@ -532,9 +534,6 @@ jobs:
         path: size-result.json
 
   build:
-    permissions:
-      contents: write # to create GitHub release (softprops/action-gh-release)
-
     name: Build
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
