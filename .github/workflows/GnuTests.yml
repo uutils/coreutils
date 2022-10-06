@@ -14,6 +14,7 @@ jobs:
     permissions:
       actions: read  # for dawidd6/action-download-artifact to query and download artifacts
       contents: read  # for actions/checkout to fetch code
+      issues: write # to publish comment
       pull-requests: read  # for dawidd6/action-download-artifact to query commit hash
     name: Run GNU tests
     runs-on: ubuntu-latest
