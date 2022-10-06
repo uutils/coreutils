@@ -213,6 +213,8 @@ jobs:
 
   style_spellcheck:
     name: Style/spelling
+    permissions:
+      pull-requests: write  # for dawidd6/action-download-artifact to query commit hash & write for comments
     runs-on: ${{ matrix.job.os }}
     # env:
     #   STYLE_FAIL_ON_FAULT: false # overrides workflow default
