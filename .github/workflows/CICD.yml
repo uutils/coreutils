@@ -15,7 +15,7 @@ env:
   # * style job configuration
   STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
 
-on: [push, pull_request_target]
+on: [push, pull_request]
 
 permissions:
   contents: read
@@ -258,7 +258,7 @@ jobs:
       with:
         github-token: ${{secrets.GITHUB_TOKEN}}
         script: |
-            github.rest.issues.createComment({
+            await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
