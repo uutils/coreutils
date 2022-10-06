@@ -18,8 +18,10 @@ env:
 on: [push, pull_request]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
+  issues: write
+
 
 jobs:
 
@@ -208,6 +210,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      contents: write
+      issues: write
     runs-on: ${{ matrix.job.os }}
     # env:
     #   STYLE_FAIL_ON_FAULT: false # overrides workflow default
