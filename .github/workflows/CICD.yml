@@ -204,7 +204,10 @@ jobs:
 
   style_spellcheck:
     name: Style/spelling
-    permissions: write-all
+
+    permissions:
+      contents: write
+      pull-requests: write
     runs-on: ${{ matrix.job.os }}
     # env:
     #   STYLE_FAIL_ON_FAULT: false # overrides workflow default
@@ -254,7 +257,6 @@ jobs:
       uses: actions/github-script@v6
       with:
         github-token: ${{secrets.GITHUB_TOKEN}}
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
         script: |
             github.rest.issues.createComment({
               issue_number: context.issue.number,
