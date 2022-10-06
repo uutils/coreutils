@@ -61,9 +61,15 @@ impl CsplitOptions {
             split_name: crash_if_err!(
                 1,
                 SplitName::new(
-                    matches.value_of(options::PREFIX).map(str::to_string),
-                    matches.value_of(options::SUFFIX_FORMAT).map(str::to_string),
-                    matches.value_of(options::DIGITS).map(str::to_string)
+                    matches
+                        .get_one::<String>(options::PREFIX)
+                        .map(|s| s.to_owned()),
+                    matches
+                        .get_one::<String>(options::SUFFIX_FORMAT)
+                        .map(|s| s.to_owned()),
+                    matches
+                        .get_one::<String>(options::DIGITS)
+                        .map(|s| s.to_owned())
                 )
             ),
             keep_files,
@@ -718,7 +724,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
     // get the file to split
-    let file_name = matches.value_of(options::FILE).unwrap();
+    let file_name = matches.get_one::<String>(options::FILE).unwrap();
 
     // get the patterns to split on
     let patterns: Vec<String> = matches

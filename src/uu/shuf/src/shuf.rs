@@ -62,7 +62,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mode = if let Some(args) = matches.get_many::<String>(options::ECHO) {
         Mode::Echo(args.map(String::from).collect())
-    } else if let Some(range) = matches.value_of(options::INPUT_RANGE) {
+    } else if let Some(range) = matches.get_one::<String>(options::INPUT_RANGE) {
         match parse_range(range) {
             Ok(m) => Mode::InputRange(m),
             Err(msg) => {
@@ -70,7 +70,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
     } else {
-        Mode::Default(matches.value_of(options::FILE).unwrap_or("-").to_string())
+        Mode::Default(
+            matches
+                .get_one::<String>(options::FILE)
+                .map(|s| s.as_str())
+                .unwrap_or("-")
+                .to_string(),
+        )
     };
 
     let options = Options {
@@ -85,8 +91,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err(msg) => return Err(USimpleError::new(1, msg)),
             }
         },
-        output: matches.value_of(options::OUTPUT).map(String::from),
-        random_source: matches.value_of(options::RANDOM_SOURCE).map(String::from),
+        output: matches.get_one::<String>(options::OUTPUT).map(String::from),
+        random_source: matches
+            .get_one::<String>(options::RANDOM_SOURCE)
+            .map(String::from),
         repeat: matches.contains_id(options::REPEAT),
         sep: if matches.contains_id(options::ZERO_TERMINATED) {
             0x00_u8

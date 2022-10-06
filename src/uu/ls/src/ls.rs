@@ -10,7 +10,10 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{builder::ValueParser, crate_version, Arg, Command};
+use clap::{
+    builder::{NonEmptyStringValueParser, ValueParser},
+    crate_version, Arg, Command,
+};
 use glob::Pattern;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
@@ -156,6 +159,7 @@ enum LsError {
     IOErrorContext(std::io::Error, PathBuf, bool),
     BlockSizeParseError(String),
     AlreadyListedError(PathBuf),
+    TimeStyleParseError(String, Vec<String>),
 }
 
 impl UError for LsError {
@@ -167,6 +171,7 @@ impl UError for LsError {
             Self::IOErrorContext(_, _, true) => 2,
             Self::BlockSizeParseError(_) => 1,
             Self::AlreadyListedError(_) => 2,
+            Self::TimeStyleParseError(_, _) => 1,
         }
     }
 }
@@ -178,6 +183,14 @@ impl Display for LsError {
         match self {
             Self::BlockSizeParseError(s) => {
                 write!(f, "invalid --block-size argument {}", s.quote())
+            }
+            Self::TimeStyleParseError(s, possible_time_styles) => {
+                write!(
+                    f,
+                    "invalid --time-style argument {}\nPossible values are: {:?}\n\nFor more information try --help",
+                    s.quote(),
+                    possible_time_styles
+                )
             }
             Self::InvalidLineWidth(s) => write!(f, "invalid line width: {}", s.quote()),
             Self::IOError(e) => write!(f, "general io error: {}", e),
@@ -300,8 +313,46 @@ enum TimeStyle {
     LongIso,
     Iso,
     Locale,
+    Format(String),
 }
 
+fn parse_time_style(options: &clap::ArgMatches) -> Result<TimeStyle, LsError> {
+    let possible_time_styles = vec![
+        "full-iso".to_string(),
+        "long-iso".to_string(),
+        "iso".to_string(),
+        "locale".to_string(),
+        "+FORMAT (e.g., +%H:%M) for a 'date'-style format".to_string(),
+    ];
+    if let Some(field) = options.get_one::<String>(options::TIME_STYLE) {
+        //If both FULL_TIME and TIME_STYLE are present
+        //The one added last is dominant
+        if options.contains_id(options::FULL_TIME)
+            && options.indices_of(options::FULL_TIME).unwrap().last()
+                > options.indices_of(options::TIME_STYLE).unwrap().last()
+        {
+            Ok(TimeStyle::FullIso)
+        } else {
+            match field.as_str() {
+                "full-iso" => Ok(TimeStyle::FullIso),
+                "long-iso" => Ok(TimeStyle::LongIso),
+                "iso" => Ok(TimeStyle::Iso),
+                "locale" => Ok(TimeStyle::Locale),
+                _ => match field.chars().next().unwrap() {
+                    '+' => Ok(TimeStyle::Format(String::from(&field[1..]))),
+                    _ => Err(LsError::TimeStyleParseError(
+                        String::from(field),
+                        possible_time_styles,
+                    )),
+                },
+            }
+        }
+    } else if options.contains_id(options::FULL_TIME) {
+        Ok(TimeStyle::FullIso)
+    } else {
+        Ok(TimeStyle::Locale)
+    }
+}
 enum Dereference {
     None,
     DirArgs,
@@ -374,9 +425,9 @@ impl Config {
     #[allow(clippy::cognitive_complexity)]
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let context = options.contains_id(options::CONTEXT);
-        let (mut format, opt) = if let Some(format_) = options.value_of(options::FORMAT) {
+        let (mut format, opt) = if let Some(format_) = options.get_one::<String>(options::FORMAT) {
             (
-                match format_ {
+                match format_.as_str() {
                     "long" | "verbose" => Format::Long,
                     "single-column" => Format::OneLine,
                     "columns" | "vertical" => Format::Columns,
@@ -447,8 +498,8 @@ impl Config {
             Files::Normal
         };
 
-        let sort = if let Some(field) = options.value_of(options::SORT) {
-            match field {
+        let sort = if let Some(field) = options.get_one::<String>(options::SORT) {
+            match field.as_str() {
                 "none" => Sort::None,
                 "name" => Sort::Name,
                 "time" => Sort::Time,
@@ -472,8 +523,8 @@ impl Config {
             Sort::Name
         };
 
-        let time = if let Some(field) = options.value_of(options::TIME) {
-            match field {
+        let time = if let Some(field) = options.get_one::<String>(options::TIME) {
+            match field.as_str() {
                 "ctime" | "status" => Time::Change,
                 "access" | "atime" | "use" => Time::Access,
                 "birth" | "creation" => Time::Birth,
@@ -488,25 +539,25 @@ impl Config {
             Time::Modification
         };
 
-        let mut needs_color = match options.value_of(options::COLOR) {
+        let mut needs_color = match options.get_one::<String>(options::COLOR) {
             None => options.contains_id(options::COLOR),
-            Some(val) => match val {
+            Some(val) => match val.as_str() {
                 "" | "always" | "yes" | "force" => true,
                 "auto" | "tty" | "if-tty" => atty::is(atty::Stream::Stdout),
                 /* "never" | "no" | "none" | */ _ => false,
             },
         };
 
-        let cmd_line_bs = options.value_of(options::size::BLOCK_SIZE);
+        let cmd_line_bs = options.get_one::<String>(options::size::BLOCK_SIZE);
         let opt_si = cmd_line_bs.is_some()
             && options
-                .value_of(options::size::BLOCK_SIZE)
+                .get_one::<String>(options::size::BLOCK_SIZE)
                 .unwrap()
                 .eq("si")
             || options.contains_id(options::size::SI);
         let opt_hr = (cmd_line_bs.is_some()
             && options
-                .value_of(options::size::BLOCK_SIZE)
+                .get_one::<String>(options::size::BLOCK_SIZE)
                 .unwrap()
                 .eq("human-readable"))
             || options.contains_id(options::size::HUMAN_READABLE);
@@ -574,7 +625,7 @@ impl Config {
             }
         };
 
-        let width = match options.value_of(options::WIDTH) {
+        let width = match options.get_one::<String>(options::WIDTH) {
             Some(x) => {
                 if x.starts_with('0') && x.len() > 1 {
                     // Read number as octal
@@ -617,7 +668,7 @@ impl Config {
         };
 
         let opt_quoting_style = options
-            .value_of(options::QUOTING_STYLE)
+            .get_one::<String>(options::QUOTING_STYLE)
             .map(|cmd_line_qs| cmd_line_qs.to_owned());
 
         let mut quoting_style = if let Some(style) = opt_quoting_style {
@@ -670,16 +721,18 @@ impl Config {
             }
         };
 
-        let indicator_style = if let Some(field) = options.value_of(options::INDICATOR_STYLE) {
-            match field {
+        let indicator_style = if let Some(field) =
+            options.get_one::<String>(options::INDICATOR_STYLE)
+        {
+            match field.as_str() {
                 "none" => IndicatorStyle::None,
                 "file-type" => IndicatorStyle::FileType,
                 "classify" => IndicatorStyle::Classify,
                 "slash" => IndicatorStyle::Slash,
                 &_ => IndicatorStyle::None,
             }
-        } else if let Some(field) = options.value_of(options::indicator_style::CLASSIFY) {
-            match field {
+        } else if let Some(field) = options.get_one::<String>(options::indicator_style::CLASSIFY) {
+            match field.as_str() {
                 "never" | "no" | "none" => IndicatorStyle::None,
                 "always" | "yes" | "force" => IndicatorStyle::Classify,
                 "auto" | "tty" | "if-tty" => {
@@ -698,31 +751,7 @@ impl Config {
         } else {
             IndicatorStyle::None
         };
-
-        let time_style = if let Some(field) = options.value_of(options::TIME_STYLE) {
-            //If both FULL_TIME and TIME_STYLE are present
-            //The one added last is dominant
-            if options.contains_id(options::FULL_TIME)
-                && options.indices_of(options::FULL_TIME).unwrap().last()
-                    > options.indices_of(options::TIME_STYLE).unwrap().last()
-            {
-                TimeStyle::FullIso
-            } else {
-                //Clap handles the env variable "TIME_STYLE"
-                match field {
-                    "full-iso" => TimeStyle::FullIso,
-                    "long-iso" => TimeStyle::LongIso,
-                    "iso" => TimeStyle::Iso,
-                    "locale" => TimeStyle::Locale,
-                    // below should never happen as clap already restricts the values.
-                    _ => unreachable!("Invalid field for --time-style"),
-                }
-            }
-        } else if options.contains_id(options::FULL_TIME) {
-            TimeStyle::FullIso
-        } else {
-            TimeStyle::Locale
-        };
+        let time_style = parse_time_style(options)?;
 
         let mut ignore_patterns: Vec<Pattern> = Vec::new();
 
@@ -1509,13 +1538,13 @@ pub fn uu_app<'a>() -> Command<'a> {
                 ]),
         )
         .arg(
-            //This still needs support for posix-*, +FORMAT
+            //This still needs support for posix-*
             Arg::new(options::TIME_STYLE)
                 .long(options::TIME_STYLE)
                 .help("time/date format with -l; see TIME_STYLE below")
                 .value_name("TIME_STYLE")
                 .env("TIME_STYLE")
-                .value_parser(["full-iso", "long-iso", "iso", "locale"])
+                .value_parser(NonEmptyStringValueParser::new())
                 .overrides_with_all(&[options::TIME_STYLE]),
         )
         .arg(
@@ -1547,7 +1576,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .value_parser(ValueParser::os_string()),
         )
         .after_help(
-            "The TIME_STYLE argument can be full-iso, long-iso, iso. \
+            "The TIME_STYLE argument can be full-iso, long-iso, iso, locale or +FORMAT. FORMAT is interpreted like in date. \
             Also the TIME_STYLE environment variable sets the default style to use.",
         )
 }
@@ -2517,7 +2546,7 @@ fn display_date(metadata: &Metadata, config: &Config) -> String {
             //According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
             let recent = time + chrono::Duration::seconds(31_556_952 / 2) > chrono::Local::now();
 
-            match config.time_style {
+            match &config.time_style {
                 TimeStyle::FullIso => time.format("%Y-%m-%d %H:%M:%S.%f %z"),
                 TimeStyle::LongIso => time.format("%Y-%m-%d %H:%M"),
                 TimeStyle::Iso => time.format(if recent { "%m-%d %H:%M" } else { "%Y-%m-%d " }),
@@ -2532,6 +2561,7 @@ fn display_date(metadata: &Metadata, config: &Config) -> String {
 
                     time.format(fmt)
                 }
+                TimeStyle::Format(e) => time.format(e),
             }
             .to_string()
         }

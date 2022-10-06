@@ -139,20 +139,6 @@ jobs:
         # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
         S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::${fault_type} file=\1,line=\2::${fault_prefix}: \`cargo fmt\`: style violation (file:'\1', line:\2; use \`cargo fmt -- \"\1\"\`)/p" ; fault=true ; }
         if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
-    - name: "`cargo fmt` testing of integration tests"
-      if: success() || failure() # run regardless of prior step success/failure
-      shell: bash
-      run: |
-        ## `cargo fmt` testing of integration tests
-        unset fault
-        fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
-        fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
-        # 'tests' is the standard/usual integration test directory
-        if [ -d tests ]; then
-          # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-          S=$(find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s\n" "$S" | sed -E -n "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::${fault_type} file=\1,line=\2::${fault_prefix}: \`cargo fmt\`: style violation (file:'\1', line:\2; use \`cargo fmt \"\1\"\`)/p" ; fault=true ; }
-        fi
-        if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
   style_lint:
     name: Style/lint
@@ -547,6 +533,9 @@ jobs:
         path: size-result.json
 
   build:
+    permissions:
+      contents: write # to create GitHub release (softprops/action-gh-release)
+
     name: Build
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
@@ -920,7 +909,7 @@ jobs:
     - uses: Swatinem/rust-cache@v1
     - name: Prepare, build and test
       ## spell-checker:ignore (ToDO) sshfs usesh vmactions
-      uses: vmactions/freebsd-vm@v0.2.6
+      uses: vmactions/freebsd-vm@v0.2.9
       with:
         usesh: true
         # sync: sshfs

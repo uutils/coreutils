@@ -119,10 +119,10 @@ fn parse_unit_size_suffix(s: &str) -> Option<usize> {
 }
 
 fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
-    let from = parse_unit(args.value_of(options::FROM).unwrap())?;
-    let to = parse_unit(args.value_of(options::TO).unwrap())?;
-    let from_unit = parse_unit_size(args.value_of(options::FROM_UNIT).unwrap())?;
-    let to_unit = parse_unit_size(args.value_of(options::TO_UNIT).unwrap())?;
+    let from = parse_unit(args.get_one::<String>(options::FROM).unwrap())?;
+    let to = parse_unit(args.get_one::<String>(options::TO).unwrap())?;
+    let from_unit = parse_unit_size(args.get_one::<String>(options::FROM_UNIT).unwrap())?;
+    let to_unit = parse_unit_size(args.get_one::<String>(options::TO_UNIT).unwrap())?;
 
     let transform = TransformOptions {
         from,
@@ -131,7 +131,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         to_unit,
     };
 
-    let padding = match args.value_of(options::PADDING) {
+    let padding = match args.get_one::<String>(options::PADDING) {
         Some(s) => s
             .parse::<isize>()
             .map_err(|_| s)
@@ -144,7 +144,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     }?;
 
     let header = if args.value_source(options::HEADER) == Some(ValueSource::CommandLine) {
-        let value = args.value_of(options::HEADER).unwrap();
+        let value = args.get_one::<String>(options::HEADER).unwrap();
 
         value
             .parse::<usize>()
@@ -158,7 +158,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         Ok(0)
     }?;
 
-    let fields = match args.value_of(options::FIELD).unwrap() {
+    let fields = match args.get_one::<String>(options::FIELD).unwrap().as_str() {
         "-" => vec![Range {
             low: 1,
             high: std::usize::MAX,
@@ -166,7 +166,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         v => Range::from_list(v)?,
     };
 
-    let format = match args.value_of(options::FORMAT) {
+    let format = match args.get_one::<String>(options::FORMAT) {
         Some(s) => s.parse()?,
         None => FormatOptions::default(),
     };
@@ -175,16 +175,18 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         return Err("grouping cannot be combined with --to".to_string());
     }
 
-    let delimiter = args.value_of(options::DELIMITER).map_or(Ok(None), |arg| {
-        if arg.len() == 1 {
-            Ok(Some(arg.to_string()))
-        } else {
-            Err("the delimiter must be a single character".to_string())
-        }
-    })?;
+    let delimiter = args
+        .get_one::<String>(options::DELIMITER)
+        .map_or(Ok(None), |arg| {
+            if arg.len() == 1 {
+                Ok(Some(arg.to_string()))
+            } else {
+                Err("the delimiter must be a single character".to_string())
+            }
+        })?;
 
     // unwrap is fine because the argument has a default value
-    let round = match args.value_of(options::ROUND).unwrap() {
+    let round = match args.get_one::<String>(options::ROUND).unwrap().as_str() {
         "up" => RoundMethod::Up,
         "down" => RoundMethod::Down,
         "from-zero" => RoundMethod::FromZero,
@@ -193,7 +195,9 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         _ => unreachable!("Should be restricted by clap"),
     };
 
-    let suffix = args.value_of(options::SUFFIX).map(|s| s.to_owned());
+    let suffix = args
+        .get_one::<String>(options::SUFFIX)
+        .map(|s| s.to_owned());
 
     Ok(NumfmtOptions {
         transform,

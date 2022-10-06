@@ -357,7 +357,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let considering_dir: bool = MainFunction::Directory == main_function;
 
     let specified_mode: Option<u32> = if matches.contains_id(OPT_MODE) {
-        let x = matches.value_of(OPT_MODE).ok_or(1)?;
+        let x = matches.get_one::<String>(OPT_MODE).ok_or(1)?;
         Some(mode::parse(x, considering_dir, get_umask()).map_err(|err| {
             show_error!("Invalid mode string: {}", err);
             1
@@ -367,7 +367,9 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     };
 
     let backup_mode = backup_control::determine_backup_mode(matches)?;
-    let target_dir = matches.value_of(OPT_TARGET_DIRECTORY).map(|d| d.to_owned());
+    let target_dir = matches
+        .get_one::<String>(OPT_TARGET_DIRECTORY)
+        .map(|d| d.to_owned());
 
     let preserve_timestamps = matches.contains_id(OPT_PRESERVE_TIMESTAMPS);
     let compare = matches.contains_id(OPT_COMPARE);
@@ -385,15 +387,24 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         specified_mode,
         backup_mode,
         suffix: backup_control::determine_backup_suffix(matches),
-        owner: matches.value_of(OPT_OWNER).unwrap_or("").to_string(),
-        group: matches.value_of(OPT_GROUP).unwrap_or("").to_string(),
+        owner: matches
+            .get_one::<String>(OPT_OWNER)
+            .map(|s| s.as_str())
+            .unwrap_or("")
+            .to_string(),
+        group: matches
+            .get_one::<String>(OPT_GROUP)
+            .map(|s| s.as_str())
+            .unwrap_or("")
+            .to_string(),
         verbose: matches.contains_id(OPT_VERBOSE),
         preserve_timestamps,
         compare,
         strip,
         strip_program: String::from(
             matches
-                .value_of(OPT_STRIP_PROGRAM)
+                .get_one::<String>(OPT_STRIP_PROGRAM)
+                .map(|s| s.as_str())
                 .unwrap_or(DEFAULT_STRIP_PROGRAM),
         ),
         create_leading: matches.contains_id(OPT_CREATE_LEADING),

@@ -46,7 +46,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    let adjustment = match matches.value_of(options::ADJUSTMENT) {
+    let adjustment = match matches.get_one::<String>(options::ADJUSTMENT) {
         Some(nstr) => {
             if !matches.contains_id(options::COMMAND) {
                 return Err(UUsageError::new(

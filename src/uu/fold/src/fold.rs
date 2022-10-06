@@ -38,7 +38,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let bytes = matches.contains_id(options::BYTES);
     let spaces = matches.contains_id(options::SPACES);
-    let poss_width = match matches.value_of(options::WIDTH) {
+    let poss_width = match matches.get_one::<String>(options::WIDTH) {
         Some(v) => Some(v.to_owned()),
         None => obs_width,
     };

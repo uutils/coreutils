@@ -65,7 +65,7 @@ impl Config {
         };
 
         let cols = options
-            .value_of(options::WRAP)
+            .get_one::<String>(options::WRAP)
             .map(|num| {
                 num.parse::<usize>().map_err(|_| {
                     USimpleError::new(

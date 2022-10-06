@@ -90,16 +90,16 @@ fn test_ls_allocation_size() {
         // fill empty file with zeros
         scene
             .ccmd("dd")
-            .arg("--if=/dev/zero")
-            .arg("--of=some-dir1/zero-file")
+            .arg("if=/dev/zero")
+            .arg("of=some-dir1/zero-file")
             .arg("bs=1024")
             .arg("count=4096")
             .succeeds();
 
         scene
             .ccmd("dd")
-            .arg("--if=/dev/zero")
-            .arg("--of=irregular-file")
+            .arg("if=/dev/zero")
+            .arg("of=irregular-file")
             .arg("bs=1")
             .arg("count=777")
             .succeeds();
@@ -1653,6 +1653,7 @@ fn test_ls_styles() {
     let re_iso = Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
     let re_locale =
         Regex::new(r"[a-z-]* \d* \w* \w* \d* [A-Z][a-z]{2} ( |\d)\d \d{2}:\d{2} test\n").unwrap();
+    let re_custom_format = Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{4}__\d{2} test\n").unwrap();
 
     //full-iso
     let result = scene
@@ -1674,6 +1675,17 @@ fn test_ls_styles() {
     //locale
     let result = scene.ucmd().arg("-l").arg("--time-style=locale").succeeds();
     assert!(re_locale.is_match(result.stdout_str()));
+
+    //+FORMAT
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=+%Y__%M")
+        .succeeds();
+    assert!(re_custom_format.is_match(result.stdout_str()));
+
+    // Also fails due to not having full clap support for time_styles
+    scene.ucmd().arg("-l").arg("-time-style=invalid").fails();
 
     //Overwrite options tests
     let result = scene

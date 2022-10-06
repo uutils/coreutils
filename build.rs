@@ -18,10 +18,6 @@ pub fn main() {
 
     let out_dir = env::var("OUT_DIR").unwrap();
     // println!("cargo:warning=out_dir={}", out_dir);
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap().replace('\\', "/");
-    // println!("cargo:warning=manifest_dir={}", manifest_dir);
-    let util_tests_dir = format!("{}/tests/by-util", manifest_dir);
-    // println!("cargo:warning=util_tests_dir={}", util_tests_dir);
 
     let mut crates = Vec::new();
     for (key, val) in env::vars() {
@@ -41,7 +37,6 @@ pub fn main() {
     crates.sort();
 
     let mut mf = File::create(Path::new(&out_dir).join("uutils_map.rs")).unwrap();
-    let mut tf = File::create(Path::new(&out_dir).join("test_modules.rs")).unwrap();
 
     mf.write_all(
         "type UtilityMap<T> = phf::Map<&'static str, (fn(T) -> i32, fn() -> Command<'static>)>;\n\
@@ -60,42 +55,15 @@ pub fn main() {
             "uu_test" => {
                 phf_map.entry("test", &map_value);
                 phf_map.entry("[", &map_value);
-
-                tf.write_all(
-                    format!(
-                        "#[path=\"{dir}/test_test.rs\"]\nmod test_test;\n",
-                        dir = util_tests_dir,
-                    )
-                    .as_bytes(),
-                )
-                .unwrap();
             }
             k if k.starts_with(OVERRIDE_PREFIX) => {
                 phf_map.entry(&k[OVERRIDE_PREFIX.len()..], &map_value);
-                tf.write_all(
-                    format!(
-                        "#[path=\"{dir}/test_{k}.rs\"]\nmod test_{k};\n",
-                        k = &krate[OVERRIDE_PREFIX.len()..],
-                        dir = util_tests_dir,
-                    )
-                    .as_bytes(),
-                )
-                .unwrap();
             }
             "false" | "true" => {
                 phf_map.entry(
                     krate,
                     &format!("(r#{krate}::uumain, r#{krate}::uu_app)", krate = krate),
                 );
-                tf.write_all(
-                    format!(
-                        "#[path=\"{dir}/test_{krate}.rs\"]\nmod test_{krate};\n",
-                        krate = krate,
-                        dir = util_tests_dir,
-                    )
-                    .as_bytes(),
-                )
-                .unwrap();
             }
             "hashsum" => {
                 phf_map.entry(
@@ -123,27 +91,9 @@ pub fn main() {
                 phf_map.entry("shake256sum", &map_value_bits);
                 phf_map.entry("b2sum", &map_value);
                 phf_map.entry("b3sum", &map_value_b3sum);
-                tf.write_all(
-                    format!(
-                        "#[path=\"{dir}/test_{krate}.rs\"]\nmod test_{krate};\n",
-                        krate = krate,
-                        dir = util_tests_dir,
-                    )
-                    .as_bytes(),
-                )
-                .unwrap();
             }
             _ => {
                 phf_map.entry(krate, &map_value);
-                tf.write_all(
-                    format!(
-                        "#[path=\"{dir}/test_{krate}.rs\"]\nmod test_{krate};\n",
-                        krate = krate,
-                        dir = util_tests_dir,
-                    )
-                    .as_bytes(),
-                )
-                .unwrap();
             }
         }
     }
@@ -151,5 +101,4 @@ pub fn main() {
     mf.write_all(b"\n}\n").unwrap();
 
     mf.flush().unwrap();
-    tf.flush().unwrap();
 }
