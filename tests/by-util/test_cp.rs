@@ -2108,3 +2108,31 @@ fn test_remove_destination_symbolic_link_loop() {
         .no_stderr();
     assert!(at.file_exists("loop"));
 }
+
+/// Test that copying a directory to itself is disallowed.
+#[test]
+fn test_copy_directory_to_itself_disallowed() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    #[cfg(not(windows))]
+    let expected = "cp: cannot copy a directory, 'd', into itself, 'd/d'";
+    #[cfg(windows)]
+    let expected = "cp: cannot copy a directory, 'd', into itself, 'd\\d'";
+    ucmd.args(&["-R", "d", "d"]).fails().stderr_only(expected);
+}
+
+/// Test that copying a nested directory to itself is disallowed.
+#[test]
+fn test_copy_nested_directory_to_itself_disallowed() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("a/b");
+    at.mkdir("a/b/c");
+    #[cfg(not(windows))]
+    let expected = "cp: cannot copy a directory, 'a/b', into itself, 'a/b/c/b'";
+    #[cfg(windows)]
+    let expected = "cp: cannot copy a directory, 'a/b', into itself, 'a/b/c\\b'";
+    ucmd.args(&["-R", "a/b", "a/b/c"])
+        .fails()
+        .stderr_only(expected);
+}
