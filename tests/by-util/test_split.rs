@@ -660,6 +660,22 @@ fn test_line_bytes_no_empty_file() {
 }
 
 #[test]
+fn test_line_bytes_no_eof() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-C", "3"])
+        .pipe_in("1\n2222\n3\n4")
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("xaa"), "1\n");
+    assert_eq!(at.read("xab"), "222");
+    assert_eq!(at.read("xac"), "2\n");
+    assert_eq!(at.read("xad"), "3\n");
+    assert_eq!(at.read("xae"), "4");
+    assert!(!at.plus("xaf").exists());
+}
+
+#[test]
 fn test_guard_input() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
