@@ -248,14 +248,17 @@ fn remove(files: &[String], options: &Options) -> bool {
 
     for filename in files {
         let file = Path::new(filename);
-        // symlink_metadata's is_dir and is_file always returns false so we also need to grab a normal metadata
+        // symlink_metadata.is_dir() and metadata.is_file() always returns false so we also need to grab a normal metadata
         had_err = match file.symlink_metadata() {
             Ok(symlink_metadata) => {
                 if is_symlink_dir(&symlink_metadata) {
+                    // We get here if we are on a windows machine and directory is symlinked in which case we remove it like a directory because windows
                     remove_dir(file, options)
                 } else if symlink_metadata.is_symlink() {
+                    // We get here if we are on not a windows machine and is symlinked in which case we remove it like a file
                     remove_file(file, options)
                 } else {
+                    // We get here if the symlink_metadata says this file or directory isn't symlinked
                     match file.metadata() {
                         Ok(metadata) => {
                             if metadata.is_dir() {
@@ -476,7 +479,7 @@ fn prompt_file(path: &Path, options: &Options, is_dir: bool) -> bool {
             true
         }
     } else {
-        // File::open(path) doesn't open the file in write mode so we need to use file options to open it in also write mode to check writability
+        // File::open(path) doesn't open the file in write mode so we need to use file options to open it in also write mode to check if it can written too
         match File::options().read(true).write(true).open(path) {
             Ok(file) => {
                 if let Ok(metadata) = file.metadata() {
