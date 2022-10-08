@@ -413,7 +413,7 @@ fn test_rm_prompts() {
         "rm: descend into directory 'a'?",
         "rm: remove write-protected regular empty file 'a/empty-no-write'?",
         "rm: remove symbolic link 'a/slink'?",
-        "rm: remove symbolic link 'a/slinkdot'?",
+        "rm: remove symbolic link 'a/slink-dot'?",
         "rm: remove write-protected regular file 'a/f-no-write'?",
         "rm: remove regular empty file 'a/empty'?",
         "rm: remove directory 'a/b'?",
@@ -441,7 +441,7 @@ fn test_rm_prompts() {
         .expect("Couldn't write to a/f-no-write");
 
     at.symlink_dir("a/empty-f", "a/slink");
-    at.symlink_dir(".", "a/slinkdot");
+    at.symlink_dir(".", "a/slink-dot");
 
     let dir_1 = "a/b/";
     let dir_2 = "a/b-no-write/";
