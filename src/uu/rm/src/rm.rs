@@ -535,8 +535,8 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
     use std::os::windows::prelude::MetadataExt;
     use winapi::um::winnt::FILE_ATTRIBUTE_READONLY;
-    let user_writable = (metadata.file_attributes() & FILE_ATTRIBUTE_READONLY) != 0;
-    if !user_writable {
+    let not_user_writable = (metadata.file_attributes() & FILE_ATTRIBUTE_READONLY) != 0;
+    if not_user_writable {
         prompt(&(format!("remove write-protected directory {}? ", path.quote())))
     } else if options.interactive == InteractiveMode::Always {
         prompt(&(format!("remove directory {}? ", path.quote())))
