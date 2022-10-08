@@ -13,10 +13,8 @@ extern crate uucore;
 use clap::{crate_version, Arg, Command};
 use remove_dir_all::remove_dir_all;
 use std::collections::VecDeque;
-use std::fs;
-use std::fs::File;
-use std::io::ErrorKind;
-use std::io::{stderr, stdin, BufRead, Write};
+use std::fs::{self, File, Metadata};
+use std::io::{stderr, stdin, BufRead, ErrorKind, Write};
 use std::ops::BitOr;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
@@ -365,12 +363,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
 }
 
 fn remove_dir(path: &Path, options: &Options) -> bool {
-    let response = if options.interactive == InteractiveMode::Always {
-        prompt_file(path, true)
-    } else {
-        true
-    };
-    if response {
+    if prompt_file(path, options, true) {
         if let Ok(mut read_dir) = fs::read_dir(path) {
             if options.dir || options.recursive {
                 if read_dir.next().is_none() {
@@ -415,12 +408,7 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
 }
 
 fn remove_file(path: &Path, options: &Options) -> bool {
-    let response = if options.interactive == InteractiveMode::Always {
-        prompt_file(path, false)
-    } else {
-        true
-    };
-    if response && prompt_write_protected(path, false, options) {
+    if prompt_file(path, options, false) {
         match fs::remove_file(path) {
             Ok(_) => {
                 if options.verbose {
@@ -442,44 +430,120 @@ fn remove_file(path: &Path, options: &Options) -> bool {
     false
 }
 
-fn prompt_write_protected(path: &Path, is_dir: bool, options: &Options) -> bool {
+fn prompt_file(path: &Path, options: &Options, is_dir: bool) -> bool {
+    // If interactive is Never we never want to send prompts
     if options.interactive == InteractiveMode::Never {
         return true;
     }
-    match File::open(path) {
-        Ok(_) => true,
-        Err(err) => {
-            if err.kind() == ErrorKind::PermissionDenied {
-                if is_dir {
-                    prompt(&(format!("rm: remove write-protected directory {}? ", path.quote())))
-                } else {
-                    if fs::metadata(path).unwrap().len() == 0 {
-                        return prompt(
-                            &(format!(
-                                "rm: remove write-protected regular empty file {}? ",
-                                path.quote()
-                            )),
-                        );
+    // If interactive is Always we want to check if the file is symlink to prompt the right message
+    if options.interactive == InteractiveMode::Always {
+        if let Ok(metadata) = fs::symlink_metadata(path) {
+            if metadata.is_symlink() {
+                return prompt(&(format!("remove symbolic link {}? ", path.quote())));
+            }
+        }
+    }
+    if is_dir {
+        // We can't use metadata.permissions.readonly for directories because it only works on files
+        // So we have to handle wether a directory is writable on not manually
+        if let Ok(metadata) = fs::metadata(path) {
+            handle_writable_directory(path, options, &metadata)
+        } else {
+            true
+        }
+    } else {
+        // File::open(path) doesn't open the file in write mode so we need to use file options to open it in also write mode to check if it can written too
+        match File::options().read(true).write(true).open(path) {
+            Ok(file) => {
+                if let Ok(metadata) = file.metadata() {
+                    if metadata.permissions().readonly() {
+                        if metadata.len() == 0 {
+                            prompt(
+                                &(format!(
+                                    "remove write-protected regular empty file {}? ",
+                                    path.quote()
+                                )),
+                            )
+                        } else {
+                            prompt(
+                                &(format!(
+                                    "remove write-protected regular file {}? ",
+                                    path.quote()
+                                )),
+                            )
+                        }
+                    } else if options.interactive == InteractiveMode::Always {
+                        if metadata.len() == 0 {
+                            prompt(&(format!("remove regular empty file {}? ", path.quote())))
+                        } else {
+                            prompt(&(format!("remove file {}? ", path.quote())))
+                        }
+                    } else {
+                        true
                     }
-                    prompt(&(format!("rm: remove write-protected regular file {}? ", path.quote())))
+                } else {
+                    true
                 }
-            } else {
-                true
+            }
+            Err(err) => {
+                if err.kind() == ErrorKind::PermissionDenied {
+                    if let Ok(metadata) = fs::metadata(path) {
+                        if metadata.len() == 0 {
+                            prompt(
+                                &(format!(
+                                    "remove write-protected regular empty file {}? ",
+                                    path.quote()
+                                )),
+                            )
+                        } else {
+                            prompt(
+                                &(format!(
+                                    "remove write-protected regular file {}? ",
+                                    path.quote()
+                                )),
+                            )
+                        }
+                    } else {
+                        prompt(&(format!("remove write-protected regular file {}? ", path.quote())))
+                    }
+                } else {
+                    true
+                }
             }
         }
     }
 }
 
-fn prompt_descend(path: &Path) -> bool {
-    prompt(&(format!("rm: descend into directory {}? ", path.quote())))
+// For directories finding if they are writable or not is a hassle. In Unix we can use the built-in rust crate to to check mode bits. But other os don't have something similar afaik
+#[cfg(unix)]
+fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    let mode = metadata.permissions().mode();
+    let user_write_permission = (mode & 0b1_1100_0000) >> 6;
+    let user_writable = !matches!(user_write_permission, 0o0 | 0o1 | 0o4 | 0o5);
+    if !user_writable {
+        prompt(&(format!("remove write-protected directory {}? ", path.quote())))
+    } else if options.interactive == InteractiveMode::Always {
+        prompt(&(format!("remove directory {}? ", path.quote())))
+    } else {
+        true
+    }
 }
 
-fn prompt_file(path: &Path, is_dir: bool) -> bool {
-    if is_dir {
-        prompt(&(format!("rm: remove directory {}? ", path.quote())))
+// I have this here for completeness but it will always return "remove directory {}" because metadata.permissions().readonly() only works for file not directories
+#[cfg(not(unix))]
+fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
+    if metadata.permissions().readonly() {
+        prompt(&(format!("remove write-protected directory {}? ", path.quote())))
+    } else if options.interactive == InteractiveMode::Always {
+        prompt(&(format!("remove directory {}? ", path.quote())))
     } else {
-        prompt(&(format!("rm: remove file {}? ", path.quote())))
+        true
     }
+}
+
+fn prompt_descend(path: &Path) -> bool {
+    prompt(&(format!("descend into directory {}? ", path.quote())))
 }
 
 fn normalize(path: &Path) -> PathBuf {
@@ -491,7 +555,7 @@ fn normalize(path: &Path) -> PathBuf {
 }
 
 fn prompt(msg: &str) -> bool {
-    let _ = stderr().write_all(msg.as_bytes());
+    let _ = stderr().write_all(format!("{}: {}", uucore::util_name(), msg).as_bytes());
     let _ = stderr().flush();
 
     let mut buf = Vec::new();
@@ -505,15 +569,13 @@ fn prompt(msg: &str) -> bool {
 }
 
 #[cfg(not(windows))]
-fn is_symlink_dir(_metadata: &fs::Metadata) -> bool {
+fn is_symlink_dir(_metadata: &Metadata) -> bool {
     false
 }
 
 #[cfg(windows)]
-use std::os::windows::prelude::MetadataExt;
-
-#[cfg(windows)]
-fn is_symlink_dir(metadata: &fs::Metadata) -> bool {
+fn is_symlink_dir(metadata: &Metadata) -> bool {
+    use std::os::windows::prelude::MetadataExt;
     use winapi::um::winnt::FILE_ATTRIBUTE_DIRECTORY;
 
     metadata.file_type().is_symlink()

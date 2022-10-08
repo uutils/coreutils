@@ -400,6 +400,109 @@ fn test_rm_descend_directory() {
     assert!(!at.file_exists(file_2));
 }
 
+#[cfg(feature = "chmod")]
+#[test]
+fn test_rm_prompts() {
+    use std::io::Write;
+    use std::process::Child;
+
+    // Needed for talking with stdin on platforms where CRLF or LF matters
+    const END_OF_LINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
+
+    let mut answers = vec![
+        "rm: descend into directory 'a'?",
+        "rm: remove write-protected regular empty file 'a/empty-no-write'?",
+        "rm: remove symbolic link 'a/slink'?",
+        "rm: remove symbolic link 'a/slink-dot'?",
+        "rm: remove write-protected regular file 'a/f-no-write'?",
+        "rm: remove regular empty file 'a/empty'?",
+        "rm: remove directory 'a/b'?",
+        "rm: remove write-protected directory 'a/b-no-write'?",
+        "rm: remove directory 'a'?",
+    ];
+
+    answers.sort();
+
+    let yes = format!("y{}", END_OF_LINE);
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("a/");
+
+    let file_1 = "a/empty";
+    let file_2 = "a/empty-no-write";
+    let file_3 = "a/f-no-write";
+
+    at.touch(file_1);
+    at.touch(file_2);
+    at.make_file(file_3)
+        .write_all(b"not-empty")
+        .expect("Couldn't write to a/f-no-write");
+
+    at.symlink_dir("a/empty-f", "a/slink");
+    at.symlink_dir(".", "a/slink-dot");
+
+    let dir_1 = "a/b/";
+    let dir_2 = "a/b-no-write/";
+
+    at.mkdir(dir_1);
+    at.mkdir(dir_2);
+
+    scene
+        .ccmd("chmod")
+        .arg("u-w")
+        .arg(file_3)
+        .arg(dir_2)
+        .arg(file_2)
+        .succeeds();
+
+    let mut child: Child = scene.ucmd().arg("-ri").arg("a").run_no_wait();
+
+    let mut child_stdin = child.stdin.take().unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+
+    let output = child.wait_with_output().unwrap();
+
+    let mut trimmed_output = Vec::new();
+    for string in String::from_utf8(output.stderr)
+        .expect("Couldn't convert output.stderr to string")
+        .split("rm: ")
+    {
+        if !string.is_empty() {
+            let trimmed_string = format!("rm: {}", string).trim().to_string();
+            trimmed_output.push(trimmed_string);
+        }
+    }
+
+    trimmed_output.sort();
+
+    assert!(trimmed_output.len() == answers.len());
+
+    for (i, checking_string) in trimmed_output.iter().enumerate() {
+        assert!(checking_string == answers[i]);
+    }
+
+    assert!(!at.dir_exists("a"));
+}
+
 #[test]
 #[ignore = "issue #3722"]
 fn test_rm_directory_rights_rm1() {
