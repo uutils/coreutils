@@ -530,7 +530,7 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
     }
 }
 
-// For windows we can use windows metadata trait and file attirubtes to see if a directory is readonly
+// For windows we can use windows metadata trait and file attributes to see if a directory is readonly
 #[cfg(windows)]
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
     use std::os::windows::prelude::MetadataExt;
