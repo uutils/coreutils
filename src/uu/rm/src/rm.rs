@@ -248,41 +248,14 @@ fn remove(files: &[String], options: &Options) -> bool {
 
     for filename in files {
         let file = Path::new(filename);
-        // symlink_metadata.is_dir() and metadata.is_file() always returns false so we also need to grab a normal metadata
         had_err = match file.symlink_metadata() {
-            Ok(symlink_metadata) => {
-                if is_symlink_dir(&symlink_metadata) {
-                    // We get here if we are on a windows machine and directory is symlinked in which case we remove it like a directory because windows
+            Ok(metadata) => {
+                if metadata.is_dir() {
+                    handle_dir(file, options)
+                } else if is_symlink_dir(&metadata) {
                     remove_dir(file, options)
-                } else if symlink_metadata.is_symlink() {
-                    // We get here if we are on not a windows machine and is symlinked in which case we remove it like a file
-                    remove_file(file, options)
                 } else {
-                    // We get here if the symlink_metadata says this file or directory isn't symlinked
-                    match file.metadata() {
-                        Ok(metadata) => {
-                            if metadata.is_dir() {
-                                handle_dir(file, options)
-                            } else {
-                                remove_file(file, options)
-                            }
-                        }
-                        Err(_e) => {
-                            // TODO: actually print out the specific error
-                            // TODO: When the error is not about missing files
-                            // (e.g., permission), even rm -f should fail with
-                            // outputting the error, but there's no easy eay.
-                            if !options.force {
-                                show_error!(
-                                    "cannot remove {}: No such file or directory",
-                                    filename.quote()
-                                );
-                                true
-                            } else {
-                                false
-                            }
-                        }
-                    }
+                    remove_file(file, options)
                 }
             }
             Err(_e) => {
