@@ -8,7 +8,7 @@
 
 /* last synced with: env (GNU coreutils) 8.13 */
 
-// spell-checker:ignore (ToDO) chdir execvp progname subcommand subcommands unsets setenv putenv spawnp
+// spell-checker:ignore (ToDO) chdir execvp progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction
 
 #[macro_use]
 extern crate clap;
@@ -18,6 +18,8 @@ extern crate uucore;
 
 use clap::{Arg, Command};
 use ini::Ini;
+#[cfg(unix)]
+use nix::sys::signal::{raise, sigaction, SaFlags, SigAction, SigHandler, SigSet, Signal};
 use std::borrow::Cow;
 use std::env;
 use std::io::{self, Write};
@@ -28,8 +30,6 @@ use std::process;
 use uucore::display::Quotable;
 use uucore::error::{UClapError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
-#[cfg(unix)]
-use uucore::signals::signal_name_by_value;
 
 const ABOUT: &str = "set each NAME to VALUE in the environment and run COMMAND";
 const USAGE: &str = "{} [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
@@ -323,24 +323,23 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
                     // See std::os::unix::process::ExitStatusExt for more information. This prints out
                     // the interrupted process and the signal it received.
                     let signal_code = exit.signal().unwrap();
-                    eprintln!(
-                        "\"{}\" terminated by signal {}",
-                        {
-                            let mut command = uucore::util_name().to_owned();
-                            command.push(' ');
-                            command.push_str(&opts.program.join(" "));
-                            command
-                        },
-                        signal_name_by_value(signal_code as usize).map_or_else(
-                            || String::from("UNKNOWN"),
-                            |signal| {
-                                let mut full_signal_name = String::from("SIG");
-                                full_signal_name.push_str(signal);
-                                full_signal_name
-                            }
+                    let signal = Signal::try_from(signal_code).unwrap();
+
+                    // We have to disable any handler that's installed by default.
+                    // This ensures that we exit on this signal.
+                    // For example, `SIGSEGV` and `SIGBUS` have default handlers installed in Rust.
+                    // We ignore the errors because there is not much we can do if that fails anyway.
+                    // SAFETY: The function is unsafe because installing functions is unsafe, but we are
+                    // just defaulting to default behavior and not installing a function. Hence, the call
+                    // is safe.
+                    let _ = unsafe {
+                        sigaction(
+                            signal,
+                            &SigAction::new(SigHandler::SigDfl, SaFlags::empty(), SigSet::all()),
                         )
-                    );
-                    return Err((128 + signal_code).into());
+                    };
+
+                    let _ = raise(signal);
                 }
                 #[cfg(not(unix))]
                 return Err(exit.code().unwrap().into());
