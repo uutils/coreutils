@@ -530,7 +530,23 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
     }
 }
 
+// For windows we can use windows metadata trait and file attirubtes to see if a directory is readonly
+#[cfg(windows)]
+fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
+    use std::os::windows::prelude::MetadataExt;
+    use winapi::um::winnt::FILE_ATTRIBUTE_READONLY;
+    let user_writable = (metadata.file_attributes() & FILE_ATTRIBUTE_READONLY) != 0;
+    if !user_writable {
+        prompt(&(format!("remove write-protected directory {}? ", path.quote())))
+    } else if options.interactive == InteractiveMode::Always {
+        prompt(&(format!("remove directory {}? ", path.quote())))
+    } else {
+        true
+    }
+}
+
 // I have this here for completeness but it will always return "remove directory {}" because metadata.permissions().readonly() only works for file not directories
+#[cfg(not(windows))]
 #[cfg(not(unix))]
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
     if metadata.permissions().readonly() {
