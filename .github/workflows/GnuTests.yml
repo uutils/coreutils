@@ -4,7 +4,7 @@ name: GnuTests
 
 # * note: to run a single test => `REPO/util/run-gnu-test.sh PATH/TO/TEST/SCRIPT`
 
-on: [push, pull_request_target]
+on: [push, pull_request]
 
 permissions:
   contents: read
@@ -187,6 +187,9 @@ jobs:
         REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/test-suite.log'
         REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
         REPO_DEFAULT_BRANCH='${{ steps.vars.outputs.repo_default_branch }}'
+        COMMENT_LOG='${{ steps.vars.outputs.path_reference }}/comment.txt'
+        mkdir -p ${{ steps.vars.outputs.path_reference }}
+        touch ${COMMENT_LOG}
         if test -f "${REF_LOG_FILE}"; then
           echo "Reference SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
           REF_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${REF_LOG_FILE}" | sort)
@@ -196,28 +199,36 @@ jobs:
           for LINE in ${REF_FAILING}
           do
             if ! grep -Fxq ${LINE}<<<"${NEW_FAILING}"; then
-              echo "::warning ::Congrats! The gnu test ${LINE} is no longer failing!"
+              MSG="Congrats! The gnu test ${LINE} is no longer failing!"
+              echo "::warning ::$MSG"
+              echo $MSG >> ${COMMENT_LOG}
             fi
           done
           for LINE in ${NEW_FAILING}
           do
             if ! grep -Fxq ${LINE}<<<"${REF_FAILING}"
             then
-              echo "::error ::GNU test failed: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
+              MSG="GNU test failed: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
+              echo "::error ::$MSG"
+              echo $MSG >> ${COMMENT_LOG}
               have_new_failures="true"
             fi
           done
           for LINE in ${REF_ERROR}
           do
             if ! grep -Fxq ${LINE}<<<"${NEW_ERROR}"; then
-              echo "::warning ::Congrats! The gnu test ${LINE} is no longer ERROR!"
+              MSG="Congrats! The gnu test ${LINE} is no longer ERROR!"
+              echo "::warning ::$MSG"
+              echo $MSG >> ${COMMENT_LOG}
             fi
           done
           for LINE in ${NEW_ERROR}
           do
             if ! grep -Fxq ${LINE}<<<"${REF_ERROR}"
             then
-              echo "::error ::GNU test error: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
+              MSG="GNU test error: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
+              echo "::error ::$MSG"
+              echo $MSG >> ${COMMENT_LOG}
               have_new_failures="true"
             fi
           done
@@ -226,6 +237,11 @@ jobs:
           echo "::warning ::Skipping test failure comparison; no prior reference test logs are available."
         fi
         if test -n "${have_new_failures}" ; then exit -1 ; fi
+    - name: Upload comparison log for comment on PR
+      uses: actions/upload-artifact@v3
+      with:
+        name: comment.txt
+        path: ${{ steps.vars.outputs.path_reference }}/comment.txt'
     - name: Compare test summary VS reference
       if: success() || failure() # run regardless of prior step success/failure
       shell: bash
