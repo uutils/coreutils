@@ -239,7 +239,7 @@ jobs:
           echo "::warning ::Skipping test failure comparison; no prior reference test logs are available."
         fi
         if test -n "${have_new_failures}" ; then exit -1 ; fi
-    - name: Publish the result if any change
+    - name: Publish the result if any change in the execution
       uses: actions/github-script@v6
       with:
         github-token: ${{secrets.GITHUB_TOKEN}}
