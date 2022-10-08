@@ -34,7 +34,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         result.push('\n');
         Cow::from(result)
     } else {
-        Cow::from("y\n")
+        Cow::from("n\n")
     };
 
     let mut buffer = [0; BUF_SIZE];
