@@ -244,6 +244,7 @@ jobs:
         fi
         if test -n "${have_new_failures}" ; then exit -1 ; fi
     - name: Upload comparison log (for GnuComment workflow)
+      if: success() || failure() # run regardless of prior step success/failure
       uses: actions/upload-artifact@v3
       with:
         name: comment
