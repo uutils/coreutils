@@ -98,7 +98,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let options = Options {
             force,
             interactive: {
-                if matches.contains_id(OPT_PROMPT) {
+                if force {
+                    InteractiveMode::Never
+                } else if matches.contains_id(OPT_PROMPT) {
                     InteractiveMode::Always
                 } else if matches.contains_id(OPT_PROMPT_MORE) {
                     InteractiveMode::Once
