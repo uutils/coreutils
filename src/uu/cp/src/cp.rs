@@ -22,15 +22,11 @@ use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::io::Read;
 use std::io::{self, stderr, stdin, Write};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use std::string::ToString;
@@ -48,6 +44,9 @@ use uucore::fs::{
     canonicalize, paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
 };
 use walkdir::WalkDir;
+
+mod platform;
+use platform::copy_on_write;
 
 quick_error! {
     #[derive(Debug)]
@@ -222,16 +221,6 @@ pub struct Options {
     target_dir: Option<String>,
     update: bool,
     verbose: bool,
-}
-
-// From /usr/include/linux/fs.h:
-// #define FICLONE		_IOW(0x94, 9, int)
-#[cfg(any(target_os = "linux", target_os = "android"))]
-// Use a macro as libc::ioctl expects u32 or u64 depending on the arch
-macro_rules! FICLONE {
-    () => {
-        0x40049409
-    };
 }
 
 static ABOUT: &str = "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
@@ -1598,26 +1587,7 @@ fn copy_helper(
     } else if source_is_symlink {
         copy_link(source, dest, symlinked_files)?;
     } else {
-        #[cfg(target_os = "macos")]
-        copy_on_write_macos(
-            source,
-            dest,
-            options.reflink_mode,
-            options.sparse_mode,
-            context,
-        )?;
-
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        copy_on_write_linux(
-            source,
-            dest,
-            options.reflink_mode,
-            options.sparse_mode,
-            context,
-        )?;
-
-        #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
-        copy_no_cow_fallback(
+        copy_on_write(
             source,
             dest,
             options.reflink_mode,
@@ -1671,180 +1641,6 @@ fn copy_link(
         dest.into()
     };
     symlink_file(&link, &dest, &context_for(&link, &dest), symlinked_files)
-}
-
-/// Copies `source` to `dest` for systems without copy-on-write
-#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
-fn copy_no_cow_fallback(
-    source: &Path,
-    dest: &Path,
-    reflink_mode: ReflinkMode,
-    sparse_mode: SparseMode,
-    context: &str,
-) -> CopyResult<()> {
-    if reflink_mode != ReflinkMode::Never {
-        return Err("--reflink is only supported on linux and macOS"
-            .to_string()
-            .into());
-    }
-    if sparse_mode != SparseMode::Auto {
-        return Err("--sparse is only supported on linux".to_string().into());
-    }
-
-    fs::copy(source, dest).context(context)?;
-
-    Ok(())
-}
-
-/// Use the Linux `ioctl_ficlone` API to do a copy-on-write clone.
-///
-/// If `fallback` is true and there is a failure performing the clone,
-/// then this function performs a standard [`std::fs::copy`]. Otherwise,
-/// this function returns an error.
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn clone<P>(source: P, dest: P, fallback: bool) -> std::io::Result<()>
-where
-    P: AsRef<Path>,
-{
-    let src_file = File::open(&source)?;
-    let dst_file = File::create(&dest)?;
-    let src_fd = src_file.as_raw_fd();
-    let dst_fd = dst_file.as_raw_fd();
-    let result = unsafe { libc::ioctl(dst_fd, FICLONE!(), src_fd) };
-    if result != 0 {
-        if fallback {
-            std::fs::copy(source, dest).map(|_| ())
-        } else {
-            Err(std::io::Error::last_os_error())
-        }
-    } else {
-        Ok(())
-    }
-}
-
-/// Perform a sparse copy from one file to another.
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn sparse_copy<P>(source: P, dest: P) -> std::io::Result<()>
-where
-    P: AsRef<Path>,
-{
-    use std::os::unix::prelude::MetadataExt;
-
-    let mut src_file = File::open(source)?;
-    let dst_file = File::create(dest)?;
-    let dst_fd = dst_file.as_raw_fd();
-
-    let size: usize = src_file.metadata()?.size().try_into().unwrap();
-    if unsafe { libc::ftruncate(dst_fd, size.try_into().unwrap()) } < 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-
-    let blksize = dst_file.metadata()?.blksize();
-    let mut buf: Vec<u8> = vec![0; blksize.try_into().unwrap()];
-    let mut current_offset: usize = 0;
-
-    // TODO Perhaps we can employ the "fiemap ioctl" API to get the
-    // file extent mappings:
-    // https://www.kernel.org/doc/html/latest/filesystems/fiemap.html
-    while current_offset < size {
-        let this_read = src_file.read(&mut buf)?;
-        if buf.iter().any(|&x| x != 0) {
-            unsafe {
-                libc::pwrite(
-                    dst_fd,
-                    buf.as_ptr() as *const libc::c_void,
-                    this_read,
-                    current_offset.try_into().unwrap(),
-                )
-            };
-        }
-        current_offset += this_read;
-    }
-    Ok(())
-}
-
-/// Copies `source` to `dest` using copy-on-write if possible.
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn copy_on_write_linux(
-    source: &Path,
-    dest: &Path,
-    reflink_mode: ReflinkMode,
-    sparse_mode: SparseMode,
-    context: &str,
-) -> CopyResult<()> {
-    let result = match (reflink_mode, sparse_mode) {
-        (ReflinkMode::Never, _) => std::fs::copy(source, dest).map(|_| ()),
-        (ReflinkMode::Auto, SparseMode::Always) => sparse_copy(source, dest),
-        (ReflinkMode::Auto, _) => clone(source, dest, true),
-        (ReflinkMode::Always, SparseMode::Auto) => clone(source, dest, false),
-        (ReflinkMode::Always, _) => {
-            return Err("`--reflink=always` can be used only with --sparse=auto".into())
-        }
-    };
-    result.context(context)?;
-    Ok(())
-}
-
-/// Copies `source` to `dest` using copy-on-write if possible.
-#[cfg(target_os = "macos")]
-fn copy_on_write_macos(
-    source: &Path,
-    dest: &Path,
-    reflink_mode: ReflinkMode,
-    sparse_mode: SparseMode,
-    context: &str,
-) -> CopyResult<()> {
-    if sparse_mode != SparseMode::Auto {
-        return Err("--sparse is only supported on linux".to_string().into());
-    }
-
-    // Extract paths in a form suitable to be passed to a syscall.
-    // The unwrap() is safe because they come from the command-line and so contain non nul
-    // character.
-    let src = CString::new(source.as_os_str().as_bytes()).unwrap();
-    let dst = CString::new(dest.as_os_str().as_bytes()).unwrap();
-
-    // clonefile(2) was introduced in macOS 10.12 so we cannot statically link against it
-    // for backward compatibility.
-    let clonefile = CString::new("clonefile").unwrap();
-    let raw_pfn = unsafe { libc::dlsym(libc::RTLD_NEXT, clonefile.as_ptr()) };
-
-    let mut error = 0;
-    if !raw_pfn.is_null() {
-        // Call clonefile(2).
-        // Safety: Casting a C function pointer to a rust function value is one of the few
-        // blessed uses of `transmute()`.
-        unsafe {
-            let pfn: extern "C" fn(
-                src: *const libc::c_char,
-                dst: *const libc::c_char,
-                flags: u32,
-            ) -> libc::c_int = std::mem::transmute(raw_pfn);
-            error = pfn(src.as_ptr(), dst.as_ptr(), 0);
-            if std::io::Error::last_os_error().kind() == std::io::ErrorKind::AlreadyExists {
-                // clonefile(2) fails if the destination exists.  Remove it and try again.  Do not
-                // bother to check if removal worked because we're going to try to clone again.
-                let _ = fs::remove_file(dest);
-                error = pfn(src.as_ptr(), dst.as_ptr(), 0);
-            }
-        }
-    }
-
-    if raw_pfn.is_null() || error != 0 {
-        // clonefile(2) is either not supported or it errored out (possibly because the FS does not
-        // support COW).
-        match reflink_mode {
-            ReflinkMode::Always => {
-                return Err(
-                    format!("failed to clone {:?} from {:?}: {}", source, dest, error).into(),
-                )
-            }
-            ReflinkMode::Auto => fs::copy(source, dest).context(context)?,
-            ReflinkMode::Never => fs::copy(source, dest).context(context)?,
-        };
-    }
-
-    Ok(())
 }
 
 /// Generate an error message if `target` is not the correct `target_type`
