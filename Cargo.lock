@@ -2834,6 +2834,7 @@ version = "0.0.15"
 dependencies = [
  "clap",
  "libc",
+ "nix",
  "uucore",
  "winapi",
 ]

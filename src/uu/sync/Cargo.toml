@@ -19,6 +19,9 @@ clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 libc = "0.2.132"
 uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["wide"] }
 
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+nix = "0.25"
+
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3", features = ["errhandlingapi", "fileapi", "handleapi", "std", "winbase", "winerror"] }
 
