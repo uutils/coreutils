@@ -964,7 +964,7 @@ fn test_ls_long() {
         let result = scene.ucmd().arg(arg).arg("test-long").succeeds();
         #[cfg(not(windows))]
         result.stdout_matches(&Regex::new(r"[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3}.*").unwrap());
-        
+
         #[cfg(windows)]
         result.stdout_matches(&Regex::new(r"[-dl](r[w-]x){3}.*").unwrap());
     }
