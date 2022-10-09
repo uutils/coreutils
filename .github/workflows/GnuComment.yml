@@ -48,5 +48,5 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issue_number,
-              body: String(fs.readFileSync('./result.txt')),
+              body: 'GNU testsuite comparison:\n```' + fs.readFileSync('./result.txt') + '\n```'
             });
