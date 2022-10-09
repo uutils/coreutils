@@ -464,3 +464,35 @@ fn test_files0_from_with_stdin_try_read_from_stdin() {
         .stderr_contains(MSG)
         .stdout_is("");
 }
+
+#[cfg(unix)]
+#[test]
+fn test_bash() {
+    let scene = TestScenario::new(util_name!());
+
+    let first = scene
+        .cmd("bash")
+        .arg("-c")
+        .arg(format!(
+            "(dd ibs=1 skip=0 count=0 status=none; {} wc -c) < lorem_ipsum.txt",
+            scene.bin_path.to_str().unwrap()
+        ))
+        .succeeds()
+        .stdout_str()
+        .trim_end()
+        .parse::<i32>()
+        .unwrap();
+    let second = scene
+        .cmd("bash")
+        .arg("-c")
+        .arg(format!(
+            "(dd ibs=1 skip=3 count=0 status=none; {} wc -c) < lorem_ipsum.txt",
+            scene.bin_path.to_str().unwrap()
+        ))
+        .succeeds()
+        .stdout_str()
+        .trim_end()
+        .parse::<i32>()
+        .unwrap();
+    assert!(first > second);
+}

@@ -8,6 +8,7 @@ use std::io::{self, ErrorKind, Read};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use libc::S_IFIFO;
+use libc::S_IFLNK;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::{fs::OpenOptions, os::unix::io::AsRawFd};
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -85,13 +86,18 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(
         if let Ok(stat) = stat::fstat(fd) {
             // If the file is regular, then the `st_size` should hold
             // the file's size in bytes.
-            // If stat.st_size = 0 then
+            // Otherwise, if stat.st_size = 0 then
             //  - either the size is 0
             //  - or the size is unknown.
             // The second case happens for files in pseudo-filesystems. For
             // example with /proc/version and /sys/kernel/profiling. So,
             // if it is 0 we don't report that and instead do a full read.
-            if (stat.st_mode as libc::mode_t & S_IFREG) != 0 && stat.st_size > 0 {
+            if ((stat.st_mode as libc::mode_t & S_IFREG) != 0
+                || (stat.st_mode as libc::mode_t & S_IFLNK) != 0)
+                // Shared memory? S_TYPEISSHM 
+                // S_TYPEISTMO
+                && stat.st_size >= 0
+            {
                 // We perform an lseek here because its possible that we are given a fd that starts
                 // somewhere further like so:
                 //
@@ -105,14 +111,18 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(
                 // Therefore, we perform a lseek with 0 offset to know where we actually starts.
                 // Note that GNU currently returns 0 if lseek fails but I am not sure how that can
                 // happen.
-                let offset = is_stdin
-                    .then(|| lseek(fd, 0, nix::unistd::Whence::SeekCur).ok())
-                    .flatten()
-                    .unwrap_or(0);
+                let offset = if is_stdin {
+                    lseek(fd, 0, nix::unistd::Whence::SeekCur).unwrap_or(0)
+                } else {
+                    0
+                };
 
                 #[cfg(target_os = "android")]
                 let offset = offset as i64;
 
+                // The max here is necessary because lseek is allowed to return an offset beyond the
+                // end of the file.
+                // See: https://man7.org/linux/man-pages/man2/lseek.2.html
                 return (stat.st_size.sub(offset).max(0) as usize, None);
             }
             #[cfg(any(target_os = "linux", target_os = "android"))]
