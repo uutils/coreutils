@@ -14,7 +14,7 @@ use clap::{
     builder::{NonEmptyStringValueParser, ValueParser},
     crate_version, Arg, Command,
 };
-use glob::Pattern;
+use glob::{MatchOptions, Pattern};
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
@@ -41,6 +41,7 @@ use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
+use uucore::parse_glob;
 use uucore::quoting_style::{escape_name, QuotingStyle};
 use uucore::{
     display::Quotable,
@@ -765,7 +766,7 @@ impl Config {
             .into_iter()
             .flatten()
         {
-            match Pattern::new(pattern) {
+            match parse_glob::from_str(pattern) {
                 Ok(p) => {
                     ignore_patterns.push(p);
                 }
@@ -779,7 +780,7 @@ impl Config {
                 .into_iter()
                 .flatten()
             {
-                match Pattern::new(pattern) {
+                match parse_glob::from_str(pattern) {
                     Ok(p) => {
                         ignore_patterns.push(p);
                     }
@@ -1877,16 +1878,18 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
         return false;
     }
 
-    // check if explicitly ignored
-    for pattern in &config.ignore_patterns {
-        if pattern.matches(entry.file_name().to_str().unwrap()) {
-            return false;
-        };
-        continue;
-    }
-
-    // else default to display
-    true
+    // check if it is among ignore_patterns
+    let options = MatchOptions {
+        // setting require_literal_leading_dot to match behavior in GNU ls
+        require_literal_leading_dot: true,
+        require_literal_separator: false,
+        case_sensitive: true,
+    };
+    let file_name = entry.file_name().into_string().unwrap();
+    !config
+        .ignore_patterns
+        .iter()
+        .any(|p| p.matches_with(&file_name, options))
 }
 
 fn enter_directory(

@@ -2681,6 +2681,73 @@ fn test_ls_ignore_backups() {
         .stdout_does_not_contain(".somehiddenbackup~");
 }
 
+// This test fails on windows, see details at #3985
+#[cfg(not(windows))]
+#[test]
+fn test_ls_ignore_explicit_period() {
+    // In ls ignore patterns, leading periods must be explicitly specified
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+    at.touch(".hidden.yml");
+    at.touch("regular.yml");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("--ignore")
+        .arg("?hidden.yml")
+        .succeeds()
+        .stdout_contains(".hidden.yml")
+        .stdout_contains("regular.yml");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("--ignore")
+        .arg("*.yml")
+        .succeeds()
+        .stdout_contains(".hidden.yml")
+        .stdout_does_not_contain("regular.yml");
+
+    // Leading period is explicitly specified
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("--ignore")
+        .arg(".*.yml")
+        .succeeds()
+        .stdout_does_not_contain(".hidden.yml")
+        .stdout_contains("regular.yml");
+}
+
+// This test fails on windows, see details at #3985
+#[cfg(not(windows))]
+#[test]
+fn test_ls_ignore_negation() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+    at.touch("apple");
+    at.touch("boy");
+
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("[!a]*")
+        .succeeds()
+        .stdout_contains("apple")
+        .stdout_does_not_contain("boy");
+
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("[^a]*")
+        .succeeds()
+        .stdout_contains("apple")
+        .stdout_does_not_contain("boy");
+}
+
 #[test]
 fn test_ls_directory() {
     let scene = TestScenario::new(util_name!());
