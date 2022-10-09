@@ -194,6 +194,10 @@ jobs:
         mkdir -p ${COMMENT_DIR}
         echo ${{ github.event.number }} > ${COMMENT_DIR}/NR
         COMMENT_LOG="${COMMENT_DIR}/result.txt"
+
+        # The comment log might be downloaded from a previous run
+        # We only want the new changes, so remove it if it exists.
+        rm -f ${COMMENT_LOG}
         touch ${COMMENT_LOG}
 
         if test -f "${REF_LOG_FILE}"; then
