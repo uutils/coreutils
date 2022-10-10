@@ -48,6 +48,27 @@ static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
 #[cfg(unix)]
 static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
 
+/// Assert that mode, ownership, and permissions of two metadata objects match.
+#[cfg(not(windows))]
+macro_rules! assert_metadata_eq {
+    ($m1:expr, $m2:expr) => {{
+        assert_eq!($m1.mode(), $m2.mode(), "mode is different");
+        assert_eq!($m1.uid(), $m2.uid(), "uid is different");
+        assert_eq!($m1.atime(), $m2.atime(), "atime is different");
+        assert_eq!(
+            $m1.atime_nsec(),
+            $m2.atime_nsec(),
+            "atime_nsec is different"
+        );
+        assert_eq!($m1.mtime(), $m2.mtime(), "mtime is different");
+        assert_eq!(
+            $m1.mtime_nsec(),
+            $m2.mtime_nsec(),
+            "mtime_nsec is different"
+        );
+    }};
+}
+
 #[test]
 fn test_cp_cp() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1787,20 +1808,7 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     {
         let metadata1 = at.symlink_metadata("dangle");
         let metadata2 = at.symlink_metadata("d2");
-        assert_eq!(metadata1.mode(), metadata2.mode(), "mode is different");
-        assert_eq!(metadata1.uid(), metadata2.uid(), "uid is different");
-        assert_eq!(metadata1.atime(), metadata2.atime(), "atime is different");
-        assert_eq!(
-            metadata1.atime_nsec(),
-            metadata2.atime_nsec(),
-            "atime_nsec is different"
-        );
-        assert_eq!(metadata1.mtime(), metadata2.mtime(), "mtime is different");
-        assert_eq!(
-            metadata1.mtime_nsec(),
-            metadata2.mtime_nsec(),
-            "mtime_nsec is different"
-        );
+        assert_metadata_eq!(metadata1, metadata2);
     }
 }
 
@@ -2135,4 +2143,68 @@ fn test_copy_nested_directory_to_itself_disallowed() {
     ucmd.args(&["-R", "a/b", "a/b/c"])
         .fails()
         .stderr_only(expected);
+}
+
+/// Test for preserving permissions when copying a directory.
+#[cfg(not(windows))]
+#[test]
+fn test_copy_dir_preserve_permissions() {
+    // Create a directory that has some non-default permissions.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d1");
+    at.set_mode("d1", 0o0500);
+
+    // Copy the directory, preserving those permissions.
+    //
+    //         preserve permissions (mode, ownership, timestamps)
+    //            |    copy directories recursively
+    //            |      |   from this source directory
+    //            |      |    |   to this destination
+    //            |      |    |     |
+    //            V      V    V     V
+    ucmd.args(&["-p", "-R", "d1", "d2"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert!(at.dir_exists("d2"));
+
+    // Assert that the permissions are preserved.
+    let metadata1 = at.metadata("d1");
+    let metadata2 = at.metadata("d2");
+    assert_metadata_eq!(metadata1, metadata2);
+}
+
+/// Test for preserving permissions when copying a directory, even in
+/// the face of an inaccessible file in that directory.
+#[cfg(not(windows))]
+#[test]
+fn test_copy_dir_preserve_permissions_inaccessible_file() {
+    // Create a directory that has some non-default permissions and
+    // contains an inaccessible file.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d1");
+    at.touch("d1/f");
+    at.set_mode("d1/f", 0);
+    at.set_mode("d1", 0o0500);
+
+    // Copy the directory, preserving those permissions. There should
+    // be an error message that the file `d1/f` is inaccessible.
+    //
+    //         preserve permissions (mode, ownership, timestamps)
+    //            |    copy directories recursively
+    //            |      |   from this source directory
+    //            |      |    |   to this destination
+    //            |      |    |     |
+    //            V      V    V     V
+    ucmd.args(&["-p", "-R", "d1", "d2"])
+        .fails()
+        .status_code(1)
+        .stderr_only("cp: cannot open 'd1/f' for reading: Permission denied");
+    assert!(at.dir_exists("d2"));
+    assert!(!at.file_exists("d2/f"));
+
+    // Assert that the permissions are preserved.
+    let metadata1 = at.metadata("d1");
+    let metadata2 = at.metadata("d2");
+    assert_metadata_eq!(metadata1, metadata2);
 }

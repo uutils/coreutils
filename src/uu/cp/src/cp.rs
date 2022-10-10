@@ -38,7 +38,7 @@ use libc::mkfifo;
 use quick_error::ResultExt;
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
+use uucore::error::{set_exit_code, UClapError, UError, UIoError, UResult, UUsageError};
 use uucore::format_usage;
 use uucore::fs::{
     canonicalize, paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
@@ -1173,17 +1173,36 @@ fn copy_directory(
                     }?;
                 }
             } else {
-                copy_file(
+                // At this point, `path` is just a plain old file.
+                // Terminate this function immediately if there is any
+                // kind of error *except* a "permission denied" error.
+                //
+                // TODO What other kinds of errors, if any, should
+                // cause us to continue walking the directory?
+                match copy_file(
                     path.as_path(),
                     local_to_target.as_path(),
                     options,
                     symlinked_files,
                     false,
-                )?;
+                ) {
+                    Ok(_) => {}
+                    Err(Error::IoErrContext(e, _))
+                        if e.kind() == std::io::ErrorKind::PermissionDenied =>
+                    {
+                        show!(uio_error!(
+                            e,
+                            "cannot open {} for reading",
+                            p.path().quote()
+                        ));
+                    }
+                    Err(e) => return Err(e),
+                }
             }
         }
     }
-
+    // Copy the attributes from the root directory to the target directory.
+    copy_attributes(root, target, &options.preserve_attributes)?;
     Ok(())
 }
 
@@ -1204,6 +1223,14 @@ impl OverwriteMode {
             Self::Clobber(_) => Ok(()),
         }
     }
+}
+
+/// Copy the specified attributes from one path to another.
+fn copy_attributes(source: &Path, dest: &Path, attributes: &[Attribute]) -> CopyResult<()> {
+    for attribute in attributes {
+        copy_attribute(source, dest, attribute)?;
+    }
+    Ok(())
 }
 
 fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResult<()> {
@@ -1554,9 +1581,7 @@ fn copy_file(
         // the user does not have permission to write to the file.
         fs::set_permissions(dest, dest_permissions).ok();
     }
-    for attribute in &options.preserve_attributes {
-        copy_attribute(source, dest, attribute)?;
-    }
+    copy_attributes(source, dest, &options.preserve_attributes)?;
     Ok(())
 }
 
