@@ -530,7 +530,7 @@ fn test_rm_force_prompts_order() {
     let output = child.wait_with_output().unwrap();
     let string_output =
         String::from_utf8(output.stderr).expect("Couldn't convert output.stderr to string");
-    assert!(string_output.trim() == String::from("rm: remove regular empty file 'empty'?"));
+    assert!(string_output.trim() == "rm: remove regular empty file 'empty'?");
     assert!(!at.file_exists(empty_file));
 
     at.touch(empty_file);
