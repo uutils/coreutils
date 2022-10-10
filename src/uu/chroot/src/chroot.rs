@@ -16,7 +16,8 @@ use std::io::Error;
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::process;
-use uucore::error::{set_exit_code, UClapError, UResult};
+use uucore::error::{set_exit_code, UClapError, UResult, UUsageError};
+use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 use uucore::{entries, format_usage};
 
@@ -47,6 +48,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(v) => Path::new(v),
         None => return Err(ChrootError::MissingNewRoot.into()),
     };
+
+    let skip_chdir = matches.contains_id(options::SKIP_CHDIR);
+    // We are resolving the path in case it is a symlink or /. or /../
+    if skip_chdir
+        && canonicalize(newroot, MissingHandling::Normal, ResolveMode::Logical)
+            .unwrap()
+            .to_str()
+            != Some("/")
+    {
+        return Err(UUsageError::new(
+            125,
+            "option --skip-chdir only permitted if NEWROOT is old '/'",
+        ));
+    }
 
     if !newroot.is_dir() {
         return Err(ChrootError::NoSuchDirectory(format!("{}", newroot.display())).into());

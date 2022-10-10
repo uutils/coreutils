@@ -1,4 +1,4 @@
-// spell-checker:ignore (words) araba newroot userspec chdir pwd's
+// spell-checker:ignore (words) araba newroot userspec chdir pwd's isroot
 
 use crate::common::util::*;
 
@@ -146,21 +146,36 @@ fn test_chroot() {
 }
 
 #[test]
+fn test_chroot_skip_chdir_not_root() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let dir = "foobar";
+    at.mkdir(dir);
+
+    ucmd.arg("--skip-chdir")
+        .arg(dir)
+        .fails()
+        .stderr_contains("chroot: option --skip-chdir only permitted if NEWROOT is old '/'")
+        .code_is(125);
+}
+
+#[test]
 fn test_chroot_skip_chdir() {
     let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
-
-    let dir = "CHROOT_DIR";
-    at.mkdir(dir);
-    let env_cd = std::env::current_dir().unwrap();
-    if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "--skip-chdir", "pwd"]) {
-        // Should return the same path
-        assert_eq!(
-            result.success().no_stderr().stdout_str(),
-            env_cd.to_str().unwrap()
-        );
-    } else {
-        print!("Test skipped; requires root user");
+    let at = ts.fixtures.clone();
+    let dirs = ["/", "/.", "/..", "isroot"];
+    at.symlink_file("/", "isroot");
+    for dir in dirs {
+        let env_cd = std::env::current_dir().unwrap();
+        if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "--skip-chdir"]) {
+            // Should return the same path
+            assert_eq!(
+                result.success().no_stderr().stdout_str(),
+                env_cd.to_str().unwrap()
+            );
+        } else {
+            print!("Test skipped; requires root user");
+        }
     }
 }
 
