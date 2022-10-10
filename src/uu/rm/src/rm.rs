@@ -88,17 +88,38 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let force = matches.contains_id(OPT_FORCE);
+    let force_index_option = matches.index_of(OPT_FORCE);
 
-    if files.is_empty() && !force {
+    // If -f(--force) is before any -i (or variants) we want prompts else no prompts
+    let force_first: bool = {
+        if let Some(force_index) = force_index_option {
+            let prompt_index_option = matches.index_of(OPT_PROMPT);
+            let prompt_more_index_option = matches.index_of(OPT_PROMPT_MORE);
+            let interactive_index_option = matches.index_of(OPT_INTERACTIVE);
+
+            if let Some(prompt_index) = prompt_index_option {
+                prompt_index > force_index
+            } else if let Some(prompt_more_index_index) = prompt_more_index_option {
+                prompt_more_index_index > force_index
+            } else if let Some(interactive_index) = interactive_index_option {
+                interactive_index > force_index
+            } else {
+                true
+            }
+        } else {
+            true
+        }
+    };
+
+    if files.is_empty() && force_index_option.is_none() {
         // Still check by hand and not use clap
         // Because "rm -f" is a thing
         return Err(UUsageError::new(1, "missing operand"));
     } else {
         let options = Options {
-            force,
+            force: force_index_option.is_some(),
             interactive: {
-                if force {
+                if force_index_option.is_some() && !force_first {
                     InteractiveMode::Never
                 } else if matches.contains_id(OPT_PROMPT) {
                     InteractiveMode::Always
