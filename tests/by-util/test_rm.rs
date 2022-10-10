@@ -504,6 +504,48 @@ fn test_rm_prompts() {
 }
 
 #[test]
+fn test_rm_force_prompts_order() {
+    use std::io::Write;
+    use std::process::Child;
+
+    // Needed for talking with stdin on platforms where CRLF or LF matters
+    const END_OF_LINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
+
+    let yes = format!("y{}", END_OF_LINE);
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let empty_file = "empty";
+
+    at.touch(empty_file);
+
+    // This should cause rm to prompt to remove regular empty file
+    let mut child: Child = scene.ucmd().arg("-fi").arg(empty_file).run_no_wait();
+
+    let mut child_stdin = child.stdin.take().unwrap();
+    child_stdin.write_all(yes.as_bytes()).unwrap();
+    child_stdin.flush().unwrap();
+
+    let output = child.wait_with_output().unwrap();
+    let string_output =
+        String::from_utf8(output.stderr).expect("Couldn't convert output.stderr to string");
+    assert!(string_output.trim() == String::from("rm: remove regular empty file 'empty'?"));
+    assert!(!at.file_exists(empty_file));
+
+    at.touch(empty_file);
+
+    // This should not cause rm to prompt to remove regular empty file
+    scene
+        .ucmd()
+        .arg("-if")
+        .arg(empty_file)
+        .succeeds()
+        .no_stderr();
+    assert!(!at.file_exists(empty_file));
+}
+
+#[test]
 #[ignore = "issue #3722"]
 fn test_rm_directory_rights_rm1() {
     let (at, mut ucmd) = at_and_ucmd!();
