@@ -1316,7 +1316,16 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
             }
             #[cfg(not(unix))]
             {
-                return Err("XAttrs are only supported on unix.".to_string().into());
+                // The documentation for GNU cp states:
+                //
+                // > Try to preserve SELinux security context and
+                // > extended attributes (xattr), but ignore any failure
+                // > to do that and print no corresponding diagnostic.
+                //
+                // so we simply do nothing here.
+                //
+                // TODO Silently ignore failures in the `#[cfg(unix)]`
+                // block instead of terminating immediately on errors.
             }
         }
     };
