@@ -217,15 +217,18 @@ fn test_cp_target_directory_is_file() {
 
 #[test]
 fn test_cp_arg_interactive() {
-    new_ucmd!()
-        .arg(TEST_HELLO_WORLD_SOURCE)
-        .arg(TEST_HOW_ARE_YOU_SOURCE)
-        .arg("-i")
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    // TODO The prompt in GNU cp is different, and it doesn't have the
+    // response either.
+    //
+    // See <https://github.com/uutils/coreutils/issues/4023>.
+    ucmd.args(&["-i", "a", "b"])
         .pipe_in("N\n")
         .succeeds()
         .no_stdout()
-        .stderr_contains(format!("overwrite '{}'?", TEST_HOW_ARE_YOU_SOURCE))
-        .stderr_contains("Not overwriting");
+        .stderr_is("cp: overwrite 'b'?  [y/N]: cp: Not overwriting 'b' at user request\n");
 }
 
 #[test]
