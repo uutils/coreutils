@@ -1372,6 +1372,15 @@ fn handle_existing_dest(
     Ok(())
 }
 
+/// Decide whether the given path exists.
+fn file_or_link_exists(path: &Path) -> bool {
+    // Using `Path.exists()` or `Path.try_exists()` is not sufficient,
+    // because if `path` is a symbolic link and there are too many
+    // levels of symbolic link, then those methods will return false
+    // or an OS error.
+    path.symlink_metadata().is_ok()
+}
+
 /// Copy the a file from `source` to `dest`. `source` will be dereferenced if
 /// `options.dereference` is set to true. `dest` will be dereferenced only if
 /// the source was not a symlink.
@@ -1389,7 +1398,7 @@ fn copy_file(
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
-    if dest.exists() {
+    if file_or_link_exists(dest) {
         handle_existing_dest(source, dest, options, source_in_command_line)?;
     }
 

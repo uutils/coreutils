@@ -2096,6 +2096,19 @@ fn test_cp_mode_hardlink_no_dereference() {
     assert_eq!(at.read_symlink("z"), "slink");
 }
 
+#[test]
+fn test_remove_destination_symbolic_link_loop() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("loop", "loop");
+    at.plus("loop");
+    at.touch("f");
+    ucmd.args(&["--remove-destination", "f", "loop"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(at.file_exists("loop"));
+}
+
 /// Test that copying a directory to itself is disallowed.
 #[test]
 fn test_copy_directory_to_itself_disallowed() {
