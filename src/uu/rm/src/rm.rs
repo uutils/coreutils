@@ -104,7 +104,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             } else if let Some(interactive_index) = interactive_index_option {
                 interactive_index > force_index
             } else {
-                true
+                false
             }
         } else {
             true
