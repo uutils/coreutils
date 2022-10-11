@@ -276,11 +276,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     };
     let check = matches.get_flag("check");
     let tag = matches.get_flag("tag");
-    let nonames = if binary_name == "b3sum" {
-        matches.get_flag("no-names")
-    } else {
-        false
-    };
+    let nonames = *matches.try_get_one("no-names").unwrap_or(Some(&false)).unwrap();
     let status = matches.get_flag("status");
     let quiet = matches.get_flag("quiet") || status;
     let strict = matches.get_flag("strict");

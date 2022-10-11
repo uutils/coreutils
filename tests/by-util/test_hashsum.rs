@@ -34,7 +34,7 @@ macro_rules! test_digest {
         fn test_nonames() {
             let ts = TestScenario::new("hashsum");
             // EXPECTED_FILE has no newline character at the end
-            if DIGEST_ARG == "b3sum" {
+            if DIGEST_ARG == "--b3sum" {
                 // Option only available on b3sum
                 assert_eq!(format!("{0}\n{0}\n", ts.fixtures.read(EXPECTED_FILE)),
                        ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("--no-names").arg("input.txt").arg("-").pipe_in_fixture("input.txt")
