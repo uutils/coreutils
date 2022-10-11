@@ -91,23 +91,33 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let force_index_option = matches.index_of(OPT_FORCE);
 
     // If -f(--force) is before any -i (or variants) we want prompts else no prompts
-    let force_first: bool = {
+    let force_prompt_never: bool = {
         if let Some(force_index) = force_index_option {
             let prompt_index_option = matches.index_of(OPT_PROMPT);
             let prompt_more_index_option = matches.index_of(OPT_PROMPT_MORE);
             let interactive_index_option = matches.index_of(OPT_INTERACTIVE);
 
+            let mut result = true;
+
             if let Some(prompt_index) = prompt_index_option {
-                prompt_index > force_index
-            } else if let Some(prompt_more_index_index) = prompt_more_index_option {
-                prompt_more_index_index > force_index
-            } else if let Some(interactive_index) = interactive_index_option {
-                interactive_index > force_index
-            } else {
-                false
+                if result {
+                    result = prompt_index <= force_index;
+                }
             }
+            if let Some(prompt_more_index_index) = prompt_more_index_option {
+                if result {
+                    result = prompt_more_index_index <= force_index;
+                }
+            }
+            if let Some(interactive_index) = interactive_index_option {
+                if result {
+                    result = interactive_index <= force_index;
+                }
+            }
+
+            result
         } else {
-            true
+            false
         }
     };
 
@@ -119,7 +129,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let options = Options {
             force: force_index_option.is_some(),
             interactive: {
-                if force_index_option.is_some() && !force_first {
+                if force_index_option.is_some() && force_prompt_never {
                     InteractiveMode::Never
                 } else if matches.contains_id(OPT_PROMPT) {
                     InteractiveMode::Always
