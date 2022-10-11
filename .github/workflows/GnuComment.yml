@@ -45,7 +45,7 @@ jobs:
             var fs = require('fs');
             var issue_number = Number(fs.readFileSync('./NR'));
             var content = fs.readFileSync('./result.txt');
-            if (content.trim().len > 0) {
+            if (content.trim().len > 7) { // 7 because we have backquote + \n
               await github.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
