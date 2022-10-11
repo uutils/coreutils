@@ -1,6 +1,6 @@
 [package]
 name = "uu_truncate"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "truncate ~ (uutils) truncate (or extend) FILE to SIZE"
@@ -16,7 +16,7 @@ path = "src/truncate.rs"
 
 [dependencies]
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
 
 [[bin]]
 name = "truncate"
