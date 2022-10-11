@@ -44,9 +44,12 @@ jobs:
           script: |
             var fs = require('fs');
             var issue_number = Number(fs.readFileSync('./NR'));
-            await github.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issue_number,
-              body: 'GNU testsuite comparison:\n```' + fs.readFileSync('./result.txt') + '\n```'
-            });
+            var content = fs.readFileSync('./result.txt');
+            if (content.trim().len > 0) {
+              await github.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue_number,
+                body: 'GNU testsuite comparison:\n```' + content + '\n```'
+              });
+            } 
