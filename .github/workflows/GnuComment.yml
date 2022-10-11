@@ -44,9 +44,15 @@ jobs:
           script: |
             var fs = require('fs');
             var issue_number = Number(fs.readFileSync('./NR'));
-            await github.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issue_number,
-              body: 'GNU testsuite comparison:\n```' + fs.readFileSync('./result.txt') + '\n```'
-            });
+            var content = fs.readFileSync('./result.txt');
+            console.log(content);
+            console.log(content.trim());
+            console.log(content.trim().length);
+            if (content.trim().length > 7) { // 7 because we have backquote + \n
+              await github.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue_number,
+                body: 'GNU testsuite comparison:\n```' + content + '\n```'
+              });
+            } 
