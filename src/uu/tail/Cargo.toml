@@ -16,7 +16,7 @@ edition = "2021"
 path = "src/tail.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 libc = "0.2.132"
 memchr = "2.5.0"
 notify = { version = "=5.0.0", features=["macos_kqueue"]}
