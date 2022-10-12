@@ -263,7 +263,7 @@ impl StrUtils for str {
     }
 
     fn fnmatch(&self, pat: &str) -> bool {
-        pat.parse::<glob::Pattern>().unwrap().matches(self)
+        parse_glob::from_str(pat).unwrap().matches(self)
     }
 }
 
@@ -276,7 +276,7 @@ enum ParseState {
 }
 
 use std::collections::HashMap;
-use uucore::format_usage;
+use uucore::{format_usage, parse_glob};
 
 fn parse<T>(lines: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
 where
