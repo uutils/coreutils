@@ -1115,7 +1115,7 @@ fn copy_directory(
         .follow_links(options.dereference)
     {
         let p = or_continue!(path);
-        let path = current_dir.join(&p.path());
+        let path = current_dir.join(p.path());
 
         let local_to_root_parent = match root_parent {
             Some(parent) => {
@@ -1131,7 +1131,7 @@ fn copy_directory(
                 }
                 #[cfg(not(windows))]
                 {
-                    or_continue!(path.strip_prefix(&parent)).to_path_buf()
+                    or_continue!(path.strip_prefix(parent)).to_path_buf()
                 }
             }
             None => path.clone(),
@@ -1351,7 +1351,7 @@ fn context_for(src: &Path, dest: &Path) -> String {
 /// Implements a simple backup copy for the destination file.
 /// TODO: for the backup, should this function be replaced by `copy_file(...)`?
 fn backup_dest(dest: &Path, backup_path: &Path) -> CopyResult<PathBuf> {
-    fs::copy(dest, &backup_path)?;
+    fs::copy(dest, backup_path)?;
     Ok(backup_path.into())
 }
 
@@ -1566,7 +1566,7 @@ fn copy_file(
                 .write(true)
                 .truncate(false)
                 .create(true)
-                .open(&dest)
+                .open(dest)
                 .unwrap();
         }
     };
@@ -1630,7 +1630,7 @@ fn copy_helper(
 fn copy_fifo(dest: &Path, overwrite: OverwriteMode) -> CopyResult<()> {
     if dest.exists() {
         overwrite.verify(dest)?;
-        fs::remove_file(&dest)?;
+        fs::remove_file(dest)?;
     }
 
     let name = CString::new(dest.as_os_str().as_bytes()).unwrap();
@@ -1647,7 +1647,7 @@ fn copy_link(
     symlinked_files: &mut HashSet<FileInformation>,
 ) -> CopyResult<()> {
     // Here, we will copy the symlink itself (actually, just recreate it)
-    let link = fs::read_link(&source)?;
+    let link = fs::read_link(source)?;
     let dest: Cow<'_, Path> = if dest.is_dir() {
         match source.file_name() {
             Some(name) => dest.join(name).into(),
@@ -1695,8 +1695,8 @@ pub fn verify_target_type(target: &Path, target_type: &TargetType) -> CopyResult
 /// ).unwrap() == Path::new("target/c.txt"))
 /// ```
 pub fn localize_to_target(root: &Path, source: &Path, target: &Path) -> CopyResult<PathBuf> {
-    let local_to_root = source.strip_prefix(&root)?;
-    Ok(target.join(&local_to_root))
+    let local_to_root = source.strip_prefix(root)?;
+    Ok(target.join(local_to_root))
 }
 
 pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {

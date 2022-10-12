@@ -380,7 +380,7 @@ fn test_chmod_non_existing_file() {
         .arg("-r,a+w")
         .arg("does-not-exist")
         .fails()
-        .stderr_contains(&"cannot access 'does-not-exist': No such file or directory");
+        .stderr_contains("cannot access 'does-not-exist': No such file or directory");
 }
 
 #[test]
@@ -403,7 +403,7 @@ fn test_chmod_preserve_root() {
         .arg("755")
         .arg("/")
         .fails()
-        .stderr_contains(&"chmod: it is dangerous to operate recursively on '/'");
+        .stderr_contains("chmod: it is dangerous to operate recursively on '/'");
 }
 
 #[test]

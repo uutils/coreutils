@@ -155,7 +155,7 @@ fn tail_file(
         watcher_service.add_bad_path(path, input.display_name.as_str(), false)?;
     } else if input.is_tailable() {
         let metadata = path.metadata().ok();
-        match File::open(&path) {
+        match File::open(path) {
             Ok(mut file) => {
                 input_service.print_header(input);
                 let mut reader;

@@ -492,7 +492,7 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     let exclude_from_iterator = matches
         .get_many::<String>(options::EXCLUDE_FROM)
         .unwrap_or_default()
-        .flat_map(|f| file_as_vec(&f));
+        .flat_map(file_as_vec);
 
     let excludes_iterator = matches
         .get_many::<String>(options::EXCLUDE)
@@ -913,7 +913,7 @@ impl FromStr for Threshold {
     type Err = ParseSizeError;
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        let offset = if s.starts_with(&['-', '+'][..]) { 1 } else { 0 };
+        let offset = usize::from(s.starts_with(&['-', '+'][..]));
 
         let size = parse_size(&s[offset..])?;
 

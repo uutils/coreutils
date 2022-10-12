@@ -1086,7 +1086,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let mut files = Vec::new();
         for path in &files0_from {
-            let reader = open(&path)?;
+            let reader = open(path)?;
             let buf_reader = BufReader::new(reader);
             for line in buf_reader.split(b'\0').flatten() {
                 files.push(OsString::from(

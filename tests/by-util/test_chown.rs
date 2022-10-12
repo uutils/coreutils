@@ -107,7 +107,7 @@ fn test_chown_only_owner() {
         .arg("--verbose")
         .arg(file1)
         .run();
-    result.stderr_contains(&"retained as");
+    result.stderr_contains("retained as");
 
     // try to change to another existing user, e.g. 'root'
     scene
@@ -116,7 +116,7 @@ fn test_chown_only_owner() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains(&"failed to change");
+        .stderr_contains("failed to change");
 }
 
 #[test]
@@ -142,7 +142,7 @@ fn test_chown_only_owner_colon() {
         .arg("--verbose")
         .arg(file1)
         .succeeds()
-        .stderr_contains(&"retained as");
+        .stderr_contains("retained as");
 
     scene
         .ucmd()
@@ -150,7 +150,7 @@ fn test_chown_only_owner_colon() {
         .arg("--verbose")
         .arg(file1)
         .succeeds()
-        .stderr_contains(&"retained as");
+        .stderr_contains("retained as");
 
     scene
         .ucmd()
@@ -158,7 +158,7 @@ fn test_chown_only_owner_colon() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains(&"failed to change");
+        .stderr_contains("failed to change");
 }
 
 #[test]
@@ -179,7 +179,7 @@ fn test_chown_only_colon() {
     if skipping_test_is_okay(&result, "No such id") {
         return;
     }
-    result.stderr_contains(&"retained as"); // TODO: verbose is not printed to stderr in GNU chown
+    result.stderr_contains("retained as"); // TODO: verbose is not printed to stderr in GNU chown
 
     // test chown : file.txt
     // expected:
@@ -192,7 +192,7 @@ fn test_chown_only_colon() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains(&"invalid group: '::'");
+        .stderr_contains("invalid group: '::'");
 
     scene
         .ucmd()
@@ -200,7 +200,7 @@ fn test_chown_only_colon() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains(&"invalid group: '..'");
+        .stderr_contains("invalid group: '..'");
 }
 
 #[test]
@@ -251,7 +251,7 @@ fn test_chown_owner_group() {
     if skipping_test_is_okay(&result, "chown: invalid group:") {
         return;
     }
-    result.stderr_contains(&"retained as");
+    result.stderr_contains("retained as");
 
     scene
         .ucmd()
@@ -259,7 +259,7 @@ fn test_chown_owner_group() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains(&"invalid group");
+        .stderr_contains("invalid group");
 
     scene
         .ucmd()
@@ -267,7 +267,7 @@ fn test_chown_owner_group() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains(&"invalid group");
+        .stderr_contains("invalid group");
 
     // TODO: on macos group name is not recognized correctly: "chown: invalid group: 'root:root'
     #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
@@ -277,7 +277,7 @@ fn test_chown_owner_group() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains(&"failed to change");
+        .stderr_contains("failed to change");
 }
 
 #[test]
@@ -316,7 +316,7 @@ fn test_chown_various_input() {
     if skipping_test_is_okay(&result, "chown: invalid group:") {
         return;
     }
-    result.stderr_contains(&"retained as");
+    result.stderr_contains("retained as");
 
     // check that username.groupname is understood
     let result = scene
@@ -328,7 +328,7 @@ fn test_chown_various_input() {
     if skipping_test_is_okay(&result, "chown: invalid group:") {
         return;
     }
-    result.stderr_contains(&"retained as");
+    result.stderr_contains("retained as");
 
     // Fails as user.name doesn't exist in the CI
     // but it is valid
@@ -338,7 +338,7 @@ fn test_chown_various_input() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains(&"chown: invalid user: 'user.name:groupname'");
+        .stderr_contains("chown: invalid user: 'user.name:groupname'");
 }
 
 #[test]
@@ -377,7 +377,7 @@ fn test_chown_only_group() {
         // With mac into the CI, we can get this answer
         return;
     }
-    result.stderr_contains(&"retained as");
+    result.stderr_contains("retained as");
     result.success();
 
     scene
@@ -386,7 +386,7 @@ fn test_chown_only_group() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains(&"failed to change");
+        .stderr_contains("failed to change");
 }
 
 #[test]
@@ -412,7 +412,7 @@ fn test_chown_only_user_id() {
         // stderr: "chown: invalid user: '1001'
         return;
     }
-    result.stderr_contains(&"retained as");
+    result.stderr_contains("retained as");
 
     scene
         .ucmd()
@@ -420,7 +420,7 @@ fn test_chown_only_user_id() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains(&"failed to change");
+        .stderr_contains("failed to change");
 }
 
 /// Test for setting the owner to a user ID for a user that does not exist.
@@ -475,7 +475,7 @@ fn test_chown_only_group_id() {
         // With mac into the CI, we can get this answer
         return;
     }
-    result.stderr_contains(&"retained as");
+    result.stderr_contains("retained as");
 
     // Apparently on CI "macos-latest, x86_64-apple-darwin, feat_os_macos"
     // the process has the rights to change from runner:staff to runner:wheel
@@ -486,7 +486,7 @@ fn test_chown_only_group_id() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains(&"failed to change");
+        .stderr_contains("failed to change");
 }
 
 /// Test for setting the group to a group ID for a group that does not exist.
@@ -547,7 +547,7 @@ fn test_chown_owner_group_id() {
         // stderr: "chown: invalid user: '1001:116'
         return;
     }
-    result.stderr_contains(&"retained as");
+    result.stderr_contains("retained as");
 
     let result = scene
         .ucmd()
@@ -560,7 +560,7 @@ fn test_chown_owner_group_id() {
         // stderr: "chown: invalid user: '1001.116'
         return;
     }
-    result.stderr_contains(&"retained as");
+    result.stderr_contains("retained as");
 
     scene
         .ucmd()
@@ -568,7 +568,7 @@ fn test_chown_owner_group_id() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains(&"failed to change");
+        .stderr_contains("failed to change");
 }
 
 #[test]
@@ -603,7 +603,7 @@ fn test_chown_owner_group_mix() {
         .arg("--verbose")
         .arg(file1)
         .run();
-    result.stderr_contains(&"retained as");
+    result.stderr_contains("retained as");
 
     // TODO: on macos group name is not recognized correctly: "chown: invalid group: '0:root'
     #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
@@ -613,7 +613,7 @@ fn test_chown_owner_group_mix() {
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains(&"failed to change");
+        .stderr_contains("failed to change");
 }
 
 #[test]
@@ -643,8 +643,8 @@ fn test_chown_recursive() {
         .arg("a")
         .arg("z")
         .run();
-    result.stderr_contains(&"ownership of 'a/a' retained as");
-    result.stderr_contains(&"ownership of 'z/y' retained as");
+    result.stderr_contains("ownership of 'a/a' retained as");
+    result.stderr_contains("ownership of 'z/y' retained as");
 }
 
 #[test]
@@ -665,7 +665,7 @@ fn test_root_preserve() {
         .arg(user_name)
         .arg("/")
         .fails();
-    result.stderr_contains(&"chown: it is dangerous to operate recursively");
+    result.stderr_contains("chown: it is dangerous to operate recursively");
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

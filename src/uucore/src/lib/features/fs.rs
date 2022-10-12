@@ -355,7 +355,7 @@ pub fn canonicalize<P: AsRef<Path>>(
                     followed_symlinks += 1;
                 } else {
                     let file_info =
-                        FileInformation::from_path(&result.parent().unwrap(), false).unwrap();
+                        FileInformation::from_path(result.parent().unwrap(), false).unwrap();
                     let mut path_to_follow = PathBuf::new();
                     for part in &parts {
                         path_to_follow.push(part.as_os_str());

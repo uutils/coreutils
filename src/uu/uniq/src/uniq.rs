@@ -424,7 +424,7 @@ fn open_input_file(in_file_name: &str) -> UResult<BufReader<Box<dyn Read + 'stat
         Box::new(stdin()) as Box<dyn Read>
     } else {
         let path = Path::new(in_file_name);
-        let in_file = File::open(&path)
+        let in_file = File::open(path)
             .map_err_context(|| format!("Could not open {}", in_file_name.maybe_quote()))?;
         Box::new(in_file) as Box<dyn Read>
     };
@@ -436,7 +436,7 @@ fn open_output_file(out_file_name: &str) -> UResult<BufWriter<Box<dyn Write + 's
         Box::new(stdout()) as Box<dyn Write>
     } else {
         let path = Path::new(out_file_name);
-        let out_file = File::create(&path)
+        let out_file = File::create(path)
             .map_err_context(|| format!("Could not create {}", out_file_name.maybe_quote()))?;
         Box::new(out_file) as Box<dyn Write>
     };

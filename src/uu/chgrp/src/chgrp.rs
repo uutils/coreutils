@@ -27,7 +27,7 @@ const USAGE: &str = "\
 
 fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>, IfFrom)> {
     let dest_gid = if let Some(file) = matches.get_one::<String>(options::REFERENCE) {
-        fs::metadata(&file)
+        fs::metadata(file)
             .map(|meta| Some(meta.gid()))
             .map_err_context(|| format!("failed to get attributes of {}", file.quote()))?
     } else {

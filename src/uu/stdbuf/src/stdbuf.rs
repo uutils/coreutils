@@ -207,7 +207,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short(options::INPUT_SHORT)
                 .help("adjust standard input stream buffering")
                 .value_name("MODE")
-                .required_unless_present_any(&[options::OUTPUT, options::ERROR]),
+                .required_unless_present_any([options::OUTPUT, options::ERROR]),
         )
         .arg(
             Arg::new(options::OUTPUT)
@@ -215,7 +215,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short(options::OUTPUT_SHORT)
                 .help("adjust standard output stream buffering")
                 .value_name("MODE")
-                .required_unless_present_any(&[options::INPUT, options::ERROR]),
+                .required_unless_present_any([options::INPUT, options::ERROR]),
         )
         .arg(
             Arg::new(options::ERROR)
@@ -223,7 +223,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short(options::ERROR_SHORT)
                 .help("adjust standard error stream buffering")
                 .value_name("MODE")
-                .required_unless_present_any(&[options::INPUT, options::OUTPUT]),
+                .required_unless_present_any([options::INPUT, options::OUTPUT]),
         )
         .arg(
             Arg::new(options::COMMAND)

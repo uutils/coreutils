@@ -368,7 +368,7 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) -> UResult<()> {
                 continue;
             }
 
-            show_if_err!(File::open(&path)
+            show_if_err!(File::open(path)
                 .map_err_context(|| filename.maybe_quote().to_string())
                 .and_then(|file| {
                     match &mode {

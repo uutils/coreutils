@@ -78,7 +78,7 @@ fn test_tee_no_more_writeable_1() {
         .pipe_in(&content[..])
         .fails()
         .stdout_contains(&content)
-        .stderr_contains(&"No space left on device");
+        .stderr_contains("No space left on device");
 
     assert_eq!(at.read(file_out), content);
 }
