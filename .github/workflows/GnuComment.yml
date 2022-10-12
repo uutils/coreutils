@@ -13,7 +13,7 @@ jobs:
       github.event.workflow_run.event == 'pull_request'
     steps:
       - name: 'Download artifact'
-        uses: actions/github-script@v3.1.0
+        uses: actions/github-script@v6.3.2
         with:
           script: |
             // List all artifacts from GnuTests
@@ -38,7 +38,7 @@ jobs:
       - run: unzip comment.zip
 
       - name: 'Comment on PR'
-        uses: actions/github-script@v3
+        uses: actions/github-script@v6.3.2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
