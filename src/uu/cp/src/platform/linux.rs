@@ -113,6 +113,7 @@ pub(crate) fn copy_on_write(
     source_is_fifo: bool,
 ) -> CopyResult<()> {
     let result = match (reflink_mode, sparse_mode) {
+        (ReflinkMode::Never, SparseMode::Always) => sparse_copy(source, dest),
         (ReflinkMode::Never, _) => std::fs::copy(source, dest).map(|_| ()),
         (ReflinkMode::Auto, SparseMode::Always) => sparse_copy(source, dest),
 
