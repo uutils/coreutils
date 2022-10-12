@@ -30,6 +30,7 @@ use clap::{crate_version, Arg, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
+use nix::sys::sysinfo::sysinfo;
 use numeric_str_cmp::{human_numeric_str_cmp, numeric_str_cmp, NumInfo, NumInfoParseSettings};
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
@@ -342,32 +343,46 @@ impl GlobalSettings {
     /// The unit may be k, K, m, M, g, G, t, T, P, E, Z, Y (powers of 1024), or b which is 1.
     /// Default is K.
     fn parse_byte_count(input: &str) -> Result<usize, ParseSizeError> {
-        // GNU sort (8.32)   valid: 1b,        k, K, m, M, g, G, t, T, P, E, Z, Y
-        // GNU sort (8.32) invalid:  b, B, 1B,                         p, e, z, y
-        const ALLOW_LIST: &[char] = &[
-            'b', 'k', 'K', 'm', 'M', 'g', 'G', 't', 'T', 'P', 'E', 'Z', 'Y',
-        ];
         let mut size_string = input.trim().to_string();
 
-        if size_string.ends_with(|c: char| ALLOW_LIST.contains(&c) || c.is_ascii_digit()) {
-            // b 1, K 1024 (default)
-            if size_string.ends_with(|c: char| c.is_ascii_digit()) {
+        match size_string.chars().last() {
+            // Default unit is K (1024)
+            Some('0'..='9') => {
                 size_string.push('K');
-            } else if size_string.ends_with('b') {
+            }
+            // b should be treated as 1, but parse_size treats it as 1024.
+            // So remove the suffix
+            Some('b') => {
                 size_string.pop();
             }
-            let size = parse_size(&size_string)?;
-            usize::try_from(size).map_err(|_| {
-                ParseSizeError::SizeTooBig(format!(
-                    "Buffer size {} does not fit in address space",
-                    size
-                ))
-            })
-        } else if size_string.starts_with(|c: char| c.is_ascii_digit()) {
-            Err(ParseSizeError::InvalidSuffix("invalid suffix".to_string()))
+            // Valid suffixes that require no further preprocessing
+            // GNU sort (8.32)   valid: 1b,        k, K, m, M, g, G, t, T, P, E, Z, Y, %
+            // GNU sort (8.32) invalid:  b, B, 1B,                         p, e, z, y
+            Some('k' | 'K' | 'm' | 'M' | 'g' | 'G' | 't' | 'T' | 'P' | 'E' | 'Z' | 'Y' | '%') => {}
+            // All other suffixes are invalid (only return InvalidSuffix if size_string is a number)
+            Some(_) if size_string.starts_with(|c: char| c.is_ascii_digit()) => {
+                return Err(ParseSizeError::InvalidSuffix("invalid suffix".to_string()))
+            }
+            // Catch non-number strings (ex. '%', 'K')
+            Some(_) | None => {
+                return Err(ParseSizeError::ParseFailure("parse failure".to_string()))
+            }
+        };
+
+        let parse_function = if size_string.ends_with('%') {
+            parse_memory_percentage
         } else {
-            Err(ParseSizeError::ParseFailure("parse failure".to_string()))
-        }
+            parse_size
+        };
+
+        let size: u64 = parse_function(&size_string)?;
+
+        usize::try_from(size).map_err(|_| {
+            ParseSizeError::SizeTooBig(format!(
+                "Buffer size {} does not fit in address space",
+                size
+            ))
+        })
     }
 
     /// Precompute some data needed for sorting.
@@ -387,6 +402,30 @@ impl GlobalSettings {
             .iter()
             .filter(|s| matches!(s.settings.mode, SortMode::GeneralNumeric))
             .count();
+    }
+}
+
+/// Parse a string containing a percentage value of total memory
+/// assert_eq!(parse_memory_percentage("0%"), Ok(0));
+fn parse_memory_percentage(size_string: &str) -> Result<u64, ParseSizeError> {
+    // Fetch memory info
+    let system = sysinfo().map_err(|_| {
+        ParseSizeError::ParseFailure("failed to retrieve total system memory".to_string())
+    });
+    match size_string[..size_string.len() - 1].parse::<u64>() {
+        Ok(percentage) => {
+            // Can't allocate more than 100% of memory
+            if percentage > 100 {
+                return Err(ParseSizeError::SizeTooBig(size_string.to_string()));
+            }
+
+            percentage
+                .checked_mul(system?.ram_total())
+                .map(|val| val / 100)
+                // Handle overflow in multiplication
+                .ok_or_else(|| ParseSizeError::SizeTooBig(size_string.to_string()))
+        }
+        Err(_) => Err(ParseSizeError::ParseFailure(size_string.to_string())),
     }
 }
 
@@ -1882,6 +1921,36 @@ mod tests {
         let mut buffer = vec![];
         tokenize(line, separator, &mut buffer);
         buffer
+    }
+
+    #[test]
+    fn test_parse_memory_percentages() {
+        let s = sysinfo().unwrap();
+        assert_eq!(
+            GlobalSettings::parse_byte_count("100%").unwrap(),
+            s.ram_total() as usize
+        );
+        assert_eq!(GlobalSettings::parse_byte_count("0%").unwrap(), 0);
+        assert_eq!(
+            GlobalSettings::parse_byte_count("50%").unwrap(),
+            (s.ram_total() / 2) as usize
+        );
+    }
+    #[test]
+    fn test_invalid_memory_percentages() {
+        assert_eq!(
+            GlobalSettings::parse_byte_count("110%").unwrap_err(),
+            ParseSizeError::SizeTooBig("110%".to_string())
+        );
+        assert_eq!(
+            GlobalSettings::parse_byte_count("101%").unwrap_err(),
+            ParseSizeError::SizeTooBig("101%".to_string())
+        );
+
+        assert_eq!(
+            GlobalSettings::parse_byte_count("%").unwrap_err(),
+            ParseSizeError::ParseFailure("%".to_string())
+        );
     }
 
     #[test]
