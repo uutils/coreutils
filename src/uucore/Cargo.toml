@@ -2,7 +2,7 @@
 
 [package]
 name = "uucore"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "uutils ~ 'core' uutils code library (cross-platform)"
@@ -18,7 +18,7 @@ edition = "2021"
 path="src/lib/lib.rs"
 
 [dependencies]
-uucore_procs = { version=">=0.0.15", path="../uucore_procs" }
+uucore_procs = { version=">=0.0.16", path="../uucore_procs" }
 clap = "3.2"
 dns-lookup = { version="1.0.5", optional=true }
 dunce = "1.0.0"
