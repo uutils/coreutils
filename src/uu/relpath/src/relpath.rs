@@ -31,8 +31,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().get_matches_from(args);
 
-    let to = Path::new(matches.value_of(options::TO).unwrap()).to_path_buf(); // required
-    let from = match matches.value_of(options::FROM) {
+    let to = Path::new(matches.get_one::<String>(options::TO).unwrap()).to_path_buf(); // required
+    let from = match matches.get_one::<String>(options::FROM) {
         Some(p) => Path::new(p).to_path_buf(),
         None => env::current_dir().unwrap(),
     };
@@ -42,7 +42,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map_err_context(String::new)?;
 
     if matches.contains_id(options::DIR) {
-        let base = Path::new(&matches.value_of(options::DIR).unwrap()).to_path_buf();
+        let base = Path::new(&matches.get_one::<String>(options::DIR).unwrap()).to_path_buf();
         let absbase = canonicalize(base, MissingHandling::Normal, ResolveMode::Logical)
             .map_err_context(String::new)?;
         if !absto.as_path().starts_with(absbase.as_path())

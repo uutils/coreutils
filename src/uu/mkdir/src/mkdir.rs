@@ -50,7 +50,7 @@ fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, St
     // Translate a ~str in octal form to u16, default to 755
     // Not tested on Windows
     let mut new_mode = DEFAULT_PERM;
-    match matches.value_of(options::MODE) {
+    match matches.get_one::<String>(options::MODE) {
         Some(m) => {
             for mode in m.split(',') {
                 if mode.contains(digits) {
@@ -96,7 +96,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
-    let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
+    let matches = uu_app()
+        .after_help(&after_help[..])
+        .try_get_matches_from(args)?;
 
     let dirs = matches
         .get_many::<OsString>(options::DIRS)

@@ -7,8 +7,6 @@ use std::fs::set_permissions;
 #[cfg(not(windows))]
 use std::os::unix::fs;
 
-#[cfg(unix)]
-use std::os::unix::fs::symlink as symlink_file;
 #[cfg(all(unix, not(target_os = "freebsd")))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(all(unix, not(target_os = "freebsd")))]
@@ -49,6 +47,27 @@ static TEST_MOUNT_MOUNTPOINT: &str = "mount";
 static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
 #[cfg(unix)]
 static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
+
+/// Assert that mode, ownership, and permissions of two metadata objects match.
+#[cfg(not(windows))]
+macro_rules! assert_metadata_eq {
+    ($m1:expr, $m2:expr) => {{
+        assert_eq!($m1.mode(), $m2.mode(), "mode is different");
+        assert_eq!($m1.uid(), $m2.uid(), "uid is different");
+        assert_eq!($m1.atime(), $m2.atime(), "atime is different");
+        assert_eq!(
+            $m1.atime_nsec(),
+            $m2.atime_nsec(),
+            "atime_nsec is different"
+        );
+        assert_eq!($m1.mtime(), $m2.mtime(), "mtime is different");
+        assert_eq!(
+            $m1.mtime_nsec(),
+            $m2.mtime_nsec(),
+            "mtime_nsec is different"
+        );
+    }};
+}
 
 #[test]
 fn test_cp_cp() {
@@ -204,6 +223,8 @@ fn test_cp_arg_interactive() {
         .arg("-i")
         .pipe_in("N\n")
         .succeeds()
+        .no_stdout()
+        .stderr_contains(format!("overwrite '{}'?", TEST_HOW_ARE_YOU_SOURCE))
         .stderr_contains("Not overwriting");
 }
 
@@ -1336,6 +1357,24 @@ fn test_cp_reflink_auto() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+fn test_cp_reflink_none() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd
+        .arg("--reflink")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_EXISTING_FILE)
+        .run();
+
+    if result.succeeded() {
+        // Check the content of the destination file
+        assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
+    } else {
+        // Older Linux versions do not support cloning.
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 fn test_cp_reflink_never() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg("--reflink=never")
@@ -1356,7 +1395,7 @@ fn test_cp_reflink_bad() {
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_contains("invalid argument");
+        .stderr_contains("error: \"bad\" isn't a valid value for '--reflink[=<WHEN>...]'");
 }
 
 #[test]
@@ -1682,7 +1721,7 @@ fn test_canonicalize_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
     at.touch("dir/file");
-    symlink_file("../dir/file", at.plus("dir/file-ln")).unwrap();
+    at.relative_symlink_file("../dir/file", "dir/file-ln");
     ucmd.arg("dir/file-ln")
         .arg(".")
         .succeeds()
@@ -1769,20 +1808,7 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     {
         let metadata1 = at.symlink_metadata("dangle");
         let metadata2 = at.symlink_metadata("d2");
-        assert_eq!(metadata1.mode(), metadata2.mode(), "mode is different");
-        assert_eq!(metadata1.uid(), metadata2.uid(), "uid is different");
-        assert_eq!(metadata1.atime(), metadata2.atime(), "atime is different");
-        assert_eq!(
-            metadata1.atime_nsec(),
-            metadata2.atime_nsec(),
-            "atime_nsec is different"
-        );
-        assert_eq!(metadata1.mtime(), metadata2.mtime(), "mtime is different");
-        assert_eq!(
-            metadata1.mtime_nsec(),
-            metadata2.mtime_nsec(),
-            "mtime_nsec is different"
-        );
+        assert_metadata_eq!(metadata1, metadata2);
     }
 }
 
@@ -2010,4 +2036,175 @@ fn test_cp_parents_2_link() {
         ));
     assert!(at.dir_exists("d/a/link") && !at.symlink_exists("d/a/link"));
     assert!(at.file_exists("d/a/link/c"));
+}
+
+#[test]
+fn test_cp_copy_symlink_contents_recursive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("src-dir");
+    at.mkdir("dest-dir");
+    at.touch("f");
+    at.write("f", "f");
+    at.relative_symlink_file("f", "slink");
+    at.relative_symlink_file("no-file", &path_concat!("src-dir", "slink"));
+    ucmd.args(&["-H", "-R", "slink", "src-dir", "dest-dir"])
+        .succeeds();
+    assert!(at.dir_exists("src-dir"));
+    assert!(at.dir_exists("dest-dir"));
+    assert!(at.dir_exists(&path_concat!("dest-dir", "src-dir")));
+    let regular_file = path_concat!("dest-dir", "slink");
+    assert!(!at.symlink_exists(&regular_file) && at.file_exists(&regular_file));
+    assert_eq!(at.read(&regular_file), "f");
+}
+
+#[test]
+fn test_cp_mode_symlink() {
+    for from in ["file", "slink", "slink2"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("file");
+        at.write("file", "f");
+        at.relative_symlink_file("file", "slink");
+        at.relative_symlink_file("slink", "slink2");
+        ucmd.args(&["-s", "-L", from, "z"]).succeeds();
+        assert!(at.symlink_exists("z"));
+        assert_eq!(at.read_symlink("z"), from);
+    }
+}
+
+// Android doesn't allow creating hard links
+#[cfg(not(target_os = "android"))]
+#[test]
+fn test_cp_mode_hardlink() {
+    for from in ["file", "slink", "slink2"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("file");
+        at.write("file", "f");
+        at.relative_symlink_file("file", "slink");
+        at.relative_symlink_file("slink", "slink2");
+        ucmd.args(&["--link", "-L", from, "z"]).succeeds();
+        assert!(at.file_exists("z") && !at.symlink_exists("z"));
+        assert_eq!(at.read("z"), "f");
+        // checking that it's the same hard link
+        at.append("z", "g");
+        assert_eq!(at.read("file"), "fg");
+    }
+}
+
+// Android doesn't allow creating hard links
+#[cfg(not(target_os = "android"))]
+#[test]
+fn test_cp_mode_hardlink_no_dereference() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.write("file", "f");
+    at.relative_symlink_file("file", "slink");
+    at.relative_symlink_file("slink", "slink2");
+    ucmd.args(&["--link", "-P", "slink2", "z"]).succeeds();
+    assert!(at.symlink_exists("z"));
+    assert_eq!(at.read_symlink("z"), "slink");
+}
+
+#[test]
+fn test_remove_destination_symbolic_link_loop() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("loop", "loop");
+    at.plus("loop");
+    at.touch("f");
+    ucmd.args(&["--remove-destination", "f", "loop"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(at.file_exists("loop"));
+}
+
+/// Test that copying a directory to itself is disallowed.
+#[test]
+fn test_copy_directory_to_itself_disallowed() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    #[cfg(not(windows))]
+    let expected = "cp: cannot copy a directory, 'd', into itself, 'd/d'";
+    #[cfg(windows)]
+    let expected = "cp: cannot copy a directory, 'd', into itself, 'd\\d'";
+    ucmd.args(&["-R", "d", "d"]).fails().stderr_only(expected);
+}
+
+/// Test that copying a nested directory to itself is disallowed.
+#[test]
+fn test_copy_nested_directory_to_itself_disallowed() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("a");
+    at.mkdir("a/b");
+    at.mkdir("a/b/c");
+    #[cfg(not(windows))]
+    let expected = "cp: cannot copy a directory, 'a/b', into itself, 'a/b/c/b'";
+    #[cfg(windows)]
+    let expected = "cp: cannot copy a directory, 'a/b', into itself, 'a/b/c\\b'";
+    ucmd.args(&["-R", "a/b", "a/b/c"])
+        .fails()
+        .stderr_only(expected);
+}
+
+/// Test for preserving permissions when copying a directory.
+#[cfg(not(windows))]
+#[test]
+fn test_copy_dir_preserve_permissions() {
+    // Create a directory that has some non-default permissions.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d1");
+    at.set_mode("d1", 0o0500);
+
+    // Copy the directory, preserving those permissions.
+    //
+    //         preserve permissions (mode, ownership, timestamps)
+    //            |    copy directories recursively
+    //            |      |   from this source directory
+    //            |      |    |   to this destination
+    //            |      |    |     |
+    //            V      V    V     V
+    ucmd.args(&["-p", "-R", "d1", "d2"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert!(at.dir_exists("d2"));
+
+    // Assert that the permissions are preserved.
+    let metadata1 = at.metadata("d1");
+    let metadata2 = at.metadata("d2");
+    assert_metadata_eq!(metadata1, metadata2);
+}
+
+/// Test for preserving permissions when copying a directory, even in
+/// the face of an inaccessible file in that directory.
+#[cfg(not(windows))]
+#[test]
+fn test_copy_dir_preserve_permissions_inaccessible_file() {
+    // Create a directory that has some non-default permissions and
+    // contains an inaccessible file.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d1");
+    at.touch("d1/f");
+    at.set_mode("d1/f", 0);
+    at.set_mode("d1", 0o0500);
+
+    // Copy the directory, preserving those permissions. There should
+    // be an error message that the file `d1/f` is inaccessible.
+    //
+    //         preserve permissions (mode, ownership, timestamps)
+    //            |    copy directories recursively
+    //            |      |   from this source directory
+    //            |      |    |   to this destination
+    //            |      |    |     |
+    //            V      V    V     V
+    ucmd.args(&["-p", "-R", "d1", "d2"])
+        .fails()
+        .status_code(1)
+        .stderr_only("cp: cannot open 'd1/f' for reading: Permission denied");
+    assert!(at.dir_exists("d2"));
+    assert!(!at.file_exists("d2/f"));
+
+    // Assert that the permissions are preserved.
+    let metadata1 = at.metadata("d1");
+    let metadata2 = at.metadata("d2");
+    assert_metadata_eq!(metadata1, metadata2);
 }

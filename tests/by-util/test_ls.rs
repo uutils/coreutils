@@ -90,16 +90,16 @@ fn test_ls_allocation_size() {
         // fill empty file with zeros
         scene
             .ccmd("dd")
-            .arg("--if=/dev/zero")
-            .arg("--of=some-dir1/zero-file")
+            .arg("if=/dev/zero")
+            .arg("of=some-dir1/zero-file")
             .arg("bs=1024")
             .arg("count=4096")
             .succeeds();
 
         scene
             .ccmd("dd")
-            .arg("--if=/dev/zero")
-            .arg("--of=irregular-file")
+            .arg("if=/dev/zero")
+            .arg("of=irregular-file")
             .arg("bs=1")
             .arg("count=777")
             .succeeds();
@@ -385,6 +385,7 @@ fn test_ls_io_errors() {
         .arg("-1")
         .arg("some-dir1")
         .fails()
+        .code_is(2)
         .stderr_contains("cannot open directory")
         .stderr_contains("Permission denied");
 
@@ -393,6 +394,7 @@ fn test_ls_io_errors() {
         .arg("-Li")
         .arg("some-dir2")
         .fails()
+        .code_is(1)
         .stderr_contains("cannot access")
         .stderr_contains("No such file or directory")
         .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
@@ -408,6 +410,7 @@ fn test_ls_io_errors() {
         .arg("-laR")
         .arg("some-dir3")
         .fails()
+        .code_is(1)
         .stderr_contains("some-dir4")
         .stderr_contains("cannot open directory")
         .stderr_contains("Permission denied")
@@ -1650,6 +1653,7 @@ fn test_ls_styles() {
     let re_iso = Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
     let re_locale =
         Regex::new(r"[a-z-]* \d* \w* \w* \d* [A-Z][a-z]{2} ( |\d)\d \d{2}:\d{2} test\n").unwrap();
+    let re_custom_format = Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{4}__\d{2} test\n").unwrap();
 
     //full-iso
     let result = scene
@@ -1671,6 +1675,17 @@ fn test_ls_styles() {
     //locale
     let result = scene.ucmd().arg("-l").arg("--time-style=locale").succeeds();
     assert!(re_locale.is_match(result.stdout_str()));
+
+    //+FORMAT
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=+%Y__%M")
+        .succeeds();
+    assert!(re_custom_format.is_match(result.stdout_str()));
+
+    // Also fails due to not having full clap support for time_styles
+    scene.ucmd().arg("-l").arg("-time-style=invalid").fails();
 
     //Overwrite options tests
     let result = scene
@@ -2666,6 +2681,73 @@ fn test_ls_ignore_backups() {
         .stdout_does_not_contain(".somehiddenbackup~");
 }
 
+// This test fails on windows, see details at #3985
+#[cfg(not(windows))]
+#[test]
+fn test_ls_ignore_explicit_period() {
+    // In ls ignore patterns, leading periods must be explicitly specified
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+    at.touch(".hidden.yml");
+    at.touch("regular.yml");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("--ignore")
+        .arg("?hidden.yml")
+        .succeeds()
+        .stdout_contains(".hidden.yml")
+        .stdout_contains("regular.yml");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("--ignore")
+        .arg("*.yml")
+        .succeeds()
+        .stdout_contains(".hidden.yml")
+        .stdout_does_not_contain("regular.yml");
+
+    // Leading period is explicitly specified
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("--ignore")
+        .arg(".*.yml")
+        .succeeds()
+        .stdout_does_not_contain(".hidden.yml")
+        .stdout_contains("regular.yml");
+}
+
+// This test fails on windows, see details at #3985
+#[cfg(not(windows))]
+#[test]
+fn test_ls_ignore_negation() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+    at.touch("apple");
+    at.touch("boy");
+
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("[!a]*")
+        .succeeds()
+        .stdout_contains("apple")
+        .stdout_does_not_contain("boy");
+
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("[^a]*")
+        .succeeds()
+        .stdout_contains("apple")
+        .stdout_does_not_contain("boy");
+}
+
 #[test]
 fn test_ls_directory() {
     let scene = TestScenario::new(util_name!());
@@ -2987,8 +3069,18 @@ fn test_ls_dangling_symlinks() {
     at.mkdir("temp_dir");
     at.symlink_file("does_not_exist", "temp_dir/dangle");
 
-    scene.ucmd().arg("-L").arg("temp_dir/dangle").fails();
-    scene.ucmd().arg("-H").arg("temp_dir/dangle").fails();
+    scene
+        .ucmd()
+        .arg("-L")
+        .arg("temp_dir/dangle")
+        .fails()
+        .code_is(2);
+    scene
+        .ucmd()
+        .arg("-H")
+        .arg("temp_dir/dangle")
+        .fails()
+        .code_is(2);
 
     scene
         .ucmd()
@@ -3001,6 +3093,7 @@ fn test_ls_dangling_symlinks() {
         .arg("-Li")
         .arg("temp_dir")
         .fails()
+        .code_is(1)
         .stderr_contains("cannot access")
         .stderr_contains("No such file or directory")
         .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
@@ -3010,6 +3103,7 @@ fn test_ls_dangling_symlinks() {
         .arg("-Ll")
         .arg("temp_dir")
         .fails()
+        .code_is(1)
         .stdout_contains("l?????????");
 
     #[cfg(unix)]
@@ -3018,6 +3112,7 @@ fn test_ls_dangling_symlinks() {
         at.touch("temp_dir/real_file");
 
         let real_file_res = scene.ucmd().arg("-Li1").arg("temp_dir").fails();
+        real_file_res.code_is(1);
         let real_file_stdout_len = String::from_utf8(real_file_res.stdout().to_owned())
             .ok()
             .unwrap()
@@ -3029,6 +3124,7 @@ fn test_ls_dangling_symlinks() {
             .len();
 
         let dangle_file_res = scene.ucmd().arg("-Li1").arg("temp_dir").fails();
+        dangle_file_res.code_is(1);
         let dangle_stdout_len = String::from_utf8(dangle_file_res.stdout().to_owned())
             .ok()
             .unwrap()
@@ -3199,6 +3295,7 @@ fn test_ls_dereference_looped_symlinks_recursive() {
 
     ucmd.args(&["-RL", "loop"])
         .fails()
+        .code_is(2)
         .stderr_contains("not listing already-listed directory");
 }
 

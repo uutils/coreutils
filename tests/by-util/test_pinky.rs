@@ -13,6 +13,11 @@ extern crate pinky;
 pub use self::pinky::*;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_capitalize() {
     assert_eq!("Zbnmasd", "zbnmasd".capitalize()); // spell-checker:disable-line
     assert_eq!("Abnmasd", "Abnmasd".capitalize()); // spell-checker:disable-line

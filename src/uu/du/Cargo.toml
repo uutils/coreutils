@@ -1,6 +1,6 @@
 [package]
 name = "uu_du"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "du ~ (uutils) display disk usage"
@@ -19,7 +19,7 @@ chrono = { version="^0.4.19", default-features=false, features=["std", "alloc", 
 # For the --exclude & --exclude-from options
 glob = "0.3.0"
 clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version="0.3", features=[] }

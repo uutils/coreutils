@@ -42,6 +42,11 @@ fn _du_basics(s: &str) {
 }
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_du_basics_subdir() {
     let ts = TestScenario::new(util_name!());
 

@@ -34,7 +34,7 @@ const ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let mut no_trailing_delimiter = matches.contains_id(OPT_NO_NEWLINE);
     let use_zero = matches.contains_id(OPT_ZERO);

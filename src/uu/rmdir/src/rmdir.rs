@@ -19,8 +19,6 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UResult};
 
-#[cfg(unix)]
-use uucore::fs::is_symlink;
 use uucore::{format_usage, util_name};
 
 static ABOUT: &str = "Remove the DIRECTORY(ies), if they are empty.";
@@ -33,7 +31,7 @@ static ARG_DIRS: &str = "dirs";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let opts = Opts {
         ignore: matches.contains_id(OPT_IGNORE_FAIL_NON_EMPTY),
@@ -78,7 +76,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 if error.raw_os_error() == Some(libc::ENOTDIR) && bytes.ends_with(b"/") {
                     // Strip the trailing slash or .symlink_metadata() will follow the symlink
                     let no_slash: &Path = OsStr::from_bytes(&bytes[..bytes.len() - 1]).as_ref();
-                    if is_symlink(no_slash) && points_to_directory(no_slash).unwrap_or(true) {
+                    if no_slash.is_symlink() && points_to_directory(no_slash).unwrap_or(true) {
                         show_error!(
                             "failed to remove {}: Symbolic link not followed",
                             path.quote()

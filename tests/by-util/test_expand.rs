@@ -3,6 +3,11 @@ use uucore::display::Quotable;
 // spell-checker:ignore (ToDO) taaaa tbbbb tcccc
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_with_tab() {
     new_ucmd!()
         .arg("with-tab.txt")

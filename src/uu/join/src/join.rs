@@ -602,11 +602,11 @@ impl<'a> State<'a> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
-    let keys = parse_field_number_option(matches.value_of("j"))?;
-    let key1 = parse_field_number_option(matches.value_of("1"))?;
-    let key2 = parse_field_number_option(matches.value_of("2"))?;
+    let keys = parse_field_number_option(matches.get_one::<String>("j").map(|s| s.as_str()))?;
+    let key1 = parse_field_number_option(matches.get_one::<String>("1").map(|s| s.as_str()))?;
+    let key2 = parse_field_number_option(matches.get_one::<String>("2").map(|s| s.as_str()))?;
 
     let mut settings: Settings = Default::default();
 
@@ -655,7 +655,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         };
     }
 
-    if let Some(format) = matches.value_of("o") {
+    if let Some(format) = matches.get_one::<String>("o") {
         if format == "auto" {
             settings.autoformat = true;
         } else {
@@ -667,7 +667,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    if let Some(empty) = matches.value_of("e") {
+    if let Some(empty) = matches.get_one::<String>("e") {
         settings.empty = empty.as_bytes().to_vec();
     }
 
@@ -687,8 +687,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.line_ending = LineEnding::Nul;
     }
 
-    let file1 = matches.value_of("file1").unwrap();
-    let file2 = matches.value_of("file2").unwrap();
+    let file1 = matches.get_one::<String>("file1").unwrap();
+    let file2 = matches.get_one::<String>("file2").unwrap();
 
     if file1 == "-" && file2 == "-" {
         return Err(USimpleError::new(1, "both files cannot be standard input"));

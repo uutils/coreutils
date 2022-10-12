@@ -113,7 +113,7 @@ impl Options {
             && !matches.contains_id(options::FIRST_ONLY);
         let uflag = !matches.contains_id(options::NO_UTF8);
 
-        let files = match matches.value_of(options::FILE) {
+        let files = match matches.get_one::<String>(options::FILE) {
             Some(v) => vec![v.to_string()],
             None => vec!["-".to_owned()],
         };
@@ -167,7 +167,7 @@ fn expand_shortcuts(args: &[String]) -> Vec<String> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
 
-    let matches = uu_app().get_matches_from(expand_shortcuts(&args));
+    let matches = uu_app().try_get_matches_from(expand_shortcuts(&args))?;
 
     unexpand(&Options::new(&matches)?).map_err_context(String::new)
 }

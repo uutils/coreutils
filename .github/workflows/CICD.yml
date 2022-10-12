@@ -7,17 +7,18 @@ name: CICD
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rsync rustc rustfmt rustup shopt xargs
 # spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend pell runtest tempfile testsuite uutils DESTDIR multisize Swatinem
 
-# ToDO: [2021-06; rivy] change from `cargo-tree` to `cargo tree` once MSRV is >= 1.45
-
 env:
   PROJECT_NAME: coreutils
   PROJECT_DESC: "Core universal (cross-platform) utilities"
   PROJECT_AUTH: "uutils"
-  RUST_MIN_SRV: "1.59.0" ## MSRV v1.59.0
+  RUST_MIN_SRV: "1.60.0" ## MSRV v1.60.0
   # * style job configuration
   STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
 
 on: [push, pull_request]
+
+permissions:
+  contents: read # to fetch code (actions/checkout)
 
 jobs:
   cargo-deny:
@@ -136,20 +137,6 @@ jobs:
         fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
         # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
         S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::${fault_type} file=\1,line=\2::${fault_prefix}: \`cargo fmt\`: style violation (file:'\1', line:\2; use \`cargo fmt -- \"\1\"\`)/p" ; fault=true ; }
-        if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
-    - name: "`cargo fmt` testing of integration tests"
-      if: success() || failure() # run regardless of prior step success/failure
-      shell: bash
-      run: |
-        ## `cargo fmt` testing of integration tests
-        unset fault
-        fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
-        fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
-        # 'tests' is the standard/usual integration test directory
-        if [ -d tests ]; then
-          # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-          S=$(find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s\n" "$S" | sed -E -n "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::${fault_type} file=\1,line=\2::${fault_prefix}: \`cargo fmt\`: style violation (file:'\1', line:\2; use \`cargo fmt \"\1\"\`)/p" ; fault=true ; }
-        fi
         if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
   style_lint:
@@ -339,14 +326,6 @@ jobs:
         toolchain: ${{ env.RUST_MIN_SRV }}
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
-    - name: Install `cargo-tree` # for dependency information
-      uses: actions-rs/install@v0.1
-      with:
-        crate: cargo-tree
-        version: latest
-        use-tool-cache: true
-      env:
-        RUSTUP_TOOLCHAIN: stable
     - name: Confirm MinSRV compatible 'Cargo.lock'
       shell: bash
       run: |
@@ -374,12 +353,12 @@ jobs:
         rustup show active-toolchain
         cargo -V
         rustc -V
-        cargo-tree tree -V
+        cargo tree -V
         # dependencies
         echo "## dependency list"
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
         RUSTUP_TOOLCHAIN=stable cargo fetch --locked --quiet
-        RUSTUP_TOOLCHAIN=stable cargo-tree tree --all --locked --no-dev-dependencies --no-indent ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
+        RUSTUP_TOOLCHAIN=stable cargo tree --all --locked --no-dev-dependencies --no-indent ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
     - name: Test
       uses: actions-rs/cargo@v1
       with:
@@ -542,6 +521,9 @@ jobs:
         path: size-result.json
 
   build:
+    permissions:
+      contents: write # to create GitHub release (softprops/action-gh-release)
+
     name: Build
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
@@ -715,14 +697,6 @@ jobs:
         echo UTILITY_LIST=${UTILITY_LIST}
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
         outputs CARGO_UTILITY_LIST_OPTIONS
-    - name: Install `cargo-tree` # for dependency information
-      uses: actions-rs/install@v0.1
-      with:
-        crate: cargo-tree
-        version: latest
-        use-tool-cache: true
-      env:
-        RUSTUP_TOOLCHAIN: stable
     - name: Info
       shell: bash
       run: |
@@ -741,11 +715,11 @@ jobs:
         rustup show active-toolchain
         cargo -V
         rustc -V
-        cargo-tree tree -V
+        cargo tree -V
         # dependencies
         echo "## dependency list"
         cargo fetch --locked --quiet
-        cargo-tree tree --locked --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all --no-dev-dependencies --no-indent | grep -vE "$PWD" | sort --unique
+        cargo tree --locked --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all --no-dev-dependencies --no-indent | grep -vE "$PWD" | sort --unique
     - name: Build
       uses: actions-rs/cargo@v1
       with:
@@ -923,7 +897,7 @@ jobs:
     - uses: Swatinem/rust-cache@v1
     - name: Prepare, build and test
       ## spell-checker:ignore (ToDO) sshfs usesh vmactions
-      uses: vmactions/freebsd-vm@v0.2.4
+      uses: vmactions/freebsd-vm@v0.2.9
       with:
         usesh: true
         # sync: sshfs

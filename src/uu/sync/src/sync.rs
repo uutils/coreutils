@@ -10,6 +10,12 @@
 extern crate libc;
 
 use clap::{crate_version, Arg, Command};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::errno::Errno;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::fcntl::{open, OFlag};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::sys::stat::Mode;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
@@ -162,19 +168,52 @@ mod platform {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let files: Vec<String> = matches
         .get_many::<String>(ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
+    if matches.is_present(options::DATA) && files.is_empty() {
+        return Err(USimpleError::new(1, "--data needs at least one argument"));
+    }
+
     for f in &files {
-        if !Path::new(&f).exists() {
-            return Err(USimpleError::new(
-                1,
-                format!("cannot stat {}: No such file or directory", f.quote()),
-            ));
+        // Use the Nix open to be able to set the NONBLOCK flags for fifo files
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        {
+            match open(Path::new(&f), OFlag::O_NONBLOCK, Mode::empty()) {
+                Ok(_) => {}
+                Err(e) => {
+                    if e == Errno::ENOENT {
+                        return Err(USimpleError::new(
+                            1,
+                            format!("cannot stat {}: No such file or directory", f.quote()),
+                        ));
+                    }
+                    if e == Errno::EACCES {
+                        if Path::new(&f).is_dir() {
+                            return Err(USimpleError::new(
+                                1,
+                                format!("error opening {}: Permission denied", f.quote()),
+                            ));
+                        } else {
+                            // ignore the issue
+                            // ./target/debug/coreutils sync --data file
+                        }
+                    }
+                }
+            }
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        {
+            if !Path::new(&f).exists() {
+                return Err(USimpleError::new(
+                    1,
+                    format!("cannot stat {}: No such file or directory", f.quote()),
+                ));
+            }
         }
     }
 

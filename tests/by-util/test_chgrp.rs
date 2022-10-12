@@ -8,6 +8,11 @@ fn test_invalid_option() {
     new_ucmd!().arg("-w").arg("/").fails();
 }
 
+#[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
 static DIR: &str = "/dev";
 
 // we should always get both arguments, regardless of whether --reference was used

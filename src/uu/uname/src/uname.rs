@@ -56,7 +56,7 @@ const HOST_OS: &str = "Redox";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let uname =
         PlatformInfo::new().map_err_context(|| "failed to create PlatformInfo".to_string())?;

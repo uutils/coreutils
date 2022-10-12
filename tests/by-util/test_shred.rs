@@ -1,6 +1,11 @@
 use crate::common::util::*;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_shred_remove() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

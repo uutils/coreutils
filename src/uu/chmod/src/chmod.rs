@@ -14,7 +14,6 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{ExitCode, UResult, USimpleError, UUsageError};
 use uucore::fs::display_permissions_unix;
-use uucore::fs::is_symlink;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
@@ -54,14 +53,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let after_help = get_long_usage();
 
-    let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
+    let matches = uu_app()
+        .after_help(&after_help[..])
+        .try_get_matches_from(args)?;
 
     let changes = matches.contains_id(options::CHANGES);
     let quiet = matches.contains_id(options::QUIET);
     let verbose = matches.contains_id(options::VERBOSE);
     let preserve_root = matches.contains_id(options::PRESERVE_ROOT);
     let recursive = matches.contains_id(options::RECURSIVE);
-    let fmode = match matches.value_of(options::REFERENCE) {
+    let fmode = match matches.get_one::<String>(options::REFERENCE) {
         Some(fref) => match fs::metadata(fref) {
             Ok(meta) => Some(meta.mode()),
             Err(err) => {
@@ -73,7 +74,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
         None => None,
     };
-    let modes = matches.value_of(options::MODE).unwrap(); // should always be Some because required
+    let modes = matches.get_one::<String>(options::MODE).unwrap(); // should always be Some because required
     let cmode = if mode_had_minus_prefix {
         // clap parsing is finished, now put prefix back
         format!("-{}", modes)
@@ -193,7 +194,7 @@ impl Chmoder {
             let filename = &filename[..];
             let file = Path::new(filename);
             if !file.exists() {
-                if is_symlink(file) {
+                if file.is_symlink() {
                     println!(
                         "failed to change mode of {} from 0000 (---------) to 0000 (---------)",
                         filename.quote()
@@ -235,10 +236,10 @@ impl Chmoder {
 
     fn walk_dir(&self, file_path: &Path) -> UResult<()> {
         let mut r = self.chmod_file(file_path);
-        if !is_symlink(file_path) && file_path.is_dir() {
+        if !file_path.is_symlink() && file_path.is_dir() {
             for dir_entry in file_path.read_dir()? {
                 let path = dir_entry?.path();
-                if !is_symlink(&path) {
+                if !path.is_symlink() {
                     r = self.walk_dir(path.as_path());
                 }
             }
@@ -260,7 +261,7 @@ impl Chmoder {
         let fperm = match fs::metadata(file) {
             Ok(meta) => meta.mode() & 0o7777,
             Err(err) => {
-                if is_symlink(file) {
+                if file.is_symlink() {
                     if self.verbose {
                         println!(
                             "neither symbolic link {} nor referent has been changed",

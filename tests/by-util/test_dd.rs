@@ -75,6 +75,11 @@ fn build_ascii_block(n: usize) -> Vec<u8> {
     (0..=127).cycle().take(n).collect()
 }
 
+#[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
 // Sanity Tests
 #[test]
 fn version() {
@@ -1160,12 +1165,12 @@ fn test_bytes_iseek_bytes_iflag() {
 }
 
 #[test]
-fn test_bytes_iseek_skip_additive() {
+fn test_bytes_iseek_skip_not_additive() {
     new_ucmd!()
-        .args(&["iseek=5", "skip=5", "iflag=skip_bytes", "bs=2"])
+        .args(&["iseek=4", "skip=4", "iflag=skip_bytes", "bs=2"])
         .pipe_in("0123456789abcdefghijklm")
         .succeeds()
-        .stdout_is("abcdefghijklm");
+        .stdout_is("456789abcdefghijklm");
 }
 
 #[test]
@@ -1188,9 +1193,9 @@ fn test_bytes_oseek_bytes_trunc_oflag() {
 }
 
 #[test]
-fn test_bytes_oseek_seek_additive() {
+fn test_bytes_oseek_seek_not_additive() {
     new_ucmd!()
-        .args(&["oseek=4", "seek=4", "oflag=seek_bytes", "bs=2"])
+        .args(&["oseek=8", "seek=8", "oflag=seek_bytes", "bs=2"])
         .pipe_in("abcdefghijklm")
         .succeeds()
         .stdout_is_fixture_bytes("dd-bytes-alphabet-null.spec");
@@ -1272,4 +1277,21 @@ fn test_invalid_file_arg_gnu_compatibility() {
         .args(&["of=81as9bn8as9g302az8ns9.pdf.zip.pl.com"])
         .pipe_in("")
         .succeeds();
+}
+
+#[test]
+fn test_ucase_lcase() {
+    new_ucmd!()
+        .arg("conv=ucase,lcase")
+        .fails()
+        .stderr_contains("lcase")
+        .stderr_contains("ucase");
+}
+
+#[test]
+fn test_big_multiplication() {
+    new_ucmd!()
+        .arg("ibs=10x10x10x10x10x10x10x10x10x10x10x10x10x10x10x10x10x10x10x10x10x10x10")
+        .fails()
+        .stderr_contains("invalid number");
 }

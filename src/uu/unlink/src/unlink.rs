@@ -22,7 +22,7 @@ static OPT_PATH: &str = "FILE";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let path: &Path = matches.get_one::<OsString>(OPT_PATH).unwrap().as_ref();
 

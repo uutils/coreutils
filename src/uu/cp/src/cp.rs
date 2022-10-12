@@ -9,46 +9,44 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ficlone ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked
+// spell-checker:ignore (ToDO) ficlone ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked fiemap
 
 #[macro_use]
 extern crate quick_error;
 #[macro_use]
 extern crate uucore;
 
-use uucore::display::Quotable;
-use uucore::format_usage;
-use uucore::fs::{paths_refer_to_same_file, FileInformation};
-
 use std::borrow::Cow;
+use std::collections::HashSet;
+use std::env;
+#[cfg(not(windows))]
+use std::ffi::CString;
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, stderr, stdin, Write};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
+#[cfg(unix)]
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::path::{Path, PathBuf, StripPrefixError};
+use std::str::FromStr;
+use std::string::ToString;
 
 use clap::{crate_version, Arg, ArgMatches, Command};
 use filetime::FileTime;
 #[cfg(unix)]
 use libc::mkfifo;
 use quick_error::ResultExt;
-use std::collections::HashSet;
-use std::env;
-#[cfg(not(windows))]
-use std::ffi::CString;
-use std::fs;
-use std::fs::File;
-use std::fs::OpenOptions;
-use std::io;
-use std::io::{stdin, stdout, Write};
-#[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
-#[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, PermissionsExt};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::os::unix::io::AsRawFd;
-use std::path::{Path, PathBuf, StripPrefixError};
-use std::str::FromStr;
-use std::string::ToString;
 use uucore::backup_control::{self, BackupMode};
-use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
-use uucore::fs::{canonicalize, is_symlink, MissingHandling, ResolveMode};
+use uucore::display::Quotable;
+use uucore::error::{set_exit_code, UClapError, UError, UIoError, UResult, UUsageError};
+use uucore::format_usage;
+use uucore::fs::{
+    canonicalize, paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
+};
 use walkdir::WalkDir;
+
+mod platform;
+use platform::copy_on_write;
 
 quick_error! {
     #[derive(Debug)]
@@ -118,9 +116,9 @@ macro_rules! or_continue(
 /// answered yes.
 macro_rules! prompt_yes(
     ($($args:tt)+) => ({
-        print!($($args)+);
-        print!(" [y/N]: ");
-        crash_if_err!(1, stdout().flush());
+        eprint!($($args)+);
+        eprint!(" [y/N]: ");
+        crash_if_err!(1, stderr().flush());
         let mut s = String::new();
         match stdin().read_line(&mut s) {
             Ok(_) => match s.char_indices().next() {
@@ -207,6 +205,7 @@ pub struct Options {
     attributes_only: bool,
     backup: BackupMode,
     copy_contents: bool,
+    cli_dereference: bool,
     copy_mode: CopyMode,
     dereference: bool,
     no_target_dir: bool,
@@ -222,16 +221,6 @@ pub struct Options {
     target_dir: Option<String>,
     update: bool,
     verbose: bool,
-}
-
-// From /usr/include/linux/fs.h:
-// #define FICLONE		_IOW(0x94, 9, int)
-#[cfg(any(target_os = "linux", target_os = "android"))]
-// Use a macro as libc::ioctl expects u32 or u64 depending on the arch
-macro_rules! FICLONE {
-    () => {
-        0x40049409
-    };
 }
 
 static ABOUT: &str = "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
@@ -425,6 +414,10 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .takes_value(true)
                 .value_name("WHEN")
                 .overrides_with_all(MODE_ARGS)
+                .require_equals(true)
+                .default_missing_value("always")
+                .value_parser(["auto", "always", "never"])
+                .min_values(0)
                 .help("control clone/CoW copies. See below"),
         )
         .arg(
@@ -497,6 +490,11 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help("always follow symbolic links in SOURCE"),
         )
         .arg(
+            Arg::new(options::CLI_SYMBOLIC_LINKS)
+                .short('H')
+                .help("follow command-line symbolic links in SOURCE"),
+        )
+        .arg(
             Arg::new(options::ARCHIVE)
                 .short('a')
                 .long(options::ARCHIVE)
@@ -542,11 +540,6 @@ pub fn uu_app<'a>() -> Command<'a> {
                     "NotImplemented: set SELinux security context of destination file to \
                     default type",
                 ),
-        )
-        .arg(
-            Arg::new(options::CLI_SYMBOLIC_LINKS)
-                .short('H')
-                .help("NotImplemented: follow command-line symbolic links in SOURCE"),
         )
         // END TODO
         .arg(
@@ -721,7 +714,7 @@ impl Options {
         // Parse target directory options
         let no_target_dir = matches.contains_id(options::NO_TARGET_DIRECTORY);
         let target_dir = matches
-            .value_of(options::TARGET_DIRECTORY)
+            .get_one::<String>(options::TARGET_DIRECTORY)
             .map(ToString::to_string);
 
         // Parse attributes to preserve
@@ -760,6 +753,7 @@ impl Options {
         let options = Self {
             attributes_only: matches.contains_id(options::ATTRIBUTES_ONLY),
             copy_contents: matches.contains_id(options::COPY_CONTENTS),
+            cli_dereference: matches.contains_id(options::CLI_SYMBOLIC_LINKS),
             copy_mode: CopyMode::from_matches(matches),
             // No dereference is set with -p, -d and --archive
             dereference: !(matches.contains_id(options::NO_DEREFERENCE)
@@ -773,8 +767,8 @@ impl Options {
             verbose: matches.contains_id(options::VERBOSE),
             strip_trailing_slashes: matches.contains_id(options::STRIP_TRAILING_SLASHES),
             reflink_mode: {
-                if let Some(reflink) = matches.value_of(options::REFLINK) {
-                    match reflink {
+                if let Some(reflink) = matches.get_one::<String>(options::REFLINK) {
+                    match reflink.as_str() {
                         "always" => ReflinkMode::Always,
                         "auto" => ReflinkMode::Auto,
                         "never" => ReflinkMode::Never,
@@ -800,17 +794,22 @@ impl Options {
                     }
                 }
             },
-            sparse_mode: match matches.value_of(options::SPARSE) {
-                Some("always") => SparseMode::Always,
-                Some("auto") => SparseMode::Auto,
-                Some("never") => SparseMode::Never,
-                Some(val) => {
-                    return Err(Error::InvalidArgument(format!(
-                        "invalid argument {} for \'sparse\'",
-                        val
-                    )));
+            sparse_mode: {
+                if let Some(val) = matches.get_one::<String>(options::SPARSE) {
+                    match val.as_str() {
+                        "always" => SparseMode::Always,
+                        "auto" => SparseMode::Auto,
+                        "never" => SparseMode::Never,
+                        _ => {
+                            return Err(Error::InvalidArgument(format!(
+                                "invalid argument {} for \'sparse\'",
+                                val
+                            )))
+                        }
+                    }
+                } else {
+                    SparseMode::Auto
                 }
-                None => SparseMode::Auto,
             },
             backup: backup_mode,
             backup_suffix,
@@ -822,6 +821,10 @@ impl Options {
         };
 
         Ok(options)
+    }
+
+    fn dereference(&self, in_command_line: bool) -> bool {
+        self.dereference || (in_command_line && self.cli_dereference)
     }
 }
 
@@ -1017,11 +1020,11 @@ fn copy_source(
     let source_path = Path::new(&source);
     if source_path.is_dir() {
         // Copy as directory
-        copy_directory(source, target, options, symlinked_files)
+        copy_directory(source, target, options, symlinked_files, true)
     } else {
         // Copy as file
         let dest = construct_dest_path(source_path, target, target_type, options)?;
-        copy_file(source_path, dest.as_path(), options, symlinked_files)
+        copy_file(source_path, dest.as_path(), options, symlinked_files, true)
     }
 }
 
@@ -1056,14 +1059,21 @@ fn copy_directory(
     target: &TargetSlice,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
+    source_in_command_line: bool,
 ) -> CopyResult<()> {
     if !options.recursive {
         return Err(format!("omitting directory {}", root.quote()).into());
     }
 
     // if no-dereference is enabled and this is a symlink, copy it as a file
-    if !options.dereference && is_symlink(root) {
-        return copy_file(root, target, options, symlinked_files);
+    if !options.dereference(source_in_command_line) && root.is_symlink() {
+        return copy_file(
+            root,
+            target,
+            options,
+            symlinked_files,
+            source_in_command_line,
+        );
     }
 
     // check if root is a prefix of target
@@ -1071,7 +1081,7 @@ fn copy_directory(
         return Err(format!(
             "cannot copy a directory, {}, into itself, {}",
             root.quote(),
-            target.quote()
+            target.join(root.file_name().unwrap()).quote()
         )
         .into());
     }
@@ -1128,7 +1138,7 @@ fn copy_directory(
         };
 
         let local_to_target = target.join(&local_to_root_parent);
-        if is_symlink(p.path()) && !options.dereference {
+        if p.path().is_symlink() && !options.dereference {
             copy_link(&path, &local_to_target, symlinked_files)?;
         } else if path.is_dir() && !local_to_target.exists() {
             if target.is_file() {
@@ -1147,10 +1157,11 @@ fn copy_directory(
                         local_to_target.as_path(),
                         options,
                         symlinked_files,
+                        false,
                     ) {
                         Ok(_) => Ok(()),
                         Err(err) => {
-                            if is_symlink(source) {
+                            if source.is_symlink() {
                                 // silent the error with a symlink
                                 // In case we do --archive, we might copy the symlink
                                 // before the file itself
@@ -1162,16 +1173,36 @@ fn copy_directory(
                     }?;
                 }
             } else {
-                copy_file(
+                // At this point, `path` is just a plain old file.
+                // Terminate this function immediately if there is any
+                // kind of error *except* a "permission denied" error.
+                //
+                // TODO What other kinds of errors, if any, should
+                // cause us to continue walking the directory?
+                match copy_file(
                     path.as_path(),
                     local_to_target.as_path(),
                     options,
                     symlinked_files,
-                )?;
+                    false,
+                ) {
+                    Ok(_) => {}
+                    Err(Error::IoErrContext(e, _))
+                        if e.kind() == std::io::ErrorKind::PermissionDenied =>
+                    {
+                        show!(uio_error!(
+                            e,
+                            "cannot open {} for reading",
+                            p.path().quote()
+                        ));
+                    }
+                    Err(e) => return Err(e),
+                }
             }
         }
     }
-
+    // Copy the attributes from the root directory to the target directory.
+    copy_attributes(root, target, &options.preserve_attributes)?;
     Ok(())
 }
 
@@ -1194,6 +1225,14 @@ impl OverwriteMode {
     }
 }
 
+/// Copy the specified attributes from one path to another.
+fn copy_attributes(source: &Path, dest: &Path, attributes: &[Attribute]) -> CopyResult<()> {
+    for attribute in attributes {
+        copy_attribute(source, dest, attribute)?;
+    }
+    Ok(())
+}
+
 fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResult<()> {
     let context = &*format!("{} -> {}", source.quote(), dest.quote());
     let source_metadata = fs::symlink_metadata(source).context(context)?;
@@ -1204,7 +1243,7 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
             // permissions of a symbolic link. In that case, we just
             // do nothing, since every symbolic link has the same
             // permissions.
-            if !is_symlink(dest) {
+            if !dest.is_symlink() {
                 fs::set_permissions(dest, source_metadata.permissions()).context(context)?;
                 // FIXME: Implement this for windows as well
                 #[cfg(feature = "feat_acl")]
@@ -1239,7 +1278,7 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
         Attribute::Timestamps => {
             let atime = FileTime::from_last_access_time(&source_metadata);
             let mtime = FileTime::from_last_modification_time(&source_metadata);
-            if is_symlink(dest) {
+            if dest.is_symlink() {
                 filetime::set_symlink_file_times(dest, atime, mtime)?;
             } else {
                 filetime::set_file_times(dest, atime, mtime)?;
@@ -1316,8 +1355,14 @@ fn backup_dest(dest: &Path, backup_path: &Path) -> CopyResult<PathBuf> {
     Ok(backup_path.into())
 }
 
-fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
-    let dereference_to_compare = options.dereference || !is_symlink(source);
+fn handle_existing_dest(
+    source: &Path,
+    dest: &Path,
+    options: &Options,
+    source_in_command_line: bool,
+) -> CopyResult<()> {
+    let dereference_to_compare =
+        options.dereference(source_in_command_line) || !source.is_symlink();
     if paths_refer_to_same_file(source, dest, dereference_to_compare) {
         return Err(format!("{}: same file", context_for(source, dest)).into());
     }
@@ -1354,6 +1399,15 @@ fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyRe
     Ok(())
 }
 
+/// Decide whether the given path exists.
+fn file_or_link_exists(path: &Path) -> bool {
+    // Using `Path.exists()` or `Path.try_exists()` is not sufficient,
+    // because if `path` is a symbolic link and there are too many
+    // levels of symbolic link, then those methods will return false
+    // or an OS error.
+    path.symlink_metadata().is_ok()
+}
+
 /// Copy the a file from `source` to `dest`. `source` will be dereferenced if
 /// `options.dereference` is set to true. `dest` will be dereferenced only if
 /// the source was not a symlink.
@@ -1369,13 +1423,14 @@ fn copy_file(
     dest: &Path,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
+    source_in_command_line: bool,
 ) -> CopyResult<()> {
-    if dest.exists() {
-        handle_existing_dest(source, dest, options)?;
+    if file_or_link_exists(dest) {
+        handle_existing_dest(source, dest, options, source_in_command_line)?;
     }
 
     // Fail if dest is a dangling symlink or a symlink this program created previously
-    if is_symlink(dest) {
+    if dest.is_symlink() {
         if FileInformation::from_path(dest, false)
             .map(|info| symlinked_files.contains(&info))
             .unwrap_or(false)
@@ -1386,7 +1441,7 @@ fn copy_file(
                 dest.display()
             )));
         }
-        let copy_contents = options.dereference || !is_symlink(source);
+        let copy_contents = options.dereference(source_in_command_line) || !source.is_symlink();
         if copy_contents && !dest.exists() {
             return Err(Error::Error(format!(
                 "not writing through dangling symlink '{}'",
@@ -1403,14 +1458,15 @@ fn copy_file(
     let context = context_for(source, dest);
     let context = context.as_str();
 
-    // canonicalize dest and source so that later steps can work with the paths directly
-    let source = if options.dereference {
-        canonicalize(source, MissingHandling::Missing, ResolveMode::Physical).unwrap()
-    } else {
-        source.to_owned()
+    let source_metadata = {
+        let result = if options.dereference(source_in_command_line) {
+            fs::metadata(source)
+        } else {
+            fs::symlink_metadata(source)
+        };
+        result.context(context)?
     };
-
-    let source_file_type = fs::symlink_metadata(&source).context(context)?.file_type();
+    let source_file_type = source_metadata.file_type();
     let source_is_symlink = source_file_type.is_symlink();
 
     #[cfg(unix)]
@@ -1418,21 +1474,11 @@ fn copy_file(
     #[cfg(not(unix))]
     let source_is_fifo = false;
 
-    let dest_already_exists_as_symlink = is_symlink(dest);
-
-    let dest = if !(source_is_symlink && dest_already_exists_as_symlink) {
-        canonicalize(dest, MissingHandling::Missing, ResolveMode::Physical).unwrap()
-    } else {
-        // Don't canonicalize a symlink copied over another symlink, because
-        // then we'll end up overwriting the destination's target.
-        dest.to_path_buf()
-    };
-
     let dest_permissions = if dest.exists() {
         dest.symlink_metadata().context(context)?.permissions()
     } else {
         #[allow(unused_mut)]
-        let mut permissions = source.symlink_metadata().context(context)?.permissions();
+        let mut permissions = source_metadata.permissions();
         #[cfg(unix)]
         {
             use uucore::mode::get_umask;
@@ -1455,19 +1501,25 @@ fn copy_file(
         CopyMode::Link => {
             if dest.exists() {
                 let backup_path =
-                    backup_control::get_backup_path(options.backup, &dest, &options.backup_suffix);
+                    backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
                 if let Some(backup_path) = backup_path {
-                    backup_dest(&dest, &backup_path)?;
-                    fs::remove_file(&dest)?;
+                    backup_dest(dest, &backup_path)?;
+                    fs::remove_file(dest)?;
                 }
             }
-
-            fs::hard_link(&source, &dest).context(context)?;
+            if options.dereference(source_in_command_line) && source.is_symlink() {
+                let resolved =
+                    canonicalize(source, MissingHandling::Missing, ResolveMode::Physical).unwrap();
+                fs::hard_link(resolved, dest)
+            } else {
+                fs::hard_link(source, dest)
+            }
+            .context(context)?;
         }
         CopyMode::Copy => {
             copy_helper(
-                &source,
-                &dest,
+                source,
+                dest,
                 options,
                 context,
                 source_is_symlink,
@@ -1476,21 +1528,20 @@ fn copy_file(
             )?;
         }
         CopyMode::SymLink => {
-            symlink_file(&source, &dest, context, symlinked_files)?;
+            symlink_file(source, dest, context, symlinked_files)?;
         }
         CopyMode::Update => {
             if dest.exists() {
-                let src_metadata = fs::symlink_metadata(&source)?;
-                let dest_metadata = fs::symlink_metadata(&dest)?;
+                let dest_metadata = fs::symlink_metadata(dest)?;
 
-                let src_time = src_metadata.modified()?;
+                let src_time = source_metadata.modified()?;
                 let dest_time = dest_metadata.modified()?;
                 if src_time <= dest_time {
                     return Ok(());
                 } else {
                     copy_helper(
-                        &source,
-                        &dest,
+                        source,
+                        dest,
                         options,
                         context,
                         source_is_symlink,
@@ -1500,8 +1551,8 @@ fn copy_file(
                 }
             } else {
                 copy_helper(
-                    &source,
-                    &dest,
+                    source,
+                    dest,
                     options,
                     context,
                     source_is_symlink,
@@ -1521,18 +1572,16 @@ fn copy_file(
     };
 
     // TODO: implement something similar to gnu's lchown
-    if !is_symlink(&dest) {
+    if !dest.is_symlink() {
         // Here, to match GNU semantics, we quietly ignore an error
         // if a user does not have the correct ownership to modify
         // the permissions of a file.
         //
         // FWIW, the OS will throw an error later, on the write op, if
         // the user does not have permission to write to the file.
-        fs::set_permissions(&dest, dest_permissions).ok();
+        fs::set_permissions(dest, dest_permissions).ok();
     }
-    for attribute in &options.preserve_attributes {
-        copy_attribute(&source, &dest, attribute)?;
-    }
+    copy_attributes(source, dest, &options.preserve_attributes)?;
     Ok(())
 }
 
@@ -1563,26 +1612,7 @@ fn copy_helper(
     } else if source_is_symlink {
         copy_link(source, dest, symlinked_files)?;
     } else {
-        #[cfg(target_os = "macos")]
-        copy_on_write_macos(
-            source,
-            dest,
-            options.reflink_mode,
-            options.sparse_mode,
-            context,
-        )?;
-
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        copy_on_write_linux(
-            source,
-            dest,
-            options.reflink_mode,
-            options.sparse_mode,
-            context,
-        )?;
-
-        #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
-        copy_no_cow_fallback(
+        copy_on_write(
             source,
             dest,
             options.reflink_mode,
@@ -1630,183 +1660,12 @@ fn copy_link(
     } else {
         // we always need to remove the file to be able to create a symlink,
         // even if it is writeable.
-        if is_symlink(dest) || dest.is_file() {
+        if dest.is_symlink() || dest.is_file() {
             fs::remove_file(dest)?;
         }
         dest.into()
     };
     symlink_file(&link, &dest, &context_for(&link, &dest), symlinked_files)
-}
-
-/// Copies `source` to `dest` for systems without copy-on-write
-#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
-fn copy_no_cow_fallback(
-    source: &Path,
-    dest: &Path,
-    reflink_mode: ReflinkMode,
-    sparse_mode: SparseMode,
-    context: &str,
-) -> CopyResult<()> {
-    if reflink_mode != ReflinkMode::Never {
-        return Err("--reflink is only supported on linux and macOS"
-            .to_string()
-            .into());
-    }
-    if sparse_mode != SparseMode::Auto {
-        return Err("--sparse is only supported on linux".to_string().into());
-    }
-
-    fs::copy(source, dest).context(context)?;
-
-    Ok(())
-}
-
-/// Copies `source` to `dest` using copy-on-write if possible.
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn copy_on_write_linux(
-    source: &Path,
-    dest: &Path,
-    reflink_mode: ReflinkMode,
-    sparse_mode: SparseMode,
-    context: &str,
-) -> CopyResult<()> {
-    use std::os::unix::prelude::MetadataExt;
-
-    let mut src_file = File::open(source).context(context)?;
-    let dst_file = OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .create(true)
-        .open(dest)
-        .context(context)?;
-
-    match (reflink_mode, sparse_mode) {
-        (ReflinkMode::Always, SparseMode::Auto) => unsafe {
-            let result = libc::ioctl(dst_file.as_raw_fd(), FICLONE!(), src_file.as_raw_fd());
-
-            if result != 0 {
-                Err(format!(
-                    "failed to clone {:?} from {:?}: {}",
-                    source,
-                    dest,
-                    std::io::Error::last_os_error()
-                )
-                .into())
-            } else {
-                Ok(())
-            }
-        },
-        (ReflinkMode::Always, SparseMode::Always) | (ReflinkMode::Always, SparseMode::Never) => {
-            Err("`--reflink=always` can be used only with --sparse=auto".into())
-        }
-        (_, SparseMode::Always) => unsafe {
-            let size: usize = src_file.metadata()?.size().try_into().unwrap();
-            if libc::ftruncate(dst_file.as_raw_fd(), size.try_into().unwrap()) < 0 {
-                return Err(format!(
-                    "failed to ftruncate {:?} to size {}: {}",
-                    dest,
-                    size,
-                    std::io::Error::last_os_error()
-                )
-                .into());
-            }
-
-            let blksize = dst_file.metadata()?.blksize();
-            let mut buf: Vec<u8> = vec![0; blksize.try_into().unwrap()];
-            let mut current_offset: usize = 0;
-
-            while current_offset < size {
-                use std::io::Read;
-
-                let this_read = src_file.read(&mut buf)?;
-
-                if buf.iter().any(|&x| x != 0) {
-                    libc::pwrite(
-                        dst_file.as_raw_fd(),
-                        buf.as_ptr() as *const libc::c_void,
-                        this_read,
-                        current_offset.try_into().unwrap(),
-                    );
-                }
-                current_offset += this_read;
-            }
-            Ok(())
-        },
-        (ReflinkMode::Auto, SparseMode::Auto) | (ReflinkMode::Auto, SparseMode::Never) => unsafe {
-            let result = libc::ioctl(dst_file.as_raw_fd(), FICLONE!(), src_file.as_raw_fd());
-
-            if result != 0 {
-                fs::copy(source, dest).context(context)?;
-            }
-            Ok(())
-        },
-        (ReflinkMode::Never, _) => {
-            fs::copy(source, dest).context(context)?;
-            Ok(())
-        }
-    }
-}
-
-/// Copies `source` to `dest` using copy-on-write if possible.
-#[cfg(target_os = "macos")]
-fn copy_on_write_macos(
-    source: &Path,
-    dest: &Path,
-    reflink_mode: ReflinkMode,
-    sparse_mode: SparseMode,
-    context: &str,
-) -> CopyResult<()> {
-    if sparse_mode != SparseMode::Auto {
-        return Err("--sparse is only supported on linux".to_string().into());
-    }
-
-    // Extract paths in a form suitable to be passed to a syscall.
-    // The unwrap() is safe because they come from the command-line and so contain non nul
-    // character.
-    let src = CString::new(source.as_os_str().as_bytes()).unwrap();
-    let dst = CString::new(dest.as_os_str().as_bytes()).unwrap();
-
-    // clonefile(2) was introduced in macOS 10.12 so we cannot statically link against it
-    // for backward compatibility.
-    let clonefile = CString::new("clonefile").unwrap();
-    let raw_pfn = unsafe { libc::dlsym(libc::RTLD_NEXT, clonefile.as_ptr()) };
-
-    let mut error = 0;
-    if !raw_pfn.is_null() {
-        // Call clonefile(2).
-        // Safety: Casting a C function pointer to a rust function value is one of the few
-        // blessed uses of `transmute()`.
-        unsafe {
-            let pfn: extern "C" fn(
-                src: *const libc::c_char,
-                dst: *const libc::c_char,
-                flags: u32,
-            ) -> libc::c_int = std::mem::transmute(raw_pfn);
-            error = pfn(src.as_ptr(), dst.as_ptr(), 0);
-            if std::io::Error::last_os_error().kind() == std::io::ErrorKind::AlreadyExists {
-                // clonefile(2) fails if the destination exists.  Remove it and try again.  Do not
-                // bother to check if removal worked because we're going to try to clone again.
-                let _ = fs::remove_file(dest);
-                error = pfn(src.as_ptr(), dst.as_ptr(), 0);
-            }
-        }
-    }
-
-    if raw_pfn.is_null() || error != 0 {
-        // clonefile(2) is either not supported or it errored out (possibly because the FS does not
-        // support COW).
-        match reflink_mode {
-            ReflinkMode::Always => {
-                return Err(
-                    format!("failed to clone {:?} from {:?}: {}", source, dest, error).into(),
-                )
-            }
-            ReflinkMode::Auto => fs::copy(source, dest).context(context)?,
-            ReflinkMode::Never => fs::copy(source, dest).context(context)?,
-        };
-    }
-
-    Ok(())
 }
 
 /// Generate an error message if `target` is not the correct `target_type`

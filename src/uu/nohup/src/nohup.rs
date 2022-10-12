@@ -21,7 +21,7 @@ use std::io::Error;
 use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UError, UResult};
+use uucore::error::{set_exit_code, UClapError, UError, UResult};
 use uucore::format_usage;
 
 static ABOUT: &str = "Run COMMAND ignoring hangup signals.";
@@ -88,7 +88,7 @@ impl Display for NohupError {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
 
     replace_fds()?;
 

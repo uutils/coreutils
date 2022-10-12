@@ -30,7 +30,7 @@ mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     if matches.contains_id(options::CONTEXT) {
         return Err(USimpleError::new(1, "--context is not implemented"));
@@ -39,7 +39,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(USimpleError::new(1, "-Z is not implemented"));
     }
 
-    let mode = match matches.value_of(options::MODE) {
+    let mode = match matches.get_one::<String>(options::MODE) {
         Some(m) => match usize::from_str_radix(m, 8) {
             Ok(m) => m,
             Err(e) => return Err(USimpleError::new(1, format!("invalid mode: {}", e))),

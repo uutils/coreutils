@@ -59,7 +59,7 @@ type RangeFloat = (ExtendedBigDecimal, ExtendedBigDecimal, ExtendedBigDecimal);
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let numbers = matches
         .get_many::<String>(ARG_NUMBERS)
@@ -67,10 +67,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect::<Vec<_>>();
 
     let options = SeqOptions {
-        separator: matches.value_of(OPT_SEPARATOR).unwrap_or("\n").to_string(),
-        terminator: matches.value_of(OPT_TERMINATOR).unwrap_or("\n").to_string(),
+        separator: matches
+            .get_one::<String>(OPT_SEPARATOR)
+            .map(|s| s.as_str())
+            .unwrap_or("\n")
+            .to_string(),
+        terminator: matches
+            .get_one::<String>(OPT_TERMINATOR)
+            .map(|s| s.as_str())
+            .unwrap_or("\n")
+            .to_string(),
         widths: matches.contains_id(OPT_WIDTHS),
-        format: matches.value_of(OPT_FORMAT),
+        format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),
     };
 
     let first = if numbers.len() > 1 {

@@ -100,9 +100,9 @@ struct Options<'a> {
 impl<'a> Options<'a> {
     fn from(matches: &'a ArgMatches) -> io::Result<Self> {
         Ok(Self {
-            all: matches.is_present(options::ALL),
-            save: matches.is_present(options::SAVE),
-            file: match matches.value_of(options::FILE) {
+            all: matches.contains_id(options::ALL),
+            save: matches.contains_id(options::SAVE),
+            file: match matches.get_one::<String>(options::FILE) {
                 Some(_f) => todo!(),
                 None => stdout().as_raw_fd(),
             },
@@ -139,7 +139,7 @@ ioctl_write_ptr_bad!(
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let opts = Options::from(&matches)?;
 

@@ -17,9 +17,9 @@ use std::env;
 use std::ffi::CString;
 use std::ffi::OsStr;
 use std::fs::{self, hard_link, File, OpenOptions};
-use std::io::{Read, Result, Write};
+use std::io::{BufWriter, Read, Result, Write};
 #[cfg(unix)]
-use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file};
+use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file, PermissionsExt};
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 #[cfg(windows)]
@@ -751,6 +751,15 @@ impl AtPath {
         }
     }
 
+    pub fn read_symlink(&self, path: &str) -> String {
+        log_info("read_symlink", self.plus_as_string(path));
+        fs::read_link(&self.plus(path))
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned()
+    }
+
     pub fn symlink_metadata(&self, path: &str) -> fs::Metadata {
         match fs::symlink_metadata(&self.plus(path)) {
             Ok(m) => m,
@@ -811,6 +820,20 @@ impl AtPath {
         } else {
             s
         }
+    }
+
+    /// Set the permissions of the specified file.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if there is an error loading the metadata
+    /// or setting the permissions of the file.
+    #[cfg(not(windows))]
+    pub fn set_mode(&self, filename: &str, mode: u32) {
+        let path = self.plus(filename);
+        let mut perms = std::fs::metadata(&path).unwrap().permissions();
+        perms.set_mode(mode);
+        std::fs::set_permissions(&path, perms).unwrap();
     }
 }
 
@@ -1105,13 +1128,14 @@ impl UCommand {
         }
 
         if let Some(ref input) = self.bytes_into_stdin {
-            let write_result = child
+            let child_stdin = child
                 .stdin
                 .take()
-                .unwrap_or_else(|| panic!("Could not take child process stdin"))
-                .write_all(input);
+                .unwrap_or_else(|| panic!("Could not take child process stdin"));
+            let mut writer = BufWriter::new(child_stdin);
+            let result = writer.write_all(input);
             if !self.ignore_stdin_write_error {
-                if let Err(e) = write_result {
+                if let Err(e) = result {
                     panic!("failed to write to stdin of child: {}", e);
                 }
             }
@@ -1826,6 +1850,25 @@ mod tests {
             }
         } else {
             println!("TEST SKIPPED (cannot run inside CI)");
+        }
+    }
+
+    // This error was first detected when running tail so tail is used here but
+    // should fail with any command that takes piped input.
+    // See also https://github.com/uutils/coreutils/issues/3895
+    #[test]
+    #[cfg_attr(not(feature = "expensive_tests"), ignore)]
+    fn test_when_piped_input_then_no_broken_pipe() {
+        let ts = TestScenario::new("tail");
+        for i in 0..10000 {
+            dbg!(i);
+            let test_string = "a\nb\n";
+            ts.ucmd()
+                .args(&["-n", "0"])
+                .pipe_in(test_string)
+                .succeeds()
+                .no_stdout()
+                .no_stderr();
         }
     }
 }

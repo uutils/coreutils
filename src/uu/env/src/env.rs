@@ -26,7 +26,7 @@ use std::iter::Iterator;
 use std::os::unix::process::ExitStatusExt;
 use std::process;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::error::{UClapError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 #[cfg(unix)]
 use uucore::signals::signal_name_by_value;
@@ -173,11 +173,11 @@ pub fn uu_app<'a>() -> Command<'a> {
 
 fn run_env(args: impl uucore::Args) -> UResult<()> {
     let app = uu_app();
-    let matches = app.get_matches_from(args);
+    let matches = app.try_get_matches_from(args).with_exit_code(125)?;
 
     let ignore_env = matches.contains_id("ignore-environment");
     let null = matches.contains_id("null");
-    let running_directory = matches.value_of("chdir");
+    let running_directory = matches.get_one::<String>("chdir").map(|s| s.as_str());
     let files = match matches.get_many::<String>("file") {
         Some(v) => v.map(|s| s.as_str()).collect(),
         None => Vec::with_capacity(0),

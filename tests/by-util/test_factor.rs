@@ -28,6 +28,11 @@ const NUM_PRIMES: usize = 10000;
 const NUM_TESTS: usize = 100;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_parallel() {
     use hex_literal::hex;
     use sha1::{Digest, Sha1};
@@ -72,12 +77,12 @@ fn test_parallel() {
 }
 
 #[test]
-fn test_first_100000_integers() {
+fn test_first_1000_integers() {
     extern crate sha1;
     use hex_literal::hex;
     use sha1::{Digest, Sha1};
 
-    let n_integers = 100_000;
+    let n_integers = 1000;
     let mut input_string = String::new();
     for i in 0..=n_integers {
         input_string.push_str(&(format!("{} ", i))[..]);
@@ -86,13 +91,13 @@ fn test_first_100000_integers() {
     println!("STDIN='{}'", input_string);
     let result = new_ucmd!().pipe_in(input_string.as_bytes()).succeeds();
 
-    // `seq 0 100000 | factor | sha1sum` => "4ed2d8403934fa1c76fe4b84c5d4b8850299c359"
+    // `seq 0 1000 | factor | sha1sum` => "c734327bd18b90fca5762f671672b5eda19f7dca"
     let mut hasher = Sha1::new();
     hasher.update(result.stdout());
     let hash_check = hasher.finalize();
     assert_eq!(
         hash_check[..],
-        hex!("4ed2d8403934fa1c76fe4b84c5d4b8850299c359")
+        hex!("c734327bd18b90fca5762f671672b5eda19f7dca")
     );
 }
 

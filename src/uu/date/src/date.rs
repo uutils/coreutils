@@ -144,9 +144,9 @@ impl<'a> From<&'a str> for Rfc3339Format {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
-    let format = if let Some(form) = matches.value_of(OPT_FORMAT) {
+    let format = if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
         if !form.starts_with('+') {
             return Err(USimpleError::new(
                 1,
@@ -162,21 +162,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Format::Iso8601(fmt)
     } else if matches.contains_id(OPT_RFC_EMAIL) {
         Format::Rfc5322
-    } else if let Some(fmt) = matches.value_of(OPT_RFC_3339).map(Into::into) {
+    } else if let Some(fmt) = matches
+        .get_one::<String>(OPT_RFC_3339)
+        .map(|s| s.as_str().into())
+    {
         Format::Rfc3339(fmt)
     } else {
         Format::Default
     };
 
-    let date_source = if let Some(date) = matches.value_of(OPT_DATE) {
+    let date_source = if let Some(date) = matches.get_one::<String>(OPT_DATE) {
         DateSource::Custom(date.into())
-    } else if let Some(file) = matches.value_of(OPT_FILE) {
+    } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
         DateSource::File(file.into())
     } else {
         DateSource::Now
     };
 
-    let set_to = match matches.value_of(OPT_SET).map(parse_date) {
+    let set_to = match matches.get_one::<String>(OPT_SET).map(parse_date) {
         None => None,
         Some(Err((input, _err))) => {
             return Err(USimpleError::new(

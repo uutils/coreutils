@@ -120,6 +120,11 @@ impl RandomFile {
 }
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_split_default() {
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "split_default";
@@ -695,4 +700,30 @@ fn test_multiple_of_input_chunk() {
         assert_eq!(glob.directory.metadata(&filename).len(), 8 * 1024);
     }
     assert_eq!(glob.collate(), at.read_bytes(name));
+}
+
+#[test]
+fn test_numeric_suffix() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n", "4", "--numeric-suffixes", "9", "threebytes.txt"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("x09"), "a");
+    assert_eq!(at.read("x10"), "b");
+    assert_eq!(at.read("x11"), "c");
+    assert_eq!(at.read("x12"), "");
+}
+
+#[test]
+fn test_hex_suffix() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n", "4", "--hex-suffixes", "9", "threebytes.txt"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("x09"), "a");
+    assert_eq!(at.read("x0a"), "b");
+    assert_eq!(at.read("x0b"), "c");
+    assert_eq!(at.read("x0c"), "");
 }

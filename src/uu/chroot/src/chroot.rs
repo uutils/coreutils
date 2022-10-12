@@ -6,16 +6,18 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) NEWROOT Userspec pstatus
+// spell-checker:ignore (ToDO) NEWROOT Userspec pstatus chdir
 mod error;
 
 use crate::error::ChrootError;
 use clap::{crate_version, Arg, Command};
 use std::ffi::CString;
 use std::io::Error;
+use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::process;
-use uucore::error::{set_exit_code, UResult};
+use uucore::error::{set_exit_code, UClapError, UResult, UUsageError};
+use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 use uucore::{entries, format_usage};
 
@@ -29,22 +31,37 @@ mod options {
     pub const GROUPS: &str = "groups";
     pub const USERSPEC: &str = "userspec";
     pub const COMMAND: &str = "command";
+    pub const SKIP_CHDIR: &str = "skip-chdir";
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
 
     let default_shell: &'static str = "/bin/sh";
     let default_option: &'static str = "-i";
     let user_shell = std::env::var("SHELL");
 
-    let newroot: &Path = match matches.value_of(options::NEWROOT) {
+    let newroot: &Path = match matches.get_one::<String>(options::NEWROOT) {
         Some(v) => Path::new(v),
         None => return Err(ChrootError::MissingNewRoot.into()),
     };
+
+    let skip_chdir = matches.contains_id(options::SKIP_CHDIR);
+    // We are resolving the path in case it is a symlink or /. or /../
+    if skip_chdir
+        && canonicalize(newroot, MissingHandling::Normal, ResolveMode::Logical)
+            .unwrap()
+            .to_str()
+            != Some("/")
+    {
+        return Err(UUsageError::new(
+            125,
+            "option --skip-chdir only permitted if NEWROOT is old '/'",
+        ));
+    }
 
     if !newroot.is_dir() {
         return Err(ChrootError::NoSuchDirectory(format!("{}", newroot.display())).into());
@@ -80,7 +97,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .status()
     {
         Ok(status) => status,
-        Err(e) => return Err(ChrootError::CommandFailed(command[0].to_string(), e).into()),
+        Err(e) => {
+            return Err(if e.kind() == std::io::ErrorKind::NotFound {
+                ChrootError::CommandNotFound(command[0].to_string(), e)
+            } else {
+                ChrootError::CommandFailed(command[0].to_string(), e)
+            }
+            .into())
+        }
     };
 
     let code = if pstatus.success() {
@@ -98,6 +122,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .trailing_var_arg(true)
         .arg(
             Arg::new(options::NEWROOT)
                 .value_hint(clap::ValueHint::DirPath)
@@ -137,6 +162,15 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .value_name("USER:GROUP"),
         )
         .arg(
+            Arg::new(options::SKIP_CHDIR)
+                .long(options::SKIP_CHDIR)
+                .help(
+                    "Use this option to not change the working directory \
+                    to / after changing the root directory to newroot, \
+                    i.e., inside the chroot.",
+                ),
+        )
+        .arg(
             Arg::new(options::COMMAND)
                 .value_hint(clap::ValueHint::CommandName)
                 .hide(true)
@@ -146,10 +180,20 @@ pub fn uu_app<'a>() -> Command<'a> {
 }
 
 fn set_context(root: &Path, options: &clap::ArgMatches) -> UResult<()> {
-    let userspec_str = options.value_of(options::USERSPEC);
-    let user_str = options.value_of(options::USER).unwrap_or_default();
-    let group_str = options.value_of(options::GROUP).unwrap_or_default();
-    let groups_str = options.value_of(options::GROUPS).unwrap_or_default();
+    let userspec_str = options.get_one::<String>(options::USERSPEC);
+    let user_str = options
+        .get_one::<String>(options::USER)
+        .map(|s| s.as_str())
+        .unwrap_or_default();
+    let group_str = options
+        .get_one::<String>(options::GROUP)
+        .map(|s| s.as_str())
+        .unwrap_or_default();
+    let groups_str = options
+        .get_one::<String>(options::GROUPS)
+        .map(|s| s.as_str())
+        .unwrap_or_default();
+    let skip_chdir = options.contains_id(options::SKIP_CHDIR);
     let userspec = match userspec_str {
         Some(u) => {
             let s: Vec<&str> = u.split(':').collect();
@@ -167,7 +211,7 @@ fn set_context(root: &Path, options: &clap::ArgMatches) -> UResult<()> {
         (userspec[0], userspec[1])
     };
 
-    enter_chroot(root)?;
+    enter_chroot(root, skip_chdir)?;
 
     set_groups_from_str(groups_str)?;
     set_main_group(group)?;
@@ -175,12 +219,20 @@ fn set_context(root: &Path, options: &clap::ArgMatches) -> UResult<()> {
     Ok(())
 }
 
-fn enter_chroot(root: &Path) -> UResult<()> {
-    std::env::set_current_dir(root).unwrap();
+fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
     let err = unsafe {
-        chroot(CString::new(".").unwrap().as_bytes_with_nul().as_ptr() as *const libc::c_char)
+        chroot(
+            CString::new(root.as_os_str().as_bytes().to_vec())
+                .unwrap()
+                .as_bytes_with_nul()
+                .as_ptr() as *const libc::c_char,
+        )
     };
+
     if err == 0 {
+        if !skip_chdir {
+            std::env::set_current_dir(root).unwrap();
+        }
         Ok(())
     } else {
         Err(ChrootError::CannotEnter(format!("{}", root.display()), Error::last_os_error()).into())

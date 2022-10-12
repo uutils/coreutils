@@ -28,3 +28,8 @@ fn test_hostname_full() {
         .succeeds()
         .stdout_contains(ls_short_res.stdout_str().trim());
 }
+
+#[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}

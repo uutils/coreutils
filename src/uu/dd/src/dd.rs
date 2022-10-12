@@ -5,16 +5,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized
 
 mod datastructures;
 use datastructures::*;
 
 mod parseargs;
-use parseargs::Matches;
+use parseargs::Parser;
 
 mod conversion_tables;
-use conversion_tables::*;
 
 mod progress;
 use progress::{gen_prog_updater, ProgUpdate, ReadStat, StatusLevel, WriteStat};
@@ -24,8 +23,9 @@ use blocks::conv_block_unblock_helper;
 
 use std::cmp;
 use std::env;
+use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Seek, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
@@ -33,48 +33,75 @@ use std::sync::mpsc;
 use std::thread;
 use std::time;
 
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, Command};
 use gcd::Gcd;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
+use uucore::help_section;
 use uucore::show_error;
 
-const ABOUT: &str = "copy, and optionally convert, a file system resource";
+const ABOUT: &str = help_section!("about", "dd.md");
+const AFTER_HELP: &str = help_section!("after help", "dd.md");
 const BUF_INIT_BYTE: u8 = 0xDD;
 
-struct Input<R: Read> {
-    src: R,
+/// Final settings after parsing
+#[derive(Default)]
+struct Settings {
+    infile: Option<String>,
+    outfile: Option<String>,
     ibs: usize,
-    print_level: Option<StatusLevel>,
-    count: Option<CountType>,
-    cflags: IConvFlags,
+    obs: usize,
+    skip: u64,
+    seek: u64,
+    count: Option<Num>,
+    iconv: IConvFlags,
     iflags: IFlags,
+    oconv: OConvFlags,
+    oflags: OFlags,
+    status: Option<StatusLevel>,
 }
 
-impl Input<io::Stdin> {
-    fn new(matches: &Matches) -> UResult<Self> {
-        let ibs = parseargs::parse_ibs(matches)?;
-        let print_level = parseargs::parse_status_level(matches)?;
-        let cflags = parseargs::parse_conv_flag_input(matches)?;
-        let iflags = parseargs::parse_iflags(matches)?;
-        let skip = parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::SKIP)?;
-        let iseek =
-            parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::ISEEK)?;
-        let count = parseargs::parse_count(&iflags, matches)?;
+/// A number in blocks or bytes
+///
+/// Some values (seek, skip, iseek, oseek) can have values either in blocks or in bytes.
+/// We need to remember this because the size of the blocks (ibs) is only known after parsing
+/// all the arguments.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Num {
+    Blocks(u64),
+    Bytes(u64),
+}
 
-        let mut i = Self {
+impl Num {
+    fn force_bytes_if(self, force: bool) -> Self {
+        match self {
+            Self::Blocks(n) if force => Self::Bytes(n),
+            count => count,
+        }
+    }
+
+    fn to_bytes(self, block_size: u64) -> u64 {
+        match self {
+            Self::Blocks(n) => n * block_size,
+            Self::Bytes(n) => n,
+        }
+    }
+}
+
+struct Input<'a, R: Read> {
+    src: R,
+    settings: &'a Settings,
+}
+
+impl<'a> Input<'a, io::Stdin> {
+    fn new(settings: &'a Settings) -> UResult<Self> {
+        let mut input = Self {
             src: io::stdin(),
-            ibs,
-            print_level,
-            count,
-            cflags,
-            iflags,
+            settings,
         };
 
-        // The --skip and --iseek flags are additive. On a stream, they discard bytes.
-        let amt = skip.unwrap_or(0) + iseek.unwrap_or(0);
-        if amt > 0 {
-            if let Err(e) = i.read_skip(amt) {
+        if settings.skip > 0 {
+            if let Err(e) = input.read_skip(settings.skip) {
                 if let io::ErrorKind::UnexpectedEof = e.kind() {
                     show_error!("'standard input': cannot skip to specified offset");
                 } else {
@@ -84,7 +111,7 @@ impl Input<io::Stdin> {
             }
         }
 
-        Ok(i)
+        Ok(input)
     }
 }
 
@@ -124,62 +151,38 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
     }
 }
 
-impl Input<File> {
-    fn new(matches: &Matches) -> UResult<Self> {
-        let ibs = parseargs::parse_ibs(matches)?;
-        let print_level = parseargs::parse_status_level(matches)?;
-        let cflags = parseargs::parse_conv_flag_input(matches)?;
-        let iflags = parseargs::parse_iflags(matches)?;
-        let skip = parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::SKIP)?;
-        let iseek =
-            parseargs::parse_seek_skip_amt(&ibs, iflags.skip_bytes, matches, options::ISEEK)?;
-        let count = parseargs::parse_count(&iflags, matches)?;
+impl<'a> Input<'a, File> {
+    fn new(filename: &Path, settings: &'a Settings) -> UResult<Self> {
+        let mut src = {
+            let mut opts = OpenOptions::new();
+            opts.read(true);
 
-        if let Some(fname) = matches.value_of(options::INFILE) {
-            let mut src = {
-                let mut opts = OpenOptions::new();
-                opts.read(true);
-
-                #[cfg(any(target_os = "linux", target_os = "android"))]
-                if let Some(libc_flags) = make_linux_iflags(&iflags) {
-                    opts.custom_flags(libc_flags);
-                }
-
-                opts.open(fname)
-                    .map_err_context(|| format!("failed to open {}", fname.quote()))?
-            };
-
-            // The --skip and --iseek flags are additive. On a file, they seek.
-            let amt = skip.unwrap_or(0) + iseek.unwrap_or(0);
-            if amt > 0 {
-                src.seek(io::SeekFrom::Start(amt))
-                    .map_err_context(|| "failed to seek in input file".to_string())?;
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            if let Some(libc_flags) = make_linux_iflags(&settings.iflags) {
+                opts.custom_flags(libc_flags);
             }
 
-            let i = Self {
-                src,
-                ibs,
-                print_level,
-                count,
-                cflags,
-                iflags,
-            };
+            opts.open(filename)
+                .map_err_context(|| format!("failed to open {}", filename.quote()))?
+        };
 
-            Ok(i)
-        } else {
-            Err(Box::new(InternalError::WrongInputType))
+        if settings.skip > 0 {
+            src.seek(io::SeekFrom::Start(settings.skip))
+                .map_err_context(|| "failed to seek in input file".to_string())?;
         }
+
+        Ok(Self { src, settings })
     }
 }
 
-impl<R: Read> Read for Input<R> {
+impl<'a, R: Read> Read for Input<'a, R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut base_idx = 0;
         let target_len = buf.len();
         loop {
             match self.src.read(&mut buf[base_idx..]) {
                 Ok(0) => return Ok(base_idx),
-                Ok(rlen) if self.iflags.fullblock => {
+                Ok(rlen) if self.settings.iflags.fullblock => {
                     base_idx += rlen;
 
                     if base_idx >= target_len {
@@ -188,14 +191,14 @@ impl<R: Read> Read for Input<R> {
                 }
                 Ok(len) => return Ok(len),
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-                Err(_) if self.cflags.noerror => return Ok(base_idx),
+                Err(_) if self.settings.iconv.noerror => return Ok(base_idx),
                 Err(e) => return Err(e),
             }
         }
     }
 }
 
-impl<R: Read> Input<R> {
+impl<'a, R: Read> Input<'a, R> {
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read follows the previous one.
@@ -204,9 +207,9 @@ impl<R: Read> Input<R> {
         let mut reads_partial = 0;
         let mut bytes_total = 0;
 
-        for chunk in buf.chunks_mut(self.ibs) {
+        for chunk in buf.chunks_mut(self.settings.ibs) {
             match self.read(chunk)? {
-                rlen if rlen == self.ibs => {
+                rlen if rlen == self.settings.ibs => {
                     bytes_total += rlen;
                     reads_complete += 1;
                 }
@@ -236,7 +239,7 @@ impl<R: Read> Input<R> {
         let mut base_idx = 0;
 
         while base_idx < buf.len() {
-            let next_blk = cmp::min(base_idx + self.ibs, buf.len());
+            let next_blk = cmp::min(base_idx + self.settings.ibs, buf.len());
             let target_len = next_blk - base_idx;
 
             match self.read(&mut buf[base_idx..next_blk])? {
@@ -251,7 +254,7 @@ impl<R: Read> Input<R> {
                 }
             }
 
-            base_idx += self.ibs;
+            base_idx += self.settings.ibs;
         }
 
         buf.truncate(base_idx);
@@ -278,39 +281,30 @@ impl<R: Read> Input<R> {
 }
 
 trait OutputTrait: Sized + Write {
-    fn new(matches: &Matches) -> UResult<Self>;
     fn fsync(&mut self) -> io::Result<()>;
     fn fdatasync(&mut self) -> io::Result<()>;
 }
 
-struct Output<W: Write> {
+struct Output<'a, W: Write> {
     dst: W,
-    obs: usize,
-    cflags: OConvFlags,
+    settings: &'a Settings,
 }
 
-impl OutputTrait for Output<io::Stdout> {
-    fn new(matches: &Matches) -> UResult<Self> {
-        let obs = parseargs::parse_obs(matches)?;
-        let cflags = parseargs::parse_conv_flag_output(matches)?;
-        let oflags = parseargs::parse_oflags(matches)?;
-        let seek = parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::SEEK)?;
-        let oseek =
-            parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::OSEEK)?;
-
+impl<'a> Output<'a, io::Stdout> {
+    fn new(settings: &'a Settings) -> UResult<Self> {
         let mut dst = io::stdout();
 
-        // The --seek and --oseek flags are additive.
-        let amt = seek.unwrap_or(0) + oseek.unwrap_or(0);
         // stdout is not seekable, so we just write null bytes.
-        if amt > 0 {
-            io::copy(&mut io::repeat(0u8).take(amt as u64), &mut dst)
+        if settings.seek > 0 {
+            io::copy(&mut io::repeat(0u8).take(settings.seek as u64), &mut dst)
                 .map_err_context(|| String::from("write error"))?;
         }
 
-        Ok(Self { dst, obs, cflags })
+        Ok(Self { dst, settings })
     }
+}
 
+impl<'a> OutputTrait for Output<'a, io::Stdout> {
     fn fsync(&mut self) -> io::Result<()> {
         self.dst.flush()
     }
@@ -320,7 +314,7 @@ impl OutputTrait for Output<io::Stdout> {
     }
 }
 
-impl<W: Write> Output<W>
+impl<'a, W: Write> Output<'a, W>
 where
     Self: OutputTrait,
 {
@@ -329,9 +323,9 @@ where
         let mut writes_partial = 0;
         let mut bytes_total = 0;
 
-        for chunk in buf.chunks(self.obs) {
+        for chunk in buf.chunks(self.settings.obs) {
             let wlen = self.write(chunk)?;
-            if wlen < self.obs {
+            if wlen < self.settings.obs {
                 writes_partial += 1;
             } else {
                 writes_complete += 1;
@@ -348,9 +342,9 @@ where
 
     /// Flush the output to disk, if configured to do so.
     fn sync(&mut self) -> std::io::Result<()> {
-        if self.cflags.fsync {
+        if self.settings.oconv.fsync {
             self.fsync()
-        } else if self.cflags.fdatasync {
+        } else if self.settings.oconv.fdatasync {
             self.fdatasync()
         } else {
             // Intentionally do nothing in this case.
@@ -391,7 +385,7 @@ where
         //
         // This is an educated guess about a good buffer size based on
         // the input and output block sizes.
-        let bsize = calc_bsize(i.ibs, self.obs);
+        let bsize = calc_bsize(i.settings.ibs, self.settings.obs);
 
         // Start a thread that reports transfer progress.
         //
@@ -404,7 +398,7 @@ where
         // to the receives `rx`, and the receiver prints the transfer
         // information.
         let (prog_tx, rx) = mpsc::channel();
-        let output_thread = thread::spawn(gen_prog_updater(rx, i.print_level));
+        let output_thread = thread::spawn(gen_prog_updater(rx, i.settings.status));
         let mut progress_as_secs = 0;
 
         // Create a common buffer with a capacity of the block size.
@@ -417,13 +411,14 @@ where
         // blocks to this output. Read/write statistics are updated on
         // each iteration and cumulative statistics are reported to
         // the progress reporting thread.
-        while below_count_limit(&i.count, &rstat, &wstat) {
+        while below_count_limit(&i.settings.count, &rstat, &wstat) {
             // Read a block from the input then write the block to the output.
             //
             // As an optimization, make an educated guess about the
             // best buffer size for reading based on the number of
             // blocks already read and the number of blocks remaining.
-            let loop_bsize = calc_loop_bsize(&i.count, &rstat, &wstat, i.ibs, bsize);
+            let loop_bsize =
+                calc_loop_bsize(&i.settings.count, &rstat, &wstat, i.settings.ibs, bsize);
             let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
             if rstat_update.is_empty() {
                 break;
@@ -499,8 +494,8 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
     }
 }
 
-impl OutputTrait for Output<File> {
-    fn new(matches: &Matches) -> UResult<Self> {
+impl<'a> Output<'a, File> {
+    fn new(filename: &Path, settings: &'a Settings) -> UResult<Self> {
         fn open_dst(path: &Path, cflags: &OConvFlags, oflags: &OFlags) -> Result<File, io::Error> {
             let mut opts = OpenOptions::new();
             opts.write(true)
@@ -515,44 +510,30 @@ impl OutputTrait for Output<File> {
 
             opts.open(path)
         }
-        let obs = parseargs::parse_obs(matches)?;
-        let cflags = parseargs::parse_conv_flag_output(matches)?;
-        let oflags = parseargs::parse_oflags(matches)?;
-        let seek = parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::SEEK)?;
-        let oseek =
-            parseargs::parse_seek_skip_amt(&obs, oflags.seek_bytes, matches, options::OSEEK)?;
 
-        if let Some(fname) = matches.value_of(options::OUTFILE) {
-            let mut dst = open_dst(Path::new(&fname), &cflags, &oflags)
-                .map_err_context(|| format!("failed to open {}", fname.quote()))?;
+        let mut dst = open_dst(filename, &settings.oconv, &settings.oflags)
+            .map_err_context(|| format!("failed to open {}", filename.quote()))?;
 
-            // Seek to the index in the output file, truncating if requested.
-            //
-            // Calling `set_len()` may result in an error (for
-            // example, when calling it on `/dev/null`), but we don't
-            // want to terminate the process when that happens.
-            // Instead, we suppress the error by calling
-            // `Result::ok()`. This matches the behavior of GNU `dd`
-            // when given the command-line argument `of=/dev/null`.
+        // Seek to the index in the output file, truncating if requested.
+        //
+        // Calling `set_len()` may result in an error (for example,
+        // when calling it on `/dev/null`), but we don't want to
+        // terminate the process when that happens.  Instead, we
+        // suppress the error by calling `Result::ok()`. This matches
+        // the behavior of GNU `dd` when given the command-line
+        // argument `of=/dev/null`.
 
-            // The --seek and --oseek flags are additive.
-            let i = seek.unwrap_or(0) + oseek.unwrap_or(0);
-            if !cflags.notrunc {
-                dst.set_len(i).ok();
-            }
-            dst.seek(io::SeekFrom::Start(i))
-                .map_err_context(|| "failed to seek in output file".to_string())?;
-
-            Ok(Self { dst, obs, cflags })
-        } else {
-            // The following error should only occur if someone
-            // mistakenly calls Output::<File>::new() without checking
-            // if 'of' has been provided. In this case,
-            // Output::<io::stdout>::new() is probably intended.
-            Err(Box::new(InternalError::WrongOutputType))
+        if !settings.oconv.notrunc {
+            dst.set_len(settings.seek).ok();
         }
-    }
+        dst.seek(io::SeekFrom::Start(settings.seek))
+            .map_err_context(|| "failed to seek in output file".to_string())?;
 
+        Ok(Self { dst, settings })
+    }
+}
+
+impl<'a> OutputTrait for Output<'a, File> {
     fn fsync(&mut self) -> io::Result<()> {
         self.dst.flush()?;
         self.dst.sync_all()
@@ -564,19 +545,19 @@ impl OutputTrait for Output<File> {
     }
 }
 
-impl Seek for Output<File> {
+impl<'a> Seek for Output<'a, File> {
     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
         self.dst.seek(pos)
     }
 }
 
-impl Write for Output<File> {
+impl<'a> Write for Output<'a, File> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         fn is_sparse(buf: &[u8]) -> bool {
             buf.iter().all(|&e| e == 0u8)
         }
         // -----------------------------
-        if self.cflags.sparse && is_sparse(buf) {
+        if self.settings.oconv.sparse && is_sparse(buf) {
             let seek_amt: i64 = buf
                 .len()
                 .try_into()
@@ -593,7 +574,7 @@ impl Write for Output<File> {
     }
 }
 
-impl Write for Output<io::Stdout> {
+impl<'a> Write for Output<'a, io::Stdout> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.dst.write(buf)
     }
@@ -620,7 +601,7 @@ fn read_helper<R: Read>(
     // Resize the buffer to the bsize. Any garbage data in the buffer is overwritten or truncated, so there is no need to fill with BUF_INIT_BYTE first.
     buf.resize(bsize, BUF_INIT_BYTE);
 
-    let mut rstat = match i.cflags.sync {
+    let mut rstat = match i.settings.iconv.sync {
         Some(ch) => i.fill_blocks(buf, ch)?,
         _ => i.fill_consecutive(buf)?,
     };
@@ -630,11 +611,11 @@ fn read_helper<R: Read>(
     }
 
     // Perform any conv=x[,x...] options
-    if i.cflags.swab {
+    if i.settings.iconv.swab {
         perform_swab(buf);
     }
 
-    match i.cflags.mode {
+    match i.settings.iconv.mode {
         Some(ref mode) => {
             *buf = conv_block_unblock_helper(buf.clone(), mode, &mut rstat);
             Ok(rstat)
@@ -658,19 +639,19 @@ fn calc_bsize(ibs: usize, obs: usize) -> usize {
 // Calculate the buffer size appropriate for this loop iteration, respecting
 // a count=N if present.
 fn calc_loop_bsize(
-    count: &Option<CountType>,
+    count: &Option<Num>,
     rstat: &ReadStat,
     wstat: &WriteStat,
     ibs: usize,
     ideal_bsize: usize,
 ) -> usize {
     match count {
-        Some(CountType::Reads(rmax)) => {
+        Some(Num::Blocks(rmax)) => {
             let rsofar = rstat.reads_complete + rstat.reads_partial;
             let rremain = rmax - rsofar;
             cmp::min(ideal_bsize as u64, rremain * ibs as u64) as usize
         }
-        Some(CountType::Bytes(bmax)) => {
+        Some(Num::Bytes(bmax)) => {
             let bmax: u128 = (*bmax).try_into().unwrap();
             let bremain: u128 = bmax - wstat.bytes_total;
             cmp::min(ideal_bsize as u128, bremain as u128) as usize
@@ -681,13 +662,13 @@ fn calc_loop_bsize(
 
 // Decide if the current progress is below a count=N limit or return
 // true if no such limit is set.
-fn below_count_limit(count: &Option<CountType>, rstat: &ReadStat, wstat: &WriteStat) -> bool {
+fn below_count_limit(count: &Option<Num>, rstat: &ReadStat, wstat: &WriteStat) -> bool {
     match count {
-        Some(CountType::Reads(n)) => {
+        Some(Num::Blocks(n)) => {
             let n = *n;
             rstat.reads_complete + rstat.reads_partial <= n
         }
-        Some(CountType::Bytes(n)) => {
+        Some(Num::Bytes(n)) => {
             let n = (*n).try_into().unwrap();
             wstat.bytes_total <= n
         }
@@ -695,48 +676,95 @@ fn below_count_limit(count: &Option<CountType>, rstat: &ReadStat, wstat: &WriteS
     }
 }
 
-fn append_dashes_if_not_present(mut acc: Vec<String>, mut s: String) -> Vec<String> {
-    if !s.starts_with("--") && !s.starts_with('-') {
-        s.insert_str(0, "--");
+/// Canonicalized file name of `/dev/stdout`.
+///
+/// For example, if this process were invoked from the command line as
+/// `dd`, then this function returns the [`OsString`] form of
+/// `"/dev/stdout"`. However, if this process were invoked as `dd >
+/// outfile`, then this function returns the canonicalized path to
+/// `outfile`, something like `"/path/to/outfile"`.
+fn stdout_canonicalized() -> OsString {
+    match Path::new("/dev/stdout").canonicalize() {
+        Ok(p) => p.into_os_string(),
+        Err(_) => OsString::from("/dev/stdout"),
     }
-    acc.push(s);
-    acc
+}
+
+/// Decide whether stdout is being redirected to a seekable file.
+///
+/// For example, if this process were invoked from the command line as
+///
+/// ```sh
+/// dd if=/dev/zero bs=1 count=10 seek=5 > /dev/sda1
+/// ```
+///
+/// where `/dev/sda1` is a seekable block device then this function
+/// would return true. If invoked as
+///
+/// ```sh
+/// dd if=/dev/zero bs=1 count=10 seek=5
+/// ```
+///
+/// then this function would return false.
+fn is_stdout_redirected_to_seekable_file() -> bool {
+    let s = stdout_canonicalized();
+    let p = Path::new(&s);
+    match File::open(p) {
+        Ok(mut f) => {
+            f.seek(SeekFrom::Current(0)).is_ok()
+                && f.seek(SeekFrom::End(0)).is_ok()
+                && f.seek(SeekFrom::Start(0)).is_ok()
+        }
+        Err(_) => false,
+    }
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let dashed_args = args
-        .collect_ignore()
-        .into_iter()
-        .fold(Vec::new(), append_dashes_if_not_present);
+    let args = args.collect_ignore();
 
-    let matches = uu_app()
-        //.after_help(TODO: Add note about multiplier strings here.)
-        .get_matches_from(dashed_args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
-    match (
-        matches.contains_id(options::INFILE),
-        matches.contains_id(options::OUTFILE),
-    ) {
-        (true, true) => {
-            let i = Input::<File>::new(&matches)?;
-            let o = Output::<File>::new(&matches)?;
+    let settings: Settings = Parser::new().parse(
+        &matches
+            .get_many::<String>(options::OPERANDS)
+            .unwrap_or_default()
+            .map(|s| s.as_ref())
+            .collect::<Vec<_>>()[..],
+    )?;
+
+    match (&settings.infile, &settings.outfile) {
+        (Some(infile), Some(outfile)) => {
+            let i = Input::<File>::new(Path::new(&infile), &settings)?;
+            let o = Output::<File>::new(Path::new(&outfile), &settings)?;
             o.dd_out(i).map_err_context(|| "IO error".to_string())
         }
-        (false, true) => {
-            let i = Input::<io::Stdin>::new(&matches)?;
-            let o = Output::<File>::new(&matches)?;
+        (None, Some(outfile)) => {
+            let i = Input::<io::Stdin>::new(&settings)?;
+            let o = Output::<File>::new(Path::new(&outfile), &settings)?;
             o.dd_out(i).map_err_context(|| "IO error".to_string())
         }
-        (true, false) => {
-            let i = Input::<File>::new(&matches)?;
-            let o = Output::<io::Stdout>::new(&matches)?;
-            o.dd_out(i).map_err_context(|| "IO error".to_string())
+        (Some(infile), None) => {
+            let i = Input::<File>::new(Path::new(&infile), &settings)?;
+            if is_stdout_redirected_to_seekable_file() {
+                let filename = stdout_canonicalized();
+                let o = Output::<File>::new(Path::new(&filename), &settings)?;
+                o.dd_out(i).map_err_context(|| "IO error".to_string())
+            } else {
+                let o = Output::<io::Stdout>::new(&settings)?;
+                o.dd_out(i).map_err_context(|| "IO error".to_string())
+            }
         }
-        (false, false) => {
-            let i = Input::<io::Stdin>::new(&matches)?;
-            let o = Output::<io::Stdout>::new(&matches)?;
-            o.dd_out(i).map_err_context(|| "IO error".to_string())
+        (None, None) => {
+            let i = Input::<io::Stdin>::new(&settings)?;
+            if is_stdout_redirected_to_seekable_file() {
+                let filename = stdout_canonicalized();
+                let o = Output::<File>::new(Path::new(&filename), &settings)?;
+                o.dd_out(i).map_err_context(|| "IO error".to_string())
+            } else {
+                let o = Output::<io::Stdout>::new(&settings)?;
+                o.dd_out(i).map_err_context(|| "IO error".to_string())
+            }
         }
     }
 }
@@ -745,246 +773,22 @@ pub fn uu_app<'a>() -> Command<'a> {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .after_help(AFTER_HELP)
         .infer_long_args(true)
-        .arg(
-            Arg::new(options::INFILE)
-                .long(options::INFILE)
-                .overrides_with(options::INFILE)
-                .takes_value(true)
-                .value_hint(clap::ValueHint::FilePath)
-                .require_equals(true)
-                .value_name("FILE")
-                .help("(alternatively if=FILE) specifies the file used for input. When not specified, stdin is used instead")
-        )
-        .arg(
-            Arg::new(options::OUTFILE)
-                .long(options::OUTFILE)
-                .overrides_with(options::OUTFILE)
-                .takes_value(true)
-                .value_hint(clap::ValueHint::FilePath)
-                .require_equals(true)
-                .value_name("FILE")
-                .help("(alternatively of=FILE) specifies the file used for output. When not specified, stdout is used instead")
-        )
-        .arg(
-            Arg::new(options::IBS)
-                .long(options::IBS)
-                .overrides_with(options::IBS)
-                .takes_value(true)
-                .require_equals(true)
-                .value_name("N")
-                .help("(alternatively ibs=N) specifies the size of buffer used for reads (default: 512). Multiplier strings permitted.")
-        )
-        .arg(
-            Arg::new(options::OBS)
-                .long(options::OBS)
-                .overrides_with(options::OBS)
-                .takes_value(true)
-                .require_equals(true)
-                .value_name("N")
-                .help("(alternatively obs=N) specifies the size of buffer used for writes (default: 512). Multiplier strings permitted.")
-        )
-        .arg(
-            Arg::new(options::BS)
-                .long(options::BS)
-                .overrides_with(options::BS)
-                .takes_value(true)
-                .require_equals(true)
-                .value_name("N")
-                .help("(alternatively bs=N) specifies ibs=N and obs=N (default: 512). If ibs or obs are also specified, bs=N takes precedence. Multiplier strings permitted.")
-        )
-        .arg(
-            Arg::new(options::CBS)
-                .long(options::CBS)
-                .overrides_with(options::CBS)
-                .takes_value(true)
-                .require_equals(true)
-                .value_name("N")
-                .help("(alternatively cbs=BYTES) specifies the 'conversion block size' in bytes. Applies to the conv=block, and conv=unblock operations. Multiplier strings permitted.")
-        )
-        .arg(
-            Arg::new(options::SKIP)
-                .long(options::SKIP)
-                .overrides_with(options::SKIP)
-                .takes_value(true)
-                .require_equals(true)
-                .value_name("N")
-                .help("(alternatively skip=N) causes N ibs-sized records of input to be skipped before beginning copy/convert operations. See iflag=count_bytes if skipping N bytes is preferred. Multiplier strings permitted.")
-        )
-        .arg(
-            Arg::new(options::SEEK)
-                .long(options::SEEK)
-                .overrides_with(options::SEEK)
-                .takes_value(true)
-                .require_equals(true)
-                .value_name("N")
-                .help("(alternatively seek=N) seeks N obs-sized records into output before beginning copy/convert operations. See oflag=seek_bytes if seeking N bytes is preferred. Multiplier strings permitted.")
-        )
-        .arg(
-            Arg::new(options::ISEEK)
-                .long(options::ISEEK)
-                .overrides_with(options::ISEEK)
-                .takes_value(true)
-                .require_equals(true)
-                .value_name("N")
-                .help("(alternatively iseek=N) seeks N obs-sized records into input before beginning copy/convert operations. See iflag=seek_bytes if seeking N bytes is preferred. Multiplier strings permitted.")
-        )
-        .arg(
-            Arg::new(options::OSEEK)
-                .long(options::OSEEK)
-                .overrides_with(options::OSEEK)
-                .takes_value(true)
-                .require_equals(true)
-                .value_name("N")
-                .help("(alternatively oseek=N) seeks N obs-sized records into output before beginning copy/convert operations. See oflag=seek_bytes if seeking N bytes is preferred. Multiplier strings permitted.")
-        )
-        .arg(
-            Arg::new(options::COUNT)
-                .long(options::COUNT)
-                .overrides_with(options::COUNT)
-                .takes_value(true)
-                .require_equals(true)
-                .value_name("N")
-                .help("(alternatively count=N) stop reading input after N ibs-sized read operations rather than proceeding until EOF. See iflag=count_bytes if stopping after N bytes is preferred. Multiplier strings permitted.")
-        )
-        .arg(
-            Arg::new(options::STATUS)
-                .long(options::STATUS)
-                .overrides_with(options::STATUS)
-                .takes_value(true)
-                .require_equals(true)
-                .value_name("LEVEL")
-                .help("(alternatively status=LEVEL) controls whether volume and performance stats are written to stderr.
-
-When unspecified, dd will print stats upon completion. An example is below.
-\t6+0 records in
-\t16+0 records out
-\t8192 bytes (8.2 kB, 8.0 KiB) copied, 0.00057009 s, 14.4 MB/s
-The first two lines are the 'volume' stats and the final line is the 'performance' stats.
-The volume stats indicate the number of complete and partial ibs-sized reads, or obs-sized writes that took place during the copy. The format of the volume stats is <complete>+<partial>. If records have been truncated (see conv=block), the volume stats will contain the number of truncated records.
-
-Permissible LEVEL values are:
-\t progress: Print periodic performance stats as the copy proceeds.
-\t noxfer: Print final volume stats, but not performance stats.
-\t none: Do not print any stats.
-
-Printing performance stats is also triggered by the INFO signal (where supported), or the USR1 signal. Setting the POSIXLY_CORRECT environment variable to any value (including an empty value) will cause the USR1 signal to be ignored.
-
-")
-        )
-        .arg(
-            Arg::new(options::CONV)
-                .long(options::CONV)
-                .takes_value(true)
-                .multiple_occurrences(true)
-                .use_value_delimiter(true)
-                .require_value_delimiter(true)
-                .multiple_values(true)
-                .require_equals(true)
-                .value_name("CONV")
-                .help("(alternatively conv=CONV[,CONV]) specifies a comma-separated list of conversion options or (for legacy reasons) file flags. Conversion options and file flags may be intermixed.
-
-Conversion options:
-\t One of {ascii, ebcdic, ibm} will perform an encoding conversion.
-\t\t 'ascii' converts from EBCDIC to ASCII. This is the inverse of the 'ebcdic' option.
-\t\t 'ebcdic' converts from ASCII to EBCDIC. This is the inverse of the 'ascii' option.
-\t\t 'ibm' converts from ASCII to EBCDIC, applying the conventions for '[', ']' and '~' specified in POSIX.
-
-\t One of {ucase, lcase} will perform a case conversion. Works in conjunction with option {ascii, ebcdic, ibm} to infer input encoding. If no other conversion option is specified, input is assumed to be ascii.
-\t\t 'ucase' converts from lower-case to upper-case
-\t\t 'lcase' converts from upper-case to lower-case.
-
-\t One of {block, unblock}. Convert between lines terminated by newline characters, and fixed-width lines padded by spaces (without any newlines). Both the 'block' and 'unblock' options require cbs=BYTES be specified.
-\t\t 'block' for each newline less than the size indicated by cbs=BYTES, remove the newline and pad with spaces up to cbs. Lines longer than cbs are truncated.
-\t\t 'unblock' for each block of input of the size indicated by cbs=BYTES, remove right-trailing spaces and replace with a newline character.
-
-\t 'sparse' attempts to seek the output when an obs-sized block consists of only zeros.
-\t 'swab' swaps each adjacent pair of bytes. If an odd number of bytes is present, the final byte is omitted.
-\t 'sync' pad each ibs-sided block with zeros. If 'block' or 'unblock' is specified, pad with spaces instead.
-
-Conversion Flags:
-\t One of {excl, nocreat}
-\t\t 'excl' the output file must be created. Fail if the output file is already present.
-\t\t 'nocreat' the output file will not be created. Fail if the output file in not already present.
-\t 'notrunc' the output file will not be truncated. If this option is not present, output will be truncated when opened.
-\t 'noerror' all read errors will be ignored. If this option is not present, dd will only ignore Error::Interrupted.
-\t 'fdatasync' data will be written before finishing.
-\t 'fsync' data and metadata will be written before finishing.
-
-")
-        )
-        .arg(
-            Arg::new(options::IFLAG)
-                .long(options::IFLAG)
-                .takes_value(true)
-                .multiple_occurrences(true)
-                .use_value_delimiter(true)
-                .require_value_delimiter(true)
-                .multiple_values(true)
-                .require_equals(true)
-                .value_name("FLAG")
-                .help("(alternatively iflag=FLAG[,FLAG]) a comma separated list of input flags which specify how the input source is treated. FLAG may be any of the input-flags or general-flags specified below.
-
-Input-Flags
-\t 'count_bytes' a value to count=N will be interpreted as bytes.
-\t 'skip_bytes' a value to skip=N will be interpreted as bytes.
-\t 'fullblock' wait for ibs bytes from each read. zero-length reads are still considered EOF.
-
-General-Flags
-\t 'direct' use direct I/O for data.
-\t 'directory' fail unless the given input (if used as an iflag) or output (if used as an oflag) is a directory.
-\t 'dsync' use synchronized I/O for data.
-\t 'sync' use synchronized I/O for data and metadata.
-\t 'nonblock' use non-blocking I/O.
-\t 'noatime' do not update access time.
-\t 'nocache' request that OS drop cache.
-\t 'noctty' do not assign a controlling tty.
-\t 'nofollow' do not follow system links.
-
-")
-        )
-        .arg(
-            Arg::new(options::OFLAG)
-                .long(options::OFLAG)
-                .takes_value(true)
-                .multiple_occurrences(true)
-                .use_value_delimiter(true)
-                .require_value_delimiter(true)
-                .multiple_values(true)
-                .require_equals(true)
-                .value_name("FLAG")
-                .help("(alternatively oflag=FLAG[,FLAG]) a comma separated list of output flags which specify how the output source is treated. FLAG may be any of the output-flags or general-flags specified below.
-
-Output-Flags
-\t 'append' open file in append mode. Consider setting conv=notrunc as well.
-\t 'seek_bytes' a value to seek=N will be interpreted as bytes.
-
-General-Flags
-\t 'direct' use direct I/O for data.
-\t 'directory' fail unless the given input (if used as an iflag) or output (if used as an oflag) is a directory.
-\t 'dsync' use synchronized I/O for data.
-\t 'sync' use synchronized I/O for data and metadata.
-\t 'nonblock' use non-blocking I/O.
-\t 'noatime' do not update access time.
-\t 'nocache' request that OS drop cache.
-\t 'noctty' do not assign a controlling tty.
-\t 'nofollow' do not follow system links.
-
-")
-        )
+        .arg(Arg::new(options::OPERANDS).multiple_values(true))
 }
 
 #[cfg(test)]
 mod tests {
-
-    use crate::datastructures::{IConvFlags, IFlags, OConvFlags};
-    use crate::{calc_bsize, uu_app, Input, Output, OutputTrait};
+    use crate::datastructures::{IConvFlags, IFlags};
+    use crate::{calc_bsize, Input, Output, Parser, Settings};
 
     use std::cmp;
     use std::fs;
     use std::fs::File;
     use std::io;
     use std::io::{BufReader, Read};
+    use std::path::Path;
 
     struct LazyReader<R: Read> {
         src: R,
@@ -1068,38 +872,36 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
     fn test_nocreat_causes_failure_when_ofile_doesnt_exist() {
-        let args = vec![
-            String::from("dd"),
-            String::from("--conv=nocreat"),
-            String::from("--of=not-a-real.file"),
-        ];
-
-        let matches = uu_app().try_get_matches_from(args).unwrap();
-        let _ = Output::<File>::new(&matches).unwrap();
+        let args = &["conv=nocreat", "of=not-a-real.file"];
+        let settings = Parser::new().parse(args).unwrap();
+        assert!(
+            Output::<File>::new(Path::new(settings.outfile.as_ref().unwrap()), &settings).is_err()
+        );
     }
 
     #[test]
     fn test_deadbeef_16_delayed() {
+        let settings = Settings {
+            ibs: 16,
+            obs: 32,
+            count: None,
+            iconv: IConvFlags {
+                sync: Some(0),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
         let input = Input {
             src: LazyReader {
                 src: File::open("./test-resources/deadbeef-16.test").unwrap(),
             },
-            ibs: 16,
-            print_level: None,
-            count: None,
-            cflags: IConvFlags {
-                sync: Some(0),
-                ..IConvFlags::default()
-            },
-            iflags: IFlags::default(),
+            settings: &settings,
         };
 
         let output = Output {
             dst: File::create("./test-resources/FAILED-deadbeef-16-delayed.test").unwrap(),
-            obs: 32,
-            cflags: OConvFlags::default(),
+            settings: &settings,
         };
 
         output.dd_out(input).unwrap();
@@ -1127,26 +929,28 @@ mod tests {
 
     #[test]
     fn test_random_73k_test_lazy_fullblock() {
+        let settings = Settings {
+            ibs: 521,
+            obs: 1031,
+            count: None,
+            iflags: IFlags {
+                fullblock: true,
+                ..IFlags::default()
+            },
+            ..Default::default()
+        };
         let input = Input {
             src: LazyReader {
                 src: File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test")
                     .unwrap(),
             },
-            ibs: 521,
-            print_level: None,
-            count: None,
-            cflags: IConvFlags::default(),
-            iflags: IFlags {
-                fullblock: true,
-                ..IFlags::default()
-            },
+            settings: &settings,
         };
 
         let output = Output {
             dst: File::create("./test-resources/FAILED-random_73k_test_lazy_fullblock.test")
                 .unwrap(),
-            obs: 1031,
-            cflags: OConvFlags::default(),
+            settings: &settings,
         };
 
         output.dd_out(input).unwrap();

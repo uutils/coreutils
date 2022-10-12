@@ -19,7 +19,7 @@ use std::io::ErrorKind;
 use std::process::{self, Child, Stdio};
 use std::time::Duration;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::error::{UClapError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::process::ChildExt;
 use uucore::signals::{signal_by_name_or_value, signal_name_by_value};
@@ -52,7 +52,7 @@ struct Config {
 
 impl Config {
     fn from(options: &clap::ArgMatches) -> UResult<Self> {
-        let signal = match options.value_of(options::SIGNAL) {
+        let signal = match options.get_one::<String>(options::SIGNAL) {
             Some(signal_) => {
                 let signal_result = signal_by_name_or_value(signal_);
                 match signal_result {
@@ -68,7 +68,7 @@ impl Config {
             _ => uucore::signals::signal_by_name_or_value("TERM").unwrap(),
         };
 
-        let kill_after = match options.value_of(options::KILL_AFTER) {
+        let kill_after = match options.get_one::<String>(options::KILL_AFTER) {
             None => None,
             Some(kill_after) => match uucore::parse_time::from_str(kill_after) {
                 Ok(k) => Some(k),
@@ -76,11 +76,12 @@ impl Config {
             },
         };
 
-        let duration =
-            match uucore::parse_time::from_str(options.value_of(options::DURATION).unwrap()) {
-                Ok(duration) => duration,
-                Err(err) => return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err)),
-            };
+        let duration = match uucore::parse_time::from_str(
+            options.get_one::<String>(options::DURATION).unwrap(),
+        ) {
+            Ok(duration) => duration,
+            Err(err) => return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err)),
+        };
 
         let preserve_status: bool = options.contains_id(options::PRESERVE_STATUS);
         let foreground = options.contains_id(options::FOREGROUND);
@@ -108,9 +109,7 @@ impl Config {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let command = uu_app();
-
-    let matches = command.get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
 
     let config = Config::from(&matches)?;
     timeout(

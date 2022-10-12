@@ -1,10 +1,17 @@
-// spell-checker:ignore (words) araba newroot userspec
+// spell-checker:ignore (words) araba newroot userspec chdir pwd's isroot
 
 use crate::common::util::*;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(125);
+}
+
+#[test]
 fn test_missing_operand() {
-    let result = new_ucmd!().run();
+    let result = new_ucmd!().fails();
+
+    result.code_is(125);
 
     assert!(result
         .stderr_str()
@@ -22,7 +29,7 @@ fn test_enter_chroot_fails() {
     at.mkdir("jail");
 
     let result = ucmd.arg("jail").fails();
-
+    result.code_is(125);
     assert!(result
         .stderr_str()
         .starts_with("chroot: cannot chroot to 'jail': Operation not permitted (os error 1)"));
@@ -36,7 +43,8 @@ fn test_no_such_directory() {
 
     ucmd.arg("a")
         .fails()
-        .stderr_is("chroot: cannot change root directory to 'a': no such directory");
+        .stderr_is("chroot: cannot change root directory to 'a': no such directory")
+        .code_is(125);
 }
 
 #[test]
@@ -46,11 +54,12 @@ fn test_invalid_user_spec() {
     at.mkdir("a");
 
     let result = ucmd.arg("a").arg("--userspec=ARABA:").fails();
-
+    result.code_is(125);
     assert!(result.stderr_str().starts_with("chroot: invalid userspec"));
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_preference_of_userspec() {
     let scene = TestScenario::new(util_name!());
     let result = scene.cmd("whoami").run();
@@ -86,7 +95,9 @@ fn test_preference_of_userspec() {
         .arg("-G")
         .arg("ABC,DEF")
         .arg(format!("--userspec={}:{}", username, group_name))
-        .run();
+        .fails();
+
+    result.code_is(125);
 
     println!("result.stdout = {}", result.stdout_str());
     println!("result.stderr = {}", result.stderr_str());
@@ -102,15 +113,87 @@ fn test_default_shell() {
     at.mkdir(dir);
 
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-    let _expected = format!(
+    let expected = format!(
         "chroot: failed to run command '{}': No such file or directory",
         shell
     );
 
-    // TODO: [2021-09; jhscheer] uncomment if/when #2692 gets merged
-    // if let Ok(result) = run_ucmd_as_root(&ts, &[dir]) {
-    //     result.stderr_contains(expected);
-    // } else {
-    //     print!("TEST SKIPPED");
-    // }
+    if let Ok(result) = run_ucmd_as_root(&ts, &[dir]) {
+        result.stderr_contains(expected);
+    } else {
+        print!("TEST SKIPPED");
+    }
+}
+
+#[test]
+fn test_chroot() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let dir = "CHROOT_DIR";
+    at.mkdir(dir);
+    if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "whoami"]) {
+        result.success().no_stderr().stdout_is("root");
+    } else {
+        print!("Test skipped; requires root user");
+    }
+
+    if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "pwd"]) {
+        result.success().no_stderr().stdout_is("/");
+    } else {
+        print!("Test skipped; requires root user");
+    }
+}
+
+#[test]
+fn test_chroot_skip_chdir_not_root() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let dir = "foobar";
+    at.mkdir(dir);
+
+    ucmd.arg("--skip-chdir")
+        .arg(dir)
+        .fails()
+        .stderr_contains("chroot: option --skip-chdir only permitted if NEWROOT is old '/'")
+        .code_is(125);
+}
+
+#[test]
+fn test_chroot_skip_chdir() {
+    let ts = TestScenario::new(util_name!());
+    let at = ts.fixtures.clone();
+    let dirs = ["/", "/.", "/..", "isroot"];
+    at.symlink_file("/", "isroot");
+    for dir in dirs {
+        let env_cd = std::env::current_dir().unwrap();
+        if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "--skip-chdir"]) {
+            // Should return the same path
+            assert_eq!(
+                result.success().no_stderr().stdout_str(),
+                env_cd.to_str().unwrap()
+            );
+        } else {
+            print!("Test skipped; requires root user");
+        }
+    }
+}
+
+#[test]
+fn test_chroot_extra_arg() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let dir = "CHROOT_DIR";
+    at.mkdir(dir);
+    let env_cd = std::env::current_dir().unwrap();
+    // Verify that -P is pwd's and not chroot
+    if let Ok(result) = run_ucmd_as_root(&ts, &[dir, "pwd", "-P"]) {
+        assert_eq!(
+            result.success().no_stderr().stdout_str(),
+            env_cd.to_str().unwrap()
+        );
+    } else {
+        print!("Test skipped; requires root user");
+    }
 }

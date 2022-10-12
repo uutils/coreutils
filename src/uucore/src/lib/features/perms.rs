@@ -10,7 +10,7 @@ use crate::error::strip_errno;
 use crate::error::UResult;
 use crate::error::USimpleError;
 pub use crate::features::entries;
-use crate::fs::{is_symlink, resolve_relative_path};
+use crate::fs::resolve_relative_path;
 use crate::show_error;
 use clap::Arg;
 use clap::ArgMatches;
@@ -274,7 +274,7 @@ impl ChownExecutor {
         let root = root.as_ref();
 
         // walkdir always dereferences the root directory, so we have to check it ourselves
-        if self.traverse_symlinks == TraverseSymlinks::None && is_symlink(root) {
+        if self.traverse_symlinks == TraverseSymlinks::None && root.is_symlink() {
             return 0;
         }
 
@@ -463,7 +463,7 @@ pub fn chown_base<'a>(
             .required(true)
             .min_values(1),
     );
-    let matches = command.get_matches_from(args);
+    let matches = command.try_get_matches_from(args)?;
 
     let files: Vec<String> = matches
         .get_many::<String>(options::ARG_FILES)

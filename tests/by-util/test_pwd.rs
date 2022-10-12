@@ -5,6 +5,11 @@ use std::path::PathBuf;
 use crate::common::util::*;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_default() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.succeeds().stdout_is(at.root_dir_resolved() + "\n");
