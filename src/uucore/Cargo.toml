@@ -21,7 +21,7 @@ path="src/lib/lib.rs"
 uucore_procs = { version=">=0.0.16", path="../uucore_procs" }
 clap = "3.2"
 dns-lookup = { version="1.0.5", optional=true }
-dunce = "1.0.0"
+dunce = "1.0.3"
 wild = "2.0"
 glob = "0.3.0"
 # * optional
