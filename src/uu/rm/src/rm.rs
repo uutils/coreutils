@@ -99,16 +99,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
             let mut result = true;
 
+            // if we have rm -i -f
             if let Some(prompt_index) = prompt_index_option {
                 if result {
                     result = prompt_index <= force_index;
                 }
             }
+            // if we have rm -I -f
             if let Some(prompt_more_index_index) = prompt_more_index_option {
                 if result {
                     result = prompt_more_index_index <= force_index;
                 }
             }
+            // if we have rm --interactive -f
             if let Some(interactive_index) = interactive_index_option {
                 if result {
                     result = interactive_index <= force_index;
