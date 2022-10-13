@@ -19,6 +19,10 @@ clap = { version = "3.2", features = ["wrap_help", "cargo"] }
 rust-ini = "0.18.0"
 uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["signals"]}
 
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.25", default-features = false, features = ["signal"] }
+
+
 [[bin]]
 name = "env"
 path = "src/main.rs"

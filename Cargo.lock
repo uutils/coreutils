@@ -2277,6 +2277,7 @@ name = "uu_env"
 version = "0.0.16"
 dependencies = [
  "clap",
+ "nix",
  "rust-ini",
  "uucore",
 ]
