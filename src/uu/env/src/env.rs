@@ -227,7 +227,11 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
         // read NAME=VALUE arguments (and up to a single program argument)
         while !begin_prog_opts {
             if let Some(opt) = iter.next() {
-                begin_prog_opts = parse_name_value_opt(&mut opts, opt)?;
+                if opt == "-" {
+                    opts.ignore_env = true;
+                } else {
+                    begin_prog_opts = parse_name_value_opt(&mut opts, opt)?;
+                }
             } else {
                 break;
             }
