@@ -557,8 +557,8 @@ fn prompt_file(path: &Path, options: &Options, is_dir: bool) -> bool {
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
     use std::os::unix::fs::PermissionsExt;
     let mode = metadata.permissions().mode();
-    let user_write_permission = (mode & 0b1_1100_0000) >> 6;
-    let user_writable = !matches!(user_write_permission, 0o0 | 0o1 | 0o4 | 0o5);
+    // Check if directory has user write permissions
+    let user_writable = (mode & libc::S_IWUSR) != 0;
     if !user_writable {
         prompt(&(format!("remove write-protected directory {}? ", path.quote())))
     } else if options.interactive == InteractiveMode::Always {
@@ -587,9 +587,7 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
 #[cfg(not(windows))]
 #[cfg(not(unix))]
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
-    if metadata.permissions().readonly() {
-        prompt(&(format!("remove write-protected directory {}? ", path.quote())))
-    } else if options.interactive == InteractiveMode::Always {
+    if options.interactive == InteractiveMode::Always {
         prompt(&(format!("remove directory {}? ", path.quote())))
     } else {
         true
