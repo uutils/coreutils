@@ -275,7 +275,7 @@ impl Params {
         // For example, if `tmpdir` is "a/b" and the template is "c/dXXX",
         // then `prefix` is "a/b/c/d".
         let tmpdir = options.tmpdir;
-        let prefix_from_option = tmpdir.clone().unwrap_or_else(|| "".to_string());
+        let prefix_from_option = tmpdir.clone().unwrap_or_default();
         let prefix_from_template = &options.template[..i];
         let prefix = Path::new(&prefix_from_option)
             .join(prefix_from_template)
@@ -311,7 +311,7 @@ impl Params {
         //
         // For example, if the suffix command-line argument is ".txt" and
         // the template is "XXXabc", then `suffix` is "abc.txt".
-        let suffix_from_option = options.suffix.unwrap_or_else(|| "".to_string());
+        let suffix_from_option = options.suffix.unwrap_or_default();
         let suffix_from_template = &options.template[j..];
         let suffix = format!("{}{}", suffix_from_template, suffix_from_option);
         if suffix.contains(MAIN_SEPARATOR) {
@@ -484,7 +484,7 @@ pub fn dry_exec(tmpdir: &str, prefix: &str, rand: usize, suffix: &str) -> UResul
 fn make_temp_dir(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
-    match builder.tempdir_in(&dir) {
+    match builder.tempdir_in(dir) {
         Ok(d) => {
             // `into_path` consumes the TempDir without removing it
             let path = d.into_path();
@@ -516,7 +516,7 @@ fn make_temp_dir(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<
 fn make_temp_file(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
-    match builder.tempfile_in(&dir) {
+    match builder.tempfile_in(dir) {
         // `keep` ensures that the file is not deleted
         Ok(named_tempfile) => match named_tempfile.keep() {
             Ok((_, pathbuf)) => Ok(pathbuf),

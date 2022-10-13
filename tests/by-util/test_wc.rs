@@ -31,7 +31,7 @@ fn test_count_bytes_large_stdin() {
             .args(&["-c"])
             .pipe_in(data)
             .succeeds()
-            .stdout_is_bytes(&expected.as_bytes());
+            .stdout_is_bytes(expected.as_bytes());
     }
 }
 

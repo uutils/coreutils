@@ -279,7 +279,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
             // If we have already seen three groups (corresponding to
             // a header) or the current char does not form part of
             // a new group, then this line is not a segment indicator.
-            if matched_groups >= 3 || settings.section_delimiter[if odd { 1 } else { 0 }] != c {
+            if matched_groups >= 3 || settings.section_delimiter[usize::from(odd)] != c {
                 matched_groups = 0;
                 break;
             }

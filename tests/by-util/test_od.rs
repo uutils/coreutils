@@ -81,7 +81,7 @@ fn test_2files() {
 
     // spell-checker:disable-next-line
     for (path, data) in [(&file1, "abcdefghijklmnop"), (&file2, "qrstuvwxyz\n")] {
-        let mut f = File::create(&path).unwrap();
+        let mut f = File::create(path).unwrap();
         assert!(
             f.write_all(data.as_bytes()).is_ok(),
             "Test setup failed - could not write file"
@@ -133,7 +133,7 @@ fn test_from_mixed() {
     // spell-checker:disable-next-line
     let (data1, data2, data3) = ("abcdefg", "hijklmnop", "qrstuvwxyz\n");
     for (path, data) in [(&file1, data1), (&file3, data3)] {
-        let mut f = File::create(&path).unwrap();
+        let mut f = File::create(path).unwrap();
         assert!(
             f.write_all(data.as_bytes()).is_ok(),
             "Test setup failed - could not write file"

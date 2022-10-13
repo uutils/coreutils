@@ -80,7 +80,7 @@ impl TmpDirWrapper {
 /// Remove the directory at `path` by deleting its child files and then itself.
 /// Errors while deleting child files are ignored.
 fn remove_tmp_dir(path: &Path) -> std::io::Result<()> {
-    if let Ok(read_dir) = std::fs::read_dir(&path) {
+    if let Ok(read_dir) = std::fs::read_dir(path) {
         for file in read_dir.flatten() {
             // if we fail to delete the file here it was probably deleted by another thread
             // in the meantime, but that's ok.

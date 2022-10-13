@@ -40,7 +40,7 @@ fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<(Option<u32>, Optio
     let dest_uid: Option<u32>;
     let dest_gid: Option<u32>;
     if let Some(file) = matches.get_one::<String>(options::REFERENCE) {
-        let meta = fs::metadata(&file)
+        let meta = fs::metadata(file)
             .map_err_context(|| format!("failed to get attributes of {}", file.quote()))?;
         dest_gid = Some(meta.gid());
         dest_uid = Some(meta.uid());

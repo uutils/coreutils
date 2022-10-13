@@ -561,8 +561,8 @@ fn test_ls_a() {
         .arg("-a")
         .arg("-1")
         .succeeds()
-        .stdout_contains(&".test-1")
-        .stdout_contains(&"..")
+        .stdout_contains(".test-1")
+        .stdout_contains("..")
         .stdout_matches(&re_pwd);
 
     scene
@@ -590,8 +590,8 @@ fn test_ls_a() {
         .arg("-1")
         .arg("some-dir")
         .succeeds()
-        .stdout_contains(&".test-2")
-        .stdout_contains(&"..")
+        .stdout_contains(".test-2")
+        .stdout_contains("..")
         .no_stderr()
         .stdout_matches(&re_pwd);
 
@@ -1821,7 +1821,7 @@ fn test_ls_files_dirs() {
         .ucmd()
         .arg("doesntexist")
         .fails()
-        .stderr_contains(&"'doesntexist': No such file or directory");
+        .stderr_contains("'doesntexist': No such file or directory");
 
     // One exists, the other doesn't
     scene
@@ -1829,8 +1829,8 @@ fn test_ls_files_dirs() {
         .arg("a")
         .arg("doesntexist")
         .fails()
-        .stderr_contains(&"'doesntexist': No such file or directory")
-        .stdout_contains(&"a:");
+        .stderr_contains("'doesntexist': No such file or directory")
+        .stdout_contains("a:");
 }
 
 #[test]
@@ -1851,7 +1851,7 @@ fn test_ls_recursive() {
         .arg("z")
         .arg("-R")
         .succeeds()
-        .stdout_contains(&"z:");
+        .stdout_contains("z:");
     let result = scene
         .ucmd()
         .arg("--color=never")
@@ -1861,7 +1861,7 @@ fn test_ls_recursive() {
         .succeeds();
 
     #[cfg(not(windows))]
-    result.stdout_contains(&"a/b:\nb");
+    result.stdout_contains("a/b:\nb");
     #[cfg(windows)]
     result.stdout_contains(&"a\\b:\nb");
 }
@@ -2014,7 +2014,7 @@ fn test_ls_indicator_style() {
         "-p",
     ] {
         // Verify that classify and file-type both contain indicators for symlinks.
-        scene.ucmd().arg(opt).succeeds().stdout_contains(&"/");
+        scene.ucmd().arg(opt).succeeds().stdout_contains("/");
     }
 
     // Classify, Indicator options should not contain any indicators when value is none.
@@ -2030,9 +2030,9 @@ fn test_ls_indicator_style() {
             .ucmd()
             .arg(opt)
             .succeeds()
-            .stdout_does_not_contain(&"/")
-            .stdout_does_not_contain(&"@")
-            .stdout_does_not_contain(&"|");
+            .stdout_does_not_contain("/")
+            .stdout_does_not_contain("@")
+            .stdout_does_not_contain("|");
     }
 
     // Classify and File-Type all contain indicators for pipes and links.
@@ -2043,8 +2043,8 @@ fn test_ls_indicator_style() {
             .ucmd()
             .arg(format!("--indicator-style={}", opt))
             .succeeds()
-            .stdout_contains(&"@")
-            .stdout_contains(&"|");
+            .stdout_contains("@")
+            .stdout_contains("|");
     }
 
     // Test sockets. Because the canonical way of making sockets to test is with
@@ -2631,7 +2631,7 @@ fn test_ls_ignore_hide() {
         .arg("--ignore=READ[ME")
         .arg("-1")
         .succeeds()
-        .stderr_contains(&"Invalid pattern")
+        .stderr_contains("Invalid pattern")
         .stdout_is("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
 
     scene
@@ -2639,7 +2639,7 @@ fn test_ls_ignore_hide() {
         .arg("--hide=READ[ME")
         .arg("-1")
         .succeeds()
-        .stderr_contains(&"Invalid pattern")
+        .stderr_contains("Invalid pattern")
         .stdout_is("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
 }
 

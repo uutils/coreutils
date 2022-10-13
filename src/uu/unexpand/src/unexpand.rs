@@ -220,7 +220,7 @@ fn open(path: &str) -> BufReader<Box<dyn Read + 'static>> {
     if path == "-" {
         BufReader::new(Box::new(stdin()) as Box<dyn Read>)
     } else {
-        file_buf = match File::open(&path) {
+        file_buf = match File::open(path) {
             Ok(a) => a,
             Err(e) => crash!(1, "{}: {}", path.maybe_quote(), e),
         };

@@ -124,7 +124,7 @@ fn open_file(name: &str) -> io::Result<LineReader> {
     match name {
         "-" => Ok(LineReader::Stdin(stdin())),
         _ => {
-            let f = File::open(&Path::new(name))?;
+            let f = File::open(Path::new(name))?;
             Ok(LineReader::FileIn(BufReader::new(f)))
         }
     }
