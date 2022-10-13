@@ -558,7 +558,8 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
     use std::os::unix::fs::PermissionsExt;
     let mode = metadata.permissions().mode();
     // Check if directory has user write permissions
-    let user_writable = (mode & libc::S_IWUSR) != 0;
+    // Why is S_IWUSR showing up as a u16 on macos?
+    let user_writable = (mode & (libc::S_IWUSR as u32)) != 0;
     if !user_writable {
         prompt(&(format!("remove write-protected directory {}? ", path.quote())))
     } else if options.interactive == InteractiveMode::Always {
