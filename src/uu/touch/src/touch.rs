@@ -69,7 +69,7 @@ fn dt_to_filename(tm: time::PrimitiveDateTime) -> FileTime {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let files = matches.get_many::<OsString>(ARG_FILES).ok_or_else(|| {
         USimpleError::new(
@@ -85,9 +85,9 @@ Try 'touch --help' for more information."##,
                 !matches.contains_id(options::NO_DEREF),
             )?
         } else {
-            let timestamp = if let Some(date) = matches.value_of(options::sources::DATE) {
+            let timestamp = if let Some(date) = matches.get_one::<String>(options::sources::DATE) {
                 parse_date(date)?
-            } else if let Some(current) = matches.value_of(options::sources::CURRENT) {
+            } else if let Some(current) = matches.get_one::<String>(options::sources::CURRENT) {
                 parse_timestamp(current)?
             } else {
                 local_dt_to_filetime(time::OffsetDateTime::now_local().unwrap())
@@ -143,7 +143,10 @@ Try 'touch --help' for more information."##,
             || matches.contains_id(options::TIME)
         {
             let st = stat(path, !matches.contains_id(options::NO_DEREF))?;
-            let time = matches.value_of(options::TIME).unwrap_or("");
+            let time = matches
+                .get_one::<String>(options::TIME)
+                .map(|s| s.as_str())
+                .unwrap_or("");
 
             if !(matches.contains_id(options::ACCESS)
                 || time.contains(&"access".to_owned())

@@ -2,6 +2,11 @@
 use crate::common::util::*;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_stdin_default() {
     new_ucmd!()
         .pipe_in("100\n200\n300\n400\n500")

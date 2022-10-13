@@ -6,6 +6,9 @@ name: GnuTests
 
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
 jobs:
   gnu:
     permissions:
@@ -34,12 +37,13 @@ jobs:
         outputs repo_default_branch repo_GNU_ref repo_reference_branch
         #
         SUITE_LOG_FILE="${path_GNU_tests}/test-suite.log"
+        ROOT_SUITE_LOG_FILE="${path_GNU_tests}/test-suite-root.log"
         TEST_LOGS_GLOB="${path_GNU_tests}/**/*.log" ## note: not usable at bash CLI; [why] double globstar not enabled by default b/c MacOS includes only bash v3 which doesn't have double globstar support
         TEST_FILESET_PREFIX='test-fileset-IDs.sha1#'
         TEST_FILESET_SUFFIX='.txt'
         TEST_SUMMARY_FILE='gnu-result.json'
         TEST_FULL_SUMMARY_FILE='gnu-full-result.json'
-        outputs SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE
+        outputs SUITE_LOG_FILE ROOT_SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE
     - name: Checkout code (uutil)
       uses: actions/checkout@v3
       with:
@@ -82,8 +86,13 @@ jobs:
         ## Some tests fail with 'cannot change locale (en_US.ISO-8859-1): No such file or directory'
         ## Some others need a French locale
         sudo locale-gen
-        sudo locale-gen fr_FR
-        sudo locale-gen fr_FR.UTF-8
+        sudo locale-gen --keep-existing fr_FR
+        sudo locale-gen --keep-existing fr_FR.UTF-8
+        sudo locale-gen --keep-existing sv_SE
+        sudo locale-gen --keep-existing sv_SE.UTF-8
+        sudo locale-gen --keep-existing en_US
+        sudo locale-gen --keep-existing ru_RU.KOI8-R
+
         sudo update-locale
         echo "After:"
         locale -a
@@ -99,6 +108,12 @@ jobs:
         path_GNU='${{ steps.vars.outputs.path_GNU }}'
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         bash "${path_UUTILS}/util/run-gnu-test.sh"
+    - name: Run GNU root tests
+      shell: bash
+      run: |
+        path_GNU='${{ steps.vars.outputs.path_GNU }}'
+        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
+        bash "${path_UUTILS}/util/run-gnu-test.sh" run-root
     - name: Extract testing info into JSON
       shell: bash
       run : |
@@ -108,18 +123,17 @@ jobs:
       id: summary
       shell: bash
       run: |
+        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         ## Extract/summarize testing info
         outputs() { step_id="summary"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         #
         SUITE_LOG_FILE='${{ steps.vars.outputs.SUITE_LOG_FILE }}'
+        ROOT_SUITE_LOG_FILE='${{ steps.vars.outputs.ROOT_SUITE_LOG_FILE }}'
+        ls -al ${SUITE_LOG_FILE} ${ROOT_SUITE_LOG_FILE}
+
         if test -f "${SUITE_LOG_FILE}"
         then
-            TOTAL=$(sed -n "s/.*# TOTAL: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
-            PASS=$(sed -n "s/.*# PASS: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
-            SKIP=$(sed -n "s/.*# SKIP: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
-            FAIL=$(sed -n "s/.*# FAIL: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
-            XPASS=$(sed -n "s/.*# XPASS: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
-            ERROR=$(sed -n "s/.*# ERROR: \(.*\)/\1/p" "${SUITE_LOG_FILE}" | tr -d '\r' | head -n1)
+            source ${path_UUTILS}/util/analyze-gnu-results.sh ${SUITE_LOG_FILE} ${ROOT_SUITE_LOG_FILE}
             if [[ "$TOTAL" -eq 0 || "$TOTAL" -eq 1 ]]; then
               echo "::error ::Failed to parse test results from '${SUITE_LOG_FILE}'; failing early"
               exit 1
@@ -172,6 +186,19 @@ jobs:
         REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/test-suite.log'
         REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
         REPO_DEFAULT_BRANCH='${{ steps.vars.outputs.repo_default_branch }}'
+
+        mkdir -p ${{ steps.vars.outputs.path_reference }}
+
+        COMMENT_DIR="${{ steps.vars.outputs.path_reference }}/comment"
+        mkdir -p ${COMMENT_DIR}
+        echo ${{ github.event.number }} > ${COMMENT_DIR}/NR
+        COMMENT_LOG="${COMMENT_DIR}/result.txt"
+
+        # The comment log might be downloaded from a previous run
+        # We only want the new changes, so remove it if it exists.
+        rm -f ${COMMENT_LOG}
+        touch ${COMMENT_LOG}
+
         if test -f "${REF_LOG_FILE}"; then
           echo "Reference SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
           REF_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${REF_LOG_FILE}" | sort)
@@ -181,28 +208,36 @@ jobs:
           for LINE in ${REF_FAILING}
           do
             if ! grep -Fxq ${LINE}<<<"${NEW_FAILING}"; then
-              echo "::warning ::Congrats! The gnu test ${LINE} is no longer failing!"
+              MSG="Congrats! The gnu test ${LINE} is no longer failing!"
+              echo "::warning ::$MSG"
+              echo $MSG >> ${COMMENT_LOG}
             fi
           done
           for LINE in ${NEW_FAILING}
           do
             if ! grep -Fxq ${LINE}<<<"${REF_FAILING}"
             then
-              echo "::error ::GNU test failed: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
+              MSG="GNU test failed: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
+              echo "::error ::$MSG"
+              echo $MSG >> ${COMMENT_LOG}
               have_new_failures="true"
             fi
           done
           for LINE in ${REF_ERROR}
           do
             if ! grep -Fxq ${LINE}<<<"${NEW_ERROR}"; then
-              echo "::warning ::Congrats! The gnu test ${LINE} is no longer ERROR!"
+              MSG="Congrats! The gnu test ${LINE} is no longer ERROR!"
+              echo "::warning ::$MSG"
+              echo $MSG >> ${COMMENT_LOG}
             fi
           done
           for LINE in ${NEW_ERROR}
           do
             if ! grep -Fxq ${LINE}<<<"${REF_ERROR}"
             then
-              echo "::error ::GNU test error: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
+              MSG="GNU test error: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
+              echo "::error ::$MSG"
+              echo $MSG >> ${COMMENT_LOG}
               have_new_failures="true"
             fi
           done
@@ -211,6 +246,12 @@ jobs:
           echo "::warning ::Skipping test failure comparison; no prior reference test logs are available."
         fi
         if test -n "${have_new_failures}" ; then exit -1 ; fi
+    - name: Upload comparison log (for GnuComment workflow)
+      if: success() || failure() # run regardless of prior step success/failure
+      uses: actions/upload-artifact@v3
+      with:
+        name: comment
+        path: ${{ steps.vars.outputs.path_reference }}/comment/
     - name: Compare test summary VS reference
       if: success() || failure() # run regardless of prior step success/failure
       shell: bash
@@ -257,8 +298,8 @@ jobs:
         ## Some tests fail with 'cannot change locale (en_US.ISO-8859-1): No such file or directory'
         ## Some others need a French locale
         sudo locale-gen
-        sudo locale-gen fr_FR
-        sudo locale-gen fr_FR.UTF-8
+        sudo locale-gen --keep-existing fr_FR
+        sudo locale-gen --keep-existing fr_FR.UTF-8
         sudo update-locale
         echo "After:"
         locale -a

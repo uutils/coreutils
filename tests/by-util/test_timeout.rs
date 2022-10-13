@@ -1,6 +1,11 @@
 // spell-checker:ignore dont
 use crate::common::util::*;
 
+#[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(125);
+}
+
 // FIXME: this depends on the system having true and false in PATH
 //        the best solution is probably to generate some test binaries that we can call for any
 //        utility that requires executing another program (kill, for instance)

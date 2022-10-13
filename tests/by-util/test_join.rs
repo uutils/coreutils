@@ -9,6 +9,11 @@ use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 use std::{ffi::OsString, os::windows::ffi::OsStringExt};
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn empty_files() {
     new_ucmd!()
         .arg("empty.txt")

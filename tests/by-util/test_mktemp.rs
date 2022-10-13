@@ -5,6 +5,8 @@ use crate::common::util::*;
 use uucore::display::Quotable;
 
 use std::path::PathBuf;
+#[cfg(not(windows))]
+use std::path::MAIN_SEPARATOR;
 use tempfile::tempdir;
 
 #[cfg(unix)]
@@ -35,6 +37,22 @@ macro_rules! assert_matches_template {
             "\"{}\" != \"{}\"",
             $template,
             $s
+        );
+    }};
+}
+
+/// Like [`assert_matches_template`] but for the suffix of a string.
+#[cfg(windows)]
+macro_rules! assert_suffix_matches_template {
+    ($template:expr, $s:expr) => {{
+        let n = ($s).len();
+        let m = ($template).len();
+        let suffix = &$s[n - m..n];
+        assert!(
+            matches_template($template, suffix),
+            "\"{}\" does not end with \"{}\"",
+            $template,
+            suffix
         );
     }};
 }
@@ -595,7 +613,11 @@ fn test_too_few_xs_suffix_directory() {
 
 #[test]
 fn test_too_many_arguments() {
-    new_ucmd!().args(&["-q", "a", "b"]).fails().code_is(1);
+    new_ucmd!()
+        .args(&["-q", "a", "b"])
+        .fails()
+        .code_is(1)
+        .usage_error("too many templates");
 }
 
 #[test]
@@ -662,4 +684,144 @@ fn test_mktemp_with_posixly_correct() {
         .env("POSIXLY_CORRECT", "1")
         .args(&["--suffix=b", "aXXXX"])
         .succeeds();
+}
+
+/// Test that files are created relative to `TMPDIR` environment variable.
+#[test]
+fn test_tmpdir_env_var() {
+    // `TMPDIR=. mktemp`
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd.env(TMPDIR, ".").succeeds();
+    let filename = result.no_stderr().stdout_str().trim_end();
+    #[cfg(not(windows))]
+    {
+        let template = format!(".{}tmp.XXXXXXXXXX", MAIN_SEPARATOR);
+        assert_matches_template!(&template, filename);
+    }
+    // On Windows, `env::temp_dir()` seems to give an absolute path
+    // regardless of the value of `TMPDIR`; see
+    // * https://github.com/uutils/coreutils/pull/3552#issuecomment-1211804981
+    // * https://doc.rust-lang.org/std/env/fn.temp_dir.html
+    // * https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-gettemppath2w
+    #[cfg(windows)]
+    assert_suffix_matches_template!("tmp.XXXXXXXXXX", filename);
+    assert!(at.file_exists(filename));
+
+    // FIXME This is not working because --tmpdir is configured to
+    // require a value.
+    //
+    // // `TMPDIR=. mktemp --tmpdir`
+    // let (at, mut ucmd) = at_and_ucmd!();
+    // let result = ucmd.env(TMPDIR, ".").arg("--tmpdir").succeeds();
+    // let filename = result.no_stderr().stdout_str().trim_end();
+    // let template = format!(".{}tmp.XXXXXXXXXX", MAIN_SEPARATOR);
+    // assert_matches_template!(&template, filename);
+    // assert!(at.file_exists(filename));
+
+    // `TMPDIR=. mktemp --tmpdir XXX`
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd.env(TMPDIR, ".").args(&["--tmpdir", "XXX"]).succeeds();
+    let filename = result.no_stderr().stdout_str().trim_end();
+    #[cfg(not(windows))]
+    {
+        let template = format!(".{}XXX", MAIN_SEPARATOR);
+        assert_matches_template!(&template, filename);
+    }
+    #[cfg(windows)]
+    assert_suffix_matches_template!("XXX", filename);
+    assert!(at.file_exists(filename));
+
+    // `TMPDIR=. mktemp XXX` - in this case `TMPDIR` is ignored.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd.env(TMPDIR, ".").arg("XXX").succeeds();
+    let filename = result.no_stderr().stdout_str().trim_end();
+    let template = "XXX";
+    assert_matches_template!(template, filename);
+    assert!(at.file_exists(filename));
+}
+
+#[test]
+fn test_nonexistent_tmpdir_env_var() {
+    #[cfg(not(windows))]
+    new_ucmd!().env(TMPDIR, "no/such/dir").fails().stderr_only("mktemp: failed to create file via template 'no/such/dir/tmp.XXXXXXXXXX': No such file or directory\n");
+    #[cfg(windows)]
+    {
+        let result = new_ucmd!().env(TMPDIR, r"no\such\dir").fails();
+        result.no_stdout();
+        let stderr = result.stderr_str();
+        assert!(
+            stderr.starts_with("mktemp: failed to create file via template"),
+            "{}",
+            stderr
+        );
+        assert!(
+            stderr.ends_with("no\\such\\dir\\tmp.XXXXXXXXXX': No such file or directory\n"),
+            "{}",
+            stderr
+        );
+    }
+
+    #[cfg(not(windows))]
+    new_ucmd!().env(TMPDIR, "no/such/dir").arg("-d").fails().stderr_only("mktemp: failed to create directory via template 'no/such/dir/tmp.XXXXXXXXXX': No such file or directory\n");
+    #[cfg(windows)]
+    {
+        let result = new_ucmd!().env(TMPDIR, r"no\such\dir").arg("-d").fails();
+        result.no_stdout();
+        let stderr = result.stderr_str();
+        assert!(
+            stderr.starts_with("mktemp: failed to create directory via template"),
+            "{}",
+            stderr
+        );
+        assert!(
+            stderr.ends_with("no\\such\\dir\\tmp.XXXXXXXXXX': No such file or directory\n"),
+            "{}",
+            stderr
+        );
+    }
+}
+
+#[test]
+fn test_nonexistent_dir_prefix() {
+    #[cfg(not(windows))]
+    new_ucmd!().arg("d/XXX").fails().stderr_only(
+        "mktemp: failed to create file via template 'd/XXX': No such file or directory\n",
+    );
+    #[cfg(windows)]
+    {
+        let result = new_ucmd!().arg(r"d\XXX").fails();
+        result.no_stdout();
+        let stderr = result.stderr_str();
+        assert!(
+            stderr.starts_with("mktemp: failed to create file via template"),
+            "{}",
+            stderr
+        );
+        assert!(
+            stderr.ends_with("d\\XXX': No such file or directory\n"),
+            "{}",
+            stderr
+        );
+    }
+
+    #[cfg(not(windows))]
+    new_ucmd!().arg("-d").arg("d/XXX").fails().stderr_only(
+        "mktemp: failed to create directory via template 'd/XXX': No such file or directory\n",
+    );
+    #[cfg(windows)]
+    {
+        let result = new_ucmd!().arg("-d").arg(r"d\XXX").fails();
+        result.no_stdout();
+        let stderr = result.stderr_str();
+        assert!(
+            stderr.starts_with("mktemp: failed to create directory via template"),
+            "{}",
+            stderr
+        );
+        assert!(
+            stderr.ends_with("d\\XXX': No such file or directory\n"),
+            "{}",
+            stderr
+        );
+    }
 }

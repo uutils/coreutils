@@ -311,4 +311,30 @@ mod tests {
         );
         assert!(random_string.as_bytes().ends_with(&[0]));
     }
+
+    /// Originally used to exclude an error within the `random` module. The two
+    /// affected tests timed out on windows, but only in the ci. These tests are
+    /// also the source for the concrete numbers. The timed out tests are
+    /// `test_tail.rs::test_pipe_when_lines_option_given_input_size_has_multiple_size_of_buffer_size`
+    /// `test_tail.rs::test_pipe_when_bytes_option_given_input_size_has_multiple_size_of_buffer_size`.
+    #[test]
+    fn test_generate_random_strings_when_length_is_around_critical_buffer_sizes() {
+        let length = 8192 * 3;
+        let random_string = RandomString::generate(AlphanumericNewline, length);
+        assert_eq!(length, random_string.len());
+
+        let length = 8192 * 3 + 1;
+        let random_string =
+            RandomString::generate_with_delimiter(&Alphanumeric, b'\n', 100, true, length);
+        assert_eq!(length, random_string.len());
+        assert_eq!(
+            100,
+            random_string
+                .as_bytes()
+                .iter()
+                .filter(|p| **p == b'\n')
+                .count()
+        );
+        assert!(!random_string.as_bytes().ends_with(&[0]));
+    }
 }

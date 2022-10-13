@@ -111,7 +111,7 @@ mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
         Some(v) => v.clone().map(|v| v.to_owned()).collect(),

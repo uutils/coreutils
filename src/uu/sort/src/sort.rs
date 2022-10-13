@@ -1104,27 +1104,45 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     settings.mode = if matches.contains_id(options::modes::HUMAN_NUMERIC)
-        || matches.value_of(options::modes::SORT) == Some("human-numeric")
+        || matches
+            .get_one::<String>(options::modes::SORT)
+            .map(|s| s.as_str())
+            == Some("human-numeric")
     {
         SortMode::HumanNumeric
     } else if matches.contains_id(options::modes::MONTH)
-        || matches.value_of(options::modes::SORT) == Some("month")
+        || matches
+            .get_one::<String>(options::modes::SORT)
+            .map(|s| s.as_str())
+            == Some("month")
     {
         SortMode::Month
     } else if matches.contains_id(options::modes::GENERAL_NUMERIC)
-        || matches.value_of(options::modes::SORT) == Some("general-numeric")
+        || matches
+            .get_one::<String>(options::modes::SORT)
+            .map(|s| s.as_str())
+            == Some("general-numeric")
     {
         SortMode::GeneralNumeric
     } else if matches.contains_id(options::modes::NUMERIC)
-        || matches.value_of(options::modes::SORT) == Some("numeric")
+        || matches
+            .get_one::<String>(options::modes::SORT)
+            .map(|s| s.as_str())
+            == Some("numeric")
     {
         SortMode::Numeric
     } else if matches.contains_id(options::modes::VERSION)
-        || matches.value_of(options::modes::SORT) == Some("version")
+        || matches
+            .get_one::<String>(options::modes::SORT)
+            .map(|s| s.as_str())
+            == Some("version")
     {
         SortMode::Version
     } else if matches.contains_id(options::modes::RANDOM)
-        || matches.value_of(options::modes::SORT) == Some("random")
+        || matches
+            .get_one::<String>(options::modes::SORT)
+            .map(|s| s.as_str())
+            == Some("random")
     {
         settings.salt = Some(get_rand_string());
         SortMode::Random
@@ -1137,7 +1155,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if matches.contains_id(options::PARALLEL) {
         // "0" is default - threads = num of cores
         settings.threads = matches
-            .value_of(options::PARALLEL)
+            .get_one::<String>(options::PARALLEL)
             .map(String::from)
             .unwrap_or_else(|| "0".to_string());
         env::set_var("RAYON_NUM_THREADS", &settings.threads);
@@ -1145,7 +1163,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     settings.buffer_size =
         matches
-            .value_of(options::BUF_SIZE)
+            .get_one::<String>(options::BUF_SIZE)
             .map_or(Ok(DEFAULT_BUF_SIZE), |s| {
                 GlobalSettings::parse_byte_count(s).map_err(|e| {
                     USimpleError::new(2, format_error_message(&e, s, options::BUF_SIZE))
@@ -1154,14 +1172,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut tmp_dir = TmpDirWrapper::new(
         matches
-            .value_of(options::TMP_DIR)
+            .get_one::<String>(options::TMP_DIR)
             .map(PathBuf::from)
             .unwrap_or_else(env::temp_dir),
     );
 
-    settings.compress_prog = matches.value_of(options::COMPRESS_PROG).map(String::from);
+    settings.compress_prog = matches
+        .get_one::<String>(options::COMPRESS_PROG)
+        .map(String::from);
 
-    if let Some(n_merge) = matches.value_of(options::BATCH_SIZE) {
+    if let Some(n_merge) = matches.get_one::<String>(options::BATCH_SIZE) {
         settings.merge_batch_size = n_merge.parse().map_err(|_| {
             UUsageError::new(
                 2,
@@ -1176,7 +1196,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.check = matches.contains_id(options::check::CHECK);
     if matches.contains_id(options::check::CHECK_SILENT)
         || matches!(
-            matches.value_of(options::check::CHECK),
+            matches
+                .get_one::<String>(options::check::CHECK)
+                .map(|s| s.as_str()),
             Some(options::check::SILENT) | Some(options::check::QUIET)
         )
     {
@@ -1262,7 +1284,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         open(file)?;
     }
 
-    let output = Output::new(matches.value_of(options::OUTPUT))?;
+    let output = Output::new(
+        matches
+            .get_one::<String>(options::OUTPUT)
+            .map(|s| s.as_str()),
+    )?;
 
     settings.init_precomputed();
 

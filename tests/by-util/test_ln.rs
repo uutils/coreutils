@@ -2,6 +2,11 @@ use crate::common::util::*;
 use std::path::PathBuf;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_symlink_existing_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_symlink_existing_file";

@@ -3,6 +3,11 @@
 use crate::common::util::*;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_single_file() {
     new_ucmd!()
         .arg("lorem_ipsum.txt")

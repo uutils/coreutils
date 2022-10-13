@@ -86,16 +86,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // opts.optflag("Z", "", "set the SELinux security context to default type");
     // opts.optopt("", "context", "like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX");
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let mode = get_mode(&matches).map_err(|e| USimpleError::new(1, e))?;
 
-    let file_name = matches.value_of("name").expect("Missing argument 'NAME'");
+    let file_name = matches
+        .get_one::<String>("name")
+        .expect("Missing argument 'NAME'");
 
     // Only check the first character, to allow mnemonic usage like
     // 'mknod /dev/rst0 character 18 0'.
     let ch = matches
-        .value_of("type")
+        .get_one::<String>("type")
         .expect("Missing argument 'TYPE'")
         .chars()
         .next()
@@ -113,7 +115,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Ok(())
         }
     } else {
-        match (matches.value_of("major"), matches.value_of("minor")) {
+        match (
+            matches.get_one::<String>("major"),
+            matches.get_one::<String>("minor"),
+        ) {
             (None, None) | (_, None) | (None, _) => {
                 return Err(UUsageError::new(
                     1,
@@ -188,7 +193,7 @@ pub fn uu_app<'a>() -> Command<'a> {
 }
 
 fn get_mode(matches: &ArgMatches) -> Result<mode_t, String> {
-    match matches.value_of("mode") {
+    match matches.get_one::<String>("mode") {
         None => Ok(MODE_RW_UGO),
         Some(str_mode) => uucore::mode::parse_mode(str_mode)
             .map_err(|e| format!("invalid mode ({})", e))

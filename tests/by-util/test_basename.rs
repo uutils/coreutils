@@ -192,3 +192,8 @@ fn test_simple_format() {
         .code_is(1)
         .stderr_contains("extra operand 'c'");
 }
+
+#[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}

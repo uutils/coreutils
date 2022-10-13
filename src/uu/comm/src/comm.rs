@@ -33,7 +33,7 @@ mod options {
 
 fn mkdelim(col: usize, opts: &ArgMatches) -> String {
     let mut s = String::new();
-    let delim = match opts.value_of(options::DELIMITER).unwrap() {
+    let delim = match opts.get_one::<String>(options::DELIMITER).unwrap().as_str() {
         "" => "\0",
         delim => delim,
     };
@@ -134,9 +134,9 @@ fn open_file(name: &str) -> io::Result<LineReader> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let matches = uu_app().get_matches_from(args);
-    let filename1 = matches.value_of(options::FILE_1).unwrap();
-    let filename2 = matches.value_of(options::FILE_2).unwrap();
+    let matches = uu_app().try_get_matches_from(args)?;
+    let filename1 = matches.get_one::<String>(options::FILE_1).unwrap();
+    let filename2 = matches.get_one::<String>(options::FILE_2).unwrap();
     let mut f1 = open_file(filename1).map_err_context(|| filename1.to_string())?;
     let mut f2 = open_file(filename2).map_err_context(|| filename2.to_string())?;
 

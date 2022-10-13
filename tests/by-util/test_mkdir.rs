@@ -21,6 +21,11 @@ static TEST_DIR11: &str = "mkdir_test11/..";
 static TEST_DIR12: &str = "mkdir_test12";
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_mkdir_mkdir() {
     new_ucmd!().arg(TEST_DIR1).succeeds();
 }

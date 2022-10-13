@@ -3,7 +3,7 @@
 #
 # UU_MAKE_PROFILE == 'debug' | 'release' ## build profile for *uutils* build; may be supplied by caller, defaults to 'debug'
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules ; (vars/env) SRCDIR vdir rcexp
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules ; (vars/env) SRCDIR vdir rcexp xpart
 
 set -e
 
@@ -184,6 +184,10 @@ sed -i "s/  {ERR_SUBST=>\"s\/(unrecognized|unknown) option \[-' \]\*foobar\[' \]
 
 # Remove the check whether a util was built. Otherwise tests against utils like "arch" are not run.
 sed -i "s|require_built_ |# require_built_ |g" init.cfg
+# Some tests are executed with the "nobody" user.
+# The check to verify if it works is based on the GNU coreutils version
+# making it too restrictive for us
+sed -i "s|\$PACKAGE_VERSION|[0-9]*|g" tests/rm/fail-2eperm.sh tests/mv/sticky-to-xpart.sh init.cfg
 
 # usage_vs_getopt.sh is heavily modified as it runs all the binaries
 # with the option -/ is used, clap is returning a better error than GNU's. Adjust the GNU test

@@ -562,6 +562,11 @@ fn test_no_operands() {
 }
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_mode_after_dash_dash() {
     let (at, ucmd) = at_and_ucmd!();
     run_single_test(

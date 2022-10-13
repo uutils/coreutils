@@ -164,7 +164,7 @@ impl Default for BlockSize {
 
 pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSizeError> {
     if matches.contains_id(OPT_BLOCKSIZE) {
-        let s = matches.value_of(OPT_BLOCKSIZE).unwrap();
+        let s = matches.get_one::<String>(OPT_BLOCKSIZE).unwrap();
         let bytes = parse_size(s)?;
 
         if bytes > 0 {

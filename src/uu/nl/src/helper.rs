@@ -29,15 +29,15 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
     // This vector holds error messages encountered.
     let mut errs: Vec<String> = vec![];
     settings.renumber = !opts.contains_id(options::NO_RENUMBER);
-    match opts.value_of(options::NUMBER_SEPARATOR) {
+    match opts.get_one::<String>(options::NUMBER_SEPARATOR) {
         None => {}
         Some(val) => {
             settings.number_separator = val.to_owned();
         }
     }
-    match opts.value_of(options::NUMBER_FORMAT) {
+    match opts.get_one::<String>(options::NUMBER_FORMAT) {
         None => {}
-        Some(val) => match val {
+        Some(val) => match val.as_str() {
             "ln" => {
                 settings.number_format = crate::NumberFormat::Left;
             }
@@ -52,7 +52,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
             }
         },
     }
-    match opts.value_of(options::BODY_NUMBERING) {
+    match opts.get_one::<String>(options::BODY_NUMBERING) {
         None => {}
         Some(val) => {
             let chars: Vec<char> = val.chars().collect();
@@ -66,7 +66,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
             }
         }
     }
-    match opts.value_of(options::FOOTER_NUMBERING) {
+    match opts.get_one::<String>(options::FOOTER_NUMBERING) {
         None => {}
         Some(val) => {
             let chars: Vec<char> = val.chars().collect();
@@ -80,7 +80,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
             }
         }
     }
-    match opts.value_of(options::HEADER_NUMBERING) {
+    match opts.get_one::<String>(options::HEADER_NUMBERING) {
         None => {}
         Some(val) => {
             let chars: Vec<char> = val.chars().collect();
@@ -94,7 +94,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
             }
         }
     }
-    match opts.value_of(options::LINE_INCREMENT) {
+    match opts.get_one::<String>(options::LINE_INCREMENT) {
         None => {}
         Some(val) => {
             let conv: Option<u64> = val.parse().ok();
@@ -106,7 +106,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
             }
         }
     }
-    match opts.value_of(options::NUMBER_WIDTH) {
+    match opts.get_one::<String>(options::NUMBER_WIDTH) {
         None => {}
         Some(val) => {
             let conv: Option<usize> = val.parse().ok();
@@ -118,7 +118,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
             }
         }
     }
-    match opts.value_of(options::STARTING_LINE_NUMBER) {
+    match opts.get_one::<String>(options::STARTING_LINE_NUMBER) {
         None => {}
         Some(val) => {
             let conv: Option<u64> = val.parse().ok();
@@ -130,7 +130,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
             }
         }
     }
-    match opts.value_of(options::JOIN_BLANK_LINES) {
+    match opts.get_one::<String>(options::JOIN_BLANK_LINES) {
         None => {}
         Some(val) => {
             let conv: Option<u64> = val.parse().ok();

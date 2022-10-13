@@ -53,7 +53,7 @@ const AFTER_HELP: &str = "\
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
     match Settings::from(&matches) {
         Ok(settings) => split(&settings),
         Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{}", e))),
@@ -144,7 +144,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .takes_value(true)
                 .value_name("N")
                 .default_value(OPT_DEFAULT_SUFFIX_LENGTH)
-                .help("use suffixes of length N (default 2)"),
+                .help("use suffixes of fixed length N. 0 implies dynamic length."),
         )
         .arg(
             Arg::new(OPT_HEX_SUFFIXES)
@@ -375,22 +375,22 @@ impl Strategy {
         ) {
             (false, false, false, false) => Ok(Self::Lines(1000)),
             (true, false, false, false) => {
-                let s = matches.value_of(OPT_LINES).unwrap();
+                let s = matches.get_one::<String>(OPT_LINES).unwrap();
                 let n = parse_size(s).map_err(StrategyError::Lines)?;
                 Ok(Self::Lines(n))
             }
             (false, true, false, false) => {
-                let s = matches.value_of(OPT_BYTES).unwrap();
+                let s = matches.get_one::<String>(OPT_BYTES).unwrap();
                 let n = parse_size(s).map_err(StrategyError::Bytes)?;
                 Ok(Self::Bytes(n))
             }
             (false, false, true, false) => {
-                let s = matches.value_of(OPT_LINE_BYTES).unwrap();
+                let s = matches.get_one::<String>(OPT_LINE_BYTES).unwrap();
                 let n = parse_size(s).map_err(StrategyError::Bytes)?;
                 Ok(Self::LineBytes(n))
             }
             (false, false, false, true) => {
-                let s = matches.value_of(OPT_NUMBER).unwrap();
+                let s = matches.get_one::<String>(OPT_NUMBER).unwrap();
                 let number_type = NumberType::from(s).map_err(StrategyError::NumberType)?;
                 Ok(Self::Number(number_type))
             }
@@ -400,13 +400,23 @@ impl Strategy {
 }
 
 /// Parse the suffix type from the command-line arguments.
-fn suffix_type_from(matches: &ArgMatches) -> SuffixType {
+fn suffix_type_from(matches: &ArgMatches) -> Result<(SuffixType, usize), SettingsError> {
     if matches.value_source(OPT_NUMERIC_SUFFIXES) == Some(ValueSource::CommandLine) {
-        SuffixType::Decimal
+        let suffix_start = matches.value_of(OPT_NUMERIC_SUFFIXES);
+        let suffix_start = suffix_start.ok_or(SettingsError::SuffixNotParsable(String::new()))?;
+        let suffix_start = suffix_start
+            .parse()
+            .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
+        Ok((SuffixType::Decimal, suffix_start))
     } else if matches.value_source(OPT_HEX_SUFFIXES) == Some(ValueSource::CommandLine) {
-        SuffixType::Hexadecimal
+        let suffix_start = matches.value_of(OPT_HEX_SUFFIXES);
+        let suffix_start = suffix_start.ok_or(SettingsError::SuffixNotParsable(String::new()))?;
+        let suffix_start = usize::from_str_radix(suffix_start, 16)
+            .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
+        Ok((SuffixType::Hexadecimal, suffix_start))
     } else {
-        SuffixType::Alphabetic
+        // no numeric/hex suffix
+        Ok((SuffixType::Alphabetic, 0))
     }
 }
 
@@ -418,6 +428,7 @@ struct Settings {
     prefix: String,
     suffix_type: SuffixType,
     suffix_length: usize,
+    suffix_start: usize,
     additional_suffix: String,
     input: String,
     /// When supplied, a shell command to output to instead of xaa, xab …
@@ -489,13 +500,16 @@ impl fmt::Display for SettingsError {
 impl Settings {
     /// Parse a strategy from the command-line arguments.
     fn from(matches: &ArgMatches) -> Result<Self, SettingsError> {
-        let additional_suffix = matches.value_of(OPT_ADDITIONAL_SUFFIX).unwrap().to_string();
+        let additional_suffix = matches
+            .get_one::<String>(OPT_ADDITIONAL_SUFFIX)
+            .unwrap()
+            .to_string();
         if additional_suffix.contains('/') {
             return Err(SettingsError::SuffixContainsSeparator(additional_suffix));
         }
         let strategy = Strategy::from(matches).map_err(SettingsError::Strategy)?;
-        let suffix_type = suffix_type_from(matches);
-        let suffix_length_str = matches.value_of(OPT_SUFFIX_LENGTH).unwrap();
+        let (suffix_type, suffix_start) = suffix_type_from(matches)?;
+        let suffix_length_str = matches.get_one::<String>(OPT_SUFFIX_LENGTH).unwrap();
         let suffix_length: usize = suffix_length_str
             .parse()
             .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?;
@@ -514,12 +528,13 @@ impl Settings {
                 .parse()
                 .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?,
             suffix_type,
+            suffix_start,
             additional_suffix,
             verbose: matches.value_source("verbose") == Some(ValueSource::CommandLine),
             strategy,
-            input: matches.value_of(ARG_INPUT).unwrap().to_owned(),
-            prefix: matches.value_of(ARG_PREFIX).unwrap().to_owned(),
-            filter: matches.value_of(OPT_FILTER).map(|s| s.to_owned()),
+            input: matches.get_one::<String>(ARG_INPUT).unwrap().to_owned(),
+            prefix: matches.get_one::<String>(ARG_PREFIX).unwrap().to_owned(),
+            filter: matches.get_one::<String>(OPT_FILTER).map(|s| s.to_owned()),
             elide_empty_files: matches.contains_id(OPT_ELIDE_EMPTY_FILES),
         };
         #[cfg(windows)]
@@ -586,7 +601,8 @@ impl<'a> ByteChunkWriter<'a> {
             &settings.additional_suffix,
             settings.suffix_length,
             settings.suffix_type,
-        );
+            settings.suffix_start,
+        )?;
         let filename = filename_iterator
             .next()
             .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
@@ -714,7 +730,8 @@ impl<'a> LineChunkWriter<'a> {
             &settings.additional_suffix,
             settings.suffix_length,
             settings.suffix_type,
-        );
+            settings.suffix_start,
+        )?;
         let filename = filename_iterator
             .next()
             .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
@@ -822,7 +839,8 @@ impl<'a> LineBytesChunkWriter<'a> {
             &settings.additional_suffix,
             settings.suffix_length,
             settings.suffix_type,
-        );
+            settings.suffix_start,
+        )?;
         let filename = filename_iterator
             .next()
             .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
@@ -1019,7 +1037,8 @@ where
         &settings.additional_suffix,
         settings.suffix_length,
         settings.suffix_type,
-    );
+        settings.suffix_start,
+    )?;
 
     // Create one writer for each chunk. This will create each
     // of the underlying files (if not in `--filter` mode).
@@ -1095,7 +1114,8 @@ where
         &settings.additional_suffix,
         settings.suffix_length,
         settings.suffix_type,
-    );
+        settings.suffix_start,
+    )?;
 
     // Create one writer for each chunk. This will create each
     // of the underlying files (if not in `--filter` mode).

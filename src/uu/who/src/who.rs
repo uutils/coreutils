@@ -60,7 +60,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let after_help = get_long_usage();
 
-    let matches = uu_app().after_help(&after_help[..]).get_matches_from(args);
+    let matches = uu_app()
+        .after_help(&after_help[..])
+        .try_get_matches_from(args)?;
 
     let files: Vec<String> = matches
         .get_many::<String>(options::FILE)

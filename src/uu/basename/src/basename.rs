@@ -49,7 +49,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     //
     // Argument parsing
     //
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     // too few arguments
     if !matches.contains_id(options::NAME) {
@@ -82,7 +82,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let suffix = if opt_suffix {
-        matches.value_of(options::SUFFIX).unwrap()
+        matches.get_one::<String>(options::SUFFIX).unwrap()
     } else if !opt_multiple && name_args_count > 1 {
         matches
             .get_many::<String>(options::NAME)

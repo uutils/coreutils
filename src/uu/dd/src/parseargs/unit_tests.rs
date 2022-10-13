@@ -1,7 +1,11 @@
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat, oconv
 
 use super::*;
 
+use crate::conversion_tables::{
+    ASCII_TO_EBCDIC_UCASE_TO_LCASE, ASCII_TO_IBM, EBCDIC_TO_ASCII_LCASE_TO_UCASE,
+};
+use crate::parseargs::Parser;
 use crate::StatusLevel;
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
@@ -20,18 +24,22 @@ fn unimplemented_flags_should_error_non_linux() {
         "noctty",
         "nofollow",
     ] {
-        let args = vec![
-            String::from("dd"),
-            format!("--iflag={}", flag),
-            format!("--oflag={}", flag),
-        ];
-        let matches = uu_app().try_get_matches_from(args).unwrap();
+        let args = vec![format!("iflag={}", flag)];
 
-        if parse_iflags(&matches).is_ok() {
+        if Parser::new()
+            .parse(&args.iter().map(AsRef::as_ref).collect::<Vec<_>>()[..])
+            .is_ok()
+        {
             succeeded.push(format!("iflag={}", flag));
         }
-        if parse_oflags(&matches).is_ok() {
-            succeeded.push(format!("oflag={}", flag));
+
+        let args = vec![format!("oflag={}", flag)];
+
+        if Parser::new()
+            .parse(&args.iter().map(AsRef::as_ref).collect::<Vec<_>>()[..])
+            .is_ok()
+        {
+            succeeded.push(format!("iflag={}", flag));
         }
     }
 
@@ -48,18 +56,22 @@ fn unimplemented_flags_should_error() {
 
     // The following flags are not implemented
     for flag in ["cio", "nocache", "nolinks", "text", "binary"] {
-        let args = vec![
-            String::from("dd"),
-            format!("--iflag={}", flag),
-            format!("--oflag={}", flag),
-        ];
-        let matches = uu_app().try_get_matches_from(args).unwrap();
+        let args = vec![format!("iflag={}", flag)];
 
-        if parse_iflags(&matches).is_ok() {
+        if Parser::new()
+            .parse(&args.iter().map(AsRef::as_ref).collect::<Vec<_>>()[..])
+            .is_ok()
+        {
             succeeded.push(format!("iflag={}", flag));
         }
-        if parse_oflags(&matches).is_ok() {
-            succeeded.push(format!("oflag={}", flag));
+
+        let args = vec![format!("oflag={}", flag)];
+
+        if Parser::new()
+            .parse(&args.iter().map(AsRef::as_ref).collect::<Vec<_>>()[..])
+            .is_ok()
+        {
+            succeeded.push(format!("iflag={}", flag));
         }
     }
 
@@ -72,103 +84,62 @@ fn unimplemented_flags_should_error() {
 
 #[test]
 fn test_status_level_absent() {
-    let args = vec![
-        String::from("dd"),
-        String::from("--if=foo.file"),
-        String::from("--of=bar.file"),
-    ];
+    let args = &["if=foo.file", "of=bar.file"];
 
-    let matches = uu_app().try_get_matches_from(args).unwrap();
-    let st = parse_status_level(&matches).unwrap();
-
-    assert_eq!(st, None);
+    assert_eq!(Parser::new().parse(args).unwrap().status, None)
 }
 
 #[test]
 fn test_status_level_none() {
-    let args = vec![
-        String::from("dd"),
-        String::from("--status=none"),
-        String::from("--if=foo.file"),
-        String::from("--of=bar.file"),
-    ];
+    let args = &["status=none", "if=foo.file", "of=bar.file"];
 
-    let matches = uu_app().try_get_matches_from(args).unwrap();
-    let st = parse_status_level(&matches).unwrap().unwrap();
-
-    assert_eq!(st, StatusLevel::None);
+    assert_eq!(
+        Parser::new().parse(args).unwrap().status,
+        Some(StatusLevel::None)
+    )
 }
 
 #[test]
 fn test_all_top_level_args_no_leading_dashes() {
-    let args = vec![
-        String::from("dd"),
-        String::from("if=foo.file"),
-        String::from("of=bar.file"),
-        String::from("ibs=10"),
-        String::from("obs=10"),
-        String::from("cbs=1"),
-        String::from("bs=100"),
-        String::from("count=2"),
-        String::from("skip=2"),
-        String::from("seek=2"),
-        String::from("iseek=2"),
-        String::from("oseek=2"),
-        String::from("status=progress"),
-        String::from("conv=ascii,ucase"),
-        String::from("iflag=count_bytes,skip_bytes"),
-        String::from("oflag=append,seek_bytes"),
+    let args = &[
+        "if=foo.file",
+        "of=bar.file",
+        "ibs=10",
+        "obs=10",
+        "cbs=1",
+        "bs=100",
+        "count=2",
+        "skip=2",
+        "seek=2",
+        "iseek=2",
+        "oseek=2",
+        "status=progress",
+        "conv=ascii,ucase",
+        "iflag=count_bytes,skip_bytes",
+        "oflag=append,seek_bytes",
     ];
-    let args = args
-        .into_iter()
-        .fold(Vec::new(), append_dashes_if_not_present);
 
-    let matches = uu_app().try_get_matches_from(args).unwrap();
+    let settings = Parser::new().parse(args).unwrap();
 
-    assert_eq!(100, parse_ibs(&matches).unwrap());
-    assert_eq!(100, parse_obs(&matches).unwrap());
-    assert_eq!(1, parse_cbs(&matches).unwrap().unwrap());
+    // ibs=10 and obs=10 are overwritten by bs=100
+    assert_eq!(settings.ibs, 100);
+    assert_eq!(settings.obs, 100);
+
+    // count=2 iflag=count_bytes
+    assert_eq!(settings.count, Some(Num::Bytes(2)));
+
+    // seek=2 oflag=seek_bytes
+    assert_eq!(settings.seek, 2);
+
+    // skip=2 iflag=skip_bytes
+    assert_eq!(settings.skip, 2);
+
+    // status=progress
+    assert_eq!(settings.status, Some(StatusLevel::Progress));
+
+    // conv=ascii,ucase
     assert_eq!(
-        CountType::Bytes(2),
-        parse_count(
-            &IFlags {
-                count_bytes: true,
-                ..IFlags::default()
-            },
-            &matches
-        )
-        .unwrap()
-        .unwrap()
-    );
-    assert_eq!(
-        200,
-        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::SKIP)
-            .unwrap()
-            .unwrap()
-    );
-    assert_eq!(
-        200,
-        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::SEEK)
-            .unwrap()
-            .unwrap()
-    );
-    assert_eq!(
-        200,
-        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::ISEEK)
-            .unwrap()
-            .unwrap()
-    );
-    assert_eq!(
-        200,
-        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::OSEEK)
-            .unwrap()
-            .unwrap()
-    );
-    assert_eq!(
-        StatusLevel::Progress,
-        parse_status_level(&matches).unwrap().unwrap()
-    );
-    assert_eq!(
+        settings.iconv,
         IConvFlags {
             // ascii implies unblock
             mode: Some(ConversionMode::ConvertThenUnblock(
@@ -177,500 +148,294 @@ fn test_all_top_level_args_no_leading_dashes() {
             )),
             ..IConvFlags::default()
         },
-        parse_conv_flag_input(&matches).unwrap()
     );
+
+    // no conv flags apply to output
+    assert_eq!(settings.oconv, OConvFlags::default(),);
+
+    // iconv=count_bytes,skip_bytes
     assert_eq!(
-        OConvFlags::default(),
-        parse_conv_flag_output(&matches).unwrap()
-    );
-    assert_eq!(
+        settings.iflags,
         IFlags {
             count_bytes: true,
             skip_bytes: true,
             ..IFlags::default()
         },
-        parse_iflags(&matches).unwrap()
     );
+
+    // oconv=append,seek_bytes
     assert_eq!(
+        settings.oflags,
         OFlags {
             append: true,
             seek_bytes: true,
             ..OFlags::default()
         },
-        parse_oflags(&matches).unwrap()
-    );
-}
-
-#[test]
-fn test_all_top_level_args_with_leading_dashes() {
-    let args = vec![
-        String::from("dd"),
-        String::from("--if=foo.file"),
-        String::from("--of=bar.file"),
-        String::from("--ibs=10"),
-        String::from("--obs=10"),
-        String::from("--cbs=1"),
-        String::from("--bs=100"),
-        String::from("--count=2"),
-        String::from("--skip=2"),
-        String::from("--seek=2"),
-        String::from("--iseek=2"),
-        String::from("--oseek=2"),
-        String::from("--status=progress"),
-        String::from("--conv=ascii,ucase"),
-        String::from("--iflag=count_bytes,skip_bytes"),
-        String::from("--oflag=append,seek_bytes"),
-    ];
-    let args = args
-        .into_iter()
-        .fold(Vec::new(), append_dashes_if_not_present);
-
-    let matches = uu_app().try_get_matches_from(args).unwrap();
-
-    assert_eq!(100, parse_ibs(&matches).unwrap());
-    assert_eq!(100, parse_obs(&matches).unwrap());
-    assert_eq!(1, parse_cbs(&matches).unwrap().unwrap());
-    assert_eq!(
-        CountType::Bytes(2),
-        parse_count(
-            &IFlags {
-                count_bytes: true,
-                ..IFlags::default()
-            },
-            &matches
-        )
-        .unwrap()
-        .unwrap()
-    );
-    assert_eq!(
-        200,
-        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::SKIP)
-            .unwrap()
-            .unwrap()
-    );
-    assert_eq!(
-        200,
-        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::SEEK)
-            .unwrap()
-            .unwrap()
-    );
-    assert_eq!(
-        200,
-        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::ISEEK)
-            .unwrap()
-            .unwrap()
-    );
-    assert_eq!(
-        200,
-        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::OSEEK)
-            .unwrap()
-            .unwrap()
-    );
-    assert_eq!(
-        StatusLevel::Progress,
-        parse_status_level(&matches).unwrap().unwrap()
-    );
-    assert_eq!(
-        IConvFlags {
-            // ascii implies unblock
-            mode: Some(ConversionMode::ConvertThenUnblock(
-                &EBCDIC_TO_ASCII_LCASE_TO_UCASE,
-                1
-            )),
-            ..IConvFlags::default()
-        },
-        parse_conv_flag_input(&matches).unwrap()
-    );
-    assert_eq!(
-        OConvFlags::default(),
-        parse_conv_flag_output(&matches).unwrap()
-    );
-    assert_eq!(
-        IFlags {
-            count_bytes: true,
-            skip_bytes: true,
-            ..IFlags::default()
-        },
-        parse_iflags(&matches).unwrap()
-    );
-    assert_eq!(
-        OFlags {
-            append: true,
-            seek_bytes: true,
-            ..OFlags::default()
-        },
-        parse_oflags(&matches).unwrap()
     );
 }
 
 #[test]
 fn test_status_level_progress() {
-    let args = vec![
-        String::from("dd"),
-        String::from("--if=foo.file"),
-        String::from("--of=bar.file"),
-        String::from("--status=progress"),
-    ];
+    let args = &["if=foo.file", "of=bar.file", "status=progress"];
 
-    let matches = uu_app().try_get_matches_from(args).unwrap();
-    let st = parse_status_level(&matches).unwrap().unwrap();
+    let settings = Parser::new().parse(args).unwrap();
 
-    assert_eq!(st, StatusLevel::Progress);
+    assert_eq!(settings.status, Some(StatusLevel::Progress));
 }
 
 #[test]
 fn test_status_level_noxfer() {
-    let args = vec![
-        String::from("dd"),
-        String::from("--if=foo.file"),
-        String::from("--status=noxfer"),
-        String::from("--of=bar.file"),
-    ];
+    let args = &["if=foo.file", "status=noxfer", "of=bar.file"];
 
-    let matches = uu_app().try_get_matches_from(args).unwrap();
-    let st = parse_status_level(&matches).unwrap().unwrap();
+    let settings = Parser::new().parse(args).unwrap();
 
-    assert_eq!(st, StatusLevel::Noxfer);
+    assert_eq!(settings.status, Some(StatusLevel::Noxfer));
 }
 
 #[test]
 fn test_multiple_flags_options() {
-    let args = vec![
-        String::from("dd"),
-        String::from("--iflag=fullblock,count_bytes"),
-        String::from("--iflag=skip_bytes"),
-        String::from("--oflag=append"),
-        String::from("--oflag=seek_bytes"),
-        String::from("--conv=ascii,ucase"),
-        String::from("--conv=unblock"),
+    let args = &[
+        "iflag=fullblock,count_bytes",
+        "iflag=skip_bytes",
+        "oflag=append",
+        "oflag=seek_bytes",
+        "conv=ascii,ucase",
+        "conv=unblock",
+        "cbs=512",
     ];
-    let matches = uu_app().try_get_matches_from(args).unwrap();
+    let settings = Parser::new().parse(args).unwrap();
 
     // iflag
-    let iflags = parse_flag_list::<Flag>(options::IFLAG, &matches).unwrap();
     assert_eq!(
-        vec![Flag::FullBlock, Flag::CountBytes, Flag::SkipBytes],
-        iflags
+        settings.iflags,
+        IFlags {
+            fullblock: true,
+            count_bytes: true,
+            skip_bytes: true,
+            ..Default::default()
+        }
     );
 
     // oflag
-    let oflags = parse_flag_list::<Flag>(options::OFLAG, &matches).unwrap();
-    assert_eq!(vec![Flag::Append, Flag::SeekBytes], oflags);
+    assert_eq!(
+        settings.oflags,
+        OFlags {
+            append: true,
+            seek_bytes: true,
+            ..Default::default()
+        }
+    );
 
     // conv
-    let conv = parse_flag_list::<ConvFlag>(options::CONV, &matches).unwrap();
     assert_eq!(
-        vec![ConvFlag::FmtEtoA, ConvFlag::UCase, ConvFlag::Unblock],
-        conv
+        settings.iconv,
+        IConvFlags {
+            mode: Some(ConversionMode::ConvertThenUnblock(
+                &EBCDIC_TO_ASCII_LCASE_TO_UCASE,
+                512
+            )),
+            ..Default::default()
+        }
     );
 }
 
 #[test]
 fn test_override_multiple_options() {
-    let args = vec![
-        String::from("dd"),
-        String::from("--if=foo.file"),
-        String::from("--if=correct.file"),
-        String::from("--of=bar.file"),
-        String::from("--of=correct.file"),
-        String::from("--ibs=256"),
-        String::from("--ibs=1024"),
-        String::from("--obs=256"),
-        String::from("--obs=1024"),
-        String::from("--cbs=1"),
-        String::from("--cbs=2"),
-        String::from("--skip=0"),
-        String::from("--skip=2"),
-        String::from("--seek=0"),
-        String::from("--seek=2"),
-        String::from("--iseek=0"),
-        String::from("--iseek=2"),
-        String::from("--oseek=0"),
-        String::from("--oseek=2"),
-        String::from("--status=none"),
-        String::from("--status=noxfer"),
-        String::from("--count=512"),
-        String::from("--count=1024"),
+    let args = &[
+        "if=foo.file",
+        "if=correct.file",
+        "of=bar.file",
+        "of=correct.file",
+        "ibs=256",
+        "ibs=1024",
+        "obs=256",
+        "obs=1024",
+        "cbs=1",
+        "cbs=2",
+        "skip=0",
+        "skip=2",
+        "seek=0",
+        "seek=2",
+        "iseek=0",
+        "iseek=2",
+        "oseek=0",
+        "oseek=2",
+        "status=none",
+        "status=noxfer",
+        "count=512",
+        "count=1024",
+        "iflag=count_bytes",
     ];
 
-    let matches = uu_app().try_get_matches_from(args).unwrap();
+    let settings = Parser::new().parse(args).unwrap();
 
-    // if
-    assert_eq!("correct.file", matches.value_of(options::INFILE).unwrap());
-
-    // of
-    assert_eq!("correct.file", matches.value_of(options::OUTFILE).unwrap());
-
-    // ibs
-    assert_eq!(1024, parse_ibs(&matches).unwrap());
-
-    // obs
-    assert_eq!(1024, parse_obs(&matches).unwrap());
-
-    // cbs
-    assert_eq!(2, parse_cbs(&matches).unwrap().unwrap());
-
-    // status
-    assert_eq!(
-        StatusLevel::Noxfer,
-        parse_status_level(&matches).unwrap().unwrap()
-    );
-
-    // skip
-    assert_eq!(
-        200,
-        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::SKIP)
-            .unwrap()
-            .unwrap()
-    );
-
-    // seek
-    assert_eq!(
-        200,
-        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::SEEK)
-            .unwrap()
-            .unwrap()
-    );
-
-    // iseek
-    assert_eq!(
-        200,
-        parse_seek_skip_amt(&100, IFlags::default().skip_bytes, &matches, options::ISEEK)
-            .unwrap()
-            .unwrap()
-    );
-
-    // oseek
-    assert_eq!(
-        200,
-        parse_seek_skip_amt(&100, OFlags::default().seek_bytes, &matches, options::OSEEK)
-            .unwrap()
-            .unwrap()
-    );
-
-    // count
-    assert_eq!(
-        CountType::Bytes(1024),
-        parse_count(
-            &IFlags {
-                count_bytes: true,
-                ..IFlags::default()
-            },
-            &matches
-        )
-        .unwrap()
-        .unwrap()
-    );
+    assert_eq!(settings.infile, Some("correct.file".into()));
+    assert_eq!(settings.outfile, Some("correct.file".into()));
+    assert_eq!(settings.ibs, 1024);
+    assert_eq!(settings.obs, 1024);
+    assert_eq!(settings.status, Some(StatusLevel::Noxfer));
+    assert_eq!(settings.skip, 2048);
+    assert_eq!(settings.seek, 2048);
+    assert_eq!(settings.count, Some(Num::Bytes(1024)));
 }
 
-// ----- IConvFlags/Output -----
+// // ----- IConvFlags/Output -----
 
 #[test]
-#[should_panic]
 fn icf_ctable_error() {
-    let args = vec![String::from("dd"), String::from("--conv=ascii,ebcdic,ibm")];
-
-    let matches = uu_app().try_get_matches_from(args).unwrap();
-
-    let _ = parse_conv_flag_input(&matches).unwrap();
+    let args = &["conv=ascii,ebcdic,ibm"];
+    assert!(Parser::new().parse(args).is_err());
 }
 
 #[test]
-#[should_panic]
 fn icf_case_error() {
-    let args = vec![String::from("dd"), String::from("--conv=ucase,lcase")];
-
-    let matches = uu_app().try_get_matches_from(args).unwrap();
-
-    let _ = parse_conv_flag_input(&matches).unwrap();
+    let args = &["conv=ucase,lcase"];
+    assert!(Parser::new().parse(args).is_err());
 }
 
 #[test]
-#[should_panic]
 fn icf_block_error() {
-    let args = vec![String::from("dd"), String::from("--conv=block,unblock")];
-
-    let matches = uu_app().try_get_matches_from(args).unwrap();
-
-    let _ = parse_conv_flag_input(&matches).unwrap();
+    let args = &["conv=block,unblock"];
+    assert!(Parser::new().parse(args).is_err());
 }
 
 #[test]
-#[should_panic]
 fn icf_creat_error() {
-    let args = vec![String::from("dd"), String::from("--conv=excl,nocreat")];
-
-    let matches = uu_app().try_get_matches_from(args).unwrap();
-
-    let _ = parse_conv_flag_output(&matches).unwrap();
+    let args = &["conv=excl,nocreat"];
+    assert!(Parser::new().parse(args).is_err());
 }
 
 #[test]
 fn parse_icf_token_ibm() {
-    let exp = vec![ConvFlag::FmtAtoI];
+    let args = &["conv=ibm"];
+    let settings = Parser::new().parse(args).unwrap();
 
-    let args = vec![String::from("dd"), String::from("--conv=ibm")];
-    let matches = uu_app().try_get_matches_from(args).unwrap();
-
-    let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
-
-    assert_eq!(exp.len(), act.len());
-    for cf in &exp {
-        assert!(exp.contains(cf));
-    }
+    assert_eq!(
+        settings.iconv,
+        IConvFlags {
+            mode: Some(ConversionMode::ConvertOnly(&ASCII_TO_IBM)),
+            ..Default::default()
+        }
+    );
 }
 
 #[test]
 fn parse_icf_tokens_elu() {
-    let exp = vec![ConvFlag::FmtEtoA, ConvFlag::LCase, ConvFlag::Unblock];
+    let args = &["conv=ebcdic,lcase"];
+    let settings = Parser::new().parse(args).unwrap();
 
-    let args = vec![
-        String::from("dd"),
-        String::from("--conv=ebcdic,lcase,unblock"),
-    ];
-    let matches = uu_app().try_get_matches_from(args).unwrap();
-    let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
-
-    assert_eq!(exp.len(), act.len());
-    for cf in &exp {
-        assert!(exp.contains(cf));
-    }
+    assert_eq!(
+        settings.iconv,
+        IConvFlags {
+            mode: Some(ConversionMode::ConvertOnly(&ASCII_TO_EBCDIC_UCASE_TO_LCASE)),
+            ..Default::default()
+        }
+    );
 }
 
 #[test]
 fn parse_icf_tokens_remaining() {
-    let exp = vec![
-        ConvFlag::FmtAtoE,
-        ConvFlag::UCase,
-        ConvFlag::Block,
-        ConvFlag::Sparse,
-        ConvFlag::Swab,
-        ConvFlag::Sync,
-        ConvFlag::NoError,
-        ConvFlag::Excl,
-        ConvFlag::NoCreat,
-        ConvFlag::NoTrunc,
-        ConvFlag::NoError,
-        ConvFlag::FDataSync,
-        ConvFlag::FSync,
-    ];
-
-    let args = vec![
-        String::from("dd"),
-        String::from("--conv=ascii,ucase,block,sparse,swab,sync,noerror,excl,nocreat,notrunc,noerror,fdatasync,fsync"),
-    ];
-    let matches = uu_app().try_get_matches_from(args).unwrap();
-
-    let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
-
-    assert_eq!(exp.len(), act.len());
-    for cf in &exp {
-        assert!(exp.contains(cf));
-    }
+    let args = &["conv=ascii,ucase,block,sparse,swab,sync,noerror,excl,nocreat,notrunc,noerror,fdatasync,fsync"];
+    assert_eq!(
+        Parser::new().read(args),
+        Ok(Parser {
+            conv: ConvFlags {
+                ascii: true,
+                ucase: true,
+                block: true,
+                sparse: true,
+                swab: true,
+                sync: true,
+                noerror: true,
+                excl: true,
+                nocreat: true,
+                notrunc: true,
+                fdatasync: true,
+                fsync: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+    );
 }
 
 #[test]
 fn parse_iflag_tokens() {
-    let exp = vec![
-        Flag::FullBlock,
-        Flag::CountBytes,
-        Flag::SkipBytes,
-        Flag::Append,
-        Flag::SeekBytes,
-    ];
-
-    let args = vec![
-        String::from("dd"),
-        String::from("--iflag=fullblock,count_bytes,skip_bytes,append,seek_bytes"),
-    ];
-    let matches = uu_app().try_get_matches_from(args).unwrap();
-
-    let act = parse_flag_list::<Flag>("iflag", &matches).unwrap();
-
-    assert_eq!(exp.len(), act.len());
-    for cf in &exp {
-        assert!(exp.contains(cf));
-    }
+    let args = &["iflag=fullblock,count_bytes,skip_bytes"];
+    assert_eq!(
+        Parser::new().read(args),
+        Ok(Parser {
+            iflag: IFlags {
+                fullblock: true,
+                count_bytes: true,
+                skip_bytes: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+    );
 }
 
 #[test]
 fn parse_oflag_tokens() {
-    let exp = vec![
-        Flag::FullBlock,
-        Flag::CountBytes,
-        Flag::SkipBytes,
-        Flag::Append,
-        Flag::SeekBytes,
-    ];
-
-    let args = vec![
-        String::from("dd"),
-        String::from("--oflag=fullblock,count_bytes,skip_bytes,append,seek_bytes"),
-    ];
-    let matches = uu_app().try_get_matches_from(args).unwrap();
-
-    let act = parse_flag_list::<Flag>("oflag", &matches).unwrap();
-
-    assert_eq!(exp.len(), act.len());
-    for cf in &exp {
-        assert!(exp.contains(cf));
-    }
+    let args = &["oflag=append,seek_bytes"];
+    assert_eq!(
+        Parser::new().read(args),
+        Ok(Parser {
+            oflag: OFlags {
+                append: true,
+                seek_bytes: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+    );
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn parse_iflag_tokens_linux() {
-    let exp = vec![
-        Flag::Direct,
-        Flag::Directory,
-        Flag::Dsync,
-        Flag::Sync,
-        Flag::NonBlock,
-        Flag::NoATime,
-        Flag::NoCtty,
-        Flag::NoFollow,
-    ];
-
-    let args = vec![
-        String::from("dd"),
-        String::from("--iflag=direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow"),
-    ];
-    let matches = uu_app().try_get_matches_from(args).unwrap();
-
-    let act = parse_flag_list::<Flag>("iflag", &matches).unwrap();
-
-    assert_eq!(exp.len(), act.len());
-    for cf in &exp {
-        assert!(exp.contains(cf));
-    }
+    let args = &["iflag=direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow"];
+    assert_eq!(
+        Parser::new().read(args),
+        Ok(Parser {
+            iflag: IFlags {
+                direct: true,
+                directory: true,
+                dsync: true,
+                sync: true,
+                nonblock: true,
+                noatime: true,
+                noctty: true,
+                nofollow: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+    );
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn parse_oflag_tokens_linux() {
-    let exp = vec![
-        Flag::Direct,
-        Flag::Directory,
-        Flag::Dsync,
-        Flag::Sync,
-        Flag::NonBlock,
-        Flag::NoATime,
-        Flag::NoCtty,
-        Flag::NoFollow,
-    ];
-
-    let args = vec![
-        String::from("dd"),
-        String::from("--oflag=direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow"),
-    ];
-    let matches = uu_app().try_get_matches_from(args).unwrap();
-
-    let act = parse_flag_list::<Flag>("oflag", &matches).unwrap();
-
-    assert_eq!(exp.len(), act.len());
-    for cf in &exp {
-        assert!(exp.contains(cf));
-    }
+    let args = &["oflag=direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow"];
+    assert_eq!(
+        Parser::new().read(args),
+        Ok(Parser {
+            oflag: OFlags {
+                direct: true,
+                directory: true,
+                dsync: true,
+                sync: true,
+                nonblock: true,
+                noatime: true,
+                noctty: true,
+                nofollow: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+    );
 }
 
 // ----- Multiplier Strings etc. -----

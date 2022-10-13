@@ -26,7 +26,7 @@ const BUF_SIZE: usize = 16 * 1024;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let string = if let Some(values) = matches.get_many::<String>("STRING") {
         let mut result = values.fold(String::new(), |res, s| res + s + " ");

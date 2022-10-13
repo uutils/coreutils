@@ -21,6 +21,11 @@ const NOT_A_DIRECTORY: &str = "The directory name is invalid.";
 const NOT_A_DIRECTORY: &str = "Not a directory";
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 fn test_rmdir_empty_directory_no_parents() {
     let (at, mut ucmd) = at_and_ucmd!();
 

@@ -41,7 +41,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut args = args.collect_ignore();
     let obs_signal = handle_obsolete(&mut args);
 
-    let matches = uu_app().get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let mode = if matches.contains_id(options::TABLE) {
         Mode::Table
@@ -60,7 +60,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Mode::Kill => {
             let sig = if let Some(signal) = obs_signal {
                 signal
-            } else if let Some(signal) = matches.value_of(options::SIGNAL) {
+            } else if let Some(signal) = matches.get_one::<String>(options::SIGNAL) {
                 parse_signal_value(signal)?
             } else {
                 15_usize //SIGTERM

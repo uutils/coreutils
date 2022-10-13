@@ -12,3 +12,8 @@ fn test_arch_help() {
         .succeeds()
         .stdout_contains("architecture name");
 }
+
+#[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}

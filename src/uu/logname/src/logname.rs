@@ -38,7 +38,7 @@ static ABOUT: &str = "Print user's login name";
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
 
-    let _ = uu_app().get_matches_from(args);
+    let _ = uu_app().try_get_matches_from(args)?;
 
     match get_userlogin() {
         Some(userlogin) => println!("{}", userlogin),

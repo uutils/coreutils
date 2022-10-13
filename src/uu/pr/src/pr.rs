@@ -9,7 +9,7 @@
 #[macro_use]
 extern crate quick_error;
 
-use clap::{AppSettings, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgMatches, Command};
 use itertools::Itertools;
 use quick_error::ResultExt;
 use regex::Regex;
@@ -22,9 +22,8 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UResult};
+use uucore::error::UResult;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 const ABOUT: &str =
     "Write content of given file or standard input to standard output with pagination filter";
 const AFTER_HELP: &str =
@@ -85,7 +84,6 @@ mod options {
     pub const INDENT: &str = "indent";
     pub const JOIN_LINES: &str = "join-lines";
     pub const HELP: &str = "help";
-    pub const VERSION: &str = "version";
     pub const FILES: &str = "files";
 }
 
@@ -196,13 +194,11 @@ quick_error! {
 
 pub fn uu_app<'a>() -> Command<'a> {
     Command::new(uucore::util_name())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .infer_long_args(true)
         .args_override_self(true)
-        .setting(AppSettings::NoAutoHelp)
-        .setting(AppSettings::NoAutoVersion)
         .arg(
             Arg::new(options::PAGES)
                 .long(options::PAGES)
@@ -362,13 +358,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help("Show this help message")
-        )
-        .arg(
-            Arg::new(options::VERSION)
-                .short('V')
-                .long(options::VERSION)
-                .help("Show version information")
+                .help("Print help information")
         )
         .arg(
             Arg::new(options::FILES)
@@ -389,20 +379,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Ok(m) => m,
         Err(e) => {
             e.print()?;
-            set_exit_code(1);
             return Ok(());
         }
     };
-
-    if matches.contains_id(options::VERSION) {
-        println!("{}", command.render_long_version());
-        return Ok(());
-    }
-
-    if matches.contains_id(options::HELP) {
-        command.print_help()?;
-        return Ok(());
-    }
 
     let mut files = matches
         .get_many::<String>(options::FILES)
@@ -491,7 +470,7 @@ fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>
         })
     };
     matches
-        .value_of(opt)
+        .get_one::<String>(opt)
         .map(|i| (i.to_string(), format!("-{}", opt)))
         .map(from_parse_error_to_pr_error)
 }
@@ -522,7 +501,8 @@ fn build_options(
     };
 
     let header = matches
-        .value_of(options::HEADER)
+        .get_one::<String>(options::HEADER)
+        .map(|s| s.as_str())
         .unwrap_or(if is_merge_mode || paths[0] == FILE_STDIN {
             ""
         } else {
@@ -535,7 +515,7 @@ fn build_options(
         parse_usize(matches, options::FIRST_LINE_NUMBER).unwrap_or(Ok(default_first_number))?;
 
     let number = matches
-        .value_of(options::NUMBER_LINES)
+        .get_one::<String>(options::NUMBER_LINES)
         .map(|i| {
             let parse_result = i.parse::<usize>();
 
@@ -617,7 +597,7 @@ fn build_options(
     };
 
     let invalid_pages_map = |i: String| {
-        let unparsed_value = matches.value_of(options::PAGES).unwrap();
+        let unparsed_value = matches.get_one::<String>(options::PAGES).unwrap();
         i.parse::<usize>().map_err(|_e| {
             PrError::EncounteredErrors(format!(
                 "invalid --pages argument {}",
@@ -627,7 +607,7 @@ fn build_options(
     };
 
     let start_page = match matches
-        .value_of(options::PAGES)
+        .get_one::<String>(options::PAGES)
         .map(|i| {
             let x: Vec<_> = i.split(':').collect();
             x[0].to_string()
@@ -639,7 +619,7 @@ fn build_options(
     };
 
     let end_page = match matches
-        .value_of(options::PAGES)
+        .get_one::<String>(options::PAGES)
         .filter(|i| i.contains(':'))
         .map(|i| {
             let x: Vec<_> = i.split(':').collect();
@@ -689,9 +669,9 @@ fn build_options(
 
     let across_mode = matches.contains_id(options::ACROSS);
 
-    let column_separator = match matches.value_of(options::COLUMN_STRING_SEPARATOR) {
+    let column_separator = match matches.get_one::<String>(options::COLUMN_STRING_SEPARATOR) {
         Some(x) => Some(x),
-        None => matches.value_of(options::COLUMN_CHAR_SEPARATOR),
+        None => matches.get_one::<String>(options::COLUMN_CHAR_SEPARATOR),
     }
     .map(ToString::to_string)
     .unwrap_or_else(|| DEFAULT_COLUMN_SEPARATOR.to_string());

@@ -1,6 +1,6 @@
 [package]
 name = "uucore_procs"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["Roy Ivy III <rivy.dev@gmail.com>"]
 license = "MIT"
 description = "uutils ~ 'uucore' proc-macros"

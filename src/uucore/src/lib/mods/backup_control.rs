@@ -245,7 +245,7 @@ pub mod arguments {
 /// This function directly takes [`clap::ArgMatches`] as argument and looks for
 /// the '-S' and '--suffix' arguments itself.
 pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
-    let supplied_suffix = matches.value_of(arguments::OPT_SUFFIX);
+    let supplied_suffix = matches.get_one::<String>(arguments::OPT_SUFFIX);
     if let Some(suffix) = supplied_suffix {
         String::from(suffix)
     } else {
@@ -337,7 +337,7 @@ pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
         // is used but method is not specified, then the value of the
         // VERSION_CONTROL environment variable is used. And if VERSION_CONTROL
         // is not set, the default backup type is 'existing'.
-        if let Some(method) = matches.value_of(arguments::OPT_BACKUP) {
+        if let Some(method) = matches.get_one::<String>(arguments::OPT_BACKUP) {
             // Second argument is for the error string that is returned.
             match_method(method, "backup type")
         } else if let Ok(method) = env::var("VERSION_CONTROL") {

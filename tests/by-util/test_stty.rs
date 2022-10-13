@@ -3,6 +3,11 @@
 use crate::common::util::*;
 
 #[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
 #[ignore = "Fails because cargo test does not run in a tty"]
 fn runs() {
     new_ucmd!().succeeds();
