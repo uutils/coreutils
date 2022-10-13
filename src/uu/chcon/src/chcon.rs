@@ -66,15 +66,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options = match parse_command_line(config, args) {
         Ok(r) => r,
         Err(r) => {
-            if let Error::CommandLine(r) = &r {
-                match r.kind() {
-                    clap::error::ErrorKind::DisplayHelp
-                    | clap::error::ErrorKind::DisplayVersion => {
-                        println!("{}", r);
-                        return Ok(());
-                    }
-                    _ => {}
-                }
+            if let Error::CommandLine(r) = r {
+                return Err(r.into());
             }
 
             return Err(UUsageError::new(libc::EXIT_FAILURE, format!("{}.\n", r)));
@@ -163,6 +156,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .disable_help_flag(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
@@ -370,10 +364,10 @@ fn parse_command_line(config: clap::Command, args: impl uucore::Args) -> Result<
         CommandLineMode::ReferenceBased {
             reference: PathBuf::from(path),
         }
-    } else if matches.get_flag(options::USER)
-        || matches.get_flag(options::ROLE)
-        || matches.get_flag(options::TYPE)
-        || matches.get_flag(options::RANGE)
+    } else if matches.contains_id(options::USER)
+        || matches.contains_id(options::ROLE)
+        || matches.contains_id(options::TYPE)
+        || matches.contains_id(options::RANGE)
     {
         CommandLineMode::Custom {
             user: matches.get_one::<OsString>(options::USER).map(Into::into),
