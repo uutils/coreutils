@@ -171,6 +171,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
+                .required(true)
                 .value_parser(NonEmptyStringValueParser::new())
                 .value_hint(clap::ValueHint::AnyPath),
         )
