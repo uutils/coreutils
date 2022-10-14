@@ -41,6 +41,7 @@ fn main() -> io::Result<()> {
         \n\
         [Introduction](index.md)\n\
         * [Installation](installation.md)\n\
+        * [Build from source](build.md)\n\
         * [Contributing](contributing.md)\n\
         * [GNU test coverage](test_coverage.md)\n\
         \n\

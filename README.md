@@ -43,7 +43,7 @@ uutils has both user and developer documentation available:
 Both can also be generated locally, the instructions for that can be found in the
 [coreutils docs](https://github.com/uutils/coreutils-docs) repository.
 
-<!-- ANCHOR: installation (this mark is needed for mdbook) -->
+<!-- ANCHOR: build (this mark is needed for mdbook) -->
 ## Requirements
 
 * Rust (`cargo`, `rustc`)
@@ -197,15 +197,6 @@ Installing with `make` installs shell completions for all installed utilities
 for `bash`, `fish` and `zsh`. Completions for `elvish` and `powershell` can also
 be generated; See `Manually install shell completions`.
 
-### NixOS
-
-The [standard package set](https://nixos.org/nixpkgs/manual/) of [NixOS](https://nixos.org/)
-provides this package out of the box since 18.03:
-
-```shell
-$ nix-env -iA nixos.uutils-coreutils
-```
-
 ### Manually install shell completions
 
 The `coreutils` binary can generate completions for the `bash`, `elvish`, `fish`, `powershell`
@@ -263,7 +254,7 @@ To uninstall from a custom parent directory:
 # DESTDIR is also supported
 $ make PREFIX=/my/path uninstall
 ```
-<!-- ANCHOR_END: installation (this mark is needed for mdbook) -->
+<!-- ANCHOR_END: build (this mark is needed for mdbook) -->
 
 ## Testing
 
