@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::path::Path;
 use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
@@ -19,24 +19,20 @@ mod options {
     pub const DIR: &str = "dir";
 }
 
-fn get_long_usage() -> String {
-    String::from(
-        "Output each NAME with its last non-slash component and trailing slashes \n\
-        removed; if NAME contains no /'s, output '.' (meaning the current directory).",
-    )
+fn get_long_usage() -> &'static str {
+    "Output each NAME with its last non-slash component and trailing slashes \n\
+        removed; if NAME contains no /'s, output '.' (meaning the current directory)."
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let after_help = get_long_usage();
-
     let matches = uu_app()
-        .after_help(&after_help[..])
+        .after_help(get_long_usage())
         .try_get_matches_from(args)?;
 
-    let separator = if matches.contains_id(options::ZERO) {
+    let separator = if matches.get_flag(options::ZERO) {
         "\0"
     } else {
         "\n"
@@ -76,7 +72,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .about(ABOUT)
         .version(crate_version!())
@@ -86,12 +82,13 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::ZERO)
                 .long(options::ZERO)
                 .short('z')
-                .help("separate output with NUL rather than newline"),
+                .help("separate output with NUL rather than newline")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DIR)
                 .hide(true)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }

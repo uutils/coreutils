@@ -10,7 +10,7 @@
 
 // spell-checker:ignore (ToDO) nodename kernelname kernelrelease kernelversion sysname hwplatform mnrsv
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use platform_info::*;
 use uucore::{
     error::{FromIo, UResult},
@@ -62,15 +62,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         PlatformInfo::new().map_err_context(|| "failed to create PlatformInfo".to_string())?;
     let mut output = String::new();
 
-    let all = matches.contains_id(options::ALL);
-    let kernelname = matches.contains_id(options::KERNELNAME);
-    let nodename = matches.contains_id(options::NODENAME);
-    let kernelrelease = matches.contains_id(options::KERNELRELEASE);
-    let kernelversion = matches.contains_id(options::KERNELVERSION);
-    let machine = matches.contains_id(options::MACHINE);
-    let processor = matches.contains_id(options::PROCESSOR);
-    let hwplatform = matches.contains_id(options::HWPLATFORM);
-    let os = matches.contains_id(options::OS);
+    let all = matches.get_flag(options::ALL);
+    let kernelname = matches.get_flag(options::KERNELNAME);
+    let nodename = matches.get_flag(options::NODENAME);
+    let kernelrelease = matches.get_flag(options::KERNELRELEASE);
+    let kernelversion = matches.get_flag(options::KERNELVERSION);
+    let machine = matches.get_flag(options::MACHINE);
+    let processor = matches.get_flag(options::PROCESSOR);
+    let hwplatform = matches.get_flag(options::HWPLATFORM);
+    let os = matches.get_flag(options::OS);
 
     let none = !(all
         || kernelname
@@ -131,50 +131,80 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
-        .arg(Arg::new(options::ALL)
-            .short('a')
-            .long(options::ALL)
-            .help("Behave as though all of the options -mnrsv were specified."))
-        .arg(Arg::new(options::KERNELNAME)
-            .short('s')
-            .long(options::KERNELNAME)
-            .alias("sysname") // Obsolescent option in GNU uname
-            .help("print the kernel name."))
-        .arg(Arg::new(options::NODENAME)
-            .short('n')
-            .long(options::NODENAME)
-            .help("print the nodename (the nodename may be a name that the system is known by to a communications network)."))
-        .arg(Arg::new(options::KERNELRELEASE)
-            .short('r')
-            .long(options::KERNELRELEASE)
-            .alias("release") // Obsolescent option in GNU uname
-            .help("print the operating system release."))
-        .arg(Arg::new(options::KERNELVERSION)
-            .short('v')
-            .long(options::KERNELVERSION)
-            .help("print the operating system version."))
-        .arg(Arg::new(options::MACHINE)
-            .short('m')
-            .long(options::MACHINE)
-            .help("print the machine hardware name."))
-        .arg(Arg::new(options::OS)
-            .short('o')
-            .long(options::OS)
-            .help("print the operating system name."))
-        .arg(Arg::new(options::PROCESSOR)
-            .short('p')
-            .long(options::PROCESSOR)
-            .help("print the processor type (non-portable)")
-            .hide(true))
-        .arg(Arg::new(options::HWPLATFORM)
-            .short('i')
-            .long(options::HWPLATFORM)
-            .help("print the hardware platform (non-portable)")
-            .hide(true))
+        .arg(
+            Arg::new(options::ALL)
+                .short('a')
+                .long(options::ALL)
+                .help("Behave as though all of the options -mnrsv were specified.")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::KERNELNAME)
+                .short('s')
+                .long(options::KERNELNAME)
+                .alias("sysname") // Obsolescent option in GNU uname
+                .help("print the kernel name.")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::NODENAME)
+                .short('n')
+                .long(options::NODENAME)
+                .help(
+                    "print the nodename (the nodename may be a name that the system \
+                is known by to a communications network).",
+                )
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::KERNELRELEASE)
+                .short('r')
+                .long(options::KERNELRELEASE)
+                .alias("release") // Obsolescent option in GNU uname
+                .help("print the operating system release.")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::KERNELVERSION)
+                .short('v')
+                .long(options::KERNELVERSION)
+                .help("print the operating system version.")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::MACHINE)
+                .short('m')
+                .long(options::MACHINE)
+                .help("print the machine hardware name.")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::OS)
+                .short('o')
+                .long(options::OS)
+                .help("print the operating system name.")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::PROCESSOR)
+                .short('p')
+                .long(options::PROCESSOR)
+                .help("print the processor type (non-portable)")
+                .action(ArgAction::SetTrue)
+                .hide(true),
+        )
+        .arg(
+            Arg::new(options::HWPLATFORM)
+                .short('i')
+                .long(options::HWPLATFORM)
+                .help("print the hardware platform (non-portable)")
+                .action(ArgAction::SetTrue)
+                .hide(true),
+        )
 }

@@ -9,7 +9,7 @@ use crate::errors::*;
 use crate::format::format_and_print;
 use crate::options::*;
 use crate::units::{Result, Unit};
-use clap::{crate_version, Arg, ArgMatches, Command, ValueSource};
+use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
 use std::io::{BufRead, Write};
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
@@ -255,7 +255,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -281,7 +281,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::FORMAT)
                 .long(options::FORMAT)
                 .help("use printf style floating-point FORMAT; see FORMAT below for details")
-                .takes_value(true)
                 .value_name("FORMAT"),
         )
         .arg(
@@ -330,6 +329,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                     "print (without converting) the first N header lines; \
                      N defaults to 1 if not specified",
                 )
+                .num_args(..=1)
                 .value_name("N")
                 .default_missing_value(options::HEADER_DEFAULT)
                 .hide_default_value(true),
@@ -357,7 +357,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::NUMBER)
                 .hide(true)
-                .multiple_occurrences(true),
+                .action(ArgAction::Append),
         )
 }
 

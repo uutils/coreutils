@@ -13,7 +13,8 @@ mod platform;
 
 use crate::filenames::FilenameIterator;
 use crate::filenames::SuffixType;
-use clap::{crate_version, Arg, ArgMatches, Command, ValueSource};
+use clap::ArgAction;
+use clap::{crate_version, parser::ValueSource, Arg, ArgMatches, Command};
 use std::env;
 use std::fmt;
 use std::fs::{metadata, File};
@@ -61,7 +62,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about("Create output files containing consecutive or interleaved sections of input")
@@ -73,7 +74,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_BYTES)
                 .short('b')
                 .long(OPT_BYTES)
-                .takes_value(true)
                 .value_name("SIZE")
                 .help("put SIZE bytes per output file"),
         )
@@ -81,7 +81,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_LINE_BYTES)
                 .short('C')
                 .long(OPT_LINE_BYTES)
-                .takes_value(true)
                 .value_name("SIZE")
                 .default_value("2")
                 .help("put at most SIZE bytes of lines per output file"),
@@ -90,7 +89,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_LINES)
                 .short('l')
                 .long(OPT_LINES)
-                .takes_value(true)
                 .value_name("NUMBER")
                 .default_value("1000")
                 .help("put NUMBER lines/records per output file"),
@@ -99,7 +97,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_NUMBER)
                 .short('n')
                 .long(OPT_NUMBER)
-                .takes_value(true)
                 .value_name("CHUNKS")
                 .help("generate CHUNKS output files; see explanation below"),
         )
@@ -107,7 +104,6 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(OPT_ADDITIONAL_SUFFIX)
                 .long(OPT_ADDITIONAL_SUFFIX)
-                .takes_value(true)
                 .value_name("SUFFIX")
                 .default_value("")
                 .help("additional SUFFIX to append to output file names"),
@@ -115,7 +111,6 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(OPT_FILTER)
                 .long(OPT_FILTER)
-                .takes_value(true)
                 .value_name("COMMAND")
                 .value_hint(clap::ValueHint::CommandName)
                 .help(
@@ -126,22 +121,21 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_ELIDE_EMPTY_FILES)
                 .long(OPT_ELIDE_EMPTY_FILES)
                 .short('e')
-                .takes_value(false)
-                .help("do not generate empty output files with '-n'"),
+                .help("do not generate empty output files with '-n'")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_NUMERIC_SUFFIXES)
                 .short('d')
                 .long(OPT_NUMERIC_SUFFIXES)
-                .takes_value(true)
                 .default_missing_value("0")
+                .num_args(0..=1)
                 .help("use numeric suffixes instead of alphabetic"),
         )
         .arg(
             Arg::new(OPT_SUFFIX_LENGTH)
                 .short('a')
                 .long(OPT_SUFFIX_LENGTH)
-                .takes_value(true)
                 .value_name("N")
                 .default_value(OPT_DEFAULT_SUFFIX_LENGTH)
                 .help("use suffixes of fixed length N. 0 implies dynamic length."),
@@ -150,34 +144,30 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_HEX_SUFFIXES)
                 .short('x')
                 .long(OPT_HEX_SUFFIXES)
-                .takes_value(true)
                 .default_missing_value("0")
+                .num_args(0..=1)
                 .help("use hex suffixes instead of alphabetic"),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .long(OPT_VERBOSE)
-                .help("print a diagnostic just before each output file is opened"),
+                .help("print a diagnostic just before each output file is opened")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_IO_BLKSIZE)
-                .long(OPT_IO_BLKSIZE)
+                .long("io-blksize")
                 .alias(OPT_IO_BLKSIZE)
-                .takes_value(true)
                 .hide(true),
         )
         .arg(
             Arg::new(ARG_INPUT)
-                .takes_value(true)
                 .default_value("-")
-                .index(1)
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(ARG_PREFIX)
-                .takes_value(true)
                 .default_value("x")
-                .index(2),
         )
 }
 
@@ -402,14 +392,14 @@ impl Strategy {
 /// Parse the suffix type from the command-line arguments.
 fn suffix_type_from(matches: &ArgMatches) -> Result<(SuffixType, usize), SettingsError> {
     if matches.value_source(OPT_NUMERIC_SUFFIXES) == Some(ValueSource::CommandLine) {
-        let suffix_start = matches.value_of(OPT_NUMERIC_SUFFIXES);
+        let suffix_start = matches.get_one::<String>(OPT_NUMERIC_SUFFIXES);
         let suffix_start = suffix_start.ok_or(SettingsError::SuffixNotParsable(String::new()))?;
         let suffix_start = suffix_start
             .parse()
             .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
         Ok((SuffixType::Decimal, suffix_start))
     } else if matches.value_source(OPT_HEX_SUFFIXES) == Some(ValueSource::CommandLine) {
-        let suffix_start = matches.value_of(OPT_HEX_SUFFIXES);
+        let suffix_start = matches.get_one::<String>(OPT_HEX_SUFFIXES);
         let suffix_start = suffix_start.ok_or(SettingsError::SuffixNotParsable(String::new()))?;
         let suffix_start = usize::from_str_radix(suffix_start, 16)
             .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
@@ -535,7 +525,7 @@ impl Settings {
             input: matches.get_one::<String>(ARG_INPUT).unwrap().to_owned(),
             prefix: matches.get_one::<String>(ARG_PREFIX).unwrap().to_owned(),
             filter: matches.get_one::<String>(OPT_FILTER).map(|s| s.to_owned()),
-            elide_empty_files: matches.contains_id(OPT_ELIDE_EMPTY_FILES),
+            elide_empty_files: matches.get_flag(OPT_ELIDE_EMPTY_FILES),
         };
         #[cfg(windows)]
         if result.filter.is_some() {

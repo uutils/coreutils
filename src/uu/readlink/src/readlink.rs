@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs;
 use std::io::{stdout, Write};
 use std::path::{Path, PathBuf};
@@ -36,23 +36,23 @@ const ARG_FILES: &str = "files";
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let mut no_trailing_delimiter = matches.contains_id(OPT_NO_NEWLINE);
-    let use_zero = matches.contains_id(OPT_ZERO);
-    let silent = matches.contains_id(OPT_SILENT) || matches.contains_id(OPT_QUIET);
-    let verbose = matches.contains_id(OPT_VERBOSE);
+    let mut no_trailing_delimiter = matches.get_flag(OPT_NO_NEWLINE);
+    let use_zero = matches.get_flag(OPT_ZERO);
+    let silent = matches.get_flag(OPT_SILENT) || matches.get_flag(OPT_QUIET);
+    let verbose = matches.get_flag(OPT_VERBOSE);
 
-    let res_mode = if matches.contains_id(OPT_CANONICALIZE)
-        || matches.contains_id(OPT_CANONICALIZE_EXISTING)
-        || matches.contains_id(OPT_CANONICALIZE_MISSING)
+    let res_mode = if matches.get_flag(OPT_CANONICALIZE)
+        || matches.get_flag(OPT_CANONICALIZE_EXISTING)
+        || matches.get_flag(OPT_CANONICALIZE_MISSING)
     {
         ResolveMode::Logical
     } else {
         ResolveMode::None
     };
 
-    let can_mode = if matches.contains_id(OPT_CANONICALIZE_EXISTING) {
+    let can_mode = if matches.get_flag(OPT_CANONICALIZE_EXISTING) {
         MissingHandling::Existing
-    } else if matches.contains_id(OPT_CANONICALIZE_MISSING) {
+    } else if matches.get_flag(OPT_CANONICALIZE_MISSING) {
         MissingHandling::Missing
     } else {
         MissingHandling::Normal
@@ -98,7 +98,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -111,7 +111,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "canonicalize by following every symlink in every component of the \
                      given name recursively; all but the last component must exist",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_EXISTING)
@@ -120,7 +121,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "canonicalize by following every symlink in every component of the \
                      given name recursively, all components must exist",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_MISSING)
@@ -129,42 +131,47 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "canonicalize by following every symlink in every component of the \
                      given name recursively, without requirements on components existence",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_NO_NEWLINE)
                 .short('n')
                 .long(OPT_NO_NEWLINE)
-                .help("do not output the trailing delimiter"),
+                .help("do not output the trailing delimiter")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_QUIET)
                 .short('q')
                 .long(OPT_QUIET)
-                .help("suppress most error messages"),
+                .help("suppress most error messages")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_SILENT)
                 .short('s')
                 .long(OPT_SILENT)
-                .help("suppress most error messages"),
+                .help("suppress most error messages")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .short('v')
                 .long(OPT_VERBOSE)
-                .help("report error message"),
+                .help("report error message")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_ZERO)
                 .short('z')
                 .long(OPT_ZERO)
-                .help("separate output with NUL rather than newline"),
+                .help("separate output with NUL rather than newline")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(ARG_FILES)
-                .multiple_occurrences(true)
-                .takes_value(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }

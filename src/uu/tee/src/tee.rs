@@ -8,7 +8,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, Arg, Command, PossibleValue};
+use clap::{builder::PossibleValue, crate_version, Arg, ArgAction, Command};
 use retain_mut::RetainMut;
 use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
@@ -54,14 +54,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
     let options = Options {
-        append: matches.contains_id(options::APPEND),
-        ignore_interrupts: matches.contains_id(options::IGNORE_INTERRUPTS),
+        append: matches.get_flag(options::APPEND),
+        ignore_interrupts: matches.get_flag(options::IGNORE_INTERRUPTS),
         files: matches
             .get_many::<String>(options::FILE)
             .map(|v| v.map(ToString::to_string).collect())
             .unwrap_or_default(),
         output_error: {
-            if matches.contains_id(options::IGNORE_PIPE_ERRORS) {
+            if matches.get_flag(options::IGNORE_PIPE_ERRORS) {
                 Some(OutputErrorMode::WarnNoPipe)
             } else if matches.contains_id(options::OUTPUT_ERROR) {
                 if let Some(v) = matches.get_one::<String>(options::OUTPUT_ERROR) {
@@ -87,7 +87,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -98,30 +98,32 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::APPEND)
                 .long(options::APPEND)
                 .short('a')
-                .help("append to the given FILEs, do not overwrite"),
+                .help("append to the given FILEs, do not overwrite")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::IGNORE_INTERRUPTS)
                 .long(options::IGNORE_INTERRUPTS)
                 .short('i')
-                .help("ignore interrupt signals (ignored on non-Unix platforms)"),
+                .help("ignore interrupt signals (ignored on non-Unix platforms)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILE)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::IGNORE_PIPE_ERRORS)
                 .short('p')
-                .help("set write error behavior (ignored on non-Unix platforms)"),
+                .help("set write error behavior (ignored on non-Unix platforms)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OUTPUT_ERROR)
                 .long(options::OUTPUT_ERROR)
                 .require_equals(true)
-                .min_values(0)
-                .max_values(1)
+                .num_args(0..=1)
                 .value_parser([
                     PossibleValue::new("warn")
                         .help("produce warnings for errors writing to any output"),

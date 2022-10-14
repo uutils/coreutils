@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
@@ -39,8 +39,8 @@ const USAGE: &str = "\
     {} [OPTION]... OCTAL-MODE FILE...
     {} [OPTION]... --reference=RFILE FILE...";
 
-fn get_long_usage() -> String {
-    String::from("Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.")
+fn get_long_usage() -> &'static str {
+    "Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'."
 }
 
 #[uucore::main]
@@ -53,15 +53,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let after_help = get_long_usage();
 
-    let matches = uu_app()
-        .after_help(&after_help[..])
-        .try_get_matches_from(args)?;
+    let matches = uu_app().after_help(after_help).try_get_matches_from(args)?;
 
-    let changes = matches.contains_id(options::CHANGES);
-    let quiet = matches.contains_id(options::QUIET);
-    let verbose = matches.contains_id(options::VERBOSE);
-    let preserve_root = matches.contains_id(options::PRESERVE_ROOT);
-    let recursive = matches.contains_id(options::RECURSIVE);
+    let changes = matches.get_flag(options::CHANGES);
+    let quiet = matches.get_flag(options::QUIET);
+    let verbose = matches.get_flag(options::VERBOSE);
+    let preserve_root = matches.get_flag(options::PRESERVE_ROOT);
+    let recursive = matches.get_flag(options::RECURSIVE);
     let fmode = match matches.get_one::<String>(options::REFERENCE) {
         Some(fref) => match fs::metadata(fref) {
             Ok(meta) => Some(meta.mode()),
@@ -112,7 +110,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     chmoder.chmod(&files)
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -122,56 +120,58 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::CHANGES)
                 .long(options::CHANGES)
                 .short('c')
-                .help("like verbose but report only when a change is made"),
+                .help("like verbose but report only when a change is made")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::QUIET)
                 .long(options::QUIET)
                 .visible_alias("silent")
                 .short('f')
-                .help("suppress most error messages"),
+                .help("suppress most error messages")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::VERBOSE)
                 .long(options::VERBOSE)
                 .short('v')
-                .help("output a diagnostic for every file processed"),
+                .help("output a diagnostic for every file processed")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_PRESERVE_ROOT)
                 .long(options::NO_PRESERVE_ROOT)
-                .help("do not treat '/' specially (the default)"),
+                .help("do not treat '/' specially (the default)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRESERVE_ROOT)
                 .long(options::PRESERVE_ROOT)
-                .help("fail to operate recursively on '/'"),
+                .help("fail to operate recursively on '/'")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::RECURSIVE)
                 .long(options::RECURSIVE)
                 .short('R')
-                .help("change files and directories recursively"),
+                .help("change files and directories recursively")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REFERENCE)
                 .long("reference")
-                .takes_value(true)
                 .value_hint(clap::ValueHint::FilePath)
                 .help("use RFILE's mode instead of MODE values"),
         )
         .arg(
-            Arg::new(options::MODE)
-                .required_unless_present(options::REFERENCE)
-                .takes_value(true),
-            // It would be nice if clap could parse with delimiter, e.g. "g-x,u+x",
-            // however .multiple_occurrences(true) cannot be used here because FILE already needs that.
-            // Only one positional argument with .multiple_occurrences(true) set is allowed per command
+            Arg::new(options::MODE).required_unless_present(options::REFERENCE), // It would be nice if clap could parse with delimiter, e.g. "g-x,u+x",
+                                                                                 // however .multiple_occurrences(true) cannot be used here because FILE already needs that.
+                                                                                 // Only one positional argument with .multiple_occurrences(true) set is allowed per command
         )
         .arg(
             Arg::new(options::FILE)
                 .required_unless_present(options::MODE)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }

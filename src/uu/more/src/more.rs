@@ -17,7 +17,7 @@ use std::{
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 extern crate nix;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use crossterm::event::KeyEventKind;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
@@ -55,7 +55,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let mut buff = String::new();
-    let silent = matches.contains_id(options::SILENT);
+    let silent = matches.get_flag(options::SILENT);
     if let Some(files) = matches.get_many::<String>(options::FILES) {
         let mut stdout = setup_term();
         let length = files.len();
@@ -97,7 +97,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .about("A file perusal filter for CRT viewing.")
         .version(crate_version!())
@@ -106,7 +106,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::SILENT)
                 .short('d')
                 .long(options::SILENT)
-                .help("Display help instead of ringing bell"),
+                .help("Display help instead of ringing bell")
+                .action(ArgAction::SetTrue),
         )
         // The commented arguments below are unimplemented:
         /*
@@ -183,7 +184,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FILES)
                 .required(false)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .help("Path to the files to be read")
                 .value_hint(clap::ValueHint::FilePath),
         )

@@ -10,7 +10,7 @@
 use std::borrow::Cow;
 use std::io::{self, Result, Write};
 
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command};
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 
@@ -47,11 +47,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .arg(Arg::new("STRING").index(1).multiple_occurrences(true))
+        .arg(Arg::new("STRING").action(ArgAction::Append))
         .infer_long_args(true)
 }
 

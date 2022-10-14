@@ -35,7 +35,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map_err_context(|| format!("cannot create link {} to {}", new.quote(), old.quote()))
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -45,9 +45,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::FILES)
                 .hide(true)
                 .required(true)
-                .min_values(2)
-                .max_values(2)
-                .takes_value(true)
+                .num_args(2)
                 .value_hint(clap::ValueHint::AnyPath)
                 .value_parser(ValueParser::os_string()),
         )

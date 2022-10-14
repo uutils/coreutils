@@ -29,7 +29,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     remove_file(path).map_err_context(|| format!("cannot unlink {}", path.quote()))
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)

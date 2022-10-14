@@ -261,8 +261,8 @@ uudoc = [ "zip" ]
 [workspace]
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-clap_complete = "3.1"
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
+clap_complete = "4.0"
 once_cell = "1.13.1"
 phf = "0.11.1"
 selinux = { version="0.3", optional = true }

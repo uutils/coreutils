@@ -1856,6 +1856,7 @@ mod tests {
     // This error was first detected when running tail so tail is used here but
     // should fail with any command that takes piped input.
     // See also https://github.com/uutils/coreutils/issues/3895
+    #[cfg(feature = "tail")]
     #[test]
     #[cfg_attr(not(feature = "expensive_tests"), ignore)]
     fn test_when_piped_input_then_no_broken_pipe() {

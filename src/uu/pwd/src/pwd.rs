@@ -5,6 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
+use clap::ArgAction;
 use clap::{crate_version, Arg, Command};
 use std::env;
 use std::io;
@@ -125,7 +126,7 @@ fn logical_path() -> io::Result<PathBuf> {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
-    let cwd = if matches.contains_id(OPT_LOGICAL) {
+    let cwd = if matches.get_flag(OPT_LOGICAL) {
         logical_path()
     } else {
         physical_path()
@@ -148,7 +149,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -158,13 +159,15 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_LOGICAL)
                 .short('L')
                 .long(OPT_LOGICAL)
-                .help("use PWD from environment, even if it contains symlinks"),
+                .help("use PWD from environment, even if it contains symlinks")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_PHYSICAL)
                 .short('P')
                 .long(OPT_PHYSICAL)
                 .overrides_with(OPT_LOGICAL)
-                .help("avoid all symlinks"),
+                .help("avoid all symlinks")
+                .action(ArgAction::SetTrue),
         )
 }

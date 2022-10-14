@@ -98,10 +98,10 @@ macro_rules! bin {
 /// Generate the usage string for clap.
 ///
 /// This function replaces all occurrences of `{}` with the execution phrase
-/// and leaks the result to return a `&'static str`. It does **not** support
+/// and returns the resulting `String`. It does **not** support
 /// more advanced formatting features such as `{0}`.
-pub fn format_usage(s: &str) -> &'static str {
-    &*Box::leak(s.replace("{}", crate::execution_phrase()).into_boxed_str())
+pub fn format_usage(s: &str) -> String {
+    s.replace("{}", crate::execution_phrase())
 }
 
 pub fn get_utility_is_second_arg() -> bool {

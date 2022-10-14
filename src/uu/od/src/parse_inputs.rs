@@ -18,7 +18,8 @@ impl CommandLineOpts for ArgMatches {
     }
 
     fn opts_present(&self, opts: &[&str]) -> bool {
-        opts.iter().any(|opt| self.contains_id(opt))
+        opts.iter()
+            .any(|opt| self.value_source(opt) == Some(clap::parser::ValueSource::CommandLine))
     }
 }
 

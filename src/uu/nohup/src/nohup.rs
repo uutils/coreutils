@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use libc::{c_char, dup2, execvp, signal};
 use libc::{SIGHUP, SIG_IGN};
 use std::env;
@@ -114,7 +114,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -124,7 +124,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::CMD)
                 .hide(true)
                 .required(true)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::CommandName),
         )
         .trailing_var_arg(true)

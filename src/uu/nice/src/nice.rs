@@ -15,7 +15,7 @@ use std::ffi::CString;
 use std::io::Error;
 use std::ptr;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::{
     error::{set_exit_code, UClapError, UResult, USimpleError, UUsageError},
     format_usage,
@@ -100,7 +100,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
@@ -112,12 +112,11 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('n')
                 .long(options::ADJUSTMENT)
                 .help("add N to the niceness (default is 10)")
-                .takes_value(true)
                 .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(options::COMMAND)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::CommandName),
         )
 }

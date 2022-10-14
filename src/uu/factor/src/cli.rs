@@ -15,7 +15,7 @@ use std::io::BufRead;
 use std::io::{self, stdin, stdout, Write};
 
 mod factor;
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 pub use factor::*;
 use uucore::display::Quotable;
 use uucore::error::UResult;
@@ -78,10 +78,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .infer_long_args(true)
-        .arg(Arg::new(options::NUMBER).multiple_occurrences(true))
+        .arg(Arg::new(options::NUMBER).action(ArgAction::Append))
 }

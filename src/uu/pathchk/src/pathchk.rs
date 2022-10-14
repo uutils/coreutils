@@ -8,7 +8,7 @@
 //  * that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) lstat
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::display::Quotable;
@@ -44,9 +44,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
     // set working mode
-    let is_posix = matches.get_many::<String>(options::POSIX).is_some();
-    let is_posix_special = matches.get_many::<String>(options::POSIX_SPECIAL).is_some();
-    let is_portability = matches.get_many::<String>(options::PORTABILITY).is_some();
+    let is_posix = matches.get_flag(options::POSIX);
+    let is_posix_special = matches.get_flag(options::POSIX_SPECIAL);
+    let is_portability = matches.get_flag(options::PORTABILITY);
 
     let mode = if (is_posix && is_posix_special) || is_portability {
         Mode::Both
@@ -82,7 +82,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -91,22 +91,25 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::POSIX)
                 .short('p')
-                .help("check for most POSIX systems"),
+                .help("check for most POSIX systems")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::POSIX_SPECIAL)
                 .short('P')
-                .help(r#"check for empty names and leading "-""#),
+                .help(r#"check for empty names and leading "-""#)
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PORTABILITY)
                 .long(options::PORTABILITY)
-                .help("check for all POSIX systems (equivalent to -p -P)"),
+                .help("check for all POSIX systems (equivalent to -p -P)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PATH)
                 .hide(true)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }

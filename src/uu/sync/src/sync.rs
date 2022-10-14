@@ -9,7 +9,7 @@
 
 extern crate libc;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::errno::Errno;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -175,7 +175,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    if matches.is_present(options::DATA) && files.is_empty() {
+    if matches.get_flag(options::DATA) && files.is_empty() {
         return Err(USimpleError::new(1, "--data needs at least one argument"));
     }
 
@@ -218,10 +218,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     #[allow(clippy::if_same_then_else)]
-    if matches.contains_id(options::FILE_SYSTEM) {
+    if matches.get_flag(options::FILE_SYSTEM) {
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
         syncfs(files);
-    } else if matches.contains_id(options::DATA) {
+    } else if matches.get_flag(options::DATA) {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         fdatasync(files);
     } else {
@@ -230,7 +230,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -241,19 +241,20 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('f')
                 .long(options::FILE_SYSTEM)
                 .conflicts_with(options::DATA)
-                .help("sync the file systems that contain the files (Linux and Windows only)"),
+                .help("sync the file systems that contain the files (Linux and Windows only)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DATA)
                 .short('d')
                 .long(options::DATA)
                 .conflicts_with(options::FILE_SYSTEM)
-                .help("sync only file data, no unneeded metadata (Linux only)"),
+                .help("sync only file data, no unneeded metadata (Linux only)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(ARG_FILES)
-                .multiple_occurrences(true)
-                .takes_value(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }

@@ -137,7 +137,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
@@ -147,7 +147,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
-                .multiple_occurrences(true)
+                .action(clap::ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
