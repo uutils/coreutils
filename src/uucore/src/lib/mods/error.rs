@@ -674,7 +674,9 @@ impl UError for ClapErrorWrapper {
         // If the error is a DisplayHelp or DisplayVersion variant,
         // we don't want to apply the custom error code, but leave
         // it 0.
-        if let clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion = self.error.kind() {
+        if let clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion =
+            self.error.kind()
+        {
             0
         } else {
             self.code

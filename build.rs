@@ -39,7 +39,7 @@ pub fn main() {
     let mut mf = File::create(Path::new(&out_dir).join("uutils_map.rs")).unwrap();
 
     mf.write_all(
-        "type UtilityMap<T> = phf::Map<&'static str, (fn(T) -> i32, fn() -> Command<'static>)>;\n\
+        "type UtilityMap<T> = phf::Map<&'static str, (fn(T) -> i32, fn() -> Command)>;\n\
          \n\
          fn util_map<T: uucore::Args>() -> UtilityMap<T> {\n"
             .as_bytes(),

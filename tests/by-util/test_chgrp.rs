@@ -21,7 +21,7 @@ fn test_help() {
     new_ucmd!()
         .arg("--help")
         .succeeds()
-        .stdout_contains("ARGS:\n    <GROUP>      \n    <FILE>...    ");
+        .stdout_contains("Arguments:");
 }
 
 #[test]
@@ -30,7 +30,7 @@ fn test_help_ref() {
         .arg("--help")
         .arg("--reference=ref_file")
         .succeeds()
-        .stdout_contains("ARGS:\n    <GROUP>      \n    <FILE>...    ");
+        .stdout_contains("Arguments:");
 }
 
 #[test]
@@ -39,7 +39,7 @@ fn test_ref_help() {
         .arg("--reference=ref_file")
         .arg("--help")
         .succeeds()
-        .stdout_contains("ARGS:\n    <GROUP>      \n    <FILE>...    ");
+        .stdout_contains("Arguments:");
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn test_missing_files() {
         .arg("groupname")
         .fails()
         .stderr_contains(
-            "error: The following required arguments were not provided:\n    <FILE>...\n",
+            "error: The following required arguments were not provided:\n  <FILE>...\n",
         );
 }
 

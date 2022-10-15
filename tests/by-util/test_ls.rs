@@ -3248,6 +3248,7 @@ fn test_ls_multiple_a_A() {
 }
 
 #[test]
+#[cfg(feature = "ln")]
 fn test_ls_quoting() {
     let scene = TestScenario::new(util_name!());
 
@@ -3267,6 +3268,7 @@ fn test_ls_quoting() {
 }
 
 #[test]
+#[cfg(feature = "ln")]
 fn test_ls_quoting_color() {
     let scene = TestScenario::new(util_name!());
 

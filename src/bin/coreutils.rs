@@ -167,7 +167,7 @@ fn gen_completions<T: uucore::Args>(
     process::exit(0);
 }
 
-fn gen_coreutils_app<T: uucore::Args>(util_map: &UtilityMap<T>) -> Command<'static> {
+fn gen_coreutils_app<T: uucore::Args>(util_map: &UtilityMap<T>) -> Command {
     let mut command = Command::new("coreutils");
     for (_, (_, sub_app)) in util_map {
         command = command.subcommand(sub_app());

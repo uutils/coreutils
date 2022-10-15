@@ -10,7 +10,9 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{builder::NonEmptyStringValueParser, crate_version, Arg, ArgMatches, Command};
+use clap::{
+    builder::NonEmptyStringValueParser, crate_version, Arg, ArgAction, ArgMatches, Command,
+};
 use std::{
     io::{stdout, Write},
     path::{Path, PathBuf},
@@ -51,13 +53,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(PathBuf::from)
         .collect();
 
-    let strip = matches.contains_id(OPT_STRIP);
-    let zero = matches.contains_id(OPT_ZERO);
-    let quiet = matches.contains_id(OPT_QUIET);
-    let logical = matches.contains_id(OPT_LOGICAL);
-    let can_mode = if matches.contains_id(OPT_CANONICALIZE_EXISTING) {
+    let strip = matches.get_flag(OPT_STRIP);
+    let zero = matches.get_flag(OPT_ZERO);
+    let quiet = matches.get_flag(OPT_QUIET);
+    let logical = matches.get_flag(OPT_LOGICAL);
+    let can_mode = if matches.get_flag(OPT_CANONICALIZE_EXISTING) {
         MissingHandling::Existing
-    } else if matches.contains_id(OPT_CANONICALIZE_MISSING) {
+    } else if matches.get_flag(OPT_CANONICALIZE_MISSING) {
         MissingHandling::Missing
     } else {
         MissingHandling::Normal
@@ -89,7 +91,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -99,33 +101,38 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_QUIET)
                 .short('q')
                 .long(OPT_QUIET)
-                .help("Do not print warnings for invalid paths"),
+                .help("Do not print warnings for invalid paths")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_STRIP)
                 .short('s')
                 .long(OPT_STRIP)
                 .visible_alias("no-symlinks")
-                .help("Only strip '.' and '..' components, but don't resolve symbolic links"),
+                .help("Only strip '.' and '..' components, but don't resolve symbolic links")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_ZERO)
                 .short('z')
                 .long(OPT_ZERO)
-                .help("Separate output filenames with \\0 rather than newline"),
+                .help("Separate output filenames with \\0 rather than newline")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_LOGICAL)
                 .short('L')
                 .long(OPT_LOGICAL)
-                .help("resolve '..' components before symlinks"),
+                .help("resolve '..' components before symlinks")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_PHYSICAL)
                 .short('P')
                 .long(OPT_PHYSICAL)
                 .overrides_with_all(&[OPT_STRIP, OPT_LOGICAL])
-                .help("resolve symlinks as encountered (default)"),
+                .help("resolve symlinks as encountered (default)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_EXISTING)
@@ -134,7 +141,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "canonicalize by following every symlink in every component of the \
                      given name recursively, all components must exist",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_CANONICALIZE_MISSING)
@@ -143,12 +151,12 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "canonicalize by following every symlink in every component of the \
                      given name recursively, without requirements on components existence",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_RELATIVE_TO)
                 .long(OPT_RELATIVE_TO)
-                .takes_value(true)
                 .value_name("DIR")
                 .value_parser(NonEmptyStringValueParser::new())
                 .help("print the resolved path relative to DIR"),
@@ -156,14 +164,13 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(OPT_RELATIVE_BASE)
                 .long(OPT_RELATIVE_BASE)
-                .takes_value(true)
                 .value_name("DIR")
                 .value_parser(NonEmptyStringValueParser::new())
                 .help("print absolute paths unless paths below DIR"),
         )
         .arg(
             Arg::new(ARG_FILES)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .required(true)
                 .value_parser(NonEmptyStringValueParser::new())
                 .value_hint(clap::ValueHint::AnyPath),

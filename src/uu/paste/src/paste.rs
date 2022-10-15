@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) delim
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
@@ -56,14 +56,14 @@ fn read_until<R: Read>(
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let serial = matches.contains_id(options::SERIAL);
+    let serial = matches.get_flag(options::SERIAL);
     let delimiters = matches.get_one::<String>(options::DELIMITER).unwrap();
     let files = matches
         .get_many::<String>(options::FILE)
         .unwrap()
         .map(|s| s.to_owned())
         .collect();
-    let line_ending = if matches.contains_id(options::ZERO_TERMINATED) {
+    let line_ending = if matches.get_flag(options::ZERO_TERMINATED) {
         LineEnding::Nul
     } else {
         LineEnding::Newline
@@ -72,7 +72,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     paste(files, serial, delimiters, line_ending)
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -81,7 +81,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::SERIAL)
                 .long(options::SERIAL)
                 .short('s')
-                .help("paste one file at a time instead of in parallel"),
+                .help("paste one file at a time instead of in parallel")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DELIMITER)
@@ -95,7 +96,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FILE)
                 .value_name("FILE")
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .default_value("-")
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -103,7 +104,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::ZERO_TERMINATED)
                 .long(options::ZERO_TERMINATED)
                 .short('z')
-                .help("line delimiter is NUL, not newline"),
+                .help("line delimiter is NUL, not newline")
+                .action(ArgAction::SetTrue),
         )
 }
 

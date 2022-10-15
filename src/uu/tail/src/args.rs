@@ -7,7 +7,7 @@
 
 use crate::paths::Input;
 use crate::{parse, platform, Quotable};
-use clap::{Arg, ArgMatches, Command, ValueSource};
+use clap::{parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
 use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::time::Duration;
@@ -62,7 +62,7 @@ pub enum FilterMode {
 
 impl FilterMode {
     fn from(matches: &ArgMatches) -> UResult<Self> {
-        let zero_term = matches.contains_id(options::ZERO_TERM);
+        let zero_term = matches.get_flag(options::ZERO_TERM);
         let mode = if let Some(arg) = matches.get_one::<String>(options::BYTES) {
             match parse_num(arg) {
                 Ok(signum) => Self::Bytes(signum),
@@ -134,7 +134,7 @@ impl Settings {
             ..Default::default()
         };
 
-        settings.follow = if matches.contains_id(options::FOLLOW_RETRY) {
+        settings.follow = if matches.get_flag(options::FOLLOW_RETRY) {
             Some(FollowMode::Name)
         } else if matches.value_source(options::FOLLOW) != Some(ValueSource::CommandLine) {
             None
@@ -146,7 +146,7 @@ impl Settings {
         };
 
         settings.retry =
-            matches.contains_id(options::RETRY) || matches.contains_id(options::FOLLOW_RETRY);
+            matches.get_flag(options::RETRY) || matches.get_flag(options::FOLLOW_RETRY);
 
         if settings.retry && settings.follow.is_none() {
             show_warning!("--retry ignored; --retry is useful only when following");
@@ -164,7 +164,7 @@ impl Settings {
             }
         }
 
-        settings.use_polling = matches.contains_id(options::USE_POLLING);
+        settings.use_polling = matches.get_flag(options::USE_POLLING);
 
         if let Some(s) = matches.get_one::<String>(options::MAX_UNCHANGED_STATS) {
             settings.max_unchanged_stats = match s.parse::<u32>() {
@@ -233,12 +233,12 @@ impl Settings {
             inputs.push_front(Input::default());
         }
 
-        settings.verbose = (matches.contains_id(options::verbosity::VERBOSE) || inputs.len() > 1)
-            && !matches.contains_id(options::verbosity::QUIET);
+        settings.verbose = (matches.get_flag(options::verbosity::VERBOSE) || inputs.len() > 1)
+            && !matches.get_flag(options::verbosity::QUIET);
 
         settings.inputs = inputs;
 
-        settings.presume_input_pipe = matches.contains_id(options::PRESUME_INPUT_PIPE);
+        settings.presume_input_pipe = matches.get_flag(options::PRESUME_INPUT_PIPE);
 
         Ok(settings)
     }
@@ -315,7 +315,7 @@ pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     Settings::from(&matches)
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     #[cfg(target_os = "linux")]
     pub static POLLING_HELP: &str = "Disable 'inotify' support and use polling instead";
     #[cfg(all(unix, not(target_os = "linux")))]
@@ -333,7 +333,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::BYTES)
                 .short('c')
                 .long(options::BYTES)
-                .takes_value(true)
                 .allow_hyphen_values(true)
                 .overrides_with_all(&[options::BYTES, options::LINES])
                 .help("Number of bytes to print"),
@@ -343,9 +342,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('f')
                 .long(options::FOLLOW)
                 .default_value("descriptor")
-                .takes_value(true)
-                .min_values(0)
-                .max_values(1)
+                .num_args(0..=1)
                 .require_equals(true)
                 .value_parser(["descriptor", "name"])
                 .help("Print the file as it grows"),
@@ -354,7 +351,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::LINES)
                 .short('n')
                 .long(options::LINES)
-                .takes_value(true)
                 .allow_hyphen_values(true)
                 .overrides_with_all(&[options::BYTES, options::LINES])
                 .help("Number of lines to print"),
@@ -362,7 +358,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::PID)
                 .long(options::PID)
-                .takes_value(true)
+                .value_name("PID")
                 .help("With -f, terminate after process ID, PID dies"),
         )
         .arg(
@@ -371,18 +367,19 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::verbosity::QUIET)
                 .visible_alias("silent")
                 .overrides_with_all(&[options::verbosity::QUIET, options::verbosity::VERBOSE])
-                .help("Never output headers giving file names"),
+                .help("Never output headers giving file names")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SLEEP_INT)
                 .short('s')
-                .takes_value(true)
+                .value_name("N")
                 .long(options::SLEEP_INT)
                 .help("Number of seconds to sleep between polling the file when running with -f"),
         )
         .arg(
             Arg::new(options::MAX_UNCHANGED_STATS)
-                .takes_value(true)
+                .value_name("N")
                 .long(options::MAX_UNCHANGED_STATS)
                 .help(
                     "Reopen a FILE which has not changed size after N (default 5) iterations \
@@ -396,44 +393,48 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('v')
                 .long(options::verbosity::VERBOSE)
                 .overrides_with_all(&[options::verbosity::QUIET, options::verbosity::VERBOSE])
-                .help("Always output headers giving file names"),
+                .help("Always output headers giving file names")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO_TERM)
                 .short('z')
                 .long(options::ZERO_TERM)
-                .help("Line delimiter is NUL, not newline"),
+                .help("Line delimiter is NUL, not newline")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::USE_POLLING)
                 .alias(options::DISABLE_INOTIFY_TERM) // NOTE: Used by GNU's test suite
                 .alias("dis") // NOTE: Used by GNU's test suite
                 .long(options::USE_POLLING)
-                .help(POLLING_HELP),
+                .help(POLLING_HELP)
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::RETRY)
                 .long(options::RETRY)
-                .help("Keep trying to open a file if it is inaccessible"),
+                .help("Keep trying to open a file if it is inaccessible")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FOLLOW_RETRY)
                 .short('F')
                 .help("Same as --follow=name --retry")
-                .overrides_with_all(&[options::RETRY, options::FOLLOW]),
+                .overrides_with_all(&[options::RETRY, options::FOLLOW])
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRESUME_INPUT_PIPE)
-                .long(options::PRESUME_INPUT_PIPE)
+                .long("presume-input-pipe")
                 .alias(options::PRESUME_INPUT_PIPE)
-                .hide(true),
+                .hide(true)
+                .action(ArgAction::SetTrue),
         )
-
         .arg(
             Arg::new(options::ARG_FILES)
-                .multiple_occurrences(true)
-                .takes_value(true)
-                .min_values(1)
+                .action(ArgAction::Append)
+                .num_args(1..)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }

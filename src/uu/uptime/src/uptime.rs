@@ -9,7 +9,7 @@
 // spell-checker:ignore (ToDO) getloadavg upsecs updays nusers loadavg boottime uphours upmins
 
 use chrono::{Local, TimeZone, Utc};
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 
 use uucore::format_usage;
 // import crate time from utmpx
@@ -43,7 +43,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if uptime < 0 {
         Err(USimpleError::new(1, "could not retrieve system uptime"))
     } else {
-        if matches.contains_id(options::SINCE) {
+        if matches.get_flag(options::SINCE) {
             let initial_date = Local.timestamp(Utc::now().timestamp() - uptime, 0);
             println!("{}", initial_date.format("%Y-%m-%d %H:%M:%S"));
             return Ok(());
@@ -59,7 +59,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -69,7 +69,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::SINCE)
                 .short('s')
                 .long(options::SINCE)
-                .help("system up since"),
+                .help("system up since")
+                .action(ArgAction::SetTrue),
         )
 }
 

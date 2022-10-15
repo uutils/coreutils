@@ -8,7 +8,7 @@
 
 //spell-checker:ignore (args) lsbf msbf
 
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command};
 use uu_base32::base_common::{self, Config, BASE_CMD_PARSE_ERROR};
 
 use uucore::{
@@ -41,10 +41,14 @@ const ENCODINGS: &[(&str, Format)] = &[
 
 const USAGE: &str = "{} [OPTION]... [FILE]";
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     let mut command = base_common::base_app(ABOUT, USAGE);
     for encoding in ENCODINGS {
-        command = command.arg(Arg::new(encoding.0).long(encoding.0));
+        command = command.arg(
+            Arg::new(encoding.0)
+                .long(encoding.0)
+                .action(ArgAction::SetTrue),
+        );
     }
     command
 }
@@ -55,7 +59,7 @@ fn parse_cmd_args(args: impl uucore::Args) -> UResult<(Config, Format)> {
         .with_exit_code(1)?;
     let format = ENCODINGS
         .iter()
-        .find(|encoding| matches.contains_id(encoding.0))
+        .find(|encoding| matches.get_flag(encoding.0))
         .ok_or_else(|| UUsageError::new(BASE_CMD_PARSE_ERROR, "missing encoding type"))?
         .1;
     let config = Config::from(&matches)?;

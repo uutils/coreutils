@@ -7,7 +7,7 @@
 
 mod flags;
 
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use nix::libc::{c_ushort, TIOCGWINSZ, TIOCSWINSZ};
 use nix::sys::termios::{
     cfgetospeed, tcgetattr, tcsetattr, ControlFlags, InputFlags, LocalFlags, OutputFlags, Termios,
@@ -100,13 +100,15 @@ struct Options<'a> {
 impl<'a> Options<'a> {
     fn from(matches: &'a ArgMatches) -> io::Result<Self> {
         Ok(Self {
-            all: matches.contains_id(options::ALL),
-            save: matches.contains_id(options::SAVE),
+            all: matches.get_flag(options::ALL),
+            save: matches.get_flag(options::SAVE),
             file: match matches.get_one::<String>(options::FILE) {
                 Some(_f) => todo!(),
                 None => stdout().as_raw_fd(),
             },
-            settings: matches.values_of(options::SETTINGS).map(|v| v.collect()),
+            settings: matches
+                .get_many::<String>(options::SETTINGS)
+                .map(|v| v.map(|s| s.as_ref()).collect()),
         })
     }
 }
@@ -320,7 +322,7 @@ fn apply_flag<T: TermiosFlag>(
     ControlFlow::Continue(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
@@ -331,27 +333,27 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::ALL)
                 .short('a')
                 .long(options::ALL)
-                .help("print all current settings in human-readable form"),
+                .help("print all current settings in human-readable form")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SAVE)
                 .short('g')
                 .long(options::SAVE)
-                .help("print all current settings in a stty-readable form"),
+                .help("print all current settings in a stty-readable form")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILE)
                 .short('F')
                 .long(options::FILE)
-                .takes_value(true)
                 .value_hint(clap::ValueHint::FilePath)
                 .value_name("DEVICE")
                 .help("open and use the specified DEVICE instead of stdin"),
         )
         .arg(
             Arg::new(options::SETTINGS)
-                .takes_value(true)
-                .multiple_values(true)
+                .action(ArgAction::Append)
                 .help("settings to change"),
         )
 }

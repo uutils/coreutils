@@ -14,7 +14,7 @@ extern crate uucore;
 extern crate clap;
 
 use crate::status::ExitStatus;
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::io::ErrorKind;
 use std::process::{self, Child, Stdio};
 use std::time::Duration;
@@ -83,9 +83,9 @@ impl Config {
             Err(err) => return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err)),
         };
 
-        let preserve_status: bool = options.contains_id(options::PRESERVE_STATUS);
-        let foreground = options.contains_id(options::FOREGROUND);
-        let verbose = options.contains_id(options::VERBOSE);
+        let preserve_status: bool = options.get_flag(options::PRESERVE_STATUS);
+        let foreground = options.get_flag(options::FOREGROUND);
+        let verbose = options.get_flag(options::VERBOSE);
 
         let command = options
             .get_many::<String>(options::COMMAND)
@@ -123,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     )
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new("timeout")
         .version(crate_version!())
         .about(ABOUT)
@@ -131,43 +131,51 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FOREGROUND)
                 .long(options::FOREGROUND)
-                .help("when not running timeout directly from a shell prompt, allow COMMAND to read from the TTY and get TTY signals; in this mode, children of COMMAND will not be timed out")
+                .help(
+                    "when not running timeout directly from a shell prompt, allow \
+                COMMAND to read from the TTY and get TTY signals; in this mode, \
+                children of COMMAND will not be timed out",
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::KILL_AFTER)
                 .long(options::KILL_AFTER)
                 .short('k')
-                .help("also send a KILL signal if COMMAND is still running this long after the initial signal was sent")
-                .takes_value(true))
+                .help(
+                    "also send a KILL signal if COMMAND is still running this long \
+                after the initial signal was sent",
+                ),
+        )
         .arg(
             Arg::new(options::PRESERVE_STATUS)
                 .long(options::PRESERVE_STATUS)
                 .help("exit with the same status as COMMAND, even when the command times out")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SIGNAL)
                 .short('s')
                 .long(options::SIGNAL)
-                .help("specify the signal to be sent on timeout; SIGNAL may be a name like 'HUP' or a number; see 'kill -l' for a list of signals")
-                .takes_value(true)
+                .help(
+                    "specify the signal to be sent on timeout; SIGNAL may be a name like \
+                'HUP' or a number; see 'kill -l' for a list of signals",
+                )
+                .value_name("SIGNAL"),
         )
         .arg(
             Arg::new(options::VERBOSE)
-              .short('v')
-              .long(options::VERBOSE)
-              .help("diagnose to stderr any signal sent upon timeout")
+                .short('v')
+                .long(options::VERBOSE)
+                .help("diagnose to stderr any signal sent upon timeout")
+                .action(ArgAction::SetTrue),
         )
-        .arg(
-            Arg::new(options::DURATION)
-                .index(1)
-                .required(true)
-        )
+        .arg(Arg::new(options::DURATION).required(true))
         .arg(
             Arg::new(options::COMMAND)
-                .index(2)
                 .required(true)
-                .multiple_occurrences(true)
-                .value_hint(clap::ValueHint::CommandName)
+                .action(ArgAction::Append)
+                .value_hint(clap::ValueHint::CommandName),
         )
         .trailing_var_arg(true)
         .infer_long_args(true)

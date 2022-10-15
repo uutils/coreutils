@@ -7,7 +7,7 @@ use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::{display::Quotable, show_error, show_warning};
 
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
 use std::borrow::Cow;
@@ -66,14 +66,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options = match parse_command_line(config, args) {
         Ok(r) => r,
         Err(r) => {
-            if let Error::CommandLine(r) = &r {
-                match r.kind() {
-                    clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion => {
-                        println!("{}", r);
-                        return Ok(());
-                    }
-                    _ => {}
-                }
+            if let Error::CommandLine(r) = r {
+                return Err(r.into());
             }
 
             return Err(UUsageError::new(libc::EXIT_FAILURE, format!("{}.\n", r)));
@@ -106,7 +100,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         CommandLineMode::ContextBased { context } => {
-            let c_context = match os_str_to_c_string(context) {
+            let c_context = match os_str_to_c_string(&context) {
                 Ok(context) => context,
 
                 Err(_r) => {
@@ -156,16 +150,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Err(libc::EXIT_FAILURE.into())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .disable_help_flag(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help("Print help information."),
+                .help("Print help information.")
+                .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::dereference::DEREFERENCE)
@@ -174,29 +170,32 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "Affect the referent of each symbolic link (this is the default), \
                      rather than the symbolic link itself.",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::dereference::NO_DEREFERENCE)
                 .short('h')
                 .long(options::dereference::NO_DEREFERENCE)
-                .help("Affect symbolic links instead of any referenced file."),
+                .help("Affect symbolic links instead of any referenced file.")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::preserve_root::PRESERVE_ROOT)
                 .long(options::preserve_root::PRESERVE_ROOT)
                 .conflicts_with(options::preserve_root::NO_PRESERVE_ROOT)
-                .help("Fail to operate recursively on '/'."),
+                .help("Fail to operate recursively on '/'.")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::preserve_root::NO_PRESERVE_ROOT)
                 .long(options::preserve_root::NO_PRESERVE_ROOT)
-                .help("Do not treat '/' specially (the default)."),
+                .help("Do not treat '/' specially (the default).")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REFERENCE)
                 .long(options::REFERENCE)
-                .takes_value(true)
                 .value_name("RFILE")
                 .value_hint(clap::ValueHint::FilePath)
                 .conflicts_with_all(&[options::USER, options::ROLE, options::TYPE, options::RANGE])
@@ -210,7 +209,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::USER)
                 .short('u')
                 .long(options::USER)
-                .takes_value(true)
                 .value_name("USER")
                 .value_hint(clap::ValueHint::Username)
                 .help("Set user USER in the target security context.")
@@ -220,7 +218,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::ROLE)
                 .short('r')
                 .long(options::ROLE)
-                .takes_value(true)
                 .value_name("ROLE")
                 .help("Set role ROLE in the target security context.")
                 .value_parser(ValueParser::os_string()),
@@ -229,7 +226,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::TYPE)
                 .short('t')
                 .long(options::TYPE)
-                .takes_value(true)
                 .value_name("TYPE")
                 .help("Set type TYPE in the target security context.")
                 .value_parser(ValueParser::os_string()),
@@ -238,7 +234,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::RANGE)
                 .short('l')
                 .long(options::RANGE)
-                .takes_value(true)
                 .value_name("RANGE")
                 .help("Set range RANGE in the target security context.")
                 .value_parser(ValueParser::os_string()),
@@ -247,7 +242,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::RECURSIVE)
                 .short('R')
                 .long(options::RECURSIVE)
-                .help("Operate on files and directories recursively."),
+                .help("Operate on files and directories recursively.")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::sym_links::FOLLOW_ARG_DIR_SYM_LINK)
@@ -260,7 +256,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "If a command line argument is a symbolic link to a directory, \
                      traverse it. Only valid when -R is specified.",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::sym_links::FOLLOW_DIR_SYM_LINKS)
@@ -273,7 +270,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "Traverse every symbolic link to a directory encountered. \
                      Only valid when -R is specified.",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::sym_links::NO_FOLLOW_SYM_LINKS)
@@ -286,19 +284,21 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "Do not traverse any symbolic links (default). \
                      Only valid when -R is specified.",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::VERBOSE)
                 .short('v')
                 .long(options::VERBOSE)
-                .help("Output a diagnostic for every file processed."),
+                .help("Output a diagnostic for every file processed.")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("FILE")
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath)
-                .min_values(1)
+                .num_args(1..)
                 .value_parser(ValueParser::os_string()),
         )
 }
@@ -316,11 +316,11 @@ struct Options {
 fn parse_command_line(config: clap::Command, args: impl uucore::Args) -> Result<Options> {
     let matches = config.try_get_matches_from(args)?;
 
-    let verbose = matches.contains_id(options::VERBOSE);
+    let verbose = matches.get_flag(options::VERBOSE);
 
-    let (recursive_mode, affect_symlink_referent) = if matches.contains_id(options::RECURSIVE) {
-        if matches.contains_id(options::sym_links::FOLLOW_DIR_SYM_LINKS) {
-            if matches.contains_id(options::dereference::NO_DEREFERENCE) {
+    let (recursive_mode, affect_symlink_referent) = if matches.get_flag(options::RECURSIVE) {
+        if matches.get_flag(options::sym_links::FOLLOW_DIR_SYM_LINKS) {
+            if matches.get_flag(options::dereference::NO_DEREFERENCE) {
                 return Err(Error::ArgumentsMismatch(format!(
                     "'--{}' with '--{}' require '-P'",
                     options::RECURSIVE,
@@ -329,8 +329,8 @@ fn parse_command_line(config: clap::Command, args: impl uucore::Args) -> Result<
             }
 
             (RecursiveMode::RecursiveAndFollowAllDirSymLinks, true)
-        } else if matches.contains_id(options::sym_links::FOLLOW_ARG_DIR_SYM_LINK) {
-            if matches.contains_id(options::dereference::NO_DEREFERENCE) {
+        } else if matches.get_flag(options::sym_links::FOLLOW_ARG_DIR_SYM_LINK) {
+            if matches.get_flag(options::dereference::NO_DEREFERENCE) {
                 return Err(Error::ArgumentsMismatch(format!(
                     "'--{}' with '--{}' require '-P'",
                     options::RECURSIVE,
@@ -340,7 +340,7 @@ fn parse_command_line(config: clap::Command, args: impl uucore::Args) -> Result<
 
             (RecursiveMode::RecursiveAndFollowArgDirSymLinks, true)
         } else {
-            if matches.contains_id(options::dereference::DEREFERENCE) {
+            if matches.get_flag(options::dereference::DEREFERENCE) {
                 return Err(Error::ArgumentsMismatch(format!(
                     "'--{}' with '--{}' require either '-H' or '-L'",
                     options::RECURSIVE,
@@ -351,12 +351,12 @@ fn parse_command_line(config: clap::Command, args: impl uucore::Args) -> Result<
             (RecursiveMode::RecursiveButDoNotFollowSymLinks, false)
         }
     } else {
-        let no_dereference = matches.contains_id(options::dereference::NO_DEREFERENCE);
+        let no_dereference = matches.get_flag(options::dereference::NO_DEREFERENCE);
         (RecursiveMode::NotRecursive, !no_dereference)
     };
 
     // By default, do not preserve root.
-    let preserve_root = matches.contains_id(options::preserve_root::PRESERVE_ROOT);
+    let preserve_root = matches.get_flag(options::preserve_root::PRESERVE_ROOT);
 
     let mut files = matches.get_many::<OsString>("FILE").unwrap_or_default();
 

@@ -11,7 +11,7 @@
 extern crate uucore;
 
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use memchr::{memchr3_iter, memchr_iter};
 use std::cmp::Ordering;
 use std::convert::From;
@@ -625,7 +625,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    settings.ignore_case = matches.contains_id("i");
+    settings.ignore_case = matches.get_flag("i");
     settings.key1 = get_field_number(keys, key1)?;
     settings.key2 = get_field_number(keys, key2)?;
 
@@ -671,19 +671,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.empty = empty.as_bytes().to_vec();
     }
 
-    if matches.contains_id("nocheck-order") {
+    if matches.get_flag("nocheck-order") {
         settings.check_order = CheckOrder::Disabled;
     }
 
-    if matches.contains_id("check-order") {
+    if matches.get_flag("check-order") {
         settings.check_order = CheckOrder::Enabled;
     }
 
-    if matches.contains_id("header") {
+    if matches.get_flag("header") {
         settings.headers = true;
     }
 
-    if matches.contains_id("z") {
+    if matches.get_flag("z") {
         settings.line_ending = LineEnding::Nul;
     }
 
@@ -700,7 +700,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(NAME)
         .version(crate_version!())
         .about(
@@ -713,8 +713,8 @@ When FILE1 or FILE2 (not both) is -, read standard input.",
         .arg(
             Arg::new("a")
                 .short('a')
-                .multiple_occurrences(true)
-                .number_of_values(1)
+                .action(ArgAction::Append)
+                .num_args(1)
                 .value_parser(["1", "2"])
                 .value_name("FILENUM")
                 .help(
@@ -725,8 +725,8 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
         .arg(
             Arg::new("v")
                 .short('v')
-                .multiple_occurrences(true)
-                .number_of_values(1)
+                .action(ArgAction::Append)
+                .num_args(1)
                 .value_parser(["1", "2"])
                 .value_name("FILENUM")
                 .help("like -a FILENUM, but suppress joined output lines"),
@@ -734,7 +734,6 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
         .arg(
             Arg::new("e")
                 .short('e')
-                .takes_value(true)
                 .value_name("EMPTY")
                 .help("replace missing input fields with EMPTY"),
         )
@@ -742,26 +741,24 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
             Arg::new("i")
                 .short('i')
                 .long("ignore-case")
-                .help("ignore differences in case when comparing fields"),
+                .help("ignore differences in case when comparing fields")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("j")
                 .short('j')
-                .takes_value(true)
                 .value_name("FIELD")
                 .help("equivalent to '-1 FIELD -2 FIELD'"),
         )
         .arg(
             Arg::new("o")
                 .short('o')
-                .takes_value(true)
                 .value_name("FORMAT")
                 .help("obey FORMAT while constructing output line"),
         )
         .arg(
             Arg::new("t")
                 .short('t')
-                .takes_value(true)
                 .value_name("CHAR")
                 .value_parser(ValueParser::os_string())
                 .help("use CHAR as input and output field separator"),
@@ -769,35 +766,45 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
         .arg(
             Arg::new("1")
                 .short('1')
-                .takes_value(true)
                 .value_name("FIELD")
                 .help("join on this FIELD of file 1"),
         )
         .arg(
             Arg::new("2")
                 .short('2')
-                .takes_value(true)
                 .value_name("FIELD")
                 .help("join on this FIELD of file 2"),
         )
-        .arg(Arg::new("check-order").long("check-order").help(
-            "check that the input is correctly sorted, \
+        .arg(
+            Arg::new("check-order")
+                .long("check-order")
+                .help(
+                    "check that the input is correctly sorted, \
              even if all input lines are pairable",
-        ))
+                )
+                .action(ArgAction::SetTrue),
+        )
         .arg(
             Arg::new("nocheck-order")
                 .long("nocheck-order")
-                .help("do not check that the input is correctly sorted"),
+                .help("do not check that the input is correctly sorted")
+                .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new("header").long("header").help(
-            "treat the first line in each file as field headers, \
+        .arg(
+            Arg::new("header")
+                .long("header")
+                .help(
+                    "treat the first line in each file as field headers, \
              print them without trying to pair them",
-        ))
+                )
+                .action(ArgAction::SetTrue),
+        )
         .arg(
             Arg::new("z")
                 .short('z')
                 .long("zero-terminated")
-                .help("line delimiter is NUL, not newline"),
+                .help("line delimiter is NUL, not newline")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("file1")

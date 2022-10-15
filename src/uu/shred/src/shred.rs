@@ -8,7 +8,7 @@
 
 // spell-checker:ignore (words) writeback wipesync
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use rand::prelude::SliceRandom;
 use rand::Rng;
 use std::cell::{Cell, RefCell};
@@ -296,15 +296,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // TODO: implement --random-source
 
-    let force = matches.contains_id(options::FORCE);
-    let remove = matches.contains_id(options::REMOVE);
+    let force = matches.get_flag(options::FORCE);
+    let remove = matches.get_flag(options::REMOVE);
     let size_arg = matches
         .get_one::<String>(options::SIZE)
         .map(|s| s.to_string());
     let size = get_size(size_arg);
-    let exact = matches.contains_id(options::EXACT) && size.is_none(); // if -s is given, ignore -x
-    let zero = matches.contains_id(options::ZERO);
-    let verbose = matches.contains_id(options::VERBOSE);
+    let exact = matches.get_flag(options::EXACT) && size.is_none(); // if -s is given, ignore -x
+    let zero = matches.get_flag(options::ZERO);
+    let verbose = matches.get_flag(options::VERBOSE);
 
     for path_str in matches.get_many::<String>(options::FILE).unwrap() {
         show_if_err!(wipe_file(
@@ -314,7 +314,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -325,7 +325,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::FORCE)
                 .long(options::FORCE)
                 .short('f')
-                .help("change permissions to allow writing if necessary"),
+                .help("change permissions to allow writing if necessary")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ITERATIONS)
@@ -339,7 +340,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::SIZE)
                 .long(options::SIZE)
                 .short('s')
-                .takes_value(true)
                 .value_name("N")
                 .help("shred this many bytes (suffixes like K, M, G accepted)"),
         )
@@ -347,13 +347,15 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::REMOVE)
                 .short('u')
                 .long(options::REMOVE)
-                .help("truncate and remove file after overwriting;  See below"),
+                .help("truncate and remove file after overwriting;  See below")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::VERBOSE)
                 .long(options::VERBOSE)
                 .short('v')
-                .help("show progress"),
+                .help("show progress")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::EXACT)
@@ -362,19 +364,20 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "do not round file sizes up to the next full block;\n\
                      this is the default for non-regular files",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO)
                 .long(options::ZERO)
                 .short('z')
-                .help("add a final overwrite with zeros to hide shredding"),
+                .help("add a final overwrite with zeros to hide shredding")
+                .action(ArgAction::SetTrue),
         )
         // Positional arguments
         .arg(
             Arg::new(options::FILE)
-                .hide(true)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }

@@ -27,8 +27,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if let Err(e) = command.try_get_matches_from_mut(args) {
         let error = match e.kind() {
-            clap::ErrorKind::DisplayHelp => command.print_help(),
-            clap::ErrorKind::DisplayVersion => {
+            clap::error::ErrorKind::DisplayHelp => command.print_help(),
+            clap::error::ErrorKind::DisplayVersion => {
                 writeln!(std::io::stdout(), "{}", command.render_version())
             }
             _ => Ok(()),
@@ -47,7 +47,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(clap::crate_version!())
         .about(ABOUT)

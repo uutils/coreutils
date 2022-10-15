@@ -903,7 +903,7 @@ fn test_bracket_syntax_help() {
     let scenario = TestScenario::new("[");
     let mut ucmd = scenario.ucmd();
 
-    ucmd.arg("--help").succeeds().stdout_contains("USAGE:");
+    ucmd.arg("--help").succeeds().stdout_contains("Usage:");
 }
 
 #[test]

@@ -421,10 +421,10 @@ type GidUidFilterParser = fn(&ArgMatches) -> UResult<(Option<u32>, Option<u32>, 
 /// `parse_gid_uid_and_filter` will be called to obtain the target gid and uid, and the filter,
 /// from `ArgMatches`.
 /// `groups_only` determines whether verbose output will only mention the group.
-pub fn chown_base<'a>(
-    mut command: Command<'a>,
+pub fn chown_base(
+    mut command: Command,
     args: impl crate::Args,
-    add_arg_if_not_reference: &'a str,
+    add_arg_if_not_reference: &'static str,
     parse_gid_uid_and_filter: GidUidFilterParser,
     groups_only: bool,
 ) -> UResult<()> {
@@ -449,19 +449,16 @@ pub fn chown_base<'a>(
         command = command.arg(
             Arg::new(add_arg_if_not_reference)
                 .value_name(add_arg_if_not_reference)
-                .required(true)
-                .takes_value(true)
-                .multiple_occurrences(false),
+                .required(true),
         );
     }
     command = command.arg(
         Arg::new(options::ARG_FILES)
             .value_name(options::ARG_FILES)
             .value_hint(clap::ValueHint::FilePath)
-            .multiple_occurrences(true)
-            .takes_value(true)
+            .action(clap::ArgAction::Append)
             .required(true)
-            .min_values(1),
+            .num_args(1..),
     );
     let matches = command.try_get_matches_from(args)?;
 
@@ -470,25 +467,25 @@ pub fn chown_base<'a>(
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let preserve_root = matches.contains_id(options::preserve_root::PRESERVE);
+    let preserve_root = matches.get_flag(options::preserve_root::PRESERVE);
 
-    let mut dereference = if matches.contains_id(options::dereference::DEREFERENCE) {
+    let mut dereference = if matches.get_flag(options::dereference::DEREFERENCE) {
         Some(true)
-    } else if matches.contains_id(options::dereference::NO_DEREFERENCE) {
+    } else if matches.get_flag(options::dereference::NO_DEREFERENCE) {
         Some(false)
     } else {
         None
     };
 
-    let mut traverse_symlinks = if matches.contains_id(options::traverse::TRAVERSE) {
+    let mut traverse_symlinks = if matches.get_flag(options::traverse::TRAVERSE) {
         TraverseSymlinks::First
-    } else if matches.contains_id(options::traverse::EVERY) {
+    } else if matches.get_flag(options::traverse::EVERY) {
         TraverseSymlinks::All
     } else {
         TraverseSymlinks::None
     };
 
-    let recursive = matches.contains_id(options::RECURSIVE);
+    let recursive = matches.get_flag(options::RECURSIVE);
     if recursive {
         if traverse_symlinks == TraverseSymlinks::None {
             if dereference == Some(true) {
@@ -500,13 +497,13 @@ pub fn chown_base<'a>(
         traverse_symlinks = TraverseSymlinks::None;
     }
 
-    let verbosity_level = if matches.contains_id(options::verbosity::CHANGES) {
+    let verbosity_level = if matches.get_flag(options::verbosity::CHANGES) {
         VerbosityLevel::Changes
-    } else if matches.contains_id(options::verbosity::SILENT)
-        || matches.contains_id(options::verbosity::QUIET)
+    } else if matches.get_flag(options::verbosity::SILENT)
+        || matches.get_flag(options::verbosity::QUIET)
     {
         VerbosityLevel::Silent
-    } else if matches.contains_id(options::verbosity::VERBOSE) {
+    } else if matches.get_flag(options::verbosity::VERBOSE) {
         VerbosityLevel::Verbose
     } else {
         VerbosityLevel::Normal

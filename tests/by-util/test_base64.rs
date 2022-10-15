@@ -79,7 +79,8 @@ fn test_wrap_no_arg() {
         new_ucmd!()
             .arg(wrap_param)
             .fails()
-            .stderr_contains("The argument '--wrap <wrap>' requires a value but none was supplied");
+            .stderr_contains("The argument '--wrap <COLS>' requires a value but none was supplied")
+            .no_stdout();
     }
 }
 

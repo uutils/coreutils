@@ -179,7 +179,7 @@ sed -i "s/\(\(b2[ml]_[69]\|b32h_[56]\|z85_8\|z85_35\).*OUT=>\)[^}]*\(.*\)/\1\"\"
 sed -i "s/\$prog: invalid input/\$prog: error: invalid input/g" tests/misc/basenc.pl
 
 # basenc: swap out error message for unexpected arg
-sed -i "s/  {ERR=>\"\$prog: foobar\\\\n\" \. \$try_help }/  {ERR=>\"error: Found argument '--foobar' which wasn't expected, or isn't valid in this context\n\n\tIf you tried to supply \`--foobar\` as a value rather than a flag, use \`-- --foobar\`\n\nUSAGE:\n    basenc [OPTION]... [FILE]\n\nFor more information try --help\n\"}]/" tests/misc/basenc.pl
+sed -i "s/  {ERR=>\"\$prog: foobar\\\\n\" \. \$try_help }/  {ERR=>\"error: Found argument '--foobar' which wasn't expected, or isn't valid in this context\n\n  If you tried to supply '--foobar' as a value rather than a flag, use '-- --foobar'\n\nUsage: basenc [OPTION]... [FILE]\n\nFor more information try '--help'\n\"}]/" tests/misc/basenc.pl
 sed -i "s/  {ERR_SUBST=>\"s\/(unrecognized|unknown) option \[-' \]\*foobar\[' \]\*\/foobar\/\"}],//" tests/misc/basenc.pl
 
 # Remove the check whether a util was built. Otherwise tests against utils like "arch" are not run.

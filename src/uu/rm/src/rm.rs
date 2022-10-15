@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use remove_dir_all::remove_dir_all;
 use std::collections::VecDeque;
 use std::fs::{self, File, Metadata};
@@ -52,7 +52,6 @@ static OPT_PRESERVE_ROOT: &str = "preserve-root";
 static OPT_PROMPT: &str = "prompt";
 static OPT_PROMPT_MORE: &str = "prompt-more";
 static OPT_RECURSIVE: &str = "recursive";
-static OPT_RECURSIVE_R: &str = "recursive_R";
 static OPT_VERBOSE: &str = "verbose";
 static PRESUME_INPUT_TTY: &str = "-presume-input-tty";
 
@@ -77,10 +76,8 @@ fn get_long_usage() -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let long_usage = get_long_usage();
-
     let matches = uu_app()
-        .after_help(&long_usage[..])
+        .after_help(get_long_usage())
         .try_get_matches_from(args)?;
 
     let files: Vec<String> = matches
@@ -134,9 +131,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             interactive: {
                 if force_index_option.is_some() && force_prompt_never {
                     InteractiveMode::Never
-                } else if matches.contains_id(OPT_PROMPT) {
+                } else if matches.get_flag(OPT_PROMPT) {
                     InteractiveMode::Always
-                } else if matches.contains_id(OPT_PROMPT_MORE) {
+                } else if matches.get_flag(OPT_PROMPT_MORE) {
                     InteractiveMode::Once
                 } else if matches.contains_id(OPT_INTERACTIVE) {
                     match matches.get_one::<String>(OPT_INTERACTIVE).unwrap().as_str() {
@@ -154,11 +151,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     InteractiveMode::PromptProtected
                 }
             },
-            one_fs: matches.contains_id(OPT_ONE_FILE_SYSTEM),
-            preserve_root: !matches.contains_id(OPT_NO_PRESERVE_ROOT),
-            recursive: matches.contains_id(OPT_RECURSIVE) || matches.contains_id(OPT_RECURSIVE_R),
-            dir: matches.contains_id(OPT_DIR),
-            verbose: matches.contains_id(OPT_VERBOSE),
+            one_fs: matches.get_flag(OPT_ONE_FILE_SYSTEM),
+            preserve_root: !matches.get_flag(OPT_NO_PRESERVE_ROOT),
+            recursive: matches.get_flag(OPT_RECURSIVE),
+            dir: matches.get_flag(OPT_DIR),
+            verbose: matches.get_flag(OPT_VERBOSE),
         };
         if options.interactive == InteractiveMode::Once && (options.recursive || files.len() > 3) {
             let msg = if options.recursive {
@@ -178,29 +175,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(OPT_FORCE)
                 .short('f')
                 .long(OPT_FORCE)
-                .multiple_occurrences(true)
-                .help("ignore nonexistent files and arguments, never prompt"),
+                .help("ignore nonexistent files and arguments, never prompt")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_PROMPT)
                 .short('i')
                 .help("prompt before every removal")
-                .overrides_with_all(&[OPT_PROMPT_MORE, OPT_INTERACTIVE]),
+                .overrides_with_all(&[OPT_PROMPT_MORE, OPT_INTERACTIVE])
+                .action(ArgAction::SetTrue),
         )
         .arg(Arg::new(OPT_PROMPT_MORE).short('I').help(
             "prompt once before removing more than three files, or when removing recursively. \
             Less intrusive than -i, while still giving some protection against most mistakes",
-        ).overrides_with_all(&[OPT_PROMPT, OPT_INTERACTIVE]))
+        ).overrides_with_all(&[OPT_PROMPT, OPT_INTERACTIVE])
+        ).action(ArgAction::SetTrue))
         .arg(
             Arg::new(OPT_INTERACTIVE)
                 .long(OPT_INTERACTIVE)
@@ -208,8 +208,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                     "prompt according to WHEN: never, once (-I), or always (-i). Without WHEN, \
                     prompts always",
                 )
-                .value_name("WHEN")
-                .takes_value(true)
+                .value_name("WHEN"),
                 .overrides_with_all(&[OPT_PROMPT, OPT_PROMPT_MORE]),
         )
         .arg(
@@ -219,43 +218,41 @@ pub fn uu_app<'a>() -> Command<'a> {
                     "when removing a hierarchy recursively, skip any directory that is on a file \
                     system different from that of the corresponding command line argument (NOT \
                     IMPLEMENTED)",
-                ),
+                ).action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_NO_PRESERVE_ROOT)
                 .long(OPT_NO_PRESERVE_ROOT)
-                .help("do not treat '/' specially"),
+                .help("do not treat '/' specially")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_PRESERVE_ROOT)
                 .long(OPT_PRESERVE_ROOT)
-                .help("do not remove '/' (default)"),
+                .help("do not remove '/' (default)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_RECURSIVE)
                 .short('r')
-                .multiple_occurrences(true)
+                .visible_short_alias('R')
                 .long(OPT_RECURSIVE)
-                .help("remove directories and their contents recursively"),
-        )
-        .arg(
-            // To mimic GNU's behavior we also want the '-R' flag. However, using clap's
-            // alias method 'visible_alias("R")' would result in a long '--R' flag.
-            Arg::new(OPT_RECURSIVE_R)
-                .short('R')
-                .help("Equivalent to -r"),
+                .help("remove directories and their contents recursively")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_DIR)
                 .short('d')
                 .long(OPT_DIR)
-                .help("remove empty directories"),
+                .help("remove empty directories")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .short('v')
                 .long(OPT_VERBOSE)
-                .help("explain what is being done"),
+                .help("explain what is being done")
+                .action(ArgAction::SetTrue),
         )
         // From the GNU source code:
         // This is solely for testing.
@@ -267,15 +264,15 @@ pub fn uu_app<'a>() -> Command<'a> {
         // hyphens. Therefore it supports 3 leading hyphens.
         .arg(
             Arg::new(PRESUME_INPUT_TTY)
-                .long(PRESUME_INPUT_TTY)
+                .long("presume-input-tty")
                 .alias(PRESUME_INPUT_TTY)
-                .hide(true),
+                .hide(true)
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(ARG_FILES)
-                .multiple_occurrences(true)
-                .takes_value(true)
-                .min_values(1)
+                .action(ArgAction::Append)
+                .num_args(1..)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }

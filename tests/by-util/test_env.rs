@@ -16,7 +16,7 @@ fn test_env_help() {
         .arg("--help")
         .succeeds()
         .no_stderr()
-        .stdout_contains("OPTIONS:");
+        .stdout_contains("Options:");
 }
 
 #[test]
@@ -120,8 +120,8 @@ fn test_multiple_name_value_pairs() {
 fn test_ignore_environment() {
     let scene = TestScenario::new(util_name!());
 
-    scene.ucmd().arg("-i").run().no_stdout();
-    scene.ucmd().arg("-").run().no_stdout();
+    scene.ucmd().arg("-i").succeeds().no_stdout();
+    scene.ucmd().arg("-").succeeds().no_stdout();
 }
 
 #[test]

@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (vars) zlines BUFWRITER seekable
 
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::display::Quotable;
@@ -41,7 +41,7 @@ mod take;
 use take::take_all_but;
 use take::take_lines;
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -52,7 +52,6 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('c')
                 .long("bytes")
                 .value_name("[-]NUM")
-                .takes_value(true)
                 .help(
                     "\
                      print the first NUM bytes of each file;\n\
@@ -68,7 +67,6 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('n')
                 .long("lines")
                 .value_name("[-]NUM")
-                .takes_value(true)
                 .help(
                     "\
                      print the first NUM lines instead of the first 10;\n\
@@ -85,31 +83,35 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long("quiet")
                 .visible_alias("silent")
                 .help("never print headers giving file names")
-                .overrides_with_all(&[options::VERBOSE_NAME, options::QUIET_NAME]),
+                .overrides_with_all(&[options::VERBOSE_NAME, options::QUIET_NAME])
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::VERBOSE_NAME)
                 .short('v')
                 .long("verbose")
                 .help("always print headers giving file names")
-                .overrides_with_all(&[options::QUIET_NAME, options::VERBOSE_NAME]),
+                .overrides_with_all(&[options::QUIET_NAME, options::VERBOSE_NAME])
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRESUME_INPUT_PIPE)
-                .long("-presume-input-pipe")
+                .long("presume-input-pipe")
                 .alias("-presume-input-pipe")
-                .hide(true),
+                .hide(true)
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO_NAME)
                 .short('z')
                 .long("zero-terminated")
                 .help("line delimiter is NUL, not newline")
-                .overrides_with(options::ZERO_NAME),
+                .overrides_with(options::ZERO_NAME)
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILES_NAME)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
@@ -199,10 +201,10 @@ impl HeadOptions {
     pub fn get_from(matches: &clap::ArgMatches) -> Result<Self, String> {
         let mut options = Self::default();
 
-        options.quiet = matches.contains_id(options::QUIET_NAME);
-        options.verbose = matches.contains_id(options::VERBOSE_NAME);
-        options.zeroed = matches.contains_id(options::ZERO_NAME);
-        options.presume_input_pipe = matches.contains_id(options::PRESUME_INPUT_PIPE);
+        options.quiet = matches.get_flag(options::QUIET_NAME);
+        options.verbose = matches.get_flag(options::VERBOSE_NAME);
+        options.zeroed = matches.get_flag(options::ZERO_NAME);
+        options.presume_input_pipe = matches.get_flag(options::PRESUME_INPUT_PIPE);
 
         options.mode = Mode::from(matches)?;
 

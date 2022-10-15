@@ -3,7 +3,7 @@
 use clap::builder::ValueParser;
 use uucore::error::{UResult, UUsageError};
 
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
 use uucore::format_usage;
 
@@ -50,7 +50,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Err(r) => {
             if let Error::CommandLine(ref r) = r {
                 match r.kind() {
-                    clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion => {
+                    clap::error::ErrorKind::DisplayHelp
+                    | clap::error::ErrorKind::DisplayVersion => {
                         println!("{}", r);
                         return Ok(());
                     }
@@ -104,7 +105,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
@@ -115,14 +116,13 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::COMPUTE)
                 .short('c')
                 .long(options::COMPUTE)
-                .takes_value(false)
-                .help("Compute process transition context before modifying."),
+                .help("Compute process transition context before modifying.")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::USER)
                 .short('u')
                 .long(options::USER)
-                .takes_value(true)
                 .value_name("USER")
                 .help("Set user USER in the target security context.")
                 .value_parser(ValueParser::os_string()),
@@ -131,7 +131,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::ROLE)
                 .short('r')
                 .long(options::ROLE)
-                .takes_value(true)
                 .value_name("ROLE")
                 .help("Set role ROLE in the target security context.")
                 .value_parser(ValueParser::os_string()),
@@ -140,7 +139,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::TYPE)
                 .short('t')
                 .long(options::TYPE)
-                .takes_value(true)
                 .value_name("TYPE")
                 .help("Set type TYPE in the target security context.")
                 .value_parser(ValueParser::os_string()),
@@ -149,14 +147,13 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::RANGE)
                 .short('l')
                 .long(options::RANGE)
-                .takes_value(true)
                 .value_name("RANGE")
                 .help("Set range RANGE in the target security context.")
                 .value_parser(ValueParser::os_string()),
         )
         .arg(
             Arg::new("ARG")
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::CommandName),
         )
@@ -210,7 +207,7 @@ struct Options {
 fn parse_command_line(config: Command, args: impl uucore::Args) -> Result<Options> {
     let matches = config.try_get_matches_from(args)?;
 
-    let compute_transition_context = matches.contains_id(options::COMPUTE);
+    let compute_transition_context = matches.get_flag(options::COMPUTE);
 
     let mut args = matches
         .get_many::<OsString>("ARG")

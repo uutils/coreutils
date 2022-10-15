@@ -254,11 +254,7 @@ fn test_error_filename_only() {
         .args(&["file"])
         .fails()
         .code_is(1)
-        .stderr_contains(
-            "error: The following required arguments were not provided:
-    --reference <RFILE>
-    --size <SIZE>",
-        );
+        .stderr_contains("error: The following required arguments were not provided:");
 }
 
 #[test]
