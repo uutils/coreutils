@@ -427,18 +427,42 @@ fn test_install_nested_paths_copy_file() {
 
 #[test]
 fn test_install_failing_omitting_directory() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file1 = "source_file";
-    let dir1 = "source_dir";
-    let dir2 = "target_dir";
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file1 = "file1";
+    let dir1 = "dir1";
+    let no_dir2 = "no-dir2";
+    let dir3 = "dir3";
 
     at.mkdir(dir1);
-    at.mkdir(dir2);
+    at.mkdir(dir3);
     at.touch(file1);
 
-    ucmd.arg(dir1)
+    // GNU install checks for existing target dir first before checking on source params
+    scene
+        .ucmd()
         .arg(file1)
-        .arg(dir2)
+        .arg(dir1)
+        .arg(no_dir2)
+        .fails()
+        .stderr_contains("is not a directory");
+
+    // file1 will be copied before install fails on dir1
+    scene
+        .ucmd()
+        .arg(file1)
+        .arg(dir1)
+        .arg(dir3)
+        .fails()
+        .code_is(1)
+        .stderr_contains("omitting directory");
+    assert!(at.file_exists(&format!("{}/{}", dir3, file1)));
+
+    // install also fails, when only one source param is given
+    scene
+        .ucmd()
+        .arg(dir1)
+        .arg(dir3)
         .fails()
         .code_is(1)
         .stderr_contains("omitting directory");
