@@ -37,11 +37,11 @@ writing cross-platform code.
 ## Documentation
 uutils has both user and developer documentation available:
 
-- [User Manual](https://uutils.github.io/coreutils-docs/user/)
-- [Developer Documentation](https://uutils.github.io/coreutils-docs/dev/coreutils/)
+- [User Manual](https://uutils.github.io/user/)
+- [Developer Documentation](https://uutils.github.io/dev/coreutils/)
 
 Both can also be generated locally, the instructions for that can be found in the
-[coreutils docs](https://github.com/uutils/coreutils-docs) repository.
+[coreutils docs](https://github.com/uutils/uutils.github.io) repository.
 
 <!-- ANCHOR: build (this mark is needed for mdbook) -->
 ## Requirements
@@ -349,7 +349,7 @@ $ make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
 
 Below is the evolution of how many GNU tests uutils passes. A more detailed
 breakdown of the GNU test results of the main branch can be found
-[in the user manual](https://uutils.github.io/coreutils-docs/user/test_coverage.html).
+[in the user manual](https://uutils.github.io/user/test_coverage.html).
 
 ![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
 
