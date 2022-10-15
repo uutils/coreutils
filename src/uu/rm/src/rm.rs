@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{crate_version, Arg, ArgAction, Command, parser::ValueSource};
 use remove_dir_all::remove_dir_all;
 use std::collections::VecDeque;
 use std::fs::{self, File, Metadata};
@@ -85,51 +85,61 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let force_index_option = matches.index_of(OPT_FORCE);
+    let force_flag = matches.get_flag(OPT_FORCE);
 
     // If -f(--force) is before any -i (or variants) we want prompts else no prompts
-    let force_prompt_never: bool = {
-        if let Some(force_index) = force_index_option {
-            let prompt_index_option = matches.index_of(OPT_PROMPT);
-            let prompt_more_index_option = matches.index_of(OPT_PROMPT_MORE);
-            let interactive_index_option = matches.index_of(OPT_INTERACTIVE);
-
-            let mut result = true;
-
-            // if we have rm -i -f
-            if let Some(prompt_index) = prompt_index_option {
-                if result {
-                    result = prompt_index <= force_index;
+    let force_prompt_never: bool = if force_flag {
+        if matches.value_source(OPT_FORCE) == Some(ValueSource::CommandLine) {
+            if let Some(force_index) = matches.index_of(OPT_FORCE) {
+                let mut result = true;
+    
+                // if we have rm -i -f
+                if matches.value_source(OPT_PROMPT) == Some(ValueSource::CommandLine) {
+                    if let Some(prompt_index) = matches.index_of(OPT_PROMPT) {
+                        if result {
+                            result = prompt_index <= force_index;
+                        }
+                    }
                 }
-            }
-            // if we have rm -I -f
-            if let Some(prompt_more_index_index) = prompt_more_index_option {
-                if result {
-                    result = prompt_more_index_index <= force_index;
+                
+                // if we have rm -I -f
+                if matches.value_source(OPT_PROMPT_MORE) == Some(ValueSource::CommandLine) {
+                    if let Some(prompt_more_index_index) = matches.index_of(OPT_PROMPT_MORE) {
+                        if result {
+                            result = prompt_more_index_index <= force_index;
+                        }
+                    }    
                 }
-            }
-            // if we have rm --interactive -f
-            if let Some(interactive_index) = interactive_index_option {
-                if result {
-                    result = interactive_index <= force_index;
-                }
-            }
 
-            result
+                // if we have rm --interactive -f
+                if matches.value_source(OPT_INTERACTIVE) == Some(ValueSource::CommandLine) {
+                    if let Some(interactive_index) = matches.index_of(OPT_INTERACTIVE) {
+                        if result {
+                            result = interactive_index <= force_index;
+                        }
+                    }    
+                }
+    
+                result
+            } else {
+                false
+            }
         } else {
             false
         }
+    } else {
+        false
     };
 
-    if files.is_empty() && force_index_option.is_none() {
+    if files.is_empty() && !force_flag {
         // Still check by hand and not use clap
         // Because "rm -f" is a thing
         return Err(UUsageError::new(1, "missing operand"));
     } else {
         let options = Options {
-            force: force_index_option.is_some(),
+            force: force_flag,
             interactive: {
-                if force_index_option.is_some() && force_prompt_never {
+                if force_flag && force_prompt_never {
                     InteractiveMode::Never
                 } else if matches.get_flag(OPT_PROMPT) {
                     InteractiveMode::Always
