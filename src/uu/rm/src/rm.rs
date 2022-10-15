@@ -196,11 +196,14 @@ pub fn uu_app() -> Command {
                 .overrides_with_all(&[OPT_PROMPT_MORE, OPT_INTERACTIVE])
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(OPT_PROMPT_MORE).short('I').help(
-            "prompt once before removing more than three files, or when removing recursively. \
-            Less intrusive than -i, while still giving some protection against most mistakes",
-        ).overrides_with_all(&[OPT_PROMPT, OPT_INTERACTIVE])
-        ).action(ArgAction::SetTrue))
+        .arg(
+            Arg::new(OPT_PROMPT_MORE)
+                .short('I')
+                .help("prompt once before removing more than three files, or when removing recursively. \
+                Less intrusive than -i, while still giving some protection against most mistakes")
+                .overrides_with_all(&[OPT_PROMPT, OPT_INTERACTIVE])
+                .action(ArgAction::SetTrue),
+        )
         .arg(
             Arg::new(OPT_INTERACTIVE)
                 .long(OPT_INTERACTIVE)
@@ -208,7 +211,7 @@ pub fn uu_app() -> Command {
                     "prompt according to WHEN: never, once (-I), or always (-i). Without WHEN, \
                     prompts always",
                 )
-                .value_name("WHEN"),
+                .value_name("WHEN")
                 .overrides_with_all(&[OPT_PROMPT, OPT_PROMPT_MORE]),
         )
         .arg(

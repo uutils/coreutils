@@ -2713,7 +2713,7 @@ name = "uu_rm"
 version = "0.0.16"
 dependencies = [
  "clap 4.0.14",
- "libc"
+ "libc",
  "remove_dir_all 0.7.0",
  "uucore",
  "walkdir",
