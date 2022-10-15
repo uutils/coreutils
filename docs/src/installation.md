@@ -1,7 +1,9 @@
+<!-- spell-checker:ignore pacman pamac nixpkgs -->
+
 # Installation
 
 This is a list of uutils packages in various distributions and package managers.
-Note that these are packaged by third-parties and the packages might contains
+Note that these are packaged by third-parties and the packages might contain
 patches.
 
 You can also [build uutils from source](/build.md).
