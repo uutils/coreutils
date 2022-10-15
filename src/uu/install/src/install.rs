@@ -485,14 +485,14 @@ fn is_new_file_path(path: &Path) -> bool {
             || path.parent().unwrap().as_os_str().is_empty()) // In case of a simple file
 }
 
-/// Test if the path is an existing directory or ends with a trailing seperator.
+/// Test if the path is an existing directory or ends with a trailing separator.
 ///
 /// Returns true, if one of the conditions above is met; else false.
 ///
 #[cfg(unix)]
 fn is_potential_directory_path(path: &Path) -> bool {
-    let seperator = MAIN_SEPARATOR as u8;
-    path.as_os_str().as_bytes().last() == Some(&seperator) || path.is_dir()
+    let separator = MAIN_SEPARATOR as u8;
+    path.as_os_str().as_bytes().last() == Some(&separator) || path.is_dir()
 }
 
 #[cfg(not(unix))]
