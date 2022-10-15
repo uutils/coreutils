@@ -170,7 +170,7 @@ impl<'a, 'b> MDWriter<'a, 'b> {
             .render_usage()
             .to_string()
             .lines()
-            .skip(1)
+            .map(|l| l.strip_prefix("Usage:").unwrap_or(l))
             .map(|l| l.trim())
             .filter(|l| !l.is_empty())
             .collect::<Vec<_>>()
