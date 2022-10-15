@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, Arg, ArgAction, Command, parser::ValueSource};
+use clap::{crate_version, parser::ValueSource, Arg, ArgAction, Command};
 use remove_dir_all::remove_dir_all;
 use std::collections::VecDeque;
 use std::fs::{self, File, Metadata};
@@ -92,7 +92,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if matches.value_source(OPT_FORCE) == Some(ValueSource::CommandLine) {
             if let Some(force_index) = matches.index_of(OPT_FORCE) {
                 let mut result = true;
-    
+
                 // if we have rm -i -f
                 if matches.value_source(OPT_PROMPT) == Some(ValueSource::CommandLine) {
                     if let Some(prompt_index) = matches.index_of(OPT_PROMPT) {
@@ -101,14 +101,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         }
                     }
                 }
-                
+
                 // if we have rm -I -f
                 if matches.value_source(OPT_PROMPT_MORE) == Some(ValueSource::CommandLine) {
                     if let Some(prompt_more_index_index) = matches.index_of(OPT_PROMPT_MORE) {
                         if result {
                             result = prompt_more_index_index <= force_index;
                         }
-                    }    
+                    }
                 }
 
                 // if we have rm --interactive -f
@@ -117,9 +117,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         if result {
                             result = interactive_index <= force_index;
                         }
-                    }    
+                    }
                 }
-    
+
                 result
             } else {
                 false
