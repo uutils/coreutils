@@ -91,11 +91,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let force_prompt_never: bool = force_flag && {
         if matches.value_source(OPT_FORCE) == Some(ValueSource::CommandLine) {
             let force_index = matches.index_of(OPT_FORCE).unwrap_or(0);
-            [OPT_PROMPT, OPT_PROMPT_MORE, OPT_INTERACTIVE]
+            ![OPT_PROMPT, OPT_PROMPT_MORE, OPT_INTERACTIVE]
                 .iter()
-                .any(|opt| {
-                    matches.value_source(opt) == Some(ValueSource::CommandLine)
-                        && matches.index_of(opt).unwrap_or(0) < force_index
+                .any(|flag| {
+                    matches.value_source(flag) == Some(ValueSource::CommandLine)
+                        && matches.index_of(flag).unwrap_or(0) > force_index
                 })
         } else {
             false
@@ -110,7 +110,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let options = Options {
             force: force_flag,
             interactive: {
-                if force_flag && force_prompt_never {
+                if force_prompt_never {
                     InteractiveMode::Never
                 } else if matches.get_flag(OPT_PROMPT) {
                     InteractiveMode::Always
