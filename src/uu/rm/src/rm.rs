@@ -88,47 +88,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let force_flag = matches.get_flag(OPT_FORCE);
 
     // If -f(--force) is before any -i (or variants) we want prompts else no prompts
-    let force_prompt_never: bool = if force_flag {
+    let force_prompt_never: bool = force_flag && {
         if matches.value_source(OPT_FORCE) == Some(ValueSource::CommandLine) {
-            if let Some(force_index) = matches.index_of(OPT_FORCE) {
-                let mut result = true;
-
-                // if we have rm -i -f
-                if matches.value_source(OPT_PROMPT) == Some(ValueSource::CommandLine) {
-                    if let Some(prompt_index) = matches.index_of(OPT_PROMPT) {
-                        if result {
-                            result = prompt_index <= force_index;
-                        }
-                    }
-                }
-
-                // if we have rm -I -f
-                if matches.value_source(OPT_PROMPT_MORE) == Some(ValueSource::CommandLine) {
-                    if let Some(prompt_more_index_index) = matches.index_of(OPT_PROMPT_MORE) {
-                        if result {
-                            result = prompt_more_index_index <= force_index;
-                        }
-                    }
-                }
-
-                // if we have rm --interactive -f
-                if matches.value_source(OPT_INTERACTIVE) == Some(ValueSource::CommandLine) {
-                    if let Some(interactive_index) = matches.index_of(OPT_INTERACTIVE) {
-                        if result {
-                            result = interactive_index <= force_index;
-                        }
-                    }
-                }
-
-                result
-            } else {
-                false
-            }
+            let force_index = matches.index_of(OPT_FORCE).unwrap_or(0);
+            [OPT_PROMPT, OPT_PROMPT_MORE, OPT_INTERACTIVE]
+                .iter()
+                .any(|opt| {
+                    matches.value_source(opt) == Some(ValueSource::CommandLine)
+                        && matches.index_of(opt).unwrap_or(0) < force_index
+                })
         } else {
             false
         }
-    } else {
-        false
     };
 
     if files.is_empty() && !force_flag {
