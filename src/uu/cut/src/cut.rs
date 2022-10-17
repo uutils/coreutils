@@ -145,7 +145,7 @@ fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
 
 fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()> {
     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
-    let buf_in = BufReader::new(reader);
+    let mut buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
     let delim = opts
         .out_delim
@@ -189,7 +189,7 @@ fn cut_fields_delimiter<R: Read>(
     newline_char: u8,
     out_delim: &str,
 ) -> UResult<()> {
-    let buf_in = BufReader::new(reader);
+    let mut buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
     let input_delim_len = delim.len();
 
@@ -273,7 +273,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> URes
         );
     }
 
-    let buf_in = BufReader::new(reader);
+    let mut buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
     let delim_len = opts.delimiter.len();
 
