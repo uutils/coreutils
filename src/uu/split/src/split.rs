@@ -38,8 +38,9 @@ static OPT_HEX_SUFFIXES: &str = "hex-suffixes";
 static OPT_SUFFIX_LENGTH: &str = "suffix-length";
 static OPT_DEFAULT_SUFFIX_LENGTH: &str = "0";
 static OPT_VERBOSE: &str = "verbose";
-//The ---io-blksize parameter is consumed and ignored.
+//The ---io and ---io-blksize parameters are consumed and ignored.
 //The parameter is included to make GNU coreutils tests pass.
+static OPT_IO: &str = "-io";
 static OPT_IO_BLKSIZE: &str = "-io-blksize";
 static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
 
@@ -153,6 +154,13 @@ pub fn uu_app() -> Command {
                 .long(OPT_VERBOSE)
                 .help("print a diagnostic just before each output file is opened")
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(OPT_IO)
+                .long(OPT_IO)
+                .alias(OPT_IO)
+                .takes_value(true)
+                .hide(true),
         )
         .arg(
             Arg::new(OPT_IO_BLKSIZE)
@@ -912,10 +920,22 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
                 // then move on to the next chunk if necessary.
                 None => {
                     let end = self.num_bytes_remaining_in_current_chunk;
-                    let num_bytes_written = self.inner.write(&buf[..end.min(buf.len())])?;
-                    self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
-                    total_bytes_written += num_bytes_written;
-                    buf = &buf[num_bytes_written..];
+
+                    // This is ugly but here to match GNU behavior. If the input
+                    // doesn't end with a \n, pretend that it does for handling
+                    // the second to last segment chunk. See `line-bytes.sh`.
+                    if end == buf.len()
+                        && self.num_bytes_remaining_in_current_chunk
+                            < self.chunk_size.try_into().unwrap()
+                        && buf[buf.len() - 1] != b'\n'
+                    {
+                        self.num_bytes_remaining_in_current_chunk = 0;
+                    } else {
+                        let num_bytes_written = self.inner.write(&buf[..end.min(buf.len())])?;
+                        self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
+                        total_bytes_written += num_bytes_written;
+                        buf = &buf[num_bytes_written..];
+                    }
                 }
 
                 // If there is a newline character and the line
