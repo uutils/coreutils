@@ -393,9 +393,9 @@ fn test_same_device_inode() {
 fn test_newer_file() {
     let scenario = TestScenario::new(util_name!());
 
-    scenario.cmd("touch").arg("regular_file").succeeds();
+    scenario.fixtures.touch("regular_file");
     sleep(std::time::Duration::from_millis(1000));
-    scenario.cmd("touch").arg("newer_file").succeeds();
+    scenario.fixtures.touch("newer_file");
 
     scenario
         .ucmd()
