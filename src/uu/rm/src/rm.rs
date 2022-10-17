@@ -89,17 +89,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // If -f(--force) is before any -i (or variants) we want prompts else no prompts
     let force_prompt_never: bool = force_flag && {
-        if matches.value_source(OPT_FORCE) == Some(ValueSource::CommandLine) {
-            let force_index = matches.index_of(OPT_FORCE).unwrap_or(0);
-            ![OPT_PROMPT, OPT_PROMPT_MORE, OPT_INTERACTIVE]
-                .iter()
-                .any(|flag| {
-                    matches.value_source(flag) == Some(ValueSource::CommandLine)
-                        && matches.index_of(flag).unwrap_or(0) > force_index
-                })
-        } else {
-            false
-        }
+        let force_index = matches.index_of(OPT_FORCE).unwrap_or(0);
+        ![OPT_PROMPT, OPT_PROMPT_MORE, OPT_INTERACTIVE]
+            .iter()
+            .any(|flag| {
+                matches.value_source(flag) == Some(ValueSource::CommandLine)
+                    && matches.index_of(flag).unwrap_or(0) > force_index
+            })
     };
 
     if files.is_empty() && !force_flag {
