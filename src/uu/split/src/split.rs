@@ -157,9 +157,8 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(OPT_IO)
-                .long(OPT_IO)
+                .long("io")
                 .alias(OPT_IO)
-                .takes_value(true)
                 .hide(true),
         )
         .arg(
