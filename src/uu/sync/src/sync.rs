@@ -11,14 +11,12 @@ extern crate libc;
 
 use clap::{crate_version, Arg, ArgAction, Command};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::errno::Errno;
-#[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::{open, OFlag};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::sys::stat::Mode;
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
 
 static ABOUT: &str = "Synchronize cached writes to persistent storage";
@@ -183,28 +181,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Use the Nix open to be able to set the NONBLOCK flags for fifo files
         #[cfg(any(target_os = "linux", target_os = "android"))]
         {
-            match open(Path::new(&f), OFlag::O_NONBLOCK, Mode::empty()) {
-                Ok(_) => {}
-                Err(e) => {
-                    if e == Errno::ENOENT {
-                        return Err(USimpleError::new(
-                            1,
-                            format!("cannot stat {}: No such file or directory", f.quote()),
-                        ));
-                    }
-                    if e == Errno::EACCES {
-                        if Path::new(&f).is_dir() {
-                            return Err(USimpleError::new(
-                                1,
-                                format!("error opening {}: Permission denied", f.quote()),
-                            ));
-                        } else {
-                            // ignore the issue
-                            // ./target/debug/coreutils sync --data file
-                        }
-                    }
-                }
-            }
+            open(Path::new(&f), OFlag::O_NONBLOCK, Mode::empty())
+                .map_err_context(|| format!("cannot stat {}", f.quote()))?;
         }
         #[cfg(not(any(target_os = "linux", target_os = "android")))]
         {

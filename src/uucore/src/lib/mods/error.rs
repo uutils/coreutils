@@ -508,6 +508,17 @@ impl From<std::io::Error> for Box<dyn UError> {
     }
 }
 
+impl<T> FromIo<UResult<T>> for Result<T, nix::Error> {
+    fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
+        self.map_err(|e| {
+            Box::new(UIoError {
+                context: Some((context)()),
+                inner: std::io::Error::from_raw_os_error(e as i32),
+            }) as Box<dyn UError>
+        })
+    }
+}
+
 /// Shorthand to construct [`UIoError`]-instances.
 ///
 /// This macro serves as a convenience call to quickly construct instances of
