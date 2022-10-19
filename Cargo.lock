@@ -2276,7 +2276,6 @@ dependencies = [
  "selinux",
  "uucore",
  "walkdir",
- "winapi",
  "xattr",
 ]
 
