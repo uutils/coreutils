@@ -2800,7 +2800,7 @@ dependencies = [
  "remove_dir_all 0.7.0",
  "uucore",
  "walkdir",
- "winapi",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
