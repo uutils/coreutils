@@ -118,6 +118,26 @@ fn test_check_sha1() {
 }
 
 #[test]
+fn test_check_file_not_found_warning() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("testf", "foobar\n");
+    at.write(
+        "testf.sha1",
+        "988881adc9fc3655077dc2d4d757d480b5ea0e11  testf\n",
+    );
+    at.remove("testf");
+    scene
+        .ccmd("sha1sum")
+        .arg("-c")
+        .arg(at.subdir.join("testf.sha1"))
+        .succeeds()
+        .stdout_is("sha1sum: testf: No such file or directory\ntestf: FAILED open or read\n")
+        .stderr_is("sha1sum: warning: 1 listed file could not be read");
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
 }
