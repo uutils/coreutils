@@ -2943,7 +2943,7 @@ dependencies = [
  "libc",
  "nix",
  "uucore",
- "winapi",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
