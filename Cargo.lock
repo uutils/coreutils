@@ -3010,7 +3010,7 @@ dependencies = [
  "filetime",
  "time",
  "uucore",
- "winapi",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
