@@ -26,7 +26,7 @@ fn test_helper(file_name: &str, possible_args: &[&str]) {
 
 #[test]
 fn test_buffer_sizes() {
-    let buffer_sizes = ["0", "50K", "50k", "1M", "100M"];
+    let buffer_sizes = ["0", "50K", "50k", "1M", "100M", "10%", "100%"];
     for buffer_size in &buffer_sizes {
         TestScenario::new(util_name!())
             .ucmd_keepenv()
@@ -65,10 +65,24 @@ fn test_invalid_buffer_size() {
 
     new_ucmd!()
         .arg("-S")
+        .arg("%")
+        .fails()
+        .code_is(2)
+        .stderr_only("sort: invalid --buffer-size argument '%'");
+
+    new_ucmd!()
+        .arg("-S")
         .arg("100f")
         .fails()
         .code_is(2)
         .stderr_only("sort: invalid suffix in --buffer-size argument '100f'");
+
+    new_ucmd!()
+        .arg("-S")
+        .arg("101%")
+        .fails()
+        .code_is(2)
+        .stderr_only("sort: --buffer-size argument '101%' too large");
 
     #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
