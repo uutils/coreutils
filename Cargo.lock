@@ -2308,7 +2308,7 @@ dependencies = [
  "clap 4.0.17",
  "libc",
  "uucore",
- "winapi",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
