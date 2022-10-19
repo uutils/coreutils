@@ -2498,7 +2498,7 @@ dependencies = [
  "clap 4.0.17",
  "hostname",
  "uucore",
- "winapi",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]

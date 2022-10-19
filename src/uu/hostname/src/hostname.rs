@@ -32,15 +32,14 @@ static OPT_HOST: &str = "host";
 mod wsa {
     use std::io;
 
-    use winapi::shared::minwindef::MAKEWORD;
-    use winapi::um::winsock2::{WSACleanup, WSAStartup, WSADATA};
+    use windows_sys::Win32::Networking::WinSock::{WSACleanup, WSAStartup, WSADATA};
 
     pub(super) struct WsaHandle(());
 
     pub(super) fn start() -> io::Result<WsaHandle> {
         let err = unsafe {
             let mut data = std::mem::MaybeUninit::<WSADATA>::uninit();
-            WSAStartup(MAKEWORD(2, 2), data.as_mut_ptr())
+            WSAStartup(0x0202, data.as_mut_ptr())
         };
         if err != 0 {
             Err(io::Error::from_raw_os_error(err))
