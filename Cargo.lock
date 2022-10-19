@@ -2968,8 +2968,8 @@ dependencies = [
  "notify",
  "same-file",
  "uucore",
- "winapi",
  "winapi-util",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
