@@ -1,5 +1,5 @@
 use crate::common::util::*;
-// spell-checker:ignore checkfile, nonames, testf
+// spell-checker:ignore checkfile, nonames, testf, ntestf
 macro_rules! get_hash(
     ($str:expr) => (
         $str.split(' ').collect::<Vec<&str>>()[0]
