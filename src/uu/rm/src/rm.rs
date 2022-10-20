@@ -550,7 +550,7 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
 #[cfg(windows)]
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
     use std::os::windows::prelude::MetadataExt;
-    use winapi::um::winnt::FILE_ATTRIBUTE_READONLY;
+    use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_READONLY;
     let not_user_writable = (metadata.file_attributes() & FILE_ATTRIBUTE_READONLY) != 0;
     if not_user_writable {
         prompt(&(format!("remove write-protected directory {}? ", path.quote())))
