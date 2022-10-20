@@ -1249,11 +1249,25 @@ fn test_install_backup_off() {
 #[test]
 fn test_install_missing_arguments() {
     let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let no_target_dir = "no-target_dir";
 
     scene
         .ucmd()
         .fails()
-        .stderr_contains("install: missing file operand");
+        .code_is(1)
+        .stderr_contains("install: missing file operand")
+        .stderr_contains("install --help' for more information.");
+
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(format!("-t {}", no_target_dir))
+        .fails()
+        .stderr_contains("install: missing file operand")
+        .stderr_contains("install --help' for more information.");
+    assert!(!at.dir_exists(no_target_dir));
 }
 
 #[test]
@@ -1262,12 +1276,33 @@ fn test_install_missing_destination() {
     let at = &scene.fixtures;
 
     let file_1 = "source_file1";
+    let dir_1 = "source_dir1";
 
     at.touch(file_1);
-    scene.ucmd().arg(file_1).fails().stderr_contains(format!(
-        "install: missing destination file operand after '{}'",
-        file_1
-    ));
+    at.mkdir(dir_1);
+
+    // will fail and also print some info on correct usage
+    scene
+        .ucmd()
+        .arg(file_1)
+        .fails()
+        .stderr_contains(format!(
+            "install: missing destination file operand after '{}'",
+            file_1
+        ))
+        .stderr_contains("install --help' for more information.");
+
+    // GNU's install will check for correct num of arguments and then fail
+    // and it does not recognize, that the source is not a file but a directory.
+    scene
+        .ucmd()
+        .arg(dir_1)
+        .fails()
+        .stderr_contains(format!(
+            "install: missing destination file operand after '{}'",
+            dir_1
+        ))
+        .stderr_contains("install --help' for more information.");
 }
 
 #[test]
