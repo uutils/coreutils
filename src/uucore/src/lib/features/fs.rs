@@ -81,9 +81,10 @@ impl FileInformation {
             let mut open_options = OpenOptions::new();
             let mut custom_flags = 0;
             if !dereference {
-                custom_flags |= winapi::um::winbase::FILE_FLAG_OPEN_REPARSE_POINT;
+                custom_flags |=
+                    windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
             }
-            custom_flags |= winapi::um::winbase::FILE_FLAG_BACKUP_SEMANTICS;
+            custom_flags |= windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
             open_options.custom_flags(custom_flags);
             let file = open_options.read(true).open(path.as_ref())?;
             Self::from_file(&file)

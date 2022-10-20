@@ -32,18 +32,14 @@ use std::ffi::OsStr;
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
 #[cfg(windows)]
-use winapi::shared::minwindef::DWORD;
+use windows_sys::Win32::Foundation::{ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE};
 #[cfg(windows)]
-use winapi::um::fileapi::GetDiskFreeSpaceW;
-#[cfg(windows)]
-use winapi::um::fileapi::{
-    FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDriveTypeW, GetVolumeInformationW,
-    GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
+use windows_sys::Win32::Storage::FileSystem::{
+    FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDiskFreeSpaceW, GetDriveTypeW,
+    GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
 };
 #[cfg(windows)]
-use winapi::um::handleapi::INVALID_HANDLE_VALUE;
-#[cfg(windows)]
-use winapi::um::winbase::DRIVE_REMOTE;
+use windows_sys::Win32::System::WindowsProgramming::DRIVE_REMOTE;
 
 // Warning: the pointer has to be used *immediately* or the Vec
 // it points to will be dropped!
@@ -265,7 +261,7 @@ impl MountInfo {
                     .collect::<Vec<u16>>()
                     .as_ptr(),
                 dev_name_buf.as_mut_ptr(),
-                dev_name_buf.len() as DWORD,
+                dev_name_buf.len() as u32,
             )
         };
         volume_name.push('\\');
@@ -276,7 +272,7 @@ impl MountInfo {
             GetVolumePathNamesForVolumeNameW(
                 String2LPWSTR!(volume_name),
                 mount_root_buf.as_mut_ptr(),
-                mount_root_buf.len() as DWORD,
+                mount_root_buf.len() as u32,
                 ptr::null_mut(),
             )
         };
@@ -296,7 +292,7 @@ impl MountInfo {
                 ptr::null_mut(),
                 ptr::null_mut(),
                 fs_type_buf.as_mut_ptr(),
-                fs_type_buf.len() as DWORD,
+                fs_type_buf.len() as u32,
             )
         };
         let fs_type = if 0 != success {
@@ -443,9 +439,8 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
     {
         let mut volume_name_buf = [0u16; MAX_PATH];
         // As recommended in the MS documentation, retrieve the first volume before the others
-        let find_handle = unsafe {
-            FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as DWORD)
-        };
+        let find_handle =
+            unsafe { FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as u32) };
         if INVALID_HANDLE_VALUE == find_handle {
             crash!(
                 EXIT_ERR,
@@ -467,12 +462,11 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
                 FindNextVolumeW(
                     find_handle,
                     volume_name_buf.as_mut_ptr(),
-                    volume_name_buf.len() as DWORD,
+                    volume_name_buf.len() as u32,
                 )
             } {
                 let err = IOError::last_os_error();
-                if err.raw_os_error() != Some(winapi::shared::winerror::ERROR_NO_MORE_FILES as i32)
-                {
+                if err.raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
                     crash!(EXIT_ERR, "FindNextVolumeW failed: {}", err);
                 }
                 break;
@@ -524,7 +518,7 @@ impl FsUsage {
                 //path_utf8.as_ptr(),
                 String2LPWSTR!(path.as_os_str()),
                 root_path.as_mut_ptr(),
-                root_path.len() as DWORD,
+                root_path.len() as u32,
                 ptr::null_mut(),
             )
         };

@@ -74,6 +74,13 @@ skip = [
     { name = "clap", version = "=3.2.22" },
     # bindgen (via selinux-sys & fts-sys)
     { name = "clap_lex", version = "=0.2.4" },
+    # windows-sys (via terminal_size, crossterm -> parking_lot, notify -> filetime)
+    { name = "windows-sys", version = "=0.36.1" },
+    { name = "windows_aarch64_msvc", version = "=0.36.1" },
+    { name = "windows_i686_gnu", version = "=0.36.1" },
+    { name = "windows_i686_msvc", version = "=0.36.1" },
+    { name = "windows_x86_64_gnu", version = "=0.36.1" },
+    { name = "windows_x86_64_msvc", version = "=0.36.1" },
 ]
 # spell-checker: enable
 
