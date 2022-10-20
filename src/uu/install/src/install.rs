@@ -506,13 +506,29 @@ fn is_potential_directory_path(path: &Path) -> bool {
 /// Returns a Result type with the Err variant containing the error message.
 ///
 fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
+    // first check that paths contains at least one element
+    if paths.is_empty() {
+        return Err(UUsageError::new(1, "missing file operand"));
+    }
+
+    // get the target from either "-t foo" param or from the last given paths argument
     let target: PathBuf = if let Some(path) = &b.target_dir {
         path.into()
     } else {
-        paths
-            .pop()
-            .ok_or_else(|| UUsageError::new(1, "missing file operand"))?
-            .into()
+        let last_path: PathBuf = paths.pop().unwrap().into();
+
+        // paths has to contain more elements
+        if paths.is_empty() {
+            return Err(UUsageError::new(
+                1,
+                format!(
+                    "missing destination file operand after '{}'",
+                    last_path.to_str().unwrap()
+                ),
+            ));
+        }
+
+        last_path
     };
 
     let sources = &paths.iter().map(PathBuf::from).collect::<Vec<_>>();
@@ -558,15 +574,7 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
     if sources.len() > 1 || is_potential_directory_path(&target) {
         copy_files_into_dir(sources, &target, b)
     } else {
-        let source = sources.first().ok_or_else(|| {
-            UUsageError::new(
-                1,
-                format!(
-                    "missing destination file operand after '{}'",
-                    target.to_str().unwrap()
-                ),
-            )
-        })?;
+        let source = sources.first().unwrap();
 
         if source.is_dir() {
             return Err(InstallError::OmittingDirectory(source.to_path_buf()).into());
