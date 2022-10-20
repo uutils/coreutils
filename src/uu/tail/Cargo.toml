@@ -24,7 +24,7 @@ uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=[
 same-file = "1.0.6"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version="0.3", features=["fileapi", "handleapi", "processthreadsapi", "synchapi", "winbase"] }
+windows-sys = { version = "0.42.0", default-features = false, features = ["Win32_System_Threading", "Win32_Foundation"] }
 winapi-util = { version="0.1.5" }
 
 [target.'cfg(unix)'.dependencies]

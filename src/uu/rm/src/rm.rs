@@ -606,7 +606,7 @@ fn is_symlink_dir(_metadata: &Metadata) -> bool {
 #[cfg(windows)]
 fn is_symlink_dir(metadata: &Metadata) -> bool {
     use std::os::windows::prelude::MetadataExt;
-    use winapi::um::winnt::FILE_ATTRIBUTE_DIRECTORY;
+    use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_DIRECTORY;
 
     metadata.file_type().is_symlink()
         && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)

@@ -41,15 +41,12 @@ use uucore::format_usage;
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size, ParseSizeError};
 #[cfg(windows)]
-use winapi::shared::minwindef::{DWORD, LPVOID};
+use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
-use winapi::um::fileapi::{FILE_ID_INFO, FILE_STANDARD_INFO};
-#[cfg(windows)]
-use winapi::um::minwinbase::{FileIdInfo, FileStandardInfo};
-#[cfg(windows)]
-use winapi::um::winbase::GetFileInformationByHandleEx;
-#[cfg(windows)]
-use winapi::um::winnt::FILE_ID_128;
+use windows_sys::Win32::Storage::FileSystem::{
+    FileIdInfo, FileStandardInfo, GetFileInformationByHandleEx, FILE_ID_128, FILE_ID_INFO,
+    FILE_STANDARD_INFO,
+};
 
 mod options {
     pub const HELP: &str = "help";
@@ -208,21 +205,19 @@ fn get_size_on_disk(path: &Path) -> u64 {
         Err(_) => return size_on_disk, // opening directories will fail
     };
 
-    let handle = file.as_raw_handle();
-
     unsafe {
         let mut file_info: FILE_STANDARD_INFO = core::mem::zeroed();
         let file_info_ptr: *mut FILE_STANDARD_INFO = &mut file_info;
 
         let success = GetFileInformationByHandleEx(
-            handle,
+            file.as_raw_handle() as HANDLE,
             FileStandardInfo,
-            file_info_ptr as LPVOID,
-            std::mem::size_of::<FILE_STANDARD_INFO>() as DWORD,
+            file_info_ptr as _,
+            std::mem::size_of::<FILE_STANDARD_INFO>() as u32,
         );
 
         if success != 0 {
-            size_on_disk = *file_info.AllocationSize.QuadPart() as u64;
+            size_on_disk = file_info.AllocationSize as u64;
         }
     }
 
@@ -238,17 +233,15 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
         Err(_) => return result,
     };
 
-    let handle = file.as_raw_handle();
-
     unsafe {
         let mut file_info: FILE_ID_INFO = core::mem::zeroed();
         let file_info_ptr: *mut FILE_ID_INFO = &mut file_info;
 
         let success = GetFileInformationByHandleEx(
-            handle,
+            file.as_raw_handle() as HANDLE,
             FileIdInfo,
-            file_info_ptr as LPVOID,
-            std::mem::size_of::<FILE_ID_INFO>() as DWORD,
+            file_info_ptr as _,
+            std::mem::size_of::<FILE_ID_INFO>() as u32,
         );
 
         if success != 0 {

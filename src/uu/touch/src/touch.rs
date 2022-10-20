@@ -472,19 +472,16 @@ fn pathbuf_from_stdout() -> UResult<PathBuf> {
     #[cfg(windows)]
     {
         use std::os::windows::prelude::AsRawHandle;
-        use winapi::shared::minwindef::{DWORD, MAX_PATH};
-        use winapi::shared::winerror::{
-            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND,
+        use windows_sys::Win32::Foundation::{
+            GetLastError, ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND,
+            HANDLE, MAX_PATH,
         };
-        use winapi::um::errhandlingapi::GetLastError;
-        use winapi::um::fileapi::GetFinalPathNameByHandleW;
-        use winapi::um::winnt::WCHAR;
+        use windows_sys::Win32::Storage::FileSystem::{
+            GetFinalPathNameByHandleW, FILE_NAME_OPENED,
+        };
 
-        let handle = std::io::stdout().lock().as_raw_handle();
-        let mut file_path_buffer: [WCHAR; MAX_PATH as usize] = [0; MAX_PATH as usize];
-
-        // Couldn't find this in winapi
-        const FILE_NAME_OPENED: DWORD = 0x8;
+        let handle = std::io::stdout().lock().as_raw_handle() as HANDLE;
+        let mut file_path_buffer: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
 
         // https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlea#examples
         // SAFETY: We transmute the handle to be able to cast *mut c_void into a

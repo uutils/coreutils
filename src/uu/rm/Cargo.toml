@@ -24,7 +24,7 @@ uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=[
 libc = "0.2.135"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version="0.3", features=[] }
+windows-sys = { version = "0.42.0", default-features = false, features = ["Win32_Storage_FileSystem"] }
 
 [[bin]]
 name = "rm"

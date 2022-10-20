@@ -22,7 +22,7 @@ clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version="0.3", features=[] }
+windows-sys = { version = "0.42.0", default-features = false, features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
 
 [[bin]]
 name = "du"
