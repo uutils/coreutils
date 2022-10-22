@@ -1041,14 +1041,8 @@ impl OverwriteMode {
         match *self {
             Self::NoClobber => Err(Error::NotAllFilesCopied),
             Self::Interactive(_) => {
-                if prompt_yes!("{}: overwrite {}? ", uucore::util_name(), path.quote()) {
-                    Ok(())
-                } else {
-                    Err(Error::Skipped(format!(
-                        "Not overwriting {} at user request",
-                        path.quote()
-                    )))
-                }
+                prompt_yes!("{}: overwrite {}? ", uucore::util_name(), path.quote());
+                Ok(())
             }
             Self::Clobber(_) => Ok(()),
         }
