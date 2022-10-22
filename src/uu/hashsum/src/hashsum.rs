@@ -498,7 +498,8 @@ where
     I: Iterator<Item = &'a OsStr>,
 {
     let mut bad_format = 0;
-    let mut failed = 0;
+    let mut failed_cksum = 0;
+    let mut failed_open_file = 0;
     let binary_marker = if options.binary { "*" } else { " " };
     for filename in files {
         let filename = Path::new(filename);
@@ -574,8 +575,19 @@ where
                         }
                     },
                 };
-                let f = File::open(ck_filename)
-                    .map_err_context(|| "failed to open file".to_string())?;
+                let f = match File::open(ck_filename) {
+                    Err(_) => {
+                        failed_open_file += 1;
+                        println!(
+                            "{}: {}: No such file or directory",
+                            uucore::util_name(),
+                            ck_filename
+                        );
+                        println!("{}: FAILED open or read", ck_filename);
+                        continue;
+                    }
+                    Ok(file) => file,
+                };
                 let mut ckf = BufReader::new(Box::new(f) as Box<dyn Read>);
                 let real_sum = digest_reader(
                     &mut options.digest,
@@ -602,7 +614,7 @@ where
                     if !options.status {
                         println!("{}: FAILED", ck_filename);
                     }
-                    failed += 1;
+                    failed_cksum += 1;
                 }
             }
         } else {
@@ -628,8 +640,15 @@ where
             Ordering::Greater => show_warning!("{} lines are improperly formatted", bad_format),
             _ => {}
         };
-        if failed > 0 {
-            show_warning!("{} computed checksum did NOT match", failed);
+        if failed_cksum > 0 {
+            show_warning!("{} computed checksum did NOT match", failed_cksum);
+        }
+        match failed_open_file.cmp(&1) {
+            Ordering::Equal => show_warning!("{} listed file could not be read", failed_open_file),
+            Ordering::Greater => {
+                show_warning!("{} listed files could not be read", failed_open_file);
+            }
+            _ => {}
         }
     }
 

@@ -402,12 +402,26 @@ pub fn canonicalize<P: AsRef<Path>>(
 }
 
 #[cfg(not(unix))]
-#[allow(unused_variables)]
 pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {
+    let write = if metadata.permissions().readonly() {
+        '-'
+    } else {
+        'w'
+    };
+
     if display_file_type {
-        return String::from("----------");
+        let file_type = if metadata.is_symlink() {
+            'l'
+        } else if metadata.is_dir() {
+            'd'
+        } else {
+            '-'
+        };
+
+        format!("{0}r{1}xr{1}xr{1}x", file_type, write)
+    } else {
+        format!("r{0}xr{0}xr{0}x", write)
     }
-    String::from("---------")
 }
 
 #[cfg(unix)]
