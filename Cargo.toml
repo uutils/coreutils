@@ -408,6 +408,7 @@ rlimit = "0.8.3"
 [target.'cfg(unix)'.dev-dependencies]
 nix = { version = "0.25", default-features = false, features = ["process", "signal", "user"] }
 rust-users = { version="0.11", package="users" }
+rand_pcg = "0.3"
 
 [build-dependencies]
 phf_codegen = "0.11.1"

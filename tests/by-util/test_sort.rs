@@ -1117,14 +1117,36 @@ fn test_tmp_files_deleted_on_sigint() {
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("tmp_dir");
+    let file_name = "big_file_to_sort.txt";
+    {
+        use rand::{Rng, SeedableRng};
+        use std::io::Write;
+        let mut file = at.make_file(file_name);
+        // approximately 20 MB
+        for _ in 0..40 {
+            let lines = rand_pcg::Pcg32::seed_from_u64(123)
+                .sample_iter(rand::distributions::uniform::Uniform::new(0, 10000))
+                .take(100000)
+                .map(|x| x.to_string() + "\n")
+                .collect::<String>();
+            file.write_all(lines.as_bytes()).unwrap();
+        }
+    }
     ucmd.args(&[
-        "ext_sort.txt",
+        file_name,
         "--buffer-size=1", // with a small buffer size `sort` will be forced to create a temporary directory very soon.
         "--temporary-directory=tmp_dir",
     ]);
     let mut child = ucmd.run_no_wait();
     // wait a short amount of time so that `sort` can create a temporary directory.
-    std::thread::sleep(Duration::from_millis(100));
+    let mut timeout = Duration::from_millis(100);
+    for _ in 0..5 {
+        std::thread::sleep(timeout);
+        if read_dir(at.plus("tmp_dir")).unwrap().next().is_some() {
+            break;
+        }
+        timeout *= 2;
+    }
     // `sort` should have created a temporary directory.
     assert!(read_dir(at.plus("tmp_dir")).unwrap().next().is_some());
     // kill sort with SIGINT
