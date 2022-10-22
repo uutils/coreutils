@@ -729,3 +729,29 @@ impl Display for ClapErrorWrapper {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nix::errno::Errno;
+    use std::io::ErrorKind;
+
+    #[test]
+    fn test_nix_error_conversion() {
+        for (nix_error, expected_error_kind) in [
+            (Errno::EACCES, ErrorKind::PermissionDenied),
+            (Errno::ENOENT, ErrorKind::NotFound),
+            (Errno::EEXIST, ErrorKind::AlreadyExists),
+        ] {
+            let error = UIoError::from(nix_error);
+            assert_eq!(expected_error_kind, error.inner.kind());
+        }
+        assert_eq!(
+            "test: Permission denied",
+            Err::<(), nix::Error>(Errno::EACCES)
+                .map_err_context(|| String::from("test"))
+                .unwrap_err()
+                .to_string()
+        )
+    }
+}
