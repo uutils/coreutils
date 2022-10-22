@@ -15,7 +15,7 @@ edition = "2021"
 path = "src/touch.rs"
 
 [dependencies]
-filetime = "0.2.17"
+filetime = "0.2.18"
 clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 time = { version = "0.3", features = ["parsing", "formatting", "local-offset", "macros"] }
 uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["libc"] }
