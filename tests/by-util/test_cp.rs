@@ -240,7 +240,7 @@ fn test_cp_arg_interactive() {
         .pipe_in("N\n")
         .succeeds()
         .no_stdout()
-        .stderr_is("cp: overwrite 'b'?  [y/N]: cp: Not overwriting 'b' at user request\n");
+        .stderr_is("cp: overwrite 'b'?  [y/N]:");
 }
 
 #[test]
