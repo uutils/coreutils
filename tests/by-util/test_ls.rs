@@ -966,7 +966,7 @@ fn test_ls_long() {
         result.stdout_matches(&Regex::new(r"[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3}.*").unwrap());
 
         #[cfg(windows)]
-        result.stdout_contains("---------- 1 somebody somegroup");
+        result.stdout_matches(&Regex::new(r"[-dl](r[w-]x){3}.*").unwrap());
     }
 }
 
