@@ -11,7 +11,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn
+// spell-checker:ignore (misc) HFKJFK Mbdfhn sysinfo MEMORYSTATUS MEMSIZE
 
 #[macro_use]
 extern crate uucore;
@@ -415,7 +415,7 @@ fn total_physical_memory() -> Option<u64> {
     use uucore::libc::{c_void, sysctl};
 
     let mut total_memory: MaybeUninit<u64> = MaybeUninit::uninit();
-    // Indices to acess total physical memory: CTL_HW, HW_MEMSIZE
+    // Indices to access total physical memory: CTL_HW, HW_MEMSIZE
     // In a nutshell the correct path for sysctl
     let mut mib: [i32; 2] = [6, 24];
     let mut size = size_of::<u64>();
@@ -431,7 +431,7 @@ fn total_physical_memory() -> Option<u64> {
     };
 
     if result == 0 {
-        // if the syscall was sucessfull this will be initialized.
+        // if the syscall was successful this will be initialized.
         Some(unsafe { total_memory.assume_init() })
     } else {
         None
@@ -454,19 +454,20 @@ fn parse_memory_percentage(size_string: &str) -> Result<u64, ParseSizeError> {
     let total_memory = total_physical_memory().ok_or_else(|| {
         ParseSizeError::ParseFailure("failed to retrieve total system memory".to_string())
     });
-    match size_string[..size_string.len() - 1].parse::<u64>() {
+    // Parse the percentage as u128 to avoid overflows when multiplying with the memory size.
+    match size_string[..size_string.len() - 1].parse::<u128>() {
         Ok(percentage) => {
             // Can't allocate more than 100% of memory
             if percentage > 100 {
                 return Err(ParseSizeError::SizeTooBig(size_string.to_string()));
             }
 
-            percentage
-                .checked_mul(total_memory?)
-                .map(|val| val / 100)
-                // Handle overflow in multiplication
-                .ok_or_else(|| ParseSizeError::SizeTooBig(size_string.to_string()))
+            let result: u128 = (percentage * total_memory? as u128) / 100;
+            // This is safe since percentage <= 100. Therefore result is at most == total_memory.
+            // Since total_memory is a u64, result must fit in u64 as well.
+            Ok(result as u64)
         }
+
         Err(_) => Err(ParseSizeError::ParseFailure(size_string.to_string())),
     }
 }

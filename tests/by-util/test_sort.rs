@@ -26,7 +26,7 @@ fn test_helper(file_name: &str, possible_args: &[&str]) {
 
 #[test]
 fn test_buffer_sizes() {
-    let buffer_sizes = ["0", "50K", "50k", "1M", "100M", "10%", "100%"];
+    let buffer_sizes = ["0", "50K", "50k", "1M", "100M"];
     for buffer_size in &buffer_sizes {
         TestScenario::new(util_name!())
             .ucmd_keepenv()
@@ -39,7 +39,8 @@ fn test_buffer_sizes() {
 
         #[cfg(not(target_pointer_width = "32"))]
         {
-            let buffer_sizes = ["1000G", "10T"];
+            // percentages cause overflows in 32bit system for ram sizes >4GB (2^32)
+            let buffer_sizes = ["1000G", "10T", "10%", "100%"];
             for buffer_size in &buffer_sizes {
                 TestScenario::new(util_name!())
                     .ucmd_keepenv()
