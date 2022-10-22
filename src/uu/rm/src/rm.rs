@@ -530,6 +530,7 @@ fn prompt_file(path: &Path, options: &Options, is_dir: bool) -> bool {
 }
 
 // For directories finding if they are writable or not is a hassle. In Unix we can use the built-in rust crate to to check mode bits. But other os don't have something similar afaik
+// Most cases are covered by keep eye out for edge cases
 #[cfg(unix)]
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
     use std::os::unix::fs::PermissionsExt;
