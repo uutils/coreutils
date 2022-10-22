@@ -16,7 +16,9 @@ use nix::fcntl::{open, OFlag};
 use nix::sys::stat::Mode;
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use uucore::error::FromIo;
+use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 
 static ABOUT: &str = "Synchronize cached writes to persistent storage";
