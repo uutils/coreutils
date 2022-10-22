@@ -23,10 +23,7 @@ use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, show_error};
 #[cfg(windows)]
-use winapi::{
-    shared::minwindef::WORD,
-    um::{minwinbase::SYSTEMTIME, sysinfoapi::SetSystemTime},
-};
+use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
 // Options
 const DATE: &str = "date";
@@ -409,16 +406,16 @@ fn set_system_datetime(date: DateTime<Utc>) -> UResult<()> {
 /// https://docs.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-systemtime
 fn set_system_datetime(date: DateTime<Utc>) -> UResult<()> {
     let system_time = SYSTEMTIME {
-        wYear: date.year() as WORD,
-        wMonth: date.month() as WORD,
+        wYear: date.year() as u16,
+        wMonth: date.month() as u16,
         // Ignored
         wDayOfWeek: 0,
-        wDay: date.day() as WORD,
-        wHour: date.hour() as WORD,
-        wMinute: date.minute() as WORD,
-        wSecond: date.second() as WORD,
+        wDay: date.day() as u16,
+        wHour: date.hour() as u16,
+        wMinute: date.minute() as u16,
+        wSecond: date.second() as u16,
         // TODO: be careful of leap seconds - valid range is [0, 999] - how to handle?
-        wMilliseconds: ((date.nanosecond() / 1_000_000) % 1000) as WORD,
+        wMilliseconds: ((date.nanosecond() / 1_000_000) % 1000) as u16,
     };
 
     let result = unsafe { SetSystemTime(&system_time) };

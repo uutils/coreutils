@@ -9,7 +9,7 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ficlone ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked fiemap
+// spell-checker:ignore (ToDO) copydir ficlone ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked fiemap
 
 #[macro_use]
 extern crate quick_error;
@@ -38,12 +38,14 @@ use libc::mkfifo;
 use quick_error::ResultExt;
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UClapError, UError, UIoError, UResult, UUsageError};
+use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::format_usage;
 use uucore::fs::{
     canonicalize, paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
 };
-use walkdir::WalkDir;
+
+mod copydir;
+use crate::copydir::copy_directory;
 
 mod platform;
 use platform::copy_on_write;
@@ -102,17 +104,6 @@ impl UError for Error {
         EXIT_ERR
     }
 }
-
-/// Continue next iteration of loop if result of expression is error
-macro_rules! or_continue(
-    ($expr:expr) => (match $expr {
-        Ok(temp) => temp,
-        Err(error) => {
-            show_error!("{}", error);
-            continue
-        },
-    })
-);
 
 /// Prompts the user yes/no and returns `true` if they successfully
 /// answered yes.
@@ -835,6 +826,15 @@ impl Options {
     fn dereference(&self, in_command_line: bool) -> bool {
         self.dereference || (in_command_line && self.cli_dereference)
     }
+
+    fn preserve_hard_links(&self) -> bool {
+        for attribute in &self.preserve_attributes {
+            if *attribute == Attribute::Links {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 impl TargetType {
@@ -938,12 +938,7 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
     let target_type = TargetType::determine(sources, target);
     verify_target_type(target, &target_type)?;
 
-    let mut preserve_hard_links = false;
-    for attribute in &options.preserve_attributes {
-        if *attribute == Attribute::Links {
-            preserve_hard_links = true;
-        }
-    }
+    let preserve_hard_links = options.preserve_hard_links();
 
     let mut hard_links: Vec<(String, u64)> = vec![];
 
@@ -1037,184 +1032,6 @@ fn copy_source(
     }
 }
 
-#[cfg(target_os = "windows")]
-fn adjust_canonicalization(p: &Path) -> Cow<Path> {
-    // In some cases, \\? can be missing on some Windows paths.  Add it at the
-    // beginning unless the path is prefixed with a device namespace.
-    const VERBATIM_PREFIX: &str = r#"\\?"#;
-    const DEVICE_NS_PREFIX: &str = r#"\\."#;
-
-    let has_prefix = p
-        .components()
-        .next()
-        .and_then(|comp| comp.as_os_str().to_str())
-        .map(|p_str| p_str.starts_with(VERBATIM_PREFIX) || p_str.starts_with(DEVICE_NS_PREFIX))
-        .unwrap_or_default();
-
-    if has_prefix {
-        p.into()
-    } else {
-        Path::new(VERBATIM_PREFIX).join(p).into()
-    }
-}
-
-/// Read the contents of the directory `root` and recursively copy the
-/// contents to `target`.
-///
-/// Any errors encountered copying files in the tree will be logged but
-/// will not cause a short-circuit.
-fn copy_directory(
-    root: &Path,
-    target: &TargetSlice,
-    options: &Options,
-    symlinked_files: &mut HashSet<FileInformation>,
-    source_in_command_line: bool,
-) -> CopyResult<()> {
-    if !options.recursive {
-        return Err(format!("omitting directory {}", root.quote()).into());
-    }
-
-    // if no-dereference is enabled and this is a symlink, copy it as a file
-    if !options.dereference(source_in_command_line) && root.is_symlink() {
-        return copy_file(
-            root,
-            target,
-            options,
-            symlinked_files,
-            source_in_command_line,
-        );
-    }
-
-    // check if root is a prefix of target
-    if path_has_prefix(target, root)? {
-        return Err(format!(
-            "cannot copy a directory, {}, into itself, {}",
-            root.quote(),
-            target.join(root.file_name().unwrap()).quote()
-        )
-        .into());
-    }
-
-    let current_dir =
-        env::current_dir().unwrap_or_else(|e| crash!(1, "failed to get current directory {}", e));
-
-    let root_path = current_dir.join(root);
-
-    let root_parent = if target.exists() {
-        root_path.parent()
-    } else {
-        Some(root_path.as_path())
-    };
-
-    #[cfg(unix)]
-    let mut hard_links: Vec<(String, u64)> = vec![];
-    let mut preserve_hard_links = false;
-    for attribute in &options.preserve_attributes {
-        if *attribute == Attribute::Links {
-            preserve_hard_links = true;
-        }
-    }
-
-    // This should be changed once Redox supports hardlinks
-    #[cfg(any(windows, target_os = "redox"))]
-    let mut hard_links: Vec<(String, u64)> = vec![];
-
-    for path in WalkDir::new(root)
-        .same_file_system(options.one_file_system)
-        .follow_links(options.dereference)
-    {
-        let p = or_continue!(path);
-        let path = current_dir.join(p.path());
-
-        let local_to_root_parent = match root_parent {
-            Some(parent) => {
-                #[cfg(windows)]
-                {
-                    // On Windows, some paths are starting with \\?
-                    // but not always, so, make sure that we are consistent for strip_prefix
-                    // See https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file for more info
-                    let parent_can = adjust_canonicalization(parent);
-                    let path_can = adjust_canonicalization(&path);
-
-                    or_continue!(&path_can.strip_prefix(&parent_can)).to_path_buf()
-                }
-                #[cfg(not(windows))]
-                {
-                    or_continue!(path.strip_prefix(parent)).to_path_buf()
-                }
-            }
-            None => path.clone(),
-        };
-
-        let local_to_target = target.join(&local_to_root_parent);
-        if p.path().is_symlink() && !options.dereference {
-            copy_link(&path, &local_to_target, symlinked_files)?;
-        } else if path.is_dir() && !local_to_target.exists() {
-            if target.is_file() {
-                return Err("cannot overwrite non-directory with directory".into());
-            }
-            fs::create_dir_all(local_to_target)?;
-        } else if !path.is_dir() {
-            if preserve_hard_links {
-                let mut found_hard_link = false;
-                let source = path.to_path_buf();
-                let dest = local_to_target.as_path().to_path_buf();
-                preserve_hardlinks(&mut hard_links, &source, &dest, &mut found_hard_link)?;
-                if !found_hard_link {
-                    match copy_file(
-                        path.as_path(),
-                        local_to_target.as_path(),
-                        options,
-                        symlinked_files,
-                        false,
-                    ) {
-                        Ok(_) => Ok(()),
-                        Err(err) => {
-                            if source.is_symlink() {
-                                // silent the error with a symlink
-                                // In case we do --archive, we might copy the symlink
-                                // before the file itself
-                                Ok(())
-                            } else {
-                                Err(err)
-                            }
-                        }
-                    }?;
-                }
-            } else {
-                // At this point, `path` is just a plain old file.
-                // Terminate this function immediately if there is any
-                // kind of error *except* a "permission denied" error.
-                //
-                // TODO What other kinds of errors, if any, should
-                // cause us to continue walking the directory?
-                match copy_file(
-                    path.as_path(),
-                    local_to_target.as_path(),
-                    options,
-                    symlinked_files,
-                    false,
-                ) {
-                    Ok(_) => {}
-                    Err(Error::IoErrContext(e, _))
-                        if e.kind() == std::io::ErrorKind::PermissionDenied =>
-                    {
-                        show!(uio_error!(
-                            e,
-                            "cannot open {} for reading",
-                            p.path().quote()
-                        ));
-                    }
-                    Err(e) => return Err(e),
-                }
-            }
-        }
-    }
-    // Copy the attributes from the root directory to the target directory.
-    copy_attributes(root, target, &options.preserve_attributes)?;
-    Ok(())
-}
-
 impl OverwriteMode {
     fn verify(&self, path: &Path) -> CopyResult<()> {
         match *self {
@@ -1235,7 +1052,11 @@ impl OverwriteMode {
 }
 
 /// Copy the specified attributes from one path to another.
-fn copy_attributes(source: &Path, dest: &Path, attributes: &[Attribute]) -> CopyResult<()> {
+pub(crate) fn copy_attributes(
+    source: &Path,
+    dest: &Path,
+    attributes: &[Attribute],
+) -> CopyResult<()> {
     for attribute in attributes {
         copy_attribute(source, dest, attribute)?;
     }
@@ -1706,13 +1527,6 @@ pub fn verify_target_type(target: &Path, target_type: &TargetType) -> CopyResult
 pub fn localize_to_target(root: &Path, source: &Path, target: &Path) -> CopyResult<PathBuf> {
     let local_to_root = source.strip_prefix(root)?;
     Ok(target.join(local_to_root))
-}
-
-pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
-    let pathbuf1 = canonicalize(p1, MissingHandling::Normal, ResolveMode::Logical)?;
-    let pathbuf2 = canonicalize(p2, MissingHandling::Normal, ResolveMode::Logical)?;
-
-    Ok(pathbuf1.starts_with(pathbuf2))
 }
 
 #[test]

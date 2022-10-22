@@ -68,29 +68,27 @@ mod platform {
 
 #[cfg(windows)]
 mod platform {
-    extern crate winapi;
-    use self::winapi::shared::minwindef;
-    use self::winapi::shared::winerror;
-    use self::winapi::um::handleapi;
-    use self::winapi::um::winbase;
-    use self::winapi::um::winnt;
     use std::fs::OpenOptions;
     use std::os::windows::prelude::*;
     use std::path::Path;
     use uucore::crash;
     use uucore::wide::{FromWide, ToWide};
+    use windows_sys::Win32::Foundation::{
+        GetLastError, ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
+    };
+    use windows_sys::Win32::Storage::FileSystem::{
+        FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, FlushFileBuffers, GetDriveTypeW,
+    };
+    use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
 
     unsafe fn flush_volume(name: &str) {
         let name_wide = name.to_wide_null();
-        if winapi::um::fileapi::GetDriveTypeW(name_wide.as_ptr()) == winbase::DRIVE_FIXED {
+        if GetDriveTypeW(name_wide.as_ptr()) == DRIVE_FIXED {
             let sliced_name = &name[..name.len() - 1]; // eliminate trailing backslash
             match OpenOptions::new().write(true).open(sliced_name) {
                 Ok(file) => {
-                    if winapi::um::fileapi::FlushFileBuffers(file.as_raw_handle()) == 0 {
-                        crash!(
-                            winapi::um::errhandlingapi::GetLastError() as i32,
-                            "failed to flush file buffer"
-                        );
+                    if FlushFileBuffers(file.as_raw_handle() as HANDLE) == 0 {
+                        crash!(GetLastError() as i32, "failed to flush file buffer");
                     }
                 }
                 Err(e) => crash!(
@@ -101,17 +99,11 @@ mod platform {
         }
     }
 
-    unsafe fn find_first_volume() -> (String, winnt::HANDLE) {
-        let mut name: [winnt::WCHAR; minwindef::MAX_PATH] = [0; minwindef::MAX_PATH];
-        let handle = winapi::um::fileapi::FindFirstVolumeW(
-            name.as_mut_ptr(),
-            name.len() as minwindef::DWORD,
-        );
-        if handle == handleapi::INVALID_HANDLE_VALUE {
-            crash!(
-                winapi::um::errhandlingapi::GetLastError() as i32,
-                "failed to find first volume"
-            );
+    unsafe fn find_first_volume() -> (String, HANDLE) {
+        let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
+        let handle = FindFirstVolumeW(name.as_mut_ptr(), name.len() as u32);
+        if handle == INVALID_HANDLE_VALUE {
+            crash!(GetLastError() as i32, "failed to find first volume");
         }
         (String::from_wide_null(&name), handle)
     }
@@ -120,16 +112,11 @@ mod platform {
         let (first_volume, next_volume_handle) = find_first_volume();
         let mut volumes = vec![first_volume];
         loop {
-            let mut name: [winnt::WCHAR; minwindef::MAX_PATH] = [0; minwindef::MAX_PATH];
-            if winapi::um::fileapi::FindNextVolumeW(
-                next_volume_handle,
-                name.as_mut_ptr(),
-                name.len() as minwindef::DWORD,
-            ) == 0
-            {
-                match winapi::um::errhandlingapi::GetLastError() {
-                    winerror::ERROR_NO_MORE_FILES => {
-                        winapi::um::fileapi::FindVolumeClose(next_volume_handle);
+            let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
+            if FindNextVolumeW(next_volume_handle, name.as_mut_ptr(), name.len() as u32) == 0 {
+                match GetLastError() {
+                    ERROR_NO_MORE_FILES => {
+                        FindVolumeClose(next_volume_handle);
                         return volumes;
                     }
                     err => crash!(err as i32, "failed to find next volume"),

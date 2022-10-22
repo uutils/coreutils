@@ -21,7 +21,7 @@ remove_dir_all = "0.7.0"
 uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["fs"] }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version="0.3", features=[] }
+windows-sys = { version = "0.42.0", default-features = false, features = ["Win32_Storage_FileSystem"] }
 
 [[bin]]
 name = "rm"
