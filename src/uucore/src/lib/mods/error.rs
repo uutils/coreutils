@@ -519,6 +519,31 @@ impl<T> FromIo<UResult<T>> for Result<T, nix::Error> {
     }
 }
 
+impl<T> FromIo<UResult<T>> for nix::Error {
+    fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
+        Err(Box::new(UIoError {
+            context: Some((context)()),
+            inner: std::io::Error::from_raw_os_error(self as i32),
+        }) as Box<dyn UError>)
+    }
+}
+
+impl From<nix::Error> for UIoError {
+    fn from(f: nix::Error) -> Self {
+        Self {
+            context: None,
+            inner: std::io::Error::from_raw_os_error(f as i32),
+        }
+    }
+}
+
+impl From<nix::Error> for Box<dyn UError> {
+    fn from(f: nix::Error) -> Self {
+        let u_error: UIoError = f.into();
+        Box::new(u_error) as Self
+    }
+}
+
 /// Shorthand to construct [`UIoError`]-instances.
 ///
 /// This macro serves as a convenience call to quickly construct instances of
