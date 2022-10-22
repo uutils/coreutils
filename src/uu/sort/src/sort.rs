@@ -30,7 +30,6 @@ use clap::{crate_version, Arg, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
-use nix::sys::sysinfo::sysinfo;
 use numeric_str_cmp::{human_numeric_str_cmp, numeric_str_cmp, NumInfo, NumInfoParseSettings};
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
@@ -404,12 +403,55 @@ impl GlobalSettings {
             .count();
     }
 }
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn total_physical_memory() -> Option<u64> {
+    use nix::sys::sysinfo::sysinfo;
+    sysinfo().ok().map(|sys| sys.ram_total())
+}
+#[cfg(any(target_os = "macos"))]
+fn total_physical_memory() -> Option<u64> {
+    use std::mem::{size_of, MaybeUninit};
+    use std::ptr::null_mut;
+    use uucore::libc::{c_void, sysctl};
+
+    let mut total_memory: MaybeUninit<u64> = MaybeUninit::uninit();
+    // Indices to acess total physical memory: CTL_HW, HW_MEMSIZE
+    // In a nutshell the correct path for sysctl
+    let mut mib: [i32; 2] = [6, 24];
+    let mut size = size_of::<u64>();
+    let result = unsafe {
+        sysctl(
+            mib.as_mut_ptr(),
+            mib.len() as _,
+            total_memory.as_mut_ptr() as *mut c_void,
+            &mut size as *mut usize,
+            null_mut(),
+            0,
+        )
+    };
+
+    if result == 0 {
+        // if the syscall was sucessfull this will be initialized.
+        Some(unsafe { total_memory.assume_init() })
+    } else {
+        None
+    }
+}
+#[cfg(target_os = "windows")]
+fn total_physical_memory() -> Option<u64> {
+    use std::mem::{size_of, zeroed};
+    use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatus, MEMORYSTATUS};
+    let mut mem_info: MEMORYSTATUS = unsafe { zeroed() };
+    mem_info.dwLength = size_of::<MEMORYSTATUS>() as u32;
+    // This call has no indication of failure.
+    unsafe { GlobalMemoryStatus(&mut mem_info) };
+    Some(mem_info.dwTotalPhys as _)
+}
 
 /// Parse a string containing a percentage value of total memory
 /// assert_eq!(parse_memory_percentage("0%"), Ok(0));
 fn parse_memory_percentage(size_string: &str) -> Result<u64, ParseSizeError> {
-    // Fetch memory info
-    let system = sysinfo().map_err(|_| {
+    let total_memory = total_physical_memory().ok_or_else(|| {
         ParseSizeError::ParseFailure("failed to retrieve total system memory".to_string())
     });
     match size_string[..size_string.len() - 1].parse::<u64>() {
@@ -420,7 +462,7 @@ fn parse_memory_percentage(size_string: &str) -> Result<u64, ParseSizeError> {
             }
 
             percentage
-                .checked_mul(system?.ram_total())
+                .checked_mul(total_memory?)
                 .map(|val| val / 100)
                 // Handle overflow in multiplication
                 .ok_or_else(|| ParseSizeError::SizeTooBig(size_string.to_string()))
@@ -1925,15 +1967,17 @@ mod tests {
 
     #[test]
     fn test_parse_memory_percentages() {
-        let s = sysinfo().unwrap();
+        let ram_total = total_physical_memory().unwrap();
+        assert!(ram_total > 1024);
+        assert!(ram_total < u64::MAX);
         assert_eq!(
             GlobalSettings::parse_byte_count("100%").unwrap(),
-            s.ram_total() as usize
+            ram_total as usize
         );
         assert_eq!(GlobalSettings::parse_byte_count("0%").unwrap(), 0);
         assert_eq!(
             GlobalSettings::parse_byte_count("50%").unwrap(),
-            (s.ram_total() / 2) as usize
+            (ram_total / 2) as usize
         );
     }
     #[test]
