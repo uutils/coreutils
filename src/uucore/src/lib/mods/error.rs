@@ -508,6 +508,20 @@ impl From<std::io::Error> for Box<dyn UError> {
     }
 }
 
+/// Enables the conversion from [`Result<T, nix::Error>`] to [`UResult<T>`].
+///
+/// # Examples
+///
+/// ```
+/// use uucore::error::FromIo;
+/// use nix::errno::Errno;
+///
+/// let nix_err = Err::<(), nix::Error>(Errno::EACCES);
+/// let uio_result = nix_err.map_err_context(|| String::from("fix me please!"));
+///
+/// // prints "fix me please!: Permission denied"
+/// println!("{}", uio_result.unwrap_err());
+/// ```
 impl<T> FromIo<UResult<T>> for Result<T, nix::Error> {
     fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
         self.map_err(|e| {
