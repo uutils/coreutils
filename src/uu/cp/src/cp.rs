@@ -1264,10 +1264,6 @@ fn copy_file(
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
-    if file_or_link_exists(dest) {
-        handle_existing_dest(source, dest, options, source_in_command_line)?;
-    }
-
     // Fail if dest is a dangling symlink or a symlink this program created previously
     if dest.is_symlink() {
         if FileInformation::from_path(dest, false)
@@ -1281,12 +1277,22 @@ fn copy_file(
             )));
         }
         let copy_contents = options.dereference(source_in_command_line) || !source.is_symlink();
-        if copy_contents && !dest.exists() {
+        if copy_contents
+            && !dest.exists()
+            && !matches!(
+                options.overwrite,
+                OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+            )
+        {
             return Err(Error::Error(format!(
                 "not writing through dangling symlink '{}'",
                 dest.display()
             )));
         }
+    }
+
+    if file_or_link_exists(dest) {
+        handle_existing_dest(source, dest, options, source_in_command_line)?;
     }
 
     if options.verbose {

@@ -1827,6 +1827,19 @@ fn test_copy_through_dangling_symlink_no_dereference_2() {
         .stderr_only("cp: not writing through dangling symlink 'target'");
 }
 
+/// Test that copy through a dangling symbolic link fails, even with --force.
+#[test]
+#[cfg(not(windows))]
+fn test_copy_through_dangling_symlink_force() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+    at.symlink_file("no-such-file", "dest");
+    ucmd.args(&["--force", "src", "dest"])
+        .fails()
+        .stderr_only("cp: not writing through dangling symlink 'dest'");
+    assert!(!at.file_exists("dest"));
+}
+
 #[test]
 #[cfg(unix)]
 fn test_cp_archive_on_nonexistent_file() {
