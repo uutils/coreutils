@@ -64,6 +64,9 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
 
     let mut buffer = ['\\'; 2];
 
+    // TODO `cargo +nightly clippy` complains that `.peek()` is never
+    // called on `iter`. However, `peek()` is called inside the
+    // `parse_code()` function that borrows `iter`.
     let mut iter = input.chars().peekable();
     while let Some(mut c) = iter.next() {
         let mut start = 1;

@@ -348,7 +348,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::OPT_AUDIT)
                 .short('A')
-                .conflicts_with_all(&[
+                .conflicts_with_all([
                     options::OPT_GROUP,
                     options::OPT_EFFECTIVE_USER,
                     options::OPT_HUMAN_READABLE,
@@ -382,7 +382,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::OPT_GROUPS)
                 .short('G')
                 .long(options::OPT_GROUPS)
-                .conflicts_with_all(&[
+                .conflicts_with_all([
                     options::OPT_GROUP,
                     options::OPT_EFFECTIVE_USER,
                     options::OPT_CONTEXT,
@@ -443,7 +443,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::OPT_CONTEXT)
                 .short('Z')
                 .long(options::OPT_CONTEXT)
-                .conflicts_with_all(&[options::OPT_GROUP, options::OPT_EFFECTIVE_USER])
+                .conflicts_with_all([options::OPT_GROUP, options::OPT_EFFECTIVE_USER])
                 .help(CONTEXT_HELP_TEXT)
                 .action(ArgAction::SetTrue),
         )
