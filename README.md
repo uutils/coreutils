@@ -7,7 +7,7 @@
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
-![MSRV](https://img.shields.io/badge/MSRV-1.59.0-brightgreen)
+![MSRV](https://img.shields.io/badge/MSRV-1.60.0-brightgreen)
 
 -----------------------------------------------
 
@@ -37,13 +37,13 @@ writing cross-platform code.
 ## Documentation
 uutils has both user and developer documentation available:
 
-- [User Manual](https://uutils.github.io/coreutils-docs/user/)
-- [Developer Documentation](https://uutils.github.io/coreutils-docs/dev/coreutils/)
+- [User Manual](https://uutils.github.io/user/)
+- [Developer Documentation](https://uutils.github.io/dev/coreutils/)
 
 Both can also be generated locally, the instructions for that can be found in the
-[coreutils docs](https://github.com/uutils/coreutils-docs) repository.
+[coreutils docs](https://github.com/uutils/uutils.github.io) repository.
 
-<!-- ANCHOR: installation (this mark is needed for mdbook) -->
+<!-- ANCHOR: build (this mark is needed for mdbook) -->
 ## Requirements
 
 * Rust (`cargo`, `rustc`)
@@ -52,7 +52,7 @@ Both can also be generated locally, the instructions for that can be found in th
 ### Rust Version
 
 uutils follows Rust's release channels and is tested against stable, beta and nightly.
-The current Minimum Supported Rust Version (MSRV) is `1.59.0`.
+The current Minimum Supported Rust Version (MSRV) is `1.60.0`.
 
 ## Building
 
@@ -197,15 +197,6 @@ Installing with `make` installs shell completions for all installed utilities
 for `bash`, `fish` and `zsh`. Completions for `elvish` and `powershell` can also
 be generated; See `Manually install shell completions`.
 
-### NixOS
-
-The [standard package set](https://nixos.org/nixpkgs/manual/) of [NixOS](https://nixos.org/)
-provides this package out of the box since 18.03:
-
-```shell
-$ nix-env -iA nixos.uutils-coreutils
-```
-
 ### Manually install shell completions
 
 The `coreutils` binary can generate completions for the `bash`, `elvish`, `fish`, `powershell`
@@ -263,7 +254,7 @@ To uninstall from a custom parent directory:
 # DESTDIR is also supported
 $ make PREFIX=/my/path uninstall
 ```
-<!-- ANCHOR_END: installation (this mark is needed for mdbook) -->
+<!-- ANCHOR_END: build (this mark is needed for mdbook) -->
 
 ## Testing
 
@@ -358,7 +349,7 @@ $ make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
 
 Below is the evolution of how many GNU tests uutils passes. A more detailed
 breakdown of the GNU test results of the main branch can be found
-[in the user manual](https://uutils.github.io/coreutils-docs/user/test_coverage.html).
+[in the user manual](https://uutils.github.io/user/test_coverage.html).
 
 ![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
 

@@ -10,7 +10,7 @@
 mod error;
 
 use crate::error::ChrootError;
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::ffi::CString;
 use std::io::Error;
 use std::os::unix::prelude::OsStrExt;
@@ -49,7 +49,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => return Err(ChrootError::MissingNewRoot.into()),
     };
 
-    let skip_chdir = matches.contains_id(options::SKIP_CHDIR);
+    let skip_chdir = matches.get_flag(options::SKIP_CHDIR);
     // We are resolving the path in case it is a symlink or /. or /../
     if skip_chdir
         && canonicalize(newroot, MissingHandling::Normal, ResolveMode::Logical)
@@ -116,7 +116,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -168,13 +168,14 @@ pub fn uu_app<'a>() -> Command<'a> {
                     "Use this option to not change the working directory \
                     to / after changing the root directory to newroot, \
                     i.e., inside the chroot.",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COMMAND)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::CommandName)
                 .hide(true)
-                .multiple_occurrences(true)
                 .index(2),
         )
 }

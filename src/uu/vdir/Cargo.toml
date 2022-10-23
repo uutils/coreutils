@@ -1,6 +1,6 @@
 [package]
 name = "uu_vdir"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "shortcut to ls -l -b"
@@ -15,10 +15,10 @@ edition = "2021"
 path = "src/vdir.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo", "env"] }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["entries", "fs"] }
+clap = { version = "4.0", features = ["wrap_help", "cargo", "env"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["entries", "fs"] }
 selinux = { version="0.3", optional = true }
-uu_ls = { version = ">=0.0.15", path="../ls"}
+uu_ls = { version = ">=0.0.16", path="../ls"}
 
 [[bin]]
 name = "vdir"

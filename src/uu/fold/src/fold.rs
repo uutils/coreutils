@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDOs) ncount routput
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
@@ -36,8 +36,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, obs_width) = handle_obsolete(&args[..]);
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let bytes = matches.contains_id(options::BYTES);
-    let spaces = matches.contains_id(options::SPACES);
+    let bytes = matches.get_flag(options::BYTES);
+    let spaces = matches.get_flag(options::SPACES);
     let poss_width = match matches.get_one::<String>(options::WIDTH) {
         Some(v) => Some(v.to_owned()),
         None => obs_width,
@@ -61,7 +61,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     fold(&files, bytes, spaces, width)
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
@@ -76,14 +76,14 @@ pub fn uu_app<'a>() -> Command<'a> {
                     "count using bytes rather than columns (meaning control characters \
                      such as newline are not treated specially)",
                 )
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SPACES)
                 .long(options::SPACES)
                 .short('s')
                 .help("break lines at word boundaries rather than a hard cut-off")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WIDTH)
@@ -91,13 +91,12 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('w')
                 .help("set WIDTH as the maximum line width rather than 80")
                 .value_name("WIDTH")
-                .allow_hyphen_values(true)
-                .takes_value(true),
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }

@@ -8,10 +8,10 @@ use std::ffi::OsStr;
 fn test_help() {
     for help_flg in ["-h", "--help"] {
         new_ucmd!()
-            .arg(&help_flg)
+            .arg(help_flg)
             .succeeds()
             .no_stderr()
-            .stdout_contains("USAGE:");
+            .stdout_contains("Usage:");
     }
 }
 
@@ -19,7 +19,7 @@ fn test_help() {
 fn test_version() {
     for version_flg in ["-V", "--version"] {
         assert!(new_ucmd!()
-            .arg(&version_flg)
+            .arg(version_flg)
             .succeeds()
             .no_stderr()
             .stdout_str()

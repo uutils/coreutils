@@ -26,13 +26,13 @@ fn test_hex_rejects_sign_after_identifier() {
         .fails()
         .no_stdout()
         .stderr_contains("which wasn't expected, or isn't valid in this context")
-        .stderr_contains("For more information try --help");
+        .stderr_contains("For more information try '--help'");
     new_ucmd!()
         .args(&["-0x+123ABC"])
         .fails()
         .no_stdout()
         .stderr_contains("which wasn't expected, or isn't valid in this context")
-        .stderr_contains("For more information try --help");
+        .stderr_contains("For more information try '--help'");
 }
 
 #[test]

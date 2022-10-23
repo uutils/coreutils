@@ -1,6 +1,6 @@
 [package]
 name = "uu_sync"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "sync ~ (uutils) synchronize cache writes to storage"
@@ -15,19 +15,19 @@ edition = "2021"
 path = "src/sync.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-libc = "0.2.132"
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["wide"] }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
+libc = "0.2.135"
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["wide"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 nix = "0.25"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version = "0.3", features = ["errhandlingapi", "fileapi", "handleapi", "std", "winbase", "winerror"] }
+windows-sys = { version = "0.42.0", default-features = false, features = ["Win32_Storage_FileSystem", "Win32_System_WindowsProgramming", "Win32_Foundation"] }
 
 [[bin]]
 name = "sync"
 path = "src/main.rs"
 
 [package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs", "winapi"]
+normal = ["uucore_procs"]

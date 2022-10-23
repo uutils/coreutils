@@ -1,6 +1,6 @@
 [package]
 name = "uu_base32"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "base32 ~ (uutils) decode/encode input (base32-encoding)"
@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/base32.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features = ["encoding"] }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features = ["encoding"] }
 
 [[bin]]
 name = "base32"

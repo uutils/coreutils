@@ -505,11 +505,7 @@ fn prefix_operator_substr(values: &[String]) -> String {
 }
 
 fn bool_as_int(b: bool) -> u8 {
-    if b {
-        1
-    } else {
-        0
-    }
+    u8::from(b)
 }
 fn bool_as_string(b: bool) -> String {
     if b {

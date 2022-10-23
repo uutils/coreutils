@@ -159,7 +159,7 @@ fn test_mkdir_trailing_dot() {
         .arg(TEST_DIR11)
         .succeeds()
         .stdout_contains("created directory 'mkdir_test11'");
-    let result = scene2.cmd("ls").arg("-al").run();
+    let result = scene2.ucmd().arg("-al").run();
     println!("ls dest {}", result.stdout_str());
 }
 

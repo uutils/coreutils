@@ -1,6 +1,6 @@
 [package]
 name = "uu_cp"
-version = "0.0.15"
+version = "0.0.16"
 authors = [
     "Jordy Dickinson <jordy.dickinson@gmail.com>",
     "Joshua S. Miller <jsmiller@uchicago.edu>",
@@ -19,16 +19,13 @@ edition = "2021"
 path = "src/cp.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 filetime = "0.2"
-libc = "0.2.132"
+libc = "0.2.135"
 quick-error = "2.0.1"
 selinux = { version="0.3", optional=true }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["entries", "fs", "perms", "mode"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["entries", "fs", "perms", "mode"] }
 walkdir = "2.2"
-
-[target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version="0.3", features=["fileapi"] }
 
 [target.'cfg(unix)'.dependencies]
 xattr="0.2.3"

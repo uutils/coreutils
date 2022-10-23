@@ -1,6 +1,6 @@
 [package]
 name = "uu_hostname"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "hostname ~ (uutils) display or set the host name of the current host"
@@ -15,16 +15,16 @@ edition = "2021"
 path = "src/hostname.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 hostname = { version = "0.3", features = ["set"] }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["wide"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["wide"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version="0.3", features=["sysinfoapi", "winsock2"] }
+windows-sys = { version = "0.42.0", default-features = false, features = ["Win32_Networking_WinSock", "Win32_Foundation"] }
 
 [[bin]]
 name = "hostname"
 path = "src/main.rs"
 
 [package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs", "winapi"]
+normal = ["uucore_procs"]

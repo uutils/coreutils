@@ -1,6 +1,6 @@
 [package]
 name = "uu_runcon"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "runcon ~ (uutils) run command with specified security context"
@@ -14,7 +14,7 @@ edition = "2021"
 path = "src/runcon.rs"
 
 [dependencies]
-clap         = { version = "3.2", features = ["wrap_help", "cargo"] }
+clap         = { version = "4.0", features = ["wrap_help", "cargo"] }
 uucore       = { version = ">=0.0.9", package="uucore", path="../../uucore", features=["entries", "fs", "perms"] }
 selinux      = { version = "0.3"   }
 thiserror    = { version = "1.0"   }

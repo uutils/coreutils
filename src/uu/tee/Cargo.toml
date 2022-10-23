@@ -1,6 +1,6 @@
 [package]
 name = "uu_tee"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tee ~ (uutils) display input and copy to FILE"
@@ -15,10 +15,10 @@ edition = "2021"
 path = "src/tee.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-libc = "0.2.132"
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
+libc = "0.2.135"
 retain_mut = "=0.1.7" # ToDO: [2021-01-01; rivy; maint/MinSRV] ~ v0.1.5 uses const generics which aren't stabilized until rust v1.51.0
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["libc"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["libc"] }
 
 [[bin]]
 name = "tee"

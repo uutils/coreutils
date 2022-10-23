@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::io::Error;
@@ -43,9 +43,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let mode = if matches.contains_id(options::TABLE) {
+    let mode = if matches.get_flag(options::TABLE) {
         Mode::Table
-    } else if matches.contains_id(options::LIST) {
+    } else if matches.get_flag(options::LIST) {
         Mode::List
     } else {
         Mode::Kill
@@ -80,7 +80,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -92,26 +92,28 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('l')
                 .long(options::LIST)
                 .help("Lists signals")
-                .conflicts_with(options::TABLE),
+                .conflicts_with(options::TABLE)
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TABLE)
                 .short('t')
                 .short_alias('L')
                 .long(options::TABLE)
-                .help("Lists table of signals"),
+                .help("Lists table of signals")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SIGNAL)
                 .short('s')
                 .long(options::SIGNAL)
-                .help("Sends given signal")
-                .takes_value(true),
+                .value_name("signal")
+                .help("Sends given signal instead of SIGTERM"),
         )
         .arg(
             Arg::new(options::PIDS_OR_SIGNALS)
                 .hide(true)
-                .multiple_occurrences(true),
+                .action(ArgAction::Append),
         )
 }
 

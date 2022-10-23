@@ -17,7 +17,7 @@ use uucore::fsext::{
 use uucore::libc::mode_t;
 use uucore::{entries, format_usage};
 
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::borrow::Cow;
 use std::convert::AsRef;
 use std::ffi::{OsStr, OsString};
@@ -522,8 +522,8 @@ impl Stater {
         };
 
         let use_printf = matches.contains_id(options::PRINTF);
-        let terse = matches.contains_id(options::TERSE);
-        let show_fs = matches.contains_id(options::FILE_SYSTEM);
+        let terse = matches.get_flag(options::TERSE);
+        let show_fs = matches.get_flag(options::FILE_SYSTEM);
 
         let default_tokens = if format_str.is_empty() {
             Self::generate_tokens(&Self::default_format(show_fs, terse, false), use_printf)?
@@ -549,7 +549,7 @@ impl Stater {
         };
 
         Ok(Self {
-            follow: matches.contains_id(options::DEREFERENCE),
+            follow: matches.get_flag(options::DEREFERENCE),
             show_fs,
             from_user: !format_str.is_empty(),
             files,
@@ -1018,10 +1018,8 @@ for details about the options it supports.
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let long_usage = get_long_usage();
-
     let matches = uu_app()
-        .after_help(&long_usage[..])
+        .after_help(get_long_usage())
         .try_get_matches_from(args)?;
 
     let stater = Stater::new(&matches)?;
@@ -1033,7 +1031,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -1043,19 +1041,22 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::DEREFERENCE)
                 .short('L')
                 .long(options::DEREFERENCE)
-                .help("follow links"),
+                .help("follow links")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILE_SYSTEM)
                 .short('f')
                 .long(options::FILE_SYSTEM)
-                .help("display file system status instead of file status"),
+                .help("display file system status instead of file status")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TERSE)
                 .short('t')
                 .long(options::TERSE)
-                .help("print the information in terse form"),
+                .help("print the information in terse form")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FORMAT)
@@ -1079,10 +1080,8 @@ pub fn uu_app<'a>() -> Command<'a> {
         )
         .arg(
             Arg::new(ARG_FILES)
-                .multiple_occurrences(true)
-                .takes_value(true)
+                .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
-                .min_values(1)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }

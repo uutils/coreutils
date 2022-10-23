@@ -8,7 +8,7 @@
 
 // spell-checker:ignore (ToDO) corasick memchr
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
@@ -139,22 +139,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .name(NAME)
         .about(ABOUT)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .disable_help_flag(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help("Print help information."),
+                .help("Print help information.")
+                .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -279,7 +281,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
             // If we have already seen three groups (corresponding to
             // a header) or the current char does not form part of
             // a new group, then this line is not a segment indicator.
-            if matched_groups >= 3 || settings.section_delimiter[if odd { 1 } else { 0 }] != c {
+            if matched_groups >= 3 || settings.section_delimiter[usize::from(odd)] != c {
                 matched_groups = 0;
                 break;
             }

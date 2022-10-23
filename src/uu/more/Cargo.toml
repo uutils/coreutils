@@ -1,6 +1,6 @@
 [package]
 name = "uu_more"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "more ~ (uutils) input perusal filter"
@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/more.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore" }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
 crossterm = ">=0.19"
 atty = "0.2"
 unicode-width = "0.1.7"

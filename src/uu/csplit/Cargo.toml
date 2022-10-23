@@ -1,6 +1,6 @@
 [package]
 name = "uu_csplit"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "csplit ~ (uutils) Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output"
@@ -15,10 +15,10 @@ edition = "2021"
 path = "src/csplit.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 thiserror = "1.0"
 regex = "1.6.0"
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["entries", "fs"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["entries", "fs"] }
 
 [[bin]]
 name = "csplit"

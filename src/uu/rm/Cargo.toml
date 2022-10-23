@@ -1,6 +1,6 @@
 [package]
 name = "uu_rm"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "rm ~ (uutils) remove PATHNAME"
@@ -15,13 +15,13 @@ edition = "2021"
 path = "src/rm.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 walkdir = "2.2"
 remove_dir_all = "0.7.0"
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["fs"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["fs"] }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version="0.3", features=[] }
+windows-sys = { version = "0.42.0", default-features = false, features = ["Win32_Storage_FileSystem"] }
 
 [[bin]]
 name = "rm"

@@ -165,6 +165,47 @@ fn test_extra_operand() {
         .no_stdout();
 }
 
+#[test]
+fn test_term_matching() {
+    fn check(term_pattern: &str, term: &str, expectation: &str) {
+        let theme = format!(
+            "
+TERM {term_pattern}
+
+.term_matching    00;38;5;61
+"
+        );
+
+        new_ucmd!()
+            .env("TERM", term)
+            .pipe_in(theme)
+            .args(&["-b", "-"])
+            .succeeds()
+            .stdout_is(expectation)
+            .no_stderr();
+    }
+
+    let expectation_if_match = r#"
+LS_COLORS='*.term_matching=00;38;5;61:';
+export LS_COLORS
+"#
+    .trim_start();
+    let expectation_if_no_match = r#"
+LS_COLORS='';
+export LS_COLORS
+"#
+    .trim_start();
+
+    // sanity checks
+    check("matches", "matches", expectation_if_match);
+    check("matches", "no_match", expectation_if_no_match);
+    // character set negation should treat ^ like !
+    check("[!a]_negation", "a_negation", expectation_if_no_match);
+    check("[!a]_negation", "b_negation", expectation_if_match);
+    check("[^a]_negation", "a_negation", expectation_if_no_match);
+    check("[^a]_negation", "b_negation", expectation_if_match);
+}
+
 fn test_helper(file_name: &str, term: &str) {
     new_ucmd!()
         .env("TERM", term)

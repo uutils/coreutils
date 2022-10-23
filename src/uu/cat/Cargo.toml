@@ -1,6 +1,6 @@
 [package]
 name = "uu_cat"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "cat ~ (uutils) concatenate and display input"
@@ -15,10 +15,10 @@ edition = "2021"
 path = "src/cat.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 thiserror = "1.0"
 atty = "0.2"
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["fs", "pipes"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["fs", "pipes"] }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.25", default-features = false }

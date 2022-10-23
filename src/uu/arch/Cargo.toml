@@ -1,6 +1,6 @@
 [package]
 name = "uu_arch"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "arch ~ (uutils) display machine architecture"
@@ -16,8 +16,8 @@ path = "src/arch.rs"
 
 [dependencies]
 platform-info = "1.0.0"
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore" }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
 
 [[bin]]
 name = "arch"

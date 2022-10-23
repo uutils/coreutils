@@ -8,7 +8,7 @@
 
 // spell-checker:ignore (paths) GPGHome findxs
 
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use uucore::display::{println_verbatim, Quotable};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::format_usage;
@@ -197,12 +197,12 @@ impl Options {
             }
         };
         Self {
-            directory: matches.contains_id(OPT_DIRECTORY),
-            dry_run: matches.contains_id(OPT_DRY_RUN),
-            quiet: matches.contains_id(OPT_QUIET),
+            directory: matches.get_flag(OPT_DIRECTORY),
+            dry_run: matches.get_flag(OPT_DRY_RUN),
+            quiet: matches.get_flag(OPT_QUIET),
             tmpdir,
             suffix: matches.get_one::<String>(OPT_SUFFIX).map(String::from),
-            treat_as_template: matches.contains_id(OPT_T),
+            treat_as_template: matches.get_flag(OPT_T),
             template,
         }
     }
@@ -275,7 +275,7 @@ impl Params {
         // For example, if `tmpdir` is "a/b" and the template is "c/dXXX",
         // then `prefix` is "a/b/c/d".
         let tmpdir = options.tmpdir;
-        let prefix_from_option = tmpdir.clone().unwrap_or_else(|| "".to_string());
+        let prefix_from_option = tmpdir.clone().unwrap_or_default();
         let prefix_from_template = &options.template[..i];
         let prefix = Path::new(&prefix_from_option)
             .join(prefix_from_template)
@@ -311,7 +311,7 @@ impl Params {
         //
         // For example, if the suffix command-line argument is ".txt" and
         // the template is "XXXabc", then `suffix` is "abc.txt".
-        let suffix_from_option = options.suffix.unwrap_or_else(|| "".to_string());
+        let suffix_from_option = options.suffix.unwrap_or_default();
         let suffix_from_template = &options.template[j..];
         let suffix = format!("{}{}", suffix_from_template, suffix_from_option);
         if suffix.contains(MAIN_SEPARATOR) {
@@ -340,7 +340,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = match uu_app().try_get_matches_from(&args) {
         Ok(m) => m,
         Err(e) => {
-            if e.kind == clap::error::ErrorKind::TooManyValues && e.info[0] == "<template>..." {
+            if e.kind() == clap::error::ErrorKind::TooManyValues
+                && e.context().any(|(kind, val)| {
+                    kind == clap::error::ContextKind::InvalidArg
+                        && val == &clap::error::ContextValue::String("[template]".into())
+                })
+            {
                 return Err(UUsageError::new(1, "too many templates"));
             }
             return Err(e.into());
@@ -388,7 +393,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -398,19 +403,22 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_DIRECTORY)
                 .short('d')
                 .long(OPT_DIRECTORY)
-                .help("Make a directory instead of a file"),
+                .help("Make a directory instead of a file")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_DRY_RUN)
                 .short('u')
                 .long(OPT_DRY_RUN)
-                .help("do not create anything; merely print a name (unsafe)"),
+                .help("do not create anything; merely print a name (unsafe)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_QUIET)
                 .short('q')
                 .long("quiet")
-                .help("Fail silently if an error occurs."),
+                .help("Fail silently if an error occurs.")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_SUFFIX)
@@ -427,23 +435,23 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(OPT_TMPDIR)
                 .help(
                     "interpret TEMPLATE relative to DIR; if DIR is not specified, use \
-                     $TMPDIR ($TMP on windows) if set, else /tmp. With this option, TEMPLATE must not \
-                     be an absolute name; unlike with -t, TEMPLATE may contain \
-                     slashes, but mktemp creates only the final component",
+                     $TMPDIR ($TMP on windows) if set, else /tmp. With this option, \
+                     TEMPLATE must not be an absolute name; unlike with -t, TEMPLATE \
+                     may contain slashes, but mktemp creates only the final component",
                 )
                 .value_name("DIR")
                 .value_hint(clap::ValueHint::DirPath),
         )
-        .arg(Arg::new(OPT_T).short('t').help(
-            "Generate a template (using the supplied prefix and TMPDIR (TMP on windows) if set) \
-             to create a filename template [deprecated]",
-        ))
         .arg(
-            Arg::new(ARG_TEMPLATE)
-                .multiple_occurrences(false)
-                .takes_value(true)
-                .max_values(1)
+            Arg::new(OPT_T)
+                .short('t')
+                .help(
+                    "Generate a template (using the supplied prefix and TMPDIR \
+                (TMP on windows) if set) to create a filename template [deprecated]",
+                )
+                .action(ArgAction::SetTrue),
         )
+        .arg(Arg::new(ARG_TEMPLATE).num_args(..=1))
 }
 
 pub fn dry_exec(tmpdir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<()> {
@@ -484,7 +492,7 @@ pub fn dry_exec(tmpdir: &str, prefix: &str, rand: usize, suffix: &str) -> UResul
 fn make_temp_dir(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
-    match builder.tempdir_in(&dir) {
+    match builder.tempdir_in(dir) {
         Ok(d) => {
             // `into_path` consumes the TempDir without removing it
             let path = d.into_path();
@@ -516,7 +524,7 @@ fn make_temp_dir(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<
 fn make_temp_file(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
-    match builder.tempfile_in(&dir) {
+    match builder.tempfile_in(dir) {
         // `keep` ensures that the file is not deleted
         Ok(named_tempfile) => match named_tempfile.keep() {
             Ok((_, pathbuf)) => Ok(pathbuf),

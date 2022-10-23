@@ -453,3 +453,8 @@ fn test_realpath_trailing_slash() {
         .succeeds()
         .stdout_contains(format!("{}no_dir\n", std::path::MAIN_SEPARATOR));
 }
+
+#[test]
+fn test_realpath_empty() {
+    new_ucmd!().fails().code_is(1);
+}

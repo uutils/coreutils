@@ -14,7 +14,7 @@ mod error;
 extern crate uucore;
 
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgMatches, Command, ErrorKind};
+use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -76,7 +76,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         LONG_HELP,
         backup_control::BACKUP_CONTROL_LONG_HELP
     );
-    let mut app = uu_app().after_help(&*help);
+    let mut app = uu_app().after_help(help);
     let matches = app.try_get_matches_from_mut(args)?;
 
     if !matches.contains_id(OPT_TARGET_DIRECTORY)
@@ -118,19 +118,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         overwrite: overwrite_mode,
         backup: backup_mode,
         suffix: backup_suffix,
-        update: matches.contains_id(OPT_UPDATE),
+        update: matches.get_flag(OPT_UPDATE),
         target_dir: matches
             .get_one::<OsString>(OPT_TARGET_DIRECTORY)
             .map(OsString::from),
-        no_target_dir: matches.contains_id(OPT_NO_TARGET_DIRECTORY),
-        verbose: matches.contains_id(OPT_VERBOSE),
-        strip_slashes: matches.contains_id(OPT_STRIP_TRAILING_SLASHES),
+        no_target_dir: matches.get_flag(OPT_NO_TARGET_DIRECTORY),
+        verbose: matches.get_flag(OPT_VERBOSE),
+        strip_slashes: matches.get_flag(OPT_STRIP_TRAILING_SLASHES),
     };
 
     exec(&files[..], &behavior)
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -142,24 +142,28 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_FORCE)
                 .short('f')
                 .long(OPT_FORCE)
-                .help("do not prompt before overwriting"),
+                .help("do not prompt before overwriting")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_INTERACTIVE)
                 .short('i')
                 .long(OPT_INTERACTIVE)
-                .help("prompt before override"),
+                .help("prompt before override")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_NO_CLOBBER)
                 .short('n')
                 .long(OPT_NO_CLOBBER)
-                .help("do not overwrite an existing file"),
+                .help("do not overwrite an existing file")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_STRIP_TRAILING_SLASHES)
                 .long(OPT_STRIP_TRAILING_SLASHES)
-                .help("remove any trailing slashes from each SOURCE argument"),
+                .help("remove any trailing slashes from each SOURCE argument")
+                .action(ArgAction::SetTrue),
         )
         .arg(backup_control::arguments::suffix())
         .arg(
@@ -167,7 +171,6 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('t')
                 .long(OPT_TARGET_DIRECTORY)
                 .help("move all SOURCE arguments into DIRECTORY")
-                .takes_value(true)
                 .value_name("DIRECTORY")
                 .value_hint(clap::ValueHint::DirPath)
                 .conflicts_with(OPT_NO_TARGET_DIRECTORY)
@@ -177,23 +180,30 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_NO_TARGET_DIRECTORY)
                 .short('T')
                 .long(OPT_NO_TARGET_DIRECTORY)
-                .help("treat DEST as a normal file"),
+                .help("treat DEST as a normal file")
+                .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(OPT_UPDATE).short('u').long(OPT_UPDATE).help(
-            "move only when the SOURCE file is newer than the destination file \
+        .arg(
+            Arg::new(OPT_UPDATE)
+                .short('u')
+                .long(OPT_UPDATE)
+                .help(
+                    "move only when the SOURCE file is newer than the destination file \
                        or when the destination file is missing",
-        ))
+                )
+                .action(ArgAction::SetTrue),
+        )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .short('v')
                 .long(OPT_VERBOSE)
-                .help("explain what is being done"),
+                .help("explain what is being done")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(ARG_FILES)
-                .multiple_occurrences(true)
-                .takes_value(true)
-                .min_values(1)
+                .action(ArgAction::Append)
+                .num_args(1..)
                 .required(true)
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath),
@@ -206,9 +216,9 @@ fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
     // overwrite options are supplied, only the last takes effect.
     // To default to no-clobber in that situation seems safer:
     //
-    if matches.contains_id(OPT_NO_CLOBBER) {
+    if matches.get_flag(OPT_NO_CLOBBER) {
         OverwriteMode::NoClobber
-    } else if matches.contains_id(OPT_INTERACTIVE) {
+    } else if matches.get_flag(OPT_INTERACTIVE) {
         OverwriteMode::Interactive
     } else {
         OverwriteMode::Force
@@ -453,7 +463,7 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     let path_symlink_points_to = fs::read_link(from)?;
     #[cfg(unix)]
     {
-        unix::fs::symlink(&path_symlink_points_to, &to).and_then(|_| fs::remove_file(&from))?;
+        unix::fs::symlink(&path_symlink_points_to, to).and_then(|_| fs::remove_file(from))?;
     }
     #[cfg(windows)]
     {

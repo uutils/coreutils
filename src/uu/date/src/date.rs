@@ -11,7 +11,7 @@
 use chrono::{DateTime, FixedOffset, Local, Offset, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
@@ -23,10 +23,7 @@ use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, show_error};
 #[cfg(windows)]
-use winapi::{
-    shared::minwindef::WORD,
-    um::{minwinbase::SYSTEMTIME, sysinfoapi::SetSystemTime},
-};
+use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
 // Options
 const DATE: &str = "date";
@@ -160,7 +157,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|mut iter| iter.next().unwrap_or(&DATE.to_string()).as_str().into())
     {
         Format::Iso8601(fmt)
-    } else if matches.contains_id(OPT_RFC_EMAIL) {
+    } else if matches.get_flag(OPT_RFC_EMAIL) {
         Format::Rfc5322
     } else if let Some(fmt) = matches
         .get_one::<String>(OPT_RFC_3339)
@@ -191,7 +188,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let settings = Settings {
-        utc: matches.contains_id(OPT_UNIVERSAL),
+        utc: matches.get_flag(OPT_UNIVERSAL),
         format,
         date_source,
         set_to,
@@ -257,7 +254,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -267,7 +264,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_DATE)
                 .short('d')
                 .long(OPT_DATE)
-                .takes_value(true)
                 .value_name("STRING")
                 .help("display time described by STRING, not 'now'"),
         )
@@ -275,7 +271,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_FILE)
                 .short('f')
                 .long(OPT_FILE)
-                .takes_value(true)
                 .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
                 .help("like --date; once for each line of DATEFILE"),
@@ -284,7 +279,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_ISO_8601)
                 .short('I')
                 .long(OPT_ISO_8601)
-                .takes_value(true)
                 .value_name("FMT")
                 .help(ISO_8601_HELP_STRING),
         )
@@ -292,25 +286,25 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_RFC_EMAIL)
                 .short('R')
                 .long(OPT_RFC_EMAIL)
-                .help(RFC_5322_HELP_STRING),
+                .help(RFC_5322_HELP_STRING)
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_RFC_3339)
                 .long(OPT_RFC_3339)
-                .takes_value(true)
                 .value_name("FMT")
                 .help(RFC_3339_HELP_STRING),
         )
         .arg(
             Arg::new(OPT_DEBUG)
                 .long(OPT_DEBUG)
-                .help("annotate the parsed date, and warn about questionable usage to stderr"),
+                .help("annotate the parsed date, and warn about questionable usage to stderr")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_REFERENCE)
                 .short('r')
                 .long(OPT_REFERENCE)
-                .takes_value(true)
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::AnyPath)
                 .help("display the last modification time of FILE"),
@@ -319,7 +313,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_SET)
                 .short('s')
                 .long(OPT_SET)
-                .takes_value(true)
                 .value_name("STRING")
                 .help(OPT_SET_HELP_STRING),
         )
@@ -328,9 +321,10 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('u')
                 .long(OPT_UNIVERSAL)
                 .alias(OPT_UNIVERSAL_2)
-                .help("print or set Coordinated Universal Time (UTC)"),
+                .help("print or set Coordinated Universal Time (UTC)")
+                .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(OPT_FORMAT).multiple_occurrences(false))
+        .arg(Arg::new(OPT_FORMAT))
 }
 
 /// Return the appropriate format string for the given settings.
@@ -412,16 +406,16 @@ fn set_system_datetime(date: DateTime<Utc>) -> UResult<()> {
 /// https://docs.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-systemtime
 fn set_system_datetime(date: DateTime<Utc>) -> UResult<()> {
     let system_time = SYSTEMTIME {
-        wYear: date.year() as WORD,
-        wMonth: date.month() as WORD,
+        wYear: date.year() as u16,
+        wMonth: date.month() as u16,
         // Ignored
         wDayOfWeek: 0,
-        wDay: date.day() as WORD,
-        wHour: date.hour() as WORD,
-        wMinute: date.minute() as WORD,
-        wSecond: date.second() as WORD,
+        wDay: date.day() as u16,
+        wHour: date.hour() as u16,
+        wMinute: date.minute() as u16,
+        wSecond: date.second() as u16,
         // TODO: be careful of leap seconds - valid range is [0, 999] - how to handle?
-        wMilliseconds: ((date.nanosecond() / 1_000_000) % 1000) as WORD,
+        wMilliseconds: ((date.nanosecond() / 1_000_000) % 1000) as u16,
     };
 
     let result = unsafe { SetSystemTime(&system_time) };

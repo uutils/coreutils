@@ -10,6 +10,7 @@ extern crate uucore;
 
 use chrono::prelude::DateTime;
 use chrono::Local;
+use clap::ArgAction;
 use clap::{crate_version, Arg, ArgMatches, Command};
 use glob::Pattern;
 use std::collections::HashSet;
@@ -40,15 +41,12 @@ use uucore::format_usage;
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size, ParseSizeError};
 #[cfg(windows)]
-use winapi::shared::minwindef::{DWORD, LPVOID};
+use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
-use winapi::um::fileapi::{FILE_ID_INFO, FILE_STANDARD_INFO};
-#[cfg(windows)]
-use winapi::um::minwinbase::{FileIdInfo, FileStandardInfo};
-#[cfg(windows)]
-use winapi::um::winbase::GetFileInformationByHandleEx;
-#[cfg(windows)]
-use winapi::um::winnt::FILE_ID_128;
+use windows_sys::Win32::Storage::FileSystem::{
+    FileIdInfo, FileStandardInfo, GetFileInformationByHandleEx, FILE_ID_128, FILE_ID_INFO,
+    FILE_STANDARD_INFO,
+};
 
 mod options {
     pub const HELP: &str = "help";
@@ -207,21 +205,19 @@ fn get_size_on_disk(path: &Path) -> u64 {
         Err(_) => return size_on_disk, // opening directories will fail
     };
 
-    let handle = file.as_raw_handle();
-
     unsafe {
         let mut file_info: FILE_STANDARD_INFO = core::mem::zeroed();
         let file_info_ptr: *mut FILE_STANDARD_INFO = &mut file_info;
 
         let success = GetFileInformationByHandleEx(
-            handle,
+            file.as_raw_handle() as HANDLE,
             FileStandardInfo,
-            file_info_ptr as LPVOID,
-            std::mem::size_of::<FILE_STANDARD_INFO>() as DWORD,
+            file_info_ptr as _,
+            std::mem::size_of::<FILE_STANDARD_INFO>() as u32,
         );
 
         if success != 0 {
-            size_on_disk = *file_info.AllocationSize.QuadPart() as u64;
+            size_on_disk = file_info.AllocationSize as u64;
         }
     }
 
@@ -237,17 +233,15 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
         Err(_) => return result,
     };
 
-    let handle = file.as_raw_handle();
-
     unsafe {
         let mut file_info: FILE_ID_INFO = core::mem::zeroed();
         let file_info_ptr: *mut FILE_ID_INFO = &mut file_info;
 
         let success = GetFileInformationByHandleEx(
-            handle,
+            file.as_raw_handle() as HANDLE,
             FileIdInfo,
-            file_info_ptr as LPVOID,
-            std::mem::size_of::<FILE_ID_INFO>() as DWORD,
+            file_info_ptr as _,
+            std::mem::size_of::<FILE_ID_INFO>() as u32,
         );
 
         if success != 0 {
@@ -282,9 +276,9 @@ fn read_block_size(s: Option<&str>) -> u64 {
 }
 
 fn choose_size(matches: &ArgMatches, stat: &Stat) -> u64 {
-    if matches.contains_id(options::INODES) {
+    if matches.get_flag(options::INODES) {
         stat.inodes
-    } else if matches.contains_id(options::APPARENT_SIZE) || matches.contains_id(options::BYTES) {
+    } else if matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES) {
         stat.size
     } else {
         // The st_blocks field indicates the number of blocks allocated to the file, 512-byte units.
@@ -492,7 +486,7 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     let exclude_from_iterator = matches
         .get_many::<String>(options::EXCLUDE_FROM)
         .unwrap_or_default()
-        .flat_map(|f| file_as_vec(&f));
+        .flat_map(file_as_vec);
 
     let excludes_iterator = matches
         .get_many::<String>(options::EXCLUDE)
@@ -501,7 +495,7 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
 
     let mut exclude_patterns = Vec::new();
     for f in excludes_iterator.chain(exclude_from_iterator) {
-        if matches.contains_id(options::VERBOSE) {
+        if matches.get_flag(options::VERBOSE) {
             println!("adding {:?} to the exclude list ", &f);
         }
         match parse_glob::from_str(&f) {
@@ -519,7 +513,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let summarize = matches.contains_id(options::SUMMARIZE);
+    let summarize = matches.get_flag(options::SUMMARIZE);
 
     let max_depth = parse_depth(
         matches
@@ -529,14 +523,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     )?;
 
     let options = Options {
-        all: matches.contains_id(options::ALL),
+        all: matches.get_flag(options::ALL),
         max_depth,
-        total: matches.contains_id(options::TOTAL),
-        separate_dirs: matches.contains_id(options::SEPARATE_DIRS),
-        one_file_system: matches.contains_id(options::ONE_FILE_SYSTEM),
-        dereference: matches.contains_id(options::DEREFERENCE),
-        inodes: matches.contains_id(options::INODES),
-        verbose: matches.contains_id(options::VERBOSE),
+        total: matches.get_flag(options::TOTAL),
+        separate_dirs: matches.get_flag(options::SEPARATE_DIRS),
+        one_file_system: matches.get_flag(options::ONE_FILE_SYSTEM),
+        dereference: matches.get_flag(options::DEREFERENCE),
+        inodes: matches.get_flag(options::INODES),
+        verbose: matches.get_flag(options::VERBOSE),
     };
 
     let files = match matches.get_one::<String>(options::FILE) {
@@ -549,7 +543,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     if options.inodes
-        && (matches.contains_id(options::APPARENT_SIZE) || matches.contains_id(options::BYTES))
+        && (matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES))
     {
         show_warning!("options --apparent-size and -b are ineffective with --inodes");
     }
@@ -565,19 +559,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::THRESHOLD)))
     });
 
-    let multiplier: u64 = if matches.contains_id(options::SI) {
+    let multiplier: u64 = if matches.get_flag(options::SI) {
         1000
     } else {
         1024
     };
     let convert_size_fn = {
-        if matches.contains_id(options::HUMAN_READABLE) || matches.contains_id(options::SI) {
+        if matches.get_flag(options::HUMAN_READABLE) || matches.get_flag(options::SI) {
             convert_size_human
-        } else if matches.contains_id(options::BYTES) {
+        } else if matches.get_flag(options::BYTES) {
             convert_size_b
-        } else if matches.contains_id(options::BLOCK_SIZE_1K) {
+        } else if matches.get_flag(options::BLOCK_SIZE_1K) {
             convert_size_k
-        } else if matches.contains_id(options::BLOCK_SIZE_1M) {
+        } else if matches.get_flag(options::BLOCK_SIZE_1M) {
             convert_size_m
         } else {
             convert_size_other
@@ -594,7 +588,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let time_format_str =
         parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?;
 
-    let line_separator = if matches.contains_id(options::NULL) {
+    let line_separator = if matches.get_flag(options::NULL) {
         "\0"
     } else {
         "\n"
@@ -710,23 +704,26 @@ fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<u
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .disable_help_flag(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
                 .help("Print help information.")
+                .action(ArgAction::Help)
         )
         .arg(
             Arg::new(options::ALL)
                 .short('a')
                 .long(options::ALL)
-                .help("write counts for all files, not just directories"),
+                .help("write counts for all files, not just directories")
+                .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new(options::APPARENT_SIZE)
@@ -736,6 +733,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                     although the apparent size is usually smaller, it may be larger due to holes \
                     in ('sparse') files, internal fragmentation, indirect blocks, and the like"
                 )
+                .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new(options::BLOCK_SIZE)
@@ -752,12 +750,14 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('b')
                 .long("bytes")
                 .help("equivalent to '--apparent-size --block-size=1'")
+                .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new(options::TOTAL)
                 .long("total")
                 .short('c')
                 .help("produce a grand total")
+                .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new(options::MAX_DEPTH)
@@ -775,6 +775,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long("human-readable")
                 .short('h')
                 .help("print sizes in human readable format (e.g., 1K 234M 2G)")
+                .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new(options::INODES)
@@ -782,70 +783,81 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "list inode usage information instead of block usage like --block-size=1K"
                 )
+                .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new(options::BLOCK_SIZE_1K)
                 .short('k')
                 .help("like --block-size=1K")
+                .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new(options::COUNT_LINKS)
                 .short('l')
                 .long("count-links")
                 .help("count sizes many times if hard linked")
+                .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new(options::DEREFERENCE)
                 .short('L')
                 .long(options::DEREFERENCE)
                 .help("dereference all symbolic links")
+                .action(ArgAction::SetTrue)
         )
         // .arg(
         //     Arg::new("no-dereference")
         //         .short('P')
         //         .long("no-dereference")
         //         .help("don't follow any symbolic links (this is the default)")
+        //         .action(ArgAction::SetTrue),        
         // )
         .arg(
             Arg::new(options::BLOCK_SIZE_1M)
                 .short('m')
                 .help("like --block-size=1M")
+                .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new(options::NULL)
                 .short('0')
                 .long("null")
                 .help("end each output line with 0 byte rather than newline")
+                .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new(options::SEPARATE_DIRS)
                 .short('S')
                 .long("separate-dirs")
                 .help("do not include size of subdirectories")
+                .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new(options::SUMMARIZE)
                 .short('s')
                 .long("summarize")
                 .help("display only a total for each argument")
+                .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new(options::SI)
                 .long(options::SI)
                 .help("like -h, but use powers of 1000 not 1024")
+                .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new(options::ONE_FILE_SYSTEM)
                 .short('x')
                 .long(options::ONE_FILE_SYSTEM)
                 .help("skip directories on different file systems")
+                .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new(options::THRESHOLD)
                 .short('t')
                 .long(options::THRESHOLD)
                 .value_name("SIZE")
-                .number_of_values(1)
+                .num_args(1)
                 .allow_hyphen_values(true)
                 .help("exclude entries smaller than SIZE if positive, \
                           or entries greater than SIZE if negative")
@@ -855,13 +867,14 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('v')
                 .long("verbose")
                 .help("verbose mode (option not present in GNU/Coreutils)")
+                .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new(options::EXCLUDE)
                 .long(options::EXCLUDE)
                 .value_name("PATTERN")
                 .help("exclude files that match PATTERN")
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
         )
         .arg(
             Arg::new(options::EXCLUDE_FROM)
@@ -870,15 +883,14 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::FilePath)
                 .help("exclude files that match any pattern in FILE")
-                .multiple_occurrences(true)
-
+                .action(ArgAction::Append)
         )
         .arg(
             Arg::new(options::TIME)
                 .long(options::TIME)
                 .value_name("WORD")
                 .require_equals(true)
-                .min_values(0)
+                .num_args(0..)
                 .value_parser(["atime", "access", "use", "ctime", "status", "birth", "creation"])
                 .help(
                     "show time of the last modification of any file in the \
@@ -899,7 +911,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::FILE)
                 .hide(true)
                 .value_hint(clap::ValueHint::AnyPath)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
         )
 }
 
@@ -913,7 +925,7 @@ impl FromStr for Threshold {
     type Err = ParseSizeError;
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        let offset = if s.starts_with(&['-', '+'][..]) { 1 } else { 0 };
+        let offset = usize::from(s.starts_with(&['-', '+'][..]));
 
         let size = parse_size(&s[offset..])?;
 

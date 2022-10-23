@@ -1,6 +1,6 @@
 [package]
 name = "uu_stty"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "stty ~ (uutils) print or change terminal characteristics"
@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/stty.rs"
 
 [dependencies]
-clap = { version = "3.1", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore" }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
 nix = { version="0.25", features = ["term"] }
 
 [[bin]]

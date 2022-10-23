@@ -6,17 +6,12 @@
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
+use windows_sys::Win32::Foundation::{CloseHandle, BOOL, HANDLE, WAIT_FAILED, WAIT_OBJECT_0};
+use windows_sys::Win32::System::Threading::{
+    OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
+};
 
-extern crate winapi;
-
-use self::winapi::shared::minwindef::DWORD;
-use self::winapi::um::handleapi::CloseHandle;
-use self::winapi::um::processthreadsapi::OpenProcess;
-use self::winapi::um::synchapi::WaitForSingleObject;
-use self::winapi::um::winbase::{WAIT_FAILED, WAIT_OBJECT_0};
-use self::winapi::um::winnt::{HANDLE, SYNCHRONIZE};
-
-pub type Pid = DWORD;
+pub type Pid = u32;
 
 pub struct ProcessChecker {
     dead: bool,
@@ -26,10 +21,10 @@ pub struct ProcessChecker {
 impl ProcessChecker {
     pub fn new(process_id: self::Pid) -> Self {
         #[allow(non_snake_case)]
-        let FALSE = 0i32;
-        let h = unsafe { OpenProcess(SYNCHRONIZE, FALSE, process_id as DWORD) };
+        let FALSE: BOOL = 0;
+        let h = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, FALSE, process_id) };
         Self {
-            dead: h.is_null(),
+            dead: h == 0,
             handle: h,
         }
     }

@@ -1,6 +1,6 @@
 [package]
 name = "uu_uptime"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "uptime ~ (uutils) display dynamic system information"
@@ -16,8 +16,8 @@ path = "src/uptime.rs"
 
 [dependencies]
 chrono = { version="^0.4.19", default-features=false, features=["std", "alloc", "clock"]}
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["libc", "utmpx"] }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["libc", "utmpx"] }
 
 [[bin]]
 name = "uptime"

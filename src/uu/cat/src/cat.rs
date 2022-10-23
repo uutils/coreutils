@@ -11,7 +11,7 @@
 // spell-checker:ignore (ToDO) nonprint nonblank nonprinting
 
 // last synced with: cat (GNU coreutils) 8.13
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::{metadata, File};
 use std::io::{self, Read, Write};
 use thiserror::Error;
@@ -185,9 +185,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let number_mode = if matches.contains_id(options::NUMBER_NONBLANK) {
+    let number_mode = if matches.get_flag(options::NUMBER_NONBLANK) {
         NumberingMode::NonEmpty
-    } else if matches.contains_id(options::NUMBER) {
+    } else if matches.get_flag(options::NUMBER) {
         NumberingMode::All
     } else {
         NumberingMode::None
@@ -200,7 +200,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         options::SHOW_NONPRINTING.to_owned(),
     ]
     .iter()
-    .any(|v| matches.contains_id(v));
+    .any(|v| matches.get_flag(v));
 
     let show_ends = vec![
         options::SHOW_ENDS.to_owned(),
@@ -208,7 +208,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         options::SHOW_NONPRINTING_ENDS.to_owned(),
     ]
     .iter()
-    .any(|v| matches.contains_id(v));
+    .any(|v| matches.get_flag(v));
 
     let show_tabs = vec![
         options::SHOW_ALL.to_owned(),
@@ -216,9 +216,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         options::SHOW_NONPRINTING_TABS.to_owned(),
     ]
     .iter()
-    .any(|v| matches.contains_id(v));
+    .any(|v| matches.get_flag(v));
 
-    let squeeze_blank = matches.contains_id(options::SQUEEZE_BLANK);
+    let squeeze_blank = matches.get_flag(options::SQUEEZE_BLANK);
     let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
         Some(v) => v.clone().map(|v| v.to_owned()).collect(),
         None => vec!["-".to_owned()],
@@ -234,7 +234,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     cat_files(&files, &options)
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
@@ -244,62 +244,71 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
-                .multiple_occurrences(true)
+                .action(clap::ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::SHOW_ALL)
                 .short('A')
                 .long(options::SHOW_ALL)
-                .help("equivalent to -vET"),
+                .help("equivalent to -vET")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NUMBER_NONBLANK)
                 .short('b')
                 .long(options::NUMBER_NONBLANK)
                 .help("number nonempty output lines, overrides -n")
-                .overrides_with(options::NUMBER),
+                .overrides_with(options::NUMBER)
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_NONPRINTING_ENDS)
                 .short('e')
-                .help("equivalent to -vE"),
+                .help("equivalent to -vE")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_ENDS)
                 .short('E')
                 .long(options::SHOW_ENDS)
-                .help("display $ at end of each line"),
+                .help("display $ at end of each line")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NUMBER)
                 .short('n')
                 .long(options::NUMBER)
-                .help("number all output lines"),
+                .help("number all output lines")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SQUEEZE_BLANK)
                 .short('s')
                 .long(options::SQUEEZE_BLANK)
-                .help("suppress repeated empty output lines"),
+                .help("suppress repeated empty output lines")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_NONPRINTING_TABS)
                 .short('t')
                 .long(options::SHOW_NONPRINTING_TABS)
-                .help("equivalent to -vT"),
+                .help("equivalent to -vT")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_TABS)
                 .short('T')
                 .long(options::SHOW_TABS)
-                .help("display TAB characters at ^I"),
+                .help("display TAB characters at ^I")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_NONPRINTING)
                 .short('v')
                 .long(options::SHOW_NONPRINTING)
-                .help("use ^ and M- notation, except for LF (\\n) and TAB (\\t)"),
+                .help("use ^ and M- notation, except for LF (\\n) and TAB (\\t)")
+                .action(ArgAction::SetTrue),
         )
 }
 

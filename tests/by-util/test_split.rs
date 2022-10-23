@@ -282,7 +282,7 @@ fn test_filter_with_env_var_set() {
     RandomFile::new(&at, name).add_lines(n_lines);
 
     let env_var_value = "some-value";
-    env::set_var("FILE", &env_var_value);
+    env::set_var("FILE", env_var_value);
     ucmd.args(&[format!("--filter={}", "cat > $FILE").as_str(), name])
         .succeeds();
 
@@ -660,6 +660,22 @@ fn test_line_bytes_no_empty_file() {
 }
 
 #[test]
+fn test_line_bytes_no_eof() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-C", "3"])
+        .pipe_in("1\n2222\n3\n4")
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("xaa"), "1\n");
+    assert_eq!(at.read("xab"), "222");
+    assert_eq!(at.read("xac"), "2\n");
+    assert_eq!(at.read("xad"), "3\n");
+    assert_eq!(at.read("xae"), "4");
+    assert!(!at.plus("xaf").exists());
+}
+
+#[test]
 fn test_guard_input() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -726,4 +742,20 @@ fn test_hex_suffix() {
     assert_eq!(at.read("x0a"), "b");
     assert_eq!(at.read("x0b"), "c");
     assert_eq!(at.read("x0c"), "");
+}
+
+#[test]
+fn test_round_robin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file_read = |f| {
+        let mut s = String::new();
+        at.open(f).read_to_string(&mut s).unwrap();
+        s
+    };
+
+    ucmd.args(&["-n", "r/2", "fivelines.txt"]).succeeds();
+
+    assert_eq!(file_read("xaa"), "1\n3\n5\n");
+    assert_eq!(file_read("xab"), "2\n4\n");
 }

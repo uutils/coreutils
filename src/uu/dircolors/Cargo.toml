@@ -1,6 +1,6 @@
 [package]
 name = "uu_dircolors"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "dircolors ~ (uutils) display commands to set LS_COLORS"
@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/dircolors.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 glob = "0.3.0"
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
 
 [[bin]]
 name = "dircolors"

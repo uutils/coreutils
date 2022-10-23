@@ -76,9 +76,11 @@ fn test_wrap() {
 #[test]
 fn test_wrap_no_arg() {
     for wrap_param in ["-w", "--wrap"] {
-        new_ucmd!().arg(wrap_param).fails().stderr_contains(
-            &"The argument '--wrap <wrap>' requires a value but none was supplied",
-        );
+        new_ucmd!()
+            .arg(wrap_param)
+            .fails()
+            .stderr_contains("The argument '--wrap <COLS>' requires a value but none was supplied")
+            .no_stdout();
     }
 }
 

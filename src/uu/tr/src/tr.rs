@@ -11,7 +11,7 @@ mod convert;
 mod operation;
 mod unicode_table;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use nom::AsBytes;
 use operation::{translate_input, Sequence, SqueezeOperation, TranslateOperation};
 use std::io::{stdin, stdout, BufReader, BufWriter};
@@ -42,16 +42,14 @@ fn get_long_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let after_help = get_long_usage();
-
     let matches = uu_app()
-        .after_help(&after_help[..])
+        .after_help(get_long_usage())
         .try_get_matches_from(args)?;
 
-    let delete_flag = matches.contains_id(options::DELETE);
-    let complement_flag = matches.contains_id(options::COMPLEMENT);
-    let squeeze_flag = matches.contains_id(options::SQUEEZE);
-    let truncate_set1_flag = matches.contains_id(options::TRUNCATE_SET1);
+    let delete_flag = matches.get_flag(options::DELETE);
+    let complement_flag = matches.get_flag(options::COMPLEMENT);
+    let squeeze_flag = matches.get_flag(options::SQUEEZE);
+    let truncate_set1_flag = matches.get_flag(options::TRUNCATE_SET1);
 
     let sets = matches
         .get_many::<String>(options::SETS)
@@ -137,7 +135,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -148,13 +146,15 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .visible_short_alias('C')
                 .short('c')
                 .long(options::COMPLEMENT)
-                .help("use the complement of SET1"),
+                .help("use the complement of SET1")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DELETE)
                 .short('d')
                 .long(options::DELETE)
-                .help("delete characters in SET1, do not translate"),
+                .help("delete characters in SET1, do not translate")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SQUEEZE)
@@ -164,19 +164,15 @@ pub fn uu_app<'a>() -> Command<'a> {
                     "replace each sequence of a repeated character that is \
                      listed in the last specified SET, with a single occurrence \
                      of that character",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TRUNCATE_SET1)
                 .long(options::TRUNCATE_SET1)
                 .short('t')
-                .help("first truncate SET1 to length of SET2"),
+                .help("first truncate SET1 to length of SET2")
+                .action(ArgAction::SetTrue),
         )
-        .arg(
-            Arg::new(options::SETS)
-                .multiple_occurrences(true)
-                .takes_value(true)
-                .min_values(1)
-                .max_values(2),
-        )
+        .arg(Arg::new(options::SETS).num_args(1..=2))
 }

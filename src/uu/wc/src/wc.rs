@@ -21,7 +21,7 @@ use utf8::{BufReadDecoder, BufReadDecoderError};
 use uucore::format_usage;
 use word_count::{TitledWordCount, WordCount};
 
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 
 use std::cmp::max;
 use std::error::Error;
@@ -61,11 +61,11 @@ impl Settings {
         };
 
         let settings = Self {
-            show_bytes: matches.contains_id(options::BYTES),
-            show_chars: matches.contains_id(options::CHAR),
-            show_lines: matches.contains_id(options::LINES),
-            show_words: matches.contains_id(options::WORDS),
-            show_max_line_length: matches.contains_id(options::MAX_LINE_LENGTH),
+            show_bytes: matches.get_flag(options::BYTES),
+            show_chars: matches.get_flag(options::CHAR),
+            show_lines: matches.get_flag(options::LINES),
+            show_words: matches.get_flag(options::WORDS),
+            show_max_line_length: matches.get_flag(options::MAX_LINE_LENGTH),
             files0_from_stdin_mode,
             title_quoting_style,
         };
@@ -205,7 +205,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     wc(&inputs, &settings)
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -215,18 +215,19 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::BYTES)
                 .short('c')
                 .long(options::BYTES)
-                .help("print the byte counts"),
+                .help("print the byte counts")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CHAR)
                 .short('m')
                 .long(options::CHAR)
-                .help("print the character counts"),
+                .help("print the character counts")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILES0_FROM)
                 .long(options::FILES0_FROM)
-                .takes_value(true)
                 .value_name("F")
                 .help(
                     "read input from the files specified by
@@ -239,24 +240,26 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::LINES)
                 .short('l')
                 .long(options::LINES)
-                .help("print the newline counts"),
+                .help("print the newline counts")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::MAX_LINE_LENGTH)
                 .short('L')
                 .long(options::MAX_LINE_LENGTH)
-                .help("print the length of the longest line"),
+                .help("print the length of the longest line")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WORDS)
                 .short('w')
                 .long(options::WORDS)
-                .help("print the word counts"),
+                .help("print the word counts")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(ARG_FILES)
-                .multiple_occurrences(true)
-                .takes_value(true)
+                .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
         )

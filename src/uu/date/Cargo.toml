@@ -1,6 +1,6 @@
 [package]
 name = "uu_date"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "date ~ (uutils) display or set the current time"
@@ -16,14 +16,14 @@ path = "src/date.rs"
 
 [dependencies]
 chrono = { version="^0.4.19", default-features=false, features=["std", "alloc", "clock"]}
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore" }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["minwinbase", "sysinfoapi", "minwindef"] }
+windows-sys = { version = "0.42.0", default-features = false, features = ["Win32_Foundation", "Win32_System_SystemInformation"] }
 
 [[bin]]
 name = "date"

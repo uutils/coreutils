@@ -13,7 +13,7 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 
@@ -75,9 +75,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // clap provides .conflicts_with / .conflicts_with_all, but we want to
     // manually handle conflicts so we can match the output of GNU coreutils
-    if (matches.contains_id(options::C_SHELL) || matches.contains_id(options::BOURNE_SHELL))
-        && (matches.contains_id(options::PRINT_DATABASE)
-            || matches.contains_id(options::PRINT_LS_COLORS))
+    if (matches.get_flag(options::C_SHELL) || matches.get_flag(options::BOURNE_SHELL))
+        && (matches.get_flag(options::PRINT_DATABASE) || matches.get_flag(options::PRINT_LS_COLORS))
     {
         return Err(UUsageError::new(
             1,
@@ -86,15 +85,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    if matches.contains_id(options::PRINT_DATABASE) && matches.contains_id(options::PRINT_LS_COLORS)
-    {
+    if matches.get_flag(options::PRINT_DATABASE) && matches.get_flag(options::PRINT_LS_COLORS) {
         return Err(UUsageError::new(
             1,
             "options --print-database and --print-ls-colors are mutually exclusive",
         ));
     }
 
-    if matches.contains_id(options::PRINT_DATABASE) {
+    if matches.get_flag(options::PRINT_DATABASE) {
         if !files.is_empty() {
             return Err(UUsageError::new(
                 1,
@@ -109,11 +107,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Ok(());
     }
 
-    let mut out_format = if matches.contains_id(options::C_SHELL) {
+    let mut out_format = if matches.get_flag(options::C_SHELL) {
         OutputFmt::CShell
-    } else if matches.contains_id(options::BOURNE_SHELL) {
+    } else if matches.get_flag(options::BOURNE_SHELL) {
         OutputFmt::Shell
-    } else if matches.contains_id(options::PRINT_LS_COLORS) {
+    } else if matches.get_flag(options::PRINT_LS_COLORS) {
         OutputFmt::Display
     } else {
         OutputFmt::Unknown
@@ -168,7 +166,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -182,7 +180,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .visible_alias("bourne-shell")
                 .overrides_with(options::C_SHELL)
                 .help("output Bourne shell code to set LS_COLORS")
-                .display_order(1),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::C_SHELL)
@@ -191,26 +189,26 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .visible_alias("c-shell")
                 .overrides_with(options::BOURNE_SHELL)
                 .help("output C shell code to set LS_COLORS")
-                .display_order(2),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRINT_DATABASE)
                 .long("print-database")
                 .short('p')
                 .help("print the byte counts")
-                .display_order(3),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRINT_LS_COLORS)
                 .long("print-ls-colors")
                 .help("output fully escaped colors for display")
-                .display_order(4),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
                 .value_hint(clap::ValueHint::FilePath)
-                .multiple_occurrences(true),
+                .action(ArgAction::Append),
         )
 }
 
@@ -263,7 +261,7 @@ impl StrUtils for str {
     }
 
     fn fnmatch(&self, pat: &str) -> bool {
-        pat.parse::<glob::Pattern>().unwrap().matches(self)
+        parse_glob::from_str(pat).unwrap().matches(self)
     }
 }
 
@@ -276,7 +274,7 @@ enum ParseState {
 }
 
 use std::collections::HashMap;
-use uucore::format_usage;
+use uucore::{format_usage, parse_glob};
 
 fn parse<T>(lines: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
 where

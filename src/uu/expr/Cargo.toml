@@ -1,6 +1,6 @@
 [package]
 name = "uu_expr"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "expr ~ (uutils) display the value of EXPRESSION"
@@ -15,11 +15,11 @@ edition = "2021"
 path = "src/expr.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 num-bigint = "0.4.0"
 num-traits = "0.2.15"
 onig = { version = "~6.4", default-features = false }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
 
 [[bin]]
 name = "expr"

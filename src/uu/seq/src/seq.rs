@@ -7,7 +7,7 @@
 use std::io::{stdout, ErrorKind, Write};
 use std::process::exit;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use num_traits::Zero;
 
 use uucore::error::FromIo;
@@ -77,7 +77,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .map(|s| s.as_str())
             .unwrap_or("\n")
             .to_string(),
-        widths: matches.contains_id(OPT_WIDTHS),
+        widths: matches.get_flag(OPT_WIDTHS),
         format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),
     };
 
@@ -152,7 +152,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .trailing_var_arg(true)
         .allow_negative_numbers(true)
@@ -164,38 +164,31 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_SEPARATOR)
                 .short('s')
                 .long("separator")
-                .help("Separator character (defaults to \\n)")
-                .takes_value(true)
-                .number_of_values(1),
+                .help("Separator character (defaults to \\n)"),
         )
         .arg(
             Arg::new(OPT_TERMINATOR)
                 .short('t')
                 .long("terminator")
-                .help("Terminator character (defaults to \\n)")
-                .takes_value(true)
-                .number_of_values(1),
+                .help("Terminator character (defaults to \\n)"),
         )
         .arg(
             Arg::new(OPT_WIDTHS)
                 .short('w')
                 .long("widths")
-                .help("Equalize widths of all numbers by padding with zeros"),
+                .help("Equalize widths of all numbers by padding with zeros")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_FORMAT)
                 .short('f')
                 .long(OPT_FORMAT)
-                .help("use printf style floating-point FORMAT")
-                .takes_value(true)
-                .number_of_values(1),
+                .help("use printf style floating-point FORMAT"),
         )
         .arg(
             Arg::new(ARG_NUMBERS)
-                .multiple_occurrences(true)
-                .takes_value(true)
-                .max_values(3)
-                .required(true),
+                .action(ArgAction::Append)
+                .num_args(1..=3),
         )
 }
 

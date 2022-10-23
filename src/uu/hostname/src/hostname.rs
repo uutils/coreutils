@@ -12,7 +12,7 @@ use std::str;
 use std::{collections::hash_set::HashSet, ffi::OsString};
 
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 
 use uucore::{
     error::{FromIo, UResult},
@@ -32,15 +32,14 @@ static OPT_HOST: &str = "host";
 mod wsa {
     use std::io;
 
-    use winapi::shared::minwindef::MAKEWORD;
-    use winapi::um::winsock2::{WSACleanup, WSAStartup, WSADATA};
+    use windows_sys::Win32::Networking::WinSock::{WSACleanup, WSAStartup, WSADATA};
 
     pub(super) struct WsaHandle(());
 
     pub(super) fn start() -> io::Result<WsaHandle> {
         let err = unsafe {
             let mut data = std::mem::MaybeUninit::<WSADATA>::uninit();
-            WSAStartup(MAKEWORD(2, 2), data.as_mut_ptr())
+            WSAStartup(0x0202, data.as_mut_ptr())
         };
         if err != 0 {
             Err(io::Error::from_raw_os_error(err))
@@ -72,7 +71,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -83,28 +82,32 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('d')
                 .long("domain")
                 .overrides_with_all(&[OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-                .help("Display the name of the DNS domain if possible"),
+                .help("Display the name of the DNS domain if possible")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_IP_ADDRESS)
                 .short('i')
                 .long("ip-address")
                 .overrides_with_all(&[OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-                .help("Display the network address(es) of the host"),
+                .help("Display the network address(es) of the host")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_FQDN)
                 .short('f')
                 .long("fqdn")
                 .overrides_with_all(&[OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-                .help("Display the FQDN (Fully Qualified Domain Name) (default)"),
+                .help("Display the FQDN (Fully Qualified Domain Name) (default)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_SHORT)
                 .short('s')
                 .long("short")
                 .overrides_with_all(&[OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-                .help("Display the short hostname (the portion before the first dot) if possible"),
+                .help("Display the short hostname (the portion before the first dot) if possible")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_HOST)
@@ -119,7 +122,7 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
         .to_string_lossy()
         .into_owned();
 
-    if matches.contains_id(OPT_IP_ADDRESS) {
+    if matches.get_flag(OPT_IP_ADDRESS) {
         // XXX: to_socket_addrs needs hostname:port so append a dummy port and remove it later.
         // This was originally supposed to use std::net::lookup_host, but that seems to be
         // deprecated.  Perhaps we should use the dns-lookup crate?
@@ -149,10 +152,10 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
 
         Ok(())
     } else {
-        if matches.contains_id(OPT_SHORT) || matches.contains_id(OPT_DOMAIN) {
+        if matches.get_flag(OPT_SHORT) || matches.get_flag(OPT_DOMAIN) {
             let mut it = hostname.char_indices().filter(|&ci| ci.1 == '.');
             if let Some(ci) = it.next() {
-                if matches.contains_id(OPT_SHORT) {
+                if matches.get_flag(OPT_SHORT) {
                     println!("{}", &hostname[0..ci.0]);
                 } else {
                     println!("{}", &hostname[ci.0 + 1..]);

@@ -352,7 +352,7 @@ fn test_install_target_new_file_failing_nonexistent_parent() {
     ucmd.arg(file1)
         .arg(format!("{}/{}", dir, file2))
         .fails()
-        .stderr_contains(&"No such file or directory");
+        .stderr_contains("No such file or directory");
 }
 
 #[test]

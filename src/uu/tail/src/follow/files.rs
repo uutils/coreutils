@@ -122,7 +122,7 @@ impl FileHandling {
         */
         self.get_mut(path)
             .reader
-            .replace(Box::new(BufReader::new(File::open(&path)?)));
+            .replace(Box::new(BufReader::new(File::open(path)?)));
         Ok(())
     }
 

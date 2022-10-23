@@ -1,6 +1,6 @@
 [package]
 name = "uu_hashsum"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "hashsum ~ (uutils) display or check input digests"
@@ -16,17 +16,17 @@ path = "src/hashsum.rs"
 
 [dependencies]
 digest = "0.10.5"
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 hex = "0.4.3"
 memchr = "2"
 md-5 = "0.10.5"
 regex = "1.6.0"
 sha1 = "0.10.1"
 sha2 = "0.10.2"
-sha3 = "0.10.2"
+sha3 = "0.10.6"
 blake2b_simd = "1.0.0"
 blake3 = "1.3.1"
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
 
 [[bin]]
 name = "hashsum"

@@ -15,7 +15,7 @@ use uucore::error::FromIo;
 use uucore::error::UResult;
 use uucore::format_usage;
 
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 
 static ABOUT: &str = "compare two sorted files line by line";
 static LONG_HELP: &str = "";
@@ -38,10 +38,10 @@ fn mkdelim(col: usize, opts: &ArgMatches) -> String {
         delim => delim,
     };
 
-    if col > 1 && !opts.contains_id(options::COLUMN_1) {
+    if col > 1 && !opts.get_flag(options::COLUMN_1) {
         s.push_str(delim.as_ref());
     }
-    if col > 2 && !opts.contains_id(options::COLUMN_2) {
+    if col > 2 && !opts.get_flag(options::COLUMN_2) {
         s.push_str(delim.as_ref());
     }
 
@@ -91,7 +91,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
 
         match ord {
             Ordering::Less => {
-                if !opts.contains_id(options::COLUMN_1) {
+                if !opts.get_flag(options::COLUMN_1) {
                     ensure_nl(ra);
                     print!("{}{}", delim[1], ra);
                 }
@@ -99,7 +99,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
                 na = a.read_line(ra);
             }
             Ordering::Greater => {
-                if !opts.contains_id(options::COLUMN_2) {
+                if !opts.get_flag(options::COLUMN_2) {
                     ensure_nl(rb);
                     print!("{}{}", delim[2], rb);
                 }
@@ -107,7 +107,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
                 nb = b.read_line(rb);
             }
             Ordering::Equal => {
-                if !opts.contains_id(options::COLUMN_3) {
+                if !opts.get_flag(options::COLUMN_3) {
                     ensure_nl(ra);
                     print!("{}{}", delim[3], ra);
                 }
@@ -124,7 +124,7 @@ fn open_file(name: &str) -> io::Result<LineReader> {
     match name {
         "-" => Ok(LineReader::Stdin(stdin())),
         _ => {
-            let f = File::open(&Path::new(name))?;
+            let f = File::open(Path::new(name))?;
             Ok(LineReader::FileIn(BufReader::new(f)))
         }
     }
@@ -144,7 +144,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -154,17 +154,20 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::COLUMN_1)
                 .short('1')
-                .help("suppress column 1 (lines unique to FILE1)"),
+                .help("suppress column 1 (lines unique to FILE1)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COLUMN_2)
                 .short('2')
-                .help("suppress column 2 (lines unique to FILE2)"),
+                .help("suppress column 2 (lines unique to FILE2)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COLUMN_3)
                 .short('3')
-                .help("suppress column 3 (lines that appear in both files)"),
+                .help("suppress column 3 (lines that appear in both files)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DELIMITER)

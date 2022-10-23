@@ -41,6 +41,7 @@ fn main() -> io::Result<()> {
         \n\
         [Introduction](index.md)\n\
         * [Installation](installation.md)\n\
+        * [Build from source](build.md)\n\
         * [Contributing](contributing.md)\n\
         * [GNU test coverage](test_coverage.md)\n\
         \n\
@@ -109,7 +110,7 @@ fn main() -> io::Result<()> {
 
 struct MDWriter<'a, 'b> {
     w: Box<dyn Write>,
-    command: Command<'a>,
+    command: Command,
     name: &'a str,
     tldr_zip: &'b mut Option<ZipArchive<File>>,
     utils_per_platform: &'b HashMap<&'b str, Vec<String>>,
@@ -167,13 +168,16 @@ impl<'a, 'b> MDWriter<'a, 'b> {
         let mut usage: String = self
             .command
             .render_usage()
+            .to_string()
             .lines()
-            .skip(1)
+            .map(|l| l.strip_prefix("Usage:").unwrap_or(l))
             .map(|l| l.trim())
             .filter(|l| !l.is_empty())
             .collect::<Vec<_>>()
             .join("\n");
-        usage = usage.replace(uucore::execution_phrase(), self.name);
+        usage = usage
+            .to_string()
+            .replace(uucore::execution_phrase(), self.name);
         writeln!(self.w, "{}", usage)?;
         writeln!(self.w, "```")
     }
@@ -282,7 +286,10 @@ impl<'a, 'b> MDWriter<'a, 'b> {
             writeln!(
                 self.w,
                 "<dd>\n\n{}\n\n</dd>",
-                arg.get_help().unwrap_or_default().replace('\n', "<br />")
+                arg.get_help()
+                    .unwrap_or_default()
+                    .to_string()
+                    .replace('\n', "<br />")
             )?;
         }
         writeln!(self.w, "</dl>\n")

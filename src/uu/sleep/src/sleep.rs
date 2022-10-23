@@ -13,7 +13,7 @@ use uucore::{
     format_usage,
 };
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 
 static ABOUT: &str = "Pause for NUMBER seconds.";
 const USAGE: &str = "\
@@ -41,7 +41,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -52,8 +52,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::NUMBER)
                 .help("pause for NUMBER seconds")
                 .value_name(options::NUMBER)
-                .index(1)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .required(true),
         )
 }

@@ -1,6 +1,6 @@
 [package]
 name = "uu_printf"
-version = "0.0.15"
+version = "0.0.16"
 authors = [
   "Nathan Ross",
   "uutils developers",
@@ -18,8 +18,8 @@ edition = "2021"
 path = "src/printf.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["memo"] }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["memo"] }
 
 [[bin]]
 name = "printf"

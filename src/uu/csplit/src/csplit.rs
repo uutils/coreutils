@@ -12,7 +12,7 @@ use std::{
     io::{BufRead, BufWriter, Write},
 };
 
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use regex::Regex;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
@@ -52,10 +52,10 @@ pub struct CsplitOptions {
 
 impl CsplitOptions {
     fn new(matches: &ArgMatches) -> Self {
-        let keep_files = matches.contains_id(options::KEEP_FILES);
-        let quiet = matches.contains_id(options::QUIET);
-        let elide_empty_files = matches.contains_id(options::ELIDE_EMPTY_FILES);
-        let suppress_matched = matches.contains_id(options::SUPPRESS_MATCHED);
+        let keep_files = matches.get_flag(options::KEEP_FILES);
+        let quiet = matches.get_flag(options::QUIET);
+        let elide_empty_files = matches.get_flag(options::ELIDE_EMPTY_FILES);
+        let suppress_matched = matches.get_flag(options::SUPPRESS_MATCHED);
 
         Self {
             split_name: crash_if_err!(
@@ -750,7 +750,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -774,12 +774,14 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::KEEP_FILES)
                 .short('k')
                 .long(options::KEEP_FILES)
-                .help("do not remove output files on errors"),
+                .help("do not remove output files on errors")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SUPPRESS_MATCHED)
                 .long(options::SUPPRESS_MATCHED)
-                .help("suppress the lines matching PATTERN"),
+                .help("suppress the lines matching PATTERN")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DIGITS)
@@ -793,13 +795,15 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('s')
                 .long(options::QUIET)
                 .visible_alias("silent")
-                .help("do not print counts of output file sizes"),
+                .help("do not print counts of output file sizes")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ELIDE_EMPTY_FILES)
                 .short('z')
                 .long(options::ELIDE_EMPTY_FILES)
-                .help("remove empty output files"),
+                .help("remove empty output files")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILE)
@@ -810,7 +814,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::PATTERN)
                 .hide(true)
-                .multiple_occurrences(true)
+                .action(clap::ArgAction::Append)
                 .required(true),
         )
         .after_help(LONG_HELP)

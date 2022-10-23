@@ -8,7 +8,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use libc::mkfifo;
 use std::ffi::CString;
 use uucore::display::Quotable;
@@ -35,7 +35,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if matches.contains_id(options::CONTEXT) {
         return Err(USimpleError::new(1, "--context is not implemented"));
     }
-    if matches.contains_id(options::SE_LINUX_SECURITY_CONTEXT) {
+    if matches.get_flag(options::SE_LINUX_SECURITY_CONTEXT) {
         return Err(USimpleError::new(1, "-Z is not implemented"));
     }
 
@@ -68,7 +68,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
@@ -81,12 +81,13 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::MODE)
                 .help("file permissions for the fifo")
                 .default_value("0666")
-                .value_name("0666"),
+                .value_name("MODE"),
         )
         .arg(
             Arg::new(options::SE_LINUX_SECURITY_CONTEXT)
                 .short('Z')
-                .help("set the SELinux security context to default type"),
+                .help("set the SELinux security context to default type")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CONTEXT)
@@ -100,7 +101,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FIFO)
                 .hide(true)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }

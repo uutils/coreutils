@@ -1,6 +1,6 @@
 [package]
 name = "uu_mknod"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "mknod ~ (uutils) create special file NAME of TYPE"
@@ -16,9 +16,9 @@ name = "uu_mknod"
 path = "src/mknod.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-libc = "^0.2.132"
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["mode"] }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
+libc = "^0.2.135"
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["mode"] }
 
 [[bin]]
 name = "mknod"

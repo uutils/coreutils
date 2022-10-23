@@ -81,9 +81,10 @@ impl FileInformation {
             let mut open_options = OpenOptions::new();
             let mut custom_flags = 0;
             if !dereference {
-                custom_flags |= winapi::um::winbase::FILE_FLAG_OPEN_REPARSE_POINT;
+                custom_flags |=
+                    windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
             }
-            custom_flags |= winapi::um::winbase::FILE_FLAG_BACKUP_SEMANTICS;
+            custom_flags |= windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
             open_options.custom_flags(custom_flags);
             let file = open_options.read(true).open(path.as_ref())?;
             Self::from_file(&file)
@@ -355,7 +356,7 @@ pub fn canonicalize<P: AsRef<Path>>(
                     followed_symlinks += 1;
                 } else {
                     let file_info =
-                        FileInformation::from_path(&result.parent().unwrap(), false).unwrap();
+                        FileInformation::from_path(result.parent().unwrap(), false).unwrap();
                     let mut path_to_follow = PathBuf::new();
                     for part in &parts {
                         path_to_follow.push(part.as_os_str());
@@ -401,12 +402,26 @@ pub fn canonicalize<P: AsRef<Path>>(
 }
 
 #[cfg(not(unix))]
-#[allow(unused_variables)]
 pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {
+    let write = if metadata.permissions().readonly() {
+        '-'
+    } else {
+        'w'
+    };
+
     if display_file_type {
-        return String::from("----------");
+        let file_type = if metadata.is_symlink() {
+            'l'
+        } else if metadata.is_dir() {
+            'd'
+        } else {
+            '-'
+        };
+
+        format!("{0}r{1}xr{1}xr{1}x", file_type, write)
+    } else {
+        format!("r{0}xr{0}xr{0}x", write)
     }
-    String::from("---------")
 }
 
 #[cfg(unix)]

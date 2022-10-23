@@ -13,7 +13,7 @@ pub extern crate filetime;
 extern crate uucore;
 
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgGroup, Command};
+use clap::{crate_version, Arg, ArgAction, ArgGroup, Command};
 use filetime::*;
 use std::ffi::OsString;
 use std::fs::{self, File};
@@ -80,10 +80,7 @@ Try 'touch --help' for more information."##,
     })?;
     let (mut atime, mut mtime) =
         if let Some(reference) = matches.get_one::<OsString>(options::sources::REFERENCE) {
-            stat(
-                Path::new(reference),
-                !matches.contains_id(options::NO_DEREF),
-            )?
+            stat(Path::new(reference), !matches.get_flag(options::NO_DEREF))?
         } else {
             let timestamp = if let Some(date) = matches.get_one::<String>(options::sources::DATE) {
                 parse_date(date)?
@@ -110,11 +107,11 @@ Try 'touch --help' for more information."##,
                 return Err(e.map_err_context(|| format!("setting times of {}", filename.quote())));
             }
 
-            if matches.contains_id(options::NO_CREATE) {
+            if matches.get_flag(options::NO_CREATE) {
                 continue;
             }
 
-            if matches.contains_id(options::NO_DEREF) {
+            if matches.get_flag(options::NO_DEREF) {
                 show!(USimpleError::new(
                     1,
                     format!(
@@ -138,17 +135,17 @@ Try 'touch --help' for more information."##,
 
         // If changing "only" atime or mtime, grab the existing value of the other.
         // Note that "-a" and "-m" may be passed together; this is not an xor.
-        if matches.contains_id(options::ACCESS)
-            || matches.contains_id(options::MODIFICATION)
+        if matches.get_flag(options::ACCESS)
+            || matches.get_flag(options::MODIFICATION)
             || matches.contains_id(options::TIME)
         {
-            let st = stat(path, !matches.contains_id(options::NO_DEREF))?;
+            let st = stat(path, !matches.get_flag(options::NO_DEREF))?;
             let time = matches
                 .get_one::<String>(options::TIME)
                 .map(|s| s.as_str())
                 .unwrap_or("");
 
-            if !(matches.contains_id(options::ACCESS)
+            if !(matches.get_flag(options::ACCESS)
                 || time.contains(&"access".to_owned())
                 || time.contains(&"atime".to_owned())
                 || time.contains(&"use".to_owned()))
@@ -156,7 +153,7 @@ Try 'touch --help' for more information."##,
                 atime = st.0;
             }
 
-            if !(matches.contains_id(options::MODIFICATION)
+            if !(matches.get_flag(options::MODIFICATION)
                 || time.contains(&"modify".to_owned())
                 || time.contains(&"mtime".to_owned()))
             {
@@ -164,7 +161,7 @@ Try 'touch --help' for more information."##,
             }
         }
 
-        if matches.contains_id(options::NO_DEREF) {
+        if matches.get_flag(options::NO_DEREF) {
             set_symlink_file_times(path, atime, mtime)
         } else {
             filetime::set_file_times(path, atime, mtime)
@@ -175,28 +172,30 @@ Try 'touch --help' for more information."##,
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .disable_help_flag(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
-                .help("Print help information."),
+                .help("Print help information.")
+                .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::ACCESS)
                 .short('a')
-                .help("change only the access time"),
+                .help("change only the access time")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::sources::CURRENT)
                 .short('t')
                 .help("use [[CC]YY]MMDDhhmm[.ss] instead of the current time")
-                .value_name("STAMP")
-                .takes_value(true),
+                .value_name("STAMP"),
         )
         .arg(
             Arg::new(options::sources::DATE)
@@ -208,13 +207,15 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::MODIFICATION)
                 .short('m')
-                .help("change only the modification time"),
+                .help("change only the modification time")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_CREATE)
                 .short('c')
                 .long(options::NO_CREATE)
-                .help("do not create any files"),
+                .help("do not create any files")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_DEREF)
@@ -223,7 +224,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "affect each symbolic link instead of any referenced file \
                      (only for systems that can change the timestamps of a symlink)",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::sources::REFERENCE)
@@ -243,14 +245,12 @@ pub fn uu_app<'a>() -> Command<'a> {
                      equivalent to -m",
                 )
                 .value_name("WORD")
-                .value_parser(["access", "atime", "use"])
-                .takes_value(true),
+                .value_parser(["access", "atime", "use"]),
         )
         .arg(
             Arg::new(ARG_FILES)
-                .multiple_occurrences(true)
-                .takes_value(true)
-                .min_values(1)
+                .action(ArgAction::Append)
+                .num_args(1..)
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath),
         )
@@ -472,19 +472,16 @@ fn pathbuf_from_stdout() -> UResult<PathBuf> {
     #[cfg(windows)]
     {
         use std::os::windows::prelude::AsRawHandle;
-        use winapi::shared::minwindef::{DWORD, MAX_PATH};
-        use winapi::shared::winerror::{
-            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND,
+        use windows_sys::Win32::Foundation::{
+            GetLastError, ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND,
+            HANDLE, MAX_PATH,
         };
-        use winapi::um::errhandlingapi::GetLastError;
-        use winapi::um::fileapi::GetFinalPathNameByHandleW;
-        use winapi::um::winnt::WCHAR;
+        use windows_sys::Win32::Storage::FileSystem::{
+            GetFinalPathNameByHandleW, FILE_NAME_OPENED,
+        };
 
-        let handle = std::io::stdout().lock().as_raw_handle();
-        let mut file_path_buffer: [WCHAR; MAX_PATH as usize] = [0; MAX_PATH as usize];
-
-        // Couldn't find this in winapi
-        const FILE_NAME_OPENED: DWORD = 0x8;
+        let handle = std::io::stdout().lock().as_raw_handle() as HANDLE;
+        let mut file_path_buffer: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
 
         // https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlea#examples
         // SAFETY: We transmute the handle to be able to cast *mut c_void into a

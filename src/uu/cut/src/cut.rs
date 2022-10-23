@@ -11,7 +11,7 @@
 extern crate uucore;
 
 use bstr::io::BufReadExt;
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use std::path::Path;
@@ -145,7 +145,7 @@ fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
 
 fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()> {
     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
-    let buf_in = BufReader::new(reader);
+    let mut buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
     let delim = opts
         .out_delim
@@ -189,7 +189,7 @@ fn cut_fields_delimiter<R: Read>(
     newline_char: u8,
     out_delim: &str,
 ) -> UResult<()> {
-    let buf_in = BufReader::new(reader);
+    let mut buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
     let input_delim_len = delim.len();
 
@@ -273,7 +273,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> URes
         );
     }
 
-    let buf_in = BufReader::new(reader);
+    let mut buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
     let delim_len = opts.delimiter.len();
 
@@ -368,7 +368,7 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) -> UResult<()> {
                 continue;
             }
 
-            show_if_err!(File::open(&path)
+            show_if_err!(File::open(path)
                 .map_err_context(|| filename.maybe_quote().to_string())
                 .and_then(|file| {
                     match &mode {
@@ -403,7 +403,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let delimiter_is_equal = args.contains(&"-d=".to_string()); // special case
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let complement = matches.contains_id(options::COMPLEMENT);
+    let complement = matches.get_flag(options::COMPLEMENT);
 
     let mode_parse = match (
         matches.get_one::<String>(options::BYTES),
@@ -421,7 +421,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             .unwrap_or_default()
                             .to_owned(),
                     ),
-                    zero_terminated: matches.contains_id(options::ZERO_TERMINATED),
+                    zero_terminated: matches.get_flag(options::ZERO_TERMINATED),
                 },
             )
         }),
@@ -436,7 +436,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             .unwrap_or_default()
                             .to_owned(),
                     ),
-                    zero_terminated: matches.contains_id(options::ZERO_TERMINATED),
+                    zero_terminated: matches.get_flag(options::ZERO_TERMINATED),
                 },
             )
         }),
@@ -453,8 +453,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     None => None,
                 };
 
-                let only_delimited = matches.contains_id(options::ONLY_DELIMITED);
-                let zero_terminated = matches.contains_id(options::ZERO_TERMINATED);
+                let only_delimited = matches.get_flag(options::ONLY_DELIMITED);
+                let zero_terminated = matches.get_flag(options::ZERO_TERMINATED);
 
                 match matches.get_one::<String>(options::DELIMITER).map(|s| s.as_str()) {
                     Some(mut delim) => {
@@ -514,7 +514,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err("invalid input: The '--delimiter' ('-d') option only usable if printing a sequence of fields".into())
             }
             Mode::Bytes(_, _) | Mode::Characters(_, _)
-                if matches.contains_id(options::ONLY_DELIMITED) =>
+                if matches.get_flag(options::ONLY_DELIMITED) =>
             {
                 Err("invalid input: The '--only-delimited' ('-s') option only usable if printing a sequence of fields".into())
             }
@@ -534,7 +534,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
@@ -546,76 +546,63 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::BYTES)
                 .short('b')
                 .long(options::BYTES)
-                .takes_value(true)
                 .help("filter byte columns from the input source")
                 .allow_hyphen_values(true)
-                .value_name("LIST")
-                .display_order(1),
+                .value_name("LIST"),
         )
         .arg(
             Arg::new(options::CHARACTERS)
                 .short('c')
                 .long(options::CHARACTERS)
                 .help("alias for character mode")
-                .takes_value(true)
                 .allow_hyphen_values(true)
-                .value_name("LIST")
-                .display_order(2),
+                .value_name("LIST"),
         )
         .arg(
             Arg::new(options::DELIMITER)
                 .short('d')
                 .long(options::DELIMITER)
                 .help("specify the delimiter character that separates fields in the input source. Defaults to Tab.")
-                .takes_value(true)
-                .value_name("DELIM")
-                .display_order(3),
+                .value_name("DELIM"),
         )
         .arg(
             Arg::new(options::FIELDS)
                 .short('f')
                 .long(options::FIELDS)
                 .help("filter field columns from the input source")
-                .takes_value(true)
                 .allow_hyphen_values(true)
-                .value_name("LIST")
-                .display_order(4),
+                .value_name("LIST"),
         )
         .arg(
             Arg::new(options::COMPLEMENT)
                 .long(options::COMPLEMENT)
                 .help("invert the filter - instead of displaying only the filtered columns, display all but those columns")
-                .takes_value(false)
-                .display_order(5),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ONLY_DELIMITED)
-            .short('s')
+                .short('s')
                 .long(options::ONLY_DELIMITED)
                 .help("in field mode, only print lines which contain the delimiter")
-                .takes_value(false)
-                .display_order(6),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO_TERMINATED)
-            .short('z')
+                .short('z')
                 .long(options::ZERO_TERMINATED)
                 .help("instead of filtering columns based on line, filter columns based on \\0 (NULL character)")
-                .takes_value(false)
-                .display_order(8),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::OUTPUT_DELIMITER)
-            .long(options::OUTPUT_DELIMITER)
+                .long(options::OUTPUT_DELIMITER)
                 .help("in field mode, replace the delimiter in output lines with this option's argument")
-                .takes_value(true)
-                .value_name("NEW_DELIM")
-                .display_order(7),
+                .value_name("NEW_DELIM"),
         )
         .arg(
             Arg::new(options::FILE)
             .hide(true)
-            .multiple_occurrences(true)
+            .action(ArgAction::Append)
             .value_hint(clap::ValueHint::FilePath)
         )
 }

@@ -21,7 +21,7 @@ use uucore::fsext::{read_fs_list, MountInfo};
 use uucore::parse_size::ParseSizeError;
 use uucore::{format_usage, show};
 
-use clap::{crate_version, Arg, ArgMatches, Command, ValueSource};
+use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
 
 use std::error::Error;
 use std::ffi::OsString;
@@ -187,9 +187,9 @@ impl Options {
         }
 
         Ok(Self {
-            show_local_fs: matches.contains_id(OPT_LOCAL),
-            show_all_fs: matches.contains_id(OPT_ALL),
-            sync: matches.contains_id(OPT_SYNC),
+            show_local_fs: matches.get_flag(OPT_LOCAL),
+            show_all_fs: matches.get_flag(OPT_ALL),
+            sync: matches.get_flag(OPT_SYNC),
             block_size: read_block_size(matches).map_err(|e| match e {
                 ParseSizeError::InvalidSuffix(s) => OptionsError::InvalidSuffix(s),
                 ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
@@ -201,13 +201,13 @@ impl Options {
                 ParseSizeError::ParseFailure(s) => OptionsError::InvalidBlockSize(s),
             })?,
             header_mode: {
-                if matches.contains_id(OPT_HUMAN_READABLE_BINARY)
-                    || matches.contains_id(OPT_HUMAN_READABLE_DECIMAL)
+                if matches.get_flag(OPT_HUMAN_READABLE_BINARY)
+                    || matches.get_flag(OPT_HUMAN_READABLE_DECIMAL)
                 {
                     HeaderMode::HumanReadable
-                } else if matches.contains_id(OPT_PORTABILITY) {
+                } else if matches.get_flag(OPT_PORTABILITY) {
                     HeaderMode::PosixPortability
-                // contains_id() doesn't work here, it always returns true because OPT_OUTPUT has
+                // get_flag() doesn't work here, it always returns true because OPT_OUTPUT has
                 // default values and hence is always present
                 } else if matches.value_source(OPT_OUTPUT) == Some(ValueSource::CommandLine) {
                     HeaderMode::Output
@@ -216,9 +216,9 @@ impl Options {
                 }
             },
             human_readable: {
-                if matches.contains_id(OPT_HUMAN_READABLE_BINARY) {
+                if matches.get_flag(OPT_HUMAN_READABLE_BINARY) {
                     Some(HumanReadable::Binary)
-                } else if matches.contains_id(OPT_HUMAN_READABLE_DECIMAL) {
+                } else if matches.get_flag(OPT_HUMAN_READABLE_DECIMAL) {
                     Some(HumanReadable::Decimal)
                 } else {
                     None
@@ -226,7 +226,7 @@ impl Options {
             },
             include,
             exclude,
-            show_total: matches.contains_id(OPT_TOTAL),
+            show_total: matches.get_flag(OPT_TOTAL),
             columns: Column::from_matches(matches).map_err(OptionsError::ColumnError)?,
         })
     }
@@ -443,7 +443,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     #[cfg(windows)]
     {
-        if matches.contains_id(OPT_INODES) {
+        if matches.get_flag(OPT_INODES) {
             println!("{}: doesn't support -i option", uucore::util_name());
             return Ok(());
         }
@@ -482,30 +482,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .after_help(LONG_HELP)
         .infer_long_args(true)
+        .disable_help_flag(true)
         .arg(
             Arg::new(OPT_HELP)
                 .long(OPT_HELP)
-                .help("Print help information."),
+                .help("Print help information.")
+                .action(ArgAction::Help),
         )
         .arg(
             Arg::new(OPT_ALL)
                 .short('a')
                 .long("all")
                 .overrides_with(OPT_ALL)
-                .help("include dummy file systems"),
+                .help("include dummy file systems")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_BLOCKSIZE)
                 .short('B')
                 .long("block-size")
-                .takes_value(true)
                 .value_name("SIZE")
                 .overrides_with_all(&[OPT_KILO, OPT_BLOCKSIZE])
                 .help(
@@ -517,57 +519,63 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_TOTAL)
                 .long("total")
                 .overrides_with(OPT_TOTAL)
-                .help("produce a grand total"),
+                .help("produce a grand total")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_HUMAN_READABLE_BINARY)
                 .short('h')
                 .long("human-readable")
                 .overrides_with_all(&[OPT_HUMAN_READABLE_DECIMAL, OPT_HUMAN_READABLE_BINARY])
-                .help("print sizes in human readable format (e.g., 1K 234M 2G)"),
+                .help("print sizes in human readable format (e.g., 1K 234M 2G)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_HUMAN_READABLE_DECIMAL)
                 .short('H')
                 .long("si")
                 .overrides_with_all(&[OPT_HUMAN_READABLE_BINARY, OPT_HUMAN_READABLE_DECIMAL])
-                .help("likewise, but use powers of 1000 not 1024"),
+                .help("likewise, but use powers of 1000 not 1024")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_INODES)
                 .short('i')
                 .long("inodes")
                 .overrides_with(OPT_INODES)
-                .help("list inode information instead of block usage"),
+                .help("list inode information instead of block usage")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_KILO)
                 .short('k')
                 .help("like --block-size=1K")
-                .overrides_with_all(&[OPT_BLOCKSIZE, OPT_KILO]),
+                .overrides_with_all(&[OPT_BLOCKSIZE, OPT_KILO])
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_LOCAL)
                 .short('l')
                 .long("local")
                 .overrides_with(OPT_LOCAL)
-                .help("limit listing to local file systems"),
+                .help("limit listing to local file systems")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_NO_SYNC)
                 .long("no-sync")
                 .overrides_with_all(&[OPT_SYNC, OPT_NO_SYNC])
-                .help("do not invoke sync before getting usage info (default)"),
+                .help("do not invoke sync before getting usage info (default)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_OUTPUT)
                 .long("output")
-                .takes_value(true)
                 .value_name("FIELD_LIST")
-                .min_values(0)
+                .action(ArgAction::Append)
+                .num_args(0..)
                 .require_equals(true)
                 .use_value_delimiter(true)
-                .multiple_occurrences(true)
                 .value_parser(OUTPUT_FIELD_LIST)
                 .default_missing_values(&OUTPUT_FIELD_LIST)
                 .default_values(&["source", "size", "used", "avail", "pcent", "target"])
@@ -582,22 +590,23 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('P')
                 .long("portability")
                 .overrides_with(OPT_PORTABILITY)
-                .help("use the POSIX output format"),
+                .help("use the POSIX output format")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_SYNC)
                 .long("sync")
                 .overrides_with_all(&[OPT_NO_SYNC, OPT_SYNC])
-                .help("invoke sync before getting usage info (non-windows only)"),
+                .help("invoke sync before getting usage info (non-windows only)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_TYPE)
                 .short('t')
                 .long("type")
                 .value_parser(ValueParser::os_string())
-                .takes_value(true)
                 .value_name("TYPE")
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .help("limit listing to file systems of type TYPE"),
         )
         .arg(
@@ -605,22 +614,22 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('T')
                 .long("print-type")
                 .overrides_with(OPT_PRINT_TYPE)
-                .help("print file system type"),
+                .help("print file system type")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_EXCLUDE_TYPE)
                 .short('x')
                 .long("exclude-type")
+                .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
-                .takes_value(true)
                 .value_name("TYPE")
                 .use_value_delimiter(true)
-                .multiple_occurrences(true)
                 .help("limit listing to file systems not of type TYPE"),
         )
         .arg(
             Arg::new(OPT_PATHS)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }

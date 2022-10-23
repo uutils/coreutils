@@ -1,6 +1,6 @@
 [package]
 name = "uu_chgrp"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "chgrp ~ (uutils) change the group ownership of FILE"
@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/chgrp.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["entries", "fs", "perms"] }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["entries", "fs", "perms"] }
 
 [[bin]]
 name = "chgrp"

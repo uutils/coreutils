@@ -1,6 +1,6 @@
 [package]
 name = "uu_split"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "split ~ (uutils) split input into output files"
@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/split.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 memchr = "2"
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["fs"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["fs"] }
 
 [[bin]]
 name = "split"

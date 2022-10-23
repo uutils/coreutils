@@ -31,7 +31,7 @@ fn test_unlink_multiple_files() {
     ucmd.arg(file_a)
         .arg(file_b)
         .fails()
-        .stderr_contains("USAGE");
+        .stderr_contains("Usage");
 }
 
 #[test]

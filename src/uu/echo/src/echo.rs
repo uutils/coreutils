@@ -6,7 +6,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::io::{self, Write};
 use std::iter::Peekable;
 use std::str::Chars;
@@ -113,8 +113,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
     let matches = uu_app().get_matches_from(args);
 
-    let no_newline = matches.contains_id(options::NO_NEWLINE);
-    let escaped = matches.contains_id(options::ENABLE_BACKSLASH_ESCAPE);
+    let no_newline = matches.get_flag(options::NO_NEWLINE);
+    let escaped = matches.get_flag(options::ENABLE_BACKSLASH_ESCAPE);
     let values: Vec<String> = match matches.get_many::<String>(options::STRING) {
         Some(s) => s.map(|s| s.to_string()).collect(),
         None => vec!["".to_string()],
@@ -124,7 +124,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map_err_context(|| "could not write to stdout".to_string())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .name(NAME)
         // TrailingVarArg specifies the final positional argument is a VarArg
@@ -141,21 +141,21 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::NO_NEWLINE)
                 .short('n')
                 .help("do not output the trailing newline")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ENABLE_BACKSLASH_ESCAPE)
                 .short('e')
                 .help("enable interpretation of backslash escapes")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DISABLE_BACKSLASH_ESCAPE)
                 .short('E')
                 .help("disable interpretation of backslash escapes (default)")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(options::STRING).multiple_occurrences(true))
+        .arg(Arg::new(options::STRING).action(ArgAction::Append))
 }
 
 fn execute(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<()> {

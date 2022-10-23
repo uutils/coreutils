@@ -1,6 +1,6 @@
 [package]
 name = "uu_sum"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "sum ~ (uutils) display checksum and block counts for input"
@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/sum.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore" }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
 
 [[bin]]
 name = "sum"

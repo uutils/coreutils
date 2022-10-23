@@ -710,7 +710,7 @@ impl AtPath {
             "symlink",
             &format!("{},{}", &original, &self.plus_as_string(link)),
         );
-        symlink_file(&original, &self.plus(link)).unwrap();
+        symlink_file(original, &self.plus(link)).unwrap();
     }
 
     pub fn symlink_dir(&self, original: &str, link: &str) {
@@ -732,7 +732,7 @@ impl AtPath {
             "symlink",
             &format!("{},{}", &original, &self.plus_as_string(link)),
         );
-        symlink_dir(&original, &self.plus(link)).unwrap();
+        symlink_dir(original, &self.plus(link)).unwrap();
     }
 
     pub fn is_symlink(&self, path: &str) -> bool {
@@ -1445,7 +1445,7 @@ pub fn run_ucmd_as_root(
         log_info("run", "sudo -E --non-interactive whoami");
         match Command::new("sudo")
             .env("LC_ALL", "C")
-            .args(&["-E", "--non-interactive", "whoami"])
+            .args(["-E", "--non-interactive", "whoami"])
             .output()
         {
             Ok(output) if String::from_utf8_lossy(&output.stdout).eq("root\n") => {
@@ -1833,7 +1833,7 @@ mod tests {
             // Skip test if we can't guarantee non-interactive `sudo`, or if we're not "root"
             if let Ok(output) = Command::new("sudo")
                 .env("LC_ALL", "C")
-                .args(&["-E", "--non-interactive", "whoami"])
+                .args(["-E", "--non-interactive", "whoami"])
                 .output()
             {
                 if output.status.success() && String::from_utf8_lossy(&output.stdout).eq("root\n") {
@@ -1856,6 +1856,7 @@ mod tests {
     // This error was first detected when running tail so tail is used here but
     // should fail with any command that takes piped input.
     // See also https://github.com/uutils/coreutils/issues/3895
+    #[cfg(feature = "tail")]
     #[test]
     #[cfg_attr(not(feature = "expensive_tests"), ignore)]
     fn test_when_piped_input_then_no_broken_pipe() {

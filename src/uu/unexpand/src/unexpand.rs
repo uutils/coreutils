@@ -11,7 +11,7 @@
 
 #[macro_use]
 extern crate uucore;
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
@@ -109,9 +109,9 @@ impl Options {
             Some(s) => tabstops_parse(&s.map(|s| s.as_str()).collect::<Vec<_>>().join(","))?,
         };
 
-        let aflag = (matches.contains_id(options::ALL) || matches.contains_id(options::TABS))
-            && !matches.contains_id(options::FIRST_ONLY);
-        let uflag = !matches.contains_id(options::NO_UTF8);
+        let aflag = (matches.get_flag(options::ALL) || matches.contains_id(options::TABS))
+            && !matches.get_flag(options::FIRST_ONLY);
+        let uflag = !matches.get_flag(options::NO_UTF8);
 
         let files = match matches.get_one::<String>(options::FILE) {
             Some(v) => vec![v.to_string()],
@@ -172,7 +172,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     unexpand(&Options::new(&matches)?).map_err_context(String::new)
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
@@ -182,37 +182,40 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
-                .multiple_occurrences(true)
-                .value_hint(clap::ValueHint::FilePath)
+                .action(ArgAction::Append)
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::ALL)
                 .short('a')
                 .long(options::ALL)
                 .help("convert all blanks, instead of just initial blanks")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FIRST_ONLY)
                 .long(options::FIRST_ONLY)
                 .help("convert only leading sequences of blanks (overrides -a)")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TABS)
                 .short('t')
                 .long(options::TABS)
-                .help("use comma separated LIST of tab positions or have tabs N characters apart instead of 8 (enables -a)")
-                .takes_value(true)
-                .multiple_occurrences(true)
-                .value_name("N, LIST")
+                .help(
+                    "use comma separated LIST of tab positions or have tabs N characters \
+                apart instead of 8 (enables -a)",
+                )
+                .action(ArgAction::Append)
+                .value_name("N, LIST"),
         )
         .arg(
             Arg::new(options::NO_UTF8)
                 .short('U')
                 .long(options::NO_UTF8)
-                .takes_value(false)
-                .help("interpret input file as 8-bit ASCII rather than UTF-8"))
+                .help("interpret input file as 8-bit ASCII rather than UTF-8")
+                .action(ArgAction::SetTrue),
+        )
 }
 
 fn open(path: &str) -> BufReader<Box<dyn Read + 'static>> {
@@ -220,7 +223,7 @@ fn open(path: &str) -> BufReader<Box<dyn Read + 'static>> {
     if path == "-" {
         BufReader::new(Box::new(stdin()) as Box<dyn Read>)
     } else {
-        file_buf = match File::open(&path) {
+        file_buf = match File::open(path) {
             Ok(a) => a,
             Err(e) => crash!(1, "{}: {}", path.maybe_quote(), e),
         };

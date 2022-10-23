@@ -1,6 +1,6 @@
 [package]
 name = "uu_tr"
-version = "0.0.15"
+version = "0.0.16"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tr ~ (uutils) translate characters within input and display"
@@ -16,8 +16,8 @@ path = "src/tr.rs"
 
 [dependencies]
 nom = "7.1.1"
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore" }
+clap = { version = "4.0", features = ["wrap_help", "cargo"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
 
 [[bin]]
 name = "tr"

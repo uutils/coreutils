@@ -769,13 +769,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .infer_long_args(true)
-        .arg(Arg::new(options::OPERANDS).multiple_values(true))
+        .arg(Arg::new(options::OPERANDS).num_args(1..))
 }
 
 #[cfg(test)]
