@@ -82,7 +82,7 @@ quick_error! {
         StripPrefixError(err: StripPrefixError) { from() }
 
         /// Result of a skipped file
-        Skipped(reason: String) { display("{}", reason) }
+        Skipped { }
 
         /// Result of a skipped file
         InvalidArgument(description: String) { display("{}", description) }
@@ -967,9 +967,7 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
                         // When using --no-clobber, we don't want to show
                         // an error message
                         Error::NotAllFilesCopied => (),
-                        Error::Skipped(_) => {
-                            show_error!("{}", error);
-                        }
+                        Error::Skipped => (),
                         _ => {
                             show_error!("{}", error);
                             non_fatal_errors = true;
@@ -1041,8 +1039,11 @@ impl OverwriteMode {
         match *self {
             Self::NoClobber => Err(Error::NotAllFilesCopied),
             Self::Interactive(_) => {
-                prompt_yes!("{}: overwrite {}? ", uucore::util_name(), path.quote());
-                Ok(())
+                if prompt_yes!("{}: overwrite {}? ", uucore::util_name(), path.quote()) {
+                    Ok(())
+                } else {
+                    Err(Error::Skipped)
+                }
             }
             Self::Clobber(_) => Ok(()),
         }
