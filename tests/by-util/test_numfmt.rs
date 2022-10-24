@@ -185,6 +185,11 @@ fn test_negative() {
 }
 
 #[test]
+fn test_negative_zero() {
+    new_ucmd!().pipe_in("-0\n-0.0").run().stdout_is("0\n0.0\n");
+}
+
+#[test]
 fn test_no_op() {
     new_ucmd!()
         .pipe_in("1024\n1234567")

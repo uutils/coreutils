@@ -161,7 +161,11 @@ fn transform_from(s: &str, opts: &TransformOptions) -> Result<f64> {
     remove_suffix(i, suffix, &opts.from).map(|n| {
         // GNU numfmt doesn't round values if no --from argument is provided by the user
         if opts.from == Unit::None {
-            n
+            if n == -0.0 {
+                0.0
+            } else {
+                n
+            }
         } else if n < 0.0 {
             -n.abs().ceil()
         } else {
