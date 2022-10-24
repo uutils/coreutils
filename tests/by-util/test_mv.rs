@@ -185,6 +185,25 @@ fn test_mv_interactive() {
 }
 
 #[test]
+fn test_mv_arg_update_interactive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file_a = "test_mv_replace_file_a";
+    let file_b = "test_mv_replace_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+
+    ucmd.arg(file_a)
+        .arg(file_b)
+        .arg("-i")
+        .arg("--update")
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+}
+
+#[test]
 fn test_mv_no_clobber() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_no_clobber_file_a";

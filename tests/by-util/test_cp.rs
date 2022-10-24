@@ -216,6 +216,18 @@ fn test_cp_target_directory_is_file() {
 }
 
 #[test]
+fn test_cp_arg_update_interactive() {
+    new_ucmd!()
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("-i")
+        .arg("--update")
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+}
+
+#[test]
 fn test_cp_arg_interactive() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
