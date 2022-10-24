@@ -232,10 +232,6 @@ fn test_cp_arg_interactive() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
     at.touch("b");
-    // TODO The prompt in GNU cp is different, and it doesn't have the
-    // response either.
-    //
-    // See <https://github.com/uutils/coreutils/issues/4023>.
     ucmd.args(&["-i", "a", "b"])
         .pipe_in("N\n")
         .succeeds()
