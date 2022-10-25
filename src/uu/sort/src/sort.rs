@@ -1336,7 +1336,7 @@ pub fn uu_app() -> Command {
                     "version",
                     "random",
                 ])
-                .conflicts_with_all(&options::modes::ALL_SORT_MODES),
+                .conflicts_with_all(options::modes::ALL_SORT_MODES),
         )
         .arg(make_sort_mode_arg(
             options::modes::HUMAN_NUMERIC,
@@ -1373,7 +1373,7 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(options::DICTIONARY_ORDER)
                 .help("consider only blanks and alphanumeric characters")
-                .conflicts_with_all(&[
+                .conflicts_with_all([
                     options::modes::NUMERIC,
                     options::modes::GENERAL_NUMERIC,
                     options::modes::HUMAN_NUMERIC,
@@ -1425,7 +1425,7 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long(options::IGNORE_NONPRINTING)
                 .help("ignore nonprinting characters")
-                .conflicts_with_all(&[
+                .conflicts_with_all([
                     options::modes::NUMERIC,
                     options::modes::GENERAL_NUMERIC,
                     options::modes::HUMAN_NUMERIC,

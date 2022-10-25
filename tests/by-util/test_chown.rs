@@ -708,7 +708,7 @@ fn test_chown_file_notexisting() {
         .fails();
 
     // TODO: uncomment once "failed to change ownership of '{}' to {}" added to stdout
-    // result.stderr_contains(&"retained as");
+    // result.stderr_contains("retained as");
     // TODO: uncomment once message changed from "cannot dereference" to "cannot access"
-    // result.stderr_contains(&"cannot access 'not_existing': No such file or directory");
+    // result.stderr_contains("cannot access 'not_existing': No such file or directory");
 }

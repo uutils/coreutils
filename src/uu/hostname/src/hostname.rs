@@ -81,7 +81,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_DOMAIN)
                 .short('d')
                 .long("domain")
-                .overrides_with_all(&[OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
+                .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
                 .help("Display the name of the DNS domain if possible")
                 .action(ArgAction::SetTrue),
         )
@@ -89,7 +89,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_IP_ADDRESS)
                 .short('i')
                 .long("ip-address")
-                .overrides_with_all(&[OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
+                .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
                 .help("Display the network address(es) of the host")
                 .action(ArgAction::SetTrue),
         )
@@ -97,7 +97,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_FQDN)
                 .short('f')
                 .long("fqdn")
-                .overrides_with_all(&[OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
+                .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
                 .help("Display the FQDN (Fully Qualified Domain Name) (default)")
                 .action(ArgAction::SetTrue),
         )
@@ -105,7 +105,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_SHORT)
                 .short('s')
                 .long("short")
-                .overrides_with_all(&[OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
+                .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
                 .help("Display the short hostname (the portion before the first dot) if possible")
                 .action(ArgAction::SetTrue),
         )

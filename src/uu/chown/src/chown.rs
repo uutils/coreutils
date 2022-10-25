@@ -156,21 +156,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::traverse::TRAVERSE)
                 .short(options::traverse::TRAVERSE.chars().next().unwrap())
                 .help("if a command line argument is a symbolic link to a directory, traverse it")
-                .overrides_with_all(&[options::traverse::EVERY, options::traverse::NO_TRAVERSE])
+                .overrides_with_all([options::traverse::EVERY, options::traverse::NO_TRAVERSE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::traverse::EVERY)
                 .short(options::traverse::EVERY.chars().next().unwrap())
                 .help("traverse every symbolic link to a directory encountered")
-                .overrides_with_all(&[options::traverse::TRAVERSE, options::traverse::NO_TRAVERSE])
+                .overrides_with_all([options::traverse::TRAVERSE, options::traverse::NO_TRAVERSE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::traverse::NO_TRAVERSE)
                 .short(options::traverse::NO_TRAVERSE.chars().next().unwrap())
                 .help("do not traverse any symbolic links (default)")
-                .overrides_with_all(&[options::traverse::TRAVERSE, options::traverse::EVERY])
+                .overrides_with_all([options::traverse::TRAVERSE, options::traverse::EVERY])
                 .action(ArgAction::SetTrue),
         )
         .arg(
