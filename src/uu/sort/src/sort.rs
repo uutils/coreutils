@@ -1986,15 +1986,18 @@ mod tests {
         let ram_total = total_physical_memory().unwrap();
         assert!(ram_total > 1024);
         assert!(ram_total < u64::MAX);
-        assert_eq!(
-            GlobalSettings::parse_byte_count("100%").unwrap(),
-            ram_total as usize
-        );
         assert_eq!(GlobalSettings::parse_byte_count("0%").unwrap(), 0);
-        assert_eq!(
-            GlobalSettings::parse_byte_count("50%").unwrap(),
-            (ram_total / 2) as usize
-        );
+        #[cfg(not(target_pointer_width = "32"))]
+        {
+            assert_eq!(
+                GlobalSettings::parse_byte_count("100%").unwrap(),
+                ram_total as usize
+            );
+            assert_eq!(
+                GlobalSettings::parse_byte_count("50%").unwrap(),
+                (ram_total / 2) as usize
+            );
+        }
     }
     #[test]
     fn test_invalid_memory_percentages() {
