@@ -1264,6 +1264,12 @@ fn copy_file(
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
+    if options.update && options.overwrite == OverwriteMode::Interactive(ClobberMode::Standard) {
+        // `cp -i --update old new` when `new` exists doesn't copy anything
+        // and exit with 0
+        return Ok(());
+    }
+
     if file_or_link_exists(dest) {
         handle_existing_dest(source, dest, options, source_in_command_line)?;
     }
