@@ -266,7 +266,7 @@ clap_complete = "4.0"
 once_cell = "1.13.1"
 phf = "0.11.1"
 selinux = { version="0.3", optional = true }
-textwrap = { version="0.15", features=["terminal_size"] }
+textwrap = { version="0.16", features=["terminal_size"] }
 uucore = { version=">=0.0.16", package="uucore", path="src/uucore" }
 zip = { version = "0.6.3", optional=true, default_features=false, features=["deflate"] }
 # * uutils
