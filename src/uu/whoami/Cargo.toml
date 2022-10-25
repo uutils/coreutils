@@ -22,7 +22,7 @@ uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=[
 windows-sys = { version = "0.42.0", default-features = false, features = ["Win32_NetworkManagement_NetManagement", "Win32_System_WindowsProgramming", "Win32_Foundation"] }
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2.135"
+libc = "0.2.136"
 
 [[bin]]
 name = "whoami"
