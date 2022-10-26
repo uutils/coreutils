@@ -423,6 +423,38 @@ fn test_chown_only_user_id() {
         .stderr_contains("failed to change");
 }
 
+#[test]
+fn test_chown_fail_id() {
+    // test chown 1111. file.txt
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd_keepenv("id").arg("-u").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
+        return;
+    }
+    let user_id = String::from(result.stdout_str().trim());
+    assert!(!user_id.is_empty());
+
+    let file1 = "test_chown_file1";
+    at.touch(file1);
+
+    scene
+        .ucmd()
+        .arg(format!("{}:", user_id))
+        .arg(file1)
+        .fails()
+        .stderr_contains("invalid spec");
+
+    scene
+        .ucmd()
+        .arg(format!("{}.", user_id))
+        .arg(file1)
+        .fails()
+        .stderr_contains("invalid spec");
+}
+
 /// Test for setting the owner to a user ID for a user that does not exist.
 ///
 /// For example:
