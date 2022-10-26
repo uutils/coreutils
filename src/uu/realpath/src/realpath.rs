@@ -130,7 +130,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_PHYSICAL)
                 .short('P')
                 .long(OPT_PHYSICAL)
-                .overrides_with_all(&[OPT_STRIP, OPT_LOGICAL])
+                .overrides_with_all([OPT_STRIP, OPT_LOGICAL])
                 .help("resolve symlinks as encountered (default)")
                 .action(ArgAction::SetTrue),
         )

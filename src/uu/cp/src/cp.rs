@@ -427,7 +427,7 @@ pub fn uu_app() -> Command {
                 ))
                 .num_args(0..)
                 .value_name("ATTR_LIST")
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::ARCHIVE,
                     options::PRESERVE_DEFAULT_ATTRIBUTES,
                     options::NO_PRESERVE,
@@ -443,7 +443,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::PRESERVE_DEFAULT_ATTRIBUTES)
                 .short('p')
                 .long(options::PRESERVE_DEFAULT_ATTRIBUTES)
-                .overrides_with_all(&[options::PRESERVE, options::NO_PRESERVE, options::ARCHIVE])
+                .overrides_with_all([options::PRESERVE, options::NO_PRESERVE, options::ARCHIVE])
                 .help("same as --preserve=mode,ownership(unix only),timestamps")
                 .action(ArgAction::SetTrue),
         )
@@ -451,7 +451,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::NO_PRESERVE)
                 .long(options::NO_PRESERVE)
                 .value_name("ATTR_LIST")
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::PRESERVE_DEFAULT_ATTRIBUTES,
                     options::PRESERVE,
                     options::ARCHIVE,
@@ -492,7 +492,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ARCHIVE)
                 .short('a')
                 .long(options::ARCHIVE)
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::PRESERVE_DEFAULT_ATTRIBUTES,
                     options::PRESERVE,
                     options::NO_PRESERVE,
@@ -1264,6 +1264,12 @@ fn copy_file(
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
+    if options.update && options.overwrite == OverwriteMode::Interactive(ClobberMode::Standard) {
+        // `cp -i --update old new` when `new` exists doesn't copy anything
+        // and exit with 0
+        return Ok(());
+    }
+
     if file_or_link_exists(dest) {
         handle_existing_dest(source, dest, options, source_in_command_line)?;
     }

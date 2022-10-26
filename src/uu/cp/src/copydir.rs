@@ -66,7 +66,7 @@ fn get_local_to_root_parent(
                 adjust_canonicalization(path),
                 adjust_canonicalization(parent),
             );
-            let path = path.strip_prefix(&parent)?;
+            let path = path.strip_prefix(parent)?;
             Ok(path.to_path_buf())
         }
         None => Ok(path.to_path_buf()),
