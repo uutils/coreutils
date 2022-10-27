@@ -21,7 +21,7 @@ remove_dir_all = "0.7.0"
 uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["fs"] }
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2.135"
+libc = "0.2.136"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.42.0", default-features = false, features = ["Win32_Storage_FileSystem"] }
