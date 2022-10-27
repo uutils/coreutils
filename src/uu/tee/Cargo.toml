@@ -16,7 +16,7 @@ path = "src/tee.rs"
 
 [dependencies]
 clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-libc = "0.2.135"
+libc = "0.2.136"
 retain_mut = "=0.1.7" # ToDO: [2021-01-01; rivy; maint/MinSRV] ~ v0.1.5 uses const generics which aren't stabilized until rust v1.51.0
 uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["libc"] }
 

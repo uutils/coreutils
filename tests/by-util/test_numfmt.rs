@@ -530,12 +530,38 @@ fn test_round() {
         new_ucmd!()
             .args(&[
                 "--to=si",
-                &format!("--round={}", method),
+                &format!("--round={method}"),
                 "--",
                 "9001",
                 "-9001",
                 "9099",
                 "-9099",
+            ])
+            .succeeds()
+            .stdout_only(exp.join("\n") + "\n");
+    }
+}
+
+#[test]
+fn test_round_with_to_unit() {
+    for (method, exp) in [
+        ("from-zero", ["6", "-6", "5.9", "-5.9", "5.86", "-5.86"]),
+        ("towards-zero", ["5", "-5", "5.8", "-5.8", "5.85", "-5.85"]),
+        ("up", ["6", "-5", "5.9", "-5.8", "5.86", "-5.85"]),
+        ("down", ["5", "-6", "5.8", "-5.9", "5.85", "-5.86"]),
+        ("nearest", ["6", "-6", "5.9", "-5.9", "5.86", "-5.86"]),
+    ] {
+        new_ucmd!()
+            .args(&[
+                "--to-unit=1024",
+                &format!("--round={method}"),
+                "--",
+                "6000",
+                "-6000",
+                "6000.0",
+                "-6000.0",
+                "6000.00",
+                "-6000.00",
             ])
             .succeeds()
             .stdout_only(exp.join("\n") + "\n");

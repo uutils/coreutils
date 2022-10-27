@@ -246,6 +246,19 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     } else {
         None
     };
+
+    if user.chars().next().map(char::is_numeric).unwrap_or(false)
+        && group.is_empty()
+        && spec != user
+    {
+        // if the arg starts with an id numeric value, the group isn't set but the separator is provided,
+        // we should fail with an error
+        return Err(USimpleError::new(
+            1,
+            format!("invalid spec: {}", spec.quote()),
+        ));
+    }
+
     Ok((uid, gid))
 }
 
