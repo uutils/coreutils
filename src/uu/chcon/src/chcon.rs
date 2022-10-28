@@ -100,7 +100,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         CommandLineMode::ContextBased { context } => {
-            let c_context = match os_str_to_c_string(&context) {
+            let c_context = match os_str_to_c_string(context) {
                 Ok(context) => context,
 
                 Err(_r) => {
@@ -198,7 +198,7 @@ pub fn uu_app() -> Command {
                 .long(options::REFERENCE)
                 .value_name("RFILE")
                 .value_hint(clap::ValueHint::FilePath)
-                .conflicts_with_all(&[options::USER, options::ROLE, options::TYPE, options::RANGE])
+                .conflicts_with_all([options::USER, options::ROLE, options::TYPE, options::RANGE])
                 .help(
                     "Use security context of RFILE, rather than specifying \
                      a CONTEXT value.",
@@ -249,7 +249,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::sym_links::FOLLOW_ARG_DIR_SYM_LINK)
                 .short('H')
                 .requires(options::RECURSIVE)
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::sym_links::FOLLOW_DIR_SYM_LINKS,
                     options::sym_links::NO_FOLLOW_SYM_LINKS,
                 ])
@@ -263,7 +263,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::sym_links::FOLLOW_DIR_SYM_LINKS)
                 .short('L')
                 .requires(options::RECURSIVE)
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::sym_links::FOLLOW_ARG_DIR_SYM_LINK,
                     options::sym_links::NO_FOLLOW_SYM_LINKS,
                 ])
@@ -277,7 +277,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::sym_links::NO_FOLLOW_SYM_LINKS)
                 .short('P')
                 .requires(options::RECURSIVE)
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::sym_links::FOLLOW_ARG_DIR_SYM_LINK,
                     options::sym_links::FOLLOW_DIR_SYM_LINKS,
                 ])

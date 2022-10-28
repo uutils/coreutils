@@ -334,7 +334,7 @@ pub fn uu_app() -> Command {
                 .short('c')
                 .long(options::BYTES)
                 .allow_hyphen_values(true)
-                .overrides_with_all(&[options::BYTES, options::LINES])
+                .overrides_with_all([options::BYTES, options::LINES])
                 .help("Number of bytes to print"),
         )
         .arg(
@@ -352,7 +352,7 @@ pub fn uu_app() -> Command {
                 .short('n')
                 .long(options::LINES)
                 .allow_hyphen_values(true)
-                .overrides_with_all(&[options::BYTES, options::LINES])
+                .overrides_with_all([options::BYTES, options::LINES])
                 .help("Number of lines to print"),
         )
         .arg(
@@ -366,7 +366,7 @@ pub fn uu_app() -> Command {
                 .short('q')
                 .long(options::verbosity::QUIET)
                 .visible_alias("silent")
-                .overrides_with_all(&[options::verbosity::QUIET, options::verbosity::VERBOSE])
+                .overrides_with_all([options::verbosity::QUIET, options::verbosity::VERBOSE])
                 .help("Never output headers giving file names")
                 .action(ArgAction::SetTrue),
         )
@@ -392,7 +392,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::verbosity::VERBOSE)
                 .short('v')
                 .long(options::verbosity::VERBOSE)
-                .overrides_with_all(&[options::verbosity::QUIET, options::verbosity::VERBOSE])
+                .overrides_with_all([options::verbosity::QUIET, options::verbosity::VERBOSE])
                 .help("Always output headers giving file names")
                 .action(ArgAction::SetTrue),
         )
@@ -421,7 +421,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FOLLOW_RETRY)
                 .short('F')
                 .help("Same as --follow=name --retry")
-                .overrides_with_all(&[options::RETRY, options::FOLLOW])
+                .overrides_with_all([options::RETRY, options::FOLLOW])
                 .action(ArgAction::SetTrue),
         )
         .arg(

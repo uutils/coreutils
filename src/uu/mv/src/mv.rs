@@ -371,6 +371,12 @@ fn rename(from: &Path, to: &Path, b: &Behavior) -> io::Result<()> {
     let mut backup_path = None;
 
     if to.exists() {
+        if b.update && b.overwrite == OverwriteMode::Interactive {
+            // `mv -i --update old new` when `new` exists doesn't move anything
+            // and exit with 0
+            return Ok(());
+        }
+
         match b.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {

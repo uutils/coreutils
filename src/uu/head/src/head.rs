@@ -59,7 +59,7 @@ pub fn uu_app() -> Command {
                      NUM bytes of each file\
                      ",
                 )
-                .overrides_with_all(&[options::BYTES_NAME, options::LINES_NAME])
+                .overrides_with_all([options::BYTES_NAME, options::LINES_NAME])
                 .allow_hyphen_values(true),
         )
         .arg(
@@ -74,7 +74,7 @@ pub fn uu_app() -> Command {
                      NUM lines of each file\
                      ",
                 )
-                .overrides_with_all(&[options::LINES_NAME, options::BYTES_NAME])
+                .overrides_with_all([options::LINES_NAME, options::BYTES_NAME])
                 .allow_hyphen_values(true),
         )
         .arg(
@@ -83,7 +83,7 @@ pub fn uu_app() -> Command {
                 .long("quiet")
                 .visible_alias("silent")
                 .help("never print headers giving file names")
-                .overrides_with_all(&[options::VERBOSE_NAME, options::QUIET_NAME])
+                .overrides_with_all([options::VERBOSE_NAME, options::QUIET_NAME])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -91,7 +91,7 @@ pub fn uu_app() -> Command {
                 .short('v')
                 .long("verbose")
                 .help("always print headers giving file names")
-                .overrides_with_all(&[options::QUIET_NAME, options::VERBOSE_NAME])
+                .overrides_with_all([options::QUIET_NAME, options::VERBOSE_NAME])
                 .action(ArgAction::SetTrue),
         )
         .arg(

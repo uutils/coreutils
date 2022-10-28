@@ -278,8 +278,8 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     let tag = matches.get_flag("tag");
     let nonames = *matches
         .try_get_one("no-names")
-        .unwrap_or(Some(&false))
-        .unwrap();
+        .unwrap_or(None)
+        .unwrap_or(&false);
     let status = matches.get_flag("status");
     let quiet = matches.get_flag("quiet") || status;
     let strict = matches.get_flag("strict");

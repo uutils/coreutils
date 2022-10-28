@@ -254,7 +254,7 @@ pub fn uu_app() -> Command {
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath),
         )
-        .group(ArgGroup::new(options::SOURCES).args(&[
+        .group(ArgGroup::new(options::SOURCES).args([
             options::sources::CURRENT,
             options::sources::DATE,
             options::sources::REFERENCE,

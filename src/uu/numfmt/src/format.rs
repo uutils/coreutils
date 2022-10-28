@@ -161,7 +161,11 @@ fn transform_from(s: &str, opts: &TransformOptions) -> Result<f64> {
     remove_suffix(i, suffix, &opts.from).map(|n| {
         // GNU numfmt doesn't round values if no --from argument is provided by the user
         if opts.from == Unit::None {
-            n
+            if n == -0.0 {
+                0.0
+            } else {
+                n
+            }
         } else if n < 0.0 {
             -n.abs().ceil()
         } else {
@@ -268,14 +272,13 @@ fn transform_to(
     let (i2, s) = consider_suffix(s, &opts.to, round_method, precision)?;
     let i2 = i2 / (opts.to_unit as f64);
     Ok(match s {
-        None if precision > 0 => {
+        None => {
             format!(
                 "{:.precision$}",
                 round_with_precision(i2, round_method, precision),
                 precision = precision
             )
         }
-        None => format!("{}", i2),
         Some(s) if precision > 0 => {
             format!(
                 "{:.precision$}{}",
