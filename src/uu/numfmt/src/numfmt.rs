@@ -275,6 +275,7 @@ pub fn uu_app() -> Command {
                 .long(options::FIELD)
                 .help("replace the numbers in these input fields; see FIELDS below")
                 .value_name("FIELDS")
+                .allow_hyphen_values(true)
                 .default_value(options::FIELD_DEFAULT),
         )
         .arg(
