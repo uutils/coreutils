@@ -376,6 +376,14 @@ fn test_format_selected_fields() {
 }
 
 #[test]
+fn test_format_implied_range_and_field() {
+    new_ucmd!()
+        .args(&["--from=auto", "--field", "-2,4", "1K 2K 3K 4K 5K 6K"])
+        .succeeds()
+        .stdout_only("1000 2000 3K 4000 5K 6K\n");
+}
+
+#[test]
 fn test_should_succeed_if_selected_field_out_of_range() {
     new_ucmd!()
         .args(&["--from=auto", "--field", "9", "1K 2K 3K"])
