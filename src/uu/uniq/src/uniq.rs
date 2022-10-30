@@ -336,7 +336,7 @@ pub fn uu_app() -> Command {
                 .num_args(0..=1)
                 .default_missing_value("separate")
                 .require_equals(true)
-                .conflicts_with_all(&[
+                .conflicts_with_all([
                     options::REPEATED,
                     options::ALL_REPEATED,
                     options::UNIQUE,

@@ -250,7 +250,7 @@ pub fn uu_app() -> Command {
                 .long(options::MESG)
                 .short('T')
                 .visible_short_alias('w')
-                .visible_aliases(&["message", "writable"])
+                .visible_aliases(["message", "writable"])
                 .help("add user's message status as +, - or ?")
                 .action(ArgAction::SetTrue),
         )
@@ -350,7 +350,7 @@ impl Who {
             println!("{}", users.join(" "));
             println!("# users={}", users.len());
         } else {
-            let records = Utmpx::iter_all_records_from(f).peekable();
+            let records = Utmpx::iter_all_records_from(f);
 
             if self.include_heading {
                 self.print_heading();

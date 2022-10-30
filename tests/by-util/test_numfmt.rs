@@ -185,6 +185,11 @@ fn test_negative() {
 }
 
 #[test]
+fn test_negative_zero() {
+    new_ucmd!().pipe_in("-0\n-0.0").run().stdout_is("0\n0.0\n");
+}
+
+#[test]
 fn test_no_op() {
     new_ucmd!()
         .pipe_in("1024\n1234567")
@@ -371,6 +376,14 @@ fn test_format_selected_fields() {
 }
 
 #[test]
+fn test_format_implied_range_and_field() {
+    new_ucmd!()
+        .args(&["--from=auto", "--field", "-2,4", "1K 2K 3K 4K 5K 6K"])
+        .succeeds()
+        .stdout_only("1000 2000 3K 4000 5K 6K\n");
+}
+
+#[test]
 fn test_should_succeed_if_selected_field_out_of_range() {
     new_ucmd!()
         .args(&["--from=auto", "--field", "9", "1K 2K 3K"])
@@ -525,12 +538,38 @@ fn test_round() {
         new_ucmd!()
             .args(&[
                 "--to=si",
-                &format!("--round={}", method),
+                &format!("--round={method}"),
                 "--",
                 "9001",
                 "-9001",
                 "9099",
                 "-9099",
+            ])
+            .succeeds()
+            .stdout_only(exp.join("\n") + "\n");
+    }
+}
+
+#[test]
+fn test_round_with_to_unit() {
+    for (method, exp) in [
+        ("from-zero", ["6", "-6", "5.9", "-5.9", "5.86", "-5.86"]),
+        ("towards-zero", ["5", "-5", "5.8", "-5.8", "5.85", "-5.85"]),
+        ("up", ["6", "-5", "5.9", "-5.8", "5.86", "-5.85"]),
+        ("down", ["5", "-6", "5.8", "-5.9", "5.85", "-5.86"]),
+        ("nearest", ["6", "-6", "5.9", "-5.9", "5.86", "-5.86"]),
+    ] {
+        new_ucmd!()
+            .args(&[
+                "--to-unit=1024",
+                &format!("--round={method}"),
+                "--",
+                "6000",
+                "-6000",
+                "6000.0",
+                "-6000.0",
+                "6000.00",
+                "-6000.00",
             ])
             .succeeds()
             .stdout_only(exp.join("\n") + "\n");
