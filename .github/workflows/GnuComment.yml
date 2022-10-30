@@ -6,8 +6,13 @@ on:
     types:
       - completed
 
+permissions: {}
 jobs:
   post-comment:
+    permissions:
+      actions: read  #  to list workflow runs artifacts
+      pull-requests: write  #  to comment on pr
+
     runs-on: ubuntu-latest
     if: >
       github.event.workflow_run.event == 'pull_request'
