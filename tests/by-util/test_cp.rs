@@ -908,6 +908,28 @@ fn test_cp_preserve_no_args() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_cp_preserve_all() {
+    // TODO: create a destination that does not allow copying of xattr and context
+    new_ucmd!()
+        .arg(TEST_COPY_FROM_FOLDER_FILE)
+        .arg(TEST_HELLO_WORLD_DEST)
+        .arg("--preserve=all")
+        .succeeds();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_preserve_xattr() {
+    // TODO: create a destination that does not allow copying of xattr and context
+    new_ucmd!()
+        .arg(TEST_COPY_FROM_FOLDER_FILE)
+        .arg(TEST_HELLO_WORLD_DEST)
+        .arg("--preserve=xattr")
+        .succeeds();
+}
+
+#[test]
 // For now, disable the test on Windows. Symlinks aren't well support on Windows.
 // It works on Unix for now and it works locally when run from a powershell
 #[cfg(not(windows))]
