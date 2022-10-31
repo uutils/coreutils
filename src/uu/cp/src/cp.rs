@@ -31,25 +31,25 @@ use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use std::string::ToString;
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use filetime::FileTime;
 #[cfg(unix)]
 use libc::mkfifo;
 use quick_error::ResultExt;
+
+use platform::copy_on_write;
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::format_usage;
 use uucore::fs::{
-    canonicalize, paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
+    canonicalize, FileInformation, MissingHandling, paths_refer_to_same_file, ResolveMode,
 };
 
-mod copydir;
 use crate::copydir::copy_directory;
 
+mod copydir;
 mod platform;
-use platform::copy_on_write;
-
 quick_error! {
     #[derive(Debug)]
     pub enum Error {
@@ -209,6 +209,7 @@ pub struct Options {
     strip_trailing_slashes: bool,
     reflink_mode: ReflinkMode,
     preserve_attributes: Vec<Attribute>,
+    require_preserve_attributes: Vec<Attribute>,
     recursive: bool,
     backup_suffix: String,
     target_dir: Option<String>,
@@ -717,6 +718,8 @@ impl Options {
             }
         };
 
+        let mut reduced_preserve_requirements_case: bool = false;
+
         // Parse attributes to preserve
         let mut preserve_attributes: Vec<Attribute> = if matches.contains_id(options::PRESERVE) {
             match matches.get_many::<String>(options::PRESERVE) {
@@ -726,6 +729,7 @@ impl Options {
                     for attribute_str in attribute_strs {
                         if attribute_str == "all" {
                             attributes = add_all_attributes();
+                            reduced_preserve_requirements_case = true;
                             break;
                         } else {
                             attributes.push(Attribute::from_str(attribute_str)?);
@@ -736,6 +740,7 @@ impl Options {
             }
         } else if matches.get_flag(options::ARCHIVE) {
             // --archive is used. Same as --preserve=all
+            reduced_preserve_requirements_case = true;
             add_all_attributes()
         } else if matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS) {
             vec![Attribute::Links]
@@ -749,6 +754,24 @@ impl Options {
         // as chown clears some of the permission and therefore could undo previous changes
         // if not executed first.
         preserve_attributes.sort_unstable();
+
+        // Parse attributes to require preserve
+        let require_preserve_attributes: Vec<Attribute> = if reduced_preserve_requirements_case {
+            preserve_attributes
+                .clone()
+                .into_iter()
+                .filter(|attribute|
+                    match attribute {
+                        #[cfg(feature = "feat_selinux")]
+                        Attribute::Context => false,
+                        Attribute::Xattr => false,
+                        _ => true
+                    }
+                )
+                .collect()
+        } else {
+            preserve_attributes.clone()
+        };
 
         let options = Self {
             attributes_only: matches.get_flag(options::ATTRIBUTES_ONLY),
@@ -816,6 +839,7 @@ impl Options {
             overwrite,
             no_target_dir,
             preserve_attributes,
+            require_preserve_attributes,
             recursive,
             target_dir,
         };
@@ -1056,9 +1080,13 @@ pub(crate) fn copy_attributes(
     source: &Path,
     dest: &Path,
     attributes: &[Attribute],
+    require_preserve_attributes: &[Attribute],
 ) -> CopyResult<()> {
     for attribute in attributes {
-        copy_attribute(source, dest, attribute)?;
+        let copy_attribute_result = copy_attribute(source, dest, attribute);
+        if require_preserve_attributes.contains(attribute) {
+            copy_attribute_result?;
+        }
     }
     Ok(())
 }
@@ -1426,7 +1454,7 @@ fn copy_file(
         // the user does not have permission to write to the file.
         fs::set_permissions(dest, dest_permissions).ok();
     }
-    copy_attributes(source, dest, &options.preserve_attributes)?;
+    copy_attributes(source, dest, &options.preserve_attributes, &options.require_preserve_attributes)?;
     Ok(())
 }
 
