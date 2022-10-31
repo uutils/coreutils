@@ -21,7 +21,7 @@ use uucore::error::UIoError;
 use uucore::fs::{canonicalize, FileInformation, MissingHandling, ResolveMode};
 
 use crate::{
-    copy_attributes, copy_file, copy_link, CopyResult, Error, Options, preserve_hardlinks,
+    copy_attributes, copy_file, copy_link, preserve_hardlinks, CopyResult, Error, Options,
     TargetSlice,
 };
 
@@ -357,7 +357,12 @@ pub(crate) fn copy_directory(
         }
     }
     // Copy the attributes from the root directory to the target directory.
-    copy_attributes(root, target, &options.preserve_attributes, &options.require_preserve_attributes)?;
+    copy_attributes(
+        root,
+        target,
+        &options.preserve_attributes,
+        &options.require_preserve_attributes,
+    )?;
     Ok(())
 }
 

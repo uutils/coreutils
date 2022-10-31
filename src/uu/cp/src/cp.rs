@@ -31,7 +31,7 @@ use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use std::string::ToString;
 
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use filetime::FileTime;
 #[cfg(unix)]
 use libc::mkfifo;
@@ -43,7 +43,7 @@ use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::format_usage;
 use uucore::fs::{
-    canonicalize, FileInformation, MissingHandling, paths_refer_to_same_file, ResolveMode,
+    canonicalize, paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
 };
 
 use crate::copydir::copy_directory;
@@ -760,14 +760,12 @@ impl Options {
             preserve_attributes
                 .clone()
                 .into_iter()
-                .filter(|attribute|
-                    match attribute {
-                        #[cfg(feature = "feat_selinux")]
-                        Attribute::Context => false,
-                        Attribute::Xattr => false,
-                        _ => true
-                    }
-                )
+                .filter(|attribute| match attribute {
+                    #[cfg(feature = "feat_selinux")]
+                    Attribute::Context => false,
+                    Attribute::Xattr => false,
+                    _ => true,
+                })
                 .collect()
         } else {
             preserve_attributes.clone()
@@ -1454,7 +1452,12 @@ fn copy_file(
         // the user does not have permission to write to the file.
         fs::set_permissions(dest, dest_permissions).ok();
     }
-    copy_attributes(source, dest, &options.preserve_attributes, &options.require_preserve_attributes)?;
+    copy_attributes(
+        source,
+        dest,
+        &options.preserve_attributes,
+        &options.require_preserve_attributes,
+    )?;
     Ok(())
 }
 
