@@ -14,7 +14,7 @@ use std::os::unix::fs::PermissionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
 
-use crate::common::testfs::utils::{testfs_mount, testfs_unmount};
+use crate::common::testfs::util::{testfs_mount, testfs_unmount};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use filetime::FileTime;
 #[cfg(any(target_os = "linux", target_os = "android"))]

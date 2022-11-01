@@ -11,7 +11,7 @@ use std::sync::Mutex;
 use std::sync::MutexGuard;
 use std::time::{Duration, SystemTime};
 
-use crate::common::testfs::utils::log_testfs;
+use crate::common::testfs::util::log_testfs;
 use fuser::FileType;
 use fuser::Filesystem;
 use fuser::KernelConfig;
