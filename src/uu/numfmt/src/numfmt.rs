@@ -160,7 +160,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 
     let fields = args.get_one::<String>(options::FIELD).unwrap().as_str();
     // a lone "-" means "all fields", even as part of a list of fields
-    let fields = if fields.split(',').any(|x| x == "-") {
+    let fields = if fields.split(&[',', ' ']).any(|x| x == "-") {
         vec![Range {
             low: 1,
             high: std::usize::MAX,
