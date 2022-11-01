@@ -432,9 +432,7 @@ impl Filesystem for TestFs {
                 let mut buffer: Vec<u8> = vec![0; read_size as usize];
                 let s = store();
                 let store = s.get(&inode).expect("Get from store failed");
-                for i in offset..read_size {
-                    buffer[i - offset] = store[i];
-                }
+                buffer[..(read_size - offset)].copy_from_slice(&store[offset..read_size]);
                 reply.data(&buffer);
             }
             Err(err) => {
@@ -473,9 +471,7 @@ impl Filesystem for TestFs {
         store().entry(inode).or_insert_with(|| [0; MAX_FILE_SIZE]);
 
         let mut inode_store = store().remove(&inode).expect("Remove from store failed");
-        for i in offset..min(MAX_FILE_SIZE, offset + data.len()) {
-            inode_store[i] = data[i - offset];
-        }
+        inode_store[offset..min(MAX_FILE_SIZE, offset + data.len())].copy_from_slice(&data[..(min(MAX_FILE_SIZE, offset + data.len()) - offset)]);
         store().insert(inode, inode_store);
         let new_size = offset + data.len();
         match get_inode(&inode) {
