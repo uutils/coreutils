@@ -252,7 +252,7 @@ impl Filesystem for TestFs {
 
     fn readlink(&mut self, _req: &Request<'_>, inode: Inode, reply: ReplyData) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn mknod(
@@ -266,7 +266,7 @@ impl Filesystem for TestFs {
         reply: ReplyEntry,
     ) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn mkdir(
@@ -318,7 +318,7 @@ impl Filesystem for TestFs {
 
     fn unlink(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, reply: ReplyEmpty) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn rmdir(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, reply: ReplyEmpty) {
@@ -361,7 +361,7 @@ impl Filesystem for TestFs {
         reply: ReplyEntry,
     ) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn rename(
@@ -375,7 +375,7 @@ impl Filesystem for TestFs {
         reply: ReplyEmpty,
     ) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn link(
@@ -387,7 +387,7 @@ impl Filesystem for TestFs {
         reply: ReplyEntry,
     ) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn open(&mut self, _req: &Request<'_>, inode: Inode, _flags: i32, reply: ReplyOpen) {
@@ -513,7 +513,7 @@ impl Filesystem for TestFs {
         reply: ReplyEmpty,
     ) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn release(
@@ -527,7 +527,7 @@ impl Filesystem for TestFs {
         reply: ReplyEmpty,
     ) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn fsync(
@@ -539,12 +539,12 @@ impl Filesystem for TestFs {
         reply: ReplyEmpty,
     ) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn opendir(&mut self, _req: &Request<'_>, _inode: Inode, _flags: i32, reply: ReplyOpen) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn readdir(
@@ -588,7 +588,7 @@ impl Filesystem for TestFs {
         reply: ReplyDirectoryPlus,
     ) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn releasedir(
@@ -600,7 +600,7 @@ impl Filesystem for TestFs {
         reply: ReplyEmpty,
     ) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn fsyncdir(
@@ -612,12 +612,12 @@ impl Filesystem for TestFs {
         reply: ReplyEmpty,
     ) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn statfs(&mut self, _req: &Request<'_>, _inode: Inode, reply: ReplyStatfs) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn setxattr(
@@ -758,7 +758,7 @@ impl Filesystem for TestFs {
         reply: ReplyLock,
     ) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn setlk(
@@ -775,7 +775,7 @@ impl Filesystem for TestFs {
         reply: ReplyEmpty,
     ) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn bmap(
@@ -787,7 +787,7 @@ impl Filesystem for TestFs {
         reply: ReplyBmap,
     ) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn ioctl(
@@ -802,7 +802,7 @@ impl Filesystem for TestFs {
         reply: ReplyIoctl,
     ) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn fallocate(
@@ -816,7 +816,7 @@ impl Filesystem for TestFs {
         reply: ReplyEmpty,
     ) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn lseek(
@@ -829,7 +829,7 @@ impl Filesystem for TestFs {
         reply: ReplyLseek,
     ) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 
     fn copy_file_range(
@@ -846,6 +846,6 @@ impl Filesystem for TestFs {
         reply: ReplyWrite,
     ) {
         println!("{}", caller_name!());
-        reply.error(libc::ENOENT);
+        reply.error(libc::ENOSYS);
     }
 }
