@@ -239,25 +239,6 @@ impl Filesystem for TestFs {
         reply.attr(&Duration::new(0, 0), &attrs);
     }
 
-    fn readlink(&mut self, _req: &Request<'_>, _inode: Inode, reply: ReplyData) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
-    }
-
-    fn mknod(
-        &mut self,
-        _req: &Request<'_>,
-        _parent: u64,
-        _name: &OsStr,
-        _mode: u32,
-        _umask: u32,
-        _rdev: u32,
-        reply: ReplyEntry,
-    ) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
-    }
-
     fn mkdir(
         &mut self,
         _req: &Request<'_>,
@@ -305,11 +286,6 @@ impl Filesystem for TestFs {
         }
     }
 
-    fn unlink(&mut self, _req: &Request<'_>, _parent: u64, _name: &OsStr, reply: ReplyEmpty) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
-    }
-
     fn rmdir(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, reply: ReplyEmpty) {
         let name: String = String::from(name.to_str().expect("OsStr to str failed"));
         log_testfs!("rmdir(parent: {parent}, name: {name})");
@@ -339,44 +315,6 @@ impl Filesystem for TestFs {
                 log_testfs!("rmdir err: {}", (Errno::from_i32(err)));
             }
         }
-    }
-
-    fn symlink(
-        &mut self,
-        _req: &Request<'_>,
-        _parent: u64,
-        _name: &OsStr,
-        _link: &Path,
-        reply: ReplyEntry,
-    ) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
-    }
-
-    fn rename(
-        &mut self,
-        _req: &Request<'_>,
-        _parent: u64,
-        _name: &OsStr,
-        _newparent: u64,
-        _newname: &OsStr,
-        _flags: u32,
-        reply: ReplyEmpty,
-    ) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
-    }
-
-    fn link(
-        &mut self,
-        _req: &Request<'_>,
-        _inode: Inode,
-        _newparent: u64,
-        _newname: &OsStr,
-        reply: ReplyEntry,
-    ) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
     }
 
     fn open(&mut self, _req: &Request<'_>, inode: Inode, _flags: i32, reply: ReplyOpen) {
@@ -487,49 +425,6 @@ impl Filesystem for TestFs {
         }
     }
 
-    fn flush(
-        &mut self,
-        _req: &Request<'_>,
-        _inode: Inode,
-        _fh: u64,
-        _lock_owner: u64,
-        reply: ReplyEmpty,
-    ) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
-    }
-
-    fn release(
-        &mut self,
-        _req: &Request<'_>,
-        _inode: Inode,
-        _fh: u64,
-        _flags: i32,
-        _lock_owner: Option<u64>,
-        _flush: bool,
-        reply: ReplyEmpty,
-    ) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
-    }
-
-    fn fsync(
-        &mut self,
-        _req: &Request<'_>,
-        _inode: Inode,
-        _fh: u64,
-        _datasync: bool,
-        reply: ReplyEmpty,
-    ) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
-    }
-
-    fn opendir(&mut self, _req: &Request<'_>, _inode: Inode, _flags: i32, reply: ReplyOpen) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
-    }
-
     fn readdir(
         &mut self,
         _req: &Request<'_>,
@@ -560,47 +455,6 @@ impl Filesystem for TestFs {
                 log_testfs!("readdir err: {}", (Errno::from_i32(err)));
             }
         }
-    }
-
-    fn readdirplus(
-        &mut self,
-        _req: &Request<'_>,
-        _inode: Inode,
-        _fh: u64,
-        _offset: i64,
-        reply: ReplyDirectoryPlus,
-    ) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
-    }
-
-    fn releasedir(
-        &mut self,
-        _req: &Request<'_>,
-        _inode: Inode,
-        _fh: u64,
-        _flags: i32,
-        reply: ReplyEmpty,
-    ) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
-    }
-
-    fn fsyncdir(
-        &mut self,
-        _req: &Request<'_>,
-        _inode: Inode,
-        _fh: u64,
-        _datasync: bool,
-        reply: ReplyEmpty,
-    ) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
-    }
-
-    fn statfs(&mut self, _req: &Request<'_>, _inode: Inode, reply: ReplyStatfs) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
     }
 
     fn setxattr(
@@ -721,109 +575,5 @@ impl Filesystem for TestFs {
                 }
             }
         }
-    }
-
-    fn getlk(
-        &mut self,
-        _req: &Request<'_>,
-        _inode: Inode,
-        _fh: u64,
-        _lock_owner: u64,
-        _start: u64,
-        _end: u64,
-        _typ: i32,
-        _pid: u32,
-        reply: ReplyLock,
-    ) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
-    }
-
-    fn setlk(
-        &mut self,
-        _req: &Request<'_>,
-        _inode: Inode,
-        _fh: u64,
-        _lock_owner: u64,
-        _start: u64,
-        _end: u64,
-        _typ: i32,
-        _pid: u32,
-        _sleep: bool,
-        reply: ReplyEmpty,
-    ) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
-    }
-
-    fn bmap(
-        &mut self,
-        _req: &Request<'_>,
-        _inode: Inode,
-        _blocksize: u32,
-        _idx: u64,
-        reply: ReplyBmap,
-    ) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
-    }
-
-    fn ioctl(
-        &mut self,
-        _req: &Request<'_>,
-        _inode: Inode,
-        _fh: u64,
-        _flags: u32,
-        _cmd: u32,
-        _in_data: &[u8],
-        _out_size: u32,
-        reply: ReplyIoctl,
-    ) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
-    }
-
-    fn fallocate(
-        &mut self,
-        _req: &Request<'_>,
-        _inode: Inode,
-        _fh: u64,
-        _offset: i64,
-        _length: i64,
-        _mode: i32,
-        reply: ReplyEmpty,
-    ) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
-    }
-
-    fn lseek(
-        &mut self,
-        _req: &Request<'_>,
-        _inode: Inode,
-        _fh: u64,
-        _offset: i64,
-        _whence: i32,
-        reply: ReplyLseek,
-    ) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
-    }
-
-    fn copy_file_range(
-        &mut self,
-        _req: &Request<'_>,
-        _ino_in: u64,
-        _fh_in: u64,
-        _offset_in: i64,
-        _ino_out: u64,
-        _fh_out: u64,
-        _offset_out: i64,
-        _len: u64,
-        _flags: u32,
-        reply: ReplyWrite,
-    ) {
-        log_testfs!("");
-        reply.error(libc::ENOSYS);
     }
 }
