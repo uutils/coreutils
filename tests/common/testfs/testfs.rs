@@ -49,21 +49,24 @@ struct InodeAttr {
     name: String,
 }
 
-static INODES: Lazy<Mutex<HashMap<Inode, InodeAttr>>> = Lazy::new(|| Mutex::new(HashMap::new()));
-static ENTRIES: Lazy<Mutex<HashMap<Inode, Vec<(Inode, FileType, String)>>>> =
+type InodeMap<T> = Lazy<Mutex<HashMap<Inode, T>>>;
+type InodeMapGuard<'a, T> = MutexGuard<'a, HashMap<Inode, T>>;
+
+static INODES: InodeMap<InodeAttr> = Lazy::new(|| Mutex::new(HashMap::new()));
+static ENTRIES: InodeMap<Vec<(Inode, FileType, String)>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
-static STORE: Lazy<Mutex<HashMap<Inode, [u8; MAX_FILE_SIZE]>>> =
+static STORE: InodeMap<[u8; MAX_FILE_SIZE]> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
-fn inodes<'a>() -> MutexGuard<'a, HashMap<Inode, InodeAttr>> {
+fn inodes<'a>() -> InodeMapGuard<'a, InodeAttr> {
     INODES.lock().expect("Inodes lock failed")
 }
 
-fn dir_entries<'a>() -> MutexGuard<'a, HashMap<Inode, Vec<(Inode, FileType, String)>>> {
+fn dir_entries<'a>() -> InodeMapGuard<'a, Vec<(Inode, FileType, String)>> {
     ENTRIES.lock().expect("Entries lock failed")
 }
 
-fn store<'a>() -> MutexGuard<'a, HashMap<Inode, [u8; MAX_FILE_SIZE]>> {
+fn store<'a>() -> InodeMapGuard<'a, [u8; MAX_FILE_SIZE]> {
     STORE.lock().expect("Store lock failed")
 }
 
