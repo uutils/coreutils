@@ -14,6 +14,7 @@ use std::os::unix::fs::PermissionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
 
+use crate::common::testfs::utils::{testfs_mount, testfs_unmount};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use filetime::FileTime;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -25,7 +26,6 @@ use std::thread::sleep;
 #[cfg(not(target_os = "freebsd"))]
 use std::time::Duration;
 use uucore::display::Quotable;
-use crate::common::testfs::utils::{testfs_mount, testfs_unmount};
 
 static TEST_EXISTING_FILE: &str = "existing_file.txt";
 static TEST_HELLO_WORLD_SOURCE: &str = "hello_world.txt";
@@ -903,7 +903,8 @@ fn test_cp_preserve_all() {
     let mount_point_dir = "mnt";
 
     at.mkdir(mount_point_dir);
-    let mount_point_path = String::from(at.subdir.to_str().expect("to_str failed")) + "/" + mount_point_dir;
+    let mount_point_path =
+        String::from(at.subdir.to_str().expect("to_str failed")) + "/" + mount_point_dir;
     let session = testfs_mount(mount_point_path.clone()).expect("testfs_mount failed");
 
     let src_file = String::from(&mount_point_path) + "/a_xattr_allow";
@@ -930,7 +931,8 @@ fn test_cp_preserve_xattr_deny() {
     let mount_point_dir = "mnt";
 
     at.mkdir(mount_point_dir);
-    let mount_point_path = String::from(at.subdir.to_str().expect("to_str failed")) + "/" + mount_point_dir;
+    let mount_point_path =
+        String::from(at.subdir.to_str().expect("to_str failed")) + "/" + mount_point_dir;
     let session = testfs_mount(mount_point_path.clone()).expect("testfs_mount failed");
 
     let src_file = String::from(&mount_point_path) + "/a_xattr_allow";
@@ -957,7 +959,8 @@ fn test_cp_preserve_xattr_allow() {
     let mount_point_dir = "mnt";
 
     at.mkdir(mount_point_dir);
-    let mount_point_path = String::from(at.subdir.to_str().expect("to_str failed")) + "/" + mount_point_dir;
+    let mount_point_path =
+        String::from(at.subdir.to_str().expect("to_str failed")) + "/" + mount_point_dir;
     let session = testfs_mount(mount_point_path.clone()).expect("testfs_mount failed");
 
     let src_file = String::from(&mount_point_path) + "/a_xattr_allow";

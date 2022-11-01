@@ -3,10 +3,10 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-use std::ffi::CString;
-use fuser::BackgroundSession;
 use crate::common::testfs::testfs::TestFs;
+use fuser::BackgroundSession;
 use fuser::MountOption::FSName;
+use std::ffi::CString;
 
 pub fn testfs_mount(mount_point: String) -> std::io::Result<BackgroundSession> {
     println!("mount_point: {}", mount_point);
