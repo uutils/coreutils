@@ -11,6 +11,7 @@ use std::sync::Mutex;
 use std::sync::MutexGuard;
 use std::time::{Duration, SystemTime};
 
+use crate::common::testfs::utils::log_testfs;
 use fuser::FileType;
 use fuser::Filesystem;
 use fuser::KernelConfig;
@@ -53,10 +54,8 @@ type InodeMap<T> = Lazy<Mutex<HashMap<Inode, T>>>;
 type InodeMapGuard<'a, T> = MutexGuard<'a, HashMap<Inode, T>>;
 
 static INODES: InodeMap<InodeAttr> = Lazy::new(|| Mutex::new(HashMap::new()));
-static ENTRIES: InodeMap<Vec<(Inode, FileType, String)>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
-static STORE: InodeMap<[u8; MAX_FILE_SIZE]> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+static ENTRIES: InodeMap<Vec<(Inode, FileType, String)>> = Lazy::new(|| Mutex::new(HashMap::new()));
+static STORE: InodeMap<[u8; MAX_FILE_SIZE]> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 fn inodes<'a>() -> InodeMapGuard<'a, InodeAttr> {
     INODES.lock().expect("Inodes lock failed")
@@ -166,22 +165,11 @@ impl TestFs {
     }
 }
 
-macro_rules! caller_name {
-    () => {{
-        fn f() {}
-        fn type_name_of<T>(_: T) -> &'static str {
-            std::any::type_name::<T>()
-        }
-        let name = type_name_of(f);
-        &name[..name.len() - 3]
-    }};
-}
-
 impl Filesystem for TestFs {
     fn init(&mut self, _req: &Request<'_>, _config: &mut KernelConfig) -> Result<(), c_int> {
-        println!("init()");
+        log_testfs!("init()");
         if !has_inode(FUSE_ROOT_ID) {
-            println!("init: setting FUSE_ROOT_ID");
+            log_testfs!("init: setting FUSE_ROOT_ID");
             let (new_inode, new_inode_attr, entries) = self.new_dir_inode(FUSE_ROOT_ID);
             set_inode(new_inode, new_inode_attr);
             dir_entries().insert(new_inode, entries);
@@ -190,7 +178,7 @@ impl Filesystem for TestFs {
     }
 
     fn destroy(&mut self) {
-        println!("{}", caller_name!());
+        log_testfs!("");
     }
 
     fn lookup(&mut self, _req: &Request<'_>, parent: Inode, name: &OsStr, reply: ReplyEntry) {
@@ -201,25 +189,25 @@ impl Filesystem for TestFs {
             Ok((entry_inode, _entry_type, _entry_name)) => match get_inode(&entry_inode) {
                 Ok(entry_inode_attr) => {
                     reply.entry(&Duration::new(0, 0), &entry_inode_attr.file_attr, 0);
-                    println!("lookup succ");
+                    log_testfs!("lookup succ");
                 }
                 Err(err) => {
-                    println!("lookup err: {}", Errno::from_i32(err));
+                    log_testfs!("lookup err: {}", Errno::from_i32(err));
                 }
             },
             Err(err) => {
                 reply.error(err.0);
-                println!("lookup err: {}", Errno::from_i32(err.0));
+                log_testfs!("lookup err: {}", Errno::from_i32(err.0));
             }
         }
     }
 
     fn forget(&mut self, _req: &Request<'_>, _inode: Inode, _nlookup: u64) {
-        println!("{}", caller_name!());
+        log_testfs!("");
     }
 
     fn getattr(&mut self, _req: &Request<'_>, inode: Inode, reply: ReplyAttr) {
-        println!("getattr(inode: {})", inode);
+        log_testfs!("getattr(inode: {})", inode);
         match get_inode(&inode) {
             Ok(inode_attr) => {
                 reply.attr(&Duration::new(0, 0), &inode_attr.file_attr);
@@ -246,13 +234,13 @@ impl Filesystem for TestFs {
         _flags: Option<u32>,
         reply: ReplyAttr,
     ) {
-        println!("setattr(inode: {})", inode);
+        log_testfs!("setattr(inode: {})", inode);
         let attrs = get_inode(&inode).expect("Get inode failed").file_attr;
         reply.attr(&Duration::new(0, 0), &attrs);
     }
 
     fn readlink(&mut self, _req: &Request<'_>, _inode: Inode, reply: ReplyData) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
@@ -266,7 +254,7 @@ impl Filesystem for TestFs {
         _rdev: u32,
         reply: ReplyEntry,
     ) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
@@ -280,10 +268,10 @@ impl Filesystem for TestFs {
         reply: ReplyEntry,
     ) {
         let name: String = String::from(name.to_str().expect("OsStr to str failed"));
-        println!("mkdir(parent: {parent}, name: {name}, mode: {mode}, umask: {umask})");
+        log_testfs!("mkdir(parent: {parent}, name: {name}, mode: {mode}, umask: {umask})");
         if name.len() > MAX_NAME_LENGTH {
             reply.error(libc::ENAMETOOLONG);
-            println!("mkdir err: name too long");
+            log_testfs!("mkdir err: name too long");
             return;
         }
         match get_inode(&parent) {
@@ -292,7 +280,7 @@ impl Filesystem for TestFs {
                 for (_, _, entry_name) in &parent_entries {
                     if &name == entry_name {
                         reply.error(libc::EEXIST);
-                        println!("mkdir err: name taken");
+                        log_testfs!("mkdir err: name taken");
                         return;
                     }
                 }
@@ -312,22 +300,22 @@ impl Filesystem for TestFs {
             }
             Err(err) => {
                 reply.error(err);
-                println!("mkdir err: {}", (Errno::from_i32(err)));
+                log_testfs!("mkdir err: {}", (Errno::from_i32(err)));
             }
         }
     }
 
     fn unlink(&mut self, _req: &Request<'_>, _parent: u64, _name: &OsStr, reply: ReplyEmpty) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
     fn rmdir(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, reply: ReplyEmpty) {
         let name: String = String::from(name.to_str().expect("OsStr to str failed"));
-        println!("rmdir(parent: {parent}, name: {name})");
+        log_testfs!("rmdir(parent: {parent}, name: {name})");
         if name.len() > MAX_NAME_LENGTH {
             reply.error(libc::ENAMETOOLONG);
-            println!("rmdir err: name too long");
+            log_testfs!("rmdir err: name too long");
             return;
         }
         match get_inode(&parent) {
@@ -338,7 +326,7 @@ impl Filesystem for TestFs {
                 {
                     if &name == entry_name {
                         let (removed_entry_inode, _, _) = parent_entries.remove(i);
-                        println!("rmdir succ: removed inode {}", removed_entry_inode);
+                        log_testfs!("rmdir succ: removed inode {}", removed_entry_inode);
                         dir_entries().insert(parent, parent_entries);
                         reply.ok();
                         return;
@@ -348,7 +336,7 @@ impl Filesystem for TestFs {
             }
             Err(err) => {
                 reply.error(err);
-                println!("rmdir err: {}", (Errno::from_i32(err)));
+                log_testfs!("rmdir err: {}", (Errno::from_i32(err)));
             }
         }
     }
@@ -361,7 +349,7 @@ impl Filesystem for TestFs {
         _link: &Path,
         reply: ReplyEntry,
     ) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
@@ -375,7 +363,7 @@ impl Filesystem for TestFs {
         _flags: u32,
         reply: ReplyEmpty,
     ) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
@@ -387,12 +375,12 @@ impl Filesystem for TestFs {
         _newname: &OsStr,
         reply: ReplyEntry,
     ) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
     fn open(&mut self, _req: &Request<'_>, inode: Inode, _flags: i32, reply: ReplyOpen) {
-        println!("open(inode: {}, flags: {})", inode, _flags);
+        log_testfs!("open(inode: {}, flags: {})", inode, _flags);
         match get_inode(&inode) {
             Ok(_inode_attr) => {
                 reply.opened(0, 0);
@@ -414,9 +402,12 @@ impl Filesystem for TestFs {
         _lock_owner: Option<u64>,
         reply: ReplyData,
     ) {
-        println!(
+        log_testfs!(
             "read(inode: {}, fh: {}, offset: {}, size: {}, ...)",
-            inode, fh, offset, size
+            inode,
+            fh,
+            offset,
+            size
         );
         if offset < 0 {
             reply.error(libc::EINVAL);
@@ -456,9 +447,11 @@ impl Filesystem for TestFs {
         _lock_owner: Option<u64>,
         reply: ReplyWrite,
     ) {
-        println!(
+        log_testfs!(
             "write(inode: {}, fh: {}, offset: {}, ...)",
-            inode, fh, offset
+            inode,
+            fh,
+            offset
         );
 
         if offset < 0 {
@@ -474,7 +467,8 @@ impl Filesystem for TestFs {
         store().entry(inode).or_insert_with(|| [0; MAX_FILE_SIZE]);
 
         let mut inode_store = store().remove(&inode).expect("Remove from store failed");
-        inode_store[offset..min(MAX_FILE_SIZE, offset + data.len())].copy_from_slice(&data[..(min(MAX_FILE_SIZE, offset + data.len()) - offset)]);
+        inode_store[offset..min(MAX_FILE_SIZE, offset + data.len())]
+            .copy_from_slice(&data[..(min(MAX_FILE_SIZE, offset + data.len()) - offset)]);
         store().insert(inode, inode_store);
         let new_size = offset + data.len();
         match get_inode(&inode) {
@@ -501,7 +495,7 @@ impl Filesystem for TestFs {
         _lock_owner: u64,
         reply: ReplyEmpty,
     ) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
@@ -515,7 +509,7 @@ impl Filesystem for TestFs {
         _flush: bool,
         reply: ReplyEmpty,
     ) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
@@ -527,12 +521,12 @@ impl Filesystem for TestFs {
         _datasync: bool,
         reply: ReplyEmpty,
     ) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
     fn opendir(&mut self, _req: &Request<'_>, _inode: Inode, _flags: i32, reply: ReplyOpen) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
@@ -544,7 +538,7 @@ impl Filesystem for TestFs {
         offset: i64,
         mut reply: ReplyDirectory,
     ) {
-        println!("readdir(ino: {inode}, fh: {_fh}, offset: {offset})");
+        log_testfs!("readdir(ino: {inode}, fh: {_fh}, offset: {offset})");
 
         match get_inode(&inode) {
             Ok(inode_attr) => {
@@ -563,7 +557,7 @@ impl Filesystem for TestFs {
             }
             Err(err) => {
                 reply.error(err);
-                println!("readdir err: {}", (Errno::from_i32(err)));
+                log_testfs!("readdir err: {}", (Errno::from_i32(err)));
             }
         }
     }
@@ -576,7 +570,7 @@ impl Filesystem for TestFs {
         _offset: i64,
         reply: ReplyDirectoryPlus,
     ) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
@@ -588,7 +582,7 @@ impl Filesystem for TestFs {
         _flags: i32,
         reply: ReplyEmpty,
     ) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
@@ -600,12 +594,12 @@ impl Filesystem for TestFs {
         _datasync: bool,
         reply: ReplyEmpty,
     ) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
     fn statfs(&mut self, _req: &Request<'_>, _inode: Inode, reply: ReplyStatfs) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
@@ -619,19 +613,19 @@ impl Filesystem for TestFs {
         _position: u32,
         reply: ReplyEmpty,
     ) {
-        println!(
+        log_testfs!(
             "setxattr(inode: {}, name: {:?}, _value: {:?})",
             inode,
             name.to_str(),
             String::from_utf8(Vec::from(_value))
         );
         let inode_attr = get_inode(&inode).expect("Get inode failed");
-        println!("setxattr at: {}", inode_attr.name);
+        log_testfs!("setxattr at: {}", inode_attr.name);
         if inode_attr.name.ends_with("xattr_deny") {
-            println!("setxattr will deny");
+            log_testfs!("setxattr will deny");
             reply.error(libc::EPERM);
         } else if inode_attr.name.ends_with("xattr_allow") {
-            println!("setxattr will allow");
+            log_testfs!("setxattr will allow");
             reply.ok()
         } else {
             reply.error(libc::EINVAL)
@@ -646,7 +640,7 @@ impl Filesystem for TestFs {
         size: u32,
         reply: ReplyXattr,
     ) {
-        println!("getxattr(inode: {}, name: {:?})", inode, name.to_str());
+        log_testfs!("getxattr(inode: {}, name: {:?})", inode, name.to_str());
         let data = "dummy_data".as_bytes();
         if size == 0 {
             reply.size(data.len() as u32);
@@ -658,7 +652,7 @@ impl Filesystem for TestFs {
     }
 
     fn listxattr(&mut self, _req: &Request<'_>, inode: Inode, size: u32, reply: ReplyXattr) {
-        println!("listxattr(inode: {})", inode);
+        log_testfs!("listxattr(inode: {})", inode);
         let mut bytes = "dummy_key".as_bytes().to_vec();
         bytes.push(0);
 
@@ -672,17 +666,12 @@ impl Filesystem for TestFs {
     }
 
     fn removexattr(&mut self, _req: &Request<'_>, inode: Inode, name: &OsStr, reply: ReplyEmpty) {
-        println!(
-            "{}(inode: {}, name: {:?})",
-            caller_name!(),
-            inode,
-            name.to_str()
-        );
+        log_testfs!("(inode: {}, name: {:?})", inode, name.to_str());
         reply.ok();
     }
 
     fn access(&mut self, _req: &Request<'_>, inode: Inode, mask: i32, reply: ReplyEmpty) {
-        println!("access(inode: {}, mask: {})", inode, mask);
+        log_testfs!("access(inode: {}, mask: {})", inode, mask);
         reply.ok();
     }
 
@@ -697,11 +686,11 @@ impl Filesystem for TestFs {
         reply: ReplyCreate,
     ) {
         let name = String::from(name.to_str().expect("OsStr to str failed"));
-        println!("create(parent: {parent}, name: {name})");
+        log_testfs!("create(parent: {parent}, name: {name})");
 
         match self.find_by_name(parent, name) {
             Ok((_entry_inode, _entry_type, _entry_name)) => {
-                println!("create err: exists");
+                log_testfs!("create err: exists");
                 reply.error(libc::EEXIST);
             }
             Err((err, name)) => {
@@ -727,7 +716,7 @@ impl Filesystem for TestFs {
                     new_inode_attr = get_inode(&new_inode).expect("Get inode failed");
                     reply.created(&Duration::new(0, 0), &new_inode_attr.file_attr, 0, 0, 0);
                 } else {
-                    println!("create err: {}", Errno::from_i32(err));
+                    log_testfs!("create err: {}", Errno::from_i32(err));
                     reply.error(err);
                 }
             }
@@ -746,7 +735,7 @@ impl Filesystem for TestFs {
         _pid: u32,
         reply: ReplyLock,
     ) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
@@ -763,7 +752,7 @@ impl Filesystem for TestFs {
         _sleep: bool,
         reply: ReplyEmpty,
     ) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
@@ -775,7 +764,7 @@ impl Filesystem for TestFs {
         _idx: u64,
         reply: ReplyBmap,
     ) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
@@ -790,7 +779,7 @@ impl Filesystem for TestFs {
         _out_size: u32,
         reply: ReplyIoctl,
     ) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
@@ -804,7 +793,7 @@ impl Filesystem for TestFs {
         _mode: i32,
         reply: ReplyEmpty,
     ) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
@@ -817,7 +806,7 @@ impl Filesystem for TestFs {
         _whence: i32,
         reply: ReplyLseek,
     ) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 
@@ -834,7 +823,7 @@ impl Filesystem for TestFs {
         _flags: u32,
         reply: ReplyWrite,
     ) {
-        println!("{}", caller_name!());
+        log_testfs!("");
         reply.error(libc::ENOSYS);
     }
 }

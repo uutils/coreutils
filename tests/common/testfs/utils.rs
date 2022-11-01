@@ -8,13 +8,30 @@ use fuser::BackgroundSession;
 use fuser::MountOption::FSName;
 use std::ffi::CString;
 
+macro_rules! log_testfs {
+    ($($arg:tt)*) => {{
+        fn f() {}
+        fn type_name_of<T>(_: T) -> &'static str {
+            std::any::type_name::<T>()
+        }
+        let name = type_name_of(f);
+        let caller_name = &name[..name.len() - 3]
+            .split("::").last().expect("Getting function name failed");
+
+        print!("{}: ", caller_name);
+        println!($($arg)*);
+    }};
+}
+
+pub(crate) use log_testfs;
+
 pub fn testfs_mount(mount_point: String) -> std::io::Result<BackgroundSession> {
-    println!("mount_point: {}", mount_point);
+    log_testfs!("mount_point: {}", mount_point);
 
     let options = [FSName(String::from("testfs"))];
 
     let res = fuser::spawn_mount2(TestFs, mount_point, &options);
-    println!("{:?}", res);
+    log_testfs!("{:?}", res);
     res
 }
 
