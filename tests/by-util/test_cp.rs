@@ -919,7 +919,7 @@ fn test_cp_preserve_all() {
         .succeeds();
 
     testfs_unmount(mount_point_path);
-    session.join()
+    session.join();
 }
 
 #[test]
@@ -947,7 +947,7 @@ fn test_cp_preserve_xattr_deny() {
         .fails();
 
     testfs_unmount(mount_point_path);
-    session.join()
+    session.join();
 }
 
 #[test]
@@ -975,7 +975,7 @@ fn test_cp_preserve_xattr_allow() {
         .succeeds();
 
     testfs_unmount(mount_point_path);
-    session.join()
+    session.join();
 }
 
 #[test]

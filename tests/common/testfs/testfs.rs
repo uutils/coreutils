@@ -88,7 +88,7 @@ fn gen_new_inode() -> Inode {
     while inodes().contains_key(&candidate_inode) {
         candidate_inode = rng.gen();
     }
-    return candidate_inode;
+    candidate_inode
 }
 
 impl TestFs {
@@ -114,7 +114,7 @@ impl TestFs {
                 return Err((err, name));
             }
         }
-        return Err((libc::ENOENT, name));
+        Err((libc::ENOENT, name))
     }
 
     fn new_dir_inode(&self, parent: Inode) -> (Inode, InodeAttr, Vec<(Inode, FileType, String)>) {
@@ -145,7 +145,7 @@ impl TestFs {
             (parent, FileType::Directory, String::from("..")),
         ];
 
-        return (new_inode, new_inode_attr, entries);
+        (new_inode, new_inode_attr, entries)
     }
 
     fn refresh_inode_time(&self, inode: Inode) -> Result<(), c_int> {
@@ -158,9 +158,7 @@ impl TestFs {
 
                 Ok(())
             }
-            Err(err) => {
-                return Err(err);
-            }
+            Err(err) => Err(err),
         }
     }
 }
@@ -231,26 +229,26 @@ impl Filesystem for TestFs {
         &mut self,
         _req: &Request<'_>,
         inode: Inode,
-        mode: Option<u32>,
-        uid: Option<u32>,
-        gid: Option<u32>,
-        size: Option<u64>,
+        _mode: Option<u32>,
+        _uid: Option<u32>,
+        _gid: Option<u32>,
+        _size: Option<u64>,
         _atime: Option<TimeOrNow>,
         _mtime: Option<TimeOrNow>,
         _ctime: Option<SystemTime>,
-        fh: Option<u64>,
+        _fh: Option<u64>,
         _crtime: Option<SystemTime>,
         _chgtime: Option<SystemTime>,
         _bkuptime: Option<SystemTime>,
-        flags: Option<u32>,
+        _flags: Option<u32>,
         reply: ReplyAttr,
     ) {
         println!("setattr(inode: {})", inode);
         let attrs = get_inode(&inode).expect("Get inode failed").file_attr;
-        reply.attr(&Duration::new(0, 0), &attrs.into());
+        reply.attr(&Duration::new(0, 0), &attrs);
     }
 
-    fn readlink(&mut self, _req: &Request<'_>, inode: Inode, reply: ReplyData) {
+    fn readlink(&mut self, _req: &Request<'_>, _inode: Inode, reply: ReplyData) {
         println!("{}", caller_name!());
         reply.error(libc::ENOSYS);
     }
@@ -258,11 +256,11 @@ impl Filesystem for TestFs {
     fn mknod(
         &mut self,
         _req: &Request<'_>,
-        parent: u64,
-        name: &OsStr,
-        mode: u32,
-        umask: u32,
-        rdev: u32,
+        _parent: u64,
+        _name: &OsStr,
+        _mode: u32,
+        _umask: u32,
+        _rdev: u32,
         reply: ReplyEntry,
     ) {
         println!("{}", caller_name!());
@@ -300,7 +298,7 @@ impl Filesystem for TestFs {
                 set_inode(new_inode, new_inode_attr);
                 dir_entries().insert(new_inode, new_inode_entries);
 
-                parent_entries.push((new_inode, FileType::Directory, String::from(name)));
+                parent_entries.push((new_inode, FileType::Directory, name));
                 dir_entries().insert(parent, parent_entries);
 
                 reply.entry(
@@ -316,7 +314,7 @@ impl Filesystem for TestFs {
         }
     }
 
-    fn unlink(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, reply: ReplyEmpty) {
+    fn unlink(&mut self, _req: &Request<'_>, _parent: u64, _name: &OsStr, reply: ReplyEmpty) {
         println!("{}", caller_name!());
         reply.error(libc::ENOSYS);
     }
@@ -333,7 +331,7 @@ impl Filesystem for TestFs {
             Ok(_parent_inode_attr) => {
                 let mut parent_entries = dir_entries().remove(&parent).expect("Remove failed");
                 for (i, (_entry_inode, _entry_file_type, entry_name)) in
-                    (&parent_entries).into_iter().enumerate()
+                    parent_entries.iter().enumerate()
                 {
                     if &name == entry_name {
                         let (removed_entry_inode, _, _) = parent_entries.remove(i);
@@ -355,9 +353,9 @@ impl Filesystem for TestFs {
     fn symlink(
         &mut self,
         _req: &Request<'_>,
-        parent: u64,
-        name: &OsStr,
-        link: &Path,
+        _parent: u64,
+        _name: &OsStr,
+        _link: &Path,
         reply: ReplyEntry,
     ) {
         println!("{}", caller_name!());
@@ -367,11 +365,11 @@ impl Filesystem for TestFs {
     fn rename(
         &mut self,
         _req: &Request<'_>,
-        parent: u64,
-        name: &OsStr,
-        newparent: u64,
-        newname: &OsStr,
-        flags: u32,
+        _parent: u64,
+        _name: &OsStr,
+        _newparent: u64,
+        _newname: &OsStr,
+        _flags: u32,
         reply: ReplyEmpty,
     ) {
         println!("{}", caller_name!());
@@ -381,9 +379,9 @@ impl Filesystem for TestFs {
     fn link(
         &mut self,
         _req: &Request<'_>,
-        inode: Inode,
-        newparent: u64,
-        newname: &OsStr,
+        _inode: Inode,
+        _newparent: u64,
+        _newname: &OsStr,
         reply: ReplyEntry,
     ) {
         println!("{}", caller_name!());
@@ -395,11 +393,9 @@ impl Filesystem for TestFs {
         match get_inode(&inode) {
             Ok(_inode_attr) => {
                 reply.opened(0, 0);
-                return;
             }
             Err(err) => {
                 reply.error(err);
-                return;
             }
         }
     }
@@ -440,11 +436,9 @@ impl Filesystem for TestFs {
                     buffer[i - offset] = store[i];
                 }
                 reply.data(&buffer);
-                return;
             }
             Err(err) => {
                 reply.error(err);
-                return;
             }
         }
     }
@@ -476,9 +470,7 @@ impl Filesystem for TestFs {
             return;
         }
 
-        if !store().contains_key(&inode) {
-            store().insert(inode, [0; MAX_FILE_SIZE]);
-        }
+        store().entry(inode).or_insert_with(|| [0; MAX_FILE_SIZE]);
 
         let mut inode_store = store().remove(&inode).expect("Remove from store failed");
         for i in offset..min(MAX_FILE_SIZE, offset + data.len()) {
@@ -495,11 +487,9 @@ impl Filesystem for TestFs {
                     return;
                 }
                 reply.written(data.len() as u32);
-                return;
             }
             Err(err) => {
                 reply.error(err);
-                return;
             }
         }
     }
@@ -507,9 +497,9 @@ impl Filesystem for TestFs {
     fn flush(
         &mut self,
         _req: &Request<'_>,
-        inode: Inode,
-        fh: u64,
-        lock_owner: u64,
+        _inode: Inode,
+        _fh: u64,
+        _lock_owner: u64,
         reply: ReplyEmpty,
     ) {
         println!("{}", caller_name!());
@@ -533,9 +523,9 @@ impl Filesystem for TestFs {
     fn fsync(
         &mut self,
         _req: &Request<'_>,
-        inode: Inode,
-        fh: u64,
-        datasync: bool,
+        _inode: Inode,
+        _fh: u64,
+        _datasync: bool,
         reply: ReplyEmpty,
     ) {
         println!("{}", caller_name!());
@@ -563,7 +553,7 @@ impl Filesystem for TestFs {
                     .remove(&inode_attr.file_attr.ino)
                     .expect("Remove failed");
                 for (i, (entry_inode, entry_file_type, entry_name)) in
-                    (&entries).into_iter().enumerate().skip(offset as usize)
+                    entries.iter().enumerate().skip(offset as usize)
                 {
                     if reply.add(*entry_inode, (i + 1) as i64, *entry_file_type, entry_name) {
                         break;
@@ -582,9 +572,9 @@ impl Filesystem for TestFs {
     fn readdirplus(
         &mut self,
         _req: &Request<'_>,
-        inode: Inode,
-        fh: u64,
-        offset: i64,
+        _inode: Inode,
+        _fh: u64,
+        _offset: i64,
         reply: ReplyDirectoryPlus,
     ) {
         println!("{}", caller_name!());
@@ -606,9 +596,9 @@ impl Filesystem for TestFs {
     fn fsyncdir(
         &mut self,
         _req: &Request<'_>,
-        inode: Inode,
-        fh: u64,
-        datasync: bool,
+        _inode: Inode,
+        _fh: u64,
+        _datasync: bool,
         reply: ReplyEmpty,
     ) {
         println!("{}", caller_name!());
@@ -748,13 +738,13 @@ impl Filesystem for TestFs {
     fn getlk(
         &mut self,
         _req: &Request<'_>,
-        inode: Inode,
-        fh: u64,
-        lock_owner: u64,
-        start: u64,
-        end: u64,
-        typ: i32,
-        pid: u32,
+        _inode: Inode,
+        _fh: u64,
+        _lock_owner: u64,
+        _start: u64,
+        _end: u64,
+        _typ: i32,
+        _pid: u32,
         reply: ReplyLock,
     ) {
         println!("{}", caller_name!());
@@ -764,14 +754,14 @@ impl Filesystem for TestFs {
     fn setlk(
         &mut self,
         _req: &Request<'_>,
-        inode: Inode,
-        fh: u64,
-        lock_owner: u64,
-        start: u64,
-        end: u64,
-        typ: i32,
-        pid: u32,
-        sleep: bool,
+        _inode: Inode,
+        _fh: u64,
+        _lock_owner: u64,
+        _start: u64,
+        _end: u64,
+        _typ: i32,
+        _pid: u32,
+        _sleep: bool,
         reply: ReplyEmpty,
     ) {
         println!("{}", caller_name!());
@@ -781,9 +771,9 @@ impl Filesystem for TestFs {
     fn bmap(
         &mut self,
         _req: &Request<'_>,
-        inode: Inode,
-        blocksize: u32,
-        idx: u64,
+        _inode: Inode,
+        _blocksize: u32,
+        _idx: u64,
         reply: ReplyBmap,
     ) {
         println!("{}", caller_name!());
@@ -793,12 +783,12 @@ impl Filesystem for TestFs {
     fn ioctl(
         &mut self,
         _req: &Request<'_>,
-        inode: Inode,
-        fh: u64,
-        flags: u32,
-        cmd: u32,
-        in_data: &[u8],
-        out_size: u32,
+        _inode: Inode,
+        _fh: u64,
+        _flags: u32,
+        _cmd: u32,
+        _in_data: &[u8],
+        _out_size: u32,
         reply: ReplyIoctl,
     ) {
         println!("{}", caller_name!());
@@ -808,11 +798,11 @@ impl Filesystem for TestFs {
     fn fallocate(
         &mut self,
         _req: &Request<'_>,
-        inode: Inode,
-        fh: u64,
-        offset: i64,
-        length: i64,
-        mode: i32,
+        _inode: Inode,
+        _fh: u64,
+        _offset: i64,
+        _length: i64,
+        _mode: i32,
         reply: ReplyEmpty,
     ) {
         println!("{}", caller_name!());
@@ -822,10 +812,10 @@ impl Filesystem for TestFs {
     fn lseek(
         &mut self,
         _req: &Request<'_>,
-        inode: Inode,
-        fh: u64,
-        offset: i64,
-        whence: i32,
+        _inode: Inode,
+        _fh: u64,
+        _offset: i64,
+        _whence: i32,
         reply: ReplyLseek,
     ) {
         println!("{}", caller_name!());
@@ -835,14 +825,14 @@ impl Filesystem for TestFs {
     fn copy_file_range(
         &mut self,
         _req: &Request<'_>,
-        ino_in: u64,
-        fh_in: u64,
-        offset_in: i64,
-        ino_out: u64,
-        fh_out: u64,
-        offset_out: i64,
-        len: u64,
-        flags: u32,
+        _ino_in: u64,
+        _fh_in: u64,
+        _offset_in: i64,
+        _ino_out: u64,
+        _fh_out: u64,
+        _offset_out: i64,
+        _len: u64,
+        _flags: u32,
         reply: ReplyWrite,
     ) {
         println!("{}", caller_name!());
