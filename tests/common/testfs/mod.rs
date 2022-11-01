@@ -1,3 +1,3 @@
 #[macro_use]
-pub mod testfs;
+pub mod fuse;
 pub mod utils;
