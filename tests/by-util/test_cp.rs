@@ -909,7 +909,7 @@ fn test_cp_preserve_no_args() {
 
 #[test]
 #[cfg(unix)]
-fn test_cp_preserve_all() {
+fn test_cp_preserve_all_succeeds() {
     // TODO: create a destination that does not allow copying of xattr and context
     new_ucmd!()
         .arg(TEST_COPY_FROM_FOLDER_FILE)
@@ -919,8 +919,8 @@ fn test_cp_preserve_all() {
 }
 
 #[test]
-#[cfg(unix)]
-fn test_cp_preserve_xattr() {
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_cp_preserve_xattr_succeeds() {
     // TODO: create a destination that does not allow copying of xattr and context
     new_ucmd!()
         .arg(TEST_COPY_FROM_FOLDER_FILE)
