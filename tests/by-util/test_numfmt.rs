@@ -373,6 +373,11 @@ fn test_format_selected_fields() {
         .args(&["--from=auto", "--field", "1,4,3", "1K 2K 3K 4K 5K 6K"])
         .succeeds()
         .stdout_only("1000 2K 3000 4000 5K 6K\n");
+
+    new_ucmd!()
+        .args(&["--from=auto", "--field", "1,4 3", "1K 2K 3K 4K 5K 6K"])
+        .succeeds()
+        .stdout_only("1000 2K 3000 4000 5K 6K\n");
 }
 
 #[test]
@@ -401,7 +406,7 @@ fn test_format_selected_field_range() {
 
 #[test]
 fn test_format_all_fields() {
-    let all_fields_patterns = vec!["-", "-,3", "3,-", "1,-,3"];
+    let all_fields_patterns = vec!["-", "-,3", "3,-", "1,-,3", "- 3"];
 
     for pattern in all_fields_patterns {
         new_ucmd!()
