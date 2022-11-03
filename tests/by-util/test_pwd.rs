@@ -90,6 +90,35 @@ fn test_symlinked_default() {
     env.ucmd.succeeds().stdout_is(env.subdir + "\n");
 }
 
+#[test]
+fn test_symlinked_default_posix() {
+    let mut env = symlinked_env();
+    env.ucmd
+        .env("POSIXLY_CORRECT", "1")
+        .succeeds()
+        .stdout_is(env.symdir.clone() + "\n");
+}
+
+#[test]
+fn test_symlinked_default_posix_l() {
+    let mut env = symlinked_env();
+    env.ucmd
+        .env("POSIXLY_CORRECT", "1")
+        .arg("-L")
+        .succeeds()
+        .stdout_is(env.symdir + "\n");
+}
+
+#[test]
+fn test_symlinked_default_posix_p() {
+    let mut env = symlinked_env();
+    env.ucmd
+        .env("POSIXLY_CORRECT", "1")
+        .arg("-P")
+        .succeeds()
+        .stdout_is(env.symdir + "\n");
+}
+
 #[cfg(not(windows))]
 pub mod untrustworthy_pwd_var {
     use std::path::Path;

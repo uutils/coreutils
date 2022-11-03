@@ -216,6 +216,18 @@ fn test_cp_target_directory_is_file() {
 }
 
 #[test]
+fn test_cp_arg_update_interactive() {
+    new_ucmd!()
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("-i")
+        .arg("--update")
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+}
+
+#[test]
 fn test_cp_arg_interactive() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
@@ -1825,6 +1837,19 @@ fn test_copy_through_dangling_symlink_no_dereference_2() {
     ucmd.args(&["-P", "file", "target"])
         .fails()
         .stderr_only("cp: not writing through dangling symlink 'target'");
+}
+
+/// Test that copy through a dangling symbolic link fails, even with --force.
+#[test]
+#[cfg(not(windows))]
+fn test_copy_through_dangling_symlink_force() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+    at.symlink_file("no-such-file", "dest");
+    ucmd.args(&["--force", "src", "dest"])
+        .fails()
+        .stderr_only("cp: not writing through dangling symlink 'dest'");
+    assert!(!at.file_exists("dest"));
 }
 
 #[test]
