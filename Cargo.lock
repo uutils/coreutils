@@ -2358,7 +2358,6 @@ name = "uu_dir"
 version = "0.0.16"
 dependencies = [
  "clap 4.0.18",
- "selinux",
  "uu_ls",
  "uucore",
 ]
@@ -2368,7 +2367,6 @@ name = "uu_dircolors"
 version = "0.0.16"
 dependencies = [
  "clap 4.0.18",
- "glob",
  "uucore",
 ]
 
@@ -3136,7 +3134,6 @@ name = "uu_vdir"
 version = "0.0.16"
 dependencies = [
  "clap 4.0.18",
- "selinux",
  "uu_ls",
  "uucore",
 ]
