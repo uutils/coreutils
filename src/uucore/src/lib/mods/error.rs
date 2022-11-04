@@ -508,6 +508,60 @@ impl From<std::io::Error> for Box<dyn UError> {
     }
 }
 
+/// Enables the conversion from [`Result<T, nix::Error>`] to [`UResult<T>`].
+///
+/// # Examples
+///
+/// ```
+/// use uucore::error::FromIo;
+/// use nix::errno::Errno;
+///
+/// let nix_err = Err::<(), nix::Error>(Errno::EACCES);
+/// let uio_result = nix_err.map_err_context(|| String::from("fix me please!"));
+///
+/// // prints "fix me please!: Permission denied"
+/// println!("{}", uio_result.unwrap_err());
+/// ```
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl<T> FromIo<UResult<T>> for Result<T, nix::Error> {
+    fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
+        self.map_err(|e| {
+            Box::new(UIoError {
+                context: Some((context)()),
+                inner: std::io::Error::from_raw_os_error(e as i32),
+            }) as Box<dyn UError>
+        })
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl<T> FromIo<UResult<T>> for nix::Error {
+    fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
+        Err(Box::new(UIoError {
+            context: Some((context)()),
+            inner: std::io::Error::from_raw_os_error(self as i32),
+        }) as Box<dyn UError>)
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl From<nix::Error> for UIoError {
+    fn from(f: nix::Error) -> Self {
+        Self {
+            context: None,
+            inner: std::io::Error::from_raw_os_error(f as i32),
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl From<nix::Error> for Box<dyn UError> {
+    fn from(f: nix::Error) -> Self {
+        let u_error: UIoError = f.into();
+        Box::new(u_error) as Self
+    }
+}
+
 /// Shorthand to construct [`UIoError`]-instances.
 ///
 /// This macro serves as a convenience call to quickly construct instances of
@@ -691,5 +745,32 @@ impl Display for ClapErrorWrapper {
     fn fmt(&self, _f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.error.print().unwrap();
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_nix_error_conversion() {
+        use super::{FromIo, UIoError};
+        use nix::errno::Errno;
+        use std::io::ErrorKind;
+
+        for (nix_error, expected_error_kind) in [
+            (Errno::EACCES, ErrorKind::PermissionDenied),
+            (Errno::ENOENT, ErrorKind::NotFound),
+            (Errno::EEXIST, ErrorKind::AlreadyExists),
+        ] {
+            let error = UIoError::from(nix_error);
+            assert_eq!(expected_error_kind, error.inner.kind());
+        }
+        assert_eq!(
+            "test: Permission denied",
+            Err::<(), nix::Error>(Errno::EACCES)
+                .map_err_context(|| String::from("test"))
+                .unwrap_err()
+                .to_string()
+        )
     }
 }

@@ -18,6 +18,8 @@ use nix::fcntl::{open, OFlag};
 use nix::sys::stat::Mode;
 use std::path::Path;
 use uucore::display::Quotable;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 
@@ -170,29 +172,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Use the Nix open to be able to set the NONBLOCK flags for fifo files
         #[cfg(any(target_os = "linux", target_os = "android"))]
         {
-            match open(Path::new(&f), OFlag::O_NONBLOCK, Mode::empty()) {
-                Ok(_) => {}
-                Err(e) => {
-                    if e == Errno::ENOENT {
-                        return Err(USimpleError::new(
-                            1,
-                            format!("cannot stat {}: No such file or directory", f.quote()),
-                        ));
-                    }
-                    if e == Errno::EACCES {
-                        if Path::new(&f).is_dir() {
-                            return Err(USimpleError::new(
-                                1,
-                                format!("error opening {}: Permission denied", f.quote()),
-                            ));
-                        } else {
-                            // ignore the issue
-                            // ./target/debug/coreutils sync --data file
-                        }
-                    }
+            let path = Path::new(&f);
+            if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
+                if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
+                    return e.map_err_context(|| format!("cannot stat {}", f.quote()))?;
                 }
             }
         }
+
         #[cfg(not(any(target_os = "linux", target_os = "android")))]
         {
             if !Path::new(&f).exists() {
