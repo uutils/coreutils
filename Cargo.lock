@@ -100,9 +100,9 @@ dependencies = [
 
 [[package]]
 name = "binary-heap-plus"
-version = "0.4.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f068638f8ff9e118a9361e66a411eff410e7fb3ecaa23bf9272324f8fc606d7"
+checksum = "e4551d8382e911ecc0d0f0ffb602777988669be09447d536ff4388d1def11296"
 dependencies = [
  "compare",
 ]
@@ -190,10 +190,11 @@ checksum = "c1ad822118d20d2c234f427000d5acc36eabe1e29a348c89b63dd60b13f28e5d"
 
 [[package]]
 name = "byte-unit"
-version = "4.0.14"
+version = "4.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95ebf10dda65f19ff0f42ea15572a359ed60d7fc74fdc984d90310937be0014b"
+checksum = "581ad4b3d627b0c09a0ccb2912148f839acaca0b93cf54cbe42b6c674e86079c"
 dependencies = [
+ "serde",
  "utf8-width",
 ]
 
@@ -285,9 +286,9 @@ dependencies = [
 
 [[package]]
 name = "clap_complete"
-version = "4.0.2"
+version = "4.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11cba7abac9b56dfe2f035098cdb3a43946f276e6db83b72c4e692343f9aab9a"
+checksum = "dfe581a2035db4174cdbdc91265e1aba50f381577f0510d0ad36c7bc59cc84a3"
 dependencies = [
  "clap 4.0.18",
 ]
@@ -1342,9 +1343,9 @@ dependencies = [
 
 [[package]]
 name = "num_cpus"
-version = "1.13.1"
+version = "1.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19e64526ebdee182341572e50e9ad03965aa510cd94427a4549448f285e957a1"
+checksum = "f6058e64324c71e02bc2b150e4f3bc8286db6c83092132ffa3f6b1eab0f9def5"
 dependencies = [
  "hermit-abi",
  "libc",
@@ -2358,7 +2359,6 @@ name = "uu_dir"
 version = "0.0.16"
 dependencies = [
  "clap 4.0.18",
- "selinux",
  "uu_ls",
  "uucore",
 ]
@@ -2368,7 +2368,6 @@ name = "uu_dircolors"
 version = "0.0.16"
 dependencies = [
  "clap 4.0.18",
- "glob",
  "uucore",
 ]
 
@@ -2818,6 +2817,7 @@ name = "uu_rm"
 version = "0.0.16"
 dependencies = [
  "clap 4.0.18",
+ "libc",
  "remove_dir_all 0.7.0",
  "uucore",
  "walkdir",
@@ -3135,7 +3135,6 @@ name = "uu_vdir"
 version = "0.0.16"
 dependencies = [
  "clap 4.0.18",
- "selinux",
  "uu_ls",
  "uucore",
 ]

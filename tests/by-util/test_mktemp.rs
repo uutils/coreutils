@@ -825,3 +825,9 @@ fn test_nonexistent_dir_prefix() {
         );
     }
 }
+
+#[test]
+fn test_default_missing_value() {
+    let scene = TestScenario::new(util_name!());
+    scene.ucmd().arg("-d").arg("--tmpdir").succeeds();
+}
