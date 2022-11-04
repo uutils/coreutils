@@ -475,11 +475,11 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     {
         if path_symlink_points_to.exists() {
             if path_symlink_points_to.is_dir() {
-                windows::fs::symlink_dir(&path_symlink_points_to, &to)?;
+                windows::fs::symlink_dir(&path_symlink_points_to, to)?;
             } else {
-                windows::fs::symlink_file(&path_symlink_points_to, &to)?;
+                windows::fs::symlink_file(&path_symlink_points_to, to)?;
             }
-            fs::remove_file(&from)?;
+            fs::remove_file(from)?;
         } else {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
