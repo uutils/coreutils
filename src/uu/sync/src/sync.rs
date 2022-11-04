@@ -11,6 +11,8 @@ extern crate libc;
 
 use clap::{crate_version, Arg, ArgAction, Command};
 #[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::errno::Errno;
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::{open, OFlag};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::sys::stat::Mode;
@@ -170,9 +172,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Use the Nix open to be able to set the NONBLOCK flags for fifo files
         #[cfg(any(target_os = "linux", target_os = "android"))]
         {
-            open(Path::new(&f), OFlag::O_NONBLOCK, Mode::empty())
-                .map_err_context(|| format!("cannot stat {}", f.quote()))?;
+            let path = Path::new(&f);
+            if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
+                if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
+                    return e.map_err_context(|| format!("cannot stat {}", f.quote()))?;
+                }
+            }
         }
+
         #[cfg(not(any(target_os = "linux", target_os = "android")))]
         {
             if !Path::new(&f).exists() {
