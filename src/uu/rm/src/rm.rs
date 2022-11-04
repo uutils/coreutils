@@ -170,7 +170,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_PROMPT)
                 .short('i')
                 .help("prompt before every removal")
-                .overrides_with_all(&[OPT_PROMPT_MORE, OPT_INTERACTIVE])
+                .overrides_with_all([OPT_PROMPT_MORE, OPT_INTERACTIVE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -178,7 +178,7 @@ pub fn uu_app() -> Command {
                 .short('I')
                 .help("prompt once before removing more than three files, or when removing recursively. \
                 Less intrusive than -i, while still giving some protection against most mistakes")
-                .overrides_with_all(&[OPT_PROMPT, OPT_INTERACTIVE])
+                .overrides_with_all([OPT_PROMPT, OPT_INTERACTIVE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -189,7 +189,7 @@ pub fn uu_app() -> Command {
                     prompts always",
                 )
                 .value_name("WHEN")
-                .overrides_with_all(&[OPT_PROMPT, OPT_PROMPT_MORE]),
+                .overrides_with_all([OPT_PROMPT, OPT_PROMPT_MORE]),
         )
         .arg(
             Arg::new(OPT_ONE_FILE_SYSTEM)
