@@ -303,7 +303,7 @@ impl MountInfo {
         let mut mn_info = Self {
             dev_id: volume_name,
             dev_name,
-            fs_type: fs_type.unwrap_or_else(|| "".to_string()),
+            fs_type: fs_type.unwrap_or_default(),
             mount_root,
             mount_dir: "".to_string(),
             mount_option: "".to_string(),
