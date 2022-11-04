@@ -220,7 +220,7 @@ fn test_change_directory() {
     let out = scene
         .ucmd()
         .arg("--chdir")
-        .arg(&temporary_path)
+        .arg(temporary_path)
         .args(&pwd)
         .succeeds()
         .stdout_move_str();
