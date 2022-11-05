@@ -107,6 +107,12 @@ impl Observer {
         files: FileHandling,
         pid: platform::Pid,
     ) -> Self {
+        let pid = if platform::supports_pid_checks(pid) {
+            pid
+        } else {
+            0
+        };
+
         Self {
             retry,
             follow,

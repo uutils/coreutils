@@ -7,8 +7,10 @@
 
 use crate::paths::Input;
 use crate::{parse, platform, Quotable};
+use atty::Stream;
 use clap::crate_version;
 use clap::{parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
+use same_file::Handle;
 use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::time::Duration;
@@ -120,11 +122,6 @@ pub enum VerificationResult {
     NoOutput,
 }
 
-pub enum CheckResult {
-    Ok,
-    NoPidSupport,
-}
-
 #[derive(Debug, Default)]
 pub struct Settings {
     pub follow: Option<FollowMode>,
@@ -202,6 +199,7 @@ impl Settings {
                             format!("invalid PID: {}", pid_str.quote()),
                         ));
                     }
+
                     settings.pid = pid;
                 }
                 Err(e) => {
@@ -243,7 +241,11 @@ impl Settings {
         self.inputs.iter().any(|input| input.is_stdin())
     }
 
-    pub fn check_warnings(&self) -> CheckResult {
+    pub fn num_inputs(&self) -> usize {
+        self.inputs.len()
+    }
+
+    pub fn check_warnings(&self) {
         if self.retry {
             if self.follow.is_none() {
                 show_warning!("--retry ignored; --retry is useful only when following");
@@ -257,11 +259,24 @@ impl Settings {
                 show_warning!("PID ignored; --pid=PID is useful only when following");
             } else if !platform::supports_pid_checks(self.pid) {
                 show_warning!("--pid=PID is not supported on this system");
-                return CheckResult::NoPidSupport;
             }
         }
 
-        CheckResult::Ok
+        if self.follow.is_some() && self.has_stdin() {
+            let blocking_stdin = self.pid == 0
+                && self.follow == Some(FollowMode::Descriptor)
+                && self.num_inputs() == 1
+                && Handle::stdin().map_or(false, |handle| {
+                    handle
+                        .as_file()
+                        .metadata()
+                        .map_or(false, |meta| !meta.is_file())
+                });
+
+            if !blocking_stdin && atty::is(Stream::Stdin) {
+                show_warning!("following standard input indefinitely is ineffective");
+            }
+        }
     }
 
     pub fn verify(&self) -> VerificationResult {

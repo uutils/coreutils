@@ -2984,6 +2984,7 @@ dependencies = [
 name = "uu_tail"
 version = "0.0.16"
 dependencies = [
+ "atty",
  "clap",
  "libc",
  "memchr",

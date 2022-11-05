@@ -42,12 +42,7 @@ use uucore::{show, show_error};
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let settings = parse_args(args)?;
 
-    let mut observer = Observer::from(&settings);
-
-    match settings.check_warnings() {
-        args::CheckResult::NoPidSupport => observer.pid = 0,
-        args::CheckResult::Ok => {}
-    }
+    settings.check_warnings();
 
     match settings.verify() {
         args::VerificationResult::CannotFollowStdinByName => {
@@ -62,11 +57,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         args::VerificationResult::Ok => {}
     }
 
-    uu_tail(&settings, observer)
+    uu_tail(&settings)
 }
 
-fn uu_tail(settings: &Settings, mut observer: Observer) -> UResult<()> {
+fn uu_tail(settings: &Settings) -> UResult<()> {
     let mut printer = HeaderPrinter::new(settings.verbose, true);
+    let mut observer = Observer::from(settings);
 
     observer.start(settings)?;
     // Do an initial tail print of each path's content.
