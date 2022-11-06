@@ -156,21 +156,21 @@ pub fn uu_app() -> Command {
             Arg::new(options::traverse::TRAVERSE)
                 .short(options::traverse::TRAVERSE.chars().next().unwrap())
                 .help("if a command line argument is a symbolic link to a directory, traverse it")
-                .overrides_with_all(&[options::traverse::EVERY, options::traverse::NO_TRAVERSE])
+                .overrides_with_all([options::traverse::EVERY, options::traverse::NO_TRAVERSE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::traverse::EVERY)
                 .short(options::traverse::EVERY.chars().next().unwrap())
                 .help("traverse every symbolic link to a directory encountered")
-                .overrides_with_all(&[options::traverse::TRAVERSE, options::traverse::NO_TRAVERSE])
+                .overrides_with_all([options::traverse::TRAVERSE, options::traverse::NO_TRAVERSE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::traverse::NO_TRAVERSE)
                 .short(options::traverse::NO_TRAVERSE.chars().next().unwrap())
                 .help("do not traverse any symbolic links (default)")
-                .overrides_with_all(&[options::traverse::TRAVERSE, options::traverse::EVERY])
+                .overrides_with_all([options::traverse::TRAVERSE, options::traverse::EVERY])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -246,6 +246,19 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     } else {
         None
     };
+
+    if user.chars().next().map(char::is_numeric).unwrap_or(false)
+        && group.is_empty()
+        && spec != user
+    {
+        // if the arg starts with an id numeric value, the group isn't set but the separator is provided,
+        // we should fail with an error
+        return Err(USimpleError::new(
+            1,
+            format!("invalid spec: {}", spec.quote()),
+        ));
+    }
+
     Ok((uid, gid))
 }
 

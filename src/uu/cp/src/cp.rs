@@ -427,7 +427,7 @@ pub fn uu_app() -> Command {
                 ))
                 .num_args(0..)
                 .value_name("ATTR_LIST")
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::ARCHIVE,
                     options::PRESERVE_DEFAULT_ATTRIBUTES,
                     options::NO_PRESERVE,
@@ -443,7 +443,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::PRESERVE_DEFAULT_ATTRIBUTES)
                 .short('p')
                 .long(options::PRESERVE_DEFAULT_ATTRIBUTES)
-                .overrides_with_all(&[options::PRESERVE, options::NO_PRESERVE, options::ARCHIVE])
+                .overrides_with_all([options::PRESERVE, options::NO_PRESERVE, options::ARCHIVE])
                 .help("same as --preserve=mode,ownership(unix only),timestamps")
                 .action(ArgAction::SetTrue),
         )
@@ -451,7 +451,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::NO_PRESERVE)
                 .long(options::NO_PRESERVE)
                 .value_name("ATTR_LIST")
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::PRESERVE_DEFAULT_ATTRIBUTES,
                     options::PRESERVE,
                     options::ARCHIVE,
@@ -492,7 +492,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ARCHIVE)
                 .short('a')
                 .long(options::ARCHIVE)
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::PRESERVE_DEFAULT_ATTRIBUTES,
                     options::PRESERVE,
                     options::NO_PRESERVE,
@@ -677,7 +677,6 @@ fn add_all_attributes() -> Vec<Attribute> {
 impl Options {
     fn from_matches(matches: &ArgMatches) -> CopyResult<Self> {
         let not_implemented_opts = vec![
-            options::COPY_CONTENTS,
             #[cfg(not(any(windows, unix)))]
             options::ONE_FILE_SYSTEM,
             options::CONTEXT,
@@ -1289,8 +1288,10 @@ fn copy_file(
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
-    if file_or_link_exists(dest) {
-        handle_existing_dest(source, dest, options, source_in_command_line)?;
+    if options.update && options.overwrite == OverwriteMode::Interactive(ClobberMode::Standard) {
+        // `cp -i --update old new` when `new` exists doesn't copy anything
+        // and exit with 0
+        return Ok(());
     }
 
     // Fail if dest is a dangling symlink or a symlink this program created previously
@@ -1306,12 +1307,22 @@ fn copy_file(
             )));
         }
         let copy_contents = options.dereference(source_in_command_line) || !source.is_symlink();
-        if copy_contents && !dest.exists() {
+        if copy_contents
+            && !dest.exists()
+            && !matches!(
+                options.overwrite,
+                OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+            )
+        {
             return Err(Error::Error(format!(
                 "not writing through dangling symlink '{}'",
                 dest.display()
             )));
         }
+    }
+
+    if file_or_link_exists(dest) {
+        handle_existing_dest(source, dest, options, source_in_command_line)?;
     }
 
     if options.verbose {
@@ -1470,7 +1481,7 @@ fn copy_helper(
          * https://github.com/rust-lang/rust/issues/79390
          */
         File::create(dest).context(dest.display().to_string())?;
-    } else if source_is_fifo && options.recursive {
+    } else if source_is_fifo && options.recursive && !options.copy_contents {
         #[cfg(unix)]
         copy_fifo(dest, options.overwrite)?;
     } else if source_is_symlink {
@@ -1482,6 +1493,8 @@ fn copy_helper(
             options.reflink_mode,
             options.sparse_mode,
             context,
+            #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+            source_is_fifo,
         )?;
     }
 

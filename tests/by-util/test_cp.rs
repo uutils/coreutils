@@ -1,4 +1,4 @@
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs ROOTDIR USERDIR procfs
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs ROOTDIR USERDIR procfs outfile
 
 use crate::common::util::*;
 #[cfg(not(windows))]
@@ -213,6 +213,18 @@ fn test_cp_target_directory_is_file() {
         .arg(TEST_HELLO_WORLD_SOURCE)
         .fails()
         .stderr_contains(format!("'{}' is not a directory", TEST_HOW_ARE_YOU_SOURCE));
+}
+
+#[test]
+fn test_cp_arg_update_interactive() {
+    new_ucmd!()
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("-i")
+        .arg("--update")
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
 }
 
 #[test]
@@ -1827,6 +1839,19 @@ fn test_copy_through_dangling_symlink_no_dereference_2() {
         .stderr_only("cp: not writing through dangling symlink 'target'");
 }
 
+/// Test that copy through a dangling symbolic link fails, even with --force.
+#[test]
+#[cfg(not(windows))]
+fn test_copy_through_dangling_symlink_force() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+    at.symlink_file("no-such-file", "dest");
+    ucmd.args(&["--force", "src", "dest"])
+        .fails()
+        .stderr_only("cp: not writing through dangling symlink 'dest'");
+    assert!(!at.file_exists("dest"));
+}
+
 #[test]
 #[cfg(unix)]
 fn test_cp_archive_on_nonexistent_file() {
@@ -2268,4 +2293,33 @@ fn test_same_file_force_backup() {
         .no_stdout()
         .no_stderr();
     assert!(at.file_exists("f~"));
+}
+
+/// Test for copying the contents of a FIFO as opposed to the FIFO object itself.
+#[cfg(unix)]
+#[test]
+fn test_copy_contents_fifo() {
+    let scenario = TestScenario::new(util_name!());
+    let at = &scenario.fixtures;
+
+    // Start the `cp` process, reading the contents of `fifo` and
+    // writing to regular file `outfile`.
+    at.mkfifo("fifo");
+    let mut ucmd = scenario.ucmd();
+    let child = ucmd
+        .args(&["--copy-contents", "fifo", "outfile"])
+        .run_no_wait();
+
+    // Write some bytes to the `fifo`. We expect these bytes to get
+    // copied through to `outfile`.
+    std::fs::write(at.plus("fifo"), "foo").unwrap();
+
+    // At this point the child process should have terminated
+    // successfully with no output. The `outfile` should have the
+    // contents of `fifo` copied into it.
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
+    assert_eq!(at.read("outfile"), "foo");
 }

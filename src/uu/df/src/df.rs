@@ -509,7 +509,7 @@ pub fn uu_app() -> Command {
                 .short('B')
                 .long("block-size")
                 .value_name("SIZE")
-                .overrides_with_all(&[OPT_KILO, OPT_BLOCKSIZE])
+                .overrides_with_all([OPT_KILO, OPT_BLOCKSIZE])
                 .help(
                     "scale sizes by SIZE before printing them; e.g.\
                     '-BM' prints sizes in units of 1,048,576 bytes",
@@ -526,7 +526,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_HUMAN_READABLE_BINARY)
                 .short('h')
                 .long("human-readable")
-                .overrides_with_all(&[OPT_HUMAN_READABLE_DECIMAL, OPT_HUMAN_READABLE_BINARY])
+                .overrides_with_all([OPT_HUMAN_READABLE_DECIMAL, OPT_HUMAN_READABLE_BINARY])
                 .help("print sizes in human readable format (e.g., 1K 234M 2G)")
                 .action(ArgAction::SetTrue),
         )
@@ -534,7 +534,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_HUMAN_READABLE_DECIMAL)
                 .short('H')
                 .long("si")
-                .overrides_with_all(&[OPT_HUMAN_READABLE_BINARY, OPT_HUMAN_READABLE_DECIMAL])
+                .overrides_with_all([OPT_HUMAN_READABLE_BINARY, OPT_HUMAN_READABLE_DECIMAL])
                 .help("likewise, but use powers of 1000 not 1024")
                 .action(ArgAction::SetTrue),
         )
@@ -550,7 +550,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_KILO)
                 .short('k')
                 .help("like --block-size=1K")
-                .overrides_with_all(&[OPT_BLOCKSIZE, OPT_KILO])
+                .overrides_with_all([OPT_BLOCKSIZE, OPT_KILO])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -564,7 +564,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_NO_SYNC)
                 .long("no-sync")
-                .overrides_with_all(&[OPT_SYNC, OPT_NO_SYNC])
+                .overrides_with_all([OPT_SYNC, OPT_NO_SYNC])
                 .help("do not invoke sync before getting usage info (default)")
                 .action(ArgAction::SetTrue),
         )
@@ -577,9 +577,9 @@ pub fn uu_app() -> Command {
                 .require_equals(true)
                 .use_value_delimiter(true)
                 .value_parser(OUTPUT_FIELD_LIST)
-                .default_missing_values(&OUTPUT_FIELD_LIST)
-                .default_values(&["source", "size", "used", "avail", "pcent", "target"])
-                .conflicts_with_all(&[OPT_INODES, OPT_PORTABILITY, OPT_PRINT_TYPE])
+                .default_missing_values(OUTPUT_FIELD_LIST)
+                .default_values(["source", "size", "used", "avail", "pcent", "target"])
+                .conflicts_with_all([OPT_INODES, OPT_PORTABILITY, OPT_PRINT_TYPE])
                 .help(
                     "use the output format defined by FIELD_LIST, \
                      or print all fields if FIELD_LIST is omitted.",
@@ -596,7 +596,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_SYNC)
                 .long("sync")
-                .overrides_with_all(&[OPT_NO_SYNC, OPT_SYNC])
+                .overrides_with_all([OPT_NO_SYNC, OPT_SYNC])
                 .help("invoke sync before getting usage info (non-windows only)")
                 .action(ArgAction::SetTrue),
         )

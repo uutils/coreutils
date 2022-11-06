@@ -86,7 +86,7 @@ fn unimplemented_flags_should_error() {
 fn test_status_level_absent() {
     let args = &["if=foo.file", "of=bar.file"];
 
-    assert_eq!(Parser::new().parse(args).unwrap().status, None)
+    assert_eq!(Parser::new().parse(args).unwrap().status, None);
 }
 
 #[test]
@@ -96,7 +96,7 @@ fn test_status_level_none() {
     assert_eq!(
         Parser::new().parse(args).unwrap().status,
         Some(StatusLevel::None)
-    )
+    );
 }
 
 #[test]

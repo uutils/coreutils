@@ -452,18 +452,18 @@ mod tests {
     fn test_integer_op() {
         let a = OsStr::new("18446744073709551616");
         let b = OsStr::new("0");
-        assert_eq!(integers(a, b, OsStr::new("-lt")).unwrap(), false);
+        assert!(!integers(a, b, OsStr::new("-lt")).unwrap());
         let a = OsStr::new("18446744073709551616");
         let b = OsStr::new("0");
-        assert_eq!(integers(a, b, OsStr::new("-gt")).unwrap(), true);
+        assert!(integers(a, b, OsStr::new("-gt")).unwrap());
         let a = OsStr::new("-1");
         let b = OsStr::new("0");
-        assert_eq!(integers(a, b, OsStr::new("-lt")).unwrap(), true);
+        assert!(integers(a, b, OsStr::new("-lt")).unwrap());
         let a = OsStr::new("42");
         let b = OsStr::new("42");
-        assert_eq!(integers(a, b, OsStr::new("-eq")).unwrap(), true);
+        assert!(integers(a, b, OsStr::new("-eq")).unwrap());
         let a = OsStr::new("42");
         let b = OsStr::new("42");
-        assert_eq!(integers(a, b, OsStr::new("-ne")).unwrap(), false);
+        assert!(!integers(a, b, OsStr::new("-ne")).unwrap());
     }
 }
