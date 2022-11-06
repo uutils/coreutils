@@ -26,7 +26,6 @@ use std::fs as std_fs;
 use std::thread::sleep;
 #[cfg(not(target_os = "freebsd"))]
 use std::time::Duration;
-use uucore::display::Quotable;
 
 static TEST_EXISTING_FILE: &str = "existing_file.txt";
 static TEST_HELLO_WORLD_SOURCE: &str = "hello_world.txt";
@@ -2054,46 +2053,37 @@ fn test_cp_parents_2_dirs() {
 }
 
 #[test]
-#[ignore = "issue #3332"]
 fn test_cp_parents_2() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir_all("a/b");
     at.touch("a/b/c");
     at.mkdir("d");
-    ucmd.args(&["--verbose", "-a", "--parents", "a/b/c", "d"])
+    #[cfg(not(windows))]
+    let expected_stdout = "a -> d/a\na/b -> d/a/b\n'a/b/c' -> 'd/a/b/c'\n";
+    #[cfg(windows)]
+    let expected_stdout = "a -> d\\a\na/b -> d\\a/b\n'a/b/c' -> 'd\\a/b/c'\n";
+    ucmd.args(&["--verbose", "--parents", "a/b/c", "d"])
         .succeeds()
-        .stdout_is(format!(
-            "{} -> {}\n{} -> {}\n{} -> {}\n",
-            "a",
-            path_concat!("d", "a"),
-            path_concat!("a", "b"),
-            path_concat!("d", "a", "b"),
-            path_concat!("a", "b", "c").quote(),
-            path_concat!("d", "a", "b", "c").quote()
-        ));
+        .stdout_only(expected_stdout);
     assert!(at.file_exists("d/a/b/c"));
 }
 
 #[test]
-#[ignore = "issue #3332"]
 fn test_cp_parents_2_link() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir_all("a/b");
     at.touch("a/b/c");
     at.mkdir("d");
     at.relative_symlink_file("b", "a/link");
-    ucmd.args(&["--verbose", "-a", "--parents", "a/link/c", "d"])
+    #[cfg(not(windows))]
+    let expected_stdout = "a -> d/a\na/link -> d/a/link\n'a/link/c' -> 'd/a/link/c'\n";
+    #[cfg(windows)]
+    let expected_stdout = "a -> d\\a\na/link -> d\\a/link\n'a/link/c' -> 'd\\a/link/c'\n";
+    ucmd.args(&["--verbose", "--parents", "a/link/c", "d"])
         .succeeds()
-        .stdout_is(format!(
-            "{} -> {}\n{} -> {}\n{} -> {}\n",
-            "a",
-            path_concat!("d", "a"),
-            path_concat!("a", "link"),
-            path_concat!("d", "a", "link"),
-            path_concat!("a", "link", "c").quote(),
-            path_concat!("d", "a", "link", "c").quote()
-        ));
-    assert!(at.dir_exists("d/a/link") && !at.symlink_exists("d/a/link"));
+        .stdout_only(expected_stdout);
+    assert!(at.dir_exists("d/a/link"));
+    assert!(!at.symlink_exists("d/a/link"));
     assert!(at.file_exists("d/a/link/c"));
 }
 
