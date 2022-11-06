@@ -23,7 +23,7 @@ jobs:
       shell: bash
       run: |
         ## VARs setup
-        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # * config
         path_GNU="gnu"
         path_GNU_tests="${path_GNU}/tests"
@@ -125,7 +125,7 @@ jobs:
       run: |
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         ## Extract/summarize testing info
-        outputs() { step_id="summary"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        outputs() { step_id="summary"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         #
         SUITE_LOG_FILE='${{ steps.vars.outputs.SUITE_LOG_FILE }}'
         ROOT_SUITE_LOG_FILE='${{ steps.vars.outputs.ROOT_SUITE_LOG_FILE }}'
@@ -332,7 +332,7 @@ jobs:
         grcov . --output-type files --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
         # generate coverage report
         grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
-        echo ::set-output name=report::${COVERAGE_REPORT_FILE}
+        echo "report=${COVERAGE_REPORT_FILE}" >> $GITHUB_OUTPUT
     - name: Upload coverage results (to Codecov.io)
       uses: codecov/codecov-action@v3
       with:
