@@ -40,16 +40,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Ok(());
     }
 
-    let mut not_found = false;
+    let mut error_found = false;
     for env_var in variables {
+        // we silently ignore a=b as variable but we trigger an error
+        if env_var.contains('=') {
+            error_found = true;
+            continue;
+        }
         if let Ok(var) = env::var(env_var) {
             print!("{}{}", var, separator);
         } else {
-            not_found = true;
+            error_found = true;
         }
     }
 
-    if not_found {
+    if error_found {
         Err(1.into())
     } else {
         Ok(())
