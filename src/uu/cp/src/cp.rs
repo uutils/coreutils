@@ -677,7 +677,6 @@ fn add_all_attributes() -> Vec<Attribute> {
 impl Options {
     fn from_matches(matches: &ArgMatches) -> CopyResult<Self> {
         let not_implemented_opts = vec![
-            options::COPY_CONTENTS,
             #[cfg(not(any(windows, unix)))]
             options::ONE_FILE_SYSTEM,
             options::CONTEXT,
@@ -1457,7 +1456,7 @@ fn copy_helper(
          * https://github.com/rust-lang/rust/issues/79390
          */
         File::create(dest).context(dest.display().to_string())?;
-    } else if source_is_fifo && options.recursive {
+    } else if source_is_fifo && options.recursive && !options.copy_contents {
         #[cfg(unix)]
         copy_fifo(dest, options.overwrite)?;
     } else if source_is_symlink {
@@ -1469,6 +1468,8 @@ fn copy_helper(
             options.reflink_mode,
             options.sparse_mode,
             context,
+            #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+            source_is_fifo,
         )?;
     }
 
