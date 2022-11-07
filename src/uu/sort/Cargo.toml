@@ -27,7 +27,7 @@ rand = "0.8"
 rayon = "1.5"
 tempfile = "3"
 unicode-width = "0.1.8"
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["fs","libc"] }
+uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["fs", "libc"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.42.0", default-features=false, features=["Win32_System_SystemInformation"]}
