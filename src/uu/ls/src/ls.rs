@@ -296,8 +296,7 @@ enum Sort {
 #[derive(PartialEq)]
 enum SizeFormat {
     Bytes,
-    Binary,
-    // Powers of 1024, --human-readable, -h
+    Binary,  // Powers of 1024, --human-readable, -h
     Decimal, // Powers of 1000, --si
 }
 
