@@ -15,7 +15,7 @@ edition = "2021"
 path = "src/arch.rs"
 
 [dependencies]
-platform-info = "1.0.0"
+platform-info = "1.0.1"
 clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
 
