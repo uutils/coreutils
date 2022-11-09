@@ -745,7 +745,12 @@ impl Options {
                             attributes.push(Attribute::from_str(attribute_str)?);
                         }
                     }
-                    attributes
+                    // `--preserve` case, use the defaults
+                    if attributes.is_empty() {
+                        DEFAULT_ATTRIBUTES.to_vec()
+                    } else {
+                        attributes
+                    }
                 }
             }
         } else if matches.get_flag(options::ARCHIVE) {
