@@ -39,6 +39,13 @@ use std::{
 };
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
+#[cfg(any(
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "android",
+    target_os = "ios"
+))]
+use uucore::libc::{dev_t, major, minor};
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::parse_glob;
@@ -63,7 +70,6 @@ Ignore files and directories starting with a '.' by default"#;
 const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 pub mod options {
-
     pub mod format {
         pub static ONE_LINE: &str = "1";
         pub static LONG: &str = "long";
@@ -290,7 +296,8 @@ enum Sort {
 #[derive(PartialEq)]
 enum SizeFormat {
     Bytes,
-    Binary,  // Powers of 1024, --human-readable, -h
+    Binary,
+    // Powers of 1024, --human-readable, -h
     Decimal, // Powers of 1000, --si
 }
 
@@ -354,6 +361,7 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<TimeStyle, LsError> {
         Ok(TimeStyle::Locale)
     }
 }
+
 enum Dereference {
     None,
     DirArgs,
@@ -2383,7 +2391,7 @@ fn display_item_long(
                             padding
                                 .size
                                 .saturating_sub(padding.minor.saturating_add(2usize))
-                        )
+                        ),
                     ),
                     pad_left(
                         &minor,
@@ -2643,23 +2651,19 @@ enum SizeOrDeviceId {
 }
 
 fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "android",
+        target_os = "ios"
+    ))]
     {
         let ft = metadata.file_type();
         if ft.is_char_device() || ft.is_block_device() {
-            let dev: u64 = metadata.rdev();
-            let major = (dev >> 24) as u8;
-            let minor = (dev & 0xff) as u8;
-            return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
-        }
-    }
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        let ft = metadata.file_type();
-        if ft.is_char_device() || ft.is_block_device() {
-            let dev: u64 = metadata.rdev();
-            let major = (dev >> 8) as u8;
-            let minor = (dev & 0xff) as u8;
+            // A type cast is needed here as the `dev_t` type varies across OSes.
+            let dev = metadata.rdev() as dev_t;
+            let major = unsafe { major(dev) };
+            let minor = unsafe { minor(dev) };
             return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
         }
     }
