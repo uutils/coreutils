@@ -232,15 +232,11 @@ fn test_cp_arg_interactive() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
     at.touch("b");
-    // TODO The prompt in GNU cp is different, and it doesn't have the
-    // response either.
-    //
-    // See <https://github.com/uutils/coreutils/issues/4023>.
     ucmd.args(&["-i", "a", "b"])
         .pipe_in("N\n")
         .succeeds()
         .no_stdout()
-        .stderr_is("cp: overwrite 'b'?  [y/N]: cp: Not overwriting 'b' at user request\n");
+        .stderr_is("cp: overwrite 'b'?  [y/N]:");
 }
 
 #[test]
@@ -312,8 +308,7 @@ fn test_cp_arg_no_clobber_twice() {
         .arg("--no-clobber")
         .arg("source.txt")
         .arg("dest.txt")
-        .succeeds()
-        .stdout_does_not_contain("Not overwriting");
+        .succeeds();
 
     assert_eq!(at.read("source.txt"), "some-content");
     // Should be empty as the "no-clobber" should keep
