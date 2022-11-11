@@ -1500,7 +1500,7 @@ fn copy_file(
     copy_attributes(source, dest, &options.preserve_attributes)?;
 
     if let Some(progress_bar) = progress_bar {
-        progress_bar.inc(fs::metadata(&source)?.len());
+        progress_bar.inc(fs::metadata(source)?.len());
     }
 
     Ok(())
