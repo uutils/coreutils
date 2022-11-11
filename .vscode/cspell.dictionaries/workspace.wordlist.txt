@@ -23,6 +23,7 @@ fsext
 getopts
 getrandom
 globset
+indicatif
 itertools
 lscolors
 mdbook

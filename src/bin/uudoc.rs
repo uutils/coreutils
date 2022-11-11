@@ -44,6 +44,7 @@ fn main() -> io::Result<()> {
         * [Build from source](build.md)\n\
         * [Contributing](contributing.md)\n\
         * [GNU test coverage](test_coverage.md)\n\
+        * [Extensions](extensions.md)\n\
         \n\
         # Reference\n\
         * [Multi-call binary](multicall.md)\n",

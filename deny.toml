@@ -81,6 +81,8 @@ skip = [
     { name = "windows_i686_msvc", version = "=0.36.1" },
     { name = "windows_x86_64_gnu", version = "=0.36.1" },
     { name = "windows_x86_64_msvc", version = "=0.36.1" },
+    # console (via indicatif)
+    { name = "terminal_size", version = "=0.1.17" },
 ]
 # spell-checker: enable
 
