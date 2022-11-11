@@ -2318,3 +2318,30 @@ fn test_copy_contents_fifo() {
     assert!(output.stderr.is_empty());
     assert_eq!(at.read("outfile"), "foo");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_reflink_never_sparse_always() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Create a file and make it a large sparse file.
+    //
+    // On common Linux filesystems, setting the length to one megabyte
+    // should cause the file to become a sparse file, but it depends
+    // on the system.
+    std::fs::File::create(at.plus("src"))
+        .unwrap()
+        .set_len(1024 * 1024)
+        .unwrap();
+
+    ucmd.args(&["--reflink=never", "--sparse=always", "src", "dest"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    at.file_exists("dest");
+
+    let src_metadata = std::fs::metadata(at.plus("src")).unwrap();
+    let dest_metadata = std::fs::metadata(at.plus("dest")).unwrap();
+    assert_eq!(src_metadata.blocks(), dest_metadata.blocks());
+    assert_eq!(dest_metadata.len(), 1024 * 1024);
+}
