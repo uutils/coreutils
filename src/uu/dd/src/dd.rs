@@ -27,7 +27,7 @@ use std::cmp;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom, Stdout, Write};
+use std::io::{self, Read, Seek, SeekFrom, Stdin, Stdout, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
@@ -90,30 +90,84 @@ impl Num {
     }
 }
 
-struct Input<'a, R: Read> {
-    src: R,
+/// Data sources.
+enum Source {
+    /// Input from stdin.
+    Stdin(Stdin),
+
+    /// Input from a file.
+    File(File),
+}
+
+impl Source {
+    fn skip(&mut self, n: u64) -> io::Result<u64> {
+        match self {
+            Self::Stdin(stdin) => match io::copy(&mut stdin.take(n), &mut io::sink()) {
+                Ok(m) if m < n => {
+                    show_error!("'standard input': cannot skip to specified offset");
+                    Ok(m)
+                }
+                Ok(m) => Ok(m),
+                Err(e) => Err(e),
+            },
+            Self::File(f) => f.seek(io::SeekFrom::Start(n)),
+        }
+    }
+}
+
+impl Read for Source {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Stdin(stdin) => stdin.read(buf),
+            Self::File(f) => f.read(buf),
+        }
+    }
+}
+
+/// The source of the data, configured with the given settings.
+///
+/// Use the [`Input::new_stdin`] or [`Input::new_file`] functions to
+/// construct a new instance of this struct. Then pass the instance to
+/// the [`Output::dd_out`] function to execute the main copy operation
+/// for `dd`.
+struct Input<'a> {
+    /// The source from which bytes will be read.
+    src: Source,
+
+    /// Configuration settings for how to read the data.
     settings: &'a Settings,
 }
 
-impl<'a> Input<'a, io::Stdin> {
-    fn new(settings: &'a Settings) -> UResult<Self> {
-        let mut input = Self {
-            src: io::stdin(),
-            settings,
+impl<'a> Input<'a> {
+    /// Instantiate this struct with stdin as a source.
+    fn new_stdin(settings: &'a Settings) -> UResult<Self> {
+        let mut src = Source::Stdin(io::stdin());
+        if settings.skip > 0 {
+            src.skip(settings.skip)?;
+        }
+        Ok(Self { src, settings })
+    }
+
+    /// Instantiate this struct with the named file as a source.
+    fn new_file(filename: &Path, settings: &'a Settings) -> UResult<Self> {
+        let src = {
+            let mut opts = OpenOptions::new();
+            opts.read(true);
+
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            if let Some(libc_flags) = make_linux_iflags(&settings.iflags) {
+                opts.custom_flags(libc_flags);
+            }
+
+            opts.open(filename)
+                .map_err_context(|| format!("failed to open {}", filename.quote()))?
         };
 
+        let mut src = Source::File(src);
         if settings.skip > 0 {
-            if let Err(e) = input.read_skip(settings.skip) {
-                if let io::ErrorKind::UnexpectedEof = e.kind() {
-                    show_error!("'standard input': cannot skip to specified offset");
-                } else {
-                    return io::Result::Err(e)
-                        .map_err_context(|| "I/O error while skipping".to_string());
-                }
-            }
+            src.skip(settings.skip)?;
         }
-
-        Ok(input)
+        Ok(Self { src, settings })
     }
 }
 
@@ -153,31 +207,7 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
     }
 }
 
-impl<'a> Input<'a, File> {
-    fn new(filename: &Path, settings: &'a Settings) -> UResult<Self> {
-        let mut src = {
-            let mut opts = OpenOptions::new();
-            opts.read(true);
-
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            if let Some(libc_flags) = make_linux_iflags(&settings.iflags) {
-                opts.custom_flags(libc_flags);
-            }
-
-            opts.open(filename)
-                .map_err_context(|| format!("failed to open {}", filename.quote()))?
-        };
-
-        if settings.skip > 0 {
-            src.seek(io::SeekFrom::Start(settings.skip))
-                .map_err_context(|| "failed to seek in input file".to_string())?;
-        }
-
-        Ok(Self { src, settings })
-    }
-}
-
-impl<'a, R: Read> Read for Input<'a, R> {
+impl<'a> Read for Input<'a> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut base_idx = 0;
         let target_len = buf.len();
@@ -200,7 +230,7 @@ impl<'a, R: Read> Read for Input<'a, R> {
     }
 }
 
-impl<'a, R: Read> Input<'a, R> {
+impl<'a> Input<'a> {
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read follows the previous one.
@@ -265,20 +295,6 @@ impl<'a, R: Read> Input<'a, R> {
             reads_partial,
             records_truncated: 0,
         })
-    }
-
-    /// Skips amount_to_read bytes from the Input by copying into a sink
-    fn read_skip(&mut self, amount_to_read: u64) -> std::io::Result<()> {
-        let copy_result = io::copy(&mut self.src.by_ref().take(amount_to_read), &mut io::sink());
-        if let Ok(n) = copy_result {
-            if n != amount_to_read {
-                io::Result::Err(io::Error::new(io::ErrorKind::UnexpectedEof, ""))
-            } else {
-                Ok(())
-            }
-        } else {
-            io::Result::Err(copy_result.unwrap_err())
-        }
     }
 }
 
@@ -485,7 +501,7 @@ impl<'a> Output<'a> {
     ///
     /// If there is a problem reading from the input or writing to
     /// this output.
-    fn dd_out<R: Read>(mut self, mut i: Input<R>) -> std::io::Result<()> {
+    fn dd_out(mut self, mut i: Input) -> std::io::Result<()> {
         // The read and write statistics.
         //
         // These objects are counters, initialized to zero. After each
@@ -645,12 +661,13 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
     }
 }
 
-/// Read helper performs read operations common to all dd reads, and dispatches the buffer to relevant helper functions as dictated by the operations requested by the user.
-fn read_helper<R: Read>(
-    i: &mut Input<R>,
-    buf: &mut Vec<u8>,
-    bsize: usize,
-) -> std::io::Result<ReadStat> {
+/// Read from an input (that is, a source of bytes) into the given buffer.
+///
+/// This function also performs any conversions as specified by
+/// `conv=swab` or `conv=block` command-line arguments. This function
+/// mutates the `buf` argument in-place. The returned [`ReadStat`]
+/// indicates how many blocks were read.
+fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> std::io::Result<ReadStat> {
     // Local Helper Fns -------------------------------------------------
     fn perform_swab(buf: &mut [u8]) {
         for base in (1..buf.len()).step_by(2) {
@@ -794,17 +811,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match (&settings.infile, &settings.outfile) {
         (Some(infile), Some(outfile)) => {
-            let i = Input::<File>::new(Path::new(&infile), &settings)?;
+            let i = Input::new_file(Path::new(&infile), &settings)?;
             let o = Output::new_file(Path::new(&outfile), &settings)?;
             o.dd_out(i).map_err_context(|| "IO error".to_string())
         }
         (None, Some(outfile)) => {
-            let i = Input::<io::Stdin>::new(&settings)?;
+            let i = Input::new_stdin(&settings)?;
             let o = Output::new_file(Path::new(&outfile), &settings)?;
             o.dd_out(i).map_err_context(|| "IO error".to_string())
         }
         (Some(infile), None) => {
-            let i = Input::<File>::new(Path::new(&infile), &settings)?;
+            let i = Input::new_file(Path::new(&infile), &settings)?;
             if is_stdout_redirected_to_seekable_file() {
                 let filename = stdout_canonicalized();
                 let o = Output::new_file(Path::new(&filename), &settings)?;
@@ -815,7 +832,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
         (None, None) => {
-            let i = Input::<io::Stdin>::new(&settings)?;
+            let i = Input::new_stdin(&settings)?;
             if is_stdout_redirected_to_seekable_file() {
                 let filename = stdout_canonicalized();
                 let o = Output::new_file(Path::new(&filename), &settings)?;
