@@ -28,6 +28,8 @@ use std::env;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Stdin, Stdout, Write};
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
@@ -313,6 +315,14 @@ enum Dest {
     /// The [`Density`] component indicates whether to attempt to
     /// write a sparse file when all-zero blocks are encountered.
     File(File, Density),
+
+    /// Output to a named pipe, also known as a FIFO.
+    #[cfg(unix)]
+    Fifo(File),
+
+    /// Output to nothing, dropping each byte written to the output.
+    #[cfg(unix)]
+    Sink,
 }
 
 impl Dest {
@@ -323,6 +333,13 @@ impl Dest {
                 f.flush()?;
                 f.sync_all()
             }
+            #[cfg(unix)]
+            Self::Fifo(f) => {
+                f.flush()?;
+                f.sync_all()
+            }
+            #[cfg(unix)]
+            Self::Sink => Ok(()),
         }
     }
 
@@ -333,6 +350,13 @@ impl Dest {
                 f.flush()?;
                 f.sync_data()
             }
+            #[cfg(unix)]
+            Self::Fifo(f) => {
+                f.flush()?;
+                f.sync_data()
+            }
+            #[cfg(unix)]
+            Self::Sink => Ok(()),
         }
     }
 
@@ -340,17 +364,24 @@ impl Dest {
         match self {
             Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
             Self::File(f, _) => f.seek(io::SeekFrom::Start(n)),
+            #[cfg(unix)]
+            Self::Fifo(f) => {
+                // Seeking in a named pipe means *reading* from the pipe.
+                io::copy(&mut f.take(n), &mut io::sink())
+            }
+            #[cfg(unix)]
+            Self::Sink => Ok(0),
         }
     }
 
     /// Truncate the underlying file to the current stream position, if possible.
     fn truncate(&mut self) -> io::Result<()> {
         match self {
-            Self::Stdout(_) => Ok(()),
             Self::File(f, _) => {
                 let pos = f.stream_position()?;
                 f.set_len(pos)
             }
+            _ => Ok(()),
         }
     }
 }
@@ -373,6 +404,10 @@ impl Write for Dest {
             }
             Self::File(f, _) => f.write(buf),
             Self::Stdout(stdout) => stdout.write(buf),
+            #[cfg(unix)]
+            Self::Fifo(f) => f.write(buf),
+            #[cfg(unix)]
+            Self::Sink => Ok(buf.len()),
         }
     }
 
@@ -380,6 +415,10 @@ impl Write for Dest {
         match self {
             Self::Stdout(stdout) => stdout.flush(),
             Self::File(f, _) => f.flush(),
+            #[cfg(unix)]
+            Self::Fifo(f) => f.flush(),
+            #[cfg(unix)]
+            Self::Sink => Ok(()),
         }
     }
 }
@@ -446,6 +485,35 @@ impl<'a> Output<'a> {
         let mut dst = Dest::File(dst, density);
         dst.seek(settings.seek)
             .map_err_context(|| "failed to seek in output file".to_string())?;
+        Ok(Self { dst, settings })
+    }
+
+    /// Instantiate this struct with the given named pipe as a destination.
+    #[cfg(unix)]
+    fn new_fifo(filename: &Path, settings: &'a Settings) -> UResult<Self> {
+        // We simulate seeking in a FIFO by *reading*, so we open the
+        // file for reading. But then we need to close the file and
+        // re-open it for writing.
+        if settings.seek > 0 {
+            Dest::Fifo(File::open(filename)?).seek(settings.seek)?;
+        }
+        // If `count=0`, then we don't bother opening the file for
+        // writing because that would cause this process to block
+        // indefinitely.
+        if let Some(Num::Blocks(0) | Num::Bytes(0)) = settings.count {
+            let dst = Dest::Sink;
+            return Ok(Self { dst, settings });
+        }
+        // At this point, we know there is at least one block to write
+        // to the output, so we open the file for writing.
+        let mut opts = OpenOptions::new();
+        opts.write(true)
+            .create(!settings.oconv.nocreat)
+            .create_new(settings.oconv.excl)
+            .append(settings.oflags.append);
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        opts.custom_flags(make_linux_oflags(&settings.oflags).unwrap_or(0));
+        let dst = Dest::Fifo(opts.open(filename)?);
         Ok(Self { dst, settings })
     }
 
@@ -795,6 +863,17 @@ fn is_stdout_redirected_to_seekable_file() -> bool {
     }
 }
 
+/// Decide whether the named file is a named pipe, also known as a FIFO.
+#[cfg(unix)]
+fn is_fifo(filename: &str) -> bool {
+    if let Ok(metadata) = std::fs::metadata(filename) {
+        if metadata.file_type().is_fifo() {
+            return true;
+        }
+    }
+    false
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
@@ -809,40 +888,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .collect::<Vec<_>>()[..],
     )?;
 
-    match (&settings.infile, &settings.outfile) {
-        (Some(infile), Some(outfile)) => {
-            let i = Input::new_file(Path::new(&infile), &settings)?;
-            let o = Output::new_file(Path::new(&outfile), &settings)?;
-            o.dd_out(i).map_err_context(|| "IO error".to_string())
+    let i = match settings.infile {
+        Some(ref infile) => Input::new_file(Path::new(&infile), &settings)?,
+        None => Input::new_stdin(&settings)?,
+    };
+    let o = match settings.outfile {
+        #[cfg(unix)]
+        Some(ref outfile) if is_fifo(outfile) => Output::new_fifo(Path::new(&outfile), &settings)?,
+        Some(ref outfile) => Output::new_file(Path::new(&outfile), &settings)?,
+        None if is_stdout_redirected_to_seekable_file() => {
+            Output::new_file(Path::new(&stdout_canonicalized()), &settings)?
         }
-        (None, Some(outfile)) => {
-            let i = Input::new_stdin(&settings)?;
-            let o = Output::new_file(Path::new(&outfile), &settings)?;
-            o.dd_out(i).map_err_context(|| "IO error".to_string())
-        }
-        (Some(infile), None) => {
-            let i = Input::new_file(Path::new(&infile), &settings)?;
-            if is_stdout_redirected_to_seekable_file() {
-                let filename = stdout_canonicalized();
-                let o = Output::new_file(Path::new(&filename), &settings)?;
-                o.dd_out(i).map_err_context(|| "IO error".to_string())
-            } else {
-                let o = Output::new_stdout(&settings)?;
-                o.dd_out(i).map_err_context(|| "IO error".to_string())
-            }
-        }
-        (None, None) => {
-            let i = Input::new_stdin(&settings)?;
-            if is_stdout_redirected_to_seekable_file() {
-                let filename = stdout_canonicalized();
-                let o = Output::new_file(Path::new(&filename), &settings)?;
-                o.dd_out(i).map_err_context(|| "IO error".to_string())
-            } else {
-                let o = Output::new_stdout(&settings)?;
-                o.dd_out(i).map_err_context(|| "IO error".to_string())
-            }
-        }
-    }
+        None => Output::new_stdout(&settings)?,
+    };
+    o.dd_out(i).map_err_context(|| "IO error".to_string())
 }
 
 pub fn uu_app() -> Command {

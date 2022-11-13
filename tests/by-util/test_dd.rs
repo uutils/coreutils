@@ -5,6 +5,8 @@ use crate::common::util::*;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
+#[cfg(all(not(windows), not(target_os = "macos")))]
+use std::process::{Command, Stdio};
 #[cfg(not(windows))]
 use std::thread::sleep;
 #[cfg(not(windows))]
@@ -1441,4 +1443,41 @@ fn test_sparse() {
     // The number of bytes in the file should be accurate though the
     // number of blocks stored on disk may be zero.
     assert_eq!(at.metadata("infile").len(), at.metadata("outfile").len());
+}
+
+// TODO These FIFO tests should work on macos, but some issue is
+// causing our implementation of dd to wait indefinitely when it
+// shouldn't.
+
+/// Test that a seek on an output FIFO results in a read.
+#[test]
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd")))]
+fn test_seek_output_fifo() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+
+    // TODO When `dd` is a bit more advanced, we could use the uutils
+    // version of dd here as well.
+    let child = Command::new("dd")
+        .current_dir(&at.subdir)
+        .args([
+            "count=1",
+            "if=/dev/zero",
+            &format!("of={}", at.plus_as_string("fifo")),
+            "status=noxfer",
+        ])
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to execute child process");
+
+    ts.ucmd()
+        .args(&["count=0", "seek=1", "of=fifo", "status=noxfer"])
+        .succeeds()
+        .stderr_only("0+0 records in\n0+0 records out\n");
+
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    assert_eq!(&output.stderr, b"1+0 records in\n1+0 records out\n");
 }
