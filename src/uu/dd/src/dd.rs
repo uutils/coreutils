@@ -401,6 +401,12 @@ where
         let output_thread = thread::spawn(gen_prog_updater(rx, i.settings.status));
         let mut progress_as_secs = 0;
 
+        // Optimization: if no blocks are to be written, then don't
+        // bother allocating any buffers.
+        if let Some(Num::Blocks(0) | Num::Bytes(0)) = i.settings.count {
+            return self.finalize(rstat, wstat, start, &prog_tx, output_thread);
+        };
+
         // Create a common buffer with a capacity of the block size.
         // This is the max size needed.
         let mut buf = vec![BUF_INIT_BYTE; bsize];
@@ -439,7 +445,18 @@ where
                 prog_tx.send(prog_update).unwrap_or(());
             }
         }
+        self.finalize(rstat, wstat, start, &prog_tx, output_thread)
+    }
 
+    /// Flush output, print final stats, and join with the progress thread.
+    fn finalize<T>(
+        &mut self,
+        rstat: ReadStat,
+        wstat: WriteStat,
+        start: time::Instant,
+        prog_tx: &mpsc::Sender<ProgUpdate>,
+        output_thread: thread::JoinHandle<T>,
+    ) -> std::io::Result<()> {
         // Flush the output, if configured to do so.
         self.sync()?;
 
