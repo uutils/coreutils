@@ -2268,7 +2268,7 @@ fn test_follow_name_move2() {
     let mut args = vec!["--follow=name", file1, file2];
 
     let mut delay = 500;
-    for _ in 0..2 {
+    for i in 0..2 {
         at.truncate(file1, "file1_content\n");
         at.truncate(file2, "file2_content\n");
 
@@ -2291,7 +2291,9 @@ fn test_follow_name_move2() {
         assert_eq!(buf_stdout, expected_stdout);
         assert_eq!(buf_stderr, expected_stderr);
 
-        args.push("--use-polling");
+        if i == 0 {
+            args.push("--use-polling");
+        }
         delay *= 3;
         // NOTE: Switch the first and second line because the events come in this order from
         //  `notify::PollWatcher`. However, for GNU's tail, the order between polling and not
@@ -2421,7 +2423,7 @@ fn test_follow_name_move_retry2() {
     let mut args = vec!["-s.1", "--max-unchanged-stats=1", "-F", file1, file2];
 
     let mut delay = 500;
-    for _ in 0..2 {
+    for i in 0..2 {
         at.touch(file1);
         at.touch(file2);
 
@@ -2451,7 +2453,9 @@ fn test_follow_name_move_retry2() {
 
         at.remove(file1);
         at.remove(file2);
-        args.push("--use-polling");
+        if i == 0 {
+            args.push("--use-polling");
+        }
         delay *= 3;
         // NOTE: Switch the first and second line because the events come in this order from
         //  `notify::PollWatcher`. However, for GNU's tail, the order between polling and not
