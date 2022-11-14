@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-//spell-checker: ignore (linux) rlimit prlimit coreutil ggroups
+//spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild
 
 #![allow(dead_code)]
 
@@ -12,12 +12,11 @@ use pretty_assertions::assert_eq;
 use rlimit::prlimit;
 #[cfg(unix)]
 use std::borrow::Cow;
-use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
 use std::ffi::OsStr;
-use std::fs::{self, hard_link, File, OpenOptions};
-use std::io::{BufWriter, Read, Result, Write};
+use std::fs::{self, hard_link, remove_file, File, OpenOptions};
+use std::io::{self, BufWriter, Read, Result, Write};
 #[cfg(unix)]
 use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file, PermissionsExt};
 #[cfg(windows)]
@@ -25,10 +24,11 @@ use std::os::windows::fs::{symlink_dir, symlink_file};
 #[cfg(windows)]
 use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, ChildStdin, Command, Output, Stdio};
 use std::rc::Rc;
-use std::thread::sleep;
+use std::thread::{sleep, JoinHandle};
 use std::time::Duration;
+use std::{env, thread};
 use tempfile::TempDir;
 use uucore::Args;
 
@@ -147,9 +147,10 @@ impl CmdResult {
     }
 
     /// Returns the program's exit code
-    /// Panics if not run
+    /// Panics if not run or has not finished yet for example when run with run_no_wait()
     pub fn code(&self) -> i32 {
-        self.code.expect("Program must be run first")
+        self.code
+            .expect("Program must be run first or has not finished, yet")
     }
 
     pub fn code_is(&self, expected_code: i32) -> &Self {
@@ -361,6 +362,7 @@ impl CmdResult {
         self.no_stderr().stdout_is_bytes(msg)
     }
 
+    // TODO: implement same functionality asserting as String instead
     /// like stdout_only(...), but expects the contents of the file at the provided relative path
     pub fn stdout_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
@@ -942,6 +944,9 @@ pub struct UCommand {
     bytes_into_stdin: Option<Vec<u8>>,
     #[cfg(any(target_os = "linux", target_os = "android"))]
     limits: Vec<(rlimit::Resource, u64, u64)>,
+    stderr_to_stdout: bool,
+    captured_stdout: Option<CapturedOutput>,
+    captured_stderr: Option<CapturedOutput>,
 }
 
 impl UCommand {
@@ -990,6 +995,9 @@ impl UCommand {
             stderr: None,
             #[cfg(any(target_os = "linux", target_os = "android"))]
             limits: vec![],
+            stderr_to_stdout: false,
+            captured_stdout: None,
+            captured_stderr: None,
         };
 
         if let Some(un) = util_name {
@@ -1023,6 +1031,14 @@ impl UCommand {
 
     pub fn set_stderr<T: Into<Stdio>>(&mut self, stderr: T) -> &mut Self {
         self.stderr = Some(stderr.into());
+        self
+    }
+
+    // TODO: Since in UChild::assert_now the bytes read are consumed if not ran together with this
+    // method it may be irritating if the output is not consumed if stderr_to_stdout is true. Add a
+    // modus operandi like stderr_to_stdout(consume: bool) to circumvent this ??
+    pub fn stderr_to_stdout(&mut self) -> &mut Self {
+        self.stderr_to_stdout = true;
         self
     }
 
@@ -1102,19 +1118,66 @@ impl UCommand {
         self
     }
 
+    // TODO: Accept a parameter `delay` which returns delayed from this method. Most use cases are
+    // with some kind of post delay. Without any delay, the output may be empty because we return
+    // immediately. Most of the time a delay of 1ms was already sufficient.
+    // TODO: rename this method after refactoring the tests to run_no_wait and merge with it
+    pub fn run_no_wait_child(&mut self) -> UChild {
+        let child = self.run_no_wait();
+        UChild::new(
+            child,
+            self.bin_path.clone(),
+            self.util_name.clone(),
+            self.tmpd.clone(),
+            self.captured_stdout.take(),
+            self.captured_stderr.take(),
+            self.ignore_stdin_write_error,
+        )
+    }
+
     /// Spawns the command, feeds the stdin if any, and returns the
-    /// child process immediately.
+    /// child process immediately. Do not use this method directly
+    /// if you want to have stderr redirected to stdout. Use
+    /// [`UCommand::run_no_wait_stderr_to_stdout`] instead.
     pub fn run_no_wait(&mut self) -> Child {
         assert!(!self.has_run, "{}", ALREADY_RUN);
         self.has_run = true;
         log_info("run", &self.comm_string);
-        let mut child = self
-            .raw
-            .stdin(self.stdin.take().unwrap_or_else(Stdio::piped))
-            .stdout(self.stdout.take().unwrap_or_else(Stdio::piped))
-            .stderr(self.stderr.take().unwrap_or_else(Stdio::piped))
-            .spawn()
-            .unwrap();
+        let command = if self.stderr_to_stdout {
+            let stdout = tempfile::NamedTempFile::new().unwrap();
+            let command = self
+                .raw
+                // TODO: use Stdio::null() as default to avoid accidental deadlocks ?
+                .stdin(self.stdin.take().unwrap_or_else(Stdio::piped))
+                .stdout(Stdio::from(stdout.as_file().try_clone().unwrap()))
+                .stderr(Stdio::from(stdout.as_file().try_clone().unwrap()));
+            self.captured_stdout = Some(CapturedOutput::new(stdout));
+            command
+        } else {
+            let stdout = if self.stdout.is_some() {
+                self.stdout.take().unwrap()
+            } else {
+                let mut stdout = CapturedOutput::new(tempfile::NamedTempFile::new().unwrap());
+                let stdio = Stdio::from(stdout.as_file().try_clone().unwrap());
+                self.captured_stdout = Some(stdout);
+                stdio
+            };
+            let stderr = if self.stderr.is_some() {
+                self.stderr.take().unwrap()
+            } else {
+                let mut stderr = CapturedOutput::new(tempfile::NamedTempFile::new().unwrap());
+                let stdio = Stdio::from(stderr.as_file().try_clone().unwrap());
+                self.captured_stderr = Some(stderr);
+                stdio
+            };
+            self.raw
+                // TODO: use Stdio::null() as default to avoid accidental deadlocks ?
+                .stdin(self.stdin.take().unwrap_or_else(Stdio::piped))
+                .stdout(stdout)
+                .stderr(stderr)
+        };
+
+        let mut child = command.spawn().unwrap();
 
         #[cfg(target_os = "linux")]
         for &(resource, soft_limit, hard_limit) in &self.limits {
@@ -1148,16 +1211,9 @@ impl UCommand {
     /// and returns a command result.
     /// It is recommended that you instead use succeeds() or fails()
     pub fn run(&mut self) -> CmdResult {
-        let prog = self.run_no_wait().wait_with_output().unwrap();
-
-        CmdResult {
-            bin_path: self.bin_path.clone(),
-            util_name: self.util_name.clone(),
-            tmpd: self.tmpd.clone(),
-            code: prog.status.code(),
-            success: prog.status.success(),
-            stdout: prog.stdout,
-            stderr: prog.stderr,
+        match self.bytes_into_stdin.take() {
+            Some(input) => self.run_no_wait_child().pipe_in_and_wait(input),
+            None => self.run_no_wait_child().wait().unwrap(),
         }
     }
 
@@ -1166,7 +1222,8 @@ impl UCommand {
     /// It is recommended that, instead of this, you use a combination of pipe_in()
     /// with succeeds() or fails()
     pub fn run_piped_stdin<T: Into<Vec<u8>>>(&mut self, input: T) -> CmdResult {
-        self.pipe_in(input).run()
+        self.bytes_into_stdin = None;
+        self.run_no_wait_child().pipe_in_and_wait(input)
     }
 
     /// Spawns the command, feeds the stdin if any, waits for the result,
@@ -1191,12 +1248,525 @@ impl UCommand {
     }
 }
 
+/// Stored the captured output in a temporary file. The file is deleted as soon as
+/// [`CapturedOutput`] is dropped.
+#[derive(Debug)]
+pub struct CapturedOutput {
+    output: tempfile::NamedTempFile,
+    current_file: File,
+}
+
+impl CapturedOutput {
+    /// Creates a new instance of CapturedOutput
+    fn new(output: tempfile::NamedTempFile) -> Self {
+        Self {
+            // TODO: do not reopen but use file pointer from output instead or current_file. That's
+            // one file descriptor less.
+            current_file: output.reopen().unwrap(),
+            output,
+        }
+    }
+
+    fn new_with(tempdir: &Rc<TempDir>) -> Self {
+        Self::new(tempfile::NamedTempFile::new_in(tempdir.path()).unwrap())
+    }
+
+    fn as_file(&mut self) -> &mut File {
+        self.output.as_file_mut()
+    }
+
+    /// Returns the captured output as [`String`]. See also [`CapturedOutput::output_as_bytes`].
+    pub fn output(&mut self) -> String {
+        String::from_utf8(self.output_as_bytes()).unwrap()
+    }
+
+    // TODO: subject to removal
+    pub fn output_exact(&mut self, size: usize) -> String {
+        String::from_utf8(self.output_exact_bytes(size)).unwrap()
+    }
+
+    // TODO: rename to output_bytes
+    /// Returns the captured output so far as string. Subsequent calls to output
+    /// return the subsequent output.
+    pub fn output_as_bytes(&mut self) -> Vec<u8> {
+        let mut buffer = Vec::<u8>::new();
+        self.current_file.read_to_end(&mut buffer).unwrap();
+        buffer
+    }
+
+    pub fn output_all_bytes(&mut self) -> Vec<u8> {
+        let mut buffer = Vec::<u8>::new();
+        self.output
+            .reopen()
+            .unwrap()
+            .read_to_end(&mut buffer)
+            .unwrap();
+        buffer
+    }
+
+    // TODO: subject to removal
+    pub fn output_exact_bytes(&mut self, size: usize) -> Vec<u8> {
+        let mut buffer = vec![0; size];
+        let mut output = self.output.reopen().unwrap();
+
+        output.read_exact(&mut buffer).unwrap();
+        buffer
+    }
+}
+
+impl Drop for CapturedOutput {
+    fn drop(&mut self) {
+        let _ = remove_file(self.output.path());
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum AssertionMode {
+    All,
+    Current,
+    // TODO: ExactAll and ExactCurrent instead?
+    Exact(usize, usize),
+}
+pub struct UChildAssertion<'a> {
+    uchild: &'a mut UChild,
+}
+
+impl<'a> UChildAssertion<'a> {
+    pub fn new(uchild: &'a mut UChild) -> Self {
+        Self { uchild }
+    }
+
+    fn with_output(&mut self, mode: AssertionMode) -> CmdResult {
+        let (code, success) = match self.uchild.try_alive() {
+            true => (None, true),
+            false => {
+                let status = self.uchild.as_child().wait().unwrap();
+                (status.code(), status.success())
+            }
+        };
+        let (stdout, stderr) = match mode {
+            AssertionMode::All => (
+                self.uchild.stdout_all_bytes(),
+                self.uchild.stderr_all_bytes(),
+            ),
+            AssertionMode::Current => (self.uchild.stdout_bytes(), self.uchild.stderr_bytes()),
+            AssertionMode::Exact(expected_stdout_size, expected_stderr_size) => (
+                self.uchild.stdout_exact_bytes(expected_stdout_size),
+                self.uchild.stderr_exact_bytes(expected_stderr_size),
+            ),
+        };
+        CmdResult {
+            bin_path: self.uchild.bin_path.clone(),
+            util_name: self.uchild.util_name.clone(),
+            tmpd: self.uchild.tmpd.clone(),
+            code,
+            success,
+            stdout,
+            stderr,
+        }
+    }
+
+    pub fn with_all_output(&mut self) -> CmdResult {
+        self.with_output(AssertionMode::All)
+    }
+
+    pub fn with_current_output(&mut self) -> CmdResult {
+        self.with_output(AssertionMode::Current)
+    }
+
+    pub fn with_exact_output(
+        &mut self,
+        expected_stdout_size: usize,
+        expected_stderr_size: usize,
+    ) -> CmdResult {
+        self.with_output(AssertionMode::Exact(
+            expected_stdout_size,
+            expected_stderr_size,
+        ))
+    }
+
+    #[allow(clippy::wrong_self_convention)]
+    pub fn is_alive(&mut self) -> &mut Self {
+        match self
+            .uchild
+            .as_child()
+            .try_wait()
+        {
+            Ok(Some(status)) => panic!(
+                "Assertion failed. Expected '{}' to be running but exited with status={}.\nstdout: {}\nstderr: {}",
+                uucore::util_name(),
+                status,
+                self.uchild.stdout_all(),
+                self.uchild.stderr_all()
+            ),
+            Ok(None) => {}
+            Err(error) => panic!("Assertion failed with error '{:?}'", error),
+        }
+
+        self
+    }
+
+    #[allow(clippy::wrong_self_convention)]
+    pub fn is_not_alive(&mut self) -> &mut Self {
+        match self
+            .uchild
+            .as_child()
+            .try_wait()
+        {
+            Ok(None) => panic!(
+                "Assertion failed. Expected '{}' to be not running but was alive.\nstdout: {}\nstderr: {}",
+                uucore::util_name(),
+                self.uchild.stdout_all(),
+                self.uchild.stderr_all()),
+            Ok(_) =>  {},
+            Err(error) => panic!("Assertion failed with error '{:?}'", error),
+        }
+
+        self
+    }
+}
+
+pub struct UChild {
+    raw: Child,
+    bin_path: String,
+    util_name: Option<String>,
+    tmpd: Option<Rc<TempDir>>,
+    captured_stdout: Option<CapturedOutput>,
+    captured_stderr: Option<CapturedOutput>,
+    ignore_stdin_write_error: bool,
+}
+
+// TODO: rename `pipe_in` to `pipe_in_bytes(Vec<u8>)` and use convenience function `pipe_in(&str)`
+// TODO: Add method `pipe_in_fixture(&str)`: like `pipe_in` but with a fixture
+impl UChild {
+    fn new(
+        child: Child,
+        bin_path: String,
+        util_name: Option<String>,
+        tmpd: Option<Rc<TempDir>>,
+        captured_stdout: Option<CapturedOutput>,
+        captured_stderr: Option<CapturedOutput>,
+        ignore_stdin_write_error: bool,
+    ) -> Self {
+        Self {
+            raw: child,
+            bin_path,
+            util_name,
+            tmpd,
+            captured_stdout,
+            captured_stderr,
+            ignore_stdin_write_error,
+        }
+    }
+
+    /// Returns a mutable reference of the wrapped child process.
+    pub fn as_child(&mut self) -> &mut Child {
+        &mut self.raw
+    }
+
+    pub fn take_child_stdin(&mut self) -> Option<ChildStdin> {
+        self.raw.stdin.take()
+    }
+
+    pub fn delay(&mut self, millis: u64) -> &mut Self {
+        sleep(Duration::from_millis(millis));
+        self
+    }
+
+    pub fn id(&self) -> u32 {
+        self.raw.id()
+    }
+
+    /// Terminates the child process unconditionally and waits for the termination. Ignores any
+    /// errors happening during [`Child::kill`].
+    ///
+    /// # Panics
+    /// If the child process could not be terminated within 60 seconds or an error happened during
+    /// [`Child::wait_with_timeout`]
+    pub fn kill(&mut self) -> &mut Self {
+        let _ = self.raw.kill();
+        for _ in 0..60 {
+            if !self.try_alive() {
+                return self;
+            }
+            sleep(Duration::from_secs(1));
+        }
+        panic!("Killing the child process within 60 seconds failed.")
+    }
+
+    // TODO: Accept AssertionMode as parameter
+    // TODO: use wait_with_output.unwrap() and return plain CmdResult instead?
+    /// Wait for the child process to terminate and return a [`CmdResult`]. This method can also be
+    /// run if the child process was killed with [`UChild::kill`].
+    ///
+    /// # Errors
+    /// Returns the error from the call to [`Child::wait_with_output`] if any
+    pub fn wait(self) -> io::Result<CmdResult> {
+        let (bin_path, util_name, tmpd) = (
+            self.bin_path.clone(),
+            self.util_name.clone(),
+            self.tmpd.clone(),
+        );
+
+        let output = self.wait_with_output()?;
+
+        Ok(CmdResult {
+            bin_path,
+            util_name,
+            tmpd,
+            code: output.status.code(),
+            success: output.status.success(),
+            stdout: output.stdout,
+            stderr: output.stderr,
+        })
+    }
+
+    pub fn wait_with_output(mut self) -> io::Result<Output> {
+        let mut output = self.raw.wait_with_output()?;
+
+        (output.stdout, output.stderr) =
+            match (self.captured_stdout.as_mut(), self.captured_stderr.as_mut()) {
+                (Some(stdout), Some(stderr)) => {
+                    (stdout.output_as_bytes(), stderr.output_as_bytes())
+                }
+                (None, Some(stderr)) => (output.stdout, stderr.output_as_bytes()),
+                (Some(stdout), None) => (stdout.output_as_bytes(), output.stderr),
+                (None, None) => (output.stdout, output.stderr),
+            };
+
+        Ok(output)
+    }
+
+    /// Reads, consumes and returns the output as [`String`] from [`Child`]'s stdout. See also
+    /// [`UChild::stdout_bytes] for side effects.
+    pub fn stdout(&mut self) -> String {
+        String::from_utf8(self.stdout_bytes()).unwrap()
+    }
+
+    pub fn stdout_all(&mut self) -> String {
+        String::from_utf8(self.stdout_all_bytes()).unwrap()
+    }
+
+    /// Reads, consumes and returns the output as bytes from [`Child`]'s stdout. Each subsequent
+    /// call to any of the functions below will return the subsequent output of the child process:
+    ///
+    /// * [`UChild::stdout`]
+    /// * [`UChild::stdout_exact_bytes`]
+    /// * and the call to itself [`UChild::stdout_bytes`]
+    pub fn stdout_bytes(&mut self) -> Vec<u8> {
+        match self.captured_stdout.as_mut() {
+            Some(output) => output.output_as_bytes(),
+            None if self.raw.stdout.is_some() => {
+                let mut buffer: Vec<u8> = vec![];
+                let stdout = self.raw.stdout.as_mut().unwrap();
+                stdout.read_to_end(&mut buffer).unwrap();
+                buffer
+            }
+            None => vec![],
+        }
+    }
+
+    /// Returns all output from start of the child process until now, if we captured the output or
+    /// else returns the output of the child process beginning from the last call to any of the
+    /// these methods:
+    /// * [`UChild::stdout`]
+    /// * [`UChild::stdout_bytes`]
+    /// * [`UChild::stdout_exact_bytes`]
+    /// * and the call to itself [`UChild::stdout_all_bytes`]
+    ///
+    /// This function does not consume any output, unlike any of the functions above besides itself.
+    pub fn stdout_all_bytes(&mut self) -> Vec<u8> {
+        match self.captured_stdout.as_mut() {
+            Some(output) => output.output_all_bytes(),
+            None => self.stdout_bytes(),
+        }
+    }
+
+    /// Reads, consumes and returns the exact amount of bytes from `stdout`. This method may block indefinitely if the
+    /// `size` amount of bytes exceeds the amount of bytes that can be read. See also [`UChild::stdout_bytes`] for
+    /// side effects.
+    pub fn stdout_exact_bytes(&mut self, size: usize) -> Vec<u8> {
+        match self.captured_stdout.as_mut() {
+            Some(output) => output.output_exact_bytes(size),
+            None if self.raw.stdout.is_some() => {
+                let mut buffer = vec![0; size];
+                let stdout = self.raw.stdout.as_mut().unwrap();
+                stdout.read_exact(&mut buffer).unwrap();
+                buffer
+            }
+            None => vec![],
+        }
+    }
+
+    /// Reads, consumes and returns the child's stderr as String. See also [`UChild::stdout_bytes`]
+    /// for side effects.
+    pub fn stderr(&mut self) -> String {
+        String::from_utf8(self.stderr_bytes()).unwrap()
+    }
+
+    pub fn stderr_all(&mut self) -> String {
+        String::from_utf8(self.stderr_all_bytes()).unwrap()
+    }
+
+    /// Reads, consumes and returns all bytes from child's stderr. If stderr is redirected to stdout
+    /// with [`UCommand::stderr_to_stdout`] then always zero bytes are returned. See also
+    /// [`UChild::stdout_bytes`] for side effects.
+    pub fn stderr_bytes(&mut self) -> Vec<u8> {
+        match self.captured_stderr.as_mut() {
+            Some(output) => output.output_as_bytes(),
+            None if self.raw.stderr.is_some() => {
+                let mut buffer: Vec<u8> = vec![];
+                let stderr = self.raw.stderr.as_mut().unwrap();
+                stderr.read_to_end(&mut buffer).unwrap();
+                buffer
+            }
+            None => vec![],
+        }
+    }
+
+    /// Returns all output from start of the child processes' stderr until now, if we captured the
+    /// output or else returns the output of the child process that can currently be read. See also
+    /// [`UChild::stdout_all_bytes`] for additional information.
+    pub fn stderr_all_bytes(&mut self) -> Vec<u8> {
+        match self.captured_stderr.as_mut() {
+            Some(output) => output.output_all_bytes(),
+            None => self.stderr_bytes(),
+        }
+    }
+
+    /// Reads, consumes and returns the exact amount of bytes from stderr. If stderr is redirect to
+    /// stdout with [`UCommand::stderr_to_stdout`] then always zero bytes are returned.
+    ///
+    /// # Important
+    /// This method blocks indefinitely if the `size` amount of bytes cannot be read.
+    pub fn stderr_exact_bytes(&mut self, size: usize) -> Vec<u8> {
+        match self.captured_stderr.as_mut() {
+            Some(output) => output.output_exact_bytes(size),
+            None if self.raw.stderr.is_some() => {
+                let stderr = self.raw.stderr.as_mut().unwrap();
+                let mut buffer = vec![0; size];
+                stderr.read_exact(&mut buffer).unwrap();
+                buffer
+            }
+            None => vec![],
+        }
+    }
+
+    /// Returns true if the child process is still alive and false otherwise.
+    ///
+    /// # Panics
+    /// If an error occurred during [`Child::try_wait`]
+    pub fn try_alive(&mut self) -> bool {
+        // TODO: return false on error of try_wait ?
+        self.raw.try_wait().unwrap().is_none()
+    }
+
+    /// Returns a [`UChildAssertion`] on which helper functions with assertions can be called.
+    pub fn make_assertion(&mut self) -> UChildAssertion {
+        UChildAssertion::new(self)
+    }
+
+    pub fn make_assertion_with_delay(&mut self, millis: u64) -> UChildAssertion {
+        sleep(Duration::from_millis(millis));
+        self.make_assertion()
+    }
+
+    /// Pipe data into [`Child`] stdin in a separate thread to avoid deadlocks. Note, that
+    /// [`UCommand::set_stdin`] must be used together with [`Stdio::piped`] or else this method
+    /// doesn't work as expected. `Stdio::piped` is the current default when using
+    /// [`UCommand::run_no_wait`]) without calling `set_stdin`. This method returns a [`JoinHandle`]
+    /// of the thread in which the writing to the child processes stdin is running.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the [`UCommand::set_stdin`] is called with setting [`Stdio::null`] or
+    /// the child's stdin cannot be taken out.
+    ///
+    /// [`JoinHandle`]: std::thread::JoinHandle
+    pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, content: T) -> JoinHandle<io::Result<()>> {
+        let ignore_stdin_write_error = self.ignore_stdin_write_error;
+        let content = content.into();
+        let stdin = self
+            .take_child_stdin()
+            .expect("Could not pipe into child process. Was it set to Stdio::null()?");
+        thread::spawn(move || {
+            let mut writer = BufWriter::new(stdin);
+            if ignore_stdin_write_error {
+                let _ = writer.write_all(&content);
+                let _ = writer.flush();
+                Ok(())
+            } else {
+                writer
+                    .write_all(&content)
+                    .and_then(|_| writer.flush())
+                    .map_err(|error| {
+                        io::Error::new(
+                            io::ErrorKind::Other,
+                            format!("failed to write to stdin of child: {}", error),
+                        )
+                    })
+            }
+        })
+    }
+
+    // TODO: Accept AssertionMode as parameter
+    /// Pipe in data with [`UChild::pipe_in`] and [`UChild::wait`] for the process to terminate to
+    /// return a [`CmdResult`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if [`UChild::wait`] panics or `thread.join()` returns an error
+    pub fn pipe_in_and_wait<T: Into<Vec<u8>>>(mut self, content: T) -> CmdResult {
+        let thread = self.pipe_in(content);
+        let result = self.wait().unwrap();
+        thread.join().unwrap().unwrap();
+        result
+    }
+
+    pub fn pipe_in_and_wait_with_output<T: Into<Vec<u8>>>(mut self, content: T) -> Output {
+        let thread = self.pipe_in(content);
+        let output = self.wait_with_output().unwrap();
+        thread.join().unwrap().unwrap();
+        output
+    }
+
+    pub fn write_in<T: Into<Vec<u8>>>(&mut self, data: T) -> io::Result<()> {
+        let stdin = self.raw.stdin.as_mut().unwrap();
+        stdin.write_all(&data.into())?;
+        stdin.flush()?;
+        Ok(())
+    }
+
+    pub fn close_stdout(&mut self) -> &mut Self {
+        if let Some(stdout) = self.raw.stdout.take() {
+            drop(stdout);
+        }
+        self
+    }
+
+    pub fn close_stderr(&mut self) -> &mut Self {
+        if let Some(stderr) = self.raw.stderr.take() {
+            drop(stderr);
+        }
+        self
+    }
+
+    pub fn close_stdin(&mut self) -> &mut Self {
+        if let Some(stdin) = self.raw.stdin.take() {
+            drop(stdin);
+        }
+        self
+    }
+}
+
+// TODO: remove after UChild is ready?
 /// Wrapper for `child.stdout.read_exact()`.
 /// Careful, this blocks indefinitely if `size` bytes is never reached.
 pub fn read_size(child: &mut Child, size: usize) -> String {
     String::from_utf8(read_size_bytes(child, size)).unwrap()
 }
 
+// TODO: remove after UChild is ready?
 /// Read the specified number of bytes from the stdout of the child process.
 ///
 /// Careful, this blocks indefinitely if `size` bytes is never reached.
