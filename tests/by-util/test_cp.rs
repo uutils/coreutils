@@ -2019,7 +2019,8 @@ fn test_copy_same_symlink_no_dereference_dangling() {
     ucmd.args(&["-d", "a", "b"]).succeeds();
 }
 
-#[cfg(not(windows))]
+// TODO: enable for Android, when #3477 solved
+#[cfg(not(any(windows, target_os = "android")))]
 #[test]
 fn test_cp_parents_2_dirs() {
     let (at, mut ucmd) = at_and_ucmd!();
