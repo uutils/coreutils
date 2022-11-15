@@ -2057,7 +2057,7 @@ fn test_ls_indicator_style() {
             .tempdir()
             .expect("failed to create dir");
         let socket_path = dir.path().join("sock");
-        let _listener = UnixListener::bind(&socket_path).expect("failed to create socket");
+        let _listener = UnixListener::bind(socket_path).expect("failed to create socket");
 
         new_ucmd!()
             .args(&[

@@ -85,7 +85,7 @@ impl RandomFile {
     /// `create()` file handle located at `at` / `name`
     fn new(at: &AtPath, name: &str) -> Self {
         Self {
-            inner: File::create(&at.plus(name)).unwrap(),
+            inner: File::create(at.plus(name)).unwrap(),
         }
     }
 
