@@ -44,7 +44,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Err(USimpleError::new(1, "could not retrieve system uptime"))
     } else {
         if matches.get_flag(options::SINCE) {
-            let initial_date = Local.timestamp(Utc::now().timestamp() - uptime, 0);
+            let initial_date = Local
+                .timestamp_opt(Utc::now().timestamp() - uptime, 0)
+                .unwrap();
             println!("{}", initial_date.format("%Y-%m-%d %H:%M:%S"));
             return Ok(());
         }

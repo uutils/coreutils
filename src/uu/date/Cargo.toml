@@ -15,7 +15,7 @@ edition = "2021"
 path = "src/date.rs"
 
 [dependencies]
-chrono = { version="^0.4.19", default-features=false, features=["std", "alloc", "clock"]}
+chrono = { version="^0.4.23", default-features=false, features=["std", "alloc", "clock"]}
 clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
 
