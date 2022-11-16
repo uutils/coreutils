@@ -11,7 +11,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, prompt_yes, show_error};
 
 use std::borrow::Cow;
 use std::error::Error;
@@ -19,7 +19,6 @@ use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs;
 
-use std::io::stdin;
 #[cfg(any(unix, target_os = "redox"))]
 use std::os::unix::fs::symlink;
 #[cfg(windows)]
@@ -410,8 +409,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         match settings.overwrite {
             OverwriteMode::NoClobber => {}
             OverwriteMode::Interactive => {
-                print!("{}: overwrite {}? ", uucore::util_name(), dst.quote());
-                if !read_yes() {
+                if !prompt_yes!("overwrite {}?", dst.quote()) {
                     return Ok(());
                 }
 
@@ -457,17 +455,6 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         }
     }
     Ok(())
-}
-
-fn read_yes() -> bool {
-    let mut s = String::new();
-    match stdin().read_line(&mut s) {
-        Ok(_) => match s.char_indices().next() {
-            Some((_, x)) => x == 'y' || x == 'Y',
-            _ => false,
-        },
-        _ => false,
-    }
 }
 
 fn simple_backup_path(path: &Path, suffix: &str) -> PathBuf {
