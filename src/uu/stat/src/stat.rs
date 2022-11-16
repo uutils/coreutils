@@ -140,7 +140,7 @@ enum Token {
     Directive {
         flag: Flags,
         width: usize,
-        precision: i32,
+        precision: Option<usize>,
         format: char,
     },
 }
@@ -245,7 +245,7 @@ struct Stater {
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn print_it(output: &OutputType, flags: Flags, width: usize, precision: i32) {
+fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Option<usize>) {
     // If the precision is given as just '.', the precision is taken to be zero.
     // A negative precision is taken as if the precision were omitted.
     // This gives the minimum number of digits to appear for d, i, o, u, x, and X conversions,
@@ -276,7 +276,7 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: i32) {
     // By default, a sign  is  used only for negative numbers.
     // A + overrides a space if both are used.
 
-    let padding_char = if flags.zero && !flags.left && precision == -1 {
+    let padding_char = if flags.zero && !flags.left && precision.is_none() {
         Padding::Zero
     } else {
         Padding::Space
@@ -286,8 +286,10 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: i32) {
 
     match output {
         OutputType::Str(s) => {
-            let limit = cmp::min(precision, s.len() as i32);
-            let s: &str = if limit >= 0 { &s[..limit as usize] } else { s };
+            let s = match precision {
+                Some(p) if p < s.len() => &s[..p],
+                _ => s,
+            };
             print_adjusted(s, flags.left, None, None, width, Padding::Space);
         }
         OutputType::Integer(num) => {
@@ -297,8 +299,7 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: i32) {
             } else {
                 Cow::Borrowed(num.as_str())
             };
-            let min_digits = cmp::max(precision, arg.len() as i32) as usize;
-            let extended: Cow<str> = extend_digits(arg.as_ref(), min_digits);
+            let extended = extend_digits(&arg, precision.unwrap_or(0));
             let prefix = if flags.sign { "+" } else { " " };
             print_adjusted(
                 extended.as_ref(),
@@ -316,8 +317,7 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: i32) {
             } else {
                 Cow::Borrowed(num.as_str())
             };
-            let min_digits = cmp::max(precision, arg.len() as i32) as usize;
-            let extended: Cow<str> = extend_digits(arg.as_ref(), min_digits);
+            let extended = extend_digits(&arg, precision.unwrap_or(0));
             print_adjusted(
                 extended.as_ref(),
                 flags.left,
@@ -329,8 +329,7 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: i32) {
         }
         OutputType::UnsignedOct(num) => {
             let num = format!("{:o}", num);
-            let min_digits = cmp::max(precision, num.len() as i32) as usize;
-            let extended: Cow<str> = extend_digits(&num, min_digits);
+            let extended = extend_digits(&num, precision.unwrap_or(0));
             print_adjusted(
                 extended.as_ref(),
                 flags.left,
@@ -342,8 +341,7 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: i32) {
         }
         OutputType::UnsignedHex(num) => {
             let num = format!("{:x}", num);
-            let min_digits = cmp::max(precision, num.len() as i32) as usize;
-            let extended: Cow<str> = extend_digits(&num, min_digits);
+            let extended = extend_digits(&num, precision.unwrap_or(0));
             print_adjusted(
                 extended.as_ref(),
                 flags.left,
@@ -397,7 +395,7 @@ impl Stater {
                     check_bound(format_str, bound, old, i)?;
 
                     let mut width = 0;
-                    let mut precision = -1;
+                    let mut precision = None;
                     let mut j = i;
 
                     if let Some((field_width, offset)) = format_str[j..].scan_num::<usize>() {
@@ -413,11 +411,11 @@ impl Stater {
                         match format_str[j..].scan_num::<i32>() {
                             Some((value, offset)) => {
                                 if value >= 0 {
-                                    precision = value;
+                                    precision = Some(value as usize);
                                 }
                                 j += offset;
                             }
-                            None => precision = 0,
+                            None => precision = Some(0),
                         }
                         check_bound(format_str, bound, old, j)?;
                     }
@@ -985,7 +983,7 @@ mod tests {
                     ..Default::default()
                 },
                 width: 10,
-                precision: 2,
+                precision: Some(2),
                 format: 'a',
             },
             Token::Char('c'),
@@ -996,7 +994,7 @@ mod tests {
                     ..Default::default()
                 },
                 width: 5,
-                precision: 0,
+                precision: Some(0),
                 format: 'w',
             },
             Token::Char('\n'),
@@ -1016,7 +1014,7 @@ mod tests {
                     ..Default::default()
                 },
                 width: 15,
-                precision: -1,
+                precision: None,
                 format: 'a',
             },
             Token::Char('\t'),
@@ -1035,7 +1033,7 @@ mod tests {
                     ..Default::default()
                 },
                 width: 20,
-                precision: -1,
+                precision: None,
                 format: 'w',
             },
             Token::Char('\x12'),
