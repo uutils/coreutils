@@ -18,7 +18,7 @@ use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, stderr, stdin, Write};
+use std::io;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
@@ -39,7 +39,7 @@ use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::fs::{
     canonicalize, paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
 };
-use uucore::{crash, crash_if_err, format_usage, show_error, show_warning};
+use uucore::{crash, format_usage, prompt_yes, show_error, show_warning};
 
 mod copydir;
 use crate::copydir::copy_directory;
@@ -101,24 +101,6 @@ impl UError for Error {
         EXIT_ERR
     }
 }
-
-/// Prompts the user yes/no and returns `true` if they successfully
-/// answered yes.
-macro_rules! prompt_yes(
-    ($($args:tt)+) => ({
-        eprint!($($args)+);
-        eprint!(" [y/N]: ");
-        crash_if_err!(1, stderr().flush());
-        let mut s = String::new();
-        match stdin().read_line(&mut s) {
-            Ok(_) => match s.char_indices().next() {
-                Some((_, x)) => x == 'y' || x == 'Y',
-                _ => false
-            },
-            _ => false
-        }
-    })
-);
 
 pub type CopyResult<T> = Result<T, Error>;
 pub type Source = PathBuf;
@@ -1085,7 +1067,7 @@ impl OverwriteMode {
         match *self {
             Self::NoClobber => Err(Error::NotAllFilesCopied),
             Self::Interactive(_) => {
-                if prompt_yes!("{}: overwrite {}? ", uucore::util_name(), path.quote()) {
+                if prompt_yes!("overwrite {}?", path.quote()) {
                     Ok(())
                 } else {
                     Err(Error::Skipped)
