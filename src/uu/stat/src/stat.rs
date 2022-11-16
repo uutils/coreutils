@@ -29,7 +29,7 @@ use std::{cmp, fs, iter};
 const ABOUT: &str = "Display file or file system status.";
 const USAGE: &str = "{} [OPTION]... FILE...";
 
-pub mod options {
+mod options {
     pub const DEREFERENCE: &str = "dereference";
     pub const FILE_SYSTEM: &str = "file-system";
     pub const FORMAT: &str = "format";
@@ -39,13 +39,13 @@ pub mod options {
 }
 
 #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
-pub struct Flags {
-    pub alter: bool,
-    pub zero: bool,
-    pub left: bool,
-    pub space: bool,
-    pub sign: bool,
-    pub group: bool,
+struct Flags {
+    alter: bool,
+    zero: bool,
+    left: bool,
+    space: bool,
+    sign: bool,
+    group: bool,
 }
 
 /// checks if the string is within the specified bound,
@@ -135,7 +135,7 @@ pub enum OutputType {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum Token {
+enum Token {
     Char(char),
     Directive {
         flag: Flags,
@@ -145,7 +145,7 @@ pub enum Token {
     },
 }
 
-pub trait ScanUtil {
+trait ScanUtil {
     fn scan_num<F>(&self) -> Option<(F, usize)>
     where
         F: std::str::FromStr;
@@ -210,7 +210,7 @@ impl ScanUtil for str {
     }
 }
 
-pub fn group_num(s: &str) -> Cow<str> {
+fn group_num(s: &str) -> Cow<str> {
     let is_negative = s.starts_with('-');
     assert!(is_negative || s.chars().take(1).all(|c| c.is_ascii_digit()));
     assert!(s.chars().skip(1).all(|c| c.is_ascii_digit()));
@@ -234,7 +234,7 @@ pub fn group_num(s: &str) -> Cow<str> {
     res.into()
 }
 
-pub struct Stater {
+struct Stater {
     follow: bool,
     show_fs: bool,
     from_user: bool,
@@ -358,7 +358,7 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: i32) {
 }
 
 impl Stater {
-    pub fn generate_tokens(format_str: &str, use_printf: bool) -> UResult<Vec<Token>> {
+    fn generate_tokens(format_str: &str, use_printf: bool) -> UResult<Vec<Token>> {
         let mut tokens = Vec::new();
         let bound = format_str.len();
         let chars = format_str.chars().collect::<Vec<char>>();
