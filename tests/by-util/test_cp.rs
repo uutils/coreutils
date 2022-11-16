@@ -909,29 +909,63 @@ fn test_cp_preserve_no_args() {
 
 #[test]
 #[cfg(unix)]
-fn test_cp_preserve_all_succeeds() {
+fn test_cp_preserve_all() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let src_file = "a";
+    let dst_file = "b";
+
+    // Prepare the source file
+    at.touch(src_file);
+    at.set_mode(src_file, 0o0500);
+
     // TODO: create a destination that does not allow copying of xattr and context
-    new_ucmd!()
-        .arg(TEST_COPY_FROM_FOLDER_FILE)
-        .arg(TEST_HELLO_WORLD_DEST)
+    // Copy
+    ucmd.arg(src_file)
+        .arg(dst_file)
         .arg("--preserve=all")
         .succeeds();
+
+    // Assert that the mode, ownership, and timestamps are preserved
+    // NOTICE: the ownership is not modified on the src file, because that requires root permissions
+    let metadata_src = at.metadata(src_file);
+    let metadata_dst = at.metadata(dst_file);
+    assert_metadata_eq!(metadata_src, metadata_dst);
 }
 
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
-fn test_cp_preserve_xattr_succeeds() {
+fn test_cp_preserve_xattr() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let src_file = "a";
+    let dst_file = "b";
+
+    // Prepare the source file
+    at.touch(src_file);
+    at.set_mode(src_file, 0o0500);
+
     // TODO: create a destination that does not allow copying of xattr and context
-    new_ucmd!()
-        .arg(TEST_COPY_FROM_FOLDER_FILE)
-        .arg(TEST_HELLO_WORLD_DEST)
+    // Copy
+    ucmd.arg(src_file)
+        .arg(dst_file)
         .arg("--preserve=xattr")
         .succeeds();
+
+    // Assert that the mode, ownership, and timestamps are *NOT* preserved
+    // NOTICE: the ownership is not modified on the src file, because that requires root permissions
+    let metadata_src = at.metadata(src_file);
+    let metadata_dst = at.metadata(dst_file);
+    assert_ne!(metadata_src.mode(), metadata_dst.mode());
+    assert_ne!(metadata_src.atime(), metadata_dst.atime());
+    assert_ne!(metadata_src.atime_nsec(), metadata_dst.atime_nsec());
+    assert_ne!(metadata_src.mtime(), metadata_dst.mtime());
 }
 
 #[test]
 #[cfg(any(target_os = "android"))]
 fn test_cp_preserve_xattr_fails_on_android() {
+    // Because of the SELinux extended attributes used on Android, trying to copy extended
+    // attributes has to fail in this case, since we specify `--preserve=xattr` and this puts it
+    // into the required attributes
     new_ucmd!()
         .arg(TEST_COPY_FROM_FOLDER_FILE)
         .arg(TEST_HELLO_WORLD_DEST)
