@@ -881,11 +881,29 @@ fn test_cp_issue_1665() {
 
 #[test]
 fn test_cp_preserve_no_args() {
-    new_ucmd!()
-        .arg(TEST_COPY_FROM_FOLDER_FILE)
-        .arg(TEST_HELLO_WORLD_DEST)
+    let (at, mut ucmd) = at_and_ucmd!();
+    let src_file = "a";
+    let dst_file = "b";
+
+    // Prepare the source file
+    at.touch(src_file);
+    #[cfg(unix)]
+    at.set_mode(src_file, 0o0500);
+
+    // Copy
+    ucmd.arg(src_file)
+        .arg(dst_file)
         .arg("--preserve")
         .succeeds();
+
+    #[cfg(unix)]
+    {
+        // Assert that the mode, ownership, and timestamps are preserved
+        // NOTICE: the ownership is not modified on the src file, because that requires root permissions
+        let metadata_src = at.metadata(src_file);
+        let metadata_dst = at.metadata(dst_file);
+        assert_metadata_eq!(metadata_src, metadata_dst);
+    }
 }
 
 #[test]
