@@ -26,18 +26,17 @@ use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::{cmp, fs, iter};
 
-static ABOUT: &str = "Display file or file system status.";
+const ABOUT: &str = "Display file or file system status.";
 const USAGE: &str = "{} [OPTION]... FILE...";
 
 pub mod options {
-    pub static DEREFERENCE: &str = "dereference";
-    pub static FILE_SYSTEM: &str = "file-system";
-    pub static FORMAT: &str = "format";
-    pub static PRINTF: &str = "printf";
-    pub static TERSE: &str = "terse";
+    pub const DEREFERENCE: &str = "dereference";
+    pub const FILE_SYSTEM: &str = "file-system";
+    pub const FORMAT: &str = "format";
+    pub const PRINTF: &str = "printf";
+    pub const TERSE: &str = "terse";
+    pub const FILES: &str = "files";
 }
-
-static ARG_FILES: &str = "files";
 
 #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Flags {
@@ -117,10 +116,8 @@ fn print_adjusted(
 ) {
     let mut field_width = cmp::max(width, s.len());
     if let Some(p) = prefix {
-        if let Some(prefix_flag) = need_prefix {
-            if prefix_flag {
-                field_width -= p.len();
-            }
+        if let Some(true) = need_prefix {
+            field_width -= p.len();
         }
         pad_and_print(s, left, field_width, padding);
     } else {
@@ -163,7 +160,7 @@ impl ScanUtil for str {
         let mut chars = self.chars();
         let mut i = 0;
         match chars.next() {
-            Some('-') | Some('+') | Some('0'..='9') => i += 1,
+            Some('-' | '+' | '0'..='9') => i += 1,
             _ => return None,
         }
         for c in chars {
@@ -181,13 +178,13 @@ impl ScanUtil for str {
 
     fn scan_char(&self, radix: u32) -> Option<(char, usize)> {
         let count = match radix {
-            8 => 3_usize,
+            8 => 3,
             16 => 2,
             _ => return None,
         };
         let chars = self.chars().enumerate();
-        let mut res = 0_u32;
-        let mut offset = 0_usize;
+        let mut res = 0;
+        let mut offset = 0;
         for (i, c) in chars {
             if i >= count {
                 break;
@@ -279,7 +276,7 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: i32) {
     // By default, a sign  is  used only for negative numbers.
     // A + overrides a space if both are used.
 
-    let padding_char: Padding = if flags.zero && !flags.left && precision == -1 {
+    let padding_char = if flags.zero && !flags.left && precision == -1 {
         Padding::Zero
     } else {
         Padding::Space
@@ -365,7 +362,7 @@ impl Stater {
         let mut tokens = Vec::new();
         let bound = format_str.len();
         let chars = format_str.chars().collect::<Vec<char>>();
-        let mut i = 0_usize;
+        let mut i = 0;
         while i < bound {
             match chars[i] {
                 '%' => {
@@ -399,8 +396,8 @@ impl Stater {
                     }
                     check_bound(format_str, bound, old, i)?;
 
-                    let mut width = 0_usize;
-                    let mut precision = -1_i32;
+                    let mut width = 0;
+                    let mut precision = -1;
                     let mut j = i;
 
                     if let Some((field_width, offset)) = format_str[j..].scan_num::<usize>() {
@@ -488,7 +485,7 @@ impl Stater {
 
     fn new(matches: &ArgMatches) -> UResult<Self> {
         let files = matches
-            .get_many::<OsString>(ARG_FILES)
+            .get_many::<OsString>(options::FILES)
             .map(|v| v.map(OsString::from).collect())
             .unwrap_or_default();
         let format_str = if matches.contains_id(options::PRINTF) {
@@ -541,15 +538,11 @@ impl Stater {
     }
 
     fn find_mount_point<P: AsRef<Path>>(&self, p: P) -> Option<String> {
-        let path = match p.as_ref().canonicalize() {
-            Ok(s) => s,
-            Err(_) => return None,
-        };
-        if let Some(ref mount_list) = self.mount_list {
-            for root in mount_list.iter() {
-                if path.starts_with(root) {
-                    return Some(root.clone());
-                }
+        let path = p.as_ref().canonicalize().ok()?;
+
+        for root in self.mount_list.as_ref()? {
+            if path.starts_with(root) {
+                return Some(root.clone());
             }
         }
         None
@@ -572,7 +565,7 @@ impl Stater {
 
     fn do_stat(&self, file: &OsStr, stdin_is_fifo: bool) -> i32 {
         let display_name = file.to_string_lossy();
-        let file: OsString = if cfg!(unix) && display_name.eq("-") {
+        let file = if cfg!(unix) && display_name == "-" {
             if let Ok(p) = Path::new("/dev/stdin").canonicalize() {
                 p.into_os_string()
             } else {
@@ -583,7 +576,7 @@ impl Stater {
         };
 
         if !self.show_fs {
-            let result = if self.follow || stdin_is_fifo && display_name.eq("-") {
+            let result = if self.follow || stdin_is_fifo && display_name == "-" {
                 fs::metadata(&file)
             } else {
                 fs::symlink_metadata(&file)
@@ -790,37 +783,35 @@ impl Stater {
     fn default_format(show_fs: bool, terse: bool, show_dev_type: bool) -> String {
         // SELinux related format is *ignored*
 
-        let mut format_str = String::with_capacity(36);
         if show_fs {
             if terse {
-                format_str.push_str("%n %i %l %t %s %S %b %f %a %c %d\n");
+                "%n %i %l %t %s %S %b %f %a %c %d\n".into()
             } else {
-                format_str.push_str(
-                    "  File: \"%n\"\n    ID: %-8i Namelen: %-7l Type: %T\nBlock \
-                     size: %-10s Fundamental block size: %S\nBlocks: Total: %-10b \
-                     Free: %-10f Available: %a\nInodes: Total: %-10c Free: %d\n",
-                );
+                "  File: \"%n\"\n    ID: %-8i Namelen: %-7l Type: %T\nBlock \
+                 size: %-10s Fundamental block size: %S\nBlocks: Total: %-10b \
+                 Free: %-10f Available: %a\nInodes: Total: %-10c Free: %d\n"
+                    .into()
             }
         } else if terse {
-            format_str.push_str("%n %s %b %f %u %g %D %i %h %t %T %X %Y %Z %W %o\n");
+            "%n %s %b %f %u %g %D %i %h %t %T %X %Y %Z %W %o\n".into()
         } else {
-            format_str.push_str("  File: %N\n  Size: %-10s\tBlocks: %-10b IO Block: %-6o %F\n");
-            if show_dev_type {
-                format_str
-                    .push_str("Device: %Dh/%dd\tInode: %-10i  Links: %-5h Device type: %t,%T\n");
-            } else {
-                format_str.push_str("Device: %Dh/%dd\tInode: %-10i  Links: %h\n");
-            }
-            format_str.push_str("Access: (%04a/%10.10A)  Uid: (%5u/%8U)   Gid: (%5g/%8G)\n");
-            format_str.push_str("Access: %x\nModify: %y\nChange: %z\n Birth: %w\n");
+            [
+                "  File: %N\n  Size: %-10s\tBlocks: %-10b IO Block: %-6o %F\n",
+                if show_dev_type {
+                    "Device: %Dh/%dd\tInode: %-10i  Links: %-5h Device type: %t,%T\n"
+                } else {
+                    "Device: %Dh/%dd\tInode: %-10i  Links: %h\n"
+                },
+                "Access: (%04a/%10.10A)  Uid: (%5u/%8U)   Gid: (%5g/%8G)\n",
+                "Access: %x\nModify: %y\nChange: %z\n Birth: %w\n",
+            ]
+            .join("")
         }
-        format_str
     }
 }
 
-fn get_long_usage() -> String {
-    String::from(
-        "
+fn get_long_usage() -> &'static str {
+    "
 The valid format sequences for files (without --file-system):
 
   %a   access rights in octal (note '#' and '0' printf flags)
@@ -872,8 +863,7 @@ Valid format sequences for file systems:
 NOTE: your shell may have its own version of stat, which usually supersedes
 the version described here.  Please refer to your shell's documentation
 for details about the options it supports.
-",
-    )
+"
 }
 
 #[uucore::main]
@@ -939,7 +929,7 @@ pub fn uu_app() -> Command {
                 ),
         )
         .arg(
-            Arg::new(ARG_FILES)
+            Arg::new(options::FILES)
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
@@ -1016,7 +1006,7 @@ mod tests {
 
     #[test]
     fn printf_format() {
-        let s = "%-# 15a\\t\\r\\\"\\\\\\a\\b\\e\\f\\v%+020.-23w\\x12\\167\\132\\112\\n";
+        let s = r#"%-# 15a\t\r\"\\\a\b\e\f\v%+020.-23w\x12\167\132\112\n"#;
         let expected = vec![
             Token::Directive {
                 flag: Flags {
