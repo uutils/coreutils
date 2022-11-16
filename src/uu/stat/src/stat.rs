@@ -39,12 +39,15 @@ pub mod options {
 
 static ARG_FILES: &str = "files";
 
-pub const F_ALTER: u8 = 1;
-pub const F_ZERO: u8 = 1 << 1;
-pub const F_LEFT: u8 = 1 << 2;
-pub const F_SPACE: u8 = 1 << 3;
-pub const F_SIGN: u8 = 1 << 4;
-pub const F_GROUP: u8 = 1 << 5;
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+pub struct Flags {
+    pub alter: bool,
+    pub zero: bool,
+    pub left: bool,
+    pub space: bool,
+    pub sign: bool,
+    pub group: bool,
+}
 
 /// checks if the string is within the specified bound,
 /// if it gets out of bound, error out by printing sub-string from index `beg` to`end`,
@@ -138,7 +141,7 @@ pub enum OutputType {
 pub enum Token {
     Char(char),
     Directive {
-        flag: u8,
+        flag: Flags,
         width: usize,
         precision: i32,
         format: char,
@@ -245,7 +248,7 @@ pub struct Stater {
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn print_it(arg: &str, output_type: &OutputType, flag: u8, width: usize, precision: i32) {
+fn print_it(arg: &str, output_type: &OutputType, flags: Flags, width: usize, precision: i32) {
     // If the precision is given as just '.', the precision is taken to be zero.
     // A negative precision is taken as if the precision were omitted.
     // This gives the minimum number of digits to appear for d, i, o, u, x, and X conversions,
@@ -280,21 +283,19 @@ fn print_it(arg: &str, output_type: &OutputType, flag: u8, width: usize, precisi
         return print!("?");
     }
 
-    let left_align = has!(flag, F_LEFT);
-    let padding_char: Padding = if has!(flag, F_ZERO) && !left_align && precision == -1 {
+    let padding_char: Padding = if flags.zero && !flags.left && precision == -1 {
         Padding::Zero
     } else {
         Padding::Space
     };
 
-    let has_sign = has!(flag, F_SIGN) || has!(flag, F_SPACE);
+    let has_sign = flags.sign || flags.space;
 
-    let should_alter = has!(flag, F_ALTER);
     let prefix = match output_type {
         OutputType::UnsignedOct => "0",
         OutputType::UnsignedHex => "0x",
         OutputType::Integer => {
-            if has!(flag, F_SIGN) {
+            if flags.sign {
                 "+"
             } else {
                 " "
@@ -311,10 +312,10 @@ fn print_it(arg: &str, output_type: &OutputType, flag: u8, width: usize, precisi
             } else {
                 arg
             };
-            print_adjusted(s, left_align, None, None, width, Padding::Space);
+            print_adjusted(s, flags.left, None, None, width, Padding::Space);
         }
         OutputType::Integer => {
-            let arg = if has!(flag, F_GROUP) {
+            let arg = if flags.group {
                 group_num(arg)
             } else {
                 Cow::Borrowed(arg)
@@ -323,7 +324,7 @@ fn print_it(arg: &str, output_type: &OutputType, flag: u8, width: usize, precisi
             let extended: Cow<str> = extend_digits(arg.as_ref(), min_digits);
             print_adjusted(
                 extended.as_ref(),
-                left_align,
+                flags.left,
                 Some(has_sign),
                 Some(prefix),
                 width,
@@ -331,7 +332,7 @@ fn print_it(arg: &str, output_type: &OutputType, flag: u8, width: usize, precisi
             );
         }
         OutputType::Unsigned => {
-            let arg = if has!(flag, F_GROUP) {
+            let arg = if flags.group {
                 group_num(arg)
             } else {
                 Cow::Borrowed(arg)
@@ -340,7 +341,7 @@ fn print_it(arg: &str, output_type: &OutputType, flag: u8, width: usize, precisi
             let extended: Cow<str> = extend_digits(arg.as_ref(), min_digits);
             print_adjusted(
                 extended.as_ref(),
-                left_align,
+                flags.left,
                 None,
                 None,
                 width,
@@ -352,8 +353,8 @@ fn print_it(arg: &str, output_type: &OutputType, flag: u8, width: usize, precisi
             let extended: Cow<str> = extend_digits(arg, min_digits);
             print_adjusted(
                 extended.as_ref(),
-                left_align,
-                Some(should_alter),
+                flags.left,
+                Some(flags.alter),
                 Some(prefix),
                 width,
                 padding_char,
@@ -364,8 +365,8 @@ fn print_it(arg: &str, output_type: &OutputType, flag: u8, width: usize, precisi
             let extended: Cow<str> = extend_digits(arg, min_digits);
             print_adjusted(
                 extended.as_ref(),
-                left_align,
-                Some(should_alter),
+                flags.left,
+                Some(flags.alter),
                 Some(prefix),
                 width,
                 padding_char,
@@ -397,16 +398,16 @@ impl Stater {
                         continue;
                     }
 
-                    let mut flag: u8 = 0;
+                    let mut flag = Flags::default();
 
                     while i < bound {
                         match chars[i] {
-                            '#' => flag |= F_ALTER,
-                            '0' => flag |= F_ZERO,
-                            '-' => flag |= F_LEFT,
-                            ' ' => flag |= F_SPACE,
-                            '+' => flag |= F_SIGN,
-                            '\'' => flag |= F_GROUP,
+                            '#' => flag.alter = true,
+                            '0' => flag.zero = true,
+                            '-' => flag.left = true,
+                            ' ' => flag.space = true,
+                            '+' => flag.sign = true,
+                            '\'' => flag.group = true,
                             'I' => unimplemented!(),
                             _ => break,
                         }

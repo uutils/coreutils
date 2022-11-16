@@ -58,14 +58,22 @@ mod test_generate_tokens {
         let s = "%'010.2ac%-#5.w\n";
         let expected = vec![
             Token::Directive {
-                flag: F_GROUP | F_ZERO,
+                flag: Flags {
+                    group: true,
+                    zero: true,
+                    ..Default::default()
+                },
                 width: 10,
                 precision: 2,
                 format: 'a',
             },
             Token::Char('c'),
             Token::Directive {
-                flag: F_LEFT | F_ALTER,
+                flag: Flags {
+                    left: true,
+                    alter: true,
+                    ..Default::default()
+                },
                 width: 5,
                 precision: 0,
                 format: 'w',
@@ -80,7 +88,12 @@ mod test_generate_tokens {
         let s = "%-# 15a\\t\\r\\\"\\\\\\a\\b\\e\\f\\v%+020.-23w\\x12\\167\\132\\112\\n";
         let expected = vec![
             Token::Directive {
-                flag: F_LEFT | F_ALTER | F_SPACE,
+                flag: Flags {
+                    left: true,
+                    alter: true,
+                    space: true,
+                    ..Default::default()
+                },
                 width: 15,
                 precision: -1,
                 format: 'a',
@@ -95,7 +108,11 @@ mod test_generate_tokens {
             Token::Char('\x0C'),
             Token::Char('\x0B'),
             Token::Directive {
-                flag: F_SIGN | F_ZERO,
+                flag: Flags {
+                    sign: true,
+                    zero: true,
+                    ..Default::default()
+                },
                 width: 20,
                 precision: -1,
                 format: 'w',
