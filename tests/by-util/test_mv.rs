@@ -166,7 +166,7 @@ fn test_mv_interactive() {
         .arg(file_b)
         .pipe_in("n")
         .succeeds()
-        .no_stderr();
+        .no_stdout();
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
@@ -178,7 +178,7 @@ fn test_mv_interactive() {
         .arg(file_b)
         .pipe_in("Yesh") // spell-checker:disable-line
         .succeeds()
-        .no_stderr();
+        .no_stdout();
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
