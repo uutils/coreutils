@@ -44,13 +44,11 @@ pub const F_ZERO: u8 = 1 << 1;
 pub const F_LEFT: u8 = 1 << 2;
 pub const F_SPACE: u8 = 1 << 3;
 pub const F_SIGN: u8 = 1 << 4;
-// unused at present
 pub const F_GROUP: u8 = 1 << 5;
 
 /// checks if the string is within the specified bound,
 /// if it gets out of bound, error out by printing sub-string from index `beg` to`end`,
 /// where `beg` & `end` is the beginning and end index of sub-string, respectively
-///
 fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> UResult<()> {
     if end >= bound {
         return Err(USimpleError::new(
@@ -63,7 +61,6 @@ fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> UResult<()>
 
 /// pads the string with zeroes if supplied min is greater
 /// then the length of the string, else returns the original string
-///
 fn extend_digits(string: &str, min: usize) -> Cow<'_, str> {
     if min > string.len() {
         let mut pad = String::with_capacity(min);
@@ -91,8 +88,7 @@ enum Padding {
 /// ```
 /// currently only supports '0' & ' ' as the padding character
 /// because the format specification of print! does not support general
-/// fill characters
-///
+/// fill characters.
 fn pad_and_print(result: &str, left: bool, width: usize, padding: Padding) {
     match (left, padding) {
         (false, Padding::Zero) => print!("{result:0>width$}"),
