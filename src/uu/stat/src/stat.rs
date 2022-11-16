@@ -127,13 +127,13 @@ fn print_adjusted(
         pad_and_print(s, left, field_width, padding);
     }
 }
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum OutputType {
-    Str,
-    Integer,
-    Unsigned,
-    UnsignedHex,
-    UnsignedOct,
+    Str(String),
+    Integer(i64),
+    Unsigned(u64),
+    UnsignedHex(u64),
+    UnsignedOct(u32),
     Unknown,
 }
 
@@ -248,7 +248,7 @@ pub struct Stater {
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn print_it(arg: &str, output_type: &OutputType, flags: Flags, width: usize, precision: i32) {
+fn print_it(output: &OutputType, flags: Flags, width: usize, precision: i32) {
     // If the precision is given as just '.', the precision is taken to be zero.
     // A negative precision is taken as if the precision were omitted.
     // This gives the minimum number of digits to appear for d, i, o, u, x, and X conversions,
@@ -279,10 +279,6 @@ fn print_it(arg: &str, output_type: &OutputType, flags: Flags, width: usize, pre
     // By default, a sign  is  used only for negative numbers.
     // A + overrides a space if both are used.
 
-    if output_type == &OutputType::Unknown {
-        return print!("?");
-    }
-
     let padding_char: Padding = if flags.zero && !flags.left && precision == -1 {
         Padding::Zero
     } else {
@@ -291,37 +287,22 @@ fn print_it(arg: &str, output_type: &OutputType, flags: Flags, width: usize, pre
 
     let has_sign = flags.sign || flags.space;
 
-    let prefix = match output_type {
-        OutputType::UnsignedOct => "0",
-        OutputType::UnsignedHex => "0x",
-        OutputType::Integer => {
-            if flags.sign {
-                "+"
-            } else {
-                " "
-            }
-        }
-        _ => "",
-    };
-
-    match output_type {
-        OutputType::Str => {
-            let limit = cmp::min(precision, arg.len() as i32);
-            let s: &str = if limit >= 0 {
-                &arg[..limit as usize]
-            } else {
-                arg
-            };
+    match output {
+        OutputType::Str(s) => {
+            let limit = cmp::min(precision, s.len() as i32);
+            let s: &str = if limit >= 0 { &s[..limit as usize] } else { s };
             print_adjusted(s, flags.left, None, None, width, Padding::Space);
         }
-        OutputType::Integer => {
+        OutputType::Integer(num) => {
+            let num = num.to_string();
             let arg = if flags.group {
-                group_num(arg)
+                group_num(&num)
             } else {
-                Cow::Borrowed(arg)
+                Cow::Borrowed(num.as_str())
             };
             let min_digits = cmp::max(precision, arg.len() as i32) as usize;
             let extended: Cow<str> = extend_digits(arg.as_ref(), min_digits);
+            let prefix = if flags.sign { "+" } else { " " };
             print_adjusted(
                 extended.as_ref(),
                 flags.left,
@@ -331,11 +312,12 @@ fn print_it(arg: &str, output_type: &OutputType, flags: Flags, width: usize, pre
                 padding_char,
             );
         }
-        OutputType::Unsigned => {
+        OutputType::Unsigned(num) => {
+            let num = num.to_string();
             let arg = if flags.group {
-                group_num(arg)
+                group_num(&num)
             } else {
-                Cow::Borrowed(arg)
+                Cow::Borrowed(num.as_str())
             };
             let min_digits = cmp::max(precision, arg.len() as i32) as usize;
             let extended: Cow<str> = extend_digits(arg.as_ref(), min_digits);
@@ -348,31 +330,33 @@ fn print_it(arg: &str, output_type: &OutputType, flags: Flags, width: usize, pre
                 padding_char,
             );
         }
-        OutputType::UnsignedOct => {
-            let min_digits = cmp::max(precision, arg.len() as i32) as usize;
-            let extended: Cow<str> = extend_digits(arg, min_digits);
+        OutputType::UnsignedOct(num) => {
+            let num = format!("{:o}", num);
+            let min_digits = cmp::max(precision, num.len() as i32) as usize;
+            let extended: Cow<str> = extend_digits(&num, min_digits);
             print_adjusted(
                 extended.as_ref(),
                 flags.left,
                 Some(flags.alter),
-                Some(prefix),
+                Some("0"),
                 width,
                 padding_char,
             );
         }
-        OutputType::UnsignedHex => {
-            let min_digits = cmp::max(precision, arg.len() as i32) as usize;
-            let extended: Cow<str> = extend_digits(arg, min_digits);
+        OutputType::UnsignedHex(num) => {
+            let num = format!("{:x}", num);
+            let min_digits = cmp::max(precision, num.len() as i32) as usize;
+            let extended: Cow<str> = extend_digits(&num, min_digits);
             print_adjusted(
                 extended.as_ref(),
                 flags.left,
                 Some(flags.alter),
-                Some(prefix),
+                Some("0x"),
                 width,
                 padding_char,
             );
         }
-        _ => unreachable!(),
+        OutputType::Unknown => print!("?"),
     }
 }
 
@@ -624,92 +608,49 @@ impl Stater {
                                 precision,
                                 format,
                             } => {
-                                let arg: String;
-                                let output_type: OutputType;
-
-                                match format {
+                                let output = match format {
                                     // access rights in octal
-                                    'a' => {
-                                        arg = format!("{:o}", 0o7777 & meta.mode());
-                                        output_type = OutputType::UnsignedOct;
-                                    }
+                                    'a' => OutputType::UnsignedOct(0o7777 & meta.mode()),
                                     // access rights in human readable form
-                                    'A' => {
-                                        arg = display_permissions(&meta, true);
-                                        output_type = OutputType::Str;
-                                    }
+                                    'A' => OutputType::Str(display_permissions(&meta, true)),
                                     // number of blocks allocated (see %B)
-                                    'b' => {
-                                        arg = format!("{}", meta.blocks());
-                                        output_type = OutputType::Unsigned;
-                                    }
+                                    'b' => OutputType::Unsigned(meta.blocks()),
 
                                     // the size in bytes of each block reported by %b
                                     // FIXME: blocksize differs on various platform
                                     // See coreutils/gnulib/lib/stat-size.h ST_NBLOCKSIZE // spell-checker:disable-line
-                                    'B' => {
-                                        // the size in bytes of each block reported by %b
-                                        arg = format!("{}", 512);
-                                        output_type = OutputType::Unsigned;
-                                    }
+                                    'B' => OutputType::Unsigned(512),
 
                                     // device number in decimal
-                                    'd' => {
-                                        arg = format!("{}", meta.dev());
-                                        output_type = OutputType::Unsigned;
-                                    }
+                                    'd' => OutputType::Unsigned(meta.dev()),
                                     // device number in hex
-                                    'D' => {
-                                        arg = format!("{:x}", meta.dev());
-                                        output_type = OutputType::UnsignedHex;
-                                    }
+                                    'D' => OutputType::UnsignedHex(meta.dev()),
                                     // raw mode in hex
-                                    'f' => {
-                                        arg = format!("{:x}", meta.mode());
-                                        output_type = OutputType::UnsignedHex;
-                                    }
+                                    'f' => OutputType::UnsignedHex(meta.mode() as u64),
                                     // file type
-                                    'F' => {
-                                        arg = pretty_filetype(meta.mode() as mode_t, meta.len())
-                                            .to_owned();
-                                        output_type = OutputType::Str;
-                                    }
+                                    'F' => OutputType::Str(
+                                        pretty_filetype(meta.mode() as mode_t, meta.len())
+                                            .to_owned(),
+                                    ),
                                     // group ID of owner
-                                    'g' => {
-                                        arg = format!("{}", meta.gid());
-                                        output_type = OutputType::Unsigned;
-                                    }
+                                    'g' => OutputType::Unsigned(meta.gid() as u64),
                                     // group name of owner
                                     'G' => {
-                                        arg = entries::gid2grp(meta.gid())
+                                        let group_name = entries::gid2grp(meta.gid())
                                             .unwrap_or_else(|_| "UNKNOWN".to_owned());
-                                        output_type = OutputType::Str;
+                                        OutputType::Str(group_name)
                                     }
                                     // number of hard links
-                                    'h' => {
-                                        arg = format!("{}", meta.nlink());
-                                        output_type = OutputType::Unsigned;
-                                    }
+                                    'h' => OutputType::Unsigned(meta.nlink()),
                                     // inode number
-                                    'i' => {
-                                        arg = format!("{}", meta.ino());
-                                        output_type = OutputType::Unsigned;
-                                    }
-
+                                    'i' => OutputType::Unsigned(meta.ino()),
                                     // mount point
-                                    'm' => {
-                                        arg = self.find_mount_point(&file).unwrap();
-                                        output_type = OutputType::Str;
-                                    }
-
+                                    'm' => OutputType::Str(self.find_mount_point(&file).unwrap()),
                                     // file name
-                                    'n' => {
-                                        arg = display_name.to_string();
-                                        output_type = OutputType::Str;
-                                    }
+                                    'n' => OutputType::Str(display_name.to_string()),
                                     // quoted file name with dereference if symbolic link
                                     'N' => {
-                                        if file_type.is_symlink() {
+                                        let file_name = if file_type.is_symlink() {
                                             let dst = match fs::read_link(&file) {
                                                 Ok(path) => path,
                                                 Err(e) => {
@@ -717,99 +658,62 @@ impl Stater {
                                                     return 1;
                                                 }
                                             };
-                                            arg = format!(
-                                                "{} -> {}",
-                                                display_name.quote(),
-                                                dst.quote()
-                                            );
+                                            format!("{} -> {}", display_name.quote(), dst.quote())
                                         } else {
-                                            arg = display_name.to_string();
-                                        }
-                                        output_type = OutputType::Str;
+                                            display_name.to_string()
+                                        };
+                                        OutputType::Str(file_name)
                                     }
                                     // optimal I/O transfer size hint
-                                    'o' => {
-                                        arg = format!("{}", meta.blksize());
-                                        output_type = OutputType::Unsigned;
-                                    }
+                                    'o' => OutputType::Unsigned(meta.blksize()),
                                     // total size, in bytes
-                                    's' => {
-                                        arg = format!("{}", meta.len());
-                                        output_type = OutputType::Integer;
-                                    }
+                                    's' => OutputType::Integer(meta.len() as i64),
                                     // major device type in hex, for character/block device special
                                     // files
-                                    't' => {
-                                        arg = format!("{:x}", meta.rdev() >> 8);
-                                        output_type = OutputType::UnsignedHex;
-                                    }
+                                    't' => OutputType::UnsignedHex(meta.rdev() >> 8),
                                     // minor device type in hex, for character/block device special
                                     // files
-                                    'T' => {
-                                        arg = format!("{:x}", meta.rdev() & 0xff);
-                                        output_type = OutputType::UnsignedHex;
-                                    }
+                                    'T' => OutputType::UnsignedHex(meta.rdev() & 0xff),
                                     // user ID of owner
-                                    'u' => {
-                                        arg = format!("{}", meta.uid());
-                                        output_type = OutputType::Unsigned;
-                                    }
+                                    'u' => OutputType::Unsigned(meta.uid() as u64),
                                     // user name of owner
                                     'U' => {
-                                        arg = entries::uid2usr(meta.uid())
+                                        let user_name = entries::uid2usr(meta.uid())
                                             .unwrap_or_else(|_| "UNKNOWN".to_owned());
-                                        output_type = OutputType::Str;
+                                        OutputType::Str(user_name)
                                     }
 
                                     // time of file birth, human-readable; - if unknown
-                                    'w' => {
-                                        arg = meta.pretty_birth();
-                                        output_type = OutputType::Str;
-                                    }
+                                    'w' => OutputType::Str(meta.pretty_birth()),
 
                                     // time of file birth, seconds since Epoch; 0 if unknown
-                                    'W' => {
-                                        arg = meta.birth();
-                                        output_type = OutputType::Integer;
-                                    }
+                                    'W' => OutputType::Unsigned(meta.birth()),
 
                                     // time of last access, human-readable
-                                    'x' => {
-                                        arg = pretty_time(meta.atime(), meta.atime_nsec());
-                                        output_type = OutputType::Str;
-                                    }
+                                    'x' => OutputType::Str(pretty_time(
+                                        meta.atime(),
+                                        meta.atime_nsec(),
+                                    )),
                                     // time of last access, seconds since Epoch
-                                    'X' => {
-                                        arg = format!("{}", meta.atime());
-                                        output_type = OutputType::Integer;
-                                    }
+                                    'X' => OutputType::Integer(meta.atime()),
                                     // time of last data modification, human-readable
-                                    'y' => {
-                                        arg = pretty_time(meta.mtime(), meta.mtime_nsec());
-                                        output_type = OutputType::Str;
-                                    }
+                                    'y' => OutputType::Str(pretty_time(
+                                        meta.mtime(),
+                                        meta.mtime_nsec(),
+                                    )),
                                     // time of last data modification, seconds since Epoch
-                                    'Y' => {
-                                        arg = format!("{}", meta.mtime());
-                                        output_type = OutputType::Str;
-                                    }
+                                    'Y' => OutputType::Integer(meta.mtime()),
                                     // time of last status change, human-readable
-                                    'z' => {
-                                        arg = pretty_time(meta.ctime(), meta.ctime_nsec());
-                                        output_type = OutputType::Str;
-                                    }
+                                    'z' => OutputType::Str(pretty_time(
+                                        meta.ctime(),
+                                        meta.ctime_nsec(),
+                                    )),
                                     // time of last status change, seconds since Epoch
-                                    'Z' => {
-                                        arg = format!("{}", meta.ctime());
-                                        output_type = OutputType::Integer;
-                                    }
+                                    'Z' => OutputType::Integer(meta.ctime()),
 
-                                    _ => {
-                                        arg = "?".to_owned();
-                                        output_type = OutputType::Unknown;
-                                    }
-                                }
-                                print_it(&arg, &output_type, flag, width, precision);
+                                    _ => OutputType::Unknown,
+                                };
+                                print_it(&output, flag, width, precision);
                             }
                         }
                     }
@@ -837,76 +741,35 @@ impl Stater {
                                 precision,
                                 format,
                             } => {
-                                let arg: String;
-                                let output_type: OutputType;
-                                match format {
+                                let output = match format {
                                     // free blocks available to non-superuser
-                                    'a' => {
-                                        arg = format!("{}", meta.avail_blocks());
-                                        output_type = OutputType::Integer;
-                                    }
+                                    'a' => OutputType::Unsigned(meta.avail_blocks()),
                                     // total data blocks in file system
-                                    'b' => {
-                                        arg = format!("{}", meta.total_blocks());
-                                        output_type = OutputType::Integer;
-                                    }
+                                    'b' => OutputType::Unsigned(meta.total_blocks()),
                                     // total file nodes in file system
-                                    'c' => {
-                                        arg = format!("{}", meta.total_file_nodes());
-                                        output_type = OutputType::Unsigned;
-                                    }
+                                    'c' => OutputType::Unsigned(meta.total_file_nodes()),
                                     // free file nodes in file system
-                                    'd' => {
-                                        arg = format!("{}", meta.free_file_nodes());
-                                        output_type = OutputType::Integer;
-                                    }
+                                    'd' => OutputType::Unsigned(meta.free_file_nodes()),
                                     // free blocks in file system
-                                    'f' => {
-                                        arg = format!("{}", meta.free_blocks());
-                                        output_type = OutputType::Integer;
-                                    }
+                                    'f' => OutputType::Unsigned(meta.free_blocks()),
                                     // file system ID in hex
-                                    'i' => {
-                                        arg = format!("{:x}", meta.fsid());
-                                        output_type = OutputType::UnsignedHex;
-                                    }
+                                    'i' => OutputType::UnsignedHex(meta.fsid()),
                                     // maximum length of filenames
-                                    'l' => {
-                                        arg = format!("{}", meta.namelen());
-                                        output_type = OutputType::Unsigned;
-                                    }
+                                    'l' => OutputType::Unsigned(meta.namelen()),
                                     // file name
-                                    'n' => {
-                                        arg = display_name.to_string();
-                                        output_type = OutputType::Str;
-                                    }
+                                    'n' => OutputType::Str(display_name.to_string()),
                                     // block size (for faster transfers)
-                                    's' => {
-                                        arg = format!("{}", meta.io_size());
-                                        output_type = OutputType::Unsigned;
-                                    }
+                                    's' => OutputType::Unsigned(meta.io_size()),
                                     // fundamental block size (for block counts)
-                                    'S' => {
-                                        arg = format!("{}", meta.block_size());
-                                        output_type = OutputType::Unsigned;
-                                    }
+                                    'S' => OutputType::Integer(meta.block_size()),
                                     // file system type in hex
-                                    't' => {
-                                        arg = format!("{:x}", meta.fs_type());
-                                        output_type = OutputType::UnsignedHex;
-                                    }
+                                    't' => OutputType::UnsignedHex(meta.fs_type() as u64),
                                     // file system type in human readable form
-                                    'T' => {
-                                        arg = pretty_fstype(meta.fs_type()).into_owned();
-                                        output_type = OutputType::Str;
-                                    }
-                                    _ => {
-                                        arg = "?".to_owned();
-                                        output_type = OutputType::Unknown;
-                                    }
-                                }
+                                    'T' => OutputType::Str(pretty_fstype(meta.fs_type()).into()),
+                                    _ => OutputType::Unknown,
+                                };
 
-                                print_it(&arg, &output_type, flag, width, precision);
+                                print_it(&output, flag, width, precision);
                             }
                         }
                     }
