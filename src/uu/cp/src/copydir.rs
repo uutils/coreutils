@@ -405,7 +405,12 @@ pub(crate) fn copy_directory(
         }
     }
     // Copy the attributes from the root directory to the target directory.
-    copy_attributes(root, target, &options.preserve_attributes)?;
+    copy_attributes(
+        root,
+        target,
+        &options.preserve_attributes,
+        &options.require_preserve_attributes,
+    )?;
     Ok(())
 }
 
