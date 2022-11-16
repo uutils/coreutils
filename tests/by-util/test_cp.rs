@@ -957,7 +957,6 @@ fn test_cp_preserve_xattr() {
     // NOTICE: the ownership is not modified on the src file, because that requires root permissions
     let metadata_src = at.metadata(src_file);
     let metadata_dst = at.metadata(dst_file);
-    assert_ne!(metadata_src.mode(), metadata_dst.mode());
     assert_ne!(metadata_src.atime(), metadata_dst.atime());
     assert_ne!(metadata_src.atime_nsec(), metadata_dst.atime_nsec());
     assert_ne!(metadata_src.mtime(), metadata_dst.mtime());
