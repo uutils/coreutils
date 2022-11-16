@@ -908,7 +908,6 @@ fn test_cp_preserve_no_args() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_cp_preserve_all() {
     let (at, mut ucmd) = at_and_ucmd!();
     let src_file = "a";
@@ -916,6 +915,7 @@ fn test_cp_preserve_all() {
 
     // Prepare the source file
     at.touch(src_file);
+    #[cfg(unix)]
     at.set_mode(src_file, 0o0500);
 
     // TODO: create a destination that does not allow copying of xattr and context
@@ -925,11 +925,14 @@ fn test_cp_preserve_all() {
         .arg("--preserve=all")
         .succeeds();
 
-    // Assert that the mode, ownership, and timestamps are preserved
-    // NOTICE: the ownership is not modified on the src file, because that requires root permissions
-    let metadata_src = at.metadata(src_file);
-    let metadata_dst = at.metadata(dst_file);
-    assert_metadata_eq!(metadata_src, metadata_dst);
+    #[cfg(unix)]
+    {
+        // Assert that the mode, ownership, and timestamps are preserved
+        // NOTICE: the ownership is not modified on the src file, because that requires root permissions
+        let metadata_src = at.metadata(src_file);
+        let metadata_dst = at.metadata(dst_file);
+        assert_metadata_eq!(metadata_src, metadata_dst);
+    }
 }
 
 #[test]
