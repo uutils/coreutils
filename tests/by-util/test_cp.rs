@@ -236,7 +236,7 @@ fn test_cp_arg_interactive() {
         .pipe_in("N\n")
         .succeeds()
         .no_stdout()
-        .stderr_is("cp: overwrite 'b'?  [y/N]:");
+        .stderr_is("cp: overwrite 'b'? ");
 }
 
 #[test]

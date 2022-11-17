@@ -11,12 +11,12 @@ use clap::{crate_version, parser::ValueSource, Arg, ArgAction, Command};
 use remove_dir_all::remove_dir_all;
 use std::collections::VecDeque;
 use std::fs::{self, File, Metadata};
-use std::io::{stderr, stdin, BufRead, ErrorKind, Write};
+use std::io::ErrorKind;
 use std::ops::BitOr;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, prompt_yes, show_error};
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
@@ -133,11 +133,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         };
         if options.interactive == InteractiveMode::Once && (options.recursive || files.len() > 3) {
             let msg = if options.recursive {
-                "Remove all arguments recursively? "
+                "Remove all arguments recursively?"
             } else {
-                "Remove all arguments? "
+                "Remove all arguments?"
             };
-            if !prompt(msg) {
+            if !prompt_yes!("{}", msg) {
                 return Ok(());
             }
         }
@@ -451,7 +451,7 @@ fn prompt_file(path: &Path, options: &Options, is_dir: bool) -> bool {
     if options.interactive == InteractiveMode::Always {
         if let Ok(metadata) = fs::symlink_metadata(path) {
             if metadata.is_symlink() {
-                return prompt(&(format!("remove symbolic link {}? ", path.quote())));
+                return prompt_yes!("remove symbolic link {}?", path.quote());
             }
         }
     }
@@ -470,25 +470,18 @@ fn prompt_file(path: &Path, options: &Options, is_dir: bool) -> bool {
                 if let Ok(metadata) = file.metadata() {
                     if metadata.permissions().readonly() {
                         if metadata.len() == 0 {
-                            prompt(
-                                &(format!(
-                                    "remove write-protected regular empty file {}? ",
-                                    path.quote()
-                                )),
+                            prompt_yes!(
+                                "remove write-protected regular empty file {}?",
+                                path.quote()
                             )
                         } else {
-                            prompt(
-                                &(format!(
-                                    "remove write-protected regular file {}? ",
-                                    path.quote()
-                                )),
-                            )
+                            prompt_yes!("remove write-protected regular file {}?", path.quote())
                         }
                     } else if options.interactive == InteractiveMode::Always {
                         if metadata.len() == 0 {
-                            prompt(&(format!("remove regular empty file {}? ", path.quote())))
+                            prompt_yes!("remove regular empty file {}?", path.quote())
                         } else {
-                            prompt(&(format!("remove file {}? ", path.quote())))
+                            prompt_yes!("remove file {}?", path.quote())
                         }
                     } else {
                         true
@@ -501,22 +494,15 @@ fn prompt_file(path: &Path, options: &Options, is_dir: bool) -> bool {
                 if err.kind() == ErrorKind::PermissionDenied {
                     if let Ok(metadata) = fs::metadata(path) {
                         if metadata.len() == 0 {
-                            prompt(
-                                &(format!(
-                                    "remove write-protected regular empty file {}? ",
-                                    path.quote()
-                                )),
+                            prompt_yes!(
+                                "remove write-protected regular empty file {}?",
+                                path.quote()
                             )
                         } else {
-                            prompt(
-                                &(format!(
-                                    "remove write-protected regular file {}? ",
-                                    path.quote()
-                                )),
-                            )
+                            prompt_yes!("remove write-protected regular file {}?", path.quote())
                         }
                     } else {
-                        prompt(&(format!("remove write-protected regular file {}? ", path.quote())))
+                        prompt_yes!("remove write-protected regular file {}?", path.quote())
                     }
                 } else {
                     true
@@ -536,9 +522,9 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
     // Why is S_IWUSR showing up as a u16 on macos?
     let user_writable = (mode & (libc::S_IWUSR as u32)) != 0;
     if !user_writable {
-        prompt(&(format!("remove write-protected directory {}? ", path.quote())))
+        prompt_yes!("remove write-protected directory {}?", path.quote())
     } else if options.interactive == InteractiveMode::Always {
-        prompt(&(format!("remove directory {}? ", path.quote())))
+        prompt_yes!("remove directory {}?", path.quote())
     } else {
         true
     }
@@ -551,9 +537,9 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
     use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_READONLY;
     let not_user_writable = (metadata.file_attributes() & FILE_ATTRIBUTE_READONLY) != 0;
     if not_user_writable {
-        prompt(&(format!("remove write-protected directory {}? ", path.quote())))
+        prompt_yes!("remove write-protected directory {}?", path.quote())
     } else if options.interactive == InteractiveMode::Always {
-        prompt(&(format!("remove directory {}? ", path.quote())))
+        prompt_yes!("remove directory {}?", path.quote())
     } else {
         true
     }
@@ -564,14 +550,14 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
 #[cfg(not(unix))]
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
     if options.interactive == InteractiveMode::Always {
-        prompt(&(format!("remove directory {}? ", path.quote())))
+        prompt_yes!("remove directory {}?", path.quote())
     } else {
         true
     }
 }
 
 fn prompt_descend(path: &Path) -> bool {
-    prompt(&(format!("descend into directory {}? ", path.quote())))
+    prompt_yes!("descend into directory {}?", path.quote())
 }
 
 fn normalize(path: &Path) -> PathBuf {
@@ -580,20 +566,6 @@ fn normalize(path: &Path) -> PathBuf {
     // for std impl progress see rfc https://github.com/rust-lang/rfcs/issues/2208
     // TODO: replace this once that lands
     uucore::fs::normalize_path(path)
-}
-
-fn prompt(msg: &str) -> bool {
-    let _ = stderr().write_all(format!("{}: {}", uucore::util_name(), msg).as_bytes());
-    let _ = stderr().flush();
-
-    let mut buf = Vec::new();
-    let stdin = stdin();
-    let mut stdin = stdin.lock();
-    let read = stdin.read_until(b'\n', &mut buf);
-    match read {
-        Ok(x) if x > 0 => matches!(buf[0], b'y' | b'Y'),
-        _ => false,
-    }
 }
 
 #[cfg(not(windows))]

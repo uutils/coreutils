@@ -117,7 +117,7 @@ fn test_symlink_interactive() {
         .args(&["-i", "-s", file, link])
         .pipe_in("n")
         .succeeds()
-        .no_stderr();
+        .no_stdout();
 
     assert!(at.file_exists(file));
     assert!(!at.is_symlink(link));
@@ -127,7 +127,7 @@ fn test_symlink_interactive() {
         .args(&["-i", "-s", file, link])
         .pipe_in("Yesh") // spell-checker:disable-line
         .succeeds()
-        .no_stderr();
+        .no_stdout();
 
     assert!(at.file_exists(file));
     assert!(at.is_symlink(link));
