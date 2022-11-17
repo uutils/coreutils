@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) ugoa cmode
 
-#[macro_use]
-extern crate uucore;
-
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
@@ -18,10 +15,10 @@ use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::format_usage;
 #[cfg(not(windows))]
 use uucore::mode;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
+use uucore::{format_usage, show, show_if_err};
 
 static DEFAULT_PERM: u32 = 0o755;
 

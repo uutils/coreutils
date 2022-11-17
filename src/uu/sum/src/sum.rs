@@ -7,16 +7,13 @@
 
 // spell-checker:ignore (ToDO) sysv
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{stdin, Read};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::format_usage;
+use uucore::{format_usage, show};
 
 static NAME: &str = "sum";
 static USAGE: &str = "{} [OPTION]... [FILE]...";

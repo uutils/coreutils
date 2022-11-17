@@ -5,15 +5,12 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, Arg, ArgAction, Command};
 use libc::mkfifo;
 use std::ffi::CString;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
-use uucore::format_usage;
+use uucore::{format_usage, show};
 
 static NAME: &str = "mkfifo";
 static USAGE: &str = "{} [OPTION]... NAME...";

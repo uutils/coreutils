@@ -5,9 +5,6 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-#[macro_use]
-extern crate uucore;
-
 use chrono::prelude::DateTime;
 use chrono::Local;
 use clap::ArgAction;
@@ -37,9 +34,9 @@ use std::{error::Error, fmt::Display};
 use uucore::display::{print_verbatim, Quotable};
 use uucore::error::FromIo;
 use uucore::error::{UError, UResult};
-use uucore::format_usage;
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::{crash, format_usage, show, show_error, show_warning};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]

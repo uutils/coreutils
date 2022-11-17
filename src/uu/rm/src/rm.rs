@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (path) eacces
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, parser::ValueSource, Arg, ArgAction, Command};
 use remove_dir_all::remove_dir_all;
 use std::collections::VecDeque;
@@ -19,7 +16,7 @@ use std::ops::BitOr;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::format_usage;
+use uucore::{format_usage, show_error};
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]

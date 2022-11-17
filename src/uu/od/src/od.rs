@@ -8,9 +8,6 @@
 // spell-checker:ignore (clap) dont
 // spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset mockstream nrofbytes partialreader odfunc multifile exitcode
 
-#[macro_use]
-extern crate uucore;
-
 mod byteorder_io;
 mod formatteriteminfo;
 mod inputdecoder;
@@ -49,6 +46,8 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::parse_size::ParseSizeError;
+use uucore::show_error;
+use uucore::show_warning;
 
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
 static ABOUT: &str = "dump files in octal and other formats";

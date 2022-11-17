@@ -9,8 +9,6 @@
 
 // spell-checker:ignore (ToDO) nums aflag uflag scol prevtab amode ctype cwidth nbytes lastcol pctype Preprocess
 
-#[macro_use]
-extern crate uucore;
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::error::Error;
 use std::fmt;
@@ -21,7 +19,7 @@ use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
-use uucore::format_usage;
+use uucore::{crash, crash_if_err, format_usage};
 
 static NAME: &str = "unexpand";
 static USAGE: &str = "{} [OPTION]... [FILE]...";

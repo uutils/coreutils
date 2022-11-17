@@ -10,9 +10,6 @@
 
 mod error;
 
-#[macro_use]
-extern crate uucore;
-
 use clap::builder::ValueParser;
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
 use std::env;
@@ -27,7 +24,7 @@ use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
-use uucore::format_usage;
+use uucore::{format_usage, show, show_if_err};
 
 use fs_extra::dir::{move_dir, CopyOptions as DirCopyOptions};
 

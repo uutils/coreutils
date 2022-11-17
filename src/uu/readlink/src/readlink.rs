@@ -7,17 +7,14 @@
 
 // spell-checker:ignore (ToDO) errno
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs;
 use std::io::{stdout, Write};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::format_usage;
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
+use uucore::{format_usage, show_error};
 
 const ABOUT: &str = "Print value of a symbolic link or canonical file name.";
 const USAGE: &str = "{} [OPTION]... [FILE]...";

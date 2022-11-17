@@ -7,9 +7,6 @@
 
 // cSpell:ignore wc wc's
 
-#[macro_use]
-extern crate uucore;
-
 mod count_fast;
 mod countable;
 mod word_count;
@@ -18,7 +15,7 @@ use count_fast::{count_bytes_chars_and_lines_fast, count_bytes_fast};
 use countable::WordCountable;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
-use uucore::format_usage;
+use uucore::{format_usage, show};
 use word_count::{TitledWordCount, WordCount};
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};

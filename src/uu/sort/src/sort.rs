@@ -13,9 +13,6 @@
 
 // spell-checker:ignore (misc) HFKJFK Mbdfhn
 
-#[macro_use]
-extern crate uucore;
-
 mod check;
 mod chunks;
 mod custom_str_cmp;

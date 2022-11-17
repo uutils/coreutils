@@ -5,7 +5,10 @@ use std::{
 };
 
 use tempfile::TempDir;
-use uucore::error::{UResult, USimpleError};
+use uucore::{
+    error::{UResult, USimpleError},
+    show_error,
+};
 
 use crate::SortError;
 

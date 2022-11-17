@@ -7,14 +7,11 @@
 
 // spell-checker:ignore (ToDO) srcpath targetpath EEXIST
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
-use uucore::format_usage;
 use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
+use uucore::{format_usage, show_error};
 
 use std::borrow::Cow;
 use std::error::Error;

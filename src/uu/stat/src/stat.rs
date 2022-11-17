@@ -5,8 +5,6 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-#[macro_use]
-extern crate uucore;
 use clap::builder::ValueParser;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -15,7 +13,7 @@ use uucore::fsext::{
     pretty_filetype, pretty_fstype, pretty_time, read_fs_list, statfs, BirthTime, FsMeta,
 };
 use uucore::libc::mode_t;
-use uucore::{entries, format_usage};
+use uucore::{entries, format_usage, has, show_error, show_warning};
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::borrow::Cow;

@@ -18,6 +18,9 @@ use indicatif::ProgressBar;
 use uucore::display::Quotable;
 use uucore::error::UIoError;
 use uucore::fs::{canonicalize, FileInformation, MissingHandling, ResolveMode};
+use uucore::show;
+use uucore::show_error;
+use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{

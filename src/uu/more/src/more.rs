@@ -14,9 +14,6 @@ use std::{
     time::Duration,
 };
 
-#[cfg(all(unix, not(target_os = "fuchsia")))]
-extern crate nix;
-
 use clap::{crate_version, Arg, ArgAction, Command};
 use crossterm::event::KeyEventKind;
 use crossterm::{

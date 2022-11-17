@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf tabsize dired
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{
     builder::{NonEmptyStringValueParser, ValueParser},
     crate_version, Arg, ArgAction, Command,
@@ -48,7 +45,6 @@ use unicode_width::UnicodeWidthStr;
 use uucore::libc::{dev_t, major, minor};
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
-use uucore::parse_glob;
 use uucore::quoting_style::{escape_name, QuotingStyle};
 use uucore::{
     display::Quotable,
@@ -58,6 +54,7 @@ use uucore::{
     parse_size::parse_size,
     version_cmp::version_cmp,
 };
+use uucore::{parse_glob, show, show_error, show_warning};
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
