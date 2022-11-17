@@ -21,10 +21,10 @@ use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::borrow::Cow;
 use std::convert::AsRef;
 use std::ffi::{OsStr, OsString};
+use std::fs;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
-use std::{cmp, fs, iter};
 
 const ABOUT: &str = "Display file or file system status.";
 const USAGE: &str = "{} [OPTION]... FILE...";
@@ -61,22 +61,6 @@ fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> UResult<()>
     Ok(())
 }
 
-/// pads the string with zeroes if supplied min is greater
-/// then the length of the string, else returns the original string
-fn extend_digits(string: &str, min: usize) -> Cow<'_, str> {
-    if min > string.len() {
-        let mut pad = String::with_capacity(min);
-        iter::repeat('0')
-            .take(min - string.len())
-            .map(|_| pad.push('0'))
-            .all(|_| true);
-        pad.push_str(string);
-        pad.into()
-    } else {
-        string.into()
-    }
-}
-
 enum Padding {
     Zero,
     Space,
@@ -100,30 +84,6 @@ fn pad_and_print(result: &str, left: bool, width: usize, padding: Padding) {
     };
 }
 
-/// prints the adjusted string after padding
-/// `left` flag specifies the type of alignment of the string
-/// `width` is the supplied padding width of the string needed
-/// `prefix` & `need_prefix` are Optional, which adjusts the `field_width` accordingly, where
-/// `field_width` is the max of supplied `width` and size of string
-/// `padding`, specifies type of padding, which is '0' or ' ' in this case.
-fn print_adjusted(
-    s: &str,
-    left: bool,
-    need_prefix: Option<bool>,
-    prefix: Option<&str>,
-    width: usize,
-    padding: Padding,
-) {
-    let mut field_width = cmp::max(width, s.len());
-    if let Some(p) = prefix {
-        if let Some(true) = need_prefix {
-            field_width -= p.len();
-        }
-        pad_and_print(s, left, field_width, padding);
-    } else {
-        pad_and_print(s, left, field_width, padding);
-    }
-}
 #[derive(Debug)]
 pub enum OutputType {
     Str(String),
@@ -282,15 +242,13 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Option<u
         Padding::Space
     };
 
-    let has_sign = flags.sign || flags.space;
-
     match output {
         OutputType::Str(s) => {
             let s = match precision {
                 Some(p) if p < s.len() => &s[..p],
                 _ => s,
             };
-            print_adjusted(s, flags.left, None, None, width, Padding::Space);
+            pad_and_print(s, flags.left, width, Padding::Space);
         }
         OutputType::Integer(num) => {
             let num = num.to_string();
@@ -299,57 +257,44 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Option<u
             } else {
                 Cow::Borrowed(num.as_str())
             };
-            let extended = extend_digits(&arg, precision.unwrap_or(0));
-            let prefix = if flags.sign { "+" } else { " " };
-            print_adjusted(
-                extended.as_ref(),
-                flags.left,
-                Some(has_sign),
-                Some(prefix),
-                width,
-                padding_char,
+            let prefix = if flags.sign {
+                "+"
+            } else if flags.space {
+                " "
+            } else {
+                ""
+            };
+            let extended = format!(
+                "{prefix}{arg:0>precision$}",
+                precision = precision.unwrap_or(0)
             );
+            pad_and_print(&extended, flags.left, width, padding_char);
         }
         OutputType::Unsigned(num) => {
             let num = num.to_string();
-            let arg = if flags.group {
+            let s = if flags.group {
                 group_num(&num)
             } else {
                 Cow::Borrowed(num.as_str())
             };
-            let extended = extend_digits(&arg, precision.unwrap_or(0));
-            print_adjusted(
-                extended.as_ref(),
-                flags.left,
-                None,
-                None,
-                width,
-                padding_char,
-            );
+            let s = format!("{s:0>precision$}", precision = precision.unwrap_or(0));
+            pad_and_print(&s, flags.left, width, padding_char);
         }
         OutputType::UnsignedOct(num) => {
-            let num = format!("{:o}", num);
-            let extended = extend_digits(&num, precision.unwrap_or(0));
-            print_adjusted(
-                extended.as_ref(),
-                flags.left,
-                Some(flags.alter),
-                Some("0"),
-                width,
-                padding_char,
+            let prefix = if flags.alter { "0" } else { "" };
+            let s = format!(
+                "{prefix}{num:0>precision$o}",
+                precision = precision.unwrap_or(0)
             );
+            pad_and_print(&s, flags.left, width, padding_char);
         }
         OutputType::UnsignedHex(num) => {
-            let num = format!("{:x}", num);
-            let extended = extend_digits(&num, precision.unwrap_or(0));
-            print_adjusted(
-                extended.as_ref(),
-                flags.left,
-                Some(flags.alter),
-                Some("0x"),
-                width,
-                padding_char,
+            let prefix = if flags.alter { "0x" } else { "" };
+            let s = format!(
+                "{prefix}{num:0>precision$x}",
+                precision = precision.unwrap_or(0)
             );
+            pad_and_print(&s, flags.left, width, padding_char);
         }
         OutputType::Unknown => print!("?"),
     }
