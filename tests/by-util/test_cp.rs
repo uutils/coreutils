@@ -896,7 +896,7 @@ fn test_cp_preserve_no_args() {
         .arg("--preserve")
         .succeeds();
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "freebsd")))]
     {
         // Assert that the mode, ownership, and timestamps are preserved
         // NOTICE: the ownership is not modified on the src file, because that requires root permissions
@@ -1834,7 +1834,7 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     assert!(at.symlink_exists("d2"), "symlink wasn't created");
 
     // `-p` means `--preserve=mode,ownership,timestamps`
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "freebsd")))]
     {
         let metadata1 = at.symlink_metadata("dangle");
         let metadata2 = at.symlink_metadata("d2");
@@ -2310,9 +2310,15 @@ fn test_same_file_force_backup() {
 }
 
 /// Test for copying the contents of a FIFO as opposed to the FIFO object itself.
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "freebsd")))]
 #[test]
 fn test_copy_contents_fifo() {
+    // TODO this test should work on FreeBSD, but the command was
+    // causing an error:
+    //
+    // cp: 'fifo' -> 'outfile': the source path is neither a regular file nor a symlink to a regular file
+    //
+    // the underlying `std::fs:copy` doesn't support copying fifo on freeBSD
     let scenario = TestScenario::new(util_name!());
     let at = &scenario.fixtures;
 
