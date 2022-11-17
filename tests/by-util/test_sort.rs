@@ -1156,3 +1156,8 @@ fn test_tmp_files_deleted_on_sigint() {
     // `sort` should have deleted the temporary directory again.
     assert!(read_dir(at.plus("tmp_dir")).unwrap().next().is_none());
 }
+
+#[test]
+fn test_same_sort_mode_twice() {
+    new_ucmd!().args(&["-k", "2n,2n", "empty.txt"]).succeeds();
+}
