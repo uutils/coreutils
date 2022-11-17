@@ -8,7 +8,7 @@ use crate::common::util::*;
 
 #[cfg(unix)]
 fn check_termination(result: &ExitStatus) {
-    assert_eq!(result.signal(), Some(libc::SIGPIPE as i32));
+    assert_eq!(result.signal(), Some(libc::SIGPIPE));
 }
 
 #[cfg(not(unix))]

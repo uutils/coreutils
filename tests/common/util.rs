@@ -470,7 +470,7 @@ pub fn recursive_copy(src: &Path, dest: &Path) -> Result<()> {
                 fs::create_dir(&new_dest)?;
                 recursive_copy(&entry.path(), &new_dest)?;
             } else {
-                fs::copy(&entry.path(), new_dest)?;
+                fs::copy(entry.path(), new_dest)?;
             }
         }
     }
@@ -631,12 +631,12 @@ impl AtPath {
 
     pub fn rmdir(&self, dir: &str) {
         log_info("rmdir", self.plus_as_string(dir));
-        fs::remove_dir(&self.plus(dir)).unwrap();
+        fs::remove_dir(self.plus(dir)).unwrap();
     }
 
     pub fn mkdir(&self, dir: &str) {
         log_info("mkdir", self.plus_as_string(dir));
-        fs::create_dir(&self.plus(dir)).unwrap();
+        fs::create_dir(self.plus(dir)).unwrap();
     }
 
     pub fn mkdir_all(&self, dir: &str) {
@@ -645,7 +645,7 @@ impl AtPath {
     }
 
     pub fn make_file(&self, name: &str) -> File {
-        match File::create(&self.plus(name)) {
+        match File::create(self.plus(name)) {
             Ok(f) => f,
             Err(e) => panic!("{}", e),
         }
@@ -653,7 +653,7 @@ impl AtPath {
 
     pub fn touch(&self, file: &str) {
         log_info("touch", self.plus_as_string(file));
-        File::create(&self.plus(file)).unwrap();
+        File::create(self.plus(file)).unwrap();
     }
 
     #[cfg(not(windows))]
@@ -682,25 +682,25 @@ impl AtPath {
     pub fn hard_link(&self, original: &str, link: &str) {
         log_info(
             "hard_link",
-            &format!(
+            format!(
                 "{},{}",
                 self.plus_as_string(original),
                 self.plus_as_string(link)
             ),
         );
-        hard_link(&self.plus(original), &self.plus(link)).unwrap();
+        hard_link(self.plus(original), self.plus(link)).unwrap();
     }
 
     pub fn symlink_file(&self, original: &str, link: &str) {
         log_info(
             "symlink",
-            &format!(
+            format!(
                 "{},{}",
                 self.plus_as_string(original),
                 self.plus_as_string(link)
             ),
         );
-        symlink_file(&self.plus(original), &self.plus(link)).unwrap();
+        symlink_file(self.plus(original), self.plus(link)).unwrap();
     }
 
     pub fn relative_symlink_file(&self, original: &str, link: &str) {
@@ -708,21 +708,21 @@ impl AtPath {
         let original = original.replace('/', &MAIN_SEPARATOR.to_string());
         log_info(
             "symlink",
-            &format!("{},{}", &original, &self.plus_as_string(link)),
+            format!("{},{}", &original, &self.plus_as_string(link)),
         );
-        symlink_file(original, &self.plus(link)).unwrap();
+        symlink_file(original, self.plus(link)).unwrap();
     }
 
     pub fn symlink_dir(&self, original: &str, link: &str) {
         log_info(
             "symlink",
-            &format!(
+            format!(
                 "{},{}",
                 self.plus_as_string(original),
                 self.plus_as_string(link)
             ),
         );
-        symlink_dir(&self.plus(original), &self.plus(link)).unwrap();
+        symlink_dir(self.plus(original), self.plus(link)).unwrap();
     }
 
     pub fn relative_symlink_dir(&self, original: &str, link: &str) {
@@ -730,14 +730,14 @@ impl AtPath {
         let original = original.replace('/', &MAIN_SEPARATOR.to_string());
         log_info(
             "symlink",
-            &format!("{},{}", &original, &self.plus_as_string(link)),
+            format!("{},{}", &original, &self.plus_as_string(link)),
         );
-        symlink_dir(original, &self.plus(link)).unwrap();
+        symlink_dir(original, self.plus(link)).unwrap();
     }
 
     pub fn is_symlink(&self, path: &str) -> bool {
         log_info("is_symlink", self.plus_as_string(path));
-        match fs::symlink_metadata(&self.plus(path)) {
+        match fs::symlink_metadata(self.plus(path)) {
             Ok(m) => m.file_type().is_symlink(),
             Err(_) => false,
         }
@@ -745,7 +745,7 @@ impl AtPath {
 
     pub fn resolve_link(&self, path: &str) -> String {
         log_info("resolve_link", self.plus_as_string(path));
-        match fs::read_link(&self.plus(path)) {
+        match fs::read_link(self.plus(path)) {
             Ok(p) => self.minus_as_string(p.to_str().unwrap()),
             Err(_) => "".to_string(),
         }
@@ -753,7 +753,7 @@ impl AtPath {
 
     pub fn read_symlink(&self, path: &str) -> String {
         log_info("read_symlink", self.plus_as_string(path));
-        fs::read_link(&self.plus(path))
+        fs::read_link(self.plus(path))
             .unwrap()
             .to_str()
             .unwrap()
@@ -761,21 +761,21 @@ impl AtPath {
     }
 
     pub fn symlink_metadata(&self, path: &str) -> fs::Metadata {
-        match fs::symlink_metadata(&self.plus(path)) {
+        match fs::symlink_metadata(self.plus(path)) {
             Ok(m) => m,
             Err(e) => panic!("{}", e),
         }
     }
 
     pub fn metadata(&self, path: &str) -> fs::Metadata {
-        match fs::metadata(&self.plus(path)) {
+        match fs::metadata(self.plus(path)) {
             Ok(m) => m,
             Err(e) => panic!("{}", e),
         }
     }
 
     pub fn file_exists(&self, path: &str) -> bool {
-        match fs::metadata(&self.plus(path)) {
+        match fs::metadata(self.plus(path)) {
             Ok(m) => m.is_file(),
             Err(_) => false,
         }
@@ -783,14 +783,14 @@ impl AtPath {
 
     /// Decide whether the named symbolic link exists in the test directory.
     pub fn symlink_exists(&self, path: &str) -> bool {
-        match fs::symlink_metadata(&self.plus(path)) {
+        match fs::symlink_metadata(self.plus(path)) {
             Ok(m) => m.file_type().is_symlink(),
             Err(_) => false,
         }
     }
 
     pub fn dir_exists(&self, path: &str) -> bool {
-        match fs::metadata(&self.plus(path)) {
+        match fs::metadata(self.plus(path)) {
             Ok(m) => m.is_dir(),
             Err(_) => false,
         }
