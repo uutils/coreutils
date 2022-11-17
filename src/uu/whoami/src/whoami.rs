@@ -7,10 +7,7 @@
 
 /* last synced with: whoami (GNU coreutils) 8.21 */
 
-#[macro_use]
-extern crate clap;
-
-use clap::Command;
+use clap::{crate_version, Command};
 
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};

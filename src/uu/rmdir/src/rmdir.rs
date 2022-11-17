@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) ENOTDIR
 
-#[macro_use]
-extern crate uucore;
-
 use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::ffi::OsString;
@@ -19,7 +16,7 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UResult};
 
-use uucore::{format_usage, util_name};
+use uucore::{format_usage, show_error, util_name};
 
 static ABOUT: &str = "Remove the DIRECTORY(ies), if they are empty.";
 const USAGE: &str = "{} [OPTION]... DIRECTORY...";

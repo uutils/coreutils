@@ -7,13 +7,14 @@
 
 use crate::paths::Input;
 use crate::{parse, platform, Quotable};
+use clap::crate_version;
 use clap::{parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
 use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::format_usage;
 use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::{format_usage, show_warning};
 
 const ABOUT: &str = "\
     Print the last 10 lines of each FILE to standard output.\n\

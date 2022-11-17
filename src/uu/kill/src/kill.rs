@@ -7,17 +7,14 @@
 
 // spell-checker:ignore (ToDO) signalname pids killpg
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, Arg, ArgAction, Command};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
-use uucore::format_usage;
 use uucore::signals::{signal_by_name_or_value, ALL_SIGNALS};
+use uucore::{format_usage, show};
 
 static ABOUT: &str = "Send signal to processes or list information about signals.";
 const USAGE: &str = "{} [OPTIONS]... PID...";

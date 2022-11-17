@@ -11,11 +11,7 @@
 
 // spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv
 
-#[macro_use]
-extern crate quick_error;
-#[macro_use]
-extern crate uucore;
-
+use quick_error::quick_error;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::env;
@@ -40,10 +36,10 @@ use quick_error::ResultExt;
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
-use uucore::format_usage;
 use uucore::fs::{
     canonicalize, paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
 };
+use uucore::{crash, crash_if_err, format_usage, show_error, show_warning};
 
 mod copydir;
 use crate::copydir::copy_directory;

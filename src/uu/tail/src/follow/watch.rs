@@ -17,6 +17,7 @@ use std::sync::mpsc;
 use std::sync::mpsc::{channel, Receiver};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UResult, USimpleError};
+use uucore::show_error;
 
 pub struct WatcherRx {
     watcher: Box<dyn Watcher>,

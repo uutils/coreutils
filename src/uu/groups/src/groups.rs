@@ -15,15 +15,13 @@
 
 // spell-checker:ignore (ToDO) passwd
 
-#[macro_use]
-extern crate uucore;
 use std::error::Error;
 use std::fmt::Display;
 use uucore::{
     display::Quotable,
     entries::{get_groups_gnu, gid2grp, Locate, Passwd},
     error::{UError, UResult},
-    format_usage,
+    format_usage, show,
 };
 
 use clap::{crate_version, Arg, ArgAction, Command};

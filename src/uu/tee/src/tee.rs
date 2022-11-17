@@ -5,9 +5,6 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{builder::PossibleValue, crate_version, Arg, ArgAction, Command};
 use retain_mut::RetainMut;
 use std::fs::OpenOptions;
@@ -15,7 +12,7 @@ use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::format_usage;
+use uucore::{format_usage, show_error};
 
 // spell-checker:ignore nopipe
 

@@ -10,13 +10,7 @@
 
 // spell-checker:ignore (ToDO) chdir execvp progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction
 
-#[macro_use]
-extern crate clap;
-
-#[macro_use]
-extern crate uucore;
-
-use clap::{Arg, ArgAction, Command};
+use clap::{crate_name, crate_version, Arg, ArgAction, Command};
 use ini::Ini;
 #[cfg(unix)]
 use nix::sys::signal::{raise, sigaction, SaFlags, SigAction, SigHandler, SigSet, Signal};
@@ -29,7 +23,7 @@ use std::os::unix::process::ExitStatusExt;
 use std::process;
 use uucore::display::Quotable;
 use uucore::error::{UClapError, UResult, USimpleError, UUsageError};
-use uucore::format_usage;
+use uucore::{format_usage, show_warning};
 
 const ABOUT: &str = "set each NAME to VALUE in the environment and run COMMAND";
 const USAGE: &str = "{} [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
