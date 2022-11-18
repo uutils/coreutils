@@ -908,6 +908,9 @@ jobs:
           # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
           set -e
           #
+          # We need a file-descriptor file system to test test_ls::test_ls_io_errors
+          mount -t fdescfs fdesc /dev/fd
+          #
           TEST_USER=tester
           REPO_NAME=${GITHUB_WORKSPACE##*/}
           WORKSPACE_PARENT="/Users/runner/work/${REPO_NAME}"
