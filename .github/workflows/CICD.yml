@@ -948,7 +948,7 @@ jobs:
           unset FAULT
           cargo build || FAULT=1
           if (test -z "\$FAULT"); then cargo test --features '${{ matrix.job.features }}' || FAULT=1 ; fi
-          if (test -z "\$FAULT"); then cargo test --features '${{ matrix.job.features }}' -p uucore || FAULT=1 ; fi
+          if (test -z "\$FAULT"); then cargo test --all-features -p uucore || FAULT=1 ; fi
           # Clean to avoid to rsync back the files
           cargo clean
           if (test -n "\$FAULT"); then exit 1 ; fi
