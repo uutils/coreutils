@@ -360,10 +360,7 @@ jobs:
         RUSTUP_TOOLCHAIN=stable cargo fetch --locked --quiet
         RUSTUP_TOOLCHAIN=stable cargo tree --all --locked --no-dev-dependencies --no-indent ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
     - name: Test
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: -v ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
+      run: cargo test -v ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
       env:
         RUSTFLAGS: "-Awarnings --cfg unsound_local_offset"
 
@@ -441,10 +438,7 @@ jobs:
         profile: minimal # minimal component installation (ie, no documentation)
     - uses: Swatinem/rust-cache@v2
     - name: Test
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+      run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
 
   build_rust_nightly:
     name: Build/nightly
@@ -468,10 +462,7 @@ jobs:
         profile: minimal # minimal component installation (ie, no documentation)
     - uses: Swatinem/rust-cache@v2
     - name: Test
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+      run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
 
   compute_size:
     name: Binary sizes
@@ -626,11 +617,11 @@ jobs:
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ; fi
         outputs CARGO_FEATURES_OPTION
-        # * CARGO_USE_CROSS (truthy)
-        CARGO_USE_CROSS='true' ; case '${{ matrix.job.use-cross }}' in ''|0|f|false|n|no) unset CARGO_USE_CROSS ;; esac;
-        outputs CARGO_USE_CROSS
+        # * CARGO_CMD
+        CARGO_CMD='cross' ; case '${{ matrix.job.use-cross }}' in ''|0|f|false|n|no) CARGO_CMD='cargo' ;; esac;
+        outputs CARGO_CMD
         # ** pass needed environment into `cross` container (iff `cross` not already configured via "Cross.toml")
-        if [ -n "${CARGO_USE_CROSS}" ] && [ ! -e "Cross.toml" ] ; then
+        if [ "${CARGO_CMD}" = 'cross' ] && [ ! -e "Cross.toml" ] ; then
           cargo install --version 0.2.1 cross
           printf "[build.env]\npassthrough = [\"CI\"]\n" > Cross.toml
         fi
@@ -723,26 +714,20 @@ jobs:
         cargo fetch --locked --quiet
         cargo tree --locked --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all --no-dev-dependencies --no-indent | grep -vE "$PWD" | sort --unique
     - name: Build
-      uses: actions-rs/cargo@v1
-      with:
-        use-cross: ${{ steps.vars.outputs.CARGO_USE_CROSS }}
-        command: build
-        args: --release --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
-        toolchain: ${{ env.RUST_MIN_SRV }}
+      shell: bash
+      run: |
+        ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} build --release \
+        --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
     - name: Test
-      uses: actions-rs/cargo@v1
-      with:
-        use-cross: ${{ steps.vars.outputs.CARGO_USE_CROSS }}
-        command: test
-        args: --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
-        toolchain: ${{ env.RUST_MIN_SRV }}
+      shell: bash
+      run: |
+        ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} test --target=${{ matrix.job.target }} \
+        ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
     - name: Test individual utilities
-      uses: actions-rs/cargo@v1
-      with:
-        use-cross: ${{ steps.vars.outputs.CARGO_USE_CROSS }}
-        command: test
-        args: --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
-        toolchain: ${{ env.RUST_MIN_SRV }}
+      shell: bash
+      run: |
+        ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} test --target=${{ matrix.job.target }} \
+        ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
     - name: Archive executable artifacts
       uses: actions/upload-artifact@v3
       with:
@@ -1035,10 +1020,7 @@ jobs:
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
         outputs CARGO_UTILITY_LIST_OPTIONS
     - name: Test uucore
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --no-fail-fast -p uucore
+      run: cargo test --no-fail-fast -p uucore
       env:
         CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
@@ -1046,10 +1028,7 @@ jobs:
         RUSTDOCFLAGS: "-Cpanic=abort"
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: Test
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-fail-fast
+      run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-fail-fast
       env:
         CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
@@ -1057,10 +1036,7 @@ jobs:
         RUSTDOCFLAGS: "-Cpanic=abort"
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: Test individual utilities
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --no-fail-fast ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
+      run: cargo test --no-fail-fast ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
       env:
         CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
