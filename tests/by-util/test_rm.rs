@@ -357,8 +357,6 @@ fn test_rm_interactive_never() {
 fn test_rm_descend_directory() {
     // This test descends into each directory and deletes the files and folders inside of them
     // This test will have the rm process asks 6 question and us answering Y to them will delete all the files and folders
-    use std::io::Write;
-    use std::process::Child;
 
     // Needed for talking with stdin on platforms where CRLF or LF matters
     const END_OF_LINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
@@ -375,24 +373,15 @@ fn test_rm_descend_directory() {
     at.touch(file_1);
     at.touch(file_2);
 
-    let mut child: Child = scene.ucmd().arg("-ri").arg("a").run_no_wait();
+    let mut child = scene.ucmd().arg("-ri").arg("a").run_no_wait();
+    child.write_in(yes.as_bytes()).unwrap();
+    child.write_in(yes.as_bytes()).unwrap();
+    child.write_in(yes.as_bytes()).unwrap();
+    child.write_in(yes.as_bytes()).unwrap();
+    child.write_in(yes.as_bytes()).unwrap();
+    child.write_in(yes.as_bytes()).unwrap();
 
-    // Needed so that we can talk to the rm program
-    let mut child_stdin = child.stdin.take().unwrap();
-    child_stdin.write_all(yes.as_bytes()).unwrap();
-    child_stdin.flush().unwrap();
-    child_stdin.write_all(yes.as_bytes()).unwrap();
-    child_stdin.flush().unwrap();
-    child_stdin.write_all(yes.as_bytes()).unwrap();
-    child_stdin.flush().unwrap();
-    child_stdin.write_all(yes.as_bytes()).unwrap();
-    child_stdin.flush().unwrap();
-    child_stdin.write_all(yes.as_bytes()).unwrap();
-    child_stdin.flush().unwrap();
-    child_stdin.write_all(yes.as_bytes()).unwrap();
-    child_stdin.flush().unwrap();
-
-    child.wait_with_output().unwrap();
+    child.wait().unwrap();
 
     assert!(!at.dir_exists("a/b"));
     assert!(!at.dir_exists("a"));
@@ -404,7 +393,6 @@ fn test_rm_descend_directory() {
 #[test]
 fn test_rm_prompts() {
     use std::io::Write;
-    use std::process::Child;
 
     // Needed for talking with stdin on platforms where CRLF or LF matters
     const END_OF_LINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
@@ -457,21 +445,15 @@ fn test_rm_prompts() {
         .arg(file_2)
         .succeeds();
 
-    let mut child: Child = scene.ucmd().arg("-ri").arg("a").run_no_wait();
-
-    let mut child_stdin = child.stdin.take().unwrap();
+    let mut child = scene.ucmd().arg("-ri").arg("a").run_no_wait();
     for _ in 0..9 {
-        child_stdin.write_all(yes.as_bytes()).unwrap();
-        child_stdin.flush().unwrap();
+        child.write_in(yes.as_bytes()).unwrap();
     }
 
-    let output = child.wait_with_output().unwrap();
+    let result = child.wait().unwrap();
 
     let mut trimmed_output = Vec::new();
-    for string in String::from_utf8(output.stderr)
-        .expect("Couldn't convert output.stderr to string")
-        .split("rm: ")
-    {
+    for string in result.stderr_str().split("rm: ") {
         if !string.is_empty() {
             let trimmed_string = format!("rm: {}", string).trim().to_string();
             trimmed_output.push(trimmed_string);
@@ -491,9 +473,6 @@ fn test_rm_prompts() {
 
 #[test]
 fn test_rm_force_prompts_order() {
-    use std::io::Write;
-    use std::process::Child;
-
     // Needed for talking with stdin on platforms where CRLF or LF matters
     const END_OF_LINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
 
@@ -507,15 +486,11 @@ fn test_rm_force_prompts_order() {
     at.touch(empty_file);
 
     // This should cause rm to prompt to remove regular empty file
-    let mut child: Child = scene.ucmd().arg("-fi").arg(empty_file).run_no_wait();
+    let mut child = scene.ucmd().arg("-fi").arg(empty_file).run_no_wait();
+    child.write_in(yes.as_bytes()).unwrap();
 
-    let mut child_stdin = child.stdin.take().unwrap();
-    child_stdin.write_all(yes.as_bytes()).unwrap();
-    child_stdin.flush().unwrap();
-
-    let output = child.wait_with_output().unwrap();
-    let string_output =
-        String::from_utf8(output.stderr).expect("Couldn't convert output.stderr to string");
+    let result = child.wait().unwrap();
+    let string_output = result.stderr_str();
     assert_eq!(
         string_output.trim(),
         "rm: remove regular empty file 'empty'?"

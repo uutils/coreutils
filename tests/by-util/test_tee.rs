@@ -111,9 +111,7 @@ mod linux_only {
     use crate::common::util::*;
 
     use std::fs::File;
-    use std::io::Write;
     use std::process::Output;
-    use std::thread;
 
     fn make_broken_pipe() -> File {
         use libc::c_int;
@@ -133,22 +131,9 @@ mod linux_only {
 
     fn run_tee(proc: &mut UCommand) -> (String, Output) {
         let content = (1..=100000).map(|x| format!("{}\n", x)).collect::<String>();
-
-        let mut prog = proc.run_no_wait();
-
-        let mut stdin = prog
-            .stdin
-            .take()
-            .unwrap_or_else(|| panic!("Could not take child process stdin"));
-
-        let c = content.clone();
-        let thread = thread::spawn(move || {
-            let _ = stdin.write_all(c.as_bytes());
-        });
-
-        let output = prog.wait_with_output().unwrap();
-
-        thread.join().unwrap();
+        let output = proc
+            .run_no_wait()
+            .pipe_in_and_wait_with_output(content.as_bytes());
 
         (content, output)
     }

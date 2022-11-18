@@ -1118,28 +1118,15 @@ impl UCommand {
         self
     }
 
-    // TODO: Accept a parameter `delay` which returns delayed from this method. Most use cases are
-    // with some kind of post delay. Without any delay, the output may be empty because we return
-    // immediately. Most of the time a delay of 1ms was already sufficient.
-    // TODO: rename this method after refactoring the tests to run_no_wait and merge with it
-    pub fn run_no_wait_child(&mut self) -> UChild {
-        let child = self.run_no_wait();
-        UChild::new(
-            child,
-            self.bin_path.clone(),
-            self.util_name.clone(),
-            self.tmpd.clone(),
-            self.captured_stdout.take(),
-            self.captured_stderr.take(),
-            self.ignore_stdin_write_error,
-        )
-    }
+    // TODO: Add convenience method run_no_wait_with_delay which accept a parameter `delay` which
+    // returns delayed from run_no_wait. A lot of use cases are with some kind of post delay.
+    // Without any delay, the output may be empty because we return immediately.
 
     /// Spawns the command, feeds the stdin if any, and returns the
     /// child process immediately. Do not use this method directly
     /// if you want to have stderr redirected to stdout. Use
     /// [`UCommand::run_no_wait_stderr_to_stdout`] instead.
-    pub fn run_no_wait(&mut self) -> Child {
+    pub fn run_no_wait(&mut self) -> UChild {
         assert!(!self.has_run, "{}", ALREADY_RUN);
         self.has_run = true;
         log_info("run", &self.comm_string);
@@ -1204,7 +1191,15 @@ impl UCommand {
             }
         }
 
-        child
+        UChild::new(
+            child,
+            self.bin_path.clone(),
+            self.util_name.clone(),
+            self.tmpd.clone(),
+            self.captured_stdout.take(),
+            self.captured_stderr.take(),
+            self.ignore_stdin_write_error,
+        )
     }
 
     /// Spawns the command, feeds the stdin if any, waits for the result
@@ -1212,8 +1207,8 @@ impl UCommand {
     /// It is recommended that you instead use succeeds() or fails()
     pub fn run(&mut self) -> CmdResult {
         match self.bytes_into_stdin.take() {
-            Some(input) => self.run_no_wait_child().pipe_in_and_wait(input),
-            None => self.run_no_wait_child().wait().unwrap(),
+            Some(input) => self.run_no_wait().pipe_in_and_wait(input),
+            None => self.run_no_wait().wait().unwrap(),
         }
     }
 
@@ -1223,7 +1218,7 @@ impl UCommand {
     /// with succeeds() or fails()
     pub fn run_piped_stdin<T: Into<Vec<u8>>>(&mut self, input: T) -> CmdResult {
         self.bytes_into_stdin = None;
-        self.run_no_wait_child().pipe_in_and_wait(input)
+        self.run_no_wait().pipe_in_and_wait(input)
     }
 
     /// Spawns the command, feeds the stdin if any, waits for the result,

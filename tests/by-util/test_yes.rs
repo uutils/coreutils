@@ -1,5 +1,4 @@
-use std::io::Read;
-use std::process::ExitStatus;
+use std::process::{ExitStatus, Stdio};
 
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
@@ -19,12 +18,10 @@ fn check_termination(result: &ExitStatus) {
 /// Run `yes`, capture some of the output, close the pipe, and verify it.
 fn run(args: &[&str], expected: &[u8]) {
     let mut cmd = new_ucmd!();
-    let mut child = cmd.args(args).run_no_wait();
-    let mut stdout = child.stdout.take().unwrap();
-    let mut buf = vec![0; expected.len()];
-    stdout.read_exact(&mut buf).unwrap();
-    drop(stdout);
-    check_termination(&child.wait().unwrap());
+    let mut child = cmd.args(args).set_stdout(Stdio::piped()).run_no_wait();
+    let buf = child.stdout_exact_bytes(expected.len());
+    child.close_stdout();
+    check_termination(&child.wait_with_output().unwrap().status);
     assert_eq!(buf.as_slice(), expected);
 }
 
