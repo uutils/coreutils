@@ -66,12 +66,10 @@ jobs:
         workflow_conclusion: completed ## continually recalibrates to last commit of default branch with a successful GnuTests (ie, "self-heals" from GnuTest regressions, but needs more supervision for/of regressions)
         path: "${{ steps.vars.outputs.path_reference }}"
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-        components: rustfmt
+      run: |
+        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
+        rustup toolchain install stable -c rustfmt --profile minimal
+        rustup default stable
     - name: Install dependencies
       shell: bash
       run: |
@@ -281,12 +279,10 @@ jobs:
         ref: 'v9.1'
         submodules: recursive
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-        components: rustfmt
+      run: |
+        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
+        rustup toolchain install nightly -c rustfmt --profile minimal
+        rustup default nightly
     - name: Install dependencies
       run: |
         sudo apt update
@@ -314,11 +310,7 @@ jobs:
     - name: Run GNU tests
       run: bash uutils/util/run-gnu-test.sh
     - name: "`grcov` ~ install"
-      uses: actions-rs/install@v0.1
-      with:
-        crate: grcov
-        version: latest
-        use-tool-cache: false
+      run: cargo install grcov
     - name: Generate coverage data (via `grcov`)
       id: coverage
       run: |

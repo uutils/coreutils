@@ -45,7 +45,6 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -66,17 +65,12 @@ jobs:
     ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
     ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly
-        default: true
-        profile: minimal
+      run: |
+        rustup toolchain install nightly --profile minimal
+        rustup default nightly
+    - uses: Swatinem/rust-cache@v2
     - name: Install `cargo-udeps`
-      uses: actions-rs/install@v0.1
-      with:
-        crate: cargo-udeps
-        version: latest
-        use-tool-cache: false
+      run: cargo install cargo-udeps
       env:
         RUSTUP_TOOLCHAIN: stable
     - name: Detect unused dependencies
@@ -103,7 +97,6 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -122,12 +115,11 @@ jobs:
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-        components: rustfmt
+      run: |
+        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
+        rustup toolchain install stable -c rustfmt --profile minimal
+        rustup default stable
+    - uses: Swatinem/rust-cache@v2
     - name: "`cargo fmt` testing"
       shell: bash
       run: |
@@ -153,7 +145,6 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -183,12 +174,10 @@ jobs:
           macos-latest) brew install coreutils ;; # needed for show-utils.sh
         esac
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-        components: clippy
+      run: |
+        rustup toolchain install stable -c clippy --profile minimal
+        rustup default stable
+    - uses: Swatinem/rust-cache@v2
     - name: "`cargo clippy` lint testing"
       shell: bash
       run: |
@@ -263,7 +252,6 @@ jobs:
 #          - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -287,12 +275,10 @@ jobs:
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
         outputs CARGO_UTILITY_LIST_OPTIONS
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-        components: clippy
+      run: |
+        rustup toolchain install stable -c clippy --profile minimal
+        rustup default stable
+    - uses: Swatinem/rust-cache@v2
     - name: "`cargo doc` with warnings"
       shell: bash
       run: |
@@ -308,7 +294,6 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -321,11 +306,10 @@ jobs:
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
     - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ env.RUST_MIN_SRV }}
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        rustup toolchain install ${{ env.RUST_MIN_SRV }} --profile minimal
+        rustup default ${{ env.RUST_MIN_SRV }}
+    - uses: Swatinem/rust-cache@v2
     - name: Confirm MinSRV compatible 'Cargo.lock'
       shell: bash
       run: |
@@ -360,10 +344,7 @@ jobs:
         RUSTUP_TOOLCHAIN=stable cargo fetch --locked --quiet
         RUSTUP_TOOLCHAIN=stable cargo tree --all --locked --no-dev-dependencies --no-indent ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
     - name: Test
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: -v ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
+      run: cargo test -v ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
       env:
         RUSTFLAGS: "-Awarnings --cfg unsound_local_offset"
 
@@ -377,13 +358,11 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        rustup toolchain install stable --profile minimal
+        rustup default stable
+    - uses: Swatinem/rust-cache@v2
     - name: "`cargo update` testing"
       shell: bash
       run: |
@@ -402,13 +381,11 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        rustup toolchain install stable --profile minimal
+        rustup default stable
+    - uses: Swatinem/rust-cache@v2
     - name: "`make build`"
       shell: bash
       run: |
@@ -433,18 +410,13 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        rustup toolchain install stable --profile minimal
+        rustup default stable
+    - uses: Swatinem/rust-cache@v2
     - name: Test
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+      run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
 
   build_rust_nightly:
     name: Build/nightly
@@ -460,18 +432,13 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        rustup toolchain install nightly --profile minimal
+        rustup default nightly
+    - uses: Swatinem/rust-cache@v2
     - name: Test
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+      run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
 
   compute_size:
     name: Binary sizes
@@ -484,7 +451,6 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
     - name: Install dependencies
       shell: bash
       run: |
@@ -492,11 +458,10 @@ jobs:
         sudo apt-get update
         sudo apt-get install jq
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        rustup toolchain install stable --profile minimal
+        rustup default stable
+    - uses: Swatinem/rust-cache@v2
     - name: "`make install`"
       shell: bash
       run: |
@@ -556,7 +521,6 @@ jobs:
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -627,11 +591,11 @@ jobs:
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ; fi
         outputs CARGO_FEATURES_OPTION
-        # * CARGO_USE_CROSS (truthy)
-        CARGO_USE_CROSS='true' ; case '${{ matrix.job.use-cross }}' in ''|0|f|false|n|no) unset CARGO_USE_CROSS ;; esac;
-        outputs CARGO_USE_CROSS
+        # * CARGO_CMD
+        CARGO_CMD='cross' ; case '${{ matrix.job.use-cross }}' in ''|0|f|false|n|no) CARGO_CMD='cargo' ;; esac;
+        outputs CARGO_CMD
         # ** pass needed environment into `cross` container (iff `cross` not already configured via "Cross.toml")
-        if [ -n "${CARGO_USE_CROSS}" ] && [ ! -e "Cross.toml" ] ; then
+        if [ "${CARGO_CMD}" = 'cross' ] && [ ! -e "Cross.toml" ] ; then
           cargo install --version 0.2.1 cross
           printf "[build.env]\npassthrough = [\"CI\"]\n" > Cross.toml
         fi
@@ -680,12 +644,12 @@ jobs:
             ;;
         esac
     - name: rust toolchain ~ install
-      uses: actions-rs/toolchain@v1
+      run: |
+        rustup toolchain install ${{ env.RUST_MIN_SRV }} -t ${{ matrix.job.target }} --profile minimal
+        rustup default ${{ env.RUST_MIN_SRV }}
+    - uses: Swatinem/rust-cache@v2
       with:
-        toolchain: ${{ env.RUST_MIN_SRV }}
-        target: ${{ matrix.job.target }}
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+        key: ${{ matrix.job.os }}-${{ matrix.job.target }}
     - name: Initialize toolchain-dependent workflow variables
       id: dep_vars
       shell: bash
@@ -721,26 +685,20 @@ jobs:
         cargo fetch --locked --quiet
         cargo tree --locked --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all --no-dev-dependencies --no-indent | grep -vE "$PWD" | sort --unique
     - name: Build
-      uses: actions-rs/cargo@v1
-      with:
-        use-cross: ${{ steps.vars.outputs.CARGO_USE_CROSS }}
-        command: build
-        args: --release --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
-        toolchain: ${{ env.RUST_MIN_SRV }}
+      shell: bash
+      run: |
+        ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} build --release \
+        --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
     - name: Test
-      uses: actions-rs/cargo@v1
-      with:
-        use-cross: ${{ steps.vars.outputs.CARGO_USE_CROSS }}
-        command: test
-        args: --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
-        toolchain: ${{ env.RUST_MIN_SRV }}
+      shell: bash
+      run: |
+        ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} test --target=${{ matrix.job.target }} \
+        ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
     - name: Test individual utilities
-      uses: actions-rs/cargo@v1
-      with:
-        use-cross: ${{ steps.vars.outputs.CARGO_USE_CROSS }}
-        command: test
-        args: --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
-        toolchain: ${{ env.RUST_MIN_SRV }}
+      shell: bash
+      run: |
+        ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} test --target=${{ matrix.job.target }} \
+        ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
     - name: Archive executable artifacts
       uses: actions/upload-artifact@v3
       with:
@@ -801,18 +759,16 @@ jobs:
           - { os: ubuntu-latest }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
     - name: Install/setup prerequisites
       shell: bash
       run: |
         ## Install/setup prerequisites
         make prepare-busytest
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        rustup toolchain install stable --profile minimal
+        rustup default stable
+    - uses: Swatinem/rust-cache@v2
     - name: "Run BusyBox test suite"
       shell: bash
       run: |
@@ -967,7 +923,6 @@ jobs:
           - { os: windows-latest , features: windows }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
     #   run: git checkout ${{ github.head_ref }}
     - name: Initialize workflow variables
@@ -1017,11 +972,10 @@ jobs:
             ;;
         esac
     - name: rust toolchain ~ install
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ steps.vars.outputs.TOOLCHAIN }}
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        rustup toolchain install ${{ steps.vars.outputs.TOOLCHAIN }} --profile minimal
+        rustup default ${{ steps.vars.outputs.TOOLCHAIN }}
+    - uses: Swatinem/rust-cache@v2
     - name: Initialize toolchain-dependent workflow variables
       id: dep_vars
       shell: bash
@@ -1033,10 +987,7 @@ jobs:
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
         outputs CARGO_UTILITY_LIST_OPTIONS
     - name: Test uucore
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --no-fail-fast -p uucore
+      run: cargo test --no-fail-fast -p uucore
       env:
         CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
@@ -1044,10 +995,7 @@ jobs:
         RUSTDOCFLAGS: "-Cpanic=abort"
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: Test
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-fail-fast
+      run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-fail-fast
       env:
         CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
@@ -1055,10 +1003,7 @@ jobs:
         RUSTDOCFLAGS: "-Cpanic=abort"
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: Test individual utilities
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --no-fail-fast ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
+      run: cargo test --no-fail-fast ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
       env:
         CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
@@ -1067,22 +1012,7 @@ jobs:
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: "`grcov` ~ install"
       id: build_grcov
-      shell: bash
-      run: |
-        git clone https://github.com/mozilla/grcov.git ~/grcov/
-        cd ~/grcov
-        # Hardcode the version of crossbeam-epoch. See
-        # https://github.com/uutils/coreutils/issues/3680
-        sed -i -e "s|tempfile =|crossbeam-epoch = \"=0.9.8\"\ntempfile =|" Cargo.toml
-        cargo install --path .
-        cd -
-# Uncomment when the upstream issue
-# https://github.com/mozilla/grcov/issues/849 is fixed
-#      uses: actions-rs/install@v0.1
-#      with:
-#        crate: grcov
-#        version: latest
-#        use-tool-cache: false
+      run: cargo install grcov
     - name: Generate coverage data (via `grcov`)
       id: coverage
       shell: bash
@@ -1094,9 +1024,9 @@ jobs:
         # GRCOV_EXCLUDE_OPTION='--excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"' ## `grcov` ignores these params when passed as an environment variable (why?)
         mkdir -p "${COVERAGE_REPORT_DIR}"
         # display coverage files
-        ~/.cargo/bin/grcov . --output-types files --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
+        ~/.cargo/bin/grcov . --output-type files --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
         # generate coverage report
-        ~/.cargo/bin/grcov . --output-types lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
+        ~/.cargo/bin/grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
         echo "report=${COVERAGE_REPORT_FILE}" >> $GITHUB_OUTPUT
     - name: Upload coverage results (to Codecov.io)
       uses: codecov/codecov-action@v3
