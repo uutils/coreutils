@@ -13,7 +13,7 @@ use uucore::fsext::{
     pretty_filetype, pretty_fstype, pretty_time, read_fs_list, statfs, BirthTime, FsMeta,
 };
 use uucore::libc::mode_t;
-use uucore::{entries, format_usage, has, show_error, show_warning};
+use uucore::{entries, format_usage, show_error, show_warning};
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::borrow::Cow;
