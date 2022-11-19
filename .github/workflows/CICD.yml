@@ -70,11 +70,7 @@ jobs:
         rustup default nightly
     - uses: Swatinem/rust-cache@v2
     - name: Install `cargo-udeps`
-      uses: actions-rs/install@v0.1
-      with:
-        crate: cargo-udeps
-        version: latest
-        use-tool-cache: false
+      run: cargo install cargo-udeps
       env:
         RUSTUP_TOOLCHAIN: stable
     - name: Detect unused dependencies
@@ -1016,22 +1012,7 @@ jobs:
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: "`grcov` ~ install"
       id: build_grcov
-      shell: bash
-      run: |
-        git clone https://github.com/mozilla/grcov.git ~/grcov/
-        cd ~/grcov
-        # Hardcode the version of crossbeam-epoch. See
-        # https://github.com/uutils/coreutils/issues/3680
-        sed -i -e "s|tempfile =|crossbeam-epoch = \"=0.9.8\"\ntempfile =|" Cargo.toml
-        cargo install --path .
-        cd -
-# Uncomment when the upstream issue
-# https://github.com/mozilla/grcov/issues/849 is fixed
-#      uses: actions-rs/install@v0.1
-#      with:
-#        crate: grcov
-#        version: latest
-#        use-tool-cache: false
+      run: cargo install grcov
     - name: Generate coverage data (via `grcov`)
       id: coverage
       shell: bash
@@ -1043,9 +1024,9 @@ jobs:
         # GRCOV_EXCLUDE_OPTION='--excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"' ## `grcov` ignores these params when passed as an environment variable (why?)
         mkdir -p "${COVERAGE_REPORT_DIR}"
         # display coverage files
-        ~/.cargo/bin/grcov . --output-types files --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
+        ~/.cargo/bin/grcov . --output-type files --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
         # generate coverage report
-        ~/.cargo/bin/grcov . --output-types lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
+        ~/.cargo/bin/grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
         echo "report=${COVERAGE_REPORT_FILE}" >> $GITHUB_OUTPUT
     - name: Upload coverage results (to Codecov.io)
       uses: codecov/codecov-action@v3

@@ -310,11 +310,7 @@ jobs:
     - name: Run GNU tests
       run: bash uutils/util/run-gnu-test.sh
     - name: "`grcov` ~ install"
-      uses: actions-rs/install@v0.1
-      with:
-        crate: grcov
-        version: latest
-        use-tool-cache: false
+      run: cargo install grcov
     - name: Generate coverage data (via `grcov`)
       id: coverage
       run: |
