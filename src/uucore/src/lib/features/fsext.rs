@@ -123,7 +123,7 @@ pub use libc::statvfs as statfs_fn;
 
 pub trait BirthTime {
     fn pretty_birth(&self) -> String;
-    fn birth(&self) -> String;
+    fn birth(&self) -> u64;
 }
 
 use std::fs::Metadata;
@@ -136,12 +136,12 @@ impl BirthTime for Metadata {
             .unwrap_or_else(|| "-".to_owned())
     }
 
-    fn birth(&self) -> String {
+    fn birth(&self) -> u64 {
         self.created()
             .ok()
             .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-            .map(|e| format!("{}", e.as_secs()))
-            .unwrap_or_else(|| "0".to_owned())
+            .map(|e| e.as_secs())
+            .unwrap_or_default()
     }
 }
 
