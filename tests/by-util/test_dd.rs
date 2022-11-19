@@ -1295,3 +1295,33 @@ fn test_big_multiplication() {
         .fails()
         .stderr_contains("invalid number");
 }
+
+/// Test for count, seek, and skip given in units of bytes.
+#[test]
+fn test_bytes_suffix() {
+    new_ucmd!()
+        .args(&["count=3B", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("abc");
+    new_ucmd!()
+        .args(&["skip=3B", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("def");
+    new_ucmd!()
+        .args(&["iseek=3B", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("def");
+    new_ucmd!()
+        .args(&["seek=3B", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("\0\0\0abcdef");
+    new_ucmd!()
+        .args(&["oseek=3B", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("\0\0\0abcdef");
+}

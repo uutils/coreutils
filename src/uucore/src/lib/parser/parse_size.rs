@@ -15,6 +15,8 @@ use crate::display::Quotable;
 /// The [`Parser::parse`] function performs the parse.
 #[derive(Default)]
 pub struct Parser {
+    /// Whether to treat the suffix "B" as meaning "bytes".
+    pub capital_b_bytes: bool,
 }
 
 impl Parser {
@@ -67,6 +69,7 @@ impl Parser {
         let unit = &size[numeric_string.len()..];
         let (base, exponent): (u128, u32) = match unit {
             "" => (1, 0),
+            "B" if self.capital_b_bytes => (1, 0),
             "b" => (512, 1),
             "KiB" | "kiB" | "K" | "k" => (1024, 1),
             "MiB" | "miB" | "M" | "m" => (1024, 2),
