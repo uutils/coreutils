@@ -65,11 +65,9 @@ jobs:
     ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
     ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly
-        default: true
-        profile: minimal
+      run: |
+        rustup toolchain install nightly --profile minimal
+        rustup default nightly
     - uses: Swatinem/rust-cache@v2
     - name: Install `cargo-udeps`
       uses: actions-rs/install@v0.1
@@ -121,12 +119,10 @@ jobs:
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-        components: rustfmt
+      run: |
+        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
+        rustup toolchain install stable -c rustfmt --profile minimal
+        rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`cargo fmt` testing"
       shell: bash
@@ -182,12 +178,9 @@ jobs:
           macos-latest) brew install coreutils ;; # needed for show-utils.sh
         esac
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-        components: clippy
+      run: |
+        rustup toolchain install stable -c clippy --profile minimal
+        rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`cargo clippy` lint testing"
       shell: bash
@@ -286,12 +279,9 @@ jobs:
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
         outputs CARGO_UTILITY_LIST_OPTIONS
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-        components: clippy
+      run: |
+        rustup toolchain install stable -c clippy --profile minimal
+        rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`cargo doc` with warnings"
       shell: bash
@@ -320,11 +310,9 @@ jobs:
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
     - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ env.RUST_MIN_SRV }}
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        rustup toolchain install ${{ env.RUST_MIN_SRV }} --profile minimal
+        rustup default ${{ env.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
     - name: Confirm MinSRV compatible 'Cargo.lock'
       shell: bash
@@ -375,11 +363,9 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        rustup toolchain install stable --profile minimal
+        rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`cargo update` testing"
       shell: bash
@@ -400,11 +386,9 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        rustup toolchain install stable --profile minimal
+        rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`make build`"
       shell: bash
@@ -431,11 +415,9 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        rustup toolchain install stable --profile minimal
+        rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: Test
       run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
@@ -455,11 +437,9 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        rustup toolchain install nightly --profile minimal
+        rustup default nightly
     - uses: Swatinem/rust-cache@v2
     - name: Test
       run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
@@ -482,11 +462,9 @@ jobs:
         sudo apt-get update
         sudo apt-get install jq
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        rustup toolchain install stable --profile minimal
+        rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`make install`"
       shell: bash
@@ -670,12 +648,9 @@ jobs:
             ;;
         esac
     - name: rust toolchain ~ install
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ env.RUST_MIN_SRV }}
-        target: ${{ matrix.job.target }}
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        rustup toolchain install ${{ env.RUST_MIN_SRV }} -t ${{ matrix.job.target }} --profile minimal
+        rustup default ${{ env.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
       with:
         key: ${{ matrix.job.os }}-${{ matrix.job.target }}
@@ -794,11 +769,9 @@ jobs:
         ## Install/setup prerequisites
         make prepare-busytest
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        rustup toolchain install stable --profile minimal
+        rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "Run BusyBox test suite"
       shell: bash
@@ -1003,11 +976,9 @@ jobs:
             ;;
         esac
     - name: rust toolchain ~ install
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ steps.vars.outputs.TOOLCHAIN }}
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        rustup toolchain install ${{ steps.vars.outputs.TOOLCHAIN }} --profile minimal
+        rustup default ${{ steps.vars.outputs.TOOLCHAIN }}
     - uses: Swatinem/rust-cache@v2
     - name: Initialize toolchain-dependent workflow variables
       id: dep_vars

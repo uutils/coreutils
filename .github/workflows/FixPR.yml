@@ -37,11 +37,9 @@ jobs:
         RUST_MIN_SRV=$(grep -P "^\s+RUST_MIN_SRV:" .github/workflows/CICD.yml | grep -Po "(?<=\x22)\d+[.]\d+(?:[.]\d+)?(?=\x22)" )
         outputs RUST_MIN_SRV
     - name: Install `rust` toolchain (v${{ steps.vars.outputs.RUST_MIN_SRV }})
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ steps.vars.outputs.RUST_MIN_SRV }}
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        rustup toolchain install ${{ steps.vars.outputs.RUST_MIN_SRV }} --profile minimal
+        rustup default ${{ steps.vars.outputs.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
     - name: Ensure updated 'Cargo.lock'
       shell: bash
@@ -103,12 +101,10 @@ jobs:
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-        components: rustfmt
+      run: |
+        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
+        rustup toolchain install stable -c rustfmt --profile minimal
+        rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`cargo fmt`"
       shell: bash
