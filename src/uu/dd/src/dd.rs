@@ -817,26 +817,9 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
-    use crate::datastructures::{IConvFlags, IFlags};
-    use crate::{calc_bsize, Density, Dest, Input, Output, Parser, Settings};
+    use crate::{calc_bsize, Output, Parser};
 
-    use std::cmp;
-    use std::fs;
-    use std::fs::File;
-    use std::io;
-    use std::io::{BufReader, Read};
     use std::path::Path;
-
-    struct LazyReader<R: Read> {
-        src: R,
-    }
-
-    impl<R: Read> Read for LazyReader<R> {
-        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            let reduced = cmp::max(buf.len() / 2, 1);
-            self.src.read(&mut buf[..reduced])
-        }
-    }
 
     #[test]
     fn bsize_test_primes() {
@@ -915,108 +898,5 @@ mod tests {
         assert!(
             Output::new_file(Path::new(settings.outfile.as_ref().unwrap()), &settings).is_err()
         );
-    }
-
-    #[test]
-    fn test_deadbeef_16_delayed() {
-        let settings = Settings {
-            ibs: 16,
-            obs: 32,
-            count: None,
-            iconv: IConvFlags {
-                sync: Some(0),
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let input = Input {
-            src: LazyReader {
-                src: File::open("./test-resources/deadbeef-16.test").unwrap(),
-            },
-            settings: &settings,
-        };
-
-        let output = Output {
-            dst: Dest::File(
-                File::create("./test-resources/FAILED-deadbeef-16-delayed.test").unwrap(),
-                Density::Dense,
-            ),
-            settings: &settings,
-        };
-
-        output.dd_out(input).unwrap();
-
-        let tmp_fname = "./test-resources/FAILED-deadbeef-16-delayed.test";
-        let spec = File::open("./test-resources/deadbeef-16.spec").unwrap();
-
-        let res = File::open(tmp_fname).unwrap();
-        // Check test file isn't empty (unless spec file is too)
-        assert_eq!(
-            res.metadata().unwrap().len(),
-            spec.metadata().unwrap().len()
-        );
-
-        let spec = BufReader::new(spec);
-        let res = BufReader::new(res);
-
-        // Check all bytes match
-        for (b_res, b_spec) in res.bytes().zip(spec.bytes()) {
-            assert_eq!(b_res.unwrap(), b_spec.unwrap());
-        }
-
-        fs::remove_file(tmp_fname).unwrap();
-    }
-
-    #[test]
-    fn test_random_73k_test_lazy_fullblock() {
-        let settings = Settings {
-            ibs: 521,
-            obs: 1031,
-            count: None,
-            iflags: IFlags {
-                fullblock: true,
-                ..IFlags::default()
-            },
-            ..Default::default()
-        };
-        let input = Input {
-            src: LazyReader {
-                src: File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test")
-                    .unwrap(),
-            },
-            settings: &settings,
-        };
-
-        let output = Output {
-            dst: Dest::File(
-                File::create("./test-resources/FAILED-random_73k_test_lazy_fullblock.test")
-                    .unwrap(),
-                Density::Dense,
-            ),
-            settings: &settings,
-        };
-
-        output.dd_out(input).unwrap();
-
-        let tmp_fname = "./test-resources/FAILED-random_73k_test_lazy_fullblock.test";
-        let spec =
-            File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap();
-
-        let res = File::open(tmp_fname).unwrap();
-        // Check test file isn't empty (unless spec file is too)
-        assert_eq!(
-            res.metadata().unwrap().len(),
-            spec.metadata().unwrap().len()
-        );
-
-        let spec = BufReader::new(spec);
-        let res = BufReader::new(res);
-
-        // Check all bytes match
-        for (b_res, b_spec) in res.bytes().zip(spec.bytes()) {
-            assert_eq!(b_res.unwrap(), b_spec.unwrap());
-        }
-
-        fs::remove_file(tmp_fname).unwrap();
     }
 }
