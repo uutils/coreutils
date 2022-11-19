@@ -5,6 +5,10 @@ use crate::common::util::*;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
+#[cfg(not(windows))]
+use std::thread::sleep;
+#[cfg(not(windows))]
+use std::time::Duration;
 use tempfile::tempfile;
 
 macro_rules! inf {
@@ -1007,6 +1011,38 @@ fn test_random_73k_test_obs_lt_not_a_multiple_ibs() {
         .stdout_is_fixture_bytes("random-5828891cb1230748e146f34223bbd3b5.test");
 }
 
+#[cfg(not(windows))]
+#[test]
+fn test_random_73k_test_lazy_fullblock() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    let child = ucmd
+        .args(&[
+            "ibs=521",
+            "obs=1031",
+            "iflag=fullblock",
+            "if=fifo",
+            "status=noxfer",
+        ])
+        .run_no_wait();
+    let data = at.read_bytes("random-5828891cb1230748e146f34223bbd3b5.test");
+    {
+        let mut fifo = OpenOptions::new()
+            .write(true)
+            .open(at.plus("fifo"))
+            .unwrap();
+        for chunk in data.chunks(521 / 2) {
+            fifo.write_all(chunk).unwrap();
+            sleep(Duration::from_millis(10));
+        }
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+
+    assert_eq!(&output.stdout, &data);
+    assert_eq!(&output.stderr, b"142+1 records in\n72+1 records out\n");
+}
+
 #[test]
 fn test_deadbeef_all_32k_test_count_reads() {
     new_ucmd!()
@@ -1324,4 +1360,37 @@ fn test_bytes_suffix() {
         .pipe_in("abcdef")
         .succeeds()
         .stdout_only("\0\0\0abcdef");
+}
+
+/// Test for "conv=sync" with a slow reader.
+#[cfg(not(windows))]
+#[test]
+fn test_sync_delayed_reader() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    let child = ucmd
+        .args(&["ibs=16", "obs=32", "conv=sync", "if=fifo", "status=noxfer"])
+        .run_no_wait();
+    {
+        let mut fifo = OpenOptions::new()
+            .write(true)
+            .open(at.plus("fifo"))
+            .unwrap();
+        for _ in 0..8 {
+            fifo.write_all(&[0xF; 8]).unwrap();
+            sleep(Duration::from_millis(10));
+        }
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+
+    // Expected output is 0xFFFFFFFF00000000FFFFFFFF00000000...
+    let mut expected: [u8; 8 * 16] = [0; 8 * 16];
+    for i in 0..8 {
+        for j in 0..8 {
+            expected[16 * i + j] = 0xF;
+        }
+    }
+    assert_eq!(&output.stdout, &expected);
+    assert_eq!(&output.stderr, b"0+8 records in\n4+0 records out\n");
 }
