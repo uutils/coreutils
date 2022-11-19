@@ -99,6 +99,10 @@ enum Source {
 
     /// Input from a file.
     File(File),
+
+    /// Input from a named pipe, also known as a FIFO.
+    #[cfg(unix)]
+    Fifo(File),
 }
 
 impl Source {
@@ -113,6 +117,8 @@ impl Source {
                 Err(e) => Err(e),
             },
             Self::File(f) => f.seek(io::SeekFrom::Start(n)),
+            #[cfg(unix)]
+            Self::Fifo(f) => io::copy(&mut f.take(n), &mut io::sink()),
         }
     }
 }
@@ -122,6 +128,8 @@ impl Read for Source {
         match self {
             Self::Stdin(stdin) => stdin.read(buf),
             Self::File(f) => f.read(buf),
+            #[cfg(unix)]
+            Self::Fifo(f) => f.read(buf),
         }
     }
 }
@@ -166,6 +174,20 @@ impl<'a> Input<'a> {
         };
 
         let mut src = Source::File(src);
+        if settings.skip > 0 {
+            src.skip(settings.skip)?;
+        }
+        Ok(Self { src, settings })
+    }
+
+    /// Instantiate this struct with the named pipe as a source.
+    #[cfg(unix)]
+    fn new_fifo(filename: &Path, settings: &'a Settings) -> UResult<Self> {
+        let mut opts = OpenOptions::new();
+        opts.read(true);
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        opts.custom_flags(make_linux_iflags(&settings.iflags).unwrap_or(0));
+        let mut src = Source::Fifo(opts.open(filename)?);
         if settings.skip > 0 {
             src.skip(settings.skip)?;
         }
@@ -889,6 +911,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     )?;
 
     let i = match settings.infile {
+        #[cfg(unix)]
+        Some(ref infile) if is_fifo(infile) => Input::new_fifo(Path::new(&infile), &settings)?,
         Some(ref infile) => Input::new_file(Path::new(&infile), &settings)?,
         None => Input::new_stdin(&settings)?,
     };

@@ -1481,3 +1481,36 @@ fn test_seek_output_fifo() {
     assert!(output.stdout.is_empty());
     assert_eq!(&output.stderr, b"1+0 records in\n1+0 records out\n");
 }
+
+/// Test that a skip on an input FIFO results in a read.
+#[test]
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd")))]
+fn test_skip_input_fifo() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+
+    // TODO When `dd` is a bit more advanced, we could use the uutils
+    // version of dd here as well.
+    let child = Command::new("dd")
+        .current_dir(&at.subdir)
+        .args([
+            "count=1",
+            "if=/dev/zero",
+            &format!("of={}", at.plus_as_string("fifo")),
+            "status=noxfer",
+        ])
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to execute child process");
+
+    ts.ucmd()
+        .args(&["count=0", "skip=1", "if=fifo", "status=noxfer"])
+        .succeeds()
+        .stderr_only("0+0 records in\n0+0 records out\n");
+
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    assert_eq!(&output.stderr, b"1+0 records in\n1+0 records out\n");
+}
