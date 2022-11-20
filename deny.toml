@@ -74,6 +74,9 @@ skip = [
     { name = "clap", version = "=3.2.22" },
     # bindgen (via selinux-sys & fts-sys)
     { name = "clap_lex", version = "=0.2.4" },
+    # fts-sys. See:
+    # https://github.com/uutils/coreutils/pull/4168#issuecomment-1321164839
+    { name = "bindgen", version = "=0.60.1" },
     # windows-sys (via terminal_size, crossterm -> parking_lot, notify -> filetime)
     { name = "windows-sys", version = "=0.36.1" },
     { name = "windows_aarch64_msvc", version = "=0.36.1" },
