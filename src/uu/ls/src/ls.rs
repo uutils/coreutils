@@ -2888,7 +2888,7 @@ fn display_file_name(
 fn color_name(name: String, path: &Path, md: Option<&Metadata>, ls_colors: &LsColors) -> String {
     match ls_colors.style_for_path_with_metadata(path, md) {
         Some(style) => {
-            return style.to_ansi_term_style().paint(name).to_string();
+            return style.to_nu_ansi_term_style().paint(name).to_string();
         }
         None => name,
     }
