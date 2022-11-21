@@ -24,7 +24,7 @@ itertools = "0.10.0"
 memchr = "2.5.0"
 ouroboros = "0.15.5"
 rand = "0.8"
-rayon = "1.5"
+rayon = "1.6"
 tempfile = "3"
 unicode-width = "0.1.8"
 uucore = { version=">=0.0.17", package="uucore", path="../../uucore", features=["fs"] }
