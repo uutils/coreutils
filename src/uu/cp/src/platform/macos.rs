@@ -52,7 +52,10 @@ pub(crate) fn copy_on_write(
                 flags: u32,
             ) -> libc::c_int = std::mem::transmute(raw_pfn);
             error = pfn(src.as_ptr(), dst.as_ptr(), 0);
-            if std::io::Error::last_os_error().kind() == std::io::ErrorKind::AlreadyExists {
+            if std::io::Error::last_os_error().kind() == std::io::ErrorKind::AlreadyExists
+                // Only remove the `dest` if the `source` and `dest` are not the same
+                && source != dest
+            {
                 // clonefile(2) fails if the destination exists.  Remove it and try again.  Do not
                 // bother to check if removal worked because we're going to try to clone again.
                 let _ = fs::remove_file(dest);

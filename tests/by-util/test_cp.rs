@@ -2290,16 +2290,9 @@ fn test_same_file_force() {
 }
 
 /// Test that copying file to itself with forced backup succeeds.
-#[cfg(all(not(windows), not(target_os = "macos")))]
+#[cfg(all(not(windows)))]
 #[test]
 fn test_same_file_force_backup() {
-    // TODO This test should work on macos, but the command was
-    // causing an error:
-    //
-    //     cp: 'f' -> 'f': No such file or directory (os error 2)
-    //
-    // I couldn't figure out how to fix it, so I just skipped this
-    // test on macos.
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("f");
     ucmd.args(&["--force", "--backup", "f", "f"])
