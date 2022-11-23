@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) retcode
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{
     builder::NonEmptyStringValueParser, crate_version, Arg, ArgAction, ArgMatches, Command,
 };
@@ -17,7 +14,6 @@ use std::{
     io::{stdout, Write},
     path::{Path, PathBuf},
 };
-use uucore::error::UClapError;
 use uucore::fs::make_path_relative_to;
 use uucore::{
     display::{print_verbatim, Quotable},
@@ -25,6 +21,7 @@ use uucore::{
     format_usage,
     fs::{canonicalize, MissingHandling, ResolveMode},
 };
+use uucore::{error::UClapError, show, show_if_err};
 
 static ABOUT: &str = "print the resolved path";
 const USAGE: &str = "{} [OPTION]... FILE...";

@@ -1,14 +1,10 @@
 // spell-checker:ignore (ToDO) IOFBF IOLBF IONBF cstdio setvbuf
 
-#[macro_use]
-extern crate cpp;
-
-#[macro_use]
-extern crate uucore;
-
+use cpp::cpp;
 use libc::{c_char, c_int, size_t, FILE, _IOFBF, _IOLBF, _IONBF};
 use std::env;
 use std::ptr;
+use uucore::crash;
 
 cpp! {{
     #include <cstdio>

@@ -26,6 +26,7 @@ quick-error = "2.0.1"
 selinux = { version="0.3", optional=true }
 uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["entries", "fs", "perms", "mode"] }
 walkdir = "2.2"
+indicatif = "0.17"
 
 [target.'cfg(unix)'.dependencies]
 xattr="0.2.3"

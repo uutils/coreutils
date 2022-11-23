@@ -16,13 +16,6 @@
 // spell-checker:ignore (shell/tools)
 // spell-checker:ignore (misc)
 
-#[macro_use]
-extern crate clap;
-
-#[macro_use]
-extern crate uucore;
-extern crate core;
-
 pub mod args;
 pub mod chunks;
 mod follow;
@@ -36,6 +29,7 @@ use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use uucore::{show, show_error, show_warning};
 
 use uucore::display::Quotable;
 use uucore::error::{get_exit_code, set_exit_code, FromIo, UError, UResult, USimpleError};

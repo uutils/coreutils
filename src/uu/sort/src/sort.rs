@@ -13,9 +13,6 @@
 
 // spell-checker:ignore (misc) HFKJFK Mbdfhn sysinfo MEMORYSTATUS MEMSIZE
 
-#[macro_use]
-extern crate uucore;
-
 mod check;
 mod chunks;
 mod custom_str_cmp;
@@ -540,7 +537,7 @@ impl KeySettings {
     }
 
     fn set_sort_mode(&mut self, mode: SortMode) -> Result<(), String> {
-        if self.mode != SortMode::Default {
+        if self.mode != SortMode::Default && self.mode != mode {
             return Err(format!(
                 "options '-{}{}' are incompatible",
                 self.mode.get_short_name().unwrap(),

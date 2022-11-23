@@ -9,9 +9,6 @@
 // spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv PWSTR lpszfilepath hresult mktime YYYYMMDDHHMM YYMMDDHHMM DATETIME YYYYMMDDHHMMS subsecond
 pub extern crate filetime;
 
-#[macro_use]
-extern crate uucore;
-
 use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgAction, ArgGroup, Command};
 use filetime::*;
@@ -22,7 +19,7 @@ use time::macros::{format_description, offset, time};
 use time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
-use uucore::format_usage;
+use uucore::{format_usage, show};
 
 static ABOUT: &str = "Update the access and modification times of each FILE to the current time.";
 const USAGE: &str = "{} [OPTION]... [USER]";

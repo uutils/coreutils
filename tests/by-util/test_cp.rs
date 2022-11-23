@@ -1,4 +1,4 @@
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs ROOTDIR USERDIR procfs
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs ROOTDIR USERDIR procfs outfile
 
 use crate::common::util::*;
 #[cfg(not(windows))]
@@ -49,7 +49,7 @@ static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
 static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
 
 /// Assert that mode, ownership, and permissions of two metadata objects match.
-#[cfg(not(windows))]
+#[cfg(all(not(windows), not(target_os = "freebsd")))]
 macro_rules! assert_metadata_eq {
     ($m1:expr, $m2:expr) => {{
         assert_eq!($m1.mode(), $m2.mode(), "mode is different");
@@ -232,15 +232,11 @@ fn test_cp_arg_interactive() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
     at.touch("b");
-    // TODO The prompt in GNU cp is different, and it doesn't have the
-    // response either.
-    //
-    // See <https://github.com/uutils/coreutils/issues/4023>.
     ucmd.args(&["-i", "a", "b"])
         .pipe_in("N\n")
         .succeeds()
         .no_stdout()
-        .stderr_is("cp: overwrite 'b'?  [y/N]: cp: Not overwriting 'b' at user request\n");
+        .stderr_is("cp: overwrite 'b'? ");
 }
 
 #[test]
@@ -312,8 +308,7 @@ fn test_cp_arg_no_clobber_twice() {
         .arg("--no-clobber")
         .arg("source.txt")
         .arg("dest.txt")
-        .succeeds()
-        .stdout_does_not_contain("Not overwriting");
+        .succeeds();
 
     assert_eq!(at.read("source.txt"), "some-content");
     // Should be empty as the "no-clobber" should keep
@@ -886,11 +881,29 @@ fn test_cp_issue_1665() {
 
 #[test]
 fn test_cp_preserve_no_args() {
-    new_ucmd!()
-        .arg(TEST_COPY_FROM_FOLDER_FILE)
-        .arg(TEST_HELLO_WORLD_DEST)
+    let (at, mut ucmd) = at_and_ucmd!();
+    let src_file = "a";
+    let dst_file = "b";
+
+    // Prepare the source file
+    at.touch(src_file);
+    #[cfg(unix)]
+    at.set_mode(src_file, 0o0500);
+
+    // Copy
+    ucmd.arg(src_file)
+        .arg(dst_file)
         .arg("--preserve")
         .succeeds();
+
+    #[cfg(all(unix, not(target_os = "freebsd")))]
+    {
+        // Assert that the mode, ownership, and timestamps are preserved
+        // NOTICE: the ownership is not modified on the src file, because that requires root permissions
+        let metadata_src = at.metadata(src_file);
+        let metadata_dst = at.metadata(dst_file);
+        assert_metadata_eq!(metadata_src, metadata_dst);
+    }
 }
 
 #[test]
@@ -1090,7 +1103,7 @@ fn test_cp_no_deref_folder_to_folder() {
 fn test_cp_archive() {
     let (at, mut ucmd) = at_and_ucmd!();
     let ts = time::OffsetDateTime::now_local().unwrap();
-    let previous = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond() as u32);
+    let previous = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
     // set the file creation/modification an hour ago
     filetime::set_file_times(
         at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
@@ -1821,7 +1834,7 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     assert!(at.symlink_exists("d2"), "symlink wasn't created");
 
     // `-p` means `--preserve=mode,ownership,timestamps`
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "freebsd")))]
     {
         let metadata1 = at.symlink_metadata("dangle");
         let metadata2 = at.symlink_metadata("d2");
@@ -2024,7 +2037,8 @@ fn test_copy_same_symlink_no_dereference_dangling() {
     ucmd.args(&["-d", "a", "b"]).succeeds();
 }
 
-#[cfg(not(windows))]
+// TODO: enable for Android, when #3477 solved
+#[cfg(not(any(windows, target_os = "android")))]
 #[test]
 fn test_cp_parents_2_dirs() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2189,7 +2203,7 @@ fn test_copy_nested_directory_to_itself_disallowed() {
 }
 
 /// Test for preserving permissions when copying a directory.
-#[cfg(not(windows))]
+#[cfg(all(not(windows), not(target_os = "freebsd")))]
 #[test]
 fn test_copy_dir_preserve_permissions() {
     // Create a directory that has some non-default permissions.
@@ -2219,7 +2233,7 @@ fn test_copy_dir_preserve_permissions() {
 
 /// Test for preserving permissions when copying a directory, even in
 /// the face of an inaccessible file in that directory.
-#[cfg(not(windows))]
+#[cfg(all(not(windows), not(target_os = "freebsd")))]
 #[test]
 fn test_copy_dir_preserve_permissions_inaccessible_file() {
     // Create a directory that has some non-default permissions and
@@ -2250,4 +2264,102 @@ fn test_copy_dir_preserve_permissions_inaccessible_file() {
     let metadata1 = at.metadata("d1");
     let metadata2 = at.metadata("d2");
     assert_metadata_eq!(metadata1, metadata2);
+}
+
+/// Test that copying file to itself with backup fails.
+#[test]
+fn test_same_file_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.args(&["--backup", "f", "f"])
+        .fails()
+        .stderr_only("cp: 'f' and 'f' are the same file");
+    assert!(!at.file_exists("f~"));
+}
+
+/// Test that copying file to itself with forced backup succeeds.
+#[cfg(not(windows))]
+#[test]
+fn test_same_file_force() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.args(&["--force", "f", "f"])
+        .fails()
+        .stderr_only("cp: 'f' and 'f' are the same file");
+    assert!(!at.file_exists("f~"));
+}
+
+/// Test that copying file to itself with forced backup succeeds.
+#[cfg(all(not(windows)))]
+#[test]
+fn test_same_file_force_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.args(&["--force", "--backup", "f", "f"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(at.file_exists("f~"));
+}
+
+/// Test for copying the contents of a FIFO as opposed to the FIFO object itself.
+#[cfg(all(unix, not(target_os = "freebsd")))]
+#[test]
+fn test_copy_contents_fifo() {
+    // TODO this test should work on FreeBSD, but the command was
+    // causing an error:
+    //
+    // cp: 'fifo' -> 'outfile': the source path is neither a regular file nor a symlink to a regular file
+    //
+    // the underlying `std::fs:copy` doesn't support copying fifo on freeBSD
+    let scenario = TestScenario::new(util_name!());
+    let at = &scenario.fixtures;
+
+    // Start the `cp` process, reading the contents of `fifo` and
+    // writing to regular file `outfile`.
+    at.mkfifo("fifo");
+    let mut ucmd = scenario.ucmd();
+    let child = ucmd
+        .args(&["--copy-contents", "fifo", "outfile"])
+        .run_no_wait();
+
+    // Write some bytes to the `fifo`. We expect these bytes to get
+    // copied through to `outfile`.
+    std::fs::write(at.plus("fifo"), "foo").unwrap();
+
+    // At this point the child process should have terminated
+    // successfully with no output. The `outfile` should have the
+    // contents of `fifo` copied into it.
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
+    assert_eq!(at.read("outfile"), "foo");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_reflink_never_sparse_always() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Create a file and make it a large sparse file.
+    //
+    // On common Linux filesystems, setting the length to one megabyte
+    // should cause the file to become a sparse file, but it depends
+    // on the system.
+    std::fs::File::create(at.plus("src"))
+        .unwrap()
+        .set_len(1024 * 1024)
+        .unwrap();
+
+    ucmd.args(&["--reflink=never", "--sparse=always", "src", "dest"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    at.file_exists("dest");
+
+    let src_metadata = std::fs::metadata(at.plus("src")).unwrap();
+    let dest_metadata = std::fs::metadata(at.plus("dest")).unwrap();
+    assert_eq!(src_metadata.blocks(), dest_metadata.blocks());
+    assert_eq!(dest_metadata.len(), 1024 * 1024);
 }

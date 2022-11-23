@@ -2,9 +2,6 @@
 // spell-checker:ignore rustdoc
 #![allow(rustdoc::private_intra_doc_links)]
 
-#[macro_use]
-extern crate uucore;
-
 use std::cmp::Ordering;
 use std::io::{self, BufReader};
 use std::{
@@ -16,7 +13,7 @@ use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use regex::Regex;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::format_usage;
+use uucore::{crash_if_err, format_usage};
 
 mod csplit_error;
 mod patterns;

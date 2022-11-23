@@ -6,6 +6,7 @@ use std::io::BufReader;
 use std::vec::Vec;
 
 use uucore::display::Quotable;
+use uucore::show_error;
 
 pub enum InputSource<'a> {
     FileName(&'a str),

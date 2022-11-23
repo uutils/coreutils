@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) PSKIP linebreak ostream parasplit tabwidth xanti xprefix
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::cmp;
 use std::fs::File;
@@ -17,7 +14,7 @@ use std::io::{stdin, stdout, Write};
 use std::io::{BufReader, BufWriter, Read};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::format_usage;
+use uucore::{format_usage, show_warning};
 
 use self::linebreak::break_lines;
 use self::parasplit::ParagraphStream;

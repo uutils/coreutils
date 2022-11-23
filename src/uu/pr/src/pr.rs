@@ -6,9 +6,6 @@
 
 // spell-checker:ignore (ToDO) adFfmprt, kmerge
 
-#[macro_use]
-extern crate quick_error;
-
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use quick_error::ResultExt;
@@ -21,6 +18,7 @@ use std::os::unix::fs::FileTypeExt;
 use time::macros::format_description;
 use time::OffsetDateTime;
 
+use quick_error::quick_error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
 

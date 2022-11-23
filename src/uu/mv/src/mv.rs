@@ -10,15 +10,12 @@
 
 mod error;
 
-#[macro_use]
-extern crate uucore;
-
 use clap::builder::ValueParser;
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
 use std::env;
 use std::ffi::OsString;
 use std::fs;
-use std::io::{self, stdin};
+use std::io;
 #[cfg(unix)]
 use std::os::unix;
 #[cfg(windows)]
@@ -27,7 +24,7 @@ use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
-use uucore::format_usage;
+use uucore::{format_usage, prompt_yes, show, show_if_err};
 
 use fs_extra::dir::{move_dir, CopyOptions as DirCopyOptions};
 
@@ -285,8 +282,7 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
                 match b.overwrite {
                     OverwriteMode::NoClobber => return Ok(()),
                     OverwriteMode::Interactive => {
-                        println!("{}: overwrite {}? ", uucore::util_name(), target.quote());
-                        if !read_yes() {
+                        if !prompt_yes!("overwrite {}? ", target.quote()) {
                             return Ok(());
                         }
                     }
@@ -380,8 +376,7 @@ fn rename(from: &Path, to: &Path, b: &Behavior) -> io::Result<()> {
         match b.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
-                println!("{}: overwrite {}? ", uucore::util_name(), to.quote());
-                if !read_yes() {
+                if !prompt_yes!("overwrite {}?", to.quote()) {
                     return Ok(());
                 }
             }
@@ -475,11 +470,11 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     {
         if path_symlink_points_to.exists() {
             if path_symlink_points_to.is_dir() {
-                windows::fs::symlink_dir(&path_symlink_points_to, &to)?;
+                windows::fs::symlink_dir(&path_symlink_points_to, to)?;
             } else {
-                windows::fs::symlink_file(&path_symlink_points_to, &to)?;
+                windows::fs::symlink_file(&path_symlink_points_to, to)?;
             }
-            fs::remove_file(&from)?;
+            fs::remove_file(from)?;
         } else {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
@@ -495,17 +490,6 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
         ));
     }
     Ok(())
-}
-
-fn read_yes() -> bool {
-    let mut s = String::new();
-    match stdin().read_line(&mut s) {
-        Ok(_) => match s.chars().next() {
-            Some(x) => x == 'y' || x == 'Y',
-            _ => false,
-        },
-        _ => false,
-    }
 }
 
 fn is_empty_dir(path: &Path) -> bool {

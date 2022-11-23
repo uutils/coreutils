@@ -20,7 +20,7 @@ time = { version = "0.3", features = ["local-offset", "macros", "formatting"] }
 uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["entries"] }
 quick-error = "2.0.1"
 itertools = "0.10.0"
-regex = "1.6"
+regex = "1.7"
 
 [[bin]]
 name = "pr"

@@ -460,24 +460,10 @@ fn test_rm_prompts() {
     let mut child: Child = scene.ucmd().arg("-ri").arg("a").run_no_wait();
 
     let mut child_stdin = child.stdin.take().unwrap();
-    child_stdin.write_all(yes.as_bytes()).unwrap();
-    child_stdin.flush().unwrap();
-    child_stdin.write_all(yes.as_bytes()).unwrap();
-    child_stdin.flush().unwrap();
-    child_stdin.write_all(yes.as_bytes()).unwrap();
-    child_stdin.flush().unwrap();
-    child_stdin.write_all(yes.as_bytes()).unwrap();
-    child_stdin.flush().unwrap();
-    child_stdin.write_all(yes.as_bytes()).unwrap();
-    child_stdin.flush().unwrap();
-    child_stdin.write_all(yes.as_bytes()).unwrap();
-    child_stdin.flush().unwrap();
-    child_stdin.write_all(yes.as_bytes()).unwrap();
-    child_stdin.flush().unwrap();
-    child_stdin.write_all(yes.as_bytes()).unwrap();
-    child_stdin.flush().unwrap();
-    child_stdin.write_all(yes.as_bytes()).unwrap();
-    child_stdin.flush().unwrap();
+    for _ in 0..9 {
+        child_stdin.write_all(yes.as_bytes()).unwrap();
+        child_stdin.flush().unwrap();
+    }
 
     let output = child.wait_with_output().unwrap();
 
@@ -494,10 +480,10 @@ fn test_rm_prompts() {
 
     trimmed_output.sort();
 
-    assert!(trimmed_output.len() == answers.len());
+    assert_eq!(trimmed_output.len(), answers.len());
 
     for (i, checking_string) in trimmed_output.iter().enumerate() {
-        assert!(checking_string == answers[i]);
+        assert_eq!(checking_string, answers[i]);
     }
 
     assert!(!at.dir_exists("a"));
@@ -530,7 +516,10 @@ fn test_rm_force_prompts_order() {
     let output = child.wait_with_output().unwrap();
     let string_output =
         String::from_utf8(output.stderr).expect("Couldn't convert output.stderr to string");
-    assert!(string_output.trim() == "rm: remove regular empty file 'empty'?");
+    assert_eq!(
+        string_output.trim(),
+        "rm: remove regular empty file 'empty'?"
+    );
     assert!(!at.file_exists(empty_file));
 
     at.touch(empty_file);

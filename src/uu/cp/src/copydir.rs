@@ -14,9 +14,13 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf, StripPrefixError};
 
+use indicatif::ProgressBar;
 use uucore::display::Quotable;
 use uucore::error::UIoError;
 use uucore::fs::{canonicalize, FileInformation, MissingHandling, ResolveMode};
+use uucore::show;
+use uucore::show_error;
+use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
@@ -170,6 +174,7 @@ impl Entry {
 
 /// Copy a single entry during a directory traversal.
 fn copy_direntry(
+    progress_bar: &Option<ProgressBar>,
     entry: Entry,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
@@ -213,6 +218,7 @@ fn copy_direntry(
             preserve_hardlinks(hard_links, &source_absolute, &dest, &mut found_hard_link)?;
             if !found_hard_link {
                 match copy_file(
+                    progress_bar,
                     &source_absolute,
                     local_to_target.as_path(),
                     options,
@@ -240,6 +246,7 @@ fn copy_direntry(
             // TODO What other kinds of errors, if any, should
             // cause us to continue walking the directory?
             match copy_file(
+                progress_bar,
                 &source_absolute,
                 local_to_target.as_path(),
                 options,
@@ -272,6 +279,7 @@ fn copy_direntry(
 /// Any errors encountered copying files in the tree will be logged but
 /// will not cause a short-circuit.
 pub(crate) fn copy_directory(
+    progress_bar: &Option<ProgressBar>,
     root: &Path,
     target: &TargetSlice,
     options: &Options,
@@ -285,6 +293,7 @@ pub(crate) fn copy_directory(
     // if no-dereference is enabled and this is a symlink, copy it as a file
     if !options.dereference(source_in_command_line) && root.is_symlink() {
         return copy_file(
+            progress_bar,
             root,
             target,
             options,
@@ -344,6 +353,7 @@ pub(crate) fn copy_directory(
             Ok(direntry) => {
                 let entry = Entry::new(&context, &direntry)?;
                 copy_direntry(
+                    progress_bar,
                     entry,
                     options,
                     symlinked_files,

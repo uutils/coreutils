@@ -36,19 +36,16 @@
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::ffi::CStr;
 use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::UResult;
 use uucore::error::{set_exit_code, USimpleError};
-use uucore::format_usage;
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
 use uucore::process::{getegid, geteuid, getgid, getuid};
+use uucore::{format_usage, show_error};
 
 macro_rules! cstr2cow {
     ($v:expr) => {

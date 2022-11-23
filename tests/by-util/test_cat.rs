@@ -511,7 +511,7 @@ fn test_write_to_self() {
         .create_new(true)
         .write(true)
         .append(true)
-        .open(&file_path)
+        .open(file_path)
         .unwrap();
 
     s.fixtures.append("first_file", "first_file_content.");

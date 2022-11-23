@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) tempdir dyld dylib dragonflybsd optgrps libstdbuf
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::fs::File;
 use std::io::{self, Write};
@@ -19,8 +16,8 @@ use std::process;
 use tempfile::tempdir;
 use tempfile::TempDir;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::format_usage;
 use uucore::parse_size::parse_size;
+use uucore::{crash, format_usage};
 
 static ABOUT: &str =
     "Run COMMAND, with modified buffering operations for its standard streams.\n\n\
@@ -101,6 +98,8 @@ fn preload_strings() -> (&'static str, &'static str) {
     target_vendor = "apple"
 )))]
 fn preload_strings() -> (&'static str, &'static str) {
+    use uucore::crash;
+
     crash!(1, "Command not supported for this operating system!")
 }
 

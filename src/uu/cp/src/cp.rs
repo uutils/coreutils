@@ -9,20 +9,16 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) copydir ficlone ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked fiemap
+// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv
 
-#[macro_use]
-extern crate quick_error;
-#[macro_use]
-extern crate uucore;
-
+use quick_error::quick_error;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, stderr, stdin, Write};
+use std::io;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
@@ -33,16 +29,17 @@ use std::string::ToString;
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use filetime::FileTime;
+use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
 use libc::mkfifo;
 use quick_error::ResultExt;
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
-use uucore::format_usage;
 use uucore::fs::{
     canonicalize, paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
 };
+use uucore::{crash, format_usage, prompt_yes, show_error, show_warning};
 
 mod copydir;
 use crate::copydir::copy_directory;
@@ -82,7 +79,7 @@ quick_error! {
         StripPrefixError(err: StripPrefixError) { from() }
 
         /// Result of a skipped file
-        Skipped(reason: String) { display("{}", reason) }
+        Skipped { }
 
         /// Result of a skipped file
         InvalidArgument(description: String) { display("{}", description) }
@@ -104,24 +101,6 @@ impl UError for Error {
         EXIT_ERR
     }
 }
-
-/// Prompts the user yes/no and returns `true` if they successfully
-/// answered yes.
-macro_rules! prompt_yes(
-    ($($args:tt)+) => ({
-        eprint!($($args)+);
-        eprint!(" [y/N]: ");
-        crash_if_err!(1, stderr().flush());
-        let mut s = String::new();
-        match stdin().read_line(&mut s) {
-            Ok(_) => match s.char_indices().next() {
-                Some((_, x)) => x == 'y' || x == 'Y',
-                _ => false
-            },
-            _ => false
-        }
-    })
-);
 
 pub type CopyResult<T> = Result<T, Error>;
 pub type Source = PathBuf;
@@ -214,6 +193,7 @@ pub struct Options {
     target_dir: Option<String>,
     update: bool,
     verbose: bool,
+    progress_bar: bool,
 }
 
 static ABOUT: &str = "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
@@ -244,6 +224,7 @@ mod options {
     pub const PARENT: &str = "parent";
     pub const PARENTS: &str = "parents";
     pub const PATHS: &str = "paths";
+    pub const PROGRESS_BAR: &str = "progress";
     pub const PRESERVE: &str = "preserve";
     pub const PRESERVE_DEFAULT_ATTRIBUTES: &str = "preserve-default-attributes";
     pub const RECURSIVE: &str = "recursive";
@@ -539,6 +520,18 @@ pub fn uu_app() -> Command {
         )
         // END TODO
         .arg(
+            // The 'g' short flag is modeled after advcpmv
+            // See this repo: https://github.com/jarun/advcpmv
+            Arg::new(options::PROGRESS_BAR)
+                .long(options::PROGRESS_BAR)
+                .short('g')
+                .action(clap::ArgAction::SetTrue)
+                .help(
+                    "Display a progress bar. \n\
+                Note: this feature is not supported by GNU coreutils.",
+                ),
+        )
+        .arg(
             Arg::new(options::PATHS)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath),
@@ -677,7 +670,6 @@ fn add_all_attributes() -> Vec<Attribute> {
 impl Options {
     fn from_matches(matches: &ArgMatches) -> CopyResult<Self> {
         let not_implemented_opts = vec![
-            options::COPY_CONTENTS,
             #[cfg(not(any(windows, unix)))]
             options::ONE_FILE_SYSTEM,
             options::CONTEXT,
@@ -731,7 +723,12 @@ impl Options {
                             attributes.push(Attribute::from_str(attribute_str)?);
                         }
                     }
-                    attributes
+                    // `--preserve` case, use the defaults
+                    if attributes.is_empty() {
+                        DEFAULT_ATTRIBUTES.to_vec()
+                    } else {
+                        attributes
+                    }
                 }
             }
         } else if matches.get_flag(options::ARCHIVE) {
@@ -818,6 +815,7 @@ impl Options {
             preserve_attributes,
             recursive,
             target_dir,
+            progress_bar: matches.get_flag(options::PROGRESS_BAR),
         };
 
         Ok(options)
@@ -834,6 +832,11 @@ impl Options {
             }
         }
         false
+    }
+
+    /// Whether to force overwriting the destination file.
+    fn force(&self) -> bool {
+        matches!(self.overwrite, OverwriteMode::Clobber(ClobberMode::Force))
     }
 }
 
@@ -931,7 +934,7 @@ fn preserve_hardlinks(
 /// `Err(Error::NotAllFilesCopied)` if at least one non-fatal error was
 /// encountered.
 ///
-/// Behavior depends on `options`, see [`Options`] for details.
+/// Behavior depends on path`options`, see [`Options`] for details.
 ///
 /// [`Options`]: ./struct.Options.html
 fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResult<()> {
@@ -945,7 +948,23 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
     let mut non_fatal_errors = false;
     let mut seen_sources = HashSet::with_capacity(sources.len());
     let mut symlinked_files = HashSet::new();
-    for source in sources {
+
+    let progress_bar = if options.progress_bar {
+        Some(
+            ProgressBar::new(disk_usage(sources, options.recursive)?)
+                .with_style(
+                    ProgressStyle::with_template(
+                        "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
+                    )
+                    .unwrap(),
+                )
+                .with_message(uucore::util_name()),
+        )
+    } else {
+        None
+    };
+
+    for source in sources.iter() {
         if seen_sources.contains(source) {
             // FIXME: compare sources by the actual file they point to, not their path. (e.g. dir/file == dir/../dir/file in most cases)
             show_warning!("source {} specified more than once", source.quote());
@@ -956,16 +975,19 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
                 preserve_hardlinks(&mut hard_links, source, &dest, &mut found_hard_link)?;
             }
             if !found_hard_link {
-                if let Err(error) =
-                    copy_source(source, target, &target_type, options, &mut symlinked_files)
-                {
+                if let Err(error) = copy_source(
+                    &progress_bar,
+                    source,
+                    target,
+                    &target_type,
+                    options,
+                    &mut symlinked_files,
+                ) {
                     match error {
                         // When using --no-clobber, we don't want to show
                         // an error message
                         Error::NotAllFilesCopied => (),
-                        Error::Skipped(_) => {
-                            show_error!("{}", error);
-                        }
+                        Error::Skipped => (),
                         _ => {
                             show_error!("{}", error);
                             non_fatal_errors = true;
@@ -1015,6 +1037,7 @@ fn construct_dest_path(
 }
 
 fn copy_source(
+    progress_bar: &Option<ProgressBar>,
     source: &SourceSlice,
     target: &TargetSlice,
     target_type: &TargetType,
@@ -1024,11 +1047,18 @@ fn copy_source(
     let source_path = Path::new(&source);
     if source_path.is_dir() {
         // Copy as directory
-        copy_directory(source, target, options, symlinked_files, true)
+        copy_directory(progress_bar, source, target, options, symlinked_files, true)
     } else {
         // Copy as file
         let dest = construct_dest_path(source_path, target, target_type, options)?;
-        copy_file(source_path, dest.as_path(), options, symlinked_files, true)
+        copy_file(
+            progress_bar,
+            source_path,
+            dest.as_path(),
+            options,
+            symlinked_files,
+            true,
+        )
     }
 }
 
@@ -1037,13 +1067,10 @@ impl OverwriteMode {
         match *self {
             Self::NoClobber => Err(Error::NotAllFilesCopied),
             Self::Interactive(_) => {
-                if prompt_yes!("{}: overwrite {}? ", uucore::util_name(), path.quote()) {
+                if prompt_yes!("overwrite {}?", path.quote()) {
                     Ok(())
                 } else {
-                    Err(Error::Skipped(format!(
-                        "Not overwriting {} at user request",
-                        path.quote()
-                    )))
+                    Err(Error::Skipped)
                 }
             }
             Self::Clobber(_) => Ok(()),
@@ -1194,16 +1221,36 @@ fn backup_dest(dest: &Path, backup_path: &Path) -> CopyResult<PathBuf> {
     Ok(backup_path.into())
 }
 
+/// Decide whether source and destination files are the same and
+/// copying is forbidden.
+///
+/// Copying to the same file is only allowed if both `--backup` and
+/// `--force` are specified and the file is a regular file.
+fn is_forbidden_copy_to_same_file(
+    source: &Path,
+    dest: &Path,
+    options: &Options,
+    source_in_command_line: bool,
+) -> bool {
+    // TODO To match the behavior of GNU cp, we also need to check
+    // that the file is a regular file.
+    let dereference_to_compare =
+        options.dereference(source_in_command_line) || !source.is_symlink();
+    paths_refer_to_same_file(source, dest, dereference_to_compare)
+        && !(options.force() && options.backup != BackupMode::NoBackup)
+}
+
+/// Back up, remove, or leave intact the destination file, depending on the options.
 fn handle_existing_dest(
     source: &Path,
     dest: &Path,
     options: &Options,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
-    let dereference_to_compare =
-        options.dereference(source_in_command_line) || !source.is_symlink();
-    if paths_refer_to_same_file(source, dest, dereference_to_compare) {
-        return Err(format!("{}: same file", context_for(source, dest)).into());
+    // Disallow copying a file to itself, unless `--force` and
+    // `--backup` are both specified.
+    if is_forbidden_copy_to_same_file(source, dest, options, source_in_command_line) {
+        return Err(format!("{} and {} are the same file", source.quote(), dest.quote()).into());
     }
 
     options.overwrite.verify(dest)?;
@@ -1258,6 +1305,7 @@ fn file_or_link_exists(path: &Path) -> bool {
 /// The original permissions of `source` will be copied to `dest`
 /// after a successful copy.
 fn copy_file(
+    progress_bar: &Option<ProgressBar>,
     source: &Path,
     dest: &Path,
     options: &Options,
@@ -1433,6 +1481,11 @@ fn copy_file(
         fs::set_permissions(dest, dest_permissions).ok();
     }
     copy_attributes(source, dest, &options.preserve_attributes)?;
+
+    if let Some(progress_bar) = progress_bar {
+        progress_bar.inc(fs::metadata(source)?.len());
+    }
+
     Ok(())
 }
 
@@ -1457,7 +1510,7 @@ fn copy_helper(
          * https://github.com/rust-lang/rust/issues/79390
          */
         File::create(dest).context(dest.display().to_string())?;
-    } else if source_is_fifo && options.recursive {
+    } else if source_is_fifo && options.recursive && !options.copy_contents {
         #[cfg(unix)]
         copy_fifo(dest, options.overwrite)?;
     } else if source_is_symlink {
@@ -1469,6 +1522,8 @@ fn copy_helper(
             options.reflink_mode,
             options.sparse_mode,
             context,
+            #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+            source_is_fifo,
         )?;
     }
 
@@ -1548,6 +1603,42 @@ pub fn verify_target_type(target: &Path, target_type: &TargetType) -> CopyResult
 pub fn localize_to_target(root: &Path, source: &Path, target: &Path) -> CopyResult<PathBuf> {
     let local_to_root = source.strip_prefix(root)?;
     Ok(target.join(local_to_root))
+}
+
+/// Get the total size of a slice of files and directories.
+///
+/// This function is much like the `du` utility, by recursively getting the sizes of files in directories.
+/// Files are not deduplicated when appearing in multiple sources. If `recursive` is set to `false`, the
+/// directories in `paths` will be ignored.
+fn disk_usage(paths: &[PathBuf], recursive: bool) -> io::Result<u64> {
+    let mut total = 0;
+    for p in paths {
+        let md = fs::metadata(p)?;
+        if md.file_type().is_dir() {
+            if recursive {
+                total += disk_usage_directory(p)?;
+            }
+        } else {
+            total += md.len();
+        }
+    }
+    Ok(total)
+}
+
+/// A helper for `disk_usage` specialized for directories.
+fn disk_usage_directory(p: &Path) -> io::Result<u64> {
+    let mut total = 0;
+
+    for entry in fs::read_dir(p)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            total += disk_usage_directory(&entry.path())?;
+        } else {
+            total += entry.metadata()?.len();
+        }
+    }
+
+    Ok(total)
 }
 
 #[test]

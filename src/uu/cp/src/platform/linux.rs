@@ -21,29 +21,39 @@ macro_rules! FICLONE {
     };
 }
 
+/// The fallback behavior for [`clone`] on failed system call.
+#[derive(Clone, Copy)]
+enum CloneFallback {
+    /// Raise an error.
+    Error,
+
+    /// Use [`std::io::copy`].
+    IOCopy,
+
+    /// Use [`std::fs::copy`].
+    FSCopy,
+}
+
 /// Use the Linux `ioctl_ficlone` API to do a copy-on-write clone.
 ///
-/// If `fallback` is true and there is a failure performing the clone,
-/// then this function performs a standard [`std::fs::copy`]. Otherwise,
-/// this function returns an error.
+/// `fallback` controls what to do if the system call fails.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn clone<P>(source: P, dest: P, fallback: bool) -> std::io::Result<()>
+fn clone<P>(source: P, dest: P, fallback: CloneFallback) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
-    let src_file = File::open(&source)?;
-    let dst_file = File::create(&dest)?;
+    let mut src_file = File::open(&source)?;
+    let mut dst_file = File::create(&dest)?;
     let src_fd = src_file.as_raw_fd();
     let dst_fd = dst_file.as_raw_fd();
     let result = unsafe { libc::ioctl(dst_fd, FICLONE!(), src_fd) };
-    if result != 0 {
-        if fallback {
-            std::fs::copy(source, dest).map(|_| ())
-        } else {
-            Err(std::io::Error::last_os_error())
-        }
-    } else {
-        Ok(())
+    if result == 0 {
+        return Ok(());
+    }
+    match fallback {
+        CloneFallback::Error => Err(std::io::Error::last_os_error()),
+        CloneFallback::IOCopy => std::io::copy(&mut src_file, &mut dst_file).map(|_| ()),
+        CloneFallback::FSCopy => std::fs::copy(source, dest).map(|_| ()),
     }
 }
 
@@ -89,18 +99,32 @@ where
 }
 
 /// Copies `source` to `dest` using copy-on-write if possible.
+///
+/// The `source_is_fifo` flag must be set to `true` if and only if
+/// `source` is a FIFO (also known as a named pipe). In this case,
+/// copy-on-write is not possible, so we copy the contents using
+/// [`std::io::copy`].
 pub(crate) fn copy_on_write(
     source: &Path,
     dest: &Path,
     reflink_mode: ReflinkMode,
     sparse_mode: SparseMode,
     context: &str,
+    source_is_fifo: bool,
 ) -> CopyResult<()> {
     let result = match (reflink_mode, sparse_mode) {
+        (ReflinkMode::Never, SparseMode::Always) => sparse_copy(source, dest),
         (ReflinkMode::Never, _) => std::fs::copy(source, dest).map(|_| ()),
         (ReflinkMode::Auto, SparseMode::Always) => sparse_copy(source, dest),
-        (ReflinkMode::Auto, _) => clone(source, dest, true),
-        (ReflinkMode::Always, SparseMode::Auto) => clone(source, dest, false),
+
+        (ReflinkMode::Auto, _) => {
+            if source_is_fifo {
+                clone(source, dest, CloneFallback::IOCopy)
+            } else {
+                clone(source, dest, CloneFallback::FSCopy)
+            }
+        }
+        (ReflinkMode::Always, SparseMode::Auto) => clone(source, dest, CloneFallback::Error),
         (ReflinkMode::Always, _) => {
             return Err("`--reflink=always` can be used only with --sparse=auto".into())
         }

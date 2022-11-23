@@ -11,8 +11,6 @@ unmaintained = "warn"
 yanked = "warn"
 notice = "warn"
 ignore = [
-    "RUSTSEC-2020-0159",
-    "RUSTSEC-2020-0071",
     #"RUSTSEC-0000-0000",
 ]
 
@@ -36,9 +34,6 @@ copyleft = "deny"
 allow-osi-fsf-free = "neither"
 default = "deny"
 confidence-threshold = 0.8
-exceptions = [
-    { allow = ["OpenSSL"], name = "ring" },
-]
 
 [[licenses.clarify]]
 name = "ring"
@@ -70,17 +65,12 @@ skip = [
     { name = "env_logger", version = "=0.8.4" },
     # tempfile
     { name = "remove_dir_all", version = "=0.5.3" },
-    # bindgen (via selinux-sys & fts-sys)
-    { name = "clap", version = "=3.2.22" },
-    # bindgen (via selinux-sys & fts-sys)
-    { name = "clap_lex", version = "=0.2.4" },
-    # windows-sys (via terminal_size, crossterm -> parking_lot, notify -> filetime)
-    { name = "windows-sys", version = "=0.36.1" },
-    { name = "windows_aarch64_msvc", version = "=0.36.1" },
-    { name = "windows_i686_gnu", version = "=0.36.1" },
-    { name = "windows_i686_msvc", version = "=0.36.1" },
-    { name = "windows_x86_64_gnu", version = "=0.36.1" },
-    { name = "windows_x86_64_msvc", version = "=0.36.1" },
+    # console (via indicatif)
+    { name = "terminal_size", version = "=0.1.17" },
+    # nix
+    { name = "memoffset", version = "=0.6.5"},
+    # blake2b_simd
+    { name = "constant_time_eq", version = "=0.1.5"},
 ]
 # spell-checker: enable
 

@@ -20,10 +20,7 @@ use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::{format_usage, util_name};
-
-#[macro_use]
-extern crate uucore;
+use uucore::{format_usage, show, show_if_err, util_name};
 
 const BLOCK_SIZE: usize = 512;
 const NAME_CHARSET: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
