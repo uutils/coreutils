@@ -21,6 +21,8 @@ fn run(args: &[&str], expected: &[u8]) {
     let mut child = cmd.args(args).set_stdout(Stdio::piped()).run_no_wait();
     let buf = child.stdout_exact_bytes(expected.len());
     child.close_stdout();
+
+    #[allow(deprecated)]
     check_termination(&child.wait_with_output().unwrap().status);
     assert_eq!(buf.as_slice(), expected);
 }

@@ -512,7 +512,7 @@ fn test_follow_non_utf8_bytes() {
         .run_no_wait();
 
     child
-        .make_assertion_with_delay(100)
+        .make_assertion_with_delay(500)
         .is_alive()
         .with_current_output()
         .stdout_only_fixture("foobar_single_default.expected");
@@ -712,7 +712,7 @@ fn test_follow_with_pid() {
         .run_no_wait();
 
     child
-        .make_assertion_with_delay(100)
+        .make_assertion_with_delay(500)
         .is_alive()
         .with_current_output()
         .stdout_only_fixture("foobar_follow_multiple.expected");
@@ -1392,9 +1392,8 @@ fn test_retry5() {
         at.mkdir(missing);
         p.delay(delay);
 
-        p.make_assertion().is_not_alive();
-        p.kill()
-            .make_assertion()
+        p.make_assertion()
+            .is_not_alive()
             .with_all_output()
             .stderr_only(expected_stderr)
             .failure();
@@ -1895,9 +1894,8 @@ fn test_follow_name_remove() {
         p.delay(delay);
 
         if i == 0 {
-            p.make_assertion().is_not_alive();
-            p.kill()
-                .make_assertion()
+            p.make_assertion()
+                .is_not_alive()
                 .with_all_output()
                 .stdout_is(&expected_stdout)
                 .stderr_is(&expected_stderr[i])
@@ -2299,9 +2297,8 @@ fn test_follow_name_move1() {
                 .stderr_is(&expected_stderr[i])
                 .stdout_is(&expected_stdout);
         } else {
-            p.make_assertion().is_not_alive();
-            p.kill()
-                .make_assertion()
+            p.make_assertion()
+                .is_not_alive()
                 .with_all_output()
                 .stderr_is(&expected_stderr[i])
                 .stdout_is(&expected_stdout)

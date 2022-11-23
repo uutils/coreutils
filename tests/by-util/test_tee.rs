@@ -131,6 +131,8 @@ mod linux_only {
 
     fn run_tee(proc: &mut UCommand) -> (String, Output) {
         let content = (1..=100000).map(|x| format!("{}\n", x)).collect::<String>();
+
+        #[allow(deprecated)]
         let output = proc
             .run_no_wait()
             .pipe_in_and_wait_with_output(content.as_bytes());

@@ -374,12 +374,12 @@ fn test_rm_descend_directory() {
     at.touch(file_2);
 
     let mut child = scene.ucmd().arg("-ri").arg("a").run_no_wait();
-    child.write_in(yes.as_bytes()).unwrap();
-    child.write_in(yes.as_bytes()).unwrap();
-    child.write_in(yes.as_bytes()).unwrap();
-    child.write_in(yes.as_bytes()).unwrap();
-    child.write_in(yes.as_bytes()).unwrap();
-    child.write_in(yes.as_bytes()).unwrap();
+    child.try_write_in(yes.as_bytes()).unwrap();
+    child.try_write_in(yes.as_bytes()).unwrap();
+    child.try_write_in(yes.as_bytes()).unwrap();
+    child.try_write_in(yes.as_bytes()).unwrap();
+    child.try_write_in(yes.as_bytes()).unwrap();
+    child.try_write_in(yes.as_bytes()).unwrap();
 
     child.wait().unwrap();
 
@@ -447,7 +447,7 @@ fn test_rm_prompts() {
 
     let mut child = scene.ucmd().arg("-ri").arg("a").run_no_wait();
     for _ in 0..9 {
-        child.write_in(yes.as_bytes()).unwrap();
+        child.try_write_in(yes.as_bytes()).unwrap();
     }
 
     let result = child.wait().unwrap();
@@ -487,7 +487,7 @@ fn test_rm_force_prompts_order() {
 
     // This should cause rm to prompt to remove regular empty file
     let mut child = scene.ucmd().arg("-fi").arg(empty_file).run_no_wait();
-    child.write_in(yes.as_bytes()).unwrap();
+    child.try_write_in(yes.as_bytes()).unwrap();
 
     let result = child.wait().unwrap();
     let string_output = result.stderr_str();
