@@ -24,7 +24,6 @@ use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf, StripPrefixError};
-use std::str::FromStr;
 use std::string::ToString;
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
@@ -157,18 +156,29 @@ pub enum CopyMode {
     AttrOnly,
 }
 
-// The ordering here determines the order in which attributes are (re-)applied.
-// In particular, Ownership must be changed first to avoid interfering with mode change.
-#[derive(Clone, Eq, PartialEq, Debug, PartialOrd, Ord)]
-pub enum Attribute {
+#[derive(Debug)]
+pub struct Attributes {
     #[cfg(unix)]
-    Ownership,
-    Mode,
-    Timestamps,
+    ownership: Preserve,
+    mode: Preserve,
+    timestamps: Preserve,
     #[cfg(feature = "feat_selinux")]
-    Context,
-    Links,
-    Xattr,
+    context: Preserve,
+    links: Preserve,
+    xattr: Preserve,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Preserve {
+    No,
+    Try,
+    Require,
+}
+
+impl Preserve {
+    pub fn is_preserve(&self) -> bool {
+        self == &Self::Try || self == &Self::Require
+    }
 }
 
 /// Re-usable, extensible copy options
@@ -187,8 +197,7 @@ pub struct Options {
     sparse_mode: SparseMode,
     strip_trailing_slashes: bool,
     reflink_mode: ReflinkMode,
-    preserve_attributes: Vec<Attribute>,
-    require_preserve_attributes: Vec<Attribute>,
+    attributes: Attributes,
     recursive: bool,
     backup_suffix: String,
     target_dir: Option<String>,
@@ -254,13 +263,6 @@ static PRESERVABLE_ATTRIBUTES: &[&str] = &[
 #[cfg(not(unix))]
 static PRESERVABLE_ATTRIBUTES: &[&str] =
     &["mode", "timestamps", "context", "links", "xattr", "all"];
-
-static DEFAULT_ATTRIBUTES: &[Attribute] = &[
-    Attribute::Mode,
-    #[cfg(unix)]
-    Attribute::Ownership,
-    Attribute::Timestamps,
-];
 
 pub fn uu_app() -> Command {
     const MODE_ARGS: &[&str] = &[
@@ -628,44 +630,69 @@ impl CopyMode {
     }
 }
 
-impl FromStr for Attribute {
-    type Err = Error;
-
-    fn from_str(value: &str) -> CopyResult<Self> {
-        Ok(match &*value.to_lowercase() {
-            "mode" => Self::Mode,
+impl Attributes {
+    fn all() -> Self {
+        Self {
             #[cfg(unix)]
-            "ownership" => Self::Ownership,
-            "timestamps" => Self::Timestamps,
+            ownership: Preserve::Require,
+            mode: Preserve::Require,
+            timestamps: Preserve::Require,
             #[cfg(feature = "feat_selinux")]
-            "context" => Self::Context,
-            "links" => Self::Links,
-            "xattr" => Self::Xattr,
+            context: Preserve::Try,
+            links: Preserve::Require,
+            xattr: Preserve::Try,
+        }
+    }
+
+    fn default() -> Self {
+        Self {
+            #[cfg(unix)]
+            ownership: Preserve::Require,
+            mode: Preserve::Require,
+            timestamps: Preserve::Require,
+            #[cfg(feature = "feat_selinux")]
+            context: Preserve::No,
+            links: Preserve::No,
+            xattr: Preserve::No,
+        }
+    }
+
+    fn none() -> Self {
+        Self {
+            #[cfg(unix)]
+            ownership: Preserve::No,
+            mode: Preserve::No,
+            timestamps: Preserve::No,
+            #[cfg(feature = "feat_selinux")]
+            context: Preserve::No,
+            links: Preserve::No,
+            xattr: Preserve::No,
+        }
+    }
+
+    fn try_set_from_string(
+        &mut self,
+        value: &str,
+        target_attributes: Attributes,
+    ) -> Result<(), Error> {
+        match &*value.to_lowercase() {
+            "mode" => self.mode = target_attributes.mode,
+            #[cfg(unix)]
+            "ownership" => self.ownership = target_attributes.ownership,
+            "timestamps" => self.timestamps = target_attributes.timestamps,
+            #[cfg(feature = "feat_selinux")]
+            "context" => self.context = target_attributes.context,
+            "links" => self.links = target_attributes.links,
+            "xattr" => self.xattr = target_attributes.xattr,
             _ => {
                 return Err(Error::InvalidArgument(format!(
                     "invalid attribute {}",
                     value.quote()
                 )));
             }
-        })
+        };
+        Ok(())
     }
-}
-
-fn add_all_attributes() -> Vec<Attribute> {
-    use Attribute::*;
-
-    let attr = vec![
-        #[cfg(unix)]
-        Ownership,
-        Mode,
-        Timestamps,
-        #[cfg(feature = "feat_selinux")]
-        Context,
-        Links,
-        Xattr,
-    ];
-
-    attr
 }
 
 impl Options {
@@ -710,26 +737,25 @@ impl Options {
             }
         };
 
-        let mut reduced_preserve_requirements_case: bool = false;
-
         // Parse attributes to preserve
-        let mut preserve_attributes: Vec<Attribute> = if matches.contains_id(options::PRESERVE) {
+        let attributes: Attributes = if matches.contains_id(options::PRESERVE) {
             match matches.get_many::<String>(options::PRESERVE) {
-                None => DEFAULT_ATTRIBUTES.to_vec(),
+                None => Attributes::default(),
                 Some(attribute_strs) => {
-                    let mut attributes = Vec::new();
+                    let mut attributes: Attributes = Attributes::none();
+                    let mut attributes_empty = true;
                     for attribute_str in attribute_strs {
+                        attributes_empty = false;
                         if attribute_str == "all" {
-                            attributes = add_all_attributes();
-                            reduced_preserve_requirements_case = true;
+                            attributes = Attributes::all();
                             break;
                         } else {
-                            attributes.push(Attribute::from_str(attribute_str)?);
+                            attributes.try_set_from_string(attribute_str, Attributes::default())?;
                         }
                     }
                     // `--preserve` case, use the defaults
-                    if attributes.is_empty() {
-                        DEFAULT_ATTRIBUTES.to_vec()
+                    if attributes_empty {
+                        Attributes::default()
                     } else {
                         attributes
                     }
@@ -737,35 +763,15 @@ impl Options {
             }
         } else if matches.get_flag(options::ARCHIVE) {
             // --archive is used. Same as --preserve=all
-            reduced_preserve_requirements_case = true;
-            add_all_attributes()
+            Attributes::all()
         } else if matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS) {
-            vec![Attribute::Links]
+            let mut attributes = Attributes::none();
+            attributes.links = Preserve::Require;
+            attributes
         } else if matches.get_flag(options::PRESERVE_DEFAULT_ATTRIBUTES) {
-            DEFAULT_ATTRIBUTES.to_vec()
+            Attributes::default()
         } else {
-            vec![]
-        };
-
-        // Make sure ownership is changed before other attributes,
-        // as chown clears some of the permission and therefore could undo previous changes
-        // if not executed first.
-        preserve_attributes.sort_unstable();
-
-        // Parse attributes to require preserve
-        let require_preserve_attributes: Vec<Attribute> = if reduced_preserve_requirements_case {
-            preserve_attributes
-                .clone()
-                .into_iter()
-                .filter(|attribute| match attribute {
-                    #[cfg(feature = "feat_selinux")]
-                    Attribute::Context => false,
-                    Attribute::Xattr => false,
-                    _ => true,
-                })
-                .collect()
-        } else {
-            preserve_attributes.clone()
+            Attributes::none()
         };
 
         let options = Self {
@@ -822,7 +828,7 @@ impl Options {
                             return Err(Error::InvalidArgument(format!(
                                 "invalid argument {} for \'sparse\'",
                                 val
-                            )))
+                            )));
                         }
                     }
                 } else {
@@ -833,8 +839,7 @@ impl Options {
             backup_suffix,
             overwrite,
             no_target_dir,
-            preserve_attributes,
-            require_preserve_attributes,
+            attributes,
             recursive,
             target_dir,
             progress_bar: matches.get_flag(options::PROGRESS_BAR),
@@ -848,12 +853,7 @@ impl Options {
     }
 
     fn preserve_hard_links(&self) -> bool {
-        for attribute in &self.preserve_attributes {
-            if *attribute == Attribute::Links {
-                return true;
-            }
-        }
-        false
+        self.attributes.links.is_preserve()
     }
 
     /// Whether to force overwriting the destination file.
@@ -1122,118 +1122,132 @@ impl OverwriteMode {
     }
 }
 
+#[macro_export]
+macro_rules! handle_preserve {
+    ($preserve:expr, $copy_call:expr) => {
+        if $preserve.is_preserve() {
+            let result = $copy_call();
+            if $preserve == Preserve::Require {
+                result?;
+            }
+        }
+    };
+}
+
 /// Copy the specified attributes from one path to another.
 pub(crate) fn copy_attributes(
     source: &Path,
     dest: &Path,
-    attributes: &[Attribute],
-    require_preserve_attributes: &[Attribute],
+    attributes: &Attributes,
 ) -> CopyResult<()> {
-    for attribute in attributes {
-        let copy_attribute_result = copy_attribute(source, dest, attribute);
-        if require_preserve_attributes.contains(attribute) {
-            copy_attribute_result?;
-        }
-    }
-    Ok(())
-}
-
-fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResult<()> {
     let context = &*format!("{} -> {}", source.quote(), dest.quote());
     let source_metadata = fs::symlink_metadata(source).context(context)?;
-    match *attribute {
-        Attribute::Mode => {
-            // The `chmod()` system call that underlies the
-            // `fs::set_permissions()` call is unable to change the
-            // permissions of a symbolic link. In that case, we just
-            // do nothing, since every symbolic link has the same
-            // permissions.
-            if !dest.is_symlink() {
-                fs::set_permissions(dest, source_metadata.permissions()).context(context)?;
-                // FIXME: Implement this for windows as well
-                #[cfg(feature = "feat_acl")]
-                exacl::getfacl(source, None)
-                    .and_then(|acl| exacl::setfacl(&[dest], &acl, None))
-                    .map_err(|err| Error::Error(err.to_string()))?;
-            }
+
+    // Ownership must be changed first to avoid interfering with mode change.
+    #[cfg(unix)]
+    handle_preserve!(attributes.ownership, || -> CopyResult<()> {
+        use std::os::unix::prelude::MetadataExt;
+        use uucore::perms::wrap_chown;
+        use uucore::perms::Verbosity;
+        use uucore::perms::VerbosityLevel;
+
+        let dest_uid = source_metadata.uid();
+        let dest_gid = source_metadata.gid();
+
+        wrap_chown(
+            dest,
+            &dest.symlink_metadata().context(context)?,
+            Some(dest_uid),
+            Some(dest_gid),
+            false,
+            Verbosity {
+                groups_only: false,
+                level: VerbosityLevel::Normal,
+            },
+        )
+        .map_err(Error::Error)?;
+
+        Ok(())
+    });
+
+    handle_preserve!(attributes.mode, || -> CopyResult<()> {
+        // The `chmod()` system call that underlies the
+        // `fs::set_permissions()` call is unable to change the
+        // permissions of a symbolic link. In that case, we just
+        // do nothing, since every symbolic link has the same
+        // permissions.
+        if !dest.is_symlink() {
+            fs::set_permissions(dest, source_metadata.permissions()).context(context)?;
+            // FIXME: Implement this for windows as well
+            #[cfg(feature = "feat_acl")]
+            exacl::getfacl(source, None)
+                .and_then(|acl| exacl::setfacl(&[dest], &acl, None))
+                .map_err(|err| Error::Error(err.to_string()))?;
         }
-        #[cfg(unix)]
-        Attribute::Ownership => {
-            use std::os::unix::prelude::MetadataExt;
-            use uucore::perms::wrap_chown;
-            use uucore::perms::Verbosity;
-            use uucore::perms::VerbosityLevel;
 
-            let dest_uid = source_metadata.uid();
-            let dest_gid = source_metadata.gid();
+        Ok(())
+    });
 
-            wrap_chown(
-                dest,
-                &dest.symlink_metadata().context(context)?,
-                Some(dest_uid),
-                Some(dest_gid),
-                false,
-                Verbosity {
-                    groups_only: false,
-                    level: VerbosityLevel::Normal,
-                },
+    handle_preserve!(attributes.timestamps, || -> CopyResult<()> {
+        let atime = FileTime::from_last_access_time(&source_metadata);
+        let mtime = FileTime::from_last_modification_time(&source_metadata);
+        if dest.is_symlink() {
+            filetime::set_symlink_file_times(dest, atime, mtime)?;
+        } else {
+            filetime::set_file_times(dest, atime, mtime)?;
+        }
+
+        Ok(())
+    });
+
+    #[cfg(feature = "feat_selinux")]
+    handle_preserve!(attributes.context, || -> CopyResult<()> {
+        let context = selinux::SecurityContext::of_path(source, false, false).map_err(|e| {
+            format!(
+                "failed to get security context of {}: {}",
+                source.display(),
+                e
             )
-            .map_err(Error::Error)?;
-        }
-        Attribute::Timestamps => {
-            let atime = FileTime::from_last_access_time(&source_metadata);
-            let mtime = FileTime::from_last_modification_time(&source_metadata);
-            if dest.is_symlink() {
-                filetime::set_symlink_file_times(dest, atime, mtime)?;
-            } else {
-                filetime::set_file_times(dest, atime, mtime)?;
-            }
-        }
-        #[cfg(feature = "feat_selinux")]
-        Attribute::Context => {
-            let context = selinux::SecurityContext::of_path(source, false, false).map_err(|e| {
+        })?;
+        if let Some(context) = context {
+            context.set_for_path(dest, false, false).map_err(|e| {
                 format!(
-                    "failed to get security context of {}: {}",
-                    source.display(),
+                    "failed to set security context for {}: {}",
+                    dest.display(),
                     e
                 )
             })?;
-            if let Some(context) = context {
-                context.set_for_path(dest, false, false).map_err(|e| {
-                    format!(
-                        "failed to set security context for {}: {}",
-                        dest.display(),
-                        e
-                    )
-                })?;
-            }
         }
-        Attribute::Links => {}
-        Attribute::Xattr => {
-            #[cfg(unix)]
-            {
-                let xattrs = xattr::list(source)?;
-                for attr in xattrs {
-                    if let Some(attr_value) = xattr::get(source, attr.clone())? {
-                        xattr::set(dest, attr, &attr_value[..])?;
-                    }
+
+        Ok(())
+    });
+
+    handle_preserve!(attributes.xattr, || -> CopyResult<()> {
+        #[cfg(unix)]
+        {
+            let xattrs = xattr::list(source)?;
+            for attr in xattrs {
+                if let Some(attr_value) = xattr::get(source, attr.clone())? {
+                    xattr::set(dest, attr, &attr_value[..])?;
                 }
             }
-            #[cfg(not(unix))]
-            {
-                // The documentation for GNU cp states:
-                //
-                // > Try to preserve SELinux security context and
-                // > extended attributes (xattr), but ignore any failure
-                // > to do that and print no corresponding diagnostic.
-                //
-                // so we simply do nothing here.
-                //
-                // TODO Silently ignore failures in the `#[cfg(unix)]`
-                // block instead of terminating immediately on errors.
-            }
         }
-    };
+        #[cfg(not(unix))]
+        {
+            // The documentation for GNU cp states:
+            //
+            // > Try to preserve SELinux security context and
+            // > extended attributes (xattr), but ignore any failure
+            // > to do that and print no corresponding diagnostic.
+            //
+            // so we simply do nothing here.
+            //
+            // TODO Silently ignore failures in the `#[cfg(unix)]`
+            // block instead of terminating immediately on errors.
+        }
+
+        Ok(())
+    });
 
     Ok(())
 }
@@ -1607,12 +1621,7 @@ fn copy_file(
         fs::set_permissions(dest, dest_permissions).ok();
     }
 
-    copy_attributes(
-        source,
-        dest,
-        &options.preserve_attributes,
-        &options.require_preserve_attributes,
-    )?;
+    copy_attributes(source, dest, &options.attributes)?;
 
     if let Some(progress_bar) = progress_bar {
         progress_bar.inc(fs::metadata(source)?.len());
