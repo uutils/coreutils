@@ -1351,6 +1351,7 @@ fn copy_file(
 
     if options.verbose {
         if let Some(pb) = progress_bar {
+            // Suspend (hide) the progress bar so the println won't overlap with the progress bar.
             pb.suspend(|| {
                 println!("{}", context_for(source, dest));
             });
