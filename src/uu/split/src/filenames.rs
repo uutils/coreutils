@@ -59,7 +59,7 @@ impl SuffixType {
 /// This iterator yields filenames for use with ``split``.
 ///
 /// The `prefix` is prepended to each filename and the
-/// `additional_suffix1 is appended to each filename.
+/// `additional_suffix1` is appended to each filename.
 ///
 /// If `suffix_length` is 0, then the variable portion of the filename
 /// that identifies the current chunk will have a dynamically
