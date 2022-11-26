@@ -24,8 +24,8 @@ use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
-    copy_attributes, copy_file, copy_link, preserve_hardlinks, CopyResult, Error, Options,
-    TargetSlice,
+    aligned_ancestors, context_for, copy_attributes, copy_file, copy_link, preserve_hardlinks,
+    CopyResult, Error, Options, TargetSlice,
 };
 
 /// Ensure a Windows path starts with a `\\?`.
@@ -172,6 +172,27 @@ impl Entry {
     }
 }
 
+/// Decide whether the given path ends with `/.`.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// assert!(ends_with_slash_dot("/."));
+/// assert!(ends_with_slash_dot("./."));
+/// assert!(ends_with_slash_dot("a/."));
+///
+/// assert!(!ends_with_slash_dot("."));
+/// assert!(!ends_with_slash_dot("./"));
+/// assert!(!ends_with_slash_dot("a/.."));
+/// ```
+fn ends_with_slash_dot<P>(path: P) -> bool
+where
+    P: AsRef<Path>,
+{
+    // `path.ends_with(".")` does not seem to work
+    path.as_ref().display().to_string().ends_with("/.")
+}
+
 /// Copy a single entry during a directory traversal.
 fn copy_direntry(
     progress_bar: &Option<ProgressBar>,
@@ -196,7 +217,10 @@ fn copy_direntry(
 
     // If the source is a directory and the destination does not
     // exist, ...
-    if source_absolute.is_dir() && !local_to_target.exists() {
+    if source_absolute.is_dir()
+        && !ends_with_slash_dot(&source_absolute)
+        && !local_to_target.exists()
+    {
         if target_is_file {
             return Err("cannot overwrite non-directory with directory".into());
         } else {
@@ -205,7 +229,10 @@ fn copy_direntry(
             // `create_dir_all()` will have any benefit over
             // `create_dir()`, since all the ancestor directories
             // should have already been created.
-            fs::create_dir_all(local_to_target)?;
+            fs::create_dir_all(&local_to_target)?;
+            if options.verbose {
+                println!("{}", context_for(&source_relative, &local_to_target));
+            }
             return Ok(());
         }
     }
@@ -324,6 +351,19 @@ pub(crate) fn copy_directory(
         if let Some(parent) = root.parent() {
             let new_target = target.join(parent);
             std::fs::create_dir_all(&new_target)?;
+
+            if options.verbose {
+                // For example, if copying file `a/b/c` and its parents
+                // to directory `d/`, then print
+                //
+                //     a -> d/a
+                //     a/b -> d/a/b
+                //
+                for (x, y) in aligned_ancestors(root, &target.join(root)) {
+                    println!("{} -> {}", x.display(), y.display());
+                }
+            }
+
             new_target
         } else {
             target.to_path_buf()
@@ -392,4 +432,26 @@ pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
     let pathbuf2 = canonicalize(p2, MissingHandling::Normal, ResolveMode::Logical)?;
 
     Ok(pathbuf1.starts_with(pathbuf2))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ends_with_slash_dot;
+
+    #[test]
+    fn test_ends_with_slash_dot() {
+        assert!(ends_with_slash_dot("/."));
+        assert!(ends_with_slash_dot("./."));
+        assert!(ends_with_slash_dot("../."));
+        assert!(ends_with_slash_dot("a/."));
+        assert!(ends_with_slash_dot("/a/."));
+
+        assert!(!ends_with_slash_dot(""));
+        assert!(!ends_with_slash_dot("."));
+        assert!(!ends_with_slash_dot("./"));
+        assert!(!ends_with_slash_dot(".."));
+        assert!(!ends_with_slash_dot("/.."));
+        assert!(!ends_with_slash_dot("a/.."));
+        assert!(!ends_with_slash_dot("/a/.."));
+    }
 }

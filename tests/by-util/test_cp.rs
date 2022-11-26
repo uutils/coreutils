@@ -2088,6 +2088,36 @@ fn test_cp_parents_2_link() {
 }
 
 #[test]
+fn test_cp_parents_2_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("a/b/c");
+    at.mkdir("d");
+    #[cfg(not(windows))]
+    let expected_stdout = "a -> d/a\na/b -> d/a/b\n'a/b/c' -> 'd/a/b/c'\n";
+    #[cfg(windows)]
+    let expected_stdout = "a -> d\\a\na/b -> d\\a/b\n'a/b/c' -> 'd\\a/b\\c'\n";
+    ucmd.args(&["--verbose", "-r", "--parents", "a/b/c", "d"])
+        .succeeds()
+        .stdout_only(expected_stdout);
+    assert!(at.dir_exists("d/a/b/c"));
+}
+
+#[test]
+fn test_cp_parents_2_deep_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("a/b/c");
+    at.mkdir_all("d/e");
+    #[cfg(not(windows))]
+    let expected_stdout = "a -> d/e/a\na/b -> d/e/a/b\n'a/b/c' -> 'd/e/a/b/c'\n";
+    #[cfg(windows)]
+    let expected_stdout = "a -> d/e\\a\na/b -> d/e\\a/b\n'a/b/c' -> 'd/e\\a/b\\c'\n";
+    ucmd.args(&["--verbose", "-r", "--parents", "a/b/c", "d/e"])
+        .succeeds()
+        .stdout_only(expected_stdout);
+    assert!(at.dir_exists("d/e/a/b/c"));
+}
+
+#[test]
 fn test_cp_copy_symlink_contents_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("src-dir");
@@ -2408,4 +2438,19 @@ fn test_symbolic_link_file() {
         std::fs::read_link(at.plus("dest")).unwrap(),
         Path::new("src")
     );
+}
+
+#[test]
+fn test_src_base_dot() {
+    let ts = TestScenario::new(util_name!());
+    let at = ts.fixtures.clone();
+    at.mkdir("x");
+    at.mkdir("y");
+    let mut ucmd = UCommand::new(ts.bin_path, &Some(ts.util_name), at.plus("y"), true);
+
+    ucmd.args(&["--verbose", "-r", "../x/.", "."])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert!(!at.dir_exists("y/x"));
 }
