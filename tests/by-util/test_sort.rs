@@ -977,10 +977,7 @@ fn test_sigpipe_panic() {
     // Dropping the stdout should not lead to an error.
     // The "Broken pipe" error should be silently ignored.
     child.close_stdout();
-    assert_eq!(
-        String::from_utf8(child.wait_with_output().unwrap().stderr),
-        Ok(String::new())
-    );
+    child.wait().unwrap().no_stderr();
 }
 
 #[test]

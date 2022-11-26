@@ -134,6 +134,7 @@ mod linux_only {
 
         #[allow(deprecated)]
         let output = proc
+            .ignore_stdin_write_error()
             .run_no_wait()
             .pipe_in_and_wait_with_output(content.as_bytes());
 

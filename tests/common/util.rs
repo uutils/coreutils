@@ -362,7 +362,6 @@ impl CmdResult {
         self.no_stderr().stdout_is_bytes(msg)
     }
 
-    // TODO: implement same functionality asserting as String instead
     /// like stdout_only(...), but expects the contents of the file at the provided relative path
     pub fn stdout_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);

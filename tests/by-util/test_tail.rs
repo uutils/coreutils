@@ -1404,8 +1404,12 @@ fn test_retry5() {
     }
 }
 
+// intermittent failures on android with diff
+// Diff < left / right > :
+// ==> existing <==
+// >X
 #[test]
-#[cfg(not(target_os = "windows"))] // FIXME: for currently not working platforms
+#[cfg(all(not(target_os = "windows"), not(target_os = "android")))] // FIXME: for currently not working platforms
 fn test_retry6() {
     // inspired by: gnu/tests/tail-2/retry.sh
     // Ensure that --follow=descriptor (without --retry) does *not* try
@@ -3002,8 +3006,7 @@ fn test_pipe_when_lines_option_given_input_size_is_one_byte_greater_than_buffer_
 // FIXME: windows: this test failed with timeout in the CI. Running this test in
 // a Windows VirtualBox image produces no errors.
 #[test]
-// TODO: switch back on
-// #[cfg(not(target_os = "windows"))]
+#[cfg(not(target_os = "windows"))]
 fn test_pipe_when_lines_option_given_input_size_has_multiple_size_of_buffer_size() {
     let total_lines = 100;
     let random_string = RandomString::generate_with_delimiter(
@@ -3310,8 +3313,7 @@ fn test_pipe_when_bytes_option_given_input_size_is_one_byte_greater_than_buffer_
 // FIXME: windows: this test failed with timeout in the CI. Running this test in
 // a Windows VirtualBox image produces no errors.
 #[test]
-// TODO: switch back on
-// #[cfg(not(target_os = "windows"))]
+#[cfg(not(target_os = "windows"))]
 fn test_pipe_when_bytes_option_given_input_size_has_multiple_size_of_buffer_size() {
     let random_string = RandomString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE * 3);
     let random_string = random_string.as_str();

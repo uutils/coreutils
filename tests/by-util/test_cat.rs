@@ -484,9 +484,7 @@ fn test_domain_socket() {
 
     let child = new_ucmd!().args(&[socket_path]).run_no_wait();
     barrier.wait();
-    let stdout = &child.wait_with_output().unwrap().stdout;
-    let output = String::from_utf8_lossy(stdout);
-    assert_eq!("a\tb", output);
+    child.wait().unwrap().stdout_is("a\tb");
 
     thread.join().unwrap();
 }
