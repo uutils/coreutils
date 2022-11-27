@@ -168,10 +168,41 @@ pub struct Attributes {
     xattr: Preserve,
 }
 
+impl Attributes {
+    pub(crate) fn max(&mut self, other: Self) {
+        #[cfg(unix)]
+        {
+            self.ownership = self.ownership.max(other.ownership);
+        }
+        self.mode = self.mode.max(other.mode);
+        self.timestamps = self.timestamps.max(other.timestamps);
+        #[cfg(feature = "feat_selinux")]
+        {
+            self.context = self.context.max(other.context);
+        }
+        self.links = self.links.max(other.links);
+        self.xattr = self.xattr.max(other.xattr);
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Preserve {
     No,
     Yes { required: bool },
+}
+
+impl Preserve {
+    pub(crate) fn max(&self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Yes { required: true }, _) | (_, Self::Yes { required: true }) => {
+                Self::Yes { required: true }
+            }
+            (Self::Yes { required: false }, _) | (_, Self::Yes { required: false }) => {
+                Self::Yes { required: false }
+            }
+            _ => Self::No,
+        }
+    }
 }
 
 /// Re-usable, extensible copy options
@@ -663,20 +694,16 @@ impl Attributes {
         }
     }
 
-    fn try_set_from_string(
-        &mut self,
-        value: &str,
-        target_attributes: Attributes,
-    ) -> Result<(), Error> {
+    fn try_set_from_string(&mut self, value: &str, target_attributes: Self) -> Result<(), Error> {
         match &*value.to_lowercase() {
-            "mode" => self.mode = target_attributes.mode,
+            "mode" => self.mode = self.mode.max(target_attributes.mode),
             #[cfg(unix)]
-            "ownership" => self.ownership = target_attributes.ownership,
-            "timestamps" => self.timestamps = target_attributes.timestamps,
+            "ownership" => self.ownership = self.ownership.max(target_attributes.ownership),
+            "timestamps" => self.timestamps = self.timestamps.max(target_attributes.timestamps),
             #[cfg(feature = "feat_selinux")]
-            "context" => self.context = target_attributes.context,
-            "links" => self.links = target_attributes.links,
-            "xattr" => self.xattr = target_attributes.xattr,
+            "context" => self.context = self.context.max(target_attributes.context),
+            "links" => self.links = self.links.max(target_attributes.links),
+            "xattr" => self.xattr = self.xattr.max(target_attributes.xattr),
             _ => {
                 return Err(Error::InvalidArgument(format!(
                     "invalid attribute {}",
@@ -740,7 +767,7 @@ impl Options {
                     for attribute_str in attribute_strs {
                         attributes_empty = false;
                         if attribute_str == "all" {
-                            attributes = Attributes::all();
+                            attributes.max(Attributes::all());
                             break;
                         } else {
                             attributes.try_set_from_string(attribute_str, Attributes::default())?;
