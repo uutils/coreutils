@@ -171,14 +171,7 @@ pub struct Attributes {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Preserve {
     No,
-    Try,
-    Require,
-}
-
-impl Preserve {
-    pub fn is_preserve(&self) -> bool {
-        self == &Self::Try || self == &Self::Require
-    }
+    Yes { required: bool },
 }
 
 /// Re-usable, extensible copy options
@@ -634,22 +627,22 @@ impl Attributes {
     fn all() -> Self {
         Self {
             #[cfg(unix)]
-            ownership: Preserve::Require,
-            mode: Preserve::Require,
-            timestamps: Preserve::Require,
+            ownership: Preserve::Yes { required: true },
+            mode: Preserve::Yes { required: true },
+            timestamps: Preserve::Yes { required: true },
             #[cfg(feature = "feat_selinux")]
-            context: Preserve::Try,
-            links: Preserve::Require,
-            xattr: Preserve::Try,
+            context: Preserve::Yes { required: false },
+            links: Preserve::Yes { required: true },
+            xattr: Preserve::Yes { required: false },
         }
     }
 
     fn default() -> Self {
         Self {
             #[cfg(unix)]
-            ownership: Preserve::Require,
-            mode: Preserve::Require,
-            timestamps: Preserve::Require,
+            ownership: Preserve::Yes { required: true },
+            mode: Preserve::Yes { required: true },
+            timestamps: Preserve::Yes { required: true },
             #[cfg(feature = "feat_selinux")]
             context: Preserve::No,
             links: Preserve::No,
@@ -766,7 +759,7 @@ impl Options {
             Attributes::all()
         } else if matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS) {
             let mut attributes = Attributes::none();
-            attributes.links = Preserve::Require;
+            attributes.links = Preserve::Yes { required: true };
             attributes
         } else if matches.get_flag(options::PRESERVE_DEFAULT_ATTRIBUTES) {
             Attributes::default()
@@ -853,7 +846,10 @@ impl Options {
     }
 
     fn preserve_hard_links(&self) -> bool {
-        self.attributes.links.is_preserve()
+        match self.attributes.links {
+            Preserve::No => false,
+            Preserve::Yes { .. } => true,
+        }
     }
 
     /// Whether to force overwriting the destination file.
@@ -1122,16 +1118,17 @@ impl OverwriteMode {
     }
 }
 
-#[macro_export]
-macro_rules! handle_preserve {
-    ($preserve:expr, $copy_call:expr) => {
-        if $preserve.is_preserve() {
-            let result = $copy_call();
-            if $preserve == Preserve::Require {
+fn handle_preserve<F: Fn() -> CopyResult<()>>(p: &Preserve, f: F) -> CopyResult<()> {
+    match p {
+        Preserve::No => {}
+        Preserve::Yes { required } => {
+            let result = f();
+            if *required {
                 result?;
             }
         }
     };
+    Ok(())
 }
 
 /// Copy the specified attributes from one path to another.
@@ -1145,7 +1142,7 @@ pub(crate) fn copy_attributes(
 
     // Ownership must be changed first to avoid interfering with mode change.
     #[cfg(unix)]
-    handle_preserve!(attributes.ownership, || -> CopyResult<()> {
+    handle_preserve(&attributes.ownership, || -> CopyResult<()> {
         use std::os::unix::prelude::MetadataExt;
         use uucore::perms::wrap_chown;
         use uucore::perms::Verbosity;
@@ -1168,9 +1165,9 @@ pub(crate) fn copy_attributes(
         .map_err(Error::Error)?;
 
         Ok(())
-    });
+    })?;
 
-    handle_preserve!(attributes.mode, || -> CopyResult<()> {
+    handle_preserve(&attributes.mode, || -> CopyResult<()> {
         // The `chmod()` system call that underlies the
         // `fs::set_permissions()` call is unable to change the
         // permissions of a symbolic link. In that case, we just
@@ -1186,9 +1183,9 @@ pub(crate) fn copy_attributes(
         }
 
         Ok(())
-    });
+    })?;
 
-    handle_preserve!(attributes.timestamps, || -> CopyResult<()> {
+    handle_preserve(&attributes.timestamps, || -> CopyResult<()> {
         let atime = FileTime::from_last_access_time(&source_metadata);
         let mtime = FileTime::from_last_modification_time(&source_metadata);
         if dest.is_symlink() {
@@ -1198,10 +1195,10 @@ pub(crate) fn copy_attributes(
         }
 
         Ok(())
-    });
+    })?;
 
     #[cfg(feature = "feat_selinux")]
-    handle_preserve!(attributes.context, || -> CopyResult<()> {
+    handle_preserve(&attributes.context, || -> CopyResult<()> {
         let context = selinux::SecurityContext::of_path(source, false, false).map_err(|e| {
             format!(
                 "failed to get security context of {}: {}",
@@ -1220,9 +1217,9 @@ pub(crate) fn copy_attributes(
         }
 
         Ok(())
-    });
+    })?;
 
-    handle_preserve!(attributes.xattr, || -> CopyResult<()> {
+    handle_preserve(&attributes.xattr, || -> CopyResult<()> {
         #[cfg(unix)]
         {
             let xattrs = xattr::list(source)?;
@@ -1247,7 +1244,7 @@ pub(crate) fn copy_attributes(
         }
 
         Ok(())
-    });
+    })?;
 
     Ok(())
 }
