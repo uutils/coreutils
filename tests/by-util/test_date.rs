@@ -110,6 +110,11 @@ fn test_date_format_full_day() {
 }
 
 #[test]
+fn test_date_issue_3780() {
+    new_ucmd!().arg("+%Y-%m-%d %H-%M-%S%:::z").succeeds();
+}
+
+#[test]
 fn test_date_nano_seconds() {
     // %N     nanoseconds (000000000..999999999)
     let re = Regex::new(r"^\d{1,9}$").unwrap();
