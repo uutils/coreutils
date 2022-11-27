@@ -17,6 +17,7 @@ jobs:
       pull-requests: read  # for dawidd6/action-download-artifact to query commit hash
     name: Run GNU tests
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
     - name: Initialize workflow variables
       id: vars
@@ -266,6 +267,7 @@ jobs:
   gnu_coverage:
     name: Run GNU tests with coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
     - name: Checkout code uutil
       uses: actions/checkout@v3
