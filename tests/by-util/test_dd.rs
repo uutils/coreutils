@@ -1394,3 +1394,27 @@ fn test_sync_delayed_reader() {
     assert_eq!(&output.stdout, &expected);
     assert_eq!(&output.stderr, b"0+8 records in\n4+0 records out\n");
 }
+
+/// Test for making a sparse copy of the input file.
+#[test]
+fn test_sparse() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Create a file and make it a large sparse file.
+    //
+    // On common Linux filesystems, setting the length to one megabyte
+    // should cause the file to become a sparse file, but it depends
+    // on the system.
+    std::fs::File::create(at.plus("infile"))
+        .unwrap()
+        .set_len(1024 * 1024)
+        .unwrap();
+
+    // Perform a sparse copy.
+    ucmd.args(&["bs=32K", "if=infile", "of=outfile", "conv=sparse"])
+        .succeeds();
+
+    // The number of bytes in the file should be accurate though the
+    // number of blocks stored on disk may be zero.
+    assert_eq!(at.metadata("infile").len(), at.metadata("outfile").len());
+}
