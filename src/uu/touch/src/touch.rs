@@ -198,6 +198,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::sources::DATE)
                 .short('d')
                 .long(options::sources::DATE)
+                .allow_hyphen_values(true)
                 .help("parse argument and use it instead of current time")
                 .value_name("STRING"),
         )
@@ -379,6 +380,60 @@ fn parse_date(s: &str) -> UResult<FileTime> {
                 time::OffsetDateTime::from_unix_timestamp(*ts).unwrap(),
             ));
         }
+    }
+
+    // Relative day, like "today", "tomorrow", or "yesterday".
+    match s {
+        "now" | "today" => {
+            let now_local = time::OffsetDateTime::now_local().unwrap();
+            return Ok(local_dt_to_filetime(now_local));
+        }
+        "tomorrow" => {
+            let duration = time::Duration::days(1);
+            let now_local = time::OffsetDateTime::now_local().unwrap();
+            let diff = now_local.checked_add(duration).unwrap();
+            return Ok(local_dt_to_filetime(diff));
+        }
+        "yesterday" => {
+            let duration = time::Duration::days(1);
+            let now_local = time::OffsetDateTime::now_local().unwrap();
+            let diff = now_local.checked_sub(duration).unwrap();
+            return Ok(local_dt_to_filetime(diff));
+        }
+        _ => {}
+    }
+
+    // Relative time, like "-1 hour" or "+3 days".
+    //
+    // TODO Add support for "year" and "month".
+    // TODO Add support for times without spaces like "-1hour".
+    let tokens: Vec<&str> = s.split_whitespace().collect();
+    let maybe_duration = match &tokens[..] {
+        [num_str, "fortnight" | "fortnights"] => num_str
+            .parse::<i64>()
+            .ok()
+            .map(|n| time::Duration::weeks(2 * n)),
+        ["fortnight" | "fortnights"] => Some(time::Duration::weeks(2)),
+        [num_str, "week" | "weeks"] => num_str.parse::<i64>().ok().map(time::Duration::weeks),
+        ["week" | "weeks"] => Some(time::Duration::weeks(1)),
+        [num_str, "day" | "days"] => num_str.parse::<i64>().ok().map(time::Duration::days),
+        ["day" | "days"] => Some(time::Duration::days(1)),
+        [num_str, "hour" | "hours"] => num_str.parse::<i64>().ok().map(time::Duration::hours),
+        ["hour" | "hours"] => Some(time::Duration::hours(1)),
+        [num_str, "minute" | "minutes" | "min" | "mins"] => {
+            num_str.parse::<i64>().ok().map(time::Duration::minutes)
+        }
+        ["minute" | "minutes" | "min" | "mins"] => Some(time::Duration::minutes(1)),
+        [num_str, "second" | "seconds" | "sec" | "secs"] => {
+            num_str.parse::<i64>().ok().map(time::Duration::seconds)
+        }
+        ["second" | "seconds" | "sec" | "secs"] => Some(time::Duration::seconds(1)),
+        _ => None,
+    };
+    if let Some(duration) = maybe_duration {
+        let now_local = time::OffsetDateTime::now_local().unwrap();
+        let diff = now_local.checked_add(duration).unwrap();
+        return Ok(local_dt_to_filetime(diff));
     }
 
     Err(USimpleError::new(1, format!("Unable to parse date: {}", s)))
