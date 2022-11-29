@@ -479,7 +479,6 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
 
     let mut process = platform::ProcessChecker::new(observer.pid);
 
-    let mut _event_counter = 0;
     let mut _timeout_counter = 0;
 
     // main follow loop
@@ -529,7 +528,6 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             .receiver
             .recv_timeout(settings.sleep_sec);
         if rx_result.is_ok() {
-            _event_counter += 1;
             _timeout_counter = 0;
         }
 
