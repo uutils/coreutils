@@ -163,7 +163,7 @@ impl<'a> Iterator for FileLines<'a> {
         // Err(true) indicates that this was a linebreak,
         // which is important to know when detecting mail headers
         if n.chars().all(char::is_whitespace) {
-            return Some(Line::NoFormatLine("".to_owned(), true));
+            return Some(Line::NoFormatLine(String::new(), true));
         }
 
         let (pmatch, poffset) = self.match_prefix(&n[..]);

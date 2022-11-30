@@ -49,7 +49,7 @@ impl InputOffset {
             (Radix::Hexadecimal, Some(l)) => format!("{:06X} ({:06X})", self.byte_pos, l),
             (Radix::Octal, None) => format!("{:07o}", self.byte_pos),
             (Radix::Octal, Some(l)) => format!("{:07o} ({:07o})", self.byte_pos, l),
-            (Radix::NoPrefix, None) => String::from(""),
+            (Radix::NoPrefix, None) => String::new(),
             (Radix::NoPrefix, Some(l)) => format!("({:07o})", l),
         }
     }

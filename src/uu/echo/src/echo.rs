@@ -120,7 +120,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let escaped = matches.get_flag(options::ENABLE_BACKSLASH_ESCAPE);
     let values: Vec<String> = match matches.get_many::<String>(options::STRING) {
         Some(s) => s.map(|s| s.to_string()).collect(),
-        None => vec!["".to_string()],
+        None => vec![String::new()],
     };
 
     execute(no_newline, escaped, &values)

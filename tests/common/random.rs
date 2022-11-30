@@ -127,7 +127,7 @@ impl RandomString {
         D: Distribution<u8>,
     {
         if length == 0 {
-            return String::from("");
+            return String::new();
         } else if length == 1 {
             return if num_delimiter > 0 {
                 String::from(delimiter as char)

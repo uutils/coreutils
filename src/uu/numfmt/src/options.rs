@@ -90,8 +90,8 @@ impl Default for FormatOptions {
             grouping: false,
             padding: None,
             precision: None,
-            prefix: String::from(""),
-            suffix: String::from(""),
+            prefix: String::new(),
+            suffix: String::new(),
             zero_padding: false,
         }
     }
@@ -112,8 +112,8 @@ impl FromStr for FormatOptions {
         let mut iter = s.chars().peekable();
         let mut options = Self::default();
 
-        let mut padding = String::from("");
-        let mut precision = String::from("");
+        let mut padding = String::new();
+        let mut precision = String::new();
         let mut double_percentage_counter = 0;
 
         // '%' chars in the prefix, if any, must appear in blocks of even length, for example: "%%%%" and
