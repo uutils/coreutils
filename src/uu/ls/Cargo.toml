@@ -20,7 +20,7 @@ clap = { version = "4.0", features = ["wrap_help", "cargo", "env"] }
 unicode-width = "0.1.8"
 number_prefix = "0.4"
 term_grid = "0.1.5"
-terminal_size = "0.2.2"
+terminal_size = "0.2.3"
 glob = "0.3.0"
 lscolors = { version = "0.13.0", default-features=false, features = ["nu-ansi-term"] }
 uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features = ["entries", "fs"] }
