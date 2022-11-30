@@ -1350,7 +1350,14 @@ fn copy_file(
     }
 
     if options.verbose {
-        println!("{}", context_for(source, dest));
+        if let Some(pb) = progress_bar {
+            // Suspend (hide) the progress bar so the println won't overlap with the progress bar.
+            pb.suspend(|| {
+                println!("{}", context_for(source, dest));
+            });
+        } else {
+            println!("{}", context_for(source, dest));
+        }
     }
 
     // Calculate the context upfront before canonicalizing the path
