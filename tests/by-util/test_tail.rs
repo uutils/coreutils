@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile file siette ocho nueve diez MULT
 // spell-checker:ignore (libs) kqueue
-// spell-checker:ignore (jargon) tailable untailable
+// spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
 
 extern crate tail;
 
@@ -14,9 +14,24 @@ use crate::common::util::*;
 use pretty_assertions::assert_eq;
 use rand::distributions::Alphanumeric;
 use std::char::from_digit;
+use std::fs::File;
 use std::io::Write;
+#[cfg(not(target_vendor = "apple"))]
+use std::io::{Seek, SeekFrom};
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))]
+use std::path::Path;
 use std::process::Stdio;
 use tail::chunks::BUFFER_SIZE as CHUNK_BUFFER_SIZE;
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))]
+use tail::text;
 
 static FOOBAR_TXT: &str = "foobar.txt";
 static FOOBAR_2_TXT: &str = "foobar2.txt";
@@ -74,12 +89,12 @@ fn test_stdin_redirect_file() {
     at.write("f", "foo");
 
     ts.ucmd()
-        .set_stdin(std::fs::File::open(at.plus("f")).unwrap())
+        .set_stdin(File::open(at.plus("f")).unwrap())
         .run()
         .stdout_is("foo")
         .succeeded();
     ts.ucmd()
-        .set_stdin(std::fs::File::open(at.plus("f")).unwrap())
+        .set_stdin(File::open(at.plus("f")).unwrap())
         .arg("-v")
         .run()
         .no_stderr()
@@ -89,7 +104,7 @@ fn test_stdin_redirect_file() {
     let mut p = ts
         .ucmd()
         .arg("-f")
-        .set_stdin(std::fs::File::open(at.plus("f")).unwrap())
+        .set_stdin(File::open(at.plus("f")).unwrap())
         .run_no_wait();
 
     p.make_assertion_with_delay(500).is_alive();
@@ -103,13 +118,12 @@ fn test_stdin_redirect_file() {
 #[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_offset() {
     // inspired by: "gnu/tests/tail-2/start-middle.sh"
-    use std::io::{Seek, SeekFrom};
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
     at.write("k", "1\n2\n");
-    let mut fh = std::fs::File::open(at.plus("k")).unwrap();
+    let mut fh = File::open(at.plus("k")).unwrap();
     fh.seek(SeekFrom::Start(2)).unwrap();
 
     ts.ucmd()
@@ -128,7 +142,6 @@ fn test_stdin_redirect_offset2() {
     // expected: ==> standard input <==
 
     // like test_stdin_redirect_offset but with multiple files
-    use std::io::{Seek, SeekFrom};
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -136,7 +149,7 @@ fn test_stdin_redirect_offset2() {
     at.write("k", "1\n2\n");
     at.write("l", "3\n4\n");
     at.write("m", "5\n6\n");
-    let mut fh = std::fs::File::open(at.plus("k")).unwrap();
+    let mut fh = File::open(at.plus("k")).unwrap();
     fh.seek(SeekFrom::Start(2)).unwrap();
 
     ts.ucmd()
@@ -258,7 +271,7 @@ fn test_follow_redirect_stdin_name_retry() {
     let mut args = vec!["-F", "-"];
     for _ in 0..2 {
         ts.ucmd()
-            .set_stdin(std::fs::File::open(at.plus("f")).unwrap())
+            .set_stdin(File::open(at.plus("f")).unwrap())
             .args(&args)
             .fails()
             .no_stdout()
@@ -285,13 +298,13 @@ fn test_stdin_redirect_dir() {
     at.mkdir("dir");
 
     ts.ucmd()
-        .set_stdin(std::fs::File::open(at.plus("dir")).unwrap())
+        .set_stdin(File::open(at.plus("dir")).unwrap())
         .fails()
         .no_stdout()
         .stderr_is("tail: error reading 'standard input': Is a directory")
         .code_is(1);
     ts.ucmd()
-        .set_stdin(std::fs::File::open(at.plus("dir")).unwrap())
+        .set_stdin(File::open(at.plus("dir")).unwrap())
         .arg("-")
         .fails()
         .no_stdout()
@@ -318,13 +331,13 @@ fn test_stdin_redirect_dir_when_target_os_is_macos() {
     at.mkdir("dir");
 
     ts.ucmd()
-        .set_stdin(std::fs::File::open(at.plus("dir")).unwrap())
+        .set_stdin(File::open(at.plus("dir")).unwrap())
         .fails()
         .no_stdout()
         .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory")
         .code_is(1);
     ts.ucmd()
-        .set_stdin(std::fs::File::open(at.plus("dir")).unwrap())
+        .set_stdin(File::open(at.plus("dir")).unwrap())
         .arg("-")
         .fails()
         .no_stdout()
@@ -364,61 +377,6 @@ fn test_follow_stdin_name_retry() {
             .code_is(1);
         args.pop();
     }
-}
-
-#[test]
-#[cfg(target_os = "linux")]
-#[cfg(disable_until_fixed)]
-fn test_follow_stdin_explicit_indefinitely() {
-    // inspired by: "gnu/tests/tail-2/follow-stdin.sh"
-    // tail -f - /dev/null </dev/tty
-    // tail: warning: following standard input indefinitely is ineffective
-    // ==> standard input <==
-
-    let ts = TestScenario::new(util_name!());
-
-    let mut p = ts
-        .ucmd()
-        .set_stdin(Stdio::null())
-        .args(&["-f", "-", "/dev/null"])
-        .run_no_wait();
-
-    p.make_assertion_with_delay(500).is_alive();
-    p.kill()
-        .make_assertion()
-        .with_all_output()
-        .stdout_is("==> standard input <==")
-        .stderr_is("tail: warning: following standard input indefinitely is ineffective");
-
-    // Also:
-    // $ echo bar > foo
-    //
-    // $ tail -f - -
-    // tail: warning: following standard input indefinitely is ineffective
-    // ==> standard input <==
-    //
-    // $ tail -f - foo
-    // tail: warning: following standard input indefinitely is ineffective
-    // ==> standard input <==
-    //
-    //
-    // $ tail -f - foo
-    // tail: warning: following standard input indefinitely is ineffective
-    // ==> standard input <==
-    //
-    // $ tail -f foo -
-    // tail: warning: following standard input indefinitely is ineffective
-    // ==> foo <==
-    // bar
-    //
-    // ==> standard input <==
-    //
-
-    // $ echo f00 | tail -f foo -
-    // bar
-    //
-
-    // TODO: Implement the above behavior of GNU's tail for following stdin indefinitely
 }
 
 #[test]
@@ -689,7 +647,7 @@ fn test_follow_invalid_pid() {
     not(target_os = "android")
 ))] // FIXME: for currently not working platforms
 fn test_follow_with_pid() {
-    use std::process::{Command, Stdio};
+    use std::process::Command;
 
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1057,6 +1015,7 @@ fn test_positive_zero_bytes() {
     ts.ucmd()
         .args(&["-c", "0"])
         .pipe_in("abcde")
+        .ignore_stdin_write_error()
         .succeeds()
         .no_stdout()
         .no_stderr();
@@ -1540,8 +1499,8 @@ fn test_retry8() {
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    let watched_file = std::path::Path::new("watched_file");
-    let parent_dir = std::path::Path::new("parent_dir");
+    let watched_file = Path::new("watched_file");
+    let parent_dir = Path::new("parent_dir");
     let user_path = parent_dir.join(watched_file);
     let parent_dir = parent_dir.to_str().unwrap();
     let user_path = user_path.to_str().unwrap();
@@ -1604,12 +1563,12 @@ fn test_retry9() {
     // Ensure that inotify will switch to polling mode if directory
     // of the watched file was removed and recreated.
 
-    use tail::text::BACKEND;
+    use text::BACKEND;
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    let watched_file = std::path::Path::new("watched_file");
-    let parent_dir = std::path::Path::new("parent_dir");
+    let watched_file = Path::new("watched_file");
+    let parent_dir = Path::new("parent_dir");
     let user_path = parent_dir.join(watched_file);
     let parent_dir = parent_dir.to_str().unwrap();
     let user_path = user_path.to_str().unwrap();
@@ -3496,4 +3455,1071 @@ fn test_args_when_presume_input_pipe_given_input_is_file() {
         .args(&["---presume-input-pipe", "-n", "+0", "data"])
         .succeeds()
         .stdout_only(random_string);
+}
+
+#[test]
+#[cfg(disable_until_fixed)]
+// FIXME: currently missing in the error message is the last line >>tail: no files remaining<<
+fn test_when_follow_retry_given_redirected_stdin_from_directory_then_correct_error_message() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("dir");
+
+    let expected = "tail: warning: --retry only effective for the initial open\n\
+                        tail: error reading 'standard input': Is a directory\n\
+                        tail: 'standard input': cannot follow end of this type of file\n\
+                        tail: no files remaining\n";
+    ts.ucmd()
+        .set_stdin(File::open(at.plus("dir")).unwrap())
+        .args(&["-f", "--retry"])
+        .fails()
+        .stderr_only(expected)
+        .code_is(1);
+}
+
+#[test]
+fn test_when_argument_file_is_a_directory() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("dir");
+
+    let expected = "tail: error reading 'dir': Is a directory";
+    ts.ucmd()
+        .arg("dir")
+        .fails()
+        .stderr_only(expected)
+        .code_is(1);
+}
+
+// TODO: make this work on windows
+#[test]
+#[cfg(unix)]
+fn test_when_argument_file_is_a_symlink() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let mut file = at.make_file("target");
+
+    at.symlink_file("target", "link");
+
+    ts.ucmd()
+        .args(&["-c", "+0", "link"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+
+    let random_string = RandomString::generate(AlphanumericNewline, 100);
+    let result = file.write_all(random_string.as_bytes());
+    assert!(result.is_ok());
+
+    ts.ucmd()
+        .args(&["-c", "+0", "link"])
+        .succeeds()
+        .stdout_only(random_string);
+
+    at.mkdir("dir");
+
+    at.symlink_file("dir", "dir_link");
+
+    let expected = "tail: error reading 'dir_link': Is a directory";
+    ts.ucmd()
+        .arg("dir_link")
+        .fails()
+        .stderr_only(expected)
+        .code_is(1);
+}
+
+// TODO: make this work on windows
+#[test]
+#[cfg(unix)]
+fn test_when_argument_file_is_a_symlink_to_directory_then_error() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir");
+    at.symlink_file("dir", "dir_link");
+
+    let expected = "tail: error reading 'dir_link': Is a directory";
+    ts.ucmd()
+        .arg("dir_link")
+        .fails()
+        .stderr_only(expected)
+        .code_is(1);
+}
+
+// TODO: make this work on windows
+#[test]
+#[cfg(unix)]
+#[cfg(disabled_until_fixed)]
+fn test_when_argument_file_is_a_faulty_symlink_then_error() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.symlink_file("self", "self");
+
+    #[cfg(all(not(target_env = "musl"), not(target_os = "android")))]
+    let expected = "tail: cannot open 'self' for reading: Too many levels of symbolic links";
+    #[cfg(all(not(target_env = "musl"), target_os = "android"))]
+    let expected = "tail: cannot open 'self' for reading: Too many symbolic links encountered";
+    #[cfg(all(target_env = "musl", not(target_os = "android")))]
+    let expected = "tail: cannot open 'self' for reading: Symbolic link loop";
+
+    ts.ucmd()
+        .arg("self")
+        .fails()
+        .stderr_only(expected)
+        .code_is(1);
+
+    at.symlink_file("missing", "broken");
+
+    let expected = "tail: cannot open 'broken' for reading: No such file or directory";
+    ts.ucmd()
+        .arg("broken")
+        .fails()
+        .stderr_only(expected)
+        .code_is(1);
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg(disabled_until_fixed)]
+fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
+    use std::os::unix::net;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let socket = "socket";
+
+    // We only bind to create the socket file but do not listen
+    let result = net::UnixListener::bind(at.plus(socket));
+    assert!(result.is_ok());
+
+    #[cfg(all(not(target_os = "freebsd"), not(target_os = "macos")))]
+    let expected_stderr = format!(
+        "tail: cannot open '{}' for reading: No such device or address",
+        socket
+    );
+    #[cfg(target_os = "freebsd")]
+    let expected_stderr = format!(
+        "tail: cannot open '{}' for reading: Operation not supported",
+        socket
+    );
+    #[cfg(target_os = "macos")]
+    let expected_stderr = format!(
+        "tail: cannot open '{}' for reading: Operation not supported on socket",
+        socket
+    );
+
+    ts.ucmd()
+        .arg(socket)
+        .fails()
+        .stderr_only(&expected_stderr)
+        .code_is(1);
+
+    let path = "file";
+    let mut file = at.make_file(path);
+
+    let random_string = RandomString::generate(AlphanumericNewline, 100);
+    let result = file.write_all(random_string.as_bytes());
+    assert!(result.is_ok());
+
+    let expected_stdout = vec![format!("==> {} <==", path), random_string].join("\n");
+    ts.ucmd()
+        .args(&["-c", "+0", path, socket])
+        .fails()
+        .stdout_is(&expected_stdout)
+        .stderr_is(&expected_stderr);
+
+    // tail does not stop processing files when having encountered a "No such
+    // device or address" error.
+    ts.ucmd()
+        .args(&["-c", "+0", socket, path])
+        .fails()
+        .stdout_is(&expected_stdout)
+        .stderr_is(&expected_stderr);
+}
+
+#[test]
+#[cfg(disabled_until_fixed)]
+fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    fixtures.write("empty", "");
+    fixtures.write("data", "file data");
+    fixtures.write("fifo", "fifo data");
+
+    let expected = "==> standard input <==\n\
+                fifo data\n\
+                ==> empty <==\n";
+    scene
+        .ucmd()
+        .args(&["-c", "+0", "-", "empty"])
+        .set_stdin(File::open(fixtures.plus("fifo")).unwrap())
+        .run()
+        .success()
+        .stdout_only(expected);
+
+    let expected = "==> standard input <==\n\
+                \n\
+                ==> empty <==\n";
+    scene
+        .ucmd()
+        .args(&["-c", "+0", "-", "empty"])
+        .pipe_in("")
+        .run()
+        .success()
+        .stdout_only(expected);
+
+    let expected = "==> empty <==\n\
+                \n\
+                ==> standard input <==\n";
+    scene
+        .ucmd()
+        .args(&["-c", "+0", "empty", "-"])
+        .pipe_in("")
+        .run()
+        .success()
+        .stdout_only(expected);
+
+    let expected = "==> empty <==\n\
+                \n\
+                ==> standard input <==\n\
+                fifo data";
+    scene
+        .ucmd()
+        .args(&["-c", "+0", "empty", "-"])
+        .set_stdin(File::open(fixtures.plus("fifo")).unwrap())
+        .run()
+        .success()
+        .stdout_only(expected);
+
+    let expected = "==> standard input <==\n\
+                pipe data\n\
+                ==> data <==\n\
+                file data";
+    scene
+        .ucmd()
+        .args(&["-c", "+0", "-", "data"])
+        .pipe_in("pipe data")
+        .run()
+        .success()
+        .stdout_only(expected);
+
+    let expected = "==> data <==\n\
+                file data\n\
+                ==> standard input <==\n\
+                pipe data";
+    scene
+        .ucmd()
+        .args(&["-c", "+0", "data", "-"])
+        .pipe_in("pipe data")
+        .run()
+        .success()
+        .stdout_only(expected);
+
+    let expected = "==> standard input <==\n\
+                pipe data\n\
+                ==> standard input <==\n";
+    scene
+        .ucmd()
+        .args(&["-c", "+0", "-", "-"])
+        .pipe_in("pipe data")
+        .run()
+        .success()
+        .stdout_only(expected);
+
+    let expected = "==> standard input <==\n\
+                fifo data\n\
+                ==> standard input <==\n";
+    scene
+        .ucmd()
+        .args(&["-c", "+0", "-", "-"])
+        .set_stdin(File::open(fixtures.plus("fifo")).unwrap())
+        .run()
+        .success()
+        .stdout_only(expected);
+}
+
+#[test]
+#[cfg(disabled_until_fixed)]
+fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_file() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    fixtures.write("empty", "");
+    fixtures.write("data", "file data");
+    fixtures.write("fifo", "fifo data");
+
+    let expected = "==> standard input <==\n\
+                \n\
+                ==> empty <==\n\
+                \n\
+                ==> standard input <==\n";
+
+    scene
+        .ucmd()
+        .args(&["-c", "+0", "-", "empty", "-"])
+        .set_stdin(File::open(fixtures.plus("empty")).unwrap())
+        .run()
+        .stdout_only(expected)
+        .success();
+
+    let expected = "==> standard input <==\n\
+                \n\
+                ==> empty <==\n\
+                \n\
+                ==> standard input <==\n";
+    scene
+        .ucmd()
+        .args(&["-c", "+0", "-", "empty", "-"])
+        .pipe_in("")
+        .stderr_to_stdout()
+        .run()
+        .stdout_only(expected)
+        .success();
+
+    let expected = "==> standard input <==\n\
+                pipe data\n\
+                ==> data <==\n\
+                file data\n\
+                ==> standard input <==\n";
+    scene
+        .ucmd()
+        .args(&["-c", "+0", "-", "data", "-"])
+        .pipe_in("pipe data")
+        .run()
+        .stdout_only(expected)
+        .success();
+
+    // Correct behavior in a sh shell is to remember the file pointer for the fifo, so we don't
+    // print the fifo twice. This matches the behavior, if only the pipe is present without fifo
+    // (See test above). Note that for example a zsh shell prints the pipe data and has therefore
+    // different output from the sh shell (or cmd shell on windows).
+
+    // windows: tail returns with success although there is an error message present (on some
+    // windows systems). This error message comes from `echo` (the line ending `\r\n` indicates that
+    // too) which cannot write to the pipe because tail finished before echo was able to write to
+    // the pipe. Seems that windows `cmd` (like posix shells) ignores pipes when a fifo is present.
+    // This is actually the wished behavior and the test therefore succeeds.
+    #[cfg(windows)]
+    let expected = "==> standard input <==\n\
+        fifo data\n\
+        ==> data <==\n\
+        file data\n\
+        ==> standard input <==\n\
+        (The process tried to write to a nonexistent pipe.\r\n)?";
+    #[cfg(unix)]
+    let expected = "==> standard input <==\n\
+        fifo data\n\
+        ==> data <==\n\
+        file data\n\
+        ==> standard input <==\n";
+
+    #[cfg(windows)]
+    let cmd = ["cmd", "/C"];
+    #[cfg(unix)]
+    let cmd = ["sh", "-c"];
+
+    scene
+        .cmd(cmd[0])
+        .arg(cmd[1])
+        .arg(format!(
+            "echo pipe data | {} tail -c +0  - data - < fifo",
+            scene.bin_path.display(),
+        ))
+        .run()
+        .stdout_only(expected)
+        .success();
+
+    let expected = "==> standard input <==\n\
+                fifo data\n\
+                ==> data <==\n\
+                file data\n\
+                ==> standard input <==\n";
+    scene
+        .ucmd()
+        .args(&["-c", "+0", "-", "data", "-"])
+        .set_stdin(File::open(fixtures.plus("fifo")).unwrap())
+        .run()
+        .stdout_only(expected)
+        .success();
+}
+
+// Bug description: The content of a file is not printed to stdout if the output data does not
+// contain newlines and --follow was given as arguments.
+//
+// This test is only formal on linux, since we currently do not detect this kind of error within the
+// test system. However, this behavior shows up on the command line and, at the time of writing this
+// description, with this test on macos and windows.
+#[test]
+#[cfg(disable_until_fixed)]
+fn test_when_follow_retry_then_initial_print_of_file_is_written_to_stdout() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    let expected_stdout = "file data";
+    fixtures.write("data", expected_stdout);
+
+    let mut child = scene
+        .ucmd()
+        .args(&["--follow=name", "--retry", "data"])
+        .run_no_wait();
+
+    child
+        .delay(1500)
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stdout_only(expected_stdout);
+}
+
+// TODO: Add test for the warning `--pid=PID is not supported on this system`
+#[test]
+fn test_args_when_settings_check_warnings_then_shows_warnings() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    let file_data = "file data\n";
+    fixtures.write("data", file_data);
+
+    let expected_stdout = format!(
+        "tail: warning: --retry ignored; --retry is useful only when following\n\
+        {}",
+        file_data
+    );
+    scene
+        .ucmd()
+        .args(&["--retry", "data"])
+        .stderr_to_stdout()
+        .run()
+        .stdout_only(expected_stdout)
+        .success();
+
+    let expected_stdout = format!(
+        "tail: warning: --retry only effective for the initial open\n\
+        {}",
+        file_data
+    );
+    let mut child = scene
+        .ucmd()
+        .args(&["--follow=descriptor", "--retry", "data"])
+        .stderr_to_stdout()
+        .run_no_wait();
+
+    child
+        .delay(500)
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stdout_only(expected_stdout);
+
+    let expected_stdout = format!(
+        "tail: warning: PID ignored; --pid=PID is useful only when following\n\
+        {}",
+        file_data
+    );
+    scene
+        .ucmd()
+        .args(&["--pid=1000", "data"])
+        .stderr_to_stdout()
+        .run()
+        .stdout_only(expected_stdout)
+        .success();
+
+    let expected_stdout = format!(
+        "tail: warning: --retry ignored; --retry is useful only when following\n\
+        tail: warning: PID ignored; --pid=PID is useful only when following\n\
+        {}",
+        file_data
+    );
+    scene
+        .ucmd()
+        .args(&["--pid=1000", "--retry", "data"])
+        .stderr_to_stdout()
+        .run()
+        .stdout_only(expected_stdout)
+        .success();
+}
+
+/// TODO: Write similar tests for windows
+#[test]
+#[cfg(target_os = "linux")]
+fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
+    let scene = TestScenario::new(util_name!());
+
+    let file_data = "file data\n";
+    scene.fixtures.write("data", file_data);
+
+    let expected_stdout = "==> standard input <==\n";
+    let expected_stderr = "tail: warning: following standard input indefinitely is ineffective\n";
+
+    // `tail -f - data` (without any redirect) would also print this warning in a terminal but we're
+    // not attached to a `tty` in the ci, so it's not possible to setup a test case for this
+    // particular usage. However, setting stdin to a `tty` behaves equivalently and we're faking an
+    // attached `tty` that way.
+
+    // testing here that the warning is printed to stderr
+    // tail -f - data < /dev/ptmx
+    let mut child = scene
+        .ucmd()
+        .args(&["--follow=descriptor", "-", "data"])
+        .set_stdin(File::open(text::DEV_PTMX).unwrap())
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stderr_is(expected_stderr)
+        .stdout_is(expected_stdout);
+
+    let expected_stdout = "tail: warning: following standard input indefinitely is ineffective\n\
+                                 ==> standard input <==\n";
+    // same like above but this time the order of the output matters and we're redirecting stderr to
+    // stdout
+    // tail -f - data < /dev/ptmx
+    let mut child = scene
+        .ucmd()
+        .args(&["--follow=descriptor", "-", "data"])
+        .set_stdin(File::open(text::DEV_PTMX).unwrap())
+        .stderr_to_stdout()
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stdout_only(expected_stdout);
+
+    let expected_stdout = format!(
+        "tail: warning: following standard input indefinitely is ineffective\n\
+        ==> data <==\n\
+        {}\n\
+        ==> standard input <==\n",
+        file_data
+    );
+    // tail -f data - < /dev/ptmx
+    let mut child = scene
+        .ucmd()
+        .args(&["--follow=descriptor", "data", "-"])
+        .set_stdin(File::open(text::DEV_PTMX).unwrap())
+        .stderr_to_stdout()
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stdout_only(expected_stdout);
+
+    let expected_stdout = "tail: warning: following standard input indefinitely is ineffective\n\
+                                 ==> standard input <==\n";
+    // tail -f - - < /dev/ptmx
+    let mut child = scene
+        .ucmd()
+        .args(&["--follow=descriptor", "-", "-"])
+        .set_stdin(File::open(text::DEV_PTMX).unwrap())
+        .stderr_to_stdout()
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stdout_only(expected_stdout);
+
+    let expected_stdout = "tail: warning: following standard input indefinitely is ineffective\n\
+                                 ==> standard input <==\n";
+    // tail -f - - data < /dev/ptmx
+    let mut child = scene
+        .ucmd()
+        .args(&["--follow=descriptor", "-", "-", "data"])
+        .set_stdin(File::open(text::DEV_PTMX).unwrap())
+        .stderr_to_stdout()
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stdout_only(expected_stdout);
+
+    let expected_stdout = "tail: warning: following standard input indefinitely is ineffective\n\
+                                 ==> standard input <==\n";
+    // tail --pid=100000 -f - data < /dev/ptmx
+    let mut child = scene
+        .ucmd()
+        .args(&["--follow=descriptor", "--pid=100000", "-", "data"])
+        .set_stdin(File::open(text::DEV_PTMX).unwrap())
+        .stderr_to_stdout()
+        .run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stdout_only(expected_stdout);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    #[cfg(target_vendor = "apple")]
+    let delay = 1000;
+    #[cfg(not(target_vendor = "apple"))]
+    let delay = 500;
+
+    let file_data = "file data\n";
+    let fifo_data = "fifo data\n";
+    let fifo_name = "fifo";
+    let file_name = "data";
+    fixtures.write(file_name, file_data);
+    fixtures.write(fifo_name, fifo_data);
+
+    let pipe_data = "pipe data";
+    let expected_stdout = format!(
+        "==> standard input <==\n\
+        {}\n\
+        ==> {} <==\n\
+        {}",
+        pipe_data, file_name, file_data
+    );
+    let mut child = scene
+        .ucmd()
+        .args(&["--follow=descriptor", "-", file_name])
+        .pipe_in(pipe_data)
+        .stderr_to_stdout()
+        .run_no_wait();
+
+    child.make_assertion_with_delay(delay).is_alive();
+    child
+        .kill()
+        .make_assertion_with_delay(delay)
+        .with_current_output()
+        .stdout_only(expected_stdout);
+
+    // Test with regular file instead of /dev/tty
+    // Fails currently on macos with
+    // Diff < left / right > :
+    // <tail: cannot open 'standard input' for reading: No such file or directory
+    // >==> standard input <==
+    // >fifo data
+    // >
+    //  ==> data <==
+    //  file data
+    #[cfg(not(target_vendor = "apple"))]
+    {
+        let expected_stdout = format!(
+            "==> standard input <==\n\
+        {}\n\
+        ==> {} <==\n\
+        {}",
+            fifo_data, file_name, file_data
+        );
+        let mut child = scene
+            .ucmd()
+            .args(&["--follow=descriptor", "-", file_name])
+            .set_stdin(File::open(fixtures.plus(fifo_name)).unwrap())
+            .stderr_to_stdout()
+            .run_no_wait();
+
+        child.make_assertion_with_delay(delay).is_alive();
+        child
+            .kill()
+            .make_assertion_with_delay(delay)
+            .with_current_output()
+            .stdout_only(expected_stdout);
+
+        let expected_stdout = format!(
+            "==> standard input <==\n\
+        {}\n\
+        ==> {} <==\n\
+        {}",
+            fifo_data, file_name, file_data
+        );
+        let mut child = scene
+            .ucmd()
+            .args(&["--follow=descriptor", "--pid=0", "-", file_name])
+            .set_stdin(File::open(fixtures.plus(fifo_name)).unwrap())
+            .stderr_to_stdout()
+            .run_no_wait();
+
+        child.make_assertion_with_delay(delay).is_alive();
+        child
+            .kill()
+            .make_assertion_with_delay(delay)
+            .with_current_output()
+            .stdout_only(expected_stdout);
+    }
+}
+
+/// The expected test outputs come from gnu's tail.
+#[test]
+#[cfg(disable_until_fixed)]
+fn test_follow_when_files_are_pointing_to_same_relative_file_and_data_is_appended() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    let file_data = "file data";
+    let relative_path_name = "data";
+
+    fixtures.write(relative_path_name, file_data);
+    let absolute_path = fixtures.plus("data").canonicalize().unwrap();
+
+    // run with relative path first and then the absolute path
+    let mut child = scene
+        .ucmd()
+        .args(&[
+            "--follow=name",
+            relative_path_name,
+            absolute_path.to_str().unwrap(),
+        ])
+        .run_no_wait();
+
+    let more_data = "more data";
+    child.delay(500);
+
+    fixtures.append(relative_path_name, more_data);
+
+    let expected_stdout = format!(
+        "==> {0} <==\n\
+        {1}\n\
+        ==> {2} <==\n\
+        {1}\n\
+        ==> {0} <==\n\
+        {3}",
+        relative_path_name,
+        file_data,
+        absolute_path.to_str().unwrap(),
+        more_data
+    );
+
+    child
+        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stderr_only(expected_stdout);
+
+    // run with absolute path first and then the relative path
+    fixtures.write(relative_path_name, file_data);
+    let mut child = scene
+        .ucmd()
+        .args(&[
+            "--follow=name",
+            absolute_path.to_str().unwrap(),
+            relative_path_name,
+        ])
+        .run_no_wait();
+
+    child.delay(500);
+    let more_data = "more data";
+    fixtures.append(relative_path_name, more_data);
+
+    let expected_stdout = format!(
+        "==> {0} <==\n\
+        {1}\n\
+        ==> {2} <==\n\
+        {1}\n\
+        ==> {0} <==\n\
+        {3}",
+        absolute_path.to_str().unwrap(),
+        file_data,
+        relative_path_name,
+        more_data
+    );
+
+    child
+        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stdout_only(expected_stdout);
+}
+
+/// The expected test outputs come from gnu's tail.
+#[test]
+#[cfg(disable_until_fixed)]
+fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_is_truncated() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    let file_data = "file data";
+    let relative_path_name = "data";
+
+    fixtures.write(relative_path_name, file_data);
+    let absolute_path = fixtures.plus("data").canonicalize().unwrap();
+
+    let mut child = scene
+        .ucmd()
+        .args(&[
+            "--follow=descriptor",
+            "--max-unchanged-stats=1",
+            "--sleep-interval=0.1",
+            relative_path_name,
+            absolute_path.to_str().unwrap(),
+        ])
+        .stderr_to_stdout()
+        .run_no_wait();
+
+    child.delay(500);
+    let less_data = "less";
+    fixtures.write(relative_path_name, "less");
+
+    let expected_stdout = format!(
+        "==> {0} <==\n\
+        {1}\n\
+        ==> {2} <==\n\
+        {1}{4}: {0}: file truncated\n\
+        \n\
+        ==> {0} <==\n\
+        {3}",
+        relative_path_name,              // 0
+        file_data,                       // 1
+        absolute_path.to_str().unwrap(), // 2
+        less_data,                       // 3
+        scene.util_name                  // 4
+    );
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stdout_only(expected_stdout);
+}
+
+/// The expected test outputs come from gnu's tail.
+#[test]
+#[cfg(unix)]
+#[cfg(disable_until_fixed)]
+fn test_follow_when_file_and_symlink_are_pointing_to_same_file_and_append_data() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    let file_data = "file data";
+    let path_name = "data";
+    let link_name = "link";
+
+    fixtures.write(path_name, file_data);
+    fixtures.symlink_file(path_name, link_name);
+
+    let mut child = scene
+        .ucmd()
+        .args(&[
+            "--follow=descriptor",
+            "--max-unchanged-stats=1",
+            "--sleep-interval=0.1",
+            path_name,
+            link_name,
+        ])
+        .run_no_wait();
+
+    child.delay(500);
+    let more_data = "more data";
+    fixtures.append(path_name, more_data);
+
+    let expected_stdout = format!(
+        "==> {0} <==\n\
+        {1}\n\
+        ==> {2} <==\n\
+        {1}\n\
+        ==> {0} <==\n\
+        {3}\n\
+        ==> {2} <==\n\
+        {3}",
+        path_name, // 0
+        file_data, // 1
+        link_name, // 2
+        more_data, // 3
+    );
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stdout_only(expected_stdout);
+
+    fixtures.write(path_name, file_data);
+    let mut child = scene
+        .ucmd()
+        .args(&[
+            "--follow=descriptor",
+            "--max-unchanged-stats=1",
+            "--sleep-interval=0.1",
+            link_name,
+            path_name,
+        ])
+        .run_no_wait();
+
+    child.delay(500);
+    let more_data = "more data";
+    fixtures.append(path_name, more_data);
+
+    let expected_stdout = format!(
+        "==> {0} <==\n\
+        {1}\n\
+        ==> {2} <==\n\
+        {1}\n\
+        ==> {0} <==\n\
+        {3}\n\
+        ==> {2} <==\n\
+        {3}",
+        link_name, // 0
+        file_data, // 1
+        path_name, // 2
+        more_data, // 3
+    );
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stdout_only(expected_stdout);
+}
+
+// Fails with:
+// 'Assertion failed. Expected 'tail' to be running but exited with status=exit status: 1.
+// stdout:
+// stderr: tail: warning: --retry ignored; --retry is useful only when following
+// tail: error reading 'dir': Is a directory
+// '
+#[test]
+#[cfg(disabled_until_fixed)]
+fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    let dirname = "dir";
+    fixtures.mkdir(dirname);
+    let expected_stderr = format!(
+        "tail: error reading '{0}': Is a directory\n\
+         tail: {0}: cannot follow end of this type of file\n",
+        dirname
+    );
+
+    let mut child = scene.ucmd().args(&["-F", "--retry", "dir"]).run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stderr_only(expected_stderr);
+}
+
+/// Fails on macos sometimes with
+/// Diff < left / right > :
+/// ==> data <==
+/// file data
+/// ==> /absolute/path/to/data <==
+/// <file datasame data
+/// >file data
+///
+/// Fails on windows with
+/// Diff < left / right > :
+//  ==> data <==
+//  file data
+//  ==> \\?\C:\Users\runneradmin\AppData\Local\Temp\.tmpi6lNnX\data <==
+// >file data
+// <
+//
+// Fails on freebsd with
+// Diff < left / right > :
+//  ==> data <==
+//  file data
+//  ==> /tmp/.tmpZPXPlS/data <==
+// >file data
+// <
+#[test]
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))]
+fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_stays_same_size() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    let file_data = "file data";
+    let relative_path_name = "data";
+
+    fixtures.write(relative_path_name, file_data);
+    let absolute_path = scene.fixtures.plus("data").canonicalize().unwrap();
+
+    let mut child = scene
+        .ucmd()
+        .args(&[
+            "--follow=descriptor",
+            "--max-unchanged-stats=1",
+            "--sleep-interval=0.1",
+            relative_path_name,
+            absolute_path.to_str().unwrap(),
+        ])
+        .run_no_wait();
+
+    child.delay(500);
+    let same_data = "same data"; // equal size to file_data
+    fixtures.write(relative_path_name, same_data);
+
+    let expected_stdout = format!(
+        "==> {0} <==\n\
+        {1}\n\
+        ==> {2} <==\n\
+        {1}",
+        relative_path_name,              // 0
+        file_data,                       // 1
+        absolute_path.to_str().unwrap(), // 2
+    );
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stdout_only(expected_stdout);
+}
+
+#[test]
+#[cfg(disable_until_fixed)]
+fn test_args_sleep_interval_when_illegal_argument_then_usage_error() {
+    let scene = TestScenario::new(util_name!());
+    for interval in [
+        &format!("{}0", f64::MAX),
+        &format!("{}0.0", f64::MAX),
+        "1_000",
+        ".",
+        "' '",
+        "",
+        " ",
+        "0,0",
+        "one.zero",
+        ".zero",
+        "one.",
+        "0..0",
+    ] {
+        scene
+            .ucmd()
+            .args(&["--sleep-interval", interval])
+            .run()
+            .usage_error(format!("invalid number of seconds: '{}'", interval))
+            .code_is(1);
+    }
 }

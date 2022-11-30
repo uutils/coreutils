@@ -21,3 +21,4 @@ pub static BACKEND: &str = "ReadDirectoryChanges";
 pub static FD0: &str = "/dev/fd/0";
 pub static IS_A_DIRECTORY: &str = "Is a directory";
 pub static DEV_TTY: &str = "/dev/tty";
+pub static DEV_PTMX: &str = "/dev/ptmx";
