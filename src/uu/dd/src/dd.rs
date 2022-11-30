@@ -324,6 +324,17 @@ impl Dest {
             Self::File(f, _) => f.seek(io::SeekFrom::Start(n)),
         }
     }
+
+    /// Truncate the underlying file to the current stream position, if possible.
+    fn truncate(&mut self) -> io::Result<()> {
+        match self {
+            Self::Stdout(_) => Ok(()),
+            Self::File(f, _) => {
+                let pos = f.stream_position()?;
+                f.set_len(pos)
+            }
+        }
+    }
 }
 
 /// Decide whether the given buffer is all zeros.
@@ -406,7 +417,6 @@ impl<'a> Output<'a> {
         // suppress the error by calling `Result::ok()`. This matches
         // the behavior of GNU `dd` when given the command-line
         // argument `of=/dev/null`.
-
         if !settings.oconv.notrunc {
             dst.set_len(settings.seek).ok();
         }
@@ -569,6 +579,18 @@ impl<'a> Output<'a> {
     ) -> std::io::Result<()> {
         // Flush the output, if configured to do so.
         self.sync()?;
+
+        // Truncate the file to the final cursor location.
+        //
+        // Calling `set_len()` may result in an error (for example,
+        // when calling it on `/dev/null`), but we don't want to
+        // terminate the process when that happens. Instead, we
+        // suppress the error by calling `Result::ok()`. This matches
+        // the behavior of GNU `dd` when given the command-line
+        // argument `of=/dev/null`.
+        if !self.settings.oconv.notrunc {
+            self.dst.truncate().ok();
+        }
 
         // Print the final read/write statistics.
         let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), true);
