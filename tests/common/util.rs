@@ -84,24 +84,92 @@ pub struct CmdResult {
 }
 
 impl CmdResult {
-    pub fn new(
+    pub fn new<T, U>(
         bin_path: String,
         util_name: Option<String>,
         tmpd: Option<Rc<TempDir>>,
         code: Option<i32>,
         success: bool,
-        stdout: &[u8],
-        stderr: &[u8],
-    ) -> Self {
+        stdout: T,
+        stderr: U,
+    ) -> Self
+    where
+        T: Into<Vec<u8>>,
+        U: Into<Vec<u8>>,
+    {
         Self {
             bin_path,
             util_name,
             tmpd,
             code,
             success,
-            stdout: stdout.to_vec(),
-            stderr: stderr.to_vec(),
+            stdout: stdout.into(),
+            stderr: stderr.into(),
         }
+    }
+
+    pub fn stdout_apply<'a, F, R>(&'a self, function: F) -> Self
+    where
+        F: Fn(&'a [u8]) -> R,
+        R: Into<Vec<u8>>,
+    {
+        Self::new(
+            self.bin_path.clone(),
+            self.util_name.clone(),
+            self.tmpd.clone(),
+            self.code,
+            self.success,
+            function(&self.stdout),
+            self.stderr.as_slice(),
+        )
+    }
+
+    pub fn stdout_str_apply<'a, F, R>(&'a self, function: F) -> Self
+    where
+        F: Fn(&'a str) -> R,
+        R: Into<Vec<u8>>,
+    {
+        Self::new(
+            self.bin_path.clone(),
+            self.util_name.clone(),
+            self.tmpd.clone(),
+            self.code,
+            self.success,
+            function(self.stdout_str()),
+            self.stderr.as_slice(),
+        )
+    }
+
+    pub fn stderr_apply<'a, F, R>(&'a self, function: F) -> Self
+    where
+        F: Fn(&'a [u8]) -> R,
+        R: Into<Vec<u8>>,
+    {
+        Self::new(
+            self.bin_path.clone(),
+            self.util_name.clone(),
+            self.tmpd.clone(),
+            self.code,
+            self.success,
+            self.stdout.as_slice(),
+            function(&self.stderr),
+        )
+    }
+
+    pub fn stderr_str_apply<'a, F, R>(&'a self, function: F) -> Self
+    where
+        F: Fn(&'a str) -> R,
+        R: Into<Vec<u8>>,
+    {
+        Self::new(
+            self.bin_path.clone(),
+            self.util_name.clone(),
+            self.tmpd.clone(),
+            self.code,
+            self.success,
+            self.stdout.as_slice(),
+            function(self.stderr_str()),
+        )
     }
 
     /// Returns a reference to the program's standard output as a slice of bytes
