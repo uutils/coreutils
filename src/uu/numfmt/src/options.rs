@@ -74,7 +74,7 @@ impl RoundMethod {
 }
 
 // Represents the options extracted from the --format argument provided by the user.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct FormatOptions {
     pub grouping: bool,
     pub padding: Option<isize>,
@@ -82,19 +82,6 @@ pub struct FormatOptions {
     pub prefix: String,
     pub suffix: String,
     pub zero_padding: bool,
-}
-
-impl Default for FormatOptions {
-    fn default() -> Self {
-        Self {
-            grouping: false,
-            padding: None,
-            precision: None,
-            prefix: String::new(),
-            suffix: String::new(),
-            zero_padding: false,
-        }
-    }
 }
 
 impl FromStr for FormatOptions {
