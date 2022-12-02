@@ -24,7 +24,7 @@ pub mod options;
 mod units;
 
 const ABOUT: &str = help_section!("about", "numfmt.md");
-const LONG_HELP: &str = help_section!("long help", "numfmt.md");
+const AFTER_HELP: &str = help_section!("after help", "numfmt.md");
 const USAGE: &str = help_usage!("numfmt.md");
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions) -> UResult<()> {
@@ -262,7 +262,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .after_help(LONG_HELP)
+        .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
         .allow_negative_numbers(true)
         .infer_long_args(true)
