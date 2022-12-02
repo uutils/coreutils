@@ -293,7 +293,7 @@ impl Params {
         // For example, if `prefix` is "a/b/c/d", then `directory` is
         // "a/b/c" is `prefix` gets reassigned to "d".
         let (directory, prefix) = if prefix.ends_with(MAIN_SEPARATOR) {
-            (prefix, "".to_string())
+            (prefix, String::new())
         } else {
             let path = Path::new(&prefix);
             let directory = match path.parent() {

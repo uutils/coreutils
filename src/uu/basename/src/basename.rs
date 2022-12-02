@@ -172,6 +172,6 @@ fn basename(fullname: &str, suffix: &str) -> String {
             }
         }
 
-        None => "".to_owned(),
+        None => String::new(),
     }
 }

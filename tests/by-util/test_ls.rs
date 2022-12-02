@@ -1174,7 +1174,7 @@ fn test_ls_long_symlink_color() {
                 captures.get(1).unwrap().as_str().to_string(),
                 captures.get(2).unwrap().as_str().to_string(),
             ),
-            None => ("".to_string(), input.to_string()),
+            None => (String::new(), input.to_string()),
         }
     }
 

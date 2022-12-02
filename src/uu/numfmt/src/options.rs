@@ -74,7 +74,7 @@ impl RoundMethod {
 }
 
 // Represents the options extracted from the --format argument provided by the user.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct FormatOptions {
     pub grouping: bool,
     pub padding: Option<isize>,
@@ -82,19 +82,6 @@ pub struct FormatOptions {
     pub prefix: String,
     pub suffix: String,
     pub zero_padding: bool,
-}
-
-impl Default for FormatOptions {
-    fn default() -> Self {
-        Self {
-            grouping: false,
-            padding: None,
-            precision: None,
-            prefix: String::from(""),
-            suffix: String::from(""),
-            zero_padding: false,
-        }
-    }
 }
 
 impl FromStr for FormatOptions {
@@ -112,8 +99,8 @@ impl FromStr for FormatOptions {
         let mut iter = s.chars().peekable();
         let mut options = Self::default();
 
-        let mut padding = String::from("");
-        let mut precision = String::from("");
+        let mut padding = String::new();
+        let mut precision = String::new();
         let mut double_percentage_counter = 0;
 
         // '%' chars in the prefix, if any, must appear in blocks of even length, for example: "%%%%" and

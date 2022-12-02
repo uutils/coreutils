@@ -169,7 +169,7 @@ impl MountInfo {
                 // Why do we cast this to i32?
                 self.dev_id = (stat.dev() as i32).to_string();
             } else {
-                self.dev_id = "".to_string();
+                self.dev_id = String::new();
             }
         }
         // set MountInfo::dummy
@@ -219,7 +219,7 @@ impl MountInfo {
                     + FIELDS_OFFSET
                     + 1;
                 let mut m = Self {
-                    dev_id: "".to_string(),
+                    dev_id: String::new(),
                     dev_name: raw[after_fields + 1].to_string(),
                     fs_type: raw[after_fields].to_string(),
                     mount_root: raw[3].to_string(),
@@ -233,10 +233,10 @@ impl MountInfo {
             }
             LINUX_MTAB => {
                 let mut m = Self {
-                    dev_id: "".to_string(),
+                    dev_id: String::new(),
                     dev_name: raw[0].to_string(),
                     fs_type: raw[2].to_string(),
-                    mount_root: "".to_string(),
+                    mount_root: String::new(),
                     mount_dir: raw[1].to_string(),
                     mount_option: raw[3].to_string(),
                     remote: false,
@@ -305,8 +305,8 @@ impl MountInfo {
             dev_name,
             fs_type: fs_type.unwrap_or_default(),
             mount_root,
-            mount_dir: "".to_string(),
-            mount_option: "".to_string(),
+            mount_dir: String::new(),
+            mount_option: String::new(),
             remote: false,
             dummy: false,
         };
@@ -324,7 +324,7 @@ impl MountInfo {
 impl From<StatFs> for MountInfo {
     fn from(statfs: StatFs) -> Self {
         let mut info = Self {
-            dev_id: "".to_string(),
+            dev_id: String::new(),
             dev_name: unsafe {
                 // spell-checker:disable-next-line
                 CStr::from_ptr(&statfs.f_mntfromname[0])
@@ -343,8 +343,8 @@ impl From<StatFs> for MountInfo {
                     .to_string_lossy()
                     .into_owned()
             },
-            mount_root: "".to_string(),
-            mount_option: "".to_string(),
+            mount_root: String::new(),
+            mount_option: String::new(),
             remote: false,
             dummy: false,
         };

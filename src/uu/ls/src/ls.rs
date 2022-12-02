@@ -2400,7 +2400,7 @@ fn display_item_long(
             }
         };
 
-        let dfn = display_file_name(item, config, None, "".to_owned(), out).contents;
+        let dfn = display_file_name(item, config, None, String::new(), out).contents;
 
         write!(out, " {} {}{}", display_date(md, config), dfn, config.eol)?;
     } else {
@@ -2473,7 +2473,7 @@ fn display_item_long(
             write!(out, " {}", pad_right("?", padding.uname))?;
         }
 
-        let dfn = display_file_name(item, config, None, "".to_owned(), out).contents;
+        let dfn = display_file_name(item, config, None, String::new(), out).contents;
         let date_len = 12;
 
         writeln!(

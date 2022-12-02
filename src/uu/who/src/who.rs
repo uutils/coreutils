@@ -322,7 +322,7 @@ fn current_tty() -> String {
                 .trim_start_matches("/dev/")
                 .to_owned()
         } else {
-            "".to_owned()
+            String::new()
         }
     }
 }
@@ -358,7 +358,7 @@ impl Who {
             let cur_tty = if self.my_line_only {
                 current_tty()
             } else {
-                "".to_owned()
+                String::new()
             };
 
             for ut in records {

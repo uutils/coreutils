@@ -2485,8 +2485,8 @@ fn test_follow_inotify_only_regular() {
     p.kill().unwrap();
 
     let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
-    assert_eq!(buf_stdout, "".to_string());
-    assert_eq!(buf_stderr, "".to_string());
+    assert_eq!(buf_stdout, String::new());
+    assert_eq!(buf_stderr, String::new());
 }
 
 fn take_stdout_stderr(p: &mut std::process::Child) -> (String, String) {

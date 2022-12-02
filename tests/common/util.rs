@@ -747,7 +747,7 @@ impl AtPath {
         log_info("resolve_link", self.plus_as_string(path));
         match fs::read_link(self.plus(path)) {
             Ok(p) => self.minus_as_string(p.to_str().unwrap()),
-            Err(_) => "".to_string(),
+            Err(_) => String::new(),
         }
     }
 
@@ -1483,7 +1483,7 @@ mod tests {
     #[test]
     fn test_code_is() {
         let res = CmdResult {
-            bin_path: "".into(),
+            bin_path: String::new(),
             util_name: None,
             tmpd: None,
             code: Some(32),
@@ -1498,7 +1498,7 @@ mod tests {
     #[should_panic]
     fn test_code_is_fail() {
         let res = CmdResult {
-            bin_path: "".into(),
+            bin_path: String::new(),
             util_name: None,
             tmpd: None,
             code: Some(32),
@@ -1512,7 +1512,7 @@ mod tests {
     #[test]
     fn test_failure() {
         let res = CmdResult {
-            bin_path: "".into(),
+            bin_path: String::new(),
             util_name: None,
             tmpd: None,
             code: None,
@@ -1527,7 +1527,7 @@ mod tests {
     #[should_panic]
     fn test_failure_fail() {
         let res = CmdResult {
-            bin_path: "".into(),
+            bin_path: String::new(),
             util_name: None,
             tmpd: None,
             code: None,
@@ -1541,7 +1541,7 @@ mod tests {
     #[test]
     fn test_success() {
         let res = CmdResult {
-            bin_path: "".into(),
+            bin_path: String::new(),
             util_name: None,
             tmpd: None,
             code: None,
@@ -1556,7 +1556,7 @@ mod tests {
     #[should_panic]
     fn test_success_fail() {
         let res = CmdResult {
-            bin_path: "".into(),
+            bin_path: String::new(),
             util_name: None,
             tmpd: None,
             code: None,
@@ -1570,7 +1570,7 @@ mod tests {
     #[test]
     fn test_no_stderr_output() {
         let res = CmdResult {
-            bin_path: "".into(),
+            bin_path: String::new(),
             util_name: None,
             tmpd: None,
             code: None,
@@ -1586,7 +1586,7 @@ mod tests {
     #[should_panic]
     fn test_no_stderr_fail() {
         let res = CmdResult {
-            bin_path: "".into(),
+            bin_path: String::new(),
             util_name: None,
             tmpd: None,
             code: None,
@@ -1602,7 +1602,7 @@ mod tests {
     #[should_panic]
     fn test_no_stdout_fail() {
         let res = CmdResult {
-            bin_path: "".into(),
+            bin_path: String::new(),
             util_name: None,
             tmpd: None,
             code: None,
@@ -1617,7 +1617,7 @@ mod tests {
     #[test]
     fn test_std_does_not_contain() {
         let res = CmdResult {
-            bin_path: "".into(),
+            bin_path: String::new(),
             util_name: None,
             tmpd: None,
             code: None,
@@ -1633,7 +1633,7 @@ mod tests {
     #[should_panic]
     fn test_stdout_does_not_contain_fail() {
         let res = CmdResult {
-            bin_path: "".into(),
+            bin_path: String::new(),
             util_name: None,
             tmpd: None,
             code: None,
@@ -1649,7 +1649,7 @@ mod tests {
     #[should_panic]
     fn test_stderr_does_not_contain_fail() {
         let res = CmdResult {
-            bin_path: "".into(),
+            bin_path: String::new(),
             util_name: None,
             tmpd: None,
             code: None,
@@ -1664,7 +1664,7 @@ mod tests {
     #[test]
     fn test_stdout_matches() {
         let res = CmdResult {
-            bin_path: "".into(),
+            bin_path: String::new(),
             util_name: None,
             tmpd: None,
             code: None,
@@ -1682,7 +1682,7 @@ mod tests {
     #[should_panic]
     fn test_stdout_matches_fail() {
         let res = CmdResult {
-            bin_path: "".into(),
+            bin_path: String::new(),
             util_name: None,
             tmpd: None,
             code: None,
@@ -1699,7 +1699,7 @@ mod tests {
     #[should_panic]
     fn test_stdout_not_matches_fail() {
         let res = CmdResult {
-            bin_path: "".into(),
+            bin_path: String::new(),
             util_name: None,
             tmpd: None,
             code: None,
@@ -1715,7 +1715,7 @@ mod tests {
     #[test]
     fn test_normalized_newlines_stdout_is() {
         let res = CmdResult {
-            bin_path: "".into(),
+            bin_path: String::new(),
             util_name: None,
             tmpd: None,
             code: None,
@@ -1733,7 +1733,7 @@ mod tests {
     #[should_panic]
     fn test_normalized_newlines_stdout_is_fail() {
         let res = CmdResult {
-            bin_path: "".into(),
+            bin_path: String::new(),
             util_name: None,
             tmpd: None,
             code: None,
