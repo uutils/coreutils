@@ -52,7 +52,7 @@ fn test_parallel() {
         .open(tmp_dir.plus("output"))
         .unwrap();
 
-    for mut child in (0..10)
+    for child in (0..10)
         .map(|_| {
             new_ucmd!()
                 .set_stdout(output.try_clone().unwrap())
@@ -61,7 +61,7 @@ fn test_parallel() {
         })
         .collect::<Vec<_>>()
     {
-        assert_eq!(child.wait().unwrap().code().unwrap(), 0);
+        child.wait().unwrap().success();
     }
 
     let result = TestScenario::new(util_name!())

@@ -1036,11 +1036,12 @@ fn test_random_73k_test_lazy_fullblock() {
             sleep(Duration::from_millis(10));
         }
     }
-    let output = child.wait_with_output().unwrap();
-    assert!(output.status.success());
-
-    assert_eq!(&output.stdout, &data);
-    assert_eq!(&output.stderr, b"142+1 records in\n72+1 records out\n");
+    child
+        .wait()
+        .unwrap()
+        .success()
+        .stdout_is_bytes(&data)
+        .stderr_is("142+1 records in\n72+1 records out\n");
 }
 
 #[test]
@@ -1381,9 +1382,6 @@ fn test_sync_delayed_reader() {
             sleep(Duration::from_millis(10));
         }
     }
-    let output = child.wait_with_output().unwrap();
-    assert!(output.status.success());
-
     // Expected output is 0xFFFFFFFF00000000FFFFFFFF00000000...
     let mut expected: [u8; 8 * 16] = [0; 8 * 16];
     for i in 0..8 {
@@ -1391,8 +1389,13 @@ fn test_sync_delayed_reader() {
             expected[16 * i + j] = 0xF;
         }
     }
-    assert_eq!(&output.stdout, &expected);
-    assert_eq!(&output.stderr, b"0+8 records in\n4+0 records out\n");
+
+    child
+        .wait()
+        .unwrap()
+        .success()
+        .stdout_is_bytes(expected)
+        .stderr_is("0+8 records in\n4+0 records out\n");
 }
 
 /// Test for making a sparse copy of the input file.

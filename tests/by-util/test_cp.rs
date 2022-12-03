@@ -2330,10 +2330,7 @@ fn test_copy_contents_fifo() {
     // At this point the child process should have terminated
     // successfully with no output. The `outfile` should have the
     // contents of `fifo` copied into it.
-    let output = child.wait_with_output().unwrap();
-    assert!(output.status.success());
-    assert!(output.stdout.is_empty());
-    assert!(output.stderr.is_empty());
+    child.wait().unwrap().no_stdout().no_stderr().success();
     assert_eq!(at.read("outfile"), "foo");
 }
 
