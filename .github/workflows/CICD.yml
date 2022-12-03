@@ -782,6 +782,8 @@ jobs:
         echo "bindir = $bindir"
         cd tmp/busybox-*/testsuite
         pwd
+        ls -al
+        ls -al runtest
         bindir=$bindir ./runtest
         output=$(bindir=$bindir ./runtest 2>&1 || true)
         echo "output = $output"
