@@ -772,13 +772,14 @@ jobs:
     - name: "Run BusyBox test suite"
       shell: bash
       run: |
+        set -v
         ls -al .busybox-config
         ls -al target/debug/
         cp -v .busybox-config target/debug/.config
         ## Run BusyBox test suite
         bindir=$(pwd)/target/debug
         cd tmp/busybox-*/testsuite
-        output=$(bindir=$bindir ./runtest 2>&1 || true)
+        output=$(bindir=$bindir ./runtest 2>&1 |é| true)
         printf "%s\n" "${output}"
         n_fails=$(echo "$output" | grep "^FAIL:\s" | wc --lines)
         if [ $n_fails -gt 0 ] ; then echo "::warning ::${n_fails}+ test failures" ; fi
