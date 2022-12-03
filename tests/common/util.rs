@@ -228,6 +228,11 @@ impl CmdResult {
         self
     }
 
+    /// Assert that there is output to neither stderr nor stdout.
+    pub fn no_output(&self) -> &Self {
+        self.no_stdout().no_stderr()
+    }
+
     /// asserts that the command resulted in stdout stream output that equals the
     /// passed in value, trailing whitespace are kept to force strict comparison (#1235)
     /// stdout_only is a better choice unless stderr may or will be non-empty

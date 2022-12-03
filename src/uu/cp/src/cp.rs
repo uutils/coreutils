@@ -918,6 +918,23 @@ fn preserve_hardlinks(
 
             for hard_link in hard_links.iter() {
                 if hard_link.1 == inode {
+                    // Consider the following files:
+                    //
+                    // * `src/f` - a regular file
+                    // * `src/link` - a hard link to `src/f`
+                    // * `dest/src/f` - a different regular file
+                    //
+                    // In this scenario, if we do `cp -a src/ dest/`, it is
+                    // possible that the order of traversal causes `src/link`
+                    // to get copied first (to `dest/src/link`). In that case,
+                    // in order to make sure `dest/src/link` is a hard link to
+                    // `dest/src/f` and `dest/src/f` has the contents of
+                    // `src/f`, we delete the existing file to allow the hard
+                    // linking.
+                    if file_or_link_exists(dest) && file_or_link_exists(Path::new(&hard_link.0)) {
+                        std::fs::remove_file(dest)?;
+                    }
+
                     std::fs::hard_link(hard_link.0.clone(), dest).unwrap();
                     *found_hard_link = true;
                 }
