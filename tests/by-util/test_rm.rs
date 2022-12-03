@@ -1,3 +1,5 @@
+use std::process::Stdio;
+
 use crate::common::util::*;
 
 #[test]
@@ -373,7 +375,12 @@ fn test_rm_descend_directory() {
     at.touch(file_1);
     at.touch(file_2);
 
-    let mut child = scene.ucmd().arg("-ri").arg("a").run_no_wait();
+    let mut child = scene
+        .ucmd()
+        .set_stdin(Stdio::piped())
+        .arg("-ri")
+        .arg("a")
+        .run_no_wait();
     child.try_write_in(yes.as_bytes()).unwrap();
     child.try_write_in(yes.as_bytes()).unwrap();
     child.try_write_in(yes.as_bytes()).unwrap();
@@ -445,7 +452,12 @@ fn test_rm_prompts() {
         .arg(file_2)
         .succeeds();
 
-    let mut child = scene.ucmd().arg("-ri").arg("a").run_no_wait();
+    let mut child = scene
+        .ucmd()
+        .set_stdin(Stdio::piped())
+        .arg("-ri")
+        .arg("a")
+        .run_no_wait();
     for _ in 0..9 {
         child.try_write_in(yes.as_bytes()).unwrap();
     }
@@ -486,7 +498,12 @@ fn test_rm_force_prompts_order() {
     at.touch(empty_file);
 
     // This should cause rm to prompt to remove regular empty file
-    let mut child = scene.ucmd().arg("-fi").arg(empty_file).run_no_wait();
+    let mut child = scene
+        .ucmd()
+        .set_stdin(Stdio::piped())
+        .arg("-fi")
+        .arg(empty_file)
+        .run_no_wait();
     child.try_write_in(yes.as_bytes()).unwrap();
 
     let result = child.wait().unwrap();

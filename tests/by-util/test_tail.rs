@@ -351,7 +351,11 @@ fn test_follow_stdin_descriptor() {
 
     let mut args = vec!["-f", "-"];
     for _ in 0..2 {
-        let mut p = ts.ucmd().args(&args).run_no_wait();
+        let mut p = ts
+            .ucmd()
+            .set_stdin(Stdio::piped())
+            .args(&args)
+            .run_no_wait();
         p.make_assertion_with_delay(500).is_alive();
         p.kill()
             .make_assertion()
