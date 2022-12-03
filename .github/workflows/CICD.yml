@@ -782,6 +782,7 @@ jobs:
         echo "bindir = $bindir"
         cd tmp/busybox-*/testsuite
         pwd
+        bindir=$bindir ./runtest
         output=$(bindir=$bindir ./runtest 2>&1 || true)
         echo "output = $output"
         printf "%s\n" "${output}"
