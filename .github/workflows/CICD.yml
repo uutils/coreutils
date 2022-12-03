@@ -772,6 +772,8 @@ jobs:
     - name: "Run BusyBox test suite"
       shell: bash
       run: |
+        ls -al .busybox-config
+        ls -al target/debug/
         cp .busybox-config target/debug/.config
         ## Run BusyBox test suite
         bindir=$(pwd)/target/debug
