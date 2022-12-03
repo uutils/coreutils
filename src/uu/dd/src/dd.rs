@@ -21,6 +21,8 @@ use progress::{gen_prog_updater, ProgUpdate, ReadStat, StatusLevel, WriteStat};
 mod blocks;
 use blocks::conv_block_unblock_helper;
 
+mod numbers;
+
 use std::cmp;
 use std::env;
 use std::ffi::OsString;
