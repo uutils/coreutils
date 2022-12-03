@@ -245,6 +245,8 @@ impl Settings {
         self.inputs.len()
     }
 
+    /// Check [`Settings`] for problematic configurations of tail originating from user provided
+    /// command line arguments and print appropriate warnings.
     pub fn check_warnings(&self) {
         if self.retry {
             if self.follow.is_none() {
@@ -262,6 +264,10 @@ impl Settings {
             }
         }
 
+        // This warning originates from gnu's tail implementation of the equivalent warning. If the
+        // user wants to follow stdin, but tail is blocking indefinitely anyways, because of stdin
+        // as `tty` (but no otherwise blocking stdin), then we print a warning that `--follow`
+        // cannot be applied under these circumstances and is therefore ineffective.
         if self.follow.is_some() && self.has_stdin() {
             let blocking_stdin = self.pid == 0
                 && self.follow == Some(FollowMode::Descriptor)
@@ -279,6 +285,10 @@ impl Settings {
         }
     }
 
+    /// Verify [`Settings`] and try to find unsolvable misconfigurations of tail originating from
+    /// user provided command line arguments. In contrast to [`Settings::check_warnings`] these
+    /// misconfigurations usually lead to the immediate exit or abortion of the running `tail`
+    /// process.
     pub fn verify(&self) -> VerificationResult {
         // Mimic GNU's tail for `tail -F`
         if self.inputs.iter().any(|i| i.is_stdin()) && self.follow == Some(FollowMode::Name) {
