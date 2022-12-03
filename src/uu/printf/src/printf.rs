@@ -4,7 +4,8 @@
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::error::{UResult, UUsageError};
-use uucore::{format_usage, memo};
+use uucore::format_usage;
+use uucore::memo::printf;
 
 const VERSION: &str = "version";
 const HELP: &str = "help";
@@ -281,7 +282,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec![],
     };
 
-    memo::Memo::run_all(format_string, &values[..])?;
+    printf(format_string, &values[..])?;
     Ok(())
 }
 
