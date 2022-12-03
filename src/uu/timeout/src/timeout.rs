@@ -11,6 +11,7 @@ mod status;
 use crate::status::ExitStatus;
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::io::ErrorKind;
+use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
 use std::time::Duration;
 use uucore::display::Quotable;
