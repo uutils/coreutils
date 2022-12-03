@@ -777,11 +777,16 @@ jobs:
         ls -al target/debug/
         cp -v .busybox-config target/debug/.config
         ## Run BusyBox test suite
+        echo "1"
         bindir=$(pwd)/target/debug
+        echo "bindir = $bindir"
         cd tmp/busybox-*/testsuite
+        pwd
         output=$(bindir=$bindir ./runtest 2>&1 || true)
+        echo "output = $output"
         printf "%s\n" "${output}"
         n_fails=$(echo "$output" | grep "^FAIL:\s" | wc --lines)
+        echo "n_fails $n_fails"
         if [ $n_fails -gt 0 ] ; then echo "::warning ::${n_fails}+ test failures" ; fi
 
   test_android:
