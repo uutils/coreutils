@@ -2363,3 +2363,32 @@ fn test_reflink_never_sparse_always() {
     assert_eq!(src_metadata.blocks(), dest_metadata.blocks());
     assert_eq!(dest_metadata.len(), 1024 * 1024);
 }
+
+/// Test for preserving attributes of a hard link in a directory.
+#[test]
+fn test_preserve_hardlink_attributes_in_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // The source directory tree.
+    at.mkdir("src");
+    at.touch("src/f");
+    at.hard_link("src/f", "src/link");
+
+    // The destination directory tree.
+    //
+    // The file `f` already exists, but the `link` does not.
+    at.mkdir_all("dest/src");
+    at.touch("dest/src/f");
+
+    ucmd.args(&["-a", "src", "dest"]).succeeds().no_output();
+
+    // The hard link should now appear in the destination directory tree.
+    //
+    // A hard link should have the same inode as the target file.
+    at.file_exists("dest/src/link");
+    #[cfg(unix)]
+    assert_eq!(
+        at.metadata("dest/src/f").ino(),
+        at.metadata("dest/src/link").ino()
+    );
+}
