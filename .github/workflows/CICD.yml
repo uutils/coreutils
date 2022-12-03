@@ -784,7 +784,7 @@ jobs:
         pwd
         ls -al
         ls -al runtest
-        bindir=$bindir ./runtest
+        bindir=$bindir sh -v ./runtest
         output=$(bindir=$bindir ./runtest 2>&1 || true)
         echo "output = $output"
         printf "%s\n" "${output}"
