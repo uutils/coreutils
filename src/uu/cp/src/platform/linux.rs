@@ -3,12 +3,15 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 // spell-checker:ignore ficlone reflink ftruncate pwrite fiemap
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::Read;
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 
 use quick_error::ResultExt;
+
+use uucore::mode::get_umask;
 
 use crate::{CopyResult, ReflinkMode, SparseMode};
 
@@ -27,9 +30,6 @@ enum CloneFallback {
     /// Raise an error.
     Error,
 
-    /// Use [`std::io::copy`].
-    IOCopy,
-
     /// Use [`std::fs::copy`].
     FSCopy,
 }
@@ -42,8 +42,8 @@ fn clone<P>(source: P, dest: P, fallback: CloneFallback) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
-    let mut src_file = File::open(&source)?;
-    let mut dst_file = File::create(&dest)?;
+    let src_file = File::open(&source)?;
+    let dst_file = File::create(&dest)?;
     let src_fd = src_file.as_raw_fd();
     let dst_fd = dst_file.as_raw_fd();
     let result = unsafe { libc::ioctl(dst_fd, FICLONE!(), src_fd) };
@@ -52,7 +52,6 @@ where
     }
     match fallback {
         CloneFallback::Error => Err(std::io::Error::last_os_error()),
-        CloneFallback::IOCopy => std::io::copy(&mut src_file, &mut dst_file).map(|_| ()),
         CloneFallback::FSCopy => std::fs::copy(source, dest).map(|_| ()),
     }
 }
@@ -98,6 +97,41 @@ where
     Ok(())
 }
 
+/// Copy the contents of the given source FIFO to the given file.
+fn copy_fifo_contents<P>(source: P, dest: P) -> std::io::Result<u64>
+where
+    P: AsRef<Path>,
+{
+    // For some reason,
+    //
+    //     cp --preserve=ownership --copy-contents fifo fifo2
+    //
+    // causes `fifo2` to be created with limited permissions (mode 622
+    // or maybe 600 it seems), and then after `fifo` is closed, the
+    // permissions get updated to match those of `fifo`. This doesn't
+    // make much sense to me but the behavior appears in
+    // `tests/cp/file-perm-race.sh`.
+    //
+    // So it seems that if `--preserve=ownership` is true then what we
+    // need to do is create the destination file with limited
+    // permissions, copy the contents, then update the permissions. If
+    // `--preserve=ownership` is not true, however, then we can just
+    // match the mode of the source file.
+    //
+    // TODO Update the code below to respect the case where
+    // `--preserve=ownership` is not true.
+    let mut src_file = File::open(&source)?;
+    let mode = 0o622 & !get_umask();
+    let mut dst_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .mode(mode)
+        .open(&dest)?;
+    let num_bytes_copied = std::io::copy(&mut src_file, &mut dst_file)?;
+    dst_file.set_permissions(src_file.metadata()?.permissions())?;
+    Ok(num_bytes_copied)
+}
+
 /// Copies `source` to `dest` using copy-on-write if possible.
 ///
 /// The `source_is_fifo` flag must be set to `true` if and only if
@@ -119,7 +153,7 @@ pub(crate) fn copy_on_write(
 
         (ReflinkMode::Auto, _) => {
             if source_is_fifo {
-                clone(source, dest, CloneFallback::IOCopy)
+                copy_fifo_contents(source, dest).map(|_| ())
             } else {
                 clone(source, dest, CloneFallback::FSCopy)
             }
