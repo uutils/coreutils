@@ -782,9 +782,13 @@ jobs:
         echo "bindir = $bindir"
         cd tmp/busybox-*/testsuite
         pwd
-        ls -al
         ls -al runtest
         VERBOSE=1 DEBUG=1 bindir=$bindir sh ./runtest -v
+        echo $?
+        VERBOSE=1 DEBUG=1 bindir=$bindir bash ./runtest -v
+        echo $?
+        VERBOSE=1 DEBUG=1 bindir=$bindir sh ./runtest -v
+        echo $?
         output=$(bindir=$bindir ./runtest -v 2>&1 || true)
         echo "output = $output"
         printf "%s\n" "${output}"
