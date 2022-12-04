@@ -784,8 +784,8 @@ jobs:
         pwd
         ls -al
         ls -al runtest
-        VERBOSE=1 DEBUG=1 bindir=$bindir sh ./runtest
-        output=$(bindir=$bindir ./runtest 2>&1 || true)
+        VERBOSE=1 DEBUG=1 bindir=$bindir sh ./runtest -v
+        output=$(bindir=$bindir ./runtest -v 2>&1 || true)
         echo "output = $output"
         printf "%s\n" "${output}"
         n_fails=$(echo "$output" | grep "^FAIL:\s" | wc --lines)
