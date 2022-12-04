@@ -765,22 +765,12 @@ jobs:
         ## VARs setup
         echo "TEST_SUMMARY_FILE=busybox-result.json" >> $GITHUB_OUTPUT
     - uses: actions/checkout@v3
+    - uses: Swatinem/rust-cache@v2
     - name: Install/setup prerequisites
       shell: bash
       run: |
         ## Install/setup prerequisites
         make prepare-busytest
-    - name: Install `rust` toolchain
-      run: |
-        rustup toolchain install stable --profile minimal
-        rustup default stable
-    - name: Install dependencies
-      shell: bash
-      run: |
-        ## Install dependencies
-        sudo apt-get update
-        sudo apt-get install jq
-    - uses: Swatinem/rust-cache@v2
     - name: "Run BusyBox test suite"
       id: summary
       shell: bash
