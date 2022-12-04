@@ -1429,6 +1429,9 @@ fn copy_file(
                     backup_dest(dest, &backup_path)?;
                     fs::remove_file(dest)?;
                 }
+                if options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
+                    fs::remove_file(dest)?;
+                }
             }
             if options.dereference(source_in_command_line) && source.is_symlink() {
                 let resolved =
@@ -1451,6 +1454,9 @@ fn copy_file(
             )?;
         }
         CopyMode::SymLink => {
+            if dest.exists() && options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
+                fs::remove_file(dest)?;
+            }
             symlink_file(source, dest, context, symlinked_files)?;
         }
         CopyMode::Update => {
