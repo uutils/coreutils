@@ -2383,7 +2383,7 @@ fn test_preserve_hardlink_attributes_in_directory() {
     //
     // A hard link should have the same inode as the target file.
     at.file_exists("dest/src/link");
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "freebsd")))]
     assert_eq!(
         at.metadata("dest/src/f").ino(),
         at.metadata("dest/src/link").ino()
