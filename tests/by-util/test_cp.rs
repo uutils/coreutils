@@ -13,6 +13,8 @@ use std::os::unix::fs::MetadataExt;
 use std::os::unix::fs::PermissionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
+#[cfg(not(windows))]
+use std::path::Path;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use filetime::FileTime;
@@ -2387,5 +2389,33 @@ fn test_preserve_hardlink_attributes_in_directory() {
     assert_eq!(
         at.metadata("dest/src/f").ino(),
         at.metadata("dest/src/link").ino()
+    );
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_hard_link_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+    at.touch("dest");
+    ucmd.args(&["-f", "--link", "src", "dest"])
+        .succeeds()
+        .no_output();
+    #[cfg(all(unix, not(target_os = "freebsd")))]
+    assert_eq!(at.metadata("src").ino(), at.metadata("dest").ino());
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_symbolic_link_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+    at.touch("dest");
+    ucmd.args(&["-f", "--symbolic-link", "src", "dest"])
+        .succeeds()
+        .no_output();
+    assert_eq!(
+        std::fs::read_link(at.plus("dest")).unwrap(),
+        Path::new("src")
     );
 }
