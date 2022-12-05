@@ -971,16 +971,16 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
     let mut symlinked_files = HashSet::new();
 
     let progress_bar = if options.progress_bar {
-        Some(
-            ProgressBar::new(disk_usage(sources, options.recursive)?)
-                .with_style(
-                    ProgressStyle::with_template(
-                        "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
-                    )
-                    .unwrap(),
+        let pb = ProgressBar::new(disk_usage(sources, options.recursive)?)
+            .with_style(
+                ProgressStyle::with_template(
+                    "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
                 )
-                .with_message(uucore::util_name()),
-        )
+                .unwrap(),
+            )
+            .with_message(uucore::util_name());
+        pb.tick();
+        Some(pb)
     } else {
         None
     };
