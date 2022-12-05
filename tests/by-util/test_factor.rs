@@ -108,10 +108,10 @@ fn test_cli_args() {
     new_ucmd!().args(&["3"]).succeeds().stdout_contains("3: 3");
 
     new_ucmd!()
-        .args(&["3", "6"])
+        .args(&["3", "6", " +9"])
         .succeeds()
         .stdout_contains("3: 3")
-        .stdout_contains("6: 2 3");
+        .stdout_contains("9: 3 3");
 }
 
 #[test]
