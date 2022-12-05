@@ -801,7 +801,6 @@ jobs:
                 '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
           HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
           echo "HASH=${HASH}" >> $GITHUB_OUTPUT
-          if [ $FAIL -gt 0 ] ; then echo "::warning ::${FAIL}+ test failures" ; fi
     - name: Reserve SHA1/ID of 'test-summary'
       uses: actions/upload-artifact@v3
       with:
