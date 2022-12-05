@@ -13,9 +13,6 @@
 
 // spell-checker:ignore (misc) HFKJFK Mbdfhn
 
-#[macro_use]
-extern crate uucore;
-
 mod check;
 mod chunks;
 mod custom_str_cmp;
@@ -458,7 +455,7 @@ impl KeySettings {
     }
 
     fn set_sort_mode(&mut self, mode: SortMode) -> Result<(), String> {
-        if self.mode != SortMode::Default {
+        if self.mode != SortMode::Default && self.mode != mode {
             return Err(format!(
                 "options '-{}{}' are incompatible",
                 self.mode.get_short_name().unwrap(),
@@ -1336,7 +1333,7 @@ pub fn uu_app() -> Command {
                     "version",
                     "random",
                 ])
-                .conflicts_with_all(&options::modes::ALL_SORT_MODES),
+                .conflicts_with_all(options::modes::ALL_SORT_MODES),
         )
         .arg(make_sort_mode_arg(
             options::modes::HUMAN_NUMERIC,
@@ -1373,7 +1370,7 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(options::DICTIONARY_ORDER)
                 .help("consider only blanks and alphanumeric characters")
-                .conflicts_with_all(&[
+                .conflicts_with_all([
                     options::modes::NUMERIC,
                     options::modes::GENERAL_NUMERIC,
                     options::modes::HUMAN_NUMERIC,
@@ -1425,7 +1422,7 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long(options::IGNORE_NONPRINTING)
                 .help("ignore nonprinting characters")
-                .conflicts_with_all(&[
+                .conflicts_with_all([
                     options::modes::NUMERIC,
                     options::modes::GENERAL_NUMERIC,
                     options::modes::HUMAN_NUMERIC,

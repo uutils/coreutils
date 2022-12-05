@@ -166,7 +166,7 @@ fn test_mv_interactive() {
         .arg(file_b)
         .pipe_in("n")
         .succeeds()
-        .no_stderr();
+        .no_stdout();
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
@@ -178,10 +178,29 @@ fn test_mv_interactive() {
         .arg(file_b)
         .pipe_in("Yesh") // spell-checker:disable-line
         .succeeds()
-        .no_stderr();
+        .no_stdout();
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
+}
+
+#[test]
+fn test_mv_arg_update_interactive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file_a = "test_mv_replace_file_a";
+    let file_b = "test_mv_replace_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+
+    ucmd.arg(file_a)
+        .arg(file_b)
+        .arg("-i")
+        .arg("--update")
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
 }
 
 #[test]
@@ -602,7 +621,7 @@ fn test_mv_update_option() {
     at.touch(file_b);
     let ts = time::OffsetDateTime::now_local().unwrap();
     let now = FileTime::from_unix_time(ts.unix_timestamp(), ts.nanosecond());
-    let later = FileTime::from_unix_time(ts.unix_timestamp() as i64 + 3600, ts.nanosecond() as u32);
+    let later = FileTime::from_unix_time(ts.unix_timestamp() + 3600, ts.nanosecond());
     filetime::set_file_times(at.plus_as_string(file_a), now, now).unwrap();
     filetime::set_file_times(at.plus_as_string(file_b), now, later).unwrap();
 

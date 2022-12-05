@@ -1,12 +1,11 @@
 // spell-checker:ignore NOFILE
 
 use crate::common::util::*;
-use std::fs::OpenOptions;
-#[cfg(unix)]
-use std::io::Read;
-
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::Resource;
+use std::fs::OpenOptions;
+#[cfg(not(windows))]
+use std::process::Stdio;
 
 #[test]
 fn test_output_simple() {
@@ -87,8 +86,7 @@ fn test_fifo_symlink() {
         pipe.write_all(&data).unwrap();
     });
 
-    let output = proc.wait_with_output().unwrap();
-    assert_eq!(&output.stdout, &data2);
+    proc.wait().unwrap().stdout_only_bytes(data2);
     thread.join().unwrap();
 }
 
@@ -395,17 +393,19 @@ fn test_squeeze_blank_before_numbering() {
 #[test]
 #[cfg(unix)]
 fn test_dev_random() {
-    let mut buf = [0; 2048];
     #[cfg(any(target_os = "linux", target_os = "android"))]
     const DEV_RANDOM: &str = "/dev/urandom";
 
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     const DEV_RANDOM: &str = "/dev/random";
 
-    let mut proc = new_ucmd!().args(&[DEV_RANDOM]).run_no_wait();
-    let mut proc_stdout = proc.stdout.take().unwrap();
-    proc_stdout.read_exact(&mut buf).unwrap();
+    let mut proc = new_ucmd!()
+        .set_stdout(Stdio::piped())
+        .args(&[DEV_RANDOM])
+        .run_no_wait();
 
+    proc.make_assertion_with_delay(100).is_alive();
+    let buf = proc.stdout_exact_bytes(2048);
     let num_zeroes = buf.iter().fold(0, |mut acc, &n| {
         if n == 0 {
             acc += 1;
@@ -415,7 +415,7 @@ fn test_dev_random() {
     // The probability of more than 512 zero bytes is essentially zero if the
     // output is truly random.
     assert!(num_zeroes < 512);
-    proc.kill().unwrap();
+    proc.kill();
 }
 
 /// Reading from /dev/full should return an infinite amount of zero bytes.
@@ -423,29 +423,35 @@ fn test_dev_random() {
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_dev_full() {
-    let mut buf = [0; 2048];
-    let mut proc = new_ucmd!().args(&["/dev/full"]).run_no_wait();
-    let mut proc_stdout = proc.stdout.take().unwrap();
+    let mut proc = new_ucmd!()
+        .set_stdout(Stdio::piped())
+        .args(&["/dev/full"])
+        .run_no_wait();
     let expected = [0; 2048];
-    proc_stdout.read_exact(&mut buf).unwrap();
-    assert_eq!(&buf[..], &expected[..]);
-    proc.kill().unwrap();
+    proc.make_assertion_with_delay(100)
+        .is_alive()
+        .with_exact_output(2048, 0)
+        .stdout_only_bytes(expected);
+    proc.kill();
 }
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_dev_full_show_all() {
-    let mut buf = [0; 2048];
-    let mut proc = new_ucmd!().args(&["-A", "/dev/full"]).run_no_wait();
-    let mut proc_stdout = proc.stdout.take().unwrap();
-    proc_stdout.read_exact(&mut buf).unwrap();
-
-    let expected: Vec<u8> = (0..buf.len())
+    let buf_len = 2048;
+    let mut proc = new_ucmd!()
+        .set_stdout(Stdio::piped())
+        .args(&["-A", "/dev/full"])
+        .run_no_wait();
+    let expected: Vec<u8> = (0..buf_len)
         .map(|n| if n & 1 == 0 { b'^' } else { b'@' })
         .collect();
 
-    assert_eq!(&buf[..], &expected[..]);
-    proc.kill().unwrap();
+    proc.make_assertion_with_delay(100)
+        .is_alive()
+        .with_exact_output(buf_len, 0)
+        .stdout_only_bytes(expected);
+    proc.kill();
 }
 
 #[test]
@@ -478,9 +484,7 @@ fn test_domain_socket() {
 
     let child = new_ucmd!().args(&[socket_path]).run_no_wait();
     barrier.wait();
-    let stdout = &child.wait_with_output().unwrap().stdout;
-    let output = String::from_utf8_lossy(stdout);
-    assert_eq!("a\tb", output);
+    child.wait().unwrap().stdout_is("a\tb");
 
     thread.join().unwrap();
 }
@@ -511,7 +515,7 @@ fn test_write_to_self() {
         .create_new(true)
         .write(true)
         .append(true)
-        .open(&file_path)
+        .open(file_path)
         .unwrap();
 
     s.fixtures.append("first_file", "first_file_content.");

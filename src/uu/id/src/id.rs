@@ -36,19 +36,16 @@
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::ffi::CStr;
 use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::UResult;
 use uucore::error::{set_exit_code, USimpleError};
-use uucore::format_usage;
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
 use uucore::process::{getegid, geteuid, getgid, getuid};
+use uucore::{format_usage, show_error};
 
 macro_rules! cstr2cow {
     ($v:expr) => {
@@ -348,7 +345,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::OPT_AUDIT)
                 .short('A')
-                .conflicts_with_all(&[
+                .conflicts_with_all([
                     options::OPT_GROUP,
                     options::OPT_EFFECTIVE_USER,
                     options::OPT_HUMAN_READABLE,
@@ -382,7 +379,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::OPT_GROUPS)
                 .short('G')
                 .long(options::OPT_GROUPS)
-                .conflicts_with_all(&[
+                .conflicts_with_all([
                     options::OPT_GROUP,
                     options::OPT_EFFECTIVE_USER,
                     options::OPT_CONTEXT,
@@ -443,7 +440,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::OPT_CONTEXT)
                 .short('Z')
                 .long(options::OPT_CONTEXT)
-                .conflicts_with_all(&[options::OPT_GROUP, options::OPT_EFFECTIVE_USER])
+                .conflicts_with_all([options::OPT_GROUP, options::OPT_EFFECTIVE_USER])
                 .help(CONTEXT_HELP_TEXT)
                 .action(ArgAction::SetTrue),
         )

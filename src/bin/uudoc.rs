@@ -44,6 +44,7 @@ fn main() -> io::Result<()> {
         * [Build from source](build.md)\n\
         * [Contributing](contributing.md)\n\
         * [GNU test coverage](test_coverage.md)\n\
+        * [Extensions](extensions.md)\n\
         \n\
         # Reference\n\
         * [Multi-call binary](multicall.md)\n",
@@ -90,6 +91,15 @@ fn main() -> io::Result<()> {
             continue;
         }
         let p = format!("docs/src/utils/{}.md", name);
+
+        let markdown = File::open(format!("src/uu/{name}/{name}.md"))
+            .and_then(|mut f: File| {
+                let mut s = String::new();
+                f.read_to_string(&mut s)?;
+                Ok(s)
+            })
+            .ok();
+
         if let Ok(f) = File::create(&p) {
             MDWriter {
                 w: Box::new(f),
@@ -97,6 +107,7 @@ fn main() -> io::Result<()> {
                 name,
                 tldr_zip: &mut tldr_zip,
                 utils_per_platform: &utils_per_platform,
+                markdown,
             }
             .markdown()?;
             println!("Wrote to '{}'", p);
@@ -114,6 +125,7 @@ struct MDWriter<'a, 'b> {
     name: &'a str,
     tldr_zip: &'b mut Option<ZipArchive<File>>,
     utils_per_platform: &'b HashMap<&'b str, Vec<String>>,
+    markdown: Option<String>,
 }
 
 impl<'a, 'b> MDWriter<'a, 'b> {
@@ -123,6 +135,7 @@ impl<'a, 'b> MDWriter<'a, 'b> {
         self.usage()?;
         self.description()?;
         self.options()?;
+        self.after_help()?;
         self.examples()
     }
 
@@ -183,12 +196,32 @@ impl<'a, 'b> MDWriter<'a, 'b> {
     }
 
     fn description(&mut self) -> io::Result<()> {
+        if let Some(after_help) = self.markdown_section("about") {
+            return writeln!(self.w, "\n\n{}", after_help);
+        }
+
         if let Some(about) = self
             .command
             .get_long_about()
             .or_else(|| self.command.get_about())
         {
             writeln!(self.w, "{}", about)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn after_help(&mut self) -> io::Result<()> {
+        if let Some(after_help) = self.markdown_section("after help") {
+            return writeln!(self.w, "\n\n{}", after_help);
+        }
+
+        if let Some(after_help) = self
+            .command
+            .get_after_long_help()
+            .or_else(|| self.command.get_after_help())
+        {
+            writeln!(self.w, "\n\n{}", after_help)
         } else {
             Ok(())
         }
@@ -293,6 +326,32 @@ impl<'a, 'b> MDWriter<'a, 'b> {
             )?;
         }
         writeln!(self.w, "</dl>\n")
+    }
+
+    fn markdown_section(&self, section: &str) -> Option<String> {
+        let md = self.markdown.as_ref()?;
+        let section = section.to_lowercase();
+
+        fn is_section_header(line: &str, section: &str) -> bool {
+            line.strip_prefix("##")
+                .map_or(false, |l| l.trim().to_lowercase() == section)
+        }
+
+        let result = md
+            .lines()
+            .skip_while(|&l| !is_section_header(l, &section))
+            .skip(1)
+            .take_while(|l| !l.starts_with("##"))
+            .collect::<Vec<_>>()
+            .join("\n")
+            .trim()
+            .to_string();
+
+        if result != "" {
+            Some(result)
+        } else {
+            None
+        }
     }
 }
 

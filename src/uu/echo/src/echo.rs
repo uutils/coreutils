@@ -64,6 +64,9 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
 
     let mut buffer = ['\\'; 2];
 
+    // TODO `cargo +nightly clippy` complains that `.peek()` is never
+    // called on `iter`. However, `peek()` is called inside the
+    // `parse_code()` function that borrows `iter`.
     let mut iter = input.chars().peekable();
     while let Some(mut c) = iter.next() {
         let mut start = 1;
@@ -117,7 +120,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let escaped = matches.get_flag(options::ENABLE_BACKSLASH_ESCAPE);
     let values: Vec<String> = match matches.get_many::<String>(options::STRING) {
         Some(s) => s.map(|s| s.to_string()).collect(),
-        None => vec!["".to_string()],
+        None => vec![String::new()],
     };
 
     execute(no_newline, escaped, &values)

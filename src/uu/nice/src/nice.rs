@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) getpriority execvp setpriority nstr PRIO cstrs ENOENT
 
-#[macro_use]
-extern crate uucore;
-
 use libc::{c_char, c_int, execvp, PRIO_PROCESS};
 use std::ffi::CString;
 use std::io::Error;
@@ -18,7 +15,7 @@ use std::ptr;
 use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::{
     error::{set_exit_code, UClapError, UResult, USimpleError, UUsageError},
-    format_usage,
+    format_usage, show_error, show_warning,
 };
 
 pub mod options {

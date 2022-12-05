@@ -976,11 +976,8 @@ fn test_sigpipe_panic() {
     let mut child = cmd.args(&["ext_sort.txt"]).run_no_wait();
     // Dropping the stdout should not lead to an error.
     // The "Broken pipe" error should be silently ignored.
-    drop(child.stdout.take());
-    assert_eq!(
-        String::from_utf8(child.wait_with_output().unwrap().stderr),
-        Ok(String::new())
-    );
+    child.close_stdout();
+    child.wait().unwrap().no_stderr();
 }
 
 #[test]
@@ -1117,20 +1114,47 @@ fn test_tmp_files_deleted_on_sigint() {
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("tmp_dir");
+    let file_name = "big_file_to_sort.txt";
+    {
+        use rand::{Rng, SeedableRng};
+        use std::io::Write;
+        let mut file = at.make_file(file_name);
+        // approximately 20 MB
+        for _ in 0..40 {
+            let lines = rand_pcg::Pcg32::seed_from_u64(123)
+                .sample_iter(rand::distributions::uniform::Uniform::new(0, 10000))
+                .take(100000)
+                .map(|x| x.to_string() + "\n")
+                .collect::<String>();
+            file.write_all(lines.as_bytes()).unwrap();
+        }
+    }
     ucmd.args(&[
-        "ext_sort.txt",
+        file_name,
         "--buffer-size=1", // with a small buffer size `sort` will be forced to create a temporary directory very soon.
         "--temporary-directory=tmp_dir",
     ]);
-    let mut child = ucmd.run_no_wait();
+    let child = ucmd.run_no_wait();
     // wait a short amount of time so that `sort` can create a temporary directory.
-    std::thread::sleep(Duration::from_millis(100));
+    let mut timeout = Duration::from_millis(100);
+    for _ in 0..5 {
+        std::thread::sleep(timeout);
+        if read_dir(at.plus("tmp_dir")).unwrap().next().is_some() {
+            break;
+        }
+        timeout *= 2;
+    }
     // `sort` should have created a temporary directory.
     assert!(read_dir(at.plus("tmp_dir")).unwrap().next().is_some());
     // kill sort with SIGINT
     signal::kill(Pid::from_raw(child.id() as i32), signal::SIGINT).unwrap();
     // wait for `sort` to exit
-    assert_eq!(child.wait().unwrap().code(), Some(2));
+    child.wait().unwrap().code_is(2);
     // `sort` should have deleted the temporary directory again.
     assert!(read_dir(at.plus("tmp_dir")).unwrap().next().is_none());
+}
+
+#[test]
+fn test_same_sort_mode_twice() {
+    new_ucmd!().args(&["-k", "2n,2n", "empty.txt"]).succeeds();
 }

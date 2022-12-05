@@ -6,12 +6,6 @@
 //! [`DigestWriter`] struct provides a wrapper around [`Digest`] that
 //! implements the [`Write`] trait, for use in situations where calling
 //! [`write`] would be useful.
-extern crate digest;
-extern crate md5;
-extern crate sha1;
-extern crate sha2;
-extern crate sha3;
-
 use std::io::Write;
 
 use hex::encode;

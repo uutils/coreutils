@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) delim sourcefiles
 
-#[macro_use]
-extern crate uucore;
-
 use bstr::io::BufReadExt;
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
@@ -19,8 +16,8 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 
 use self::searcher::Searcher;
-use uucore::format_usage;
 use uucore::ranges::Range;
+use uucore::{format_usage, show, show_error, show_if_err};
 
 mod searcher;
 
@@ -340,7 +337,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> URes
     Ok(())
 }
 
-fn cut_files(mut filenames: Vec<String>, mode: &Mode) -> UResult<()> {
+fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
     let mut stdin_read = false;
 
     if filenames.is_empty() {
@@ -380,8 +377,6 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) -> UResult<()> {
                 }));
         }
     }
-
-    Ok(())
 }
 
 mod options {
@@ -529,7 +524,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect();
 
     match mode_parse {
-        Ok(mode) => cut_files(files, &mode),
+        Ok(mode) => {
+            cut_files(files, &mode);
+            Ok(())
+        }
         Err(e) => Err(USimpleError::new(1, e)),
     }
 }

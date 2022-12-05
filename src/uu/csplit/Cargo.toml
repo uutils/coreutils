@@ -17,7 +17,7 @@ path = "src/csplit.rs"
 [dependencies]
 clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 thiserror = "1.0"
-regex = "1.6.0"
+regex = "1.7.0"
 uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["entries", "fs"] }
 
 [[bin]]

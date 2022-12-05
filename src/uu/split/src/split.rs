@@ -1221,6 +1221,47 @@ where
     Ok(())
 }
 
+fn split_into_n_chunks_by_line_round_robin<R>(
+    settings: &Settings,
+    reader: &mut R,
+    num_chunks: u64,
+) -> UResult<()>
+where
+    R: BufRead,
+{
+    // This object is responsible for creating the filename for each chunk.
+    let mut filename_iterator = FilenameIterator::new(
+        &settings.prefix,
+        &settings.additional_suffix,
+        settings.suffix_length,
+        settings.suffix_type,
+        settings.suffix_start,
+    )?;
+
+    // Create one writer for each chunk. This will create each
+    // of the underlying files (if not in `--filter` mode).
+    let mut writers = vec![];
+    for _ in 0..num_chunks {
+        let filename = filename_iterator
+            .next()
+            .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+        let writer = settings.instantiate_current_writer(filename.as_str())?;
+        writers.push(writer);
+    }
+
+    let num_chunks: usize = num_chunks.try_into().unwrap();
+    for (i, line_result) in reader.lines().enumerate() {
+        let line = line_result.unwrap();
+        let maybe_writer = writers.get_mut(i % num_chunks);
+        let writer = maybe_writer.unwrap();
+        let bytes = line.as_bytes();
+        writer.write_all(bytes)?;
+        writer.write_all(b"\n")?;
+    }
+
+    Ok(())
+}
+
 fn split(settings: &Settings) -> UResult<()> {
     let mut reader = BufReader::new(if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
@@ -1246,6 +1287,9 @@ fn split(settings: &Settings) -> UResult<()> {
             // is a little easier to deal with a 0-indexed number.
             let chunk_number = chunk_number - 1;
             kth_chunk_by_line(settings, &mut reader, chunk_number, num_chunks)
+        }
+        Strategy::Number(NumberType::RoundRobin(num_chunks)) => {
+            split_into_n_chunks_by_line_round_robin(settings, &mut reader, num_chunks)
         }
         Strategy::Number(_) => Err(USimpleError::new(1, "-n mode not yet fully implemented")),
         Strategy::Lines(chunk_size) => {

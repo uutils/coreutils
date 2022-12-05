@@ -52,7 +52,7 @@ fn util_name_double() {
     };
 
     let scenario = TestScenario::new("sort");
-    let mut child = Command::new(&scenario.bin_path)
+    let mut child = Command::new(scenario.bin_path)
         .arg("sort")
         .stdin(Stdio::piped())
         .stderr(Stdio::piped())

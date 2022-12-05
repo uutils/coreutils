@@ -14,7 +14,7 @@ use crate::conversion_tables::ConversionTable;
 use std::error::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
-use uucore::parse_size::ParseSizeError;
+use uucore::parse_size::{ParseSizeError, Parser as SizeParser};
 use uucore::show_warning;
 
 /// Parser Errors describe errors with parser input
@@ -499,8 +499,11 @@ fn parse_bytes_only(s: &str) -> Result<u64, ParseError> {
 /// assert_eq!(parse_bytes_no_x("2k", "2k").unwrap(), 2 * 1024);
 /// ```
 fn parse_bytes_no_x(full: &str, s: &str) -> Result<u64, ParseError> {
+    let parser = SizeParser {
+        capital_b_bytes: true,
+    };
     let (num, multiplier) = match (s.find('c'), s.rfind('w'), s.rfind('b')) {
-        (None, None, None) => match uucore::parse_size::parse_size(s) {
+        (None, None, None) => match parser.parse(s) {
             Ok(n) => (n, 1),
             Err(ParseSizeError::InvalidSuffix(_)) | Err(ParseSizeError::ParseFailure(_)) => {
                 return Err(ParseError::InvalidNumber(full.to_string()))

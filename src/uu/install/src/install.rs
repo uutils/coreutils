@@ -9,9 +9,6 @@
 
 mod mode;
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use file_diff::diff;
 use filetime::{set_file_times, FileTime};
@@ -19,10 +16,10 @@ use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UIoError, UResult, UUsageError};
-use uucore::format_usage;
 use uucore::fs::dir_strip_dot_for_creation;
 use uucore::mode::get_umask;
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
+use uucore::{format_usage, show, show_error, show_if_err, uio_error};
 
 use libc::{getegid, geteuid};
 use std::error::Error;

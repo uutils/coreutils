@@ -13,7 +13,7 @@ use num_traits::Zero;
 use uucore::error::FromIo;
 use uucore::error::UResult;
 use uucore::format_usage;
-use uucore::memo::Memo;
+use uucore::memo::printf;
 use uucore::show;
 
 mod error;
@@ -275,13 +275,10 @@ fn print_seq(
         // If there was an argument `-f FORMAT`, then use that format
         // template instead of the default formatting strategy.
         //
-        // The `Memo::run_all()` function takes in the template and
-        // the current value and writes the result to `stdout`.
-        //
-        // TODO The `run_all()` method takes a string as its second
+        // TODO The `printf()` method takes a string as its second
         // parameter but we have an `ExtendedBigDecimal`. In order to
         // satisfy the signature of the function, we convert the
-        // `ExtendedBigDecimal` into a string. The `Memo::run_all()`
+        // `ExtendedBigDecimal` into a string. The `printf()`
         // logic will subsequently parse that string into something
         // similar to an `ExtendedBigDecimal` again before rendering
         // it as a string and ultimately writing to `stdout`. We
@@ -290,7 +287,7 @@ fn print_seq(
         match format {
             Some(f) => {
                 let s = format!("{}", value);
-                if let Err(x) = Memo::run_all(f, &[s]) {
+                if let Err(x) = printf(f, &[s]) {
                     show!(x);
                     exit(1);
                 }
@@ -348,14 +345,14 @@ fn print_seq_integers(
         // If there was an argument `-f FORMAT`, then use that format
         // template instead of the default formatting strategy.
         //
-        // The `Memo::run_all()` function takes in the template and
+        // The `printf()` function takes in the template and
         // the current value and writes the result to `stdout`.
         //
         // TODO See similar comment about formatting in `print_seq()`.
         match format {
             Some(f) => {
                 let s = format!("{}", value);
-                if let Err(x) = Memo::run_all(f, &[s]) {
+                if let Err(x) = printf(f, &[s]) {
                     show!(x);
                     exit(1);
                 }

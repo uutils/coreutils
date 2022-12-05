@@ -58,11 +58,11 @@ impl Distribution<u8> for AlphanumericNewline {
 /// use rand::distributions::Alphanumeric;
 ///
 /// // generates a 100 byte string with characters from AlphanumericNewline
-/// let random_string = RandomString::generate(&AlphanumericNewline, 100);
+/// let random_string = RandomString::generate(AlphanumericNewline, 100);
 /// assert_eq!(100, random_string.len());
 ///
 /// // generates a 100 byte string with 10 newline characters not ending with a newline
-/// let string = RandomString::generate_with_delimiter(&Alphanumeric, b'\n', 10, false, 100);
+/// let string = RandomString::generate_with_delimiter(Alphanumeric, b'\n', 10, false, 100);
 /// assert_eq!(100, random_string.len());
 /// ```
 pub struct RandomString;
@@ -108,7 +108,7 @@ impl RandomString {
     /// use crate::common::random::{AlphanumericNewline, RandomString};
     ///
     /// // generates a 100 byte string with 10 '\0' byte characters not ending with a '\0' byte
-    /// let string = RandomString::generate_with_delimiter(&AlphanumericNewline, 0, 10, false, 100);
+    /// let string = RandomString::generate_with_delimiter(AlphanumericNewline, 0, 10, false, 100);
     /// assert_eq!(100, random_string.len());
     /// assert_eq!(
     ///     10,
@@ -127,7 +127,7 @@ impl RandomString {
         D: Distribution<u8>,
     {
         if length == 0 {
-            return String::from("");
+            return String::new();
         } else if length == 1 {
             return if num_delimiter > 0 {
                 String::from(delimiter as char)

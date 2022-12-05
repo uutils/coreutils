@@ -16,7 +16,6 @@ path = "src/dircolors.rs"
 
 [dependencies]
 clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-glob = "0.3.0"
 uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
 
 [[bin]]

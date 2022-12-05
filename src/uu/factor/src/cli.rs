@@ -6,9 +6,6 @@
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
 
-#[macro_use]
-extern crate uucore;
-
 use std::error::Error;
 use std::fmt::Write as FmtWrite;
 use std::io::BufRead;
@@ -19,6 +16,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 pub use factor::*;
 use uucore::display::Quotable;
 use uucore::error::UResult;
+use uucore::{show_error, show_warning};
 
 mod miller_rabin;
 pub mod numeric;

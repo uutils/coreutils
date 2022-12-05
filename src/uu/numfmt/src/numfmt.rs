@@ -24,7 +24,7 @@ pub mod options;
 mod units;
 
 const ABOUT: &str = help_section!("about", "numfmt.md");
-const LONG_HELP: &str = help_section!("long help", "numfmt.md");
+const AFTER_HELP: &str = help_section!("after help", "numfmt.md");
 const USAGE: &str = help_usage!("numfmt.md");
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions) -> UResult<()> {
@@ -158,12 +158,15 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         Ok(0)
     }?;
 
-    let fields = match args.get_one::<String>(options::FIELD).unwrap().as_str() {
-        "-" => vec![Range {
+    let fields = args.get_one::<String>(options::FIELD).unwrap().as_str();
+    // a lone "-" means "all fields", even as part of a list of fields
+    let fields = if fields.split(&[',', ' ']).any(|x| x == "-") {
+        vec![Range {
             low: 1,
             high: std::usize::MAX,
-        }],
-        v => Range::from_list(v)?,
+        }]
+    } else {
+        Range::from_list(fields)?
     };
 
     let format = match args.get_one::<String>(options::FORMAT) {
@@ -259,7 +262,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .after_help(LONG_HELP)
+        .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
         .allow_negative_numbers(true)
         .infer_long_args(true)
@@ -275,6 +278,7 @@ pub fn uu_app() -> Command {
                 .long(options::FIELD)
                 .help("replace the numbers in these input fields; see FIELDS below")
                 .value_name("FIELDS")
+                .allow_hyphen_values(true)
                 .default_value(options::FIELD_DEFAULT),
         )
         .arg(

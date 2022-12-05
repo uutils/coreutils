@@ -21,11 +21,13 @@ use progress::{gen_prog_updater, ProgUpdate, ReadStat, StatusLevel, WriteStat};
 mod blocks;
 use blocks::conv_block_unblock_helper;
 
+mod numbers;
+
 use std::cmp;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::io::{self, Read, Seek, SeekFrom, Stdout, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
@@ -280,51 +282,171 @@ impl<'a, R: Read> Input<'a, R> {
     }
 }
 
-trait OutputTrait: Sized + Write {
-    fn fsync(&mut self) -> io::Result<()>;
-    fn fdatasync(&mut self) -> io::Result<()>;
+enum Density {
+    Sparse,
+    Dense,
 }
 
-struct Output<'a, W: Write> {
-    dst: W,
-    settings: &'a Settings,
+/// Data destinations.
+enum Dest {
+    /// Output to stdout.
+    Stdout(Stdout),
+
+    /// Output to a file.
+    ///
+    /// The [`Density`] component indicates whether to attempt to
+    /// write a sparse file when all-zero blocks are encountered.
+    File(File, Density),
 }
 
-impl<'a> Output<'a, io::Stdout> {
-    fn new(settings: &'a Settings) -> UResult<Self> {
-        let mut dst = io::stdout();
-
-        // stdout is not seekable, so we just write null bytes.
-        if settings.seek > 0 {
-            io::copy(&mut io::repeat(0u8).take(settings.seek as u64), &mut dst)
-                .map_err_context(|| String::from("write error"))?;
-        }
-
-        Ok(Self { dst, settings })
-    }
-}
-
-impl<'a> OutputTrait for Output<'a, io::Stdout> {
+impl Dest {
     fn fsync(&mut self) -> io::Result<()> {
-        self.dst.flush()
+        match self {
+            Self::Stdout(stdout) => stdout.flush(),
+            Self::File(f, _) => {
+                f.flush()?;
+                f.sync_all()
+            }
+        }
     }
 
     fn fdatasync(&mut self) -> io::Result<()> {
-        self.dst.flush()
+        match self {
+            Self::Stdout(stdout) => stdout.flush(),
+            Self::File(f, _) => {
+                f.flush()?;
+                f.sync_data()
+            }
+        }
+    }
+
+    fn seek(&mut self, n: u64) -> io::Result<u64> {
+        match self {
+            Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
+            Self::File(f, _) => f.seek(io::SeekFrom::Start(n)),
+        }
+    }
+
+    /// Truncate the underlying file to the current stream position, if possible.
+    fn truncate(&mut self) -> io::Result<()> {
+        match self {
+            Self::Stdout(_) => Ok(()),
+            Self::File(f, _) => {
+                let pos = f.stream_position()?;
+                f.set_len(pos)
+            }
+        }
     }
 }
 
-impl<'a, W: Write> Output<'a, W>
-where
-    Self: OutputTrait,
-{
+/// Decide whether the given buffer is all zeros.
+fn is_sparse(buf: &[u8]) -> bool {
+    buf.iter().all(|&e| e == 0u8)
+}
+
+impl Write for Dest {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            Self::File(f, Density::Sparse) if is_sparse(buf) => {
+                let seek_amt: i64 = buf
+                    .len()
+                    .try_into()
+                    .expect("Internal dd Error: Seek amount greater than signed 64-bit integer");
+                f.seek(io::SeekFrom::Current(seek_amt))?;
+                Ok(buf.len())
+            }
+            Self::File(f, _) => f.write(buf),
+            Self::Stdout(stdout) => stdout.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Self::Stdout(stdout) => stdout.flush(),
+            Self::File(f, _) => f.flush(),
+        }
+    }
+}
+
+/// The destination of the data, configured with the given settings.
+///
+/// Use the [`Output::new_stdout`] or [`Output::new_file`] functions
+/// to construct a new instance of this struct. Then use the
+/// [`Output::dd_out`] function to execute the main copy operation for
+/// `dd`.
+struct Output<'a> {
+    /// The destination to which bytes will be written.
+    dst: Dest,
+
+    /// Configuration settings for how to read and write the data.
+    settings: &'a Settings,
+}
+
+impl<'a> Output<'a> {
+    /// Instantiate this struct with stdout as a destination.
+    fn new_stdout(settings: &'a Settings) -> UResult<Self> {
+        let mut dst = Dest::Stdout(io::stdout());
+        dst.seek(settings.seek)
+            .map_err_context(|| "write error".to_string())?;
+        Ok(Self { dst, settings })
+    }
+
+    /// Instantiate this struct with the named file as a destination.
+    fn new_file(filename: &Path, settings: &'a Settings) -> UResult<Self> {
+        fn open_dst(path: &Path, cflags: &OConvFlags, oflags: &OFlags) -> Result<File, io::Error> {
+            let mut opts = OpenOptions::new();
+            opts.write(true)
+                .create(!cflags.nocreat)
+                .create_new(cflags.excl)
+                .append(oflags.append);
+
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            if let Some(libc_flags) = make_linux_oflags(oflags) {
+                opts.custom_flags(libc_flags);
+            }
+
+            opts.open(path)
+        }
+
+        let dst = open_dst(filename, &settings.oconv, &settings.oflags)
+            .map_err_context(|| format!("failed to open {}", filename.quote()))?;
+
+        // Seek to the index in the output file, truncating if requested.
+        //
+        // Calling `set_len()` may result in an error (for example,
+        // when calling it on `/dev/null`), but we don't want to
+        // terminate the process when that happens.  Instead, we
+        // suppress the error by calling `Result::ok()`. This matches
+        // the behavior of GNU `dd` when given the command-line
+        // argument `of=/dev/null`.
+        if !settings.oconv.notrunc {
+            dst.set_len(settings.seek).ok();
+        }
+        let density = if settings.oconv.sparse {
+            Density::Sparse
+        } else {
+            Density::Dense
+        };
+        let mut dst = Dest::File(dst, density);
+        dst.seek(settings.seek)
+            .map_err_context(|| "failed to seek in output file".to_string())?;
+        Ok(Self { dst, settings })
+    }
+
+    /// Write the given bytes one block at a time.
+    ///
+    /// This may write partial blocks (for example, if the underlying
+    /// call to [`Write::write`] writes fewer than `buf.len()`
+    /// bytes). The returned [`WriteStat`] object will include the
+    /// number of partial and complete blocks written during execution
+    /// of this function.
     fn write_blocks(&mut self, buf: &[u8]) -> io::Result<WriteStat> {
         let mut writes_complete = 0;
         let mut writes_partial = 0;
         let mut bytes_total = 0;
 
         for chunk in buf.chunks(self.settings.obs) {
-            let wlen = self.write(chunk)?;
+            let wlen = self.dst.write(chunk)?;
             if wlen < self.settings.obs {
                 writes_partial += 1;
             } else {
@@ -343,9 +465,9 @@ where
     /// Flush the output to disk, if configured to do so.
     fn sync(&mut self) -> std::io::Result<()> {
         if self.settings.oconv.fsync {
-            self.fsync()
+            self.dst.fsync()
         } else if self.settings.oconv.fdatasync {
-            self.fdatasync()
+            self.dst.fdatasync()
         } else {
             // Intentionally do nothing in this case.
             Ok(())
@@ -401,6 +523,12 @@ where
         let output_thread = thread::spawn(gen_prog_updater(rx, i.settings.status));
         let mut progress_as_secs = 0;
 
+        // Optimization: if no blocks are to be written, then don't
+        // bother allocating any buffers.
+        if let Some(Num::Blocks(0) | Num::Bytes(0)) = i.settings.count {
+            return self.finalize(rstat, wstat, start, &prog_tx, output_thread);
+        };
+
         // Create a common buffer with a capacity of the block size.
         // This is the max size needed.
         let mut buf = vec![BUF_INIT_BYTE; bsize];
@@ -439,9 +567,32 @@ where
                 prog_tx.send(prog_update).unwrap_or(());
             }
         }
+        self.finalize(rstat, wstat, start, &prog_tx, output_thread)
+    }
 
+    /// Flush output, print final stats, and join with the progress thread.
+    fn finalize<T>(
+        &mut self,
+        rstat: ReadStat,
+        wstat: WriteStat,
+        start: time::Instant,
+        prog_tx: &mpsc::Sender<ProgUpdate>,
+        output_thread: thread::JoinHandle<T>,
+    ) -> std::io::Result<()> {
         // Flush the output, if configured to do so.
         self.sync()?;
+
+        // Truncate the file to the final cursor location.
+        //
+        // Calling `set_len()` may result in an error (for example,
+        // when calling it on `/dev/null`), but we don't want to
+        // terminate the process when that happens. Instead, we
+        // suppress the error by calling `Result::ok()`. This matches
+        // the behavior of GNU `dd` when given the command-line
+        // argument `of=/dev/null`.
+        if !self.settings.oconv.notrunc {
+            self.dst.truncate().ok();
+        }
 
         // Print the final read/write statistics.
         let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), true);
@@ -491,96 +642,6 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
         Some(flag)
     } else {
         None
-    }
-}
-
-impl<'a> Output<'a, File> {
-    fn new(filename: &Path, settings: &'a Settings) -> UResult<Self> {
-        fn open_dst(path: &Path, cflags: &OConvFlags, oflags: &OFlags) -> Result<File, io::Error> {
-            let mut opts = OpenOptions::new();
-            opts.write(true)
-                .create(!cflags.nocreat)
-                .create_new(cflags.excl)
-                .append(oflags.append);
-
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            if let Some(libc_flags) = make_linux_oflags(oflags) {
-                opts.custom_flags(libc_flags);
-            }
-
-            opts.open(path)
-        }
-
-        let mut dst = open_dst(filename, &settings.oconv, &settings.oflags)
-            .map_err_context(|| format!("failed to open {}", filename.quote()))?;
-
-        // Seek to the index in the output file, truncating if requested.
-        //
-        // Calling `set_len()` may result in an error (for example,
-        // when calling it on `/dev/null`), but we don't want to
-        // terminate the process when that happens.  Instead, we
-        // suppress the error by calling `Result::ok()`. This matches
-        // the behavior of GNU `dd` when given the command-line
-        // argument `of=/dev/null`.
-
-        if !settings.oconv.notrunc {
-            dst.set_len(settings.seek).ok();
-        }
-        dst.seek(io::SeekFrom::Start(settings.seek))
-            .map_err_context(|| "failed to seek in output file".to_string())?;
-
-        Ok(Self { dst, settings })
-    }
-}
-
-impl<'a> OutputTrait for Output<'a, File> {
-    fn fsync(&mut self) -> io::Result<()> {
-        self.dst.flush()?;
-        self.dst.sync_all()
-    }
-
-    fn fdatasync(&mut self) -> io::Result<()> {
-        self.dst.flush()?;
-        self.dst.sync_data()
-    }
-}
-
-impl<'a> Seek for Output<'a, File> {
-    fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
-        self.dst.seek(pos)
-    }
-}
-
-impl<'a> Write for Output<'a, File> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        fn is_sparse(buf: &[u8]) -> bool {
-            buf.iter().all(|&e| e == 0u8)
-        }
-        // -----------------------------
-        if self.settings.oconv.sparse && is_sparse(buf) {
-            let seek_amt: i64 = buf
-                .len()
-                .try_into()
-                .expect("Internal dd Error: Seek amount greater than signed 64-bit integer");
-            self.dst.seek(io::SeekFrom::Current(seek_amt))?;
-            Ok(buf.len())
-        } else {
-            self.dst.write(buf)
-        }
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.dst.flush()
-    }
-}
-
-impl<'a> Write for Output<'a, io::Stdout> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.dst.write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.dst.flush()
     }
 }
 
@@ -736,22 +797,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     match (&settings.infile, &settings.outfile) {
         (Some(infile), Some(outfile)) => {
             let i = Input::<File>::new(Path::new(&infile), &settings)?;
-            let o = Output::<File>::new(Path::new(&outfile), &settings)?;
+            let o = Output::new_file(Path::new(&outfile), &settings)?;
             o.dd_out(i).map_err_context(|| "IO error".to_string())
         }
         (None, Some(outfile)) => {
             let i = Input::<io::Stdin>::new(&settings)?;
-            let o = Output::<File>::new(Path::new(&outfile), &settings)?;
+            let o = Output::new_file(Path::new(&outfile), &settings)?;
             o.dd_out(i).map_err_context(|| "IO error".to_string())
         }
         (Some(infile), None) => {
             let i = Input::<File>::new(Path::new(&infile), &settings)?;
             if is_stdout_redirected_to_seekable_file() {
                 let filename = stdout_canonicalized();
-                let o = Output::<File>::new(Path::new(&filename), &settings)?;
+                let o = Output::new_file(Path::new(&filename), &settings)?;
                 o.dd_out(i).map_err_context(|| "IO error".to_string())
             } else {
-                let o = Output::<io::Stdout>::new(&settings)?;
+                let o = Output::new_stdout(&settings)?;
                 o.dd_out(i).map_err_context(|| "IO error".to_string())
             }
         }
@@ -759,10 +820,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let i = Input::<io::Stdin>::new(&settings)?;
             if is_stdout_redirected_to_seekable_file() {
                 let filename = stdout_canonicalized();
-                let o = Output::<File>::new(Path::new(&filename), &settings)?;
+                let o = Output::new_file(Path::new(&filename), &settings)?;
                 o.dd_out(i).map_err_context(|| "IO error".to_string())
             } else {
-                let o = Output::<io::Stdout>::new(&settings)?;
+                let o = Output::new_stdout(&settings)?;
                 o.dd_out(i).map_err_context(|| "IO error".to_string())
             }
         }
@@ -780,26 +841,9 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
-    use crate::datastructures::{IConvFlags, IFlags};
-    use crate::{calc_bsize, Input, Output, Parser, Settings};
+    use crate::{calc_bsize, Output, Parser};
 
-    use std::cmp;
-    use std::fs;
-    use std::fs::File;
-    use std::io;
-    use std::io::{BufReader, Read};
     use std::path::Path;
-
-    struct LazyReader<R: Read> {
-        src: R,
-    }
-
-    impl<R: Read> Read for LazyReader<R> {
-        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            let reduced = cmp::max(buf.len() / 2, 1);
-            self.src.read(&mut buf[..reduced])
-        }
-    }
 
     #[test]
     fn bsize_test_primes() {
@@ -876,104 +920,7 @@ mod tests {
         let args = &["conv=nocreat", "of=not-a-real.file"];
         let settings = Parser::new().parse(args).unwrap();
         assert!(
-            Output::<File>::new(Path::new(settings.outfile.as_ref().unwrap()), &settings).is_err()
+            Output::new_file(Path::new(settings.outfile.as_ref().unwrap()), &settings).is_err()
         );
-    }
-
-    #[test]
-    fn test_deadbeef_16_delayed() {
-        let settings = Settings {
-            ibs: 16,
-            obs: 32,
-            count: None,
-            iconv: IConvFlags {
-                sync: Some(0),
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let input = Input {
-            src: LazyReader {
-                src: File::open("./test-resources/deadbeef-16.test").unwrap(),
-            },
-            settings: &settings,
-        };
-
-        let output = Output {
-            dst: File::create("./test-resources/FAILED-deadbeef-16-delayed.test").unwrap(),
-            settings: &settings,
-        };
-
-        output.dd_out(input).unwrap();
-
-        let tmp_fname = "./test-resources/FAILED-deadbeef-16-delayed.test";
-        let spec = File::open("./test-resources/deadbeef-16.spec").unwrap();
-
-        let res = File::open(tmp_fname).unwrap();
-        // Check test file isn't empty (unless spec file is too)
-        assert_eq!(
-            res.metadata().unwrap().len(),
-            spec.metadata().unwrap().len()
-        );
-
-        let spec = BufReader::new(spec);
-        let res = BufReader::new(res);
-
-        // Check all bytes match
-        for (b_res, b_spec) in res.bytes().zip(spec.bytes()) {
-            assert_eq!(b_res.unwrap(), b_spec.unwrap());
-        }
-
-        fs::remove_file(tmp_fname).unwrap();
-    }
-
-    #[test]
-    fn test_random_73k_test_lazy_fullblock() {
-        let settings = Settings {
-            ibs: 521,
-            obs: 1031,
-            count: None,
-            iflags: IFlags {
-                fullblock: true,
-                ..IFlags::default()
-            },
-            ..Default::default()
-        };
-        let input = Input {
-            src: LazyReader {
-                src: File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test")
-                    .unwrap(),
-            },
-            settings: &settings,
-        };
-
-        let output = Output {
-            dst: File::create("./test-resources/FAILED-random_73k_test_lazy_fullblock.test")
-                .unwrap(),
-            settings: &settings,
-        };
-
-        output.dd_out(input).unwrap();
-
-        let tmp_fname = "./test-resources/FAILED-random_73k_test_lazy_fullblock.test";
-        let spec =
-            File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap();
-
-        let res = File::open(tmp_fname).unwrap();
-        // Check test file isn't empty (unless spec file is too)
-        assert_eq!(
-            res.metadata().unwrap().len(),
-            spec.metadata().unwrap().len()
-        );
-
-        let spec = BufReader::new(spec);
-        let res = BufReader::new(res);
-
-        // Check all bytes match
-        for (b_res, b_spec) in res.bytes().zip(spec.bytes()) {
-            assert_eq!(b_res.unwrap(), b_spec.unwrap());
-        }
-
-        fs::remove_file(tmp_fname).unwrap();
     }
 }

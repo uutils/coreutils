@@ -16,14 +16,14 @@ jobs:
       contents: read  # for actions/checkout to fetch code
       pull-requests: read  # for dawidd6/action-download-artifact to query commit hash
     name: Run GNU tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - name: Initialize workflow variables
       id: vars
       shell: bash
       run: |
         ## VARs setup
-        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # * config
         path_GNU="gnu"
         path_GNU_tests="${path_GNU}/tests"
@@ -66,18 +66,16 @@ jobs:
         workflow_conclusion: completed ## continually recalibrates to last commit of default branch with a successful GnuTests (ie, "self-heals" from GnuTest regressions, but needs more supervision for/of regressions)
         path: "${{ steps.vars.outputs.path_reference }}"
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-        components: rustfmt
+      run: |
+        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
+        rustup toolchain install stable -c rustfmt --profile minimal
+        rustup default stable
     - name: Install dependencies
       shell: bash
       run: |
         ## Install dependencies
         sudo apt-get update
-        sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify jq valgrind libexpect-perl
+        sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python3-pyinotify jq valgrind libexpect-perl
     - name: Add various locales
       shell: bash
       run: |
@@ -125,7 +123,7 @@ jobs:
       run: |
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         ## Extract/summarize testing info
-        outputs() { step_id="summary"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        outputs() { step_id="summary"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         #
         SUITE_LOG_FILE='${{ steps.vars.outputs.SUITE_LOG_FILE }}'
         ROOT_SUITE_LOG_FILE='${{ steps.vars.outputs.ROOT_SUITE_LOG_FILE }}'
@@ -267,7 +265,7 @@ jobs:
 
   gnu_coverage:
     name: Run GNU tests with coverage
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - name: Checkout code uutil
       uses: actions/checkout@v3
@@ -281,16 +279,14 @@ jobs:
         ref: 'v9.1'
         submodules: recursive
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-        components: rustfmt
+      run: |
+        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
+        rustup toolchain install nightly -c rustfmt --profile minimal
+        rustup default nightly
     - name: Install dependencies
       run: |
         sudo apt update
-        sudo apt install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify jq valgrind libexpect-perl -y
+        sudo apt install autoconf autopoint bison texinfo gperf gcc g++ gdb python3-pyinotify jq valgrind libexpect-perl -y
     - name: Add various locales
       run: |
         echo "Before:"
@@ -314,11 +310,7 @@ jobs:
     - name: Run GNU tests
       run: bash uutils/util/run-gnu-test.sh
     - name: "`grcov` ~ install"
-      uses: actions-rs/install@v0.1
-      with:
-        crate: grcov
-        version: latest
-        use-tool-cache: false
+      run: cargo install grcov
     - name: Generate coverage data (via `grcov`)
       id: coverage
       run: |
@@ -332,7 +324,7 @@ jobs:
         grcov . --output-type files --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
         # generate coverage report
         grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
-        echo ::set-output name=report::${COVERAGE_REPORT_FILE}
+        echo "report=${COVERAGE_REPORT_FILE}" >> $GITHUB_OUTPUT
     - name: Upload coverage results (to Codecov.io)
       uses: codecov/codecov-action@v3
       with:

@@ -9,18 +9,13 @@
 
 // spell-checker:ignore (ToDO) algo, algoname, regexes, nread, nonames
 
-#[macro_use]
-extern crate clap;
-
-#[macro_use]
-extern crate uucore;
-
 mod digest;
 
 use self::digest::Digest;
 use self::digest::DigestWriter;
 
 use clap::builder::ValueParser;
+use clap::crate_version;
 use clap::ArgAction;
 use clap::{Arg, ArgMatches, Command};
 use hex::encode;
@@ -37,8 +32,10 @@ use std::io::{self, stdin, BufRead, BufReader, Read};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
+use uucore::crash;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
+use uucore::show_warning;
 
 const NAME: &str = "hashsum";
 
@@ -276,11 +273,10 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     };
     let check = matches.get_flag("check");
     let tag = matches.get_flag("tag");
-    let nonames = if binary_name == "b3sum" {
-        matches.get_flag("no-names")
-    } else {
-        false
-    };
+    let nonames = *matches
+        .try_get_one("no-names")
+        .unwrap_or(None)
+        .unwrap_or(&false);
     let status = matches.get_flag("status");
     let quiet = matches.get_flag("quiet") || status;
     let strict = matches.get_flag("strict");

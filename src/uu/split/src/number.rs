@@ -67,7 +67,7 @@ impl Error for Overflow {}
 ///
 /// For the [`DynamicWidthNumber`], the digits are not unique in the
 /// sense that repeatedly incrementing the number will eventually
-/// yield `vec![0, 0]`, `vec![0, 0, 0], `vec![0, 0, 0, 0]`, etc.
+/// yield `vec![0, 0]`, `vec![0, 0, 0]`, `vec![0, 0, 0, 0]`, etc.
 /// That's okay because each of these numbers will be displayed
 /// differently and we only intend to use these numbers for display
 /// purposes and not for mathematical purposes.
@@ -95,7 +95,7 @@ impl Number {
     ///
     /// For the [`DynamicWidthNumber`], the digits are not unique in the
     /// sense that repeatedly incrementing the number will eventually
-    /// yield `vec![0, 0]`, `vec![0, 0, 0], `vec![0, 0, 0, 0]`, etc.
+    /// yield `vec![0, 0]`, `vec![0, 0, 0]`, `vec![0, 0, 0, 0]`, etc.
     /// That's okay because each of these numbers will be displayed
     /// differently and we only intend to use these numbers for display
     /// purposes and not for mathematical purposes.

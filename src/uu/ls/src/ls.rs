@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf tabsize dired
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{
     builder::{NonEmptyStringValueParser, ValueParser},
     crate_version, Arg, ArgAction, Command,
@@ -39,9 +36,15 @@ use std::{
 };
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
+#[cfg(any(
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "android",
+    target_os = "ios"
+))]
+use uucore::libc::{dev_t, major, minor};
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
-use uucore::parse_glob;
 use uucore::quoting_style::{escape_name, QuotingStyle};
 use uucore::{
     display::Quotable,
@@ -51,6 +54,7 @@ use uucore::{
     parse_size::parse_size,
     version_cmp::version_cmp,
 };
+use uucore::{parse_glob, show, show_error, show_warning};
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
@@ -63,7 +67,6 @@ Ignore files and directories starting with a '.' by default"#;
 const USAGE: &str = "{} [OPTION]... [FILE]...";
 
 pub mod options {
-
     pub mod format {
         pub static ONE_LINE: &str = "1";
         pub static LONG: &str = "long";
@@ -354,6 +357,7 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<TimeStyle, LsError> {
         Ok(TimeStyle::Locale)
     }
 }
+
 enum Dereference {
     None,
     DirArgs,
@@ -981,7 +985,7 @@ pub fn uu_app() -> Command {
                 ])
                 .hide_possible_values(true)
                 .require_equals(true)
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::FORMAT,
                     options::format::COLUMNS,
                     options::format::LONG,
@@ -993,7 +997,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::format::COLUMNS)
                 .short('C')
                 .help("Display the files in columns.")
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::FORMAT,
                     options::format::COLUMNS,
                     options::format::LONG,
@@ -1007,7 +1011,7 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .long(options::format::LONG)
                 .help("Display detailed information.")
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::FORMAT,
                     options::format::COLUMNS,
                     options::format::LONG,
@@ -1020,7 +1024,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::format::ACROSS)
                 .short('x')
                 .help("List entries in rows instead of in columns.")
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::FORMAT,
                     options::format::COLUMNS,
                     options::format::LONG,
@@ -1042,7 +1046,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::format::COMMAS)
                 .short('m')
                 .help("List entries separated by commas.")
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::FORMAT,
                     options::format::COLUMNS,
                     options::format::LONG,
@@ -1114,7 +1118,7 @@ pub fn uu_app() -> Command {
                     "c",
                     "escape",
                 ])
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::QUOTING_STYLE,
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
@@ -1126,7 +1130,7 @@ pub fn uu_app() -> Command {
                 .short('N')
                 .long(options::quoting::LITERAL)
                 .help("Use literal quoting style. Equivalent to `--quoting-style=literal`")
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::QUOTING_STYLE,
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
@@ -1139,7 +1143,7 @@ pub fn uu_app() -> Command {
                 .short('b')
                 .long(options::quoting::ESCAPE)
                 .help("Use escape quoting style. Equivalent to `--quoting-style=escape`")
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::QUOTING_STYLE,
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
@@ -1152,7 +1156,7 @@ pub fn uu_app() -> Command {
                 .short('Q')
                 .long(options::quoting::C)
                 .help("Use C quoting style. Equivalent to `--quoting-style=c`")
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::QUOTING_STYLE,
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
@@ -1166,14 +1170,14 @@ pub fn uu_app() -> Command {
                 .short('q')
                 .long(options::HIDE_CONTROL_CHARS)
                 .help("Replace control characters with '?' if they are not escaped.")
-                .overrides_with_all(&[options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS])
+                .overrides_with_all([options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS])
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHOW_CONTROL_CHARS)
                 .long(options::SHOW_CONTROL_CHARS)
                 .help("Show control characters 'as is' if they are not escaped.")
-                .overrides_with_all(&[options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS])
+                .overrides_with_all([options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS])
                 .action(ArgAction::SetTrue),
         )
         // Time arguments
@@ -1192,7 +1196,7 @@ pub fn uu_app() -> Command {
                 ])
                 .hide_possible_values(true)
                 .require_equals(true)
-                .overrides_with_all(&[options::TIME, options::time::ACCESS, options::time::CHANGE]),
+                .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE]),
         )
         .arg(
             Arg::new(options::time::CHANGE)
@@ -1203,7 +1207,7 @@ pub fn uu_app() -> Command {
                         time. When explicitly sorting by time (--sort=time or -t) or when not \
                         using a long listing format, sort according to the status change time.",
                 )
-                .overrides_with_all(&[options::TIME, options::time::ACCESS, options::time::CHANGE])
+                .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1215,7 +1219,7 @@ pub fn uu_app() -> Command {
                         sorting by time (--sort=time or -t) or when not using a long listing \
                         format, sort according to the access time.",
                 )
-                .overrides_with_all(&[options::TIME, options::time::ACCESS, options::time::CHANGE])
+                .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE])
                 .action(ArgAction::SetTrue),
         )
         // Hide and ignore
@@ -1251,7 +1255,7 @@ pub fn uu_app() -> Command {
                 .value_name("field")
                 .value_parser(["name", "none", "time", "size", "version", "extension"])
                 .require_equals(true)
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
                     options::sort::TIME,
@@ -1264,7 +1268,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::sort::SIZE)
                 .short('S')
                 .help("Sort by file size, largest first.")
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
                     options::sort::TIME,
@@ -1278,7 +1282,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::sort::TIME)
                 .short('t')
                 .help("Sort by modification time (the 'mtime' in the inode), newest first.")
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
                     options::sort::TIME,
@@ -1292,7 +1296,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::sort::VERSION)
                 .short('v')
                 .help("Natural sort of (version) numbers in the filenames.")
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
                     options::sort::TIME,
@@ -1306,7 +1310,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::sort::EXTENSION)
                 .short('X')
                 .help("Sort alphabetically by entry extension.")
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
                     options::sort::TIME,
@@ -1324,7 +1328,7 @@ pub fn uu_app() -> Command {
                     directory.  This is especially useful when listing very large directories, \
                     since not doing any sorting can be noticeably faster.",
                 )
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::SORT,
                     options::sort::SIZE,
                     options::sort::TIME,
@@ -1343,7 +1347,7 @@ pub fn uu_app() -> Command {
                     "When showing file information for a symbolic link, show information for the \
                     file the link references rather than the link itself.",
                 )
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::dereference::ALL,
                     options::dereference::DIR_ARGS,
                     options::dereference::ARGS,
@@ -1357,7 +1361,7 @@ pub fn uu_app() -> Command {
                     "Do not dereference symlinks except when they link to directories and are \
                     given as command line arguments.",
                 )
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::dereference::ALL,
                     options::dereference::DIR_ARGS,
                     options::dereference::ARGS,
@@ -1369,7 +1373,7 @@ pub fn uu_app() -> Command {
                 .short('H')
                 .long(options::dereference::ARGS)
                 .help("Do not dereference symlinks except when given as command line arguments.")
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::dereference::ALL,
                     options::dereference::DIR_ARGS,
                     options::dereference::ARGS,
@@ -1509,7 +1513,7 @@ pub fn uu_app() -> Command {
                 none (default),  slash (-p), file-type (--file-type), classify (-F)",
                 )
                 .value_parser(["none", "slash", "file-type", "classify"])
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
                     options::indicator_style::CLASSIFY,
@@ -1545,7 +1549,7 @@ pub fn uu_app() -> Command {
                 .default_missing_value("always")
                 .require_equals(true)
                 .num_args(0..=1)
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
                     options::indicator_style::CLASSIFY,
@@ -1556,7 +1560,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::indicator_style::FILE_TYPE)
                 .long(options::indicator_style::FILE_TYPE)
                 .help("Same as --classify, but do not append '*'")
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
                     options::indicator_style::CLASSIFY,
@@ -1568,7 +1572,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::indicator_style::SLASH)
                 .short('p')
                 .help("Append / indicator to directories.")
-                .overrides_with_all(&[
+                .overrides_with_all([
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
                     options::indicator_style::CLASSIFY,
@@ -1584,7 +1588,7 @@ pub fn uu_app() -> Command {
                 .value_name("TIME_STYLE")
                 .env("TIME_STYLE")
                 .value_parser(NonEmptyStringValueParser::new())
-                .overrides_with_all(&[options::TIME_STYLE]),
+                .overrides_with_all([options::TIME_STYLE]),
         )
         .arg(
             Arg::new(options::FULL_TIME)
@@ -2383,7 +2387,7 @@ fn display_item_long(
                             padding
                                 .size
                                 .saturating_sub(padding.minor.saturating_add(2usize))
-                        )
+                        ),
                     ),
                     pad_left(
                         &minor,
@@ -2396,7 +2400,7 @@ fn display_item_long(
             }
         };
 
-        let dfn = display_file_name(item, config, None, "".to_owned(), out).contents;
+        let dfn = display_file_name(item, config, None, String::new(), out).contents;
 
         write!(out, " {} {}{}", display_date(md, config), dfn, config.eol)?;
     } else {
@@ -2469,7 +2473,7 @@ fn display_item_long(
             write!(out, " {}", pad_right("?", padding.uname))?;
         }
 
-        let dfn = display_file_name(item, config, None, "".to_owned(), out).contents;
+        let dfn = display_file_name(item, config, None, String::new(), out).contents;
         let date_len = 12;
 
         writeln!(
@@ -2643,23 +2647,19 @@ enum SizeOrDeviceId {
 }
 
 fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "android",
+        target_os = "ios"
+    ))]
     {
         let ft = metadata.file_type();
         if ft.is_char_device() || ft.is_block_device() {
-            let dev: u64 = metadata.rdev();
-            let major = (dev >> 24) as u8;
-            let minor = (dev & 0xff) as u8;
-            return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
-        }
-    }
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        let ft = metadata.file_type();
-        if ft.is_char_device() || ft.is_block_device() {
-            let dev: u64 = metadata.rdev();
-            let major = (dev >> 8) as u8;
-            let minor = (dev & 0xff) as u8;
+            // A type cast is needed here as the `dev_t` type varies across OSes.
+            let dev = metadata.rdev() as dev_t;
+            let major = unsafe { major(dev) };
+            let minor = unsafe { minor(dev) };
             return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
         }
     }
@@ -2888,7 +2888,7 @@ fn display_file_name(
 fn color_name(name: String, path: &Path, md: Option<&Metadata>, ls_colors: &LsColors) -> String {
     match ls_colors.style_for_path_with_metadata(path, md) {
         Some(style) => {
-            return style.to_ansi_term_style().paint(name).to_string();
+            return style.to_nu_ansi_term_style().paint(name).to_string();
         }
         None => name,
     }

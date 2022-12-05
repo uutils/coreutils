@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) autoformat FILENUM whitespaces pairable unpairable nocheck
 
-#[macro_use]
-extern crate uucore;
-
 use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgAction, Command};
 use memchr::{memchr3_iter, memchr_iter};
@@ -25,6 +22,7 @@ use std::num::IntErrorKind;
 use std::os::unix::ffi::OsStrExt;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UError, UResult, USimpleError};
+use uucore::{crash, crash_if_err};
 
 static NAME: &str = "join";
 

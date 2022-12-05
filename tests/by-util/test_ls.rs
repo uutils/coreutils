@@ -1174,7 +1174,7 @@ fn test_ls_long_symlink_color() {
                 captures.get(1).unwrap().as_str().to_string(),
                 captures.get(2).unwrap().as_str().to_string(),
             ),
-            None => ("".to_string(), input.to_string()),
+            None => (String::new(), input.to_string()),
         }
     }
 
@@ -1863,7 +1863,7 @@ fn test_ls_recursive() {
     #[cfg(not(windows))]
     result.stdout_contains("a/b:\nb");
     #[cfg(windows)]
-    result.stdout_contains(&"a\\b:\nb");
+    result.stdout_contains("a\\b:\nb");
 }
 
 #[test]
@@ -2057,7 +2057,7 @@ fn test_ls_indicator_style() {
             .tempdir()
             .expect("failed to create dir");
         let socket_path = dir.path().join("sock");
-        let _listener = UnixListener::bind(&socket_path).expect("failed to create socket");
+        let _listener = UnixListener::bind(socket_path).expect("failed to create socket");
 
         new_ucmd!()
             .args(&[
@@ -2093,13 +2093,13 @@ fn test_ls_indicator_style() {
             .ucmd()
             .arg(format!("--indicator-style={}", opt))
             .succeeds()
-            .stdout_contains(&"/");
+            .stdout_contains("/");
     }
 
     // Same test as above, but with the alternate flags.
     let options = vec!["--classify", "--file-type", "-p"];
     for opt in options {
-        scene.ucmd().arg(opt).succeeds().stdout_contains(&"/");
+        scene.ucmd().arg(opt).succeeds().stdout_contains("/");
     }
 
     // Classify and File-Type all contain indicators for pipes and links.
@@ -2110,7 +2110,7 @@ fn test_ls_indicator_style() {
             .ucmd()
             .arg(format!("--indicator-style={}", opt))
             .succeeds()
-            .stdout_contains(&"@");
+            .stdout_contains("@");
     }
 }
 
@@ -3195,7 +3195,7 @@ fn test_ls_context_format() {
     ] {
         let format = format!("--format={}", word);
         ts.ucmd()
-            .args(&[&"-Z", &format.as_str(), &"/"])
+            .args(&["-Z", format.as_str(), "/"])
             .succeeds()
             .stdout_only(
                 unwrap_or_return!(expected_result(&ts, &["-Z", format.as_str(), "/"])).stdout_str(),

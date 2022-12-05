@@ -1,6 +1,6 @@
 // spell-checker:ignore lmnop xlmnop
 use crate::common::util::*;
-use std::io::Read;
+use std::process::Stdio;
 
 #[test]
 fn test_invalid_arg() {
@@ -595,12 +595,10 @@ fn test_width_floats() {
 /// Run `seq`, capture some of the output, close the pipe, and verify it.
 fn run(args: &[&str], expected: &[u8]) {
     let mut cmd = new_ucmd!();
-    let mut child = cmd.args(args).run_no_wait();
-    let mut stdout = child.stdout.take().unwrap();
-    let mut buf = vec![0; expected.len()];
-    stdout.read_exact(&mut buf).unwrap();
-    drop(stdout);
-    assert!(child.wait().unwrap().success());
+    let mut child = cmd.args(args).set_stdout(Stdio::piped()).run_no_wait();
+    let buf = child.stdout_exact_bytes(expected.len());
+    child.close_stdout();
+    child.wait().unwrap().success();
     assert_eq!(buf.as_slice(), expected);
 }
 

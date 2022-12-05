@@ -57,7 +57,7 @@ fn test_long_format_multiple_users() {
     // and an account that (probably) doesn't exist
     let runner = match std::env::var("USER") {
         Ok(user) => user,
-        Err(_) => "".to_string(),
+        Err(_) => String::new(),
     };
     let args = ["-l", "root", "root", "root", &runner, "no_such_user"];
     let ts = TestScenario::new(util_name!());

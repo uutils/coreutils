@@ -146,7 +146,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::traverse::NO_TRAVERSE)
                 .short(options::traverse::NO_TRAVERSE.chars().next().unwrap())
                 .help("do not traverse any symbolic links (default)")
-                .overrides_with_all(&[options::traverse::TRAVERSE, options::traverse::EVERY])
+                .overrides_with_all([options::traverse::TRAVERSE, options::traverse::EVERY])
                 .action(ArgAction::SetTrue),
         )
         .arg(

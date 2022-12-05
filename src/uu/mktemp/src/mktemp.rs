@@ -293,7 +293,7 @@ impl Params {
         // For example, if `prefix` is "a/b/c/d", then `directory` is
         // "a/b/c" is `prefix` gets reassigned to "d".
         let (directory, prefix) = if prefix.ends_with(MAIN_SEPARATOR) {
-            (prefix, "".to_string())
+            (prefix, String::new())
         } else {
             let path = Path::new(&prefix);
             let directory = match path.parent() {
@@ -440,6 +440,9 @@ pub fn uu_app() -> Command {
                      may contain slashes, but mktemp creates only the final component",
                 )
                 .value_name("DIR")
+                // Allows use of default argument just by setting --tmpdir. Else,
+                // use provided input to generate tmpdir
+                .num_args(0..=1)
                 .value_hint(clap::ValueHint::DirPath),
         )
         .arg(

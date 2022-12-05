@@ -1,4 +1,5 @@
 // Copyright (C) ~ Roy Ivy III <rivy.dev@gmail.com>; MIT license
+// spell-checker:ignore backticks
 
 extern crate proc_macro;
 use std::{fs::File, io::Read, path::PathBuf};
@@ -35,6 +36,19 @@ pub fn main(_args: TokenStream, stream: TokenStream) -> TokenStream {
     );
 
     TokenStream::from(new)
+}
+
+// FIXME: This is currently a stub. We could do much more here and could
+// even pull in a full markdown parser to get better results.
+/// Render markdown into a format that's easier to read in the terminal.
+///
+/// For now, all this function does is remove backticks.
+/// Some ideas for future improvement:
+/// - Render headings as bold
+/// - Convert triple backticks to indented
+/// - Printing tables in a nice format
+fn render_markdown(s: &str) -> String {
+    s.replace('`', "")
 }
 
 /// Get the usage from the "Usage" section in the help file.
@@ -81,7 +95,8 @@ pub fn help_section(input: TokenStream) -> TokenStream {
     let section = get_argument(&input, 0, "section");
     let filename = get_argument(&input, 1, "filename");
     let text = parse_help(&section, &filename);
-    TokenTree::Literal(Literal::string(&text)).into()
+    let rendered = render_markdown(&text);
+    TokenTree::Literal(Literal::string(&rendered)).into()
 }
 
 /// Get an argument from the input vector of `TokenTree`.

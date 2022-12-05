@@ -5,8 +5,6 @@
 
 // spell-checker:ignore (ToDO) allocs bset dflag cflag sflag tflag
 
-extern crate nom;
-
 mod convert;
 mod operation;
 mod unicode_table;

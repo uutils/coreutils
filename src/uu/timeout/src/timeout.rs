@@ -8,21 +8,17 @@
 // spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld getpid
 mod status;
 
-#[macro_use]
-extern crate uucore;
-
-extern crate clap;
-
 use crate::status::ExitStatus;
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::io::ErrorKind;
+use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
 use std::time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{UClapError, UResult, USimpleError, UUsageError};
-use uucore::format_usage;
 use uucore::process::ChildExt;
 use uucore::signals::{signal_by_name_or_value, signal_name_by_value};
+use uucore::{format_usage, show_error};
 
 static ABOUT: &str = "Start COMMAND, and kill it if still running after DURATION.";
 const USAGE: &str = "{} [OPTION] DURATION COMMAND...";
