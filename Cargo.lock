@@ -2660,6 +2660,7 @@ version = "0.0.16"
 dependencies = [
  "clap",
  "fs_extra",
+ "indicatif",
  "uucore",
 ]
 
