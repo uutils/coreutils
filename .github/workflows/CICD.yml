@@ -758,27 +758,64 @@ jobs:
         job:
           - { os: ubuntu-latest }
     steps:
+    - name: Initialize workflow variables
+      id: vars
+      shell: bash
+      run: |
+        ## VARs setup
+        echo "TEST_SUMMARY_FILE=busybox-result.json" >> $GITHUB_OUTPUT
     - uses: actions/checkout@v3
+    - uses: Swatinem/rust-cache@v2
     - name: Install/setup prerequisites
       shell: bash
       run: |
         ## Install/setup prerequisites
         make prepare-busytest
-    - name: Install `rust` toolchain
-      run: |
-        rustup toolchain install stable --profile minimal
-        rustup default stable
-    - uses: Swatinem/rust-cache@v2
     - name: "Run BusyBox test suite"
+      id: summary
       shell: bash
       run: |
+        set -v
+        cp .busybox-config target/debug/.config
         ## Run BusyBox test suite
         bindir=$(pwd)/target/debug
         cd tmp/busybox-*/testsuite
         output=$(bindir=$bindir ./runtest 2>&1 || true)
         printf "%s\n" "${output}"
-        n_fails=$(echo "$output" | grep "^FAIL:\s" | wc --lines)
-        if [ $n_fails -gt 0 ] ; then echo "::warning ::${n_fails}+ test failures" ; fi
+        FAIL=$(echo "$output" | grep "^FAIL:\s" | wc --lines)
+        PASS=$(echo "$output" | grep "^PASS:\s" | wc --lines)
+        SKIPPED=$(echo "$output" | grep "^SKIPPED:\s" | wc --lines)
+        TOTAL=`expr $FAIL + $PASS + $SKIPPED`
+        echo "FAIL $FAIL"
+        echo "SKIP $SKIPPED"
+        echo "PASS $PASS"
+        echo "TOTAL $TOTAL"
+        cd -
+        jq -n \
+                --arg date "$(date --rfc-email)" \
+                --arg sha "$GITHUB_SHA" \
+                --arg total "$TOTAL" \
+                --arg pass "$PASS" \
+                --arg skip "$SKIPPED" \
+                --arg fail "$FAIL" \
+                '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+          HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
+          echo "HASH=${HASH}" >> $GITHUB_OUTPUT
+    - name: Reserve SHA1/ID of 'test-summary'
+      uses: actions/upload-artifact@v3
+      with:
+        name: "${{ steps.summary.outputs.HASH }}"
+        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
+    - name: Reserve test results summary
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-summary
+        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
+    - name: Upload json results
+      uses: actions/upload-artifact@v3
+      with:
+        name: busybox-result.json
+        path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
 
   test_android:
     name: Test Android builds
