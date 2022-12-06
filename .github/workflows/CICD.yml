@@ -791,6 +791,9 @@ jobs:
         echo "PASS $PASS"
         echo "TOTAL $TOTAL"
         cd -
+        output="Busybox tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / SKIP: $SKIP"
+        echo "${output}"
+        if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
         jq -n \
                 --arg date "$(date --rfc-email)" \
                 --arg sha "$GITHUB_SHA" \
