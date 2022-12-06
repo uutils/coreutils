@@ -27,7 +27,9 @@ use std::fmt::{Debug, Display};
 use std::fs;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
-use std::path::{Path, PathBuf};
+#[cfg(unix)]
+use std::os::unix::prelude::OsStrExt;
+use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::process;
 
 const DEFAULT_MODE: u32 = 0o755;
@@ -480,40 +482,73 @@ fn is_new_file_path(path: &Path) -> bool {
             || path.parent().unwrap().as_os_str().is_empty()) // In case of a simple file
 }
 
+/// Test if the path is an existing directory or ends with a trailing separator.
+///
+/// Returns true, if one of the conditions above is met; else false.
+///
+#[cfg(unix)]
+fn is_potential_directory_path(path: &Path) -> bool {
+    let separator = MAIN_SEPARATOR as u8;
+    path.as_os_str().as_bytes().last() == Some(&separator) || path.is_dir()
+}
+
+#[cfg(not(unix))]
+fn is_potential_directory_path(path: &Path) -> bool {
+    let path_str = path.to_string_lossy();
+    path_str.ends_with(MAIN_SEPARATOR) || path_str.ends_with('/') || path.is_dir()
+}
+
 /// Perform an install, given a list of paths and behavior.
 ///
 /// Returns a Result type with the Err variant containing the error message.
 ///
 fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
+    // first check that paths contains at least one element
+    if paths.is_empty() {
+        return Err(UUsageError::new(1, "missing file operand"));
+    }
+
+    // get the target from either "-t foo" param or from the last given paths argument
     let target: PathBuf = if let Some(path) = &b.target_dir {
         path.into()
     } else {
-        paths
-            .pop()
-            .ok_or_else(|| UUsageError::new(1, "missing file operand"))?
-            .into()
+        let last_path: PathBuf = paths.pop().unwrap().into();
+
+        // paths has to contain more elements
+        if paths.is_empty() {
+            return Err(UUsageError::new(
+                1,
+                format!(
+                    "missing destination file operand after '{}'",
+                    last_path.to_str().unwrap()
+                ),
+            ));
+        }
+
+        last_path
     };
 
     let sources = &paths.iter().map(PathBuf::from).collect::<Vec<_>>();
 
-    if sources.len() > 1 || (target.exists() && target.is_dir()) {
-        copy_files_into_dir(sources, &target, b)
-    } else {
+    if b.create_leading {
         // if -t is used in combination with -D, create whole target because it does not include filename
-        let to_create: Option<&Path> = if b.target_dir.is_some() && b.create_leading {
+        let to_create: Option<&Path> = if b.target_dir.is_some() {
             Some(target.as_path())
-        } else {
+        // if source and target are filenames used in combination with -D, create target's parent
+        } else if !(sources.len() > 1 || is_potential_directory_path(&target)) {
             target.parent()
+        } else {
+            None
         };
 
         if let Some(to_create) = to_create {
-            if !to_create.exists() && b.create_leading {
+            if !to_create.exists() {
                 if b.verbose {
                     let mut result = PathBuf::new();
                     // When creating directories with -Dv, show directory creations step by step
                     for part in to_create.components() {
                         result.push(part.as_os_str());
-                        if !Path::new(part.as_os_str()).is_dir() {
+                        if !result.is_dir() {
                             // Don't display when the directory already exists
                             println!("install: creating directory {}", result.quote());
                         }
@@ -531,25 +566,16 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
                 }
             }
         }
+    }
 
-        let source = sources.first().ok_or_else(|| {
-            UUsageError::new(
-                1,
-                format!(
-                    "missing destination file operand after '{}'",
-                    target.to_str().unwrap()
-                ),
-            )
-        })?;
+    if sources.len() > 1 || is_potential_directory_path(&target) {
+        copy_files_into_dir(sources, &target, b)
+    } else {
+        let source = sources.first().unwrap();
 
-        // If the -D flag was passed (target does not include filename),
-        // we need to add the source name to the target_dir
-        // because `copy` expects `to` to be a file, not a directory
-        let target = if target.is_dir() && b.create_leading {
-            target.join(source)
-        } else {
-            target // already includes dest filename
-        };
+        if source.is_dir() {
+            return Err(InstallError::OmittingDirectory(source.to_path_buf()).into());
+        }
 
         if target.is_file() || is_new_file_path(&target) {
             copy(source, &target, b)

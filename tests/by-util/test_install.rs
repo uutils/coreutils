@@ -1,4 +1,4 @@
-// spell-checker:ignore (words) helloworld objdump n'source
+// spell-checker:ignore (words) helloworld nodir objdump n'source
 
 use crate::common::util::*;
 use filetime::FileTime;
@@ -427,18 +427,42 @@ fn test_install_nested_paths_copy_file() {
 
 #[test]
 fn test_install_failing_omitting_directory() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file1 = "source_file";
-    let dir1 = "source_dir";
-    let dir2 = "target_dir";
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file1 = "file1";
+    let dir1 = "dir1";
+    let no_dir2 = "no-dir2";
+    let dir3 = "dir3";
 
     at.mkdir(dir1);
-    at.mkdir(dir2);
+    at.mkdir(dir3);
     at.touch(file1);
 
-    ucmd.arg(dir1)
+    // GNU install checks for existing target dir first before checking on source params
+    scene
+        .ucmd()
         .arg(file1)
-        .arg(dir2)
+        .arg(dir1)
+        .arg(no_dir2)
+        .fails()
+        .stderr_contains("is not a directory");
+
+    // file1 will be copied before install fails on dir1
+    scene
+        .ucmd()
+        .arg(file1)
+        .arg(dir1)
+        .arg(dir3)
+        .fails()
+        .code_is(1)
+        .stderr_contains("omitting directory");
+    assert!(at.file_exists(&format!("{}/{}", dir3, file1)));
+
+    // install also fails, when only one source param is given
+    scene
+        .ucmd()
+        .arg(dir1)
+        .arg(dir3)
         .fails()
         .code_is(1)
         .stderr_contains("omitting directory");
@@ -668,6 +692,106 @@ fn test_install_creating_leading_dirs() {
         .arg(at.plus(target))
         .succeeds()
         .no_stderr();
+
+    assert!(at.file_exists(target));
+}
+
+#[test]
+fn test_install_creating_leading_dirs_verbose() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "create_leading_test_file";
+    let target = "dir1/no-dir2/no-dir3/test_file";
+
+    at.touch(source);
+    at.mkdir("dir1");
+
+    let creating_dir1 = regex::Regex::new("(?m)^install: creating directory.*dir1'$").unwrap();
+    let creating_nodir23 =
+        regex::Regex::new(r"(?m)^install: creating directory.*no-dir[23]'$").unwrap();
+
+    scene
+        .ucmd()
+        .arg("-Dv")
+        .arg(source)
+        .arg(at.plus(target))
+        .succeeds()
+        .stdout_matches(&creating_nodir23)
+        .stdout_does_not_match(&creating_dir1)
+        .no_stderr();
+
+    assert!(at.file_exists(target));
+}
+
+#[test]
+fn test_install_creating_leading_dirs_with_single_source_and_target_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source1 = "source_file_1";
+    let target_dir = "missing_target_dir/";
+
+    at.touch(source1);
+
+    // installing a single file into a missing directory will fail, when -D is used w/o -t parameter
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(source1)
+        .arg(at.plus(target_dir))
+        .fails()
+        .stderr_contains("missing_target_dir/' is not a directory");
+
+    assert!(!at.dir_exists(target_dir));
+
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(source1)
+        .arg("-t")
+        .arg(at.plus(target_dir))
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(&format!("{target_dir}/{source1}")));
+}
+
+#[test]
+fn test_install_creating_leading_dirs_with_multiple_sources_and_target_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source1 = "source_file_1";
+    let source2 = "source_file_2";
+    let target_dir = "missing_target_dir";
+
+    at.touch(source1);
+    at.touch(source2);
+
+    // installing multiple files into a missing directory will fail, when -D is used w/o -t parameter
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(source1)
+        .arg(source2)
+        .arg(at.plus(target_dir))
+        .fails()
+        .stderr_contains("missing_target_dir' is not a directory");
+
+    assert!(!at.dir_exists(target_dir));
+
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(source1)
+        .arg(source2)
+        .arg("-t")
+        .arg(at.plus(target_dir))
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.dir_exists(target_dir));
 }
 
 #[test]
@@ -1125,11 +1249,25 @@ fn test_install_backup_off() {
 #[test]
 fn test_install_missing_arguments() {
     let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let no_target_dir = "no-target_dir";
 
     scene
         .ucmd()
         .fails()
-        .stderr_contains("install: missing file operand");
+        .code_is(1)
+        .stderr_contains("install: missing file operand")
+        .stderr_contains("install --help' for more information.");
+
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(format!("-t {}", no_target_dir))
+        .fails()
+        .stderr_contains("install: missing file operand")
+        .stderr_contains("install --help' for more information.");
+    assert!(!at.dir_exists(no_target_dir));
 }
 
 #[test]
@@ -1138,12 +1276,33 @@ fn test_install_missing_destination() {
     let at = &scene.fixtures;
 
     let file_1 = "source_file1";
+    let dir_1 = "source_dir1";
 
     at.touch(file_1);
-    scene.ucmd().arg(file_1).fails().stderr_contains(format!(
-        "install: missing destination file operand after '{}'",
-        file_1
-    ));
+    at.mkdir(dir_1);
+
+    // will fail and also print some info on correct usage
+    scene
+        .ucmd()
+        .arg(file_1)
+        .fails()
+        .stderr_contains(format!(
+            "install: missing destination file operand after '{}'",
+            file_1
+        ))
+        .stderr_contains("install --help' for more information.");
+
+    // GNU's install will check for correct num of arguments and then fail
+    // and it does not recognize, that the source is not a file but a directory.
+    scene
+        .ucmd()
+        .arg(dir_1)
+        .fails()
+        .stderr_contains(format!(
+            "install: missing destination file operand after '{}'",
+            dir_1
+        ))
+        .stderr_contains("install --help' for more information.");
 }
 
 #[test]
