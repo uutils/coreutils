@@ -891,6 +891,16 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
     Ok((paths, target))
 }
 
+/// Get the inode information for a file.
+fn get_inode(file_info: &FileInformation) -> u64 {
+    #[cfg(unix)]
+    let result = file_info.inode();
+    #[cfg(windows)]
+    let result = file_info.file_index();
+    result
+}
+
+#[cfg(target_os = "redox")]
 fn preserve_hardlinks(
     hard_links: &mut Vec<(String, u64)>,
     source: &std::path::Path,
@@ -898,53 +908,47 @@ fn preserve_hardlinks(
     found_hard_link: &mut bool,
 ) -> CopyResult<()> {
     // Redox does not currently support hard links
-    #[cfg(not(target_os = "redox"))]
-    {
-        if !source.is_dir() {
-            let info = match FileInformation::from_path(source, false) {
-                Ok(info) => info,
-                Err(e) => {
-                    return Err(format!("cannot stat {}: {}", source.quote(), e,).into());
-                }
-            };
+    Ok(())
+}
 
-            #[cfg(unix)]
-            let inode = info.inode();
-
-            #[cfg(windows)]
-            let inode = info.file_index();
-
-            let nlinks = info.number_of_links();
-
-            for hard_link in hard_links.iter() {
-                if hard_link.1 == inode {
-                    // Consider the following files:
-                    //
-                    // * `src/f` - a regular file
-                    // * `src/link` - a hard link to `src/f`
-                    // * `dest/src/f` - a different regular file
-                    //
-                    // In this scenario, if we do `cp -a src/ dest/`, it is
-                    // possible that the order of traversal causes `src/link`
-                    // to get copied first (to `dest/src/link`). In that case,
-                    // in order to make sure `dest/src/link` is a hard link to
-                    // `dest/src/f` and `dest/src/f` has the contents of
-                    // `src/f`, we delete the existing file to allow the hard
-                    // linking.
-                    if file_or_link_exists(dest) && file_or_link_exists(Path::new(&hard_link.0)) {
-                        std::fs::remove_file(dest)?;
-                    }
-
-                    std::fs::hard_link(hard_link.0.clone(), dest).unwrap();
-                    *found_hard_link = true;
-                }
+/// Hard link a pair of files if needed _and_ record if this pair is a new hard link.
+#[cfg(not(target_os = "redox"))]
+fn preserve_hardlinks(
+    hard_links: &mut Vec<(String, u64)>,
+    source: &std::path::Path,
+    dest: &std::path::Path,
+) -> CopyResult<bool> {
+    let info = FileInformation::from_path(source, false)
+        .context(format!("cannot stat {}", source.quote()))?;
+    let inode = get_inode(&info);
+    let nlinks = info.number_of_links();
+    let mut found_hard_link = false;
+    for (link, link_inode) in hard_links.iter() {
+        if *link_inode == inode {
+            // Consider the following files:
+            //
+            // * `src/f` - a regular file
+            // * `src/link` - a hard link to `src/f`
+            // * `dest/src/f` - a different regular file
+            //
+            // In this scenario, if we do `cp -a src/ dest/`, it is
+            // possible that the order of traversal causes `src/link`
+            // to get copied first (to `dest/src/link`). In that case,
+            // in order to make sure `dest/src/link` is a hard link to
+            // `dest/src/f` and `dest/src/f` has the contents of
+            // `src/f`, we delete the existing file to allow the hard
+            // linking.
+            if file_or_link_exists(dest) && file_or_link_exists(Path::new(link)) {
+                std::fs::remove_file(dest)?;
             }
-            if !(*found_hard_link) && nlinks > 1 {
-                hard_links.push((dest.to_str().unwrap().to_string(), inode));
-            }
+            std::fs::hard_link(link, dest).unwrap();
+            found_hard_link = true;
         }
     }
-    Ok(())
+    if !found_hard_link && nlinks > 1 {
+        hard_links.push((dest.to_str().unwrap().to_string(), inode));
+    }
+    Ok(found_hard_link)
 }
 
 /// Copy all `sources` to `target`.  Returns an
@@ -986,11 +990,12 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
             // FIXME: compare sources by the actual file they point to, not their path. (e.g. dir/file == dir/../dir/file in most cases)
             show_warning!("source {} specified more than once", source.quote());
         } else {
-            let mut found_hard_link = false;
-            if preserve_hard_links {
+            let found_hard_link = if preserve_hard_links && !source.is_dir() {
                 let dest = construct_dest_path(source, target, &target_type, options)?;
-                preserve_hardlinks(&mut hard_links, source, &dest, &mut found_hard_link)?;
-            }
+                preserve_hardlinks(&mut hard_links, source, &dest)?
+            } else {
+                false
+            };
             if !found_hard_link {
                 if let Err(error) = copy_source(
                     &progress_bar,

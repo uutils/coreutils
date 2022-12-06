@@ -213,9 +213,8 @@ fn copy_direntry(
     // If the source is not a directory, then we need to copy the file.
     if !source_absolute.is_dir() {
         if preserve_hard_links {
-            let mut found_hard_link = false;
             let dest = local_to_target.as_path().to_path_buf();
-            preserve_hardlinks(hard_links, &source_absolute, &dest, &mut found_hard_link)?;
+            let found_hard_link = preserve_hardlinks(hard_links, &source_absolute, &dest)?;
             if !found_hard_link {
                 match copy_file(
                     progress_bar,
