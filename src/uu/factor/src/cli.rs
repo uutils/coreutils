@@ -35,12 +35,16 @@ fn print_factors_str(
     w: &mut io::BufWriter<impl io::Write>,
     factors_buffer: &mut String,
 ) -> Result<(), Box<dyn Error>> {
-    num_str.parse::<u64>().map_err(|e| e.into()).and_then(|x| {
-        factors_buffer.clear();
-        writeln!(factors_buffer, "{}:{}", x, factor(x))?;
-        w.write_all(factors_buffer.as_bytes())?;
-        Ok(())
-    })
+    num_str
+        .trim()
+        .parse::<u64>()
+        .map_err(|e| e.into())
+        .and_then(|x| {
+            factors_buffer.clear();
+            writeln!(factors_buffer, "{}:{}", x, factor(x))?;
+            w.write_all(factors_buffer.as_bytes())?;
+            Ok(())
+        })
 }
 
 #[uucore::main]
