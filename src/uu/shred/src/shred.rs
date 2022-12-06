@@ -126,7 +126,7 @@ impl<'a> BytesGenerator<'a> {
     fn new(total_bytes: u64, gen_type: PassType<'a>, exact: bool) -> BytesGenerator {
         let rng = match gen_type {
             PassType::Random => Some(RefCell::new(rand::thread_rng())),
-            _ => None,
+            PassType::Pattern(_) => None,
         };
 
         let bytes = [0; BLOCK_SIZE];

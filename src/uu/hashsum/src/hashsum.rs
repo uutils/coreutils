@@ -634,7 +634,7 @@ where
         match bad_format.cmp(&1) {
             Ordering::Equal => show_warning!("{} line is improperly formatted", bad_format),
             Ordering::Greater => show_warning!("{} lines are improperly formatted", bad_format),
-            _ => {}
+            Ordering::Less => {}
         };
         if failed_cksum > 0 {
             show_warning!("{} computed checksum did NOT match", failed_cksum);
@@ -644,7 +644,7 @@ where
             Ordering::Greater => {
                 show_warning!("{} listed files could not be read", failed_open_file);
             }
-            _ => {}
+            Ordering::Less => {}
         }
     }
 
