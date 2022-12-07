@@ -655,6 +655,9 @@ impl CopyMode {
 }
 
 impl Attributes {
+    // TODO: ownership is required if the user is root, for non-root users it's not required.
+    // See: https://github.com/coreutils/coreutils/blob/master/src/copy.c#L3181
+
     fn all() -> Self {
         Self {
             #[cfg(unix)]
@@ -665,6 +668,19 @@ impl Attributes {
             context: Preserve::Yes { required: false },
             links: Preserve::Yes { required: true },
             xattr: Preserve::Yes { required: false },
+        }
+    }
+
+    fn default_explicit() -> Self {
+        Self {
+            #[cfg(unix)]
+            ownership: Preserve::Yes { required: true },
+            mode: Preserve::Yes { required: true },
+            timestamps: Preserve::Yes { required: true },
+            #[cfg(feature = "feat_selinux")]
+            context: Preserve::Yes { required: true },
+            links: Preserve::Yes { required: true },
+            xattr: Preserve::Yes { required: true },
         }
     }
 
@@ -770,7 +786,10 @@ impl Options {
                             attributes.max(Attributes::all());
                             break;
                         } else {
-                            attributes.try_set_from_string(attribute_str, Attributes::default())?;
+                            attributes.try_set_from_string(
+                                attribute_str,
+                                Attributes::default_explicit(),
+                            )?;
                         }
                     }
                     // `--preserve` case, use the defaults
