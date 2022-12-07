@@ -923,7 +923,7 @@ fn test_cp_preserve_all() {
         .arg("--preserve=all")
         .succeeds();
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "freebsd")))]
     {
         // Assert that the mode, ownership, and timestamps are preserved
         // NOTICE: the ownership is not modified on the src file, because that requires root permissions
@@ -941,9 +941,9 @@ fn test_cp_preserve_xattr() {
     let dst_file = "b";
 
     // Prepare the source file
-    at.make_file(src_file)
-        .set_permissions(PermissionsExt::from_mode(0o0500))
-        .unwrap();
+    at.touch(src_file);
+    #[cfg(unix)]
+    at.set_mode(src_file, 0o0500);
 
     // Sleep so that the time stats are different
     sleep(Duration::from_secs(1));
