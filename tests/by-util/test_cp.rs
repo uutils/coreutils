@@ -22,9 +22,7 @@ use filetime::FileTime;
 use rlimit::Resource;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs as std_fs;
-#[cfg(not(target_os = "freebsd"))]
 use std::thread::sleep;
-#[cfg(not(target_os = "freebsd"))]
 use std::time::Duration;
 
 static TEST_EXISTING_FILE: &str = "existing_file.txt";
