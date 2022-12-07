@@ -171,7 +171,7 @@ jobs:
       shell: bash
       run: |
         case '${{ matrix.job.os }}' in
-          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse libfuse-dev pkg-config ;; # needed for fuser 
+          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse3 libfuse-dev pkg-config ;; # needed for fuser 
           macos-latest) brew install coreutils ;; # needed for show-utils.sh
         esac
     - name: Install `rust` toolchain
@@ -221,7 +221,7 @@ jobs:
         # * pin installed cspell to v4.2.8 (cspell v5+ is broken for NodeJS < v12)
         ## maint: [2021-11-10; rivy] `cspell` version may be advanced to v5 when used with NodeJS >= v12
         sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell@4.2.8 -g ;
-        sudo apt-get -y install fuse libfuse-dev pkg-config ; # needed for fuser
+        sudo apt-get -y install fuse3 libfuse-dev pkg-config ; # needed for fuser
     - name: Run `cspell`
       shell: bash
       run: |
