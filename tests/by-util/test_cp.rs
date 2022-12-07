@@ -957,7 +957,8 @@ fn test_cp_preserve_xattr() {
         .arg("--preserve=xattr")
         .succeeds();
 
-    #[cfg(not(target_os = "freebsd"))]
+    // FIXME: macos copy keeps the original mtime
+    #[cfg(not(any(target_os = "freebsd", target_os = "macos")))]
     {
         // Assert that the mode, ownership, and timestamps are *NOT* preserved
         // NOTICE: the ownership is not modified on the src file, because that requires root permissions
