@@ -817,6 +817,86 @@ jobs:
         name: busybox-result.json
         path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
 
+  test_toybox:
+    name: Tests/Toybox test suite
+    needs: [ min_version, deps ]
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest }
+    steps:
+    - name: Initialize workflow variables
+      id: vars
+      shell: bash
+      run: |
+        ## VARs setup
+        echo "TEST_SUMMARY_FILE=toybox-result.json" >> $GITHUB_OUTPUT
+    - uses: actions/checkout@v3
+    - uses: Swatinem/rust-cache@v2
+    - name: rust toolchain ~ install
+      run: |
+        rustup toolchain install ${{ env.RUST_MIN_SRV }} --profile minimal
+        rustup default ${{ env.RUST_MIN_SRV }}
+    - name: "Build coreutils as multiple binaries"
+      shell: bash
+      run: |
+        set -v
+        make
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        ## Install/setup prerequisites
+        make toybox-src
+    - name: "Run Toybox test suite"
+      id: summary
+      shell: bash
+      run: |
+        set -v
+        ## Run Toybox test suite
+        cd tmp/toybox-*/
+        make defconfig
+        make tests &> tmp.log || true
+        cat tmp.log
+        FAIL=$(grep "FAIL" tmp.log | wc --lines)
+        PASS=$(grep "PASS:"  tmp.log| wc --lines)
+        SKIP=$(grep " disabled$"  tmp.log| wc --lines)
+        TOTAL=`expr $FAIL + $PASS + $SKIP`
+        echo "FAIL $FAIL"
+        echo "SKIP $SKIP"
+        echo "PASS $PASS"
+        echo "TOTAL $TOTAL"
+        cd -
+        jq -n \
+                --arg date "$(date --rfc-email)" \
+                --arg sha "$GITHUB_SHA" \
+                --arg total "$TOTAL" \
+                --arg pass "$PASS" \
+                --arg skip "$SKIP" \
+                --arg fail "$FAIL" \
+                '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+        output="Toybox tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / SKIP: $SKIP"
+        echo "${output}"
+        if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
+        HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
+          echo "HASH=${HASH}" >> $GITHUB_OUTPUT
+    - name: Reserve SHA1/ID of 'test-summary'
+      uses: actions/upload-artifact@v3
+      with:
+        name: "${{ steps.summary.outputs.HASH }}"
+        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
+    - name: Reserve test results summary
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-summary
+        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
+    - name: Upload json results
+      uses: actions/upload-artifact@v3
+      with:
+        name: toybox-result.json
+        path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
+
   test_android:
     name: Test Android builds
     needs: [ min_version, deps ]
