@@ -966,6 +966,16 @@ fn test_cp_preserve_xattr() {
 }
 
 #[test]
+#[cfg(all(target_os = "linux", not(feature = "feat_selinux")))]
+fn test_cp_preserve_all_context_fails_on_non_selinux() {
+    new_ucmd!()
+        .arg(TEST_COPY_FROM_FOLDER_FILE)
+        .arg(TEST_HELLO_WORLD_DEST)
+        .arg("--preserve=all,context")
+        .fails();
+}
+
+#[test]
 #[cfg(any(target_os = "android"))]
 fn test_cp_preserve_xattr_fails_on_android() {
     // Because of the SELinux extended attributes used on Android, trying to copy extended
