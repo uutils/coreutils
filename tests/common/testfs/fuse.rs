@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-//spell-checker: ignore chgtime
+//spell-checker: ignore bkuptime chgtime crtime ENAMETOOLONG ERANGE fuser getattr removexattr setattr setattr testfs
 
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -173,15 +173,15 @@ impl Filesystem for TestFs {
             Ok((entry_inode, _entry_type, _entry_name)) => match get_inode(&entry_inode) {
                 Ok(entry_inode_attr) => {
                     reply.entry(&Duration::new(0, 0), &entry_inode_attr.file_attr, 0);
-                    log_testfs!("lookup succ");
+                    log_testfs!("success");
                 }
                 Err(err) => {
-                    log_testfs!("lookup err: {}", Errno::from_i32(err));
+                    log_testfs!("err: {}", Errno::from_i32(err));
                 }
             },
             Err(err) => {
                 reply.error(err.0);
-                log_testfs!("lookup err: {}", Errno::from_i32(err.0));
+                log_testfs!("err: {}", Errno::from_i32(err.0));
             }
         }
     }

@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) libselinux gethostid procfs
+# spell-checker:ignore (libs) libselinux gethostid procfs fuser
 
 [package]
 name = "coreutils"
