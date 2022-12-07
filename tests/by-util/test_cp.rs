@@ -16,6 +16,7 @@ use std::os::windows::fs::symlink_file;
 #[cfg(not(windows))]
 use std::path::Path;
 
+#[cfg(target_os = "linux")]
 use crate::common::testfs::util::{testfs_mount, testfs_unmount};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use filetime::FileTime;
@@ -990,7 +991,7 @@ fn test_cp_preserve_xattr_fails_on_android() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn test_cp_preserve_all_xattr_testfs() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1018,7 +1019,7 @@ fn test_cp_preserve_all_xattr_testfs() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn test_cp_preserve_xattr_deny() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1046,7 +1047,7 @@ fn test_cp_preserve_xattr_deny() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn test_cp_preserve_xattr_allow() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
