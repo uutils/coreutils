@@ -784,19 +784,22 @@ jobs:
         printf "%s\n" "${output}"
         FAIL=$(echo "$output" | grep "^FAIL:\s" | wc --lines)
         PASS=$(echo "$output" | grep "^PASS:\s" | wc --lines)
-        SKIPPED=$(echo "$output" | grep "^SKIPPED:\s" | wc --lines)
-        TOTAL=`expr $FAIL + $PASS + $SKIPPED`
+        SKIP=$(echo "$output" | grep "^SKIPPED:\s" | wc --lines)
+        TOTAL=`expr $FAIL + $PASS + $SKIP`
         echo "FAIL $FAIL"
-        echo "SKIP $SKIPPED"
+        echo "SKIP $SKIP"
         echo "PASS $PASS"
         echo "TOTAL $TOTAL"
         cd -
+        output="Busybox tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / SKIP: $SKIP"
+        echo "${output}"
+        if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
         jq -n \
                 --arg date "$(date --rfc-email)" \
                 --arg sha "$GITHUB_SHA" \
                 --arg total "$TOTAL" \
                 --arg pass "$PASS" \
-                --arg skip "$SKIPPED" \
+                --arg skip "$SKIP" \
                 --arg fail "$FAIL" \
                 '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
           HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
