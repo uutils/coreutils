@@ -345,17 +345,17 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
             ),
         );
 
+        c.tick();
+
         (Some(m), Some(c))
     } else {
         (None, None)
     };
 
-    count_progress.as_ref().map(|cp| cp.tick());
-
     for sourcepath in files.iter() {
-        count_progress
-            .as_ref()
-            .map(|pb| pb.set_message(sourcepath.to_string_lossy().to_string()));
+        if let Some(ref pb) = count_progress {
+            pb.set_message(sourcepath.to_string_lossy().to_string());
+        }
 
         let targetpath = match sourcepath.file_name() {
             Some(name) => target_dir.join(name),
@@ -403,7 +403,9 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
             };
         };
 
-        count_progress.as_ref().map(|pb| pb.inc(1));
+        if let Some(ref pb) = count_progress {
+            pb.inc(1);
+        }
     }
     Ok(())
 }
@@ -435,7 +437,7 @@ fn rename(
 
         backup_path = backup_control::get_backup_path(b.backup, to, &b.suffix);
         if let Some(ref backup_path) = backup_path {
-            rename_with_fallback(to, backup_path, &b, multi_progress)?;
+            rename_with_fallback(to, backup_path, b, multi_progress)?;
         }
 
         if b.update && fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()? {
@@ -455,7 +457,7 @@ fn rename(
         }
     }
 
-    rename_with_fallback(from, to, &b, multi_progress)?;
+    rename_with_fallback(from, to, b, multi_progress)?;
 
     if b.verbose {
         let message = match backup_path {
@@ -518,29 +520,31 @@ fn rename_with_fallback(
                 Err(_) => None,
             };
 
-            let progress_bar = if b.progress_bar && total_size.is_some() {
-                let bar = ProgressBar::new(total_size.unwrap()).with_style(
-                    ProgressStyle::with_template(
-                        "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
-                    )
-                    .unwrap(),
-                );
+            let progress_bar = if b.progress_bar {
+                if let Some(total_size) = total_size {
+                    let bar = ProgressBar::new(total_size).with_style(
+                        ProgressStyle::with_template(
+                            "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
+                        )
+                        .unwrap(),
+                    );
 
-                match multi_progress {
-                    Some(mp) => Some(mp.add(bar)),
-                    None => Some(bar),
+                    match multi_progress {
+                        Some(mp) => Some(mp.add(bar)),
+                        None => Some(bar),
+                    }
+                } else {
+                    None
                 }
             } else {
                 None
             };
 
             let progress_handler = |process_info: TransitProcess| {
-                progress_bar
-                    .as_ref()
-                    .map(|pb| pb.set_position(process_info.copied_bytes));
-                progress_bar
-                    .as_ref()
-                    .map(|pb| pb.set_message(process_info.file_name));
+                if let Some(ref pb) = progress_bar {
+                    pb.set_position(process_info.copied_bytes);
+                    pb.set_message(process_info.file_name);
+                }
                 TransitProcessResult::ContinueOrAbort
             };
 
