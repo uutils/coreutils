@@ -957,12 +957,15 @@ fn test_cp_preserve_xattr() {
         .arg("--preserve=xattr")
         .succeeds();
 
-    // Assert that the mode, ownership, and timestamps are *NOT* preserved
-    // NOTICE: the ownership is not modified on the src file, because that requires root permissions
-    let metadata_src = at.metadata(src_file);
-    let metadata_dst = at.metadata(dst_file);
-    assert_ne!(metadata_src.mtime(), metadata_dst.mtime());
-    // TODO: verify access time as well. It shouldn't change, however, it does change in this test.
+    #[cfg(not(target_os = "freebsd"))]
+    {
+        // Assert that the mode, ownership, and timestamps are *NOT* preserved
+        // NOTICE: the ownership is not modified on the src file, because that requires root permissions
+        let metadata_src = at.metadata(src_file);
+        let metadata_dst = at.metadata(dst_file);
+        assert_ne!(metadata_src.mtime(), metadata_dst.mtime());
+        // TODO: verify access time as well. It shouldn't change, however, it does change in this test.
+    }
 }
 
 #[test]
