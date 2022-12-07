@@ -632,7 +632,7 @@ impl<'a> Output<'a> {
         // Optimization: if no blocks are to be written, then don't
         // bother allocating any buffers.
         if let Some(Num::Blocks(0) | Num::Bytes(0)) = i.settings.count {
-            return self.finalize(rstat, wstat, start, &prog_tx, output_thread);
+            return finalize(&mut self, rstat, wstat, start, &prog_tx, output_thread);
         };
 
         // Create a common buffer with a capacity of the block size.
@@ -673,42 +673,42 @@ impl<'a> Output<'a> {
                 prog_tx.send(prog_update).unwrap_or(());
             }
         }
-        self.finalize(rstat, wstat, start, &prog_tx, output_thread)
+        finalize(&mut self, rstat, wstat, start, &prog_tx, output_thread)
+    }
+}
+
+/// Flush output, print final stats, and join with the progress thread.
+fn finalize<T>(
+    output: &mut Output,
+    rstat: ReadStat,
+    wstat: WriteStat,
+    start: time::Instant,
+    prog_tx: &mpsc::Sender<ProgUpdate>,
+    output_thread: thread::JoinHandle<T>,
+) -> std::io::Result<()> {
+    // Flush the output, if configured to do so.
+    output.sync()?;
+
+    // Truncate the file to the final cursor location.
+    //
+    // Calling `set_len()` may result in an error (for example,
+    // when calling it on `/dev/null`), but we don't want to
+    // terminate the process when that happens. Instead, we
+    // suppress the error by calling `Result::ok()`. This matches
+    // the behavior of GNU `dd` when given the command-line
+    // argument `of=/dev/null`.
+    if !output.settings.oconv.notrunc {
+        output.dst.truncate().ok();
     }
 
-    /// Flush output, print final stats, and join with the progress thread.
-    fn finalize<T>(
-        &mut self,
-        rstat: ReadStat,
-        wstat: WriteStat,
-        start: time::Instant,
-        prog_tx: &mpsc::Sender<ProgUpdate>,
-        output_thread: thread::JoinHandle<T>,
-    ) -> std::io::Result<()> {
-        // Flush the output, if configured to do so.
-        self.sync()?;
-
-        // Truncate the file to the final cursor location.
-        //
-        // Calling `set_len()` may result in an error (for example,
-        // when calling it on `/dev/null`), but we don't want to
-        // terminate the process when that happens. Instead, we
-        // suppress the error by calling `Result::ok()`. This matches
-        // the behavior of GNU `dd` when given the command-line
-        // argument `of=/dev/null`.
-        if !self.settings.oconv.notrunc {
-            self.dst.truncate().ok();
-        }
-
-        // Print the final read/write statistics.
-        let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), true);
-        prog_tx.send(prog_update).unwrap_or(());
-        // Wait for the output thread to finish
-        output_thread
-            .join()
-            .expect("Failed to join with the output thread.");
-        Ok(())
-    }
+    // Print the final read/write statistics.
+    let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), true);
+    prog_tx.send(prog_update).unwrap_or(());
+    // Wait for the output thread to finish
+    output_thread
+        .join()
+        .expect("Failed to join with the output thread.");
+    Ok(())
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
