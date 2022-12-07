@@ -1,4 +1,4 @@
-// spell-checker:ignore testfs
+// spell-checker: ignore testfs fuse
 
 #[macro_use]
 pub mod fuse;
