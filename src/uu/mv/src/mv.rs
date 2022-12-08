@@ -515,10 +515,7 @@ fn rename_with_fallback(
             //    If finding the total size fails for whatever reason,
             //    the progress bar wont be shown for this file / dir.
             //    (Move will probably fail due to permission error later?)
-            let total_size = match dir_get_size(from) {
-                Ok(size) => Some(size),
-                Err(_) => None,
-            };
+            let total_size = dir_get_size(from).ok();
 
             let progress_bar = if b.progress_bar {
                 if let Some(total_size) = total_size {
