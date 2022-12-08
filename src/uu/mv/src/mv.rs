@@ -28,7 +28,7 @@ use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::{format_usage, prompt_yes, show};
 
 use fs_extra::dir::{
-    get_size as dir_get_size, move_dir_with_progress, CopyOptions as DirCopyOptions,
+    get_size as dir_get_size, move_dir, move_dir_with_progress, CopyOptions as DirCopyOptions,
     TransitProcess, TransitProcessResult,
 };
 
@@ -525,7 +525,7 @@ fn rename_with_fallback(
                         )
                         .unwrap(),
                     );
-
+                    
                     match multi_progress {
                         Some(mp) => Some(mp.add(bar)),
                         None => Some(bar),
@@ -537,15 +537,17 @@ fn rename_with_fallback(
                 None
             };
 
-            let progress_handler = |process_info: TransitProcess| {
-                if let Some(ref pb) = progress_bar {
+            let result = if let Some(ref pb) = progress_bar {
+                move_dir_with_progress(from, to, &options, |process_info: TransitProcess| {
                     pb.set_position(process_info.copied_bytes);
                     pb.set_message(process_info.file_name);
-                }
-                TransitProcessResult::ContinueOrAbort
+                    TransitProcessResult::ContinueOrAbort
+                })
+            } else {
+                move_dir(from, to, &options)
             };
 
-            if let Err(err) = move_dir_with_progress(from, to, &options, progress_handler) {
+            if let Err(err) = result {
                 return match err.kind {
                     fs_extra::error::ErrorKind::PermissionDenied => Err(io::Error::new(
                         io::ErrorKind::PermissionDenied,
