@@ -46,7 +46,7 @@ use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
-use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::parse_size::{ParseSizeError, Parser};
 use uucore::version_cmp::version_cmp;
 
 use crate::tmp_dir::TmpDirWrapper;
@@ -342,30 +342,20 @@ impl GlobalSettings {
     fn parse_byte_count(input: &str) -> Result<usize, ParseSizeError> {
         // GNU sort (8.32)   valid: 1b,        k, K, m, M, g, G, t, T, P, E, Z, Y
         // GNU sort (8.32) invalid:  b, B, 1B,                         p, e, z, y
-        const ALLOW_LIST: &[char] = &[
-            'b', 'k', 'K', 'm', 'M', 'g', 'G', 't', 'T', 'P', 'E', 'Z', 'Y',
-        ];
-        let mut size_string = input.trim().to_string();
+        let size = Parser::default()
+            .with_allow_list(&[
+                "b", "k", "K", "m", "M", "g", "G", "t", "T", "P", "E", "Z", "Y",
+            ])
+            .with_default_unit("K")
+            .with_b_byte_count(true)
+            .parse(input.trim())?;
 
-        if size_string.ends_with(|c: char| ALLOW_LIST.contains(&c) || c.is_ascii_digit()) {
-            // b 1, K 1024 (default)
-            if size_string.ends_with(|c: char| c.is_ascii_digit()) {
-                size_string.push('K');
-            } else if size_string.ends_with('b') {
-                size_string.pop();
-            }
-            let size = parse_size(&size_string)?;
-            usize::try_from(size).map_err(|_| {
-                ParseSizeError::SizeTooBig(format!(
-                    "Buffer size {} does not fit in address space",
-                    size
-                ))
-            })
-        } else if size_string.starts_with(|c: char| c.is_ascii_digit()) {
-            Err(ParseSizeError::InvalidSuffix("invalid suffix".to_string()))
-        } else {
-            Err(ParseSizeError::ParseFailure("parse failure".to_string()))
-        }
+        usize::try_from(size).map_err(|_| {
+            ParseSizeError::SizeTooBig(format!(
+                "Buffer size {} does not fit in address space",
+                size
+            ))
+        })
     }
 
     /// Precompute some data needed for sorting.

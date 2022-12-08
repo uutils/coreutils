@@ -501,6 +501,7 @@ fn parse_bytes_only(s: &str) -> Result<u64, ParseError> {
 fn parse_bytes_no_x(full: &str, s: &str) -> Result<u64, ParseError> {
     let parser = SizeParser {
         capital_b_bytes: true,
+        ..Default::default()
     };
     let (num, multiplier) = match (s.find('c'), s.rfind('w'), s.rfind('b')) {
         (None, None, None) => match parser.parse(s) {
