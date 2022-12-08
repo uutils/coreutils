@@ -337,19 +337,20 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         .canonicalize()
         .unwrap_or_else(|_| target_dir.to_path_buf());
 
-    let (multi_progress, count_progress) = if b.progress_bar && files.len() > 1 {
-        let m = MultiProgress::new();
-        let c = m.add(
-            ProgressBar::new(files.len().try_into().unwrap()).with_style(
-                ProgressStyle::with_template("moving {msg} {wide_bar} {pos}/{len}").unwrap(),
-            ),
-        );
+    let multi_progress = b.progress_bar.then(MultiProgress::new);
 
-        c.tick();
-
-        (Some(m), Some(c))
+    let count_progress = if let Some(ref multi_progress) = multi_progress {
+        if files.len() > 1 {
+            Some(multi_progress.add(
+                ProgressBar::new(files.len().try_into().unwrap()).with_style(
+                    ProgressStyle::with_template("moving {msg} {wide_bar} {pos}/{len}").unwrap(),
+                ),
+            ))
+        } else {
+            None
+        }
     } else {
-        (None, None)
+        None
     };
 
     for sourcepath in files.iter() {
@@ -437,7 +438,7 @@ fn rename(
 
         backup_path = backup_control::get_backup_path(b.backup, to, &b.suffix);
         if let Some(ref backup_path) = backup_path {
-            rename_with_fallback(to, backup_path, b, multi_progress)?;
+            rename_with_fallback(to, backup_path, multi_progress)?;
         }
 
         if b.update && fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()? {
@@ -457,7 +458,7 @@ fn rename(
         }
     }
 
-    rename_with_fallback(from, to, b, multi_progress)?;
+    rename_with_fallback(from, to, multi_progress)?;
 
     if b.verbose {
         let message = match backup_path {
@@ -485,7 +486,6 @@ fn rename(
 fn rename_with_fallback(
     from: &Path,
     to: &Path,
-    b: &Behavior,
     multi_progress: Option<&MultiProgress>,
 ) -> io::Result<()> {
     if fs::rename(from, to).is_err() {
@@ -517,25 +517,19 @@ fn rename_with_fallback(
             //    (Move will probably fail due to permission error later?)
             let total_size = dir_get_size(from).ok();
 
-            let progress_bar = if b.progress_bar {
-                if let Some(total_size) = total_size {
+            let progress_bar =
+                if let (Some(multi_progress), Some(total_size)) = (multi_progress, total_size) {
                     let bar = ProgressBar::new(total_size).with_style(
                         ProgressStyle::with_template(
                             "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
                         )
                         .unwrap(),
                     );
-                    
-                    match multi_progress {
-                        Some(mp) => Some(mp.add(bar)),
-                        None => Some(bar),
-                    }
+
+                    Some(multi_progress.add(bar))
                 } else {
                     None
-                }
-            } else {
-                None
-            };
+                };
 
             let result = if let Some(ref pb) = progress_bar {
                 move_dir_with_progress(from, to, &options, |process_info: TransitProcess| {
