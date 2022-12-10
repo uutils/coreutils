@@ -10,6 +10,7 @@
 use pretty_assertions::assert_eq;
 #[cfg(target_os = "linux")]
 use rlimit::prlimit;
+use rstest::rstest;
 #[cfg(unix)]
 use std::borrow::Cow;
 #[cfg(not(windows))]
@@ -26,9 +27,10 @@ use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
 use std::rc::Rc;
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread::{sleep, JoinHandle};
-use std::time::Duration;
-use std::{env, thread};
+use std::time::{Duration, Instant};
+use std::{env, hint, thread};
 use tempfile::{Builder, TempDir};
 use uucore::Args;
 
@@ -950,6 +952,7 @@ pub struct UCommand {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     limits: Vec<(rlimit::Resource, u64, u64)>,
     stderr_to_stdout: bool,
+    timeout: Option<Duration>,
     tmpd: Option<Rc<TempDir>>, // drop last
 }
 
@@ -1000,6 +1003,7 @@ impl UCommand {
             #[cfg(any(target_os = "linux", target_os = "android"))]
             limits: vec![],
             stderr_to_stdout: false,
+            timeout: Some(Duration::from_secs(30)),
         };
 
         if let Some(un) = util_name {
@@ -1113,6 +1117,18 @@ impl UCommand {
         hard_limit: u64,
     ) -> &mut Self {
         self.limits.push((resource, soft_limit, hard_limit));
+        self
+    }
+
+    /// Set the timeout for [`UCommand::run`] and similar methods in [`UCommand`].
+    ///
+    /// After the timeout elapsed these `run` methods (besides [`UCommand::run_no_wait`]) will
+    /// panic. When [`UCommand::run_no_wait`] is used, this timeout is applied to
+    /// [`UChild::wait_with_output`] including all other waiting methods in [`UChild`] implicitly
+    /// using `wait_with_output()` and additionally [`UChild::kill`]. The default timeout of `kill`
+    /// will be overwritten by this `timeout`.
+    pub fn timeout(&mut self, timeout: Duration) -> &mut Self {
+        self.timeout = Some(timeout);
         self
     }
 
@@ -1449,6 +1465,7 @@ pub struct UChild {
     ignore_stdin_write_error: bool,
     stderr_to_stdout: bool,
     join_handle: Option<JoinHandle<io::Result<()>>>,
+    timeout: Option<Duration>,
     tmpd: Option<Rc<TempDir>>, // drop last
 }
 
@@ -1468,6 +1485,7 @@ impl UChild {
             ignore_stdin_write_error: ucommand.ignore_stdin_write_error,
             stderr_to_stdout: ucommand.stderr_to_stdout,
             join_handle: None,
+            timeout: ucommand.timeout,
             tmpd: ucommand.tmpd.clone(),
         }
     }
@@ -1504,30 +1522,52 @@ impl UChild {
         self.delay(millis).make_assertion()
     }
 
-    /// Try to kill the child process.
+    /// Try to kill the child process and wait for it's termination.
     ///
-    /// # Panics
-    /// If the child process could not be terminated within 60 seconds.
+    /// This method blocks until the child process is killed, but returns an error if `self.timeout`
+    /// or the default of 60s was reached. If no such error happened, the process resources are
+    /// released, so there is usually no need to call `wait` or alike on unix systems although it's
+    /// still possible to do so.
+    ///
+    /// # Platform specific behavior
+    ///
+    /// On unix systems the child process resources will be released like a call to [`Child::wait`]
+    /// or alike would do.
+    ///
+    /// # Error
+    ///
+    /// If [`Child::kill`] returned an error or if the child process could not be terminated within
+    /// `self.timeout` or the default of 60s.
     pub fn try_kill(&mut self) -> io::Result<()> {
+        let start = Instant::now();
         self.raw.kill()?;
-        for _ in 0..60 {
-            if !self.is_alive() {
-                return Ok(());
+
+        let timeout = self.timeout.unwrap_or(Duration::from_secs(60));
+        // As a side effect, we're cleaning up the killed child process with the implicit call to
+        // `Child::try_wait` in `self.is_alive`, which reaps the process id on unix systems. We
+        // always fail with error on timeout if `self.timeout` is set to zero.
+        while self.is_alive() || timeout == Duration::ZERO {
+            if start.elapsed() < timeout {
+                self.delay(10);
+            } else {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("kill: Timeout of '{}s' reached", timeout.as_secs_f64()),
+                ));
             }
-            sleep(Duration::from_secs(1));
+            hint::spin_loop();
         }
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            "Killing the child process within 60 seconds failed.",
-        ))
+
+        Ok(())
     }
 
     /// Terminate the child process unconditionally and wait for the termination.
     ///
-    /// Ignores any errors happening during [`Child::kill`] (i.e. child process already exited).
+    /// Ignores any errors happening during [`Child::kill`] (i.e. child process already exited) but
+    /// still panics on timeout.
     ///
     /// # Panics
-    /// If the child process could not be terminated within 60 seconds.
+    /// If the child process could not be terminated within `self.timeout` or the default of 60s.
     pub fn kill(&mut self) -> &mut Self {
         self.try_kill()
             .or_else(|error| {
@@ -1544,10 +1584,12 @@ impl UChild {
 
     /// Wait for the child process to terminate and return a [`CmdResult`].
     ///
-    /// This method can also be run if the child process was killed with [`UChild::kill`].
+    /// See [`UChild::wait_with_output`] for details on timeouts etc. This method can also be run if
+    /// the child process was killed with [`UChild::kill`].
     ///
     /// # Errors
-    /// Returns the error from the call to [`Child::wait_with_output`] if any
+    ///
+    /// Returns the error from the call to [`UChild::wait_with_output`] if any
     pub fn wait(self) -> io::Result<CmdResult> {
         let (bin_path, util_name, tmpd) = (
             self.bin_path.clone(),
@@ -1571,10 +1613,43 @@ impl UChild {
 
     /// Wait for the child process to terminate and return an instance of [`Output`].
     ///
-    /// Joins with the thread created by [`UChild::pipe_in`] if any.
+    /// If `self.timeout` is reached while waiting, a [`io::ErrorKind::Other`] representing a
+    /// timeout error is returned. If no errors happened, we join with the thread created by
+    /// [`UChild::pipe_in`] if any.
+    ///
+    /// # Error
+    ///
+    /// If `self.timeout` is reached while waiting or [`Child::wait_with_output`] returned an
+    /// error.
     #[deprecated = "Please use wait() -> io::Result<CmdResult> instead."]
     pub fn wait_with_output(mut self) -> io::Result<Output> {
-        let mut output = self.raw.wait_with_output()?;
+        let output = if let Some(timeout) = self.timeout {
+            let child = self.raw;
+
+            let (sender, receiver) = mpsc::channel();
+            let handle = thread::spawn(move || sender.send(child.wait_with_output()));
+
+            match receiver.recv_timeout(timeout) {
+                Ok(result) => {
+                    // unwraps are safe here because we got a result from the sender and there was no panic
+                    // causing a disconnect.
+                    handle.join().unwrap().unwrap();
+                    result
+                }
+                Err(RecvTimeoutError::Timeout) => Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("wait: Timeout of '{}s' reached", timeout.as_secs_f64()),
+                )),
+                Err(RecvTimeoutError::Disconnected) => {
+                    handle.join().unwrap().unwrap();
+                    panic!("Error receiving from waiting thread because of unexpected disconnect")
+                }
+            }
+        } else {
+            self.raw.wait_with_output()
+        };
+
+        let mut output = output?;
 
         if let Some(join_handle) = self.join_handle.take() {
             join_handle
@@ -2702,5 +2777,91 @@ mod tests {
             .with_current_output()
             .stdout_matches(&Regex::new("[\0].*").unwrap())
             .no_stderr();
+    }
+
+    #[cfg(feature = "sleep")]
+    #[test]
+    fn test_uchild_when_wait_and_timeout_is_reached_then_timeout_error() {
+        let ts = TestScenario::new("sleep");
+        let child = ts
+            .ucmd()
+            .timeout(Duration::from_secs(1))
+            .arg("10.0")
+            .run_no_wait();
+
+        match child.wait() {
+            Err(error) if error.kind() == io::ErrorKind::Other => {
+                std::assert_eq!(error.to_string(), "wait: Timeout of '1s' reached");
+            }
+            Err(error) => panic!(
+                "Assertion failed: Expected error with timeout but was: {}",
+                error
+            ),
+            Ok(_) => panic!("Assertion failed: Expected timeout of `wait`."),
+        }
+    }
+
+    #[cfg(feature = "sleep")]
+    #[rstest]
+    #[timeout(Duration::from_secs(5))]
+    fn test_uchild_when_kill_and_timeout_higher_than_kill_time_then_no_panic() {
+        let ts = TestScenario::new("sleep");
+        let mut child = ts
+            .ucmd()
+            .timeout(Duration::from_secs(60))
+            .arg("20.0")
+            .run_no_wait();
+
+        child.kill().make_assertion().is_not_alive();
+    }
+
+    #[cfg(feature = "sleep")]
+    #[test]
+    fn test_uchild_when_try_kill_and_timeout_is_reached_then_error() {
+        let ts = TestScenario::new("sleep");
+        let mut child = ts.ucmd().timeout(Duration::ZERO).arg("10.0").run_no_wait();
+
+        match child.try_kill() {
+            Err(error) if error.kind() == io::ErrorKind::Other => {
+                std::assert_eq!(error.to_string(), "kill: Timeout of '0s' reached");
+            }
+            Err(error) => panic!(
+                "Assertion failed: Expected error with timeout but was: {}",
+                error
+            ),
+            Ok(_) => panic!("Assertion failed: Expected timeout of `try_kill`."),
+        }
+    }
+
+    #[cfg(feature = "sleep")]
+    #[test]
+    #[should_panic = "kill: Timeout of '0s' reached"]
+    fn test_uchild_when_kill_with_timeout_and_timeout_is_reached_then_panic() {
+        let ts = TestScenario::new("sleep");
+        let mut child = ts.ucmd().timeout(Duration::ZERO).arg("10.0").run_no_wait();
+
+        child.kill();
+        panic!("Assertion failed: Expected timeout of `kill`.");
+    }
+
+    #[cfg(feature = "sleep")]
+    #[test]
+    #[should_panic(expected = "wait: Timeout of '1.1s' reached")]
+    fn test_ucommand_when_run_with_timeout_and_timeout_is_reached_then_panic() {
+        let ts = TestScenario::new("sleep");
+        ts.ucmd()
+            .timeout(Duration::from_millis(1100))
+            .arg("10.0")
+            .run();
+
+        panic!("Assertion failed: Expected timeout of `run`.")
+    }
+
+    #[cfg(feature = "sleep")]
+    #[rstest]
+    #[timeout(Duration::from_secs(10))]
+    fn test_ucommand_when_run_with_timeout_higher_then_execution_time_then_no_panic() {
+        let ts = TestScenario::new("sleep");
+        ts.ucmd().timeout(Duration::from_secs(60)).arg("1.0").run();
     }
 }
