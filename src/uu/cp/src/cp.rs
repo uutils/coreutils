@@ -1316,6 +1316,47 @@ fn file_or_link_exists(path: &Path) -> bool {
     path.symlink_metadata().is_ok()
 }
 
+/// Zip the ancestors of a source path and destination path.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let actual = aligned_ancestors(&Path::new("a/b/c"), &Path::new("d/a/b/c"));
+/// let expected = vec![
+///     (Path::new("a"), Path::new("d/a")),
+///     (Path::new("a/b"), Path::new("d/a/b")),
+/// ];
+/// assert_eq!(actual, expected);
+/// ```
+fn aligned_ancestors<'a>(source: &'a Path, dest: &'a Path) -> Vec<(&'a Path, &'a Path)> {
+    // Collect the ancestors of each. For example, if `source` is
+    // "a/b/c", then the ancestors are "a/b/c", "a/b", "a/", and "".
+    let source_ancestors: Vec<&Path> = source.ancestors().collect();
+    let dest_ancestors: Vec<&Path> = dest.ancestors().collect();
+
+    // For this particular application, we don't care about the null
+    // path "" and we don't care about the full path (e.g. "a/b/c"),
+    // so we exclude those.
+    let n = source_ancestors.len();
+    let source_ancestors = &source_ancestors[1..n - 1];
+
+    // Get the matching number of elements from the ancestors of the
+    // destination path (for example, get "d/a" and "d/a/b").
+    let k = source_ancestors.len();
+    let dest_ancestors = &dest_ancestors[1..1 + k];
+
+    // Now we have two slices of the same length, so we zip them.
+    let mut result = vec![];
+    for (x, y) in source_ancestors
+        .iter()
+        .rev()
+        .zip(dest_ancestors.iter().rev())
+    {
+        result.push((*x, *y));
+    }
+    result
+}
+
 /// Copy the a file from `source` to `dest`. `source` will be dereferenced if
 /// `options.dereference` is set to true. `dest` will be dereferenced only if
 /// the source was not a symlink.
@@ -1375,9 +1416,33 @@ fn copy_file(
         if let Some(pb) = progress_bar {
             // Suspend (hide) the progress bar so the println won't overlap with the progress bar.
             pb.suspend(|| {
+                if options.parents {
+                    // For example, if copying file `a/b/c` and its parents
+                    // to directory `d/`, then print
+                    //
+                    //     a -> d/a
+                    //     a/b -> d/a/b
+                    //
+                    for (x, y) in aligned_ancestors(source, dest) {
+                        println!("{} -> {}", x.display(), y.display());
+                    }
+                }
+
                 println!("{}", context_for(source, dest));
             });
         } else {
+            if options.parents {
+                // For example, if copying file `a/b/c` and its parents
+                // to directory `d/`, then print
+                //
+                //     a -> d/a
+                //     a/b -> d/a/b
+                //
+                for (x, y) in aligned_ancestors(source, dest) {
+                    println!("{} -> {}", x.display(), y.display());
+                }
+            }
+
             println!("{}", context_for(source, dest));
         }
     }
@@ -1676,15 +1741,29 @@ fn disk_usage_directory(p: &Path) -> io::Result<u64> {
     Ok(total)
 }
 
-#[test]
-fn test_cp_localize_to_target() {
-    assert!(
-        localize_to_target(
-            Path::new("a/source/"),
-            Path::new("a/source/c.txt"),
-            Path::new("target/")
-        )
-        .unwrap()
-            == Path::new("target/c.txt")
-    );
+#[cfg(test)]
+mod tests {
+
+    use crate::{aligned_ancestors, localize_to_target};
+    use std::path::Path;
+
+    #[test]
+    fn test_cp_localize_to_target() {
+        let root = Path::new("a/source/");
+        let source = Path::new("a/source/c.txt");
+        let target = Path::new("target/");
+        let actual = localize_to_target(root, source, target).unwrap();
+        let expected = Path::new("target/c.txt");
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_aligned_ancestors() {
+        let actual = aligned_ancestors(&Path::new("a/b/c"), &Path::new("d/a/b/c"));
+        let expected = vec![
+            (Path::new("a"), Path::new("d/a")),
+            (Path::new("a/b"), Path::new("d/a/b")),
+        ];
+        assert_eq!(actual, expected);
+    }
 }
