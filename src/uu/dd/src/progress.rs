@@ -151,20 +151,23 @@ impl ProgUpdate {
         // If the number of bytes written is sufficiently large, then
         // print a more concise representation of the number, like
         // "1.2 kB" and "1.0 KiB".
-        if btotal < 1000 {
-            write!(
+        match btotal {
+            1 => write!(
+                w,
+                "{}{} byte copied, {:.1} s, {}/s{}",
+                carriage_return, btotal, duration, transfer_rate, newline,
+            ),
+            0..=999 => write!(
                 w,
                 "{}{} bytes copied, {:.1} s, {}/s{}",
                 carriage_return, btotal, duration, transfer_rate, newline,
-            )
-        } else if btotal < 1024 {
-            write!(
+            ),
+            1000..=1023 => write!(
                 w,
                 "{}{} bytes ({}) copied, {:.1} s, {}/s{}",
                 carriage_return, btotal, btotal_metric, duration, transfer_rate, newline,
-            )
-        } else {
-            write!(
+            ),
+            _ => write!(
                 w,
                 "{}{} bytes ({}, {}) copied, {:.1} s, {}/s{}",
                 carriage_return,
@@ -174,7 +177,7 @@ impl ProgUpdate {
                 duration,
                 transfer_rate,
                 newline,
-            )
+            ),
         }
     }
 
@@ -563,6 +566,11 @@ mod tests {
         //
         // The throughput still does not match GNU dd.
         assert_eq!(cursor.get_ref(), b"0 bytes copied, 1.0 s, 0.0 B/s\n");
+
+        let prog_update = prog_update_write(1);
+        let mut cursor = Cursor::new(vec![]);
+        prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
+        assert_eq!(cursor.get_ref(), b"1 byte copied, 1.0 s, 0.0 B/s\n");
 
         let prog_update = prog_update_write(999);
         let mut cursor = Cursor::new(vec![]);
