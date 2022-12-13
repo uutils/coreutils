@@ -659,7 +659,16 @@ impl Attributes {
             ownership: Preserve::Yes { required: true },
             mode: Preserve::Yes { required: true },
             timestamps: Preserve::Yes { required: true },
-            context: Preserve::Yes { required: false },
+            context: {
+                #[cfg(feature = "feat_selinux")]
+                {
+                    Preserve::Yes { required: false }
+                }
+                #[cfg(not(feature = "feat_selinux"))]
+                {
+                    Preserve::No
+                }
+            },
             links: Preserve::Yes { required: true },
             xattr: Preserve::Yes { required: false },
         }
@@ -991,6 +1000,20 @@ fn preserve_hardlinks(
     Ok(found_hard_link)
 }
 
+fn show_error_if_needed(error: &Error) -> bool {
+    match error {
+        // When using --no-clobber, we don't want to show
+        // an error message
+        Error::NotAllFilesCopied => (),
+        Error::Skipped => (),
+        _ => {
+            show_error!("{}", error);
+            return true;
+        }
+    }
+    false
+}
+
 /// Copy all `sources` to `target`.  Returns an
 /// `Err(Error::NotAllFilesCopied)` if at least one non-fatal error was
 /// encountered.
@@ -1045,15 +1068,8 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
                     options,
                     &mut symlinked_files,
                 ) {
-                    match error {
-                        // When using --no-clobber, we don't want to show
-                        // an error message
-                        Error::NotAllFilesCopied => (),
-                        Error::Skipped => (),
-                        _ => {
-                            show_error!("{}", error);
-                            non_fatal_errors = true;
-                        }
+                    if show_error_if_needed(&error) {
+                        non_fatal_errors = true;
                     }
                 }
             }
@@ -1147,6 +1163,8 @@ fn handle_preserve<F: Fn() -> CopyResult<()>>(p: &Preserve, f: F) -> CopyResult<
             let result = f();
             if *required {
                 result?;
+            } else if let Err(error) = result {
+                show_error_if_needed(&error);
             }
         }
     };
