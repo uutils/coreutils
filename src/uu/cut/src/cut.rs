@@ -263,6 +263,7 @@ fn cut_fields_delimiter<R: Read>(
     Ok(())
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn cut_fields_whitespace<R: Read>(
     reader: R,
     ranges: &[Range],
