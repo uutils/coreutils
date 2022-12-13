@@ -2548,9 +2548,18 @@ mod tests {
     fn test_uchild_when_run_no_wait_with_a_non_blocking_util() {
         let ts = TestScenario::new("echo");
         let mut child = ts.ucmd().arg("hello world").run_no_wait();
-        child.delay(500);
 
-        // check `child.is_alive()` is working
+        // check `child.is_alive()` and `child.delay()` is working
+        let mut trials = 10;
+        while child.is_alive() {
+            if trials <= 0 {
+                panic!("Assertion failed: child process is still alive.")
+            }
+
+            child.delay(500);
+            trials -= 1;
+        }
+
         assert!(!child.is_alive());
 
         // check `child.is_not_alive()` is working
@@ -2599,9 +2608,9 @@ mod tests {
         at.touch("a/empty");
 
         #[cfg(target_vendor = "apple")]
-        let delay: u64 = 1000;
+        let delay: u64 = 2000;
         #[cfg(not(target_vendor = "apple"))]
-        let delay: u64 = 500;
+        let delay: u64 = 1000;
 
         let yes = if cfg!(windows) { "y\r\n" } else { "y\n" };
 
@@ -2641,29 +2650,10 @@ mod tests {
             .with_exact_output(44, 0)
             .stdout_only(expected);
 
-        #[cfg(windows)]
-        let expected = "rm: descend into directory 'a'? \
-                              rm: remove regular empty file 'a\\empty'? \
-                              removed 'a\\empty'\n\
-                              rm: remove directory 'a'? \
-                              removed directory 'a'\n";
-        #[cfg(unix)]
-        let expected = "rm: descend into directory 'a'? \
-                              rm: remove regular empty file 'a/empty'? \
-                              removed 'a/empty'\n\
-                              rm: remove directory 'a'? \
-                              removed directory 'a'\n";
+        let expected = "removed directory 'a'\n";
 
         child.write_in(yes);
-        child
-            .delay(delay)
-            .kill()
-            .make_assertion()
-            .is_not_alive()
-            .with_all_output()
-            .stdout_only(expected);
-
-        child.wait().unwrap().no_stdout().no_stderr().success();
+        child.wait().unwrap().stdout_only(expected).success();
     }
 
     #[cfg(feature = "tail")]
