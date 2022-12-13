@@ -278,7 +278,7 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
             match quotes {
                 Quotes::Single => format!("'{}'", escaped_str),
                 Quotes::Double => format!("\"{}\"", escaped_str),
-                _ => escaped_str,
+                Quotes::None => escaped_str,
             }
         }
         QuotingStyle::Shell {
