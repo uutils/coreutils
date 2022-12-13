@@ -12,6 +12,7 @@ mod error;
 
 use clap::builder::ValueParser;
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -24,9 +25,12 @@ use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
-use uucore::{format_usage, prompt_yes, show, show_if_err};
+use uucore::{format_usage, prompt_yes, show};
 
-use fs_extra::dir::{move_dir, CopyOptions as DirCopyOptions};
+use fs_extra::dir::{
+    get_size as dir_get_size, move_dir, move_dir_with_progress, CopyOptions as DirCopyOptions,
+    TransitProcess, TransitProcessResult,
+};
 
 use crate::error::MvError;
 
@@ -39,6 +43,7 @@ pub struct Behavior {
     no_target_dir: bool,
     verbose: bool,
     strip_slashes: bool,
+    progress_bar: bool,
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -63,7 +68,7 @@ static OPT_TARGET_DIRECTORY: &str = "target-directory";
 static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
 static OPT_UPDATE: &str = "update";
 static OPT_VERBOSE: &str = "verbose";
-
+static OPT_PROGRESS: &str = "progress";
 static ARG_FILES: &str = "files";
 
 #[uucore::main]
@@ -122,6 +127,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         no_target_dir: matches.get_flag(OPT_NO_TARGET_DIRECTORY),
         verbose: matches.get_flag(OPT_VERBOSE),
         strip_slashes: matches.get_flag(OPT_STRIP_TRAILING_SLASHES),
+        progress_bar: matches.get_flag(OPT_PROGRESS),
     };
 
     exec(&files[..], &behavior)
@@ -198,6 +204,16 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new(OPT_PROGRESS)
+                .short('g')
+                .long(OPT_PROGRESS)
+                .help(
+                    "Display a progress bar. \n\
+                Note: this feature is not supported by GNU coreutils.",
+                )
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .num_args(1..)
@@ -271,7 +287,7 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
                     if !source.is_dir() {
                         Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
                     } else {
-                        rename(source, target, b).map_err_context(|| {
+                        rename(source, target, b, None).map_err_context(|| {
                             format!("cannot move {} to {}", source.quote(), target.quote())
                         })
                     }
@@ -294,7 +310,7 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
                 )
                 .into())
             } else {
-                rename(source, target, b).map_err(|e| USimpleError::new(1, format!("{}", e)))
+                rename(source, target, b, None).map_err(|e| USimpleError::new(1, format!("{}", e)))
             }
         }
         _ => {
@@ -321,7 +337,27 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         .canonicalize()
         .unwrap_or_else(|_| target_dir.to_path_buf());
 
+    let multi_progress = b.progress_bar.then(MultiProgress::new);
+
+    let count_progress = if let Some(ref multi_progress) = multi_progress {
+        if files.len() > 1 {
+            Some(multi_progress.add(
+                ProgressBar::new(files.len().try_into().unwrap()).with_style(
+                    ProgressStyle::with_template("moving {msg} {wide_bar} {pos}/{len}").unwrap(),
+                ),
+            ))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     for sourcepath in files.iter() {
+        if let Some(ref pb) = count_progress {
+            pb.set_message(sourcepath.to_string_lossy().to_string());
+        }
+
         let targetpath = match sourcepath.file_name() {
             Some(name) => target_dir.join(name),
             None => {
@@ -352,18 +388,35 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
             }
         }
 
-        show_if_err!(
-            rename(sourcepath, &targetpath, b).map_err_context(|| format!(
-                "cannot move {} to {}",
-                sourcepath.quote(),
-                targetpath.quote()
-            ))
-        );
+        let rename_result = rename(sourcepath, &targetpath, b, multi_progress.as_ref())
+            .map_err_context(|| {
+                format!(
+                    "cannot move {} to {}",
+                    sourcepath.quote(),
+                    targetpath.quote()
+                )
+            });
+
+        if let Err(e) = rename_result {
+            match multi_progress {
+                Some(ref pb) => pb.suspend(|| show!(e)),
+                None => show!(e),
+            };
+        };
+
+        if let Some(ref pb) = count_progress {
+            pb.inc(1);
+        }
     }
     Ok(())
 }
 
-fn rename(from: &Path, to: &Path, b: &Behavior) -> io::Result<()> {
+fn rename(
+    from: &Path,
+    to: &Path,
+    b: &Behavior,
+    multi_progress: Option<&MultiProgress>,
+) -> io::Result<()> {
     let mut backup_path = None;
 
     if to.exists() {
@@ -385,7 +438,7 @@ fn rename(from: &Path, to: &Path, b: &Behavior) -> io::Result<()> {
 
         backup_path = backup_control::get_backup_path(b.backup, to, &b.suffix);
         if let Some(ref backup_path) = backup_path {
-            rename_with_fallback(to, backup_path)?;
+            rename_with_fallback(to, backup_path, multi_progress)?;
         }
 
         if b.update && fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()? {
@@ -405,21 +458,36 @@ fn rename(from: &Path, to: &Path, b: &Behavior) -> io::Result<()> {
         }
     }
 
-    rename_with_fallback(from, to)?;
+    rename_with_fallback(from, to, multi_progress)?;
 
     if b.verbose {
-        print!("{} -> {}", from.quote(), to.quote());
-        match backup_path {
-            Some(path) => println!(" (backup: {})", path.quote()),
-            None => println!(),
-        }
+        let message = match backup_path {
+            Some(path) => format!(
+                "{} -> {} (backup: {})",
+                from.quote(),
+                to.quote(),
+                path.quote()
+            ),
+            None => format!("{} -> {}", from.quote(), to.quote()),
+        };
+
+        match multi_progress {
+            Some(pb) => pb.suspend(|| {
+                println!("{}", message);
+            }),
+            None => println!("{}", message),
+        };
     }
     Ok(())
 }
 
 /// A wrapper around `fs::rename`, so that if it fails, we try falling back on
 /// copying and removing.
-fn rename_with_fallback(from: &Path, to: &Path) -> io::Result<()> {
+fn rename_with_fallback(
+    from: &Path,
+    to: &Path,
+    multi_progress: Option<&MultiProgress>,
+) -> io::Result<()> {
     if fs::rename(from, to).is_err() {
         // Get metadata without following symlinks
         let metadata = from.symlink_metadata()?;
@@ -441,7 +509,39 @@ fn rename_with_fallback(from: &Path, to: &Path) -> io::Result<()> {
                 copy_inside: true,
                 ..DirCopyOptions::new()
             };
-            if let Err(err) = move_dir(from, to, &options) {
+
+            // Calculate total size of directory
+            // Silently degrades:
+            //    If finding the total size fails for whatever reason,
+            //    the progress bar wont be shown for this file / dir.
+            //    (Move will probably fail due to permission error later?)
+            let total_size = dir_get_size(from).ok();
+
+            let progress_bar =
+                if let (Some(multi_progress), Some(total_size)) = (multi_progress, total_size) {
+                    let bar = ProgressBar::new(total_size).with_style(
+                        ProgressStyle::with_template(
+                            "{msg}: [{elapsed_precise}] {wide_bar} {bytes:>7}/{total_bytes:7}",
+                        )
+                        .unwrap(),
+                    );
+
+                    Some(multi_progress.add(bar))
+                } else {
+                    None
+                };
+
+            let result = if let Some(ref pb) = progress_bar {
+                move_dir_with_progress(from, to, &options, |process_info: TransitProcess| {
+                    pb.set_position(process_info.copied_bytes);
+                    pb.set_message(process_info.file_name);
+                    TransitProcessResult::ContinueOrAbort
+                })
+            } else {
+                move_dir(from, to, &options)
+            };
+
+            if let Err(err) = result {
                 return match err.kind {
                     fs_extra::error::ErrorKind::PermissionDenied => Err(io::Error::new(
                         io::ErrorKind::PermissionDenied,
