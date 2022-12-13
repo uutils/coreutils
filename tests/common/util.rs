@@ -216,7 +216,7 @@ impl CmdResult {
 
     /// asserts that the command resulted in empty (zero-length) stderr stream output
     /// unless asserting there was neither stdout or stderr, `stderr_only` is usually a better choice
-    /// generally, it's better to use `stderr_only`() instead,
+    /// generally, it's better to use `stderr_only()` instead,
     /// but you might find yourself using this function if
     /// 1.  you can not know exactly what stderr will be or
     /// 2.  you know that stderr will also be empty
@@ -294,7 +294,7 @@ impl CmdResult {
         self.stdout_is_bytes(contents)
     }
 
-    /// like `stdout_is_fixture`(...), but replaces the data in fixture file based on values provided in `template_vars`
+    /// like `stdout_is_fixture()`, but replaces the data in fixture file based on values provided in `template_vars`
     /// command output
     pub fn stdout_is_templated_fixture<T: AsRef<OsStr>>(
         &self,
