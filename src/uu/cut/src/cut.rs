@@ -352,7 +352,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> URes
             match opts.out_delimiter {
                 Some(ref delim) => delim,
                 _ => "\t",
-            }
+            },
         );
     }
     if let Some(ref o_delim) = opts.out_delimiter {
