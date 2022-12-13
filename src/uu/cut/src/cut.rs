@@ -90,6 +90,7 @@ static LONG_HELP: &str = "
         If the -w option is provided, fields will be separated by any number
         of  whitespace characters (Space and Tab). The output delimiter will
         be a Tab unless explicitly specified. Only one of -d or -w option can be specified.
+        This is an extension adopted from FreeBSD.
 
     Optionally Filter based on delimiter
         If the --only-delimited (-s) flag is provided, only lines which
@@ -675,7 +676,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::WHITESPACE_DELIMITED)
                 .short('w')
-                .help("Use any number of whitespace (Space, Tab) to separate fields in the input source.")
+                .help("Use any number of whitespace (Space, Tab) to separate fields in the input source (FreeBSD extension).")
                 .value_name("WHITESPACE")
                 .action(ArgAction::SetTrue),
         )
