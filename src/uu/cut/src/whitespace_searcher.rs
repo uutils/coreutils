@@ -35,9 +35,9 @@ impl<'a> Iterator for WhitespaceSearcher<'a> {
             let match_pos = self.position + match_idx;
             self.haystack = &self.haystack[skip..];
             self.position += skip;
-            return Some((match_pos, self.position));
+            Some((match_pos, self.position))
         } else {
-            return None;
+            None
         }
     }
 }
