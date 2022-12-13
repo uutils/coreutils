@@ -585,7 +585,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             ))
                         }
                     }
-
                     None => Ok(Mode::Fields(
                         ranges,
                         FieldOptions {
