@@ -615,7 +615,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err("invalid input: The '--delimiter' ('-d') option only usable if printing a sequence of fields".into())
             }
             Mode::Bytes(_, _) | Mode::Characters(_, _)
-                if matches.contains_id(options::WHITESPACE_DELIMITED) =>
+                if matches.get_flag(options::WHITESPACE_DELIMITED) =>
             {
                 Err("invalid input: The '-w' option only usable if printing a sequence of fields".into())
             }
