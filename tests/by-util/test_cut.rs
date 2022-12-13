@@ -92,6 +92,30 @@ fn test_whitespace_delimited() {
 }
 
 #[test]
+fn test_whitespace_with_explicit_delimiter() {
+    new_ucmd!()
+        .args(&["-w", "-f", COMPLEX_SEQUENCE.sequence, "-d:"])
+        .fails()
+        .code_is(1);
+}
+
+#[test]
+fn test_whitespace_with_byte() {
+    new_ucmd!()
+        .args(&["-w", "-b", COMPLEX_SEQUENCE.sequence])
+        .fails()
+        .code_is(1);
+}
+
+#[test]
+fn test_whitespace_with_char() {
+    new_ucmd!()
+        .args(&["-c", COMPLEX_SEQUENCE.sequence, "-w"])
+        .fails()
+        .code_is(1);
+}
+
+#[test]
 fn test_specify_delimiter() {
     for param in ["-d", "--delimiter", "--del"] {
         new_ucmd!()
