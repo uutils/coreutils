@@ -162,7 +162,6 @@ pub struct Attributes {
     ownership: Preserve,
     mode: Preserve,
     timestamps: Preserve,
-    #[cfg(feature = "feat_selinux")]
     context: Preserve,
     links: Preserve,
     xattr: Preserve,
@@ -176,10 +175,7 @@ impl Attributes {
         }
         self.mode = self.mode.max(other.mode);
         self.timestamps = self.timestamps.max(other.timestamps);
-        #[cfg(feature = "feat_selinux")]
-        {
-            self.context = self.context.max(other.context);
-        }
+        self.context = self.context.max(other.context);
         self.links = self.links.max(other.links);
         self.xattr = self.xattr.max(other.xattr);
     }
@@ -277,7 +273,6 @@ static PRESERVABLE_ATTRIBUTES: &[&str] = &[
     "mode",
     "ownership",
     "timestamps",
-    #[cfg(feature = "feat_selinux")]
     "context",
     "links",
     "xattr",
@@ -664,7 +659,6 @@ impl Attributes {
             ownership: Preserve::Yes { required: true },
             mode: Preserve::Yes { required: true },
             timestamps: Preserve::Yes { required: true },
-            #[cfg(feature = "feat_selinux")]
             context: Preserve::Yes { required: false },
             links: Preserve::Yes { required: true },
             xattr: Preserve::Yes { required: false },
@@ -677,7 +671,6 @@ impl Attributes {
             ownership: Preserve::Yes { required: true },
             mode: Preserve::Yes { required: true },
             timestamps: Preserve::Yes { required: true },
-            #[cfg(feature = "feat_selinux")]
             context: Preserve::No,
             links: Preserve::No,
             xattr: Preserve::No,
@@ -690,7 +683,6 @@ impl Attributes {
             ownership: Preserve::No,
             mode: Preserve::No,
             timestamps: Preserve::No,
-            #[cfg(feature = "feat_selinux")]
             context: Preserve::No,
             links: Preserve::No,
             xattr: Preserve::No,
@@ -705,7 +697,6 @@ impl Attributes {
             #[cfg(unix)]
             "ownership" => self.ownership = self.ownership.max(preserve_yes_required),
             "timestamps" => self.timestamps = self.timestamps.max(preserve_yes_required),
-            #[cfg(feature = "feat_selinux")]
             "context" => self.context = self.context.max(preserve_yes_required),
             "links" => self.links = self.links.max(preserve_yes_required),
             "xattr" => self.xattr = self.xattr.max(preserve_yes_required),
@@ -773,11 +764,8 @@ impl Options {
                         attributes_empty = false;
                         if attribute_str == "all" {
                             attributes.max(Attributes::all());
-                            break;
                         } else {
-                            attributes.try_set_from_string(
-                                attribute_str
-                            )?;
+                            attributes.try_set_from_string(attribute_str)?;
                         }
                     }
                     // `--preserve` case, use the defaults
@@ -1231,26 +1219,34 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
-    #[cfg(feature = "feat_selinux")]
     handle_preserve(&attributes.context, || -> CopyResult<()> {
-        let context = selinux::SecurityContext::of_path(source, false, false).map_err(|e| {
-            format!(
-                "failed to get security context of {}: {}",
-                source.display(),
-                e
-            )
-        })?;
-        if let Some(context) = context {
-            context.set_for_path(dest, false, false).map_err(|e| {
+        #[cfg(feature = "feat_selinux")]
+        {
+            let context = selinux::SecurityContext::of_path(source, false, false).map_err(|e| {
                 format!(
-                    "failed to set security context for {}: {}",
-                    dest.display(),
+                    "failed to get security context of {}: {}",
+                    source.display(),
                     e
                 )
             })?;
-        }
+            if let Some(context) = context {
+                context.set_for_path(dest, false, false).map_err(|e| {
+                    format!(
+                        "failed to set security context for {}: {}",
+                        dest.display(),
+                        e
+                    )
+                })?;
+            }
 
-        Ok(())
+            Ok(())
+        }
+        #[cfg(not(feature = "feat_selinux"))]
+        {
+            Err(Error::Error(
+                "SELinux was not enabled during the compile time!".to_string(),
+            ))
+        }
     })?;
 
     handle_preserve(&attributes.xattr, || -> CopyResult<()> {
