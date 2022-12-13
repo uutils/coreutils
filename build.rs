@@ -6,8 +6,6 @@ use std::io::Write;
 use std::path::Path;
 
 pub fn main() {
-    // println!("cargo:warning=Running build.rs");
-
     if let Ok(profile) = env::var("PROFILE") {
         println!("cargo:rustc-cfg=build={:?}", profile);
     }
@@ -17,7 +15,6 @@ pub fn main() {
     const OVERRIDE_PREFIX: &str = "uu_";
 
     let out_dir = env::var("OUT_DIR").unwrap();
-    // println!("cargo:warning=out_dir={}", out_dir);
 
     let mut crates = Vec::new();
     for (key, val) in env::vars() {
