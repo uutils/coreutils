@@ -551,42 +551,41 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let zero_terminated = matches.get_flag(options::ZERO_TERMINATED);
 
                 match matches.get_one::<String>(options::DELIMITER).map(|s| s.as_str()) {
-                    Some(mut delim) => {
-                        if whitespace_delimited {
+                    Some(_) if whitespace_delimited => {
                             Err("invalid input: Only one of --delimiter (-d) or -w option can be specified".into())
                         }
-                        else {
-                            // GNU's `cut` supports `-d=` to set the delimiter to `=`.
-                            // Clap parsing is limited in this situation, see:
-                            // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
-                            if delimiter_is_equal {
-                                delim = "=";
-                            } else if delim == "''" {
-                                // treat `''` as empty delimiter
-                                delim = "";
-                            }
-                            if delim.chars().count() > 1 {
-                                Err("invalid input: The '--delimiter' ('-d') option expects empty or 1 character long, but was provided a value 2 characters or longer".into())
+                    Some(mut delim) => {
+                        // GNU's `cut` supports `-d=` to set the delimiter to `=`.
+                        // Clap parsing is limited in this situation, see:
+                        // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
+                        if delimiter_is_equal {
+                            delim = "=";
+                        } else if delim == "''" {
+                            // treat `''` as empty delimiter
+                            delim = "";
+                        }
+                        if delim.chars().count() > 1 {
+                            Err("invalid input: The '--delimiter' ('-d') option expects empty or 1 character long, but was provided a value 2 characters or longer".into())
+                        } else {
+                            let delim = if delim.is_empty() {
+                                "\0".to_owned()
                             } else {
-                                let delim = if delim.is_empty() {
-                                    "\0".to_owned()
-                                } else {
-                                    delim.to_owned()
-                                };
+                                delim.to_owned()
+                            };
 
-                                Ok(Mode::Fields(
-                                    ranges,
-                                    FieldOptions {
-                                        delimiter: delim,
-                                        out_delimiter: out_delim,
-                                        only_delimited,
-                                        whitespace_delimited,
-                                        zero_terminated,
-                                    },
-                                ))
-                            }
+                            Ok(Mode::Fields(
+                                ranges,
+                                FieldOptions {
+                                    delimiter: delim,
+                                    out_delimiter: out_delim,
+                                    only_delimited,
+                                    whitespace_delimited,
+                                    zero_terminated,
+                                },
+                            ))
                         }
                     }
+
                     None => Ok(Mode::Fields(
                         ranges,
                         FieldOptions {
