@@ -25,21 +25,19 @@ impl<'a> Iterator for WhitespaceSearcher<'a> {
     type Item = (usize, usize);
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(match_idx) = memchr2(b' ', b'\t', self.haystack) {
-                let mut skip = match_idx + 1;
-                while skip < self.haystack.len()
-                    && (self.haystack[skip] == b' ' || self.haystack[skip] == b'\t')
-                {
-                    skip += 1;
-                }
-                let match_pos = self.position + match_idx;
-                self.haystack = &self.haystack[skip..];
-                self.position += skip;
-                return Some((match_pos, self.position));
-            } else {
-                return None;
+        if let Some(match_idx) = memchr2(b' ', b'\t', self.haystack) {
+            let mut skip = match_idx + 1;
+            while skip < self.haystack.len()
+                && (self.haystack[skip] == b' ' || self.haystack[skip] == b'\t')
+            {
+                skip += 1;
             }
+            let match_pos = self.position + match_idx;
+            self.haystack = &self.haystack[skip..];
+            self.position += skip;
+            return Some((match_pos, self.position));
+        } else {
+            return None;
         }
     }
 }
