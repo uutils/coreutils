@@ -671,19 +671,6 @@ impl Attributes {
         }
     }
 
-    fn default_explicit() -> Self {
-        Self {
-            #[cfg(unix)]
-            ownership: Preserve::Yes { required: true },
-            mode: Preserve::Yes { required: true },
-            timestamps: Preserve::Yes { required: true },
-            #[cfg(feature = "feat_selinux")]
-            context: Preserve::Yes { required: true },
-            links: Preserve::Yes { required: true },
-            xattr: Preserve::Yes { required: true },
-        }
-    }
-
     fn default() -> Self {
         Self {
             #[cfg(unix)]
@@ -710,16 +697,18 @@ impl Attributes {
         }
     }
 
-    fn try_set_from_string(&mut self, value: &str, target_attributes: Self) -> Result<(), Error> {
+    fn try_set_from_string(&mut self, value: &str) -> Result<(), Error> {
+        let preserve_yes_required = Preserve::Yes { required: true };
+
         match &*value.to_lowercase() {
-            "mode" => self.mode = self.mode.max(target_attributes.mode),
+            "mode" => self.mode = self.mode.max(preserve_yes_required),
             #[cfg(unix)]
-            "ownership" => self.ownership = self.ownership.max(target_attributes.ownership),
-            "timestamps" => self.timestamps = self.timestamps.max(target_attributes.timestamps),
+            "ownership" => self.ownership = self.ownership.max(preserve_yes_required),
+            "timestamps" => self.timestamps = self.timestamps.max(preserve_yes_required),
             #[cfg(feature = "feat_selinux")]
-            "context" => self.context = self.context.max(target_attributes.context),
-            "links" => self.links = self.links.max(target_attributes.links),
-            "xattr" => self.xattr = self.xattr.max(target_attributes.xattr),
+            "context" => self.context = self.context.max(preserve_yes_required),
+            "links" => self.links = self.links.max(preserve_yes_required),
+            "xattr" => self.xattr = self.xattr.max(preserve_yes_required),
             _ => {
                 return Err(Error::InvalidArgument(format!(
                     "invalid attribute {}",
@@ -787,8 +776,7 @@ impl Options {
                             break;
                         } else {
                             attributes.try_set_from_string(
-                                attribute_str,
-                                Attributes::default_explicit(),
+                                attribute_str
                             )?;
                         }
                     }
