@@ -88,7 +88,7 @@ static LONG_HELP: &str = "
         If not set, a default delimiter of Tab will be used.
 
         If the -w option is provided, fields will be separated by any number
-        of  whitespace characters (Space and Tab). The output delimiter will
+        of whitespace characters (Space and Tab). The output delimiter will
         be a Tab unless explicitly specified. Only one of -d or -w option can be specified.
         This is an extension adopted from FreeBSD.
 
