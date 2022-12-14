@@ -296,13 +296,17 @@ fn cut_fields_whitespace<R: Read>(
         // delimiter character positions, since each delimiter sequence length can vary.
         for &Range { low, high } in ranges {
             if low - fields_pos > 0 {
+                // current field is not in the range, so jump to the field corresponding to the
+                // beginning of the range if any
                 low_idx = match delim_search.nth(low - fields_pos - 1) {
                     Some((_, last)) => last,
                     None => break,
                 };
             }
 
+            // at this point, current field is the first in the range
             for _ in 0..=high - low {
+                // skip printing delimiter if this is the first matching field for this line
                 if print_delim {
                     out.write_all(out_delim.as_bytes())?;
                 } else {
@@ -310,6 +314,7 @@ fn cut_fields_whitespace<R: Read>(
                 }
 
                 match delim_search.next() {
+                    // print the current field up to the next whitespace
                     Some((first, last)) => {
                         let segment = &line[low_idx..first];
 
@@ -319,6 +324,7 @@ fn cut_fields_whitespace<R: Read>(
                         fields_pos = high + 1;
                     }
                     None => {
+                        // this is the last field in the line, so print the rest
                         let segment = &line[low_idx..];
 
                         out.write_all(segment)?;
