@@ -83,12 +83,10 @@ fn test_field_sequence() {
 
 #[test]
 fn test_whitespace_delimited() {
-    for param in ["-w"] {
-        new_ucmd!()
-            .args(&[param, "-f", COMPLEX_SEQUENCE.sequence, INPUT])
-            .succeeds()
-            .stdout_only_fixture("whitespace_delimited.expected");
-    }
+    new_ucmd!()
+        .args(&["-w", "-f", COMPLEX_SEQUENCE.sequence, INPUT])
+        .succeeds()
+        .stdout_only_fixture("whitespace_delimited.expected");
 }
 
 #[test]
