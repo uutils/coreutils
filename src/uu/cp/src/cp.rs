@@ -798,6 +798,17 @@ impl Options {
             Attributes::none()
         };
 
+        #[cfg(not(feature = "feat_selinux"))]
+        if let Preserve::Yes { required } = attributes.context {
+            let selinux_disabled_error =
+                Error::Error("SELinux was not enabled during the compile time!".to_string());
+            if required {
+                return Err(selinux_disabled_error);
+            } else {
+                show_error_if_needed(&selinux_disabled_error);
+            }
+        }
+
         let options = Self {
             attributes_only: matches.get_flag(options::ATTRIBUTES_ONLY),
             copy_contents: matches.get_flag(options::COPY_CONTENTS),
@@ -1237,34 +1248,26 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
+    #[cfg(feature = "feat_selinux")]
     handle_preserve(&attributes.context, || -> CopyResult<()> {
-        #[cfg(feature = "feat_selinux")]
-        {
-            let context = selinux::SecurityContext::of_path(source, false, false).map_err(|e| {
+        let context = selinux::SecurityContext::of_path(source, false, false).map_err(|e| {
+            format!(
+                "failed to get security context of {}: {}",
+                source.display(),
+                e
+            )
+        })?;
+        if let Some(context) = context {
+            context.set_for_path(dest, false, false).map_err(|e| {
                 format!(
-                    "failed to get security context of {}: {}",
-                    source.display(),
+                    "failed to set security context for {}: {}",
+                    dest.display(),
                     e
                 )
             })?;
-            if let Some(context) = context {
-                context.set_for_path(dest, false, false).map_err(|e| {
-                    format!(
-                        "failed to set security context for {}: {}",
-                        dest.display(),
-                        e
-                    )
-                })?;
-            }
+        }
 
-            Ok(())
-        }
-        #[cfg(not(feature = "feat_selinux"))]
-        {
-            Err(Error::Error(
-                "SELinux was not enabled during the compile time!".to_string(),
-            ))
-        }
+        Ok(())
     })?;
 
     handle_preserve(&attributes.xattr, || -> CopyResult<()> {
