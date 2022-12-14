@@ -290,7 +290,10 @@ fn cut_fields_whitespace<R: Read>(
 
             return Ok(true);
         }
-
+        // The logic is identical to `cut_fields_delimiter` function above, which uses
+        // `Searcher` that iterates over and returns the first position of the delimiter character.
+        // The main difference is that `WhitespaceSearcher` returns a pair of the first and last
+        // delimiter character positions, since each delimiter sequence length can vary.
         for &Range { low, high } in ranges {
             if low - fields_pos > 0 {
                 low_idx = match delim_search.nth(low - fields_pos - 1) {

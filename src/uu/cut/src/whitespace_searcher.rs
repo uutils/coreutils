@@ -24,6 +24,9 @@ impl<'a> WhitespaceSearcher<'a> {
 impl<'a> Iterator for WhitespaceSearcher<'a> {
     type Item = (usize, usize);
 
+    // Iterate over sequences of consecutive whitespace (space and/or tab) characters.
+    // Returns (first, last) positions of each sequence, where `first` is inclusive and `last` is exclusive.
+    // The delimiter sequence byte-length is equal to `last - first`
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(match_idx) = memchr2(b' ', b'\t', self.haystack) {
             let mut skip = match_idx + 1;
