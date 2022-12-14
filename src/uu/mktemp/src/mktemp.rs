@@ -38,6 +38,7 @@ static OPT_DRY_RUN: &str = "dry-run";
 static OPT_QUIET: &str = "quiet";
 static OPT_SUFFIX: &str = "suffix";
 static OPT_TMPDIR: &str = "tmpdir";
+static OPT_SHORT_TMPDIR: &str = "short-tmpdir";
 static OPT_T: &str = "t";
 
 static ARG_TEMPLATE: &str = "template";
@@ -124,9 +125,8 @@ struct Options {
 
     /// The directory in which to create the temporary file.
     ///
-    /// If `None`, the file will be created in the current directory.
+    /// If `None`, the file will be created in the OS-temp directory.
     tmpdir: Option<String>,
-
     /// The suffix to append to the temporary file, if any.
     suffix: Option<String>,
 
@@ -137,64 +137,53 @@ struct Options {
     template: String,
 }
 
-/// Decide whether the argument to `--tmpdir` should actually be the template.
-///
-/// This function is required to work around a limitation of `clap`,
-/// the command-line argument parsing library. In case the command
-/// line is
-///
-/// ```sh
-/// mktemp --tmpdir XXX
-/// ```
-///
-/// the program should behave like
-///
-/// ```sh
-/// mktemp --tmpdir=${TMPDIR:-/tmp} XXX
-/// ```
-///
-/// However, `clap` thinks that `XXX` is the value of the `--tmpdir`
-/// option. This function returns `true` in this case and `false`
-/// in all other cases.
-fn is_tmpdir_argument_actually_the_template(matches: &ArgMatches) -> bool {
-    if !matches.contains_id(ARG_TEMPLATE) {
-        if let Some(tmpdir) = matches.get_one::<String>(OPT_TMPDIR) {
-            if !Path::new(tmpdir).is_dir() && tmpdir.contains("XXX") {
-                return true;
-            }
-        }
-    }
-    false
-}
-
 impl Options {
     fn from(matches: &ArgMatches) -> Self {
-        // Special case to work around a limitation of `clap`; see
-        // `is_tmpdir_argument_actually_the_template()` for more
-        // information.
-        //
-        // Fixed in clap 3
-        // See https://github.com/clap-rs/clap/pull/1587
-        let (tmpdir, template) = if is_tmpdir_argument_actually_the_template(matches) {
-            let tmpdir = Some(env::temp_dir().display().to_string());
-            let template = matches.get_one::<String>(OPT_TMPDIR).unwrap().to_string();
-            (tmpdir, template)
-        } else {
-            // If no template argument is given, `--tmpdir` is implied.
-            match matches.get_one::<String>(ARG_TEMPLATE) {
-                None => {
-                    let tmpdir = match matches.get_one::<String>(OPT_TMPDIR) {
-                        None => Some(env::temp_dir().display().to_string()),
-                        Some(tmpdir) => Some(tmpdir.to_string()),
-                    };
-                    let template = DEFAULT_TEMPLATE;
-                    (tmpdir, template.to_string())
-                }
-                Some(template) => {
-                    let tmpdir = matches.get_one::<String>(OPT_TMPDIR).map(String::from);
-                    (tmpdir, template.to_string())
-                }
+        // Workaround due to way clap handles arguments.
+        // Short and long tmpdir options have different behavior based on how arguments are given
+        // Due to limitations in clap, this behavior is impossible using a single flag
+        // Thus, a short option (-p) is additionally created in addition
+        // to the long option(--tmpdir)
+        let short_tmpdir = match matches.get_one::<String>(OPT_SHORT_TMPDIR) {
+            Some(tmpdir) => Some(tmpdir.to_string()),
+            None => Some(env::temp_dir().display().to_string()),
+        };
+
+        let long_tmpdir = match matches.get_one::<String>(OPT_TMPDIR) {
+            Some(tmpdir) => Some(tmpdir.to_string()),
+            None => Some(env::temp_dir().display().to_string()),
+        };
+
+        // When both -p and --tmpdir flags are given, take the last flag provided
+        // When a single short/long flag is given, use that as the tmpdir
+        let tmpdir = if matches.contains_id(OPT_TMPDIR) && matches.contains_id(OPT_SHORT_TMPDIR) {
+            let short_tmpdir_pos = matches.index_of(OPT_SHORT_TMPDIR).unwrap();
+            let long_tmpdir_pos = match matches.index_of(OPT_TMPDIR) {
+                Some(pos) => pos,
+                None => matches.index_of(ARG_TEMPLATE).unwrap_or(0),
+            };
+
+            if short_tmpdir_pos > long_tmpdir_pos && long_tmpdir_pos != 0 {
+                short_tmpdir
+            } else {
+                long_tmpdir
             }
+        } else if matches.contains_id(OPT_TMPDIR) && !matches.contains_id(OPT_SHORT_TMPDIR) {
+            long_tmpdir
+        // If no tmpdir flags are given, check for template and use tmpdir accordingly
+        } else if !matches.contains_id(OPT_TMPDIR) && !matches.contains_id(OPT_SHORT_TMPDIR) {
+            if !matches.contains_id(ARG_TEMPLATE) {
+                Some(env::temp_dir().display().to_string())
+            } else {
+                None
+            }
+        } else {
+            short_tmpdir
+        };
+
+        let template = match matches.get_one::<String>(ARG_TEMPLATE) {
+            Some(template) => template.to_string(),
+            None => DEFAULT_TEMPLATE.to_string(),
         };
         Self {
             directory: matches.get_flag(OPT_DIRECTORY),
@@ -354,11 +343,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Parse command-line options into a format suitable for the
     // application logic.
+    //
     let options = Options::from(&matches);
 
     if env::var("POSIXLY_CORRECT").is_ok() {
         // If POSIXLY_CORRECT was set, template MUST be the last argument.
-        if is_tmpdir_argument_actually_the_template(&matches) || matches.contains_id(ARG_TEMPLATE) {
+        if matches.contains_id(ARG_TEMPLATE) {
             // Template argument was provided, check if was the last one.
             if args.last().unwrap() != &options.template {
                 return Err(Box::new(MkTempError::TooManyTemplates));
@@ -429,9 +419,16 @@ pub fn uu_app() -> Command {
                 )
                 .value_name("SUFFIX"),
         )
+        // Short option needed to handle the behavior of short/long options for TMPDIR.
+        // See Options trait for more information.
+        .arg(
+            Arg::new(OPT_SHORT_TMPDIR)
+                .short('p')
+                .value_name("DIR")
+                .help("Same as --tmpdir"),
+        )
         .arg(
             Arg::new(OPT_TMPDIR)
-                .short('p')
                 .long(OPT_TMPDIR)
                 .help(
                     "interpret TEMPLATE relative to DIR; if DIR is not specified, use \
@@ -440,6 +437,7 @@ pub fn uu_app() -> Command {
                      may contain slashes, but mktemp creates only the final component",
                 )
                 .value_name("DIR")
+                .require_equals(true)
                 // Allows use of default argument just by setting --tmpdir. Else,
                 // use provided input to generate tmpdir
                 .num_args(0..=1)
