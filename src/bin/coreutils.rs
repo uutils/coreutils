@@ -20,8 +20,8 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 
 fn usage<T>(utils: &UtilityMap<T>, name: &str) {
-    println!("{} {} (multi-call binary)\n", name, VERSION);
-    println!("Usage: {} [function [arguments...]]\n", name);
+    println!("{name} {VERSION} (multi-call binary)\n");
+    println!("Usage: {name} [function [arguments...]]\n");
     println!("Currently defined functions:\n");
     #[allow(clippy::map_clone)]
     let mut utils: Vec<&str> = utils.keys().map(|&s| s).collect();
@@ -153,7 +153,7 @@ fn gen_completions<T: uucore::Args>(
         .get_matches_from(std::iter::once(OsString::from("completion")).chain(args));
 
     let utility = matches.get_one::<String>("utility").unwrap();
-    let shell = matches.get_one::<Shell>("shell").unwrap().to_owned();
+    let shell = *matches.get_one::<Shell>("shell").unwrap();
 
     let mut command = if utility == "coreutils" {
         gen_coreutils_app(util_map)

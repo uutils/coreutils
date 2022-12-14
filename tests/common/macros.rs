@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-/// Platform-independent helper for constructing a PathBuf from individual elements
+/// Platform-independent helper for constructing a `PathBuf` from individual elements
 #[macro_export]
 macro_rules! path_concat {
     ($e:expr, ..$n:expr) => {{
