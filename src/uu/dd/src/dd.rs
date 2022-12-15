@@ -715,7 +715,7 @@ fn calc_loop_bsize(
         Some(Num::Bytes(bmax)) => {
             let bmax: u128 = (*bmax).try_into().unwrap();
             let bremain: u128 = bmax - wstat.bytes_total;
-            cmp::min(ideal_bsize as u128, bremain as u128) as usize
+            cmp::min(ideal_bsize as u128, bremain) as usize
         }
         None => ideal_bsize,
     }

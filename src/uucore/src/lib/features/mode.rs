@@ -51,7 +51,7 @@ pub fn parse_symbolic(
         mode = &mode[pos..];
         let (mut srwx, pos) = parse_change(mode, fperm, considering_dir);
         if respect_umask {
-            srwx &= !(umask as u32);
+            srwx &= !umask;
         }
         mode = &mode[pos..];
         match op {
@@ -132,12 +132,20 @@ fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
 }
 
 pub fn parse_mode(mode: &str) -> Result<mode_t, String> {
+    #[cfg(all(
+        not(target_os = "freebsd"),
+        not(target_vendor = "apple"),
+        not(target_os = "android")
+    ))]
     let fperm = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+    #[cfg(any(target_os = "freebsd", target_vendor = "apple", target_os = "android"))]
+    let fperm = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+
     let arr: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
     let result = if mode.contains(arr) {
-        parse_numeric(fperm as u32, mode, true)
+        parse_numeric(fperm, mode, true)
     } else {
-        parse_symbolic(fperm as u32, mode, get_umask(), true)
+        parse_symbolic(fperm, mode, get_umask(), true)
     };
     result.map(|mode| mode as mode_t)
 }
@@ -152,7 +160,14 @@ pub fn get_umask() -> u32 {
     // possible but it can't violate Rust's guarantees.
     let mask = unsafe { umask(0) };
     unsafe { umask(mask) };
-    mask as u32
+    #[cfg(all(
+        not(target_os = "freebsd"),
+        not(target_vendor = "apple"),
+        not(target_os = "android")
+    ))]
+    return mask;
+    #[cfg(any(target_os = "freebsd", target_vendor = "apple", target_os = "android"))]
+    return mask.into();
 }
 
 // Iterate 'args' and delete the first occurrence

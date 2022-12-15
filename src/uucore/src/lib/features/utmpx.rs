@@ -51,6 +51,9 @@ pub use libc::getutxent;
 pub use libc::setutxent;
 #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "netbsd"))]
 pub use libc::utmpxname;
+
+/// # Safety
+/// Just fixed the clippy warning. Please add description here.
 #[cfg(target_os = "freebsd")]
 pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
     0
@@ -165,11 +168,11 @@ pub struct Utmpx {
 impl Utmpx {
     /// A.K.A. ut.ut_type
     pub fn record_type(&self) -> i16 {
-        self.inner.ut_type as i16
+        self.inner.ut_type
     }
     /// A.K.A. ut.ut_pid
     pub fn pid(&self) -> i32 {
-        self.inner.ut_pid as i32
+        self.inner.ut_pid
     }
     /// A.K.A. ut.ut_id
     pub fn terminal_suffix(&self) -> String {
@@ -189,7 +192,12 @@ impl Utmpx {
     }
     /// A.K.A. ut.ut_tv
     pub fn login_time(&self) -> time::OffsetDateTime {
+        #[cfg(all(not(target_os = "freebsd"), not(target_vendor = "apple")))]
         let ts_nanos: i128 = (self.inner.ut_tv.tv_sec as i64 * 1_000_000_000_i64
+            + self.inner.ut_tv.tv_usec as i64 * 1_000_i64)
+            .into();
+        #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+        let ts_nanos: i128 = (self.inner.ut_tv.tv_sec * 1_000_000_000_i64
             + self.inner.ut_tv.tv_usec as i64 * 1_000_i64)
             .into();
         let local_offset = time::OffsetDateTime::now_local().unwrap().offset();

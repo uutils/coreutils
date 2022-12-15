@@ -109,15 +109,36 @@ impl FileInformation {
     }
 
     pub fn number_of_links(&self) -> u64 {
-        #[cfg(unix)]
-        return self.0.st_nlink as u64;
+        #[cfg(all(
+            unix,
+            not(target_vendor = "apple"),
+            not(target_os = "android"),
+            not(target_os = "freebsd"),
+            not(target_arch = "aarch64"),
+            target_pointer_width = "64"
+        ))]
+        return self.0.st_nlink;
+        #[cfg(all(
+            unix,
+            any(
+                target_vendor = "apple",
+                target_os = "android",
+                target_os = "freebsd",
+                target_arch = "aarch64",
+                not(target_pointer_width = "64")
+            )
+        ))]
+        return self.0.st_nlink.into();
         #[cfg(windows)]
-        return self.0.number_of_links() as u64;
+        return self.0.number_of_links();
     }
 
     #[cfg(unix)]
     pub fn inode(&self) -> u64 {
-        self.0.st_ino as u64
+        #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
+        return self.0.st_ino;
+        #[cfg(any(target_os = "freebsd", not(target_pointer_width = "64")))]
+        return self.0.st_ino.into();
     }
 }
 

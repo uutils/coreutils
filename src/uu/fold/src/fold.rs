@@ -274,9 +274,7 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> URe
                     last_space = if spaces { Some(output.len()) } else { None };
                 }
                 '\x08' => {
-                    if col_count > 0 {
-                        col_count -= 1;
-                    }
+                    col_count = col_count.saturating_sub(1);
                 }
                 _ if spaces && ch.is_whitespace() => {
                     last_space = Some(output.len());

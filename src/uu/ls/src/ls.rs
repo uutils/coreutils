@@ -2702,7 +2702,14 @@ fn file_is_executable(md: &Metadata) -> bool {
     // S_IXUSR -> user has execute permission
     // S_IXGRP -> group has execute permission
     // S_IXOTH -> other users have execute permission
-    md.mode() & ((S_IXUSR | S_IXGRP | S_IXOTH) as u32) != 0
+    #[cfg(all(
+        not(target_os = "android"),
+        not(target_os = "freebsd"),
+        not(target_vendor = "apple")
+    ))]
+    return md.mode() & (S_IXUSR | S_IXGRP | S_IXOTH) != 0;
+    #[cfg(any(target_os = "android", target_os = "freebsd", target_vendor = "apple"))]
+    return md.mode() & ((S_IXUSR | S_IXGRP | S_IXOTH) as u32) != 0;
 }
 
 fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
