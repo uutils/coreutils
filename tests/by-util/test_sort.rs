@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (words) ints
 
+use std::time::Duration;
+
 use crate::common::util::*;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
@@ -948,6 +950,7 @@ fn test_compress_fail() {
 fn test_merge_batches() {
     TestScenario::new(util_name!())
         .ucmd_keepenv()
+        .timeout(Duration::from_secs(120))
         .args(&["ext_sort.txt", "-n", "-S", "150b"])
         .succeeds()
         .stdout_only_fixture("ext_sort.expected");

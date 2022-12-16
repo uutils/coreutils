@@ -1641,8 +1641,8 @@ impl UChild {
                     format!("wait: Timeout of '{}s' reached", timeout.as_secs_f64()),
                 )),
                 Err(RecvTimeoutError::Disconnected) => {
-                    handle.join().unwrap().unwrap();
-                    panic!("Error receiving from waiting thread because of unexpected disconnect")
+                    handle.join().expect("Panic caused disconnect").unwrap();
+                    panic!("Error receiving from waiting thread because of unexpected disconnect");
                 }
             }
         } else {
