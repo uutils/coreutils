@@ -9,6 +9,10 @@ extensions.
 
 `cp` can display a progress bar when the `-g`/`--progress` flag is set.
 
+## `mv`
+
+`mv` can display a progress bar when the `-g`/`--progress` flag is set.
+
 ## `hashsum`
 
 This utility does not exist in GNU coreutils. `hashsum` is a utility that

@@ -287,7 +287,7 @@ where
         OutputFmt::Shell => result.push_str("LS_COLORS='"),
         OutputFmt::CShell => result.push_str("setenv LS_COLORS '"),
         OutputFmt::Display => (),
-        _ => unreachable!(),
+        OutputFmt::Unknown => unreachable!(),
     }
 
     let mut table: HashMap<&str, &str> = HashMap::with_capacity(48);
@@ -405,7 +405,7 @@ where
             // remove latest "\n"
             result.pop();
         }
-        _ => unreachable!(),
+        OutputFmt::Unknown => unreachable!(),
     }
 
     Ok(result)

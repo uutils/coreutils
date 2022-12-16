@@ -396,7 +396,7 @@ pub fn canonicalize<P: AsRef<Path>>(
                 read_dir(parent)?;
             }
         }
-        _ => {}
+        MissingHandling::Missing => {}
     }
     Ok(result)
 }

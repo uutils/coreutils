@@ -147,7 +147,7 @@ impl CmdResult {
     }
 
     /// Returns the program's exit code
-    /// Panics if not run or has not finished yet for example when run with run_no_wait()
+    /// Panics if not run or has not finished yet for example when run with `run_no_wait()`
     pub fn code(&self) -> i32 {
         self.code
             .expect("Program must be run first or has not finished, yet")
@@ -158,7 +158,7 @@ impl CmdResult {
         self
     }
 
-    /// Returns the program's TempDir
+    /// Returns the program's `TempDir`
     /// Panics if not present
     pub fn tmpd(&self) -> Rc<TempDir> {
         match &self.tmpd {
@@ -201,7 +201,7 @@ impl CmdResult {
     }
 
     /// asserts that the command resulted in empty (zero-length) stderr stream output
-    /// generally, it's better to use stdout_only() instead,
+    /// generally, it's better to use `stdout_only()` instead,
     /// but you might find yourself using this function if
     /// 1.  you can not know exactly what stdout will be or
     /// 2.  you know that stdout will also be empty
@@ -215,8 +215,8 @@ impl CmdResult {
     }
 
     /// asserts that the command resulted in empty (zero-length) stderr stream output
-    /// unless asserting there was neither stdout or stderr, stderr_only is usually a better choice
-    /// generally, it's better to use stderr_only() instead,
+    /// unless asserting there was neither stdout or stderr, `stderr_only` is usually a better choice
+    /// generally, it's better to use `stderr_only()` instead,
     /// but you might find yourself using this function if
     /// 1.  you can not know exactly what stderr will be or
     /// 2.  you know that stderr will also be empty
@@ -236,7 +236,7 @@ impl CmdResult {
 
     /// asserts that the command resulted in stdout stream output that equals the
     /// passed in value, trailing whitespace are kept to force strict comparison (#1235)
-    /// stdout_only is a better choice unless stderr may or will be non-empty
+    /// `stdout_only()` is a better choice unless stderr may or will be non-empty
     pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> &Self {
         assert_eq!(self.stdout_str(), String::from(msg.as_ref()));
         self
@@ -244,13 +244,12 @@ impl CmdResult {
 
     /// like `stdout_is`, but succeeds if any elements of `expected` matches stdout.
     pub fn stdout_is_any<T: AsRef<str> + std::fmt::Debug>(&self, expected: &[T]) -> &Self {
-        if !expected.iter().any(|msg| self.stdout_str() == msg.as_ref()) {
-            panic!(
-                "stdout was {}\nExpected any of {:#?}",
-                self.stdout_str(),
-                expected
-            );
-        }
+        assert!(
+            expected.iter().any(|msg| self.stdout_str() == msg.as_ref()),
+            "stdout was {}\nExpected any of {:#?}",
+            self.stdout_str(),
+            expected
+        );
         self
     }
 
@@ -268,7 +267,7 @@ impl CmdResult {
         self
     }
 
-    /// like stdout_is(...), but expects the contents of the file at the provided relative path
+    /// like `stdout_is()`, but expects the contents of the file at the provided relative path
     pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stdout_is(String::from_utf8(contents).unwrap())
@@ -295,7 +294,7 @@ impl CmdResult {
         self.stdout_is_bytes(contents)
     }
 
-    /// like stdout_is_fixture(...), but replaces the data in fixture file based on values provided in template_vars
+    /// like `stdout_is_fixture()`, but replaces the data in fixture file based on values provided in `template_vars`
     /// command output
     pub fn stdout_is_templated_fixture<T: AsRef<OsStr>>(
         &self,
@@ -329,7 +328,7 @@ impl CmdResult {
 
     /// asserts that the command resulted in stderr stream output that equals the
     /// passed in value, when both are trimmed of trailing whitespace
-    /// stderr_only is a better choice unless stdout may or will be non-empty
+    /// `stderr_only` is a better choice unless stdout may or will be non-empty
     pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> &Self {
         assert_eq!(
             self.stderr_str().trim_end(),
@@ -345,7 +344,7 @@ impl CmdResult {
         self
     }
 
-    /// Like stdout_is_fixture, but for stderr
+    /// Like `stdout_is_fixture`, but for stderr
     pub fn stderr_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stderr_is(String::from_utf8(contents).unwrap())
@@ -367,7 +366,7 @@ impl CmdResult {
         self.no_stderr().stdout_is_bytes(msg)
     }
 
-    /// like stdout_only(...), but expects the contents of the file at the provided relative path
+    /// like `stdout_only()`, but expects the contents of the file at the provided relative path
     pub fn stdout_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stdout_only_bytes(contents)
@@ -399,8 +398,8 @@ impl CmdResult {
     /// 1.  the command resulted in stderr stream output that equals the
     ///     the following format when both are trimmed of trailing whitespace
     ///     `"{util_name}: {msg}\nTry '{bin_path} {util_name} --help' for more information."`
-    ///     This the expected format when a UUsageError is returned or when show_error! is called
-    ///     `msg` should be the same as the one provided to UUsageError::new or show_error!
+    ///     This the expected format when a `UUsageError` is returned or when `show_error!` is called
+    ///     `msg` should be the same as the one provided to `UUsageError::new` or `show_error!`
     ///
     /// 2.  the command resulted in empty (zero-length) stdout stream output
     pub fn usage_error<T: AsRef<str>>(&self, msg: T) -> &Self {
@@ -448,16 +447,20 @@ impl CmdResult {
     }
 
     pub fn stdout_matches(&self, regex: &regex::Regex) -> &Self {
-        if !regex.is_match(self.stdout_str().trim()) {
-            panic!("Stdout does not match regex:\n{}", self.stdout_str());
-        }
+        assert!(
+            regex.is_match(self.stdout_str().trim()),
+            "Stdout does not match regex:\n{}",
+            self.stdout_str()
+        );
         self
     }
 
     pub fn stdout_does_not_match(&self, regex: &regex::Regex) -> &Self {
-        if regex.is_match(self.stdout_str().trim()) {
-            panic!("Stdout matches regex:\n{}", self.stdout_str());
-        }
+        assert!(
+            !regex.is_match(self.stdout_str().trim()),
+            "Stdout matches regex:\n{}",
+            self.stdout_str()
+        );
         self
     }
 }
@@ -552,7 +555,7 @@ impl AtPath {
         let mut f = self.open(name);
         let mut contents = String::new();
         f.read_to_string(&mut contents)
-            .unwrap_or_else(|e| panic!("Couldn't read {}: {}", name, e));
+            .unwrap_or_else(|e| panic!("Couldn't read {name}: {e}"));
         contents
     }
 
@@ -560,20 +563,20 @@ impl AtPath {
         let mut f = self.open(name);
         let mut contents = Vec::new();
         f.read_to_end(&mut contents)
-            .unwrap_or_else(|e| panic!("Couldn't read {}: {}", name, e));
+            .unwrap_or_else(|e| panic!("Couldn't read {name}: {e}"));
         contents
     }
 
     pub fn write(&self, name: &str, contents: &str) {
         log_info("write(default)", self.plus_as_string(name));
         std::fs::write(self.plus(name), contents)
-            .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
+            .unwrap_or_else(|e| panic!("Couldn't write {name}: {e}"));
     }
 
     pub fn write_bytes(&self, name: &str, contents: &[u8]) {
         log_info("write(default)", self.plus_as_string(name));
         std::fs::write(self.plus(name), contents)
-            .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
+            .unwrap_or_else(|e| panic!("Couldn't write {name}: {e}"));
     }
 
     pub fn append(&self, name: &str, contents: &str) {
@@ -585,7 +588,7 @@ impl AtPath {
             .open(self.plus(name))
             .unwrap();
         f.write_all(contents.as_bytes())
-            .unwrap_or_else(|e| panic!("Couldn't write(append) {}: {}", name, e));
+            .unwrap_or_else(|e| panic!("Couldn't write(append) {name}: {e}"));
     }
 
     pub fn append_bytes(&self, name: &str, contents: &[u8]) {
@@ -597,7 +600,7 @@ impl AtPath {
             .open(self.plus(name))
             .unwrap();
         f.write_all(contents)
-            .unwrap_or_else(|e| panic!("Couldn't write(append) to {}: {}", name, e));
+            .unwrap_or_else(|e| panic!("Couldn't write(append) to {name}: {e}"));
     }
 
     pub fn truncate(&self, name: &str, contents: &str) {
@@ -609,30 +612,29 @@ impl AtPath {
             .open(self.plus(name))
             .unwrap();
         f.write_all(contents.as_bytes())
-            .unwrap_or_else(|e| panic!("Couldn't write(truncate) {}: {}", name, e));
+            .unwrap_or_else(|e| panic!("Couldn't write(truncate) {name}: {e}"));
     }
 
     pub fn rename(&self, source: &str, target: &str) {
         let source = self.plus(source);
         let target = self.plus(target);
-        log_info("rename", format!("{:?} {:?}", source, target));
+        log_info("rename", format!("{source:?} {target:?}"));
         std::fs::rename(&source, &target)
-            .unwrap_or_else(|e| panic!("Couldn't rename {:?} -> {:?}: {}", source, target, e));
+            .unwrap_or_else(|e| panic!("Couldn't rename {source:?} -> {target:?}: {e}"));
     }
 
     pub fn remove(&self, source: &str) {
         let source = self.plus(source);
-        log_info("remove", format!("{:?}", source));
-        std::fs::remove_file(&source)
-            .unwrap_or_else(|e| panic!("Couldn't remove {:?}: {}", source, e));
+        log_info("remove", format!("{source:?}"));
+        std::fs::remove_file(&source).unwrap_or_else(|e| panic!("Couldn't remove {source:?}: {e}"));
     }
 
     pub fn copy(&self, source: &str, target: &str) {
         let source = self.plus(source);
         let target = self.plus(target);
-        log_info("copy", format!("{:?} {:?}", source, target));
+        log_info("copy", format!("{source:?} {target:?}"));
         std::fs::copy(&source, &target)
-            .unwrap_or_else(|e| panic!("Couldn't copy {:?} -> {:?}: {}", source, target, e));
+            .unwrap_or_else(|e| panic!("Couldn't copy {source:?} -> {target:?}: {e}"));
     }
 
     pub fn rmdir(&self, dir: &str) {
@@ -959,7 +961,7 @@ impl UCommand {
         env_clear: bool,
     ) -> Self {
         let bin_path = bin_path.as_ref();
-        let util_name = util_name.as_ref().map(|un| un.as_ref());
+        let util_name = util_name.as_ref().map(std::convert::AsRef::as_ref);
 
         let mut ucmd = Self {
             tmpd: None,
@@ -1079,7 +1081,7 @@ impl UCommand {
         self
     }
 
-    /// like pipe_in(...), but uses the contents of the file at the provided relative path as the piped in data
+    /// like `pipe_in()`, but uses the contents of the file at the provided relative path as the piped in data
     pub fn pipe_in_fixture<S: AsRef<OsStr>>(&mut self, file_rel_path: S) -> &mut Self {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.pipe_in(contents)
@@ -1192,7 +1194,7 @@ impl UCommand {
 
     /// Spawns the command, feeding the passed in stdin, waits for the result
     /// and returns a command result.
-    /// It is recommended that, instead of this, you use a combination of pipe_in()
+    /// It is recommended that, instead of this, you use a combination of `pipe_in()`
     /// with succeeds() or fails()
     pub fn run_piped_stdin<T: Into<Vec<u8>>>(&mut self, input: T) -> CmdResult {
         self.pipe_in(input).run()
@@ -1216,7 +1218,7 @@ impl UCommand {
 
     pub fn get_full_fixture_path(&self, file_rel_path: &str) -> String {
         let tmpdir_path = self.tmpd.as_ref().unwrap().path();
-        format!("{}/{}", tmpdir_path.to_str().unwrap(), file_rel_path)
+        format!("{}/{file_rel_path}", tmpdir_path.to_str().unwrap())
     }
 }
 
@@ -1229,7 +1231,7 @@ struct CapturedOutput {
 }
 
 impl CapturedOutput {
-    /// Creates a new instance of CapturedOutput
+    /// Creates a new instance of `CapturedOutput`
     fn new(output: tempfile::NamedTempFile) -> Self {
         Self {
             current_file: output.reopen().unwrap(),
@@ -1411,7 +1413,7 @@ impl<'a> UChildAssertion<'a> {
                 self.uchild.stderr_all()
             ),
             Ok(None) => {}
-            Err(error) => panic!("Assertion failed with error '{:?}'", error),
+            Err(error) => panic!("Assertion failed with error '{error:?}'"),
         }
 
         self
@@ -1430,7 +1432,7 @@ impl<'a> UChildAssertion<'a> {
                 self.uchild.stdout_all(),
                 self.uchild.stderr_all()),
             Ok(_) =>  {},
-            Err(error) => panic!("Assertion failed with error '{:?}'", error),
+            Err(error) => panic!("Assertion failed with error '{error:?}'"),
         }
 
         self
@@ -1780,7 +1782,7 @@ impl UChild {
             match writer.write_all(&content).and_then(|_| writer.flush()) {
                 Err(error) if !ignore_stdin_write_error => Err(io::Error::new(
                     io::ErrorKind::Other,
-                    format!("failed to write to stdin of child: {}", error),
+                    format!("failed to write to stdin of child: {error}"),
                 )),
                 Ok(_) | Err(_) => Ok(()),
             }
@@ -1832,7 +1834,7 @@ impl UChild {
         match stdin.write_all(&data.into()).and_then(|_| stdin.flush()) {
             Err(error) if !self.ignore_stdin_write_error => Err(io::Error::new(
                 io::ErrorKind::Other,
-                format!("failed to write to stdin of child: {}", error),
+                format!("failed to write to stdin of child: {error}"),
             )),
             Ok(_) | Err(_) => Ok(()),
         }
@@ -1894,7 +1896,7 @@ pub fn whoami() -> String {
     std::env::var("USER")
         .or_else(|_| std::env::var("USERNAME"))
         .unwrap_or_else(|e| {
-            println!("{}: {}, using \"nobody\" instead", UUTILS_WARNING, e);
+            println!("{UUTILS_WARNING}: {e}, using \"nobody\" instead");
             "nobody".to_string()
         })
 }
@@ -1965,33 +1967,33 @@ pub fn check_coreutil_version(
     // id (GNU coreutils) 8.32.162-4eda
 
     let util_name = &host_name_for(util_name);
-    log_info("run", format!("{} --version", util_name));
+    log_info("run", format!("{util_name} --version"));
     let version_check = match Command::new(util_name.as_ref())
         .env("LC_ALL", "C")
         .arg("--version")
         .output()
     {
         Ok(s) => s,
-        Err(e) => return Err(format!("{}: '{}' {}", UUTILS_WARNING, util_name, e)),
+        Err(e) => return Err(format!("{UUTILS_WARNING}: '{util_name}' {e}")),
     };
     std::str::from_utf8(&version_check.stdout).unwrap()
         .split('\n')
         .collect::<Vec<_>>()
         .first()
         .map_or_else(
-            || Err(format!("{}: unexpected output format for reference coreutil: '{} --version'", UUTILS_WARNING, util_name)),
+            || Err(format!("{UUTILS_WARNING}: unexpected output format for reference coreutil: '{util_name} --version'")),
             |s| {
-                if s.contains(&format!("(GNU coreutils) {}", version_expected)) {
-                    Ok(format!("{}: {}", UUTILS_INFO, s))
+                if s.contains(&format!("(GNU coreutils) {version_expected}")) {
+                    Ok(format!("{UUTILS_INFO}: {s}"))
                 } else if s.contains("(GNU coreutils)") {
                     let version_found = parse_coreutil_version(s);
                     let version_expected = version_expected.parse::<f32>().unwrap_or_default();
                     if version_found > version_expected {
-                    Ok(format!("{}: version for the reference coreutil '{}' is higher than expected; expected: {}, found: {}", UUTILS_INFO, util_name, version_expected, version_found))
+                    Ok(format!("{UUTILS_INFO}: version for the reference coreutil '{util_name}' is higher than expected; expected: {version_expected}, found: {version_found}"))
                     } else {
-                    Err(format!("{}: version for the reference coreutil '{}' does not match; expected: {}, found: {}", UUTILS_WARNING, util_name, version_expected, version_found)) }
+                    Err(format!("{UUTILS_WARNING}: version for the reference coreutil '{util_name}' does not match; expected: {version_expected}, found: {version_found}")) }
                 } else {
-                    Err(format!("{}: no coreutils version string found for reference coreutils '{} --version'", UUTILS_WARNING, util_name))
+                    Err(format!("{UUTILS_WARNING}: no coreutils version string found for reference coreutils '{util_name} --version'"))
                 }
             },
         )
@@ -2125,10 +2127,10 @@ pub fn run_ucmd_as_root(
                 Err("Cannot run non-interactive sudo".to_string())
             }
             Ok(_output) => Err("\"sudo whoami\" didn't return \"root\"".to_string()),
-            Err(e) => Err(format!("{}: {}", UUTILS_WARNING, e)),
+            Err(e) => Err(format!("{UUTILS_WARNING}: {e}")),
         }
     } else {
-        Err(format!("{}: {}", UUTILS_INFO, "cannot run inside CI"))
+        Err(format!("{UUTILS_INFO}: {}", "cannot run inside CI"))
     }
 }
 
@@ -2548,9 +2550,18 @@ mod tests {
     fn test_uchild_when_run_no_wait_with_a_non_blocking_util() {
         let ts = TestScenario::new("echo");
         let mut child = ts.ucmd().arg("hello world").run_no_wait();
-        child.delay(500);
 
-        // check `child.is_alive()` is working
+        // check `child.is_alive()` and `child.delay()` is working
+        let mut trials = 10;
+        while child.is_alive() {
+            if trials <= 0 {
+                panic!("Assertion failed: child process is still alive.")
+            }
+
+            child.delay(500);
+            trials -= 1;
+        }
+
         assert!(!child.is_alive());
 
         // check `child.is_not_alive()` is working
@@ -2599,9 +2610,9 @@ mod tests {
         at.touch("a/empty");
 
         #[cfg(target_vendor = "apple")]
-        let delay: u64 = 1000;
+        let delay: u64 = 2000;
         #[cfg(not(target_vendor = "apple"))]
-        let delay: u64 = 500;
+        let delay: u64 = 1000;
 
         let yes = if cfg!(windows) { "y\r\n" } else { "y\n" };
 
@@ -2641,29 +2652,10 @@ mod tests {
             .with_exact_output(44, 0)
             .stdout_only(expected);
 
-        #[cfg(windows)]
-        let expected = "rm: descend into directory 'a'? \
-                              rm: remove regular empty file 'a\\empty'? \
-                              removed 'a\\empty'\n\
-                              rm: remove directory 'a'? \
-                              removed directory 'a'\n";
-        #[cfg(unix)]
-        let expected = "rm: descend into directory 'a'? \
-                              rm: remove regular empty file 'a/empty'? \
-                              removed 'a/empty'\n\
-                              rm: remove directory 'a'? \
-                              removed directory 'a'\n";
+        let expected = "removed directory 'a'\n";
 
         child.write_in(yes);
-        child
-            .delay(delay)
-            .kill()
-            .make_assertion()
-            .is_not_alive()
-            .with_all_output()
-            .stdout_only(expected);
-
-        child.wait().unwrap().no_stdout().no_stderr().success();
+        child.wait().unwrap().stdout_only(expected).success();
     }
 
     #[cfg(feature = "tail")]

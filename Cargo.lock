@@ -2660,6 +2660,7 @@ version = "0.0.16"
 dependencies = [
  "clap",
  "fs_extra",
+ "indicatif",
  "uucore",
 ]
 
@@ -2984,6 +2985,7 @@ dependencies = [
 name = "uu_tail"
 version = "0.0.16"
 dependencies = [
+ "atty",
  "clap",
  "libc",
  "memchr",

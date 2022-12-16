@@ -24,58 +24,57 @@ mod paths;
 mod platform;
 pub mod text;
 
+pub use args::uu_app;
+use args::{parse_args, FilterMode, Settings, Signum};
+use chunks::ReverseChunks;
+use follow::Observer;
+use paths::{FileExtTail, HeaderPrinter, Input, InputKind, MetadataExtTail};
 use same_file::Handle;
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use uucore::{show, show_error, show_warning};
-
 use uucore::display::Quotable;
 use uucore::error::{get_exit_code, set_exit_code, FromIo, UError, UResult, USimpleError};
-
-pub use args::uu_app;
-use args::{parse_args, FilterMode, Settings, Signum};
-use chunks::ReverseChunks;
-use follow::WatcherService;
-use paths::{FileExtTail, Input, InputKind, InputService, MetadataExtTail};
+use uucore::{show, show_error};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let settings = parse_args(args)?;
+
+    settings.check_warnings();
+
+    match settings.verify() {
+        args::VerificationResult::CannotFollowStdinByName => {
+            return Err(USimpleError::new(
+                1,
+                format!("cannot follow {} by name", text::DASH.quote()),
+            ))
+        }
+        // Exit early if we do not output anything. Note, that this may break a pipe
+        // when tail is on the receiving side.
+        args::VerificationResult::NoOutput => return Ok(()),
+        args::VerificationResult::Ok => {}
+    }
+
     uu_tail(&settings)
 }
 
 fn uu_tail(settings: &Settings) -> UResult<()> {
-    // Mimic GNU's tail for `tail -F` and exit immediately
-    let mut input_service = InputService::from(settings);
-    let mut watcher_service = WatcherService::from(settings);
+    let mut printer = HeaderPrinter::new(settings.verbose, true);
+    let mut observer = Observer::from(settings);
 
-    if input_service.has_stdin() && watcher_service.follow_name() {
-        return Err(USimpleError::new(
-            1,
-            format!("cannot follow {} by name", text::DASH.quote()),
-        ));
-    }
-
-    watcher_service.start(settings)?;
+    observer.start(settings)?;
     // Do an initial tail print of each path's content.
     // Add `path` and `reader` to `files` map if `--follow` is selected.
-    for input in &input_service.inputs.clone() {
+    for input in &settings.inputs.clone() {
         match input.kind() {
             InputKind::File(path) if cfg!(not(unix)) || path != &PathBuf::from(text::DEV_STDIN) => {
-                tail_file(
-                    settings,
-                    &mut input_service,
-                    input,
-                    path,
-                    &mut watcher_service,
-                    0,
-                )?;
+                tail_file(settings, &mut printer, input, path, &mut observer, 0)?;
             }
             // File points to /dev/stdin here
             InputKind::File(_) | InputKind::Stdin => {
-                tail_stdin(settings, &mut input_service, input, &mut watcher_service)?;
+                tail_stdin(settings, &mut printer, input, &mut observer)?;
             }
         }
     }
@@ -90,9 +89,8 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
         the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
         not the -f option shall be ignored.
         */
-
-        if !input_service.has_only_stdin() {
-            follow::follow(watcher_service, settings)?;
+        if !settings.has_only_stdin() {
+            follow::follow(observer, settings)?;
         }
     }
 
@@ -105,16 +103,12 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
 
 fn tail_file(
     settings: &Settings,
-    input_service: &mut InputService,
+    header_printer: &mut HeaderPrinter,
     input: &Input,
     path: &Path,
-    watcher_service: &mut WatcherService,
+    observer: &mut Observer,
     offset: u64,
 ) -> UResult<()> {
-    if watcher_service.follow_descriptor_retry() {
-        show_warning!("--retry only effective for the initial open");
-    }
-
     if !path.exists() {
         set_exit_code(1);
         show_error!(
@@ -122,11 +116,11 @@ fn tail_file(
             input.display_name,
             text::NO_SUCH_FILE
         );
-        watcher_service.add_bad_path(path, input.display_name.as_str(), false)?;
+        observer.add_bad_path(path, input.display_name.as_str(), false)?;
     } else if path.is_dir() {
         set_exit_code(1);
 
-        input_service.print_header(input);
+        header_printer.print_input(input);
         let err_msg = "Is a directory".to_string();
 
         show_error!("error reading '{}': {}", input.display_name, err_msg);
@@ -142,16 +136,16 @@ fn tail_file(
                 msg
             );
         }
-        if !(watcher_service.follow_name_retry()) {
+        if !(observer.follow_name_retry()) {
             // skip directory if not retry
             return Ok(());
         }
-        watcher_service.add_bad_path(path, input.display_name.as_str(), false)?;
+        observer.add_bad_path(path, input.display_name.as_str(), false)?;
     } else if input.is_tailable() {
         let metadata = path.metadata().ok();
         match File::open(path) {
             Ok(mut file) => {
-                input_service.print_header(input);
+                header_printer.print_input(input);
                 let mut reader;
                 if !settings.presume_input_pipe
                     && file.is_seekable(if input.is_stdin() { offset } else { 0 })
@@ -163,7 +157,7 @@ fn tail_file(
                     reader = BufReader::new(file);
                     unbounded_tail(&mut reader, settings)?;
                 }
-                watcher_service.add_path(
+                observer.add_path(
                     path,
                     input.display_name.as_str(),
                     Some(Box::new(reader)),
@@ -171,20 +165,20 @@ fn tail_file(
                 )?;
             }
             Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
-                watcher_service.add_bad_path(path, input.display_name.as_str(), false)?;
+                observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 show!(e.map_err_context(|| {
                     format!("cannot open '{}' for reading", input.display_name)
                 }));
             }
             Err(e) => {
-                watcher_service.add_bad_path(path, input.display_name.as_str(), false)?;
+                observer.add_bad_path(path, input.display_name.as_str(), false)?;
                 return Err(e.map_err_context(|| {
                     format!("cannot open '{}' for reading", input.display_name)
                 }));
             }
         }
     } else {
-        watcher_service.add_bad_path(path, input.display_name.as_str(), false)?;
+        observer.add_bad_path(path, input.display_name.as_str(), false)?;
     }
 
     Ok(())
@@ -192,9 +186,9 @@ fn tail_file(
 
 fn tail_stdin(
     settings: &Settings,
-    input_service: &mut InputService,
+    header_printer: &mut HeaderPrinter,
     input: &Input,
-    watcher_service: &mut WatcherService,
+    observer: &mut Observer,
 ) -> UResult<()> {
     match input.resolve() {
         // fifo
@@ -211,24 +205,20 @@ fn tail_stdin(
             }
             tail_file(
                 settings,
-                input_service,
+                header_printer,
                 input,
                 &path,
-                watcher_service,
+                observer,
                 stdin_offset,
             )?;
         }
         // pipe
         None => {
-            input_service.print_header(input);
+            header_printer.print_input(input);
             if !paths::stdin_is_bad_fd() {
                 let mut reader = BufReader::new(stdin());
                 unbounded_tail(&mut reader, settings)?;
-                watcher_service.add_stdin(
-                    input.display_name.as_str(),
-                    Some(Box::new(reader)),
-                    true,
-                )?;
+                observer.add_stdin(input.display_name.as_str(), Some(Box::new(reader)), true)?;
             } else {
                 set_exit_code(1);
                 show_error!(
@@ -417,7 +407,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         FilterMode::Lines(Signum::Negative(count), sep) => {
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, *count);
             chunks.fill(reader)?;
-            chunks.print(writer)?;
+            chunks.print(&mut writer)?;
         }
         FilterMode::Lines(Signum::PlusZero | Signum::Positive(1), _) => {
             io::copy(reader, &mut writer)?;
@@ -441,7 +431,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         FilterMode::Bytes(Signum::Negative(count)) => {
             let mut chunks = chunks::BytesChunkBuffer::new(*count);
             chunks.fill(reader)?;
-            chunks.print(writer)?;
+            chunks.print(&mut writer)?;
         }
         FilterMode::Bytes(Signum::PlusZero | Signum::Positive(1)) => {
             io::copy(reader, &mut writer)?;
