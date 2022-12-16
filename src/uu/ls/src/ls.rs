@@ -2702,13 +2702,7 @@ fn file_is_executable(md: &Metadata) -> bool {
     // S_IXUSR -> user has execute permission
     // S_IXGRP -> group has execute permission
     // S_IXOTH -> other users have execute permission
-    #[cfg(all(
-        not(target_os = "android"),
-        not(target_os = "freebsd"),
-        not(target_vendor = "apple")
-    ))]
-    return md.mode() & (S_IXUSR | S_IXGRP | S_IXOTH) != 0;
-    #[cfg(any(target_os = "android", target_os = "freebsd", target_vendor = "apple"))]
+    #[allow(clippy::unnecessary_cast)]
     return md.mode() & ((S_IXUSR | S_IXGRP | S_IXOTH) as u32) != 0;
 }
 

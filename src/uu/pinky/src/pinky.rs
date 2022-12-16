@@ -277,17 +277,15 @@ impl Pinky {
 
         let mesg;
         let last_change;
+
         match pts_path.metadata() {
+            #[allow(clippy::unnecessary_cast)]
             Ok(meta) => {
-                #[cfg(all(
-                    not(target_os = "android"),
-                    not(target_os = "freebsd"),
-                    not(target_vendor = "apple")
-                ))]
-                let iwgrp = S_IWGRP;
-                #[cfg(any(target_os = "android", target_os = "freebsd", target_vendor = "apple"))]
-                let iwgrp = S_IWGRP as u32;
-                mesg = if meta.mode() & iwgrp != 0 { ' ' } else { '*' };
+                mesg = if meta.mode() & S_IWGRP as u32 != 0 {
+                    ' '
+                } else {
+                    '*'
+                };
                 last_change = meta.atime();
             }
             _ => {
