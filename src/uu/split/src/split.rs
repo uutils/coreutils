@@ -1115,7 +1115,7 @@ where
     // of bytes per chunk.
     let metadata = metadata(&settings.input).unwrap();
     let num_bytes = metadata.len();
-    let chunk_size = (num_bytes / (num_chunks as u64)) as usize;
+    let chunk_size = (num_bytes / num_chunks) as usize;
 
     // This object is responsible for creating the filename for each chunk.
     let mut filename_iterator = FilenameIterator::new(
@@ -1188,7 +1188,7 @@ where
     // of bytes per chunk.
     let metadata = metadata(&settings.input).unwrap();
     let num_bytes = metadata.len();
-    let chunk_size = (num_bytes / (num_chunks as u64)) as usize;
+    let chunk_size = (num_bytes / num_chunks) as usize;
 
     // Write to stdout instead of to a file.
     let stdout = std::io::stdout();

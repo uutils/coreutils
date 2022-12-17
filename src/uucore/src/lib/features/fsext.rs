@@ -499,15 +499,39 @@ impl FsUsage {
     #[cfg(unix)]
     pub fn new(statvfs: StatFs) -> Self {
         {
-            Self {
+            #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
+            return Self {
                 blocksize: statvfs.f_bsize as u64, // or `statvfs.f_frsize` ?
-                blocks: statvfs.f_blocks as u64,
-                bfree: statvfs.f_bfree as u64,
-                bavail: statvfs.f_bavail as u64,
+                blocks: statvfs.f_blocks,
+                bfree: statvfs.f_bfree,
+                bavail: statvfs.f_bavail,
+                bavail_top_bit_set: ((statvfs.f_bavail) & (1u64.rotate_right(1))) != 0,
+                files: statvfs.f_files,
+                ffree: statvfs.f_ffree,
+            };
+            #[cfg(all(not(target_os = "freebsd"), not(target_pointer_width = "64")))]
+            return Self {
+                blocksize: statvfs.f_bsize as u64, // or `statvfs.f_frsize` ?
+                blocks: statvfs.f_blocks.into(),
+                bfree: statvfs.f_bfree.into(),
+                bavail: statvfs.f_bavail.into(),
                 bavail_top_bit_set: ((statvfs.f_bavail as u64) & (1u64.rotate_right(1))) != 0,
-                files: statvfs.f_files as u64,
-                ffree: statvfs.f_ffree as u64,
-            }
+                files: statvfs.f_files.into(),
+                ffree: statvfs.f_ffree.into(),
+            };
+            #[cfg(target_os = "freebsd")]
+            return Self {
+                blocksize: statvfs.f_bsize, // or `statvfs.f_frsize` ?
+                blocks: statvfs.f_blocks,
+                bfree: statvfs.f_bfree,
+                bavail: statvfs.f_bavail.try_into().unwrap(),
+                bavail_top_bit_set: ((std::convert::TryInto::<u64>::try_into(statvfs.f_bavail)
+                    .unwrap())
+                    & (1u64.rotate_right(1)))
+                    != 0,
+                files: statvfs.f_files,
+                ffree: statvfs.f_ffree.try_into().unwrap(),
+            };
         }
     }
     #[cfg(not(unix))]
@@ -556,7 +580,7 @@ impl FsUsage {
         let bytes_per_cluster = sectors_per_cluster as u64 * bytes_per_sector as u64;
         Self {
             // f_bsize      File system block size.
-            blocksize: bytes_per_cluster as u64,
+            blocksize: bytes_per_cluster,
             // f_blocks - Total number of blocks on the file system, in units of f_frsize.
             // frsize =     Fundamental file system block size (fragment size).
             blocks: total_number_of_clusters as u64,
@@ -590,22 +614,60 @@ pub trait FsMeta {
 #[cfg(unix)]
 impl FsMeta for StatFs {
     fn block_size(&self) -> i64 {
-        self.f_bsize as i64
+        #[cfg(all(
+            not(target_env = "musl"),
+            not(target_vendor = "apple"),
+            not(target_os = "android"),
+            not(target_os = "freebsd"),
+            target_pointer_width = "64"
+        ))]
+        return self.f_bsize;
+        #[cfg(all(
+            not(target_env = "musl"),
+            not(target_os = "freebsd"),
+            any(
+                target_vendor = "apple",
+                target_os = "android",
+                not(target_pointer_width = "64")
+            )
+        ))]
+        return self.f_bsize.into();
+        #[cfg(any(target_env = "musl", target_os = "freebsd"))]
+        return self.f_bsize.try_into().unwrap();
     }
     fn total_blocks(&self) -> u64 {
-        self.f_blocks as u64
+        #[cfg(target_pointer_width = "64")]
+        return self.f_blocks;
+        #[cfg(not(target_pointer_width = "64"))]
+        return self.f_blocks.into();
     }
     fn free_blocks(&self) -> u64 {
-        self.f_bfree as u64
+        #[cfg(target_pointer_width = "64")]
+        return self.f_bfree;
+        #[cfg(not(target_pointer_width = "64"))]
+        return self.f_bfree.into();
     }
     fn avail_blocks(&self) -> u64 {
-        self.f_bavail as u64
+        #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
+        return self.f_bavail;
+        #[cfg(all(not(target_os = "freebsd"), not(target_pointer_width = "64")))]
+        return self.f_bavail.into();
+        #[cfg(target_os = "freebsd")]
+        return self.f_bavail.try_into().unwrap();
     }
     fn total_file_nodes(&self) -> u64 {
-        self.f_files as u64
+        #[cfg(target_pointer_width = "64")]
+        return self.f_files;
+        #[cfg(not(target_pointer_width = "64"))]
+        return self.f_files.into();
     }
     fn free_file_nodes(&self) -> u64 {
-        self.f_ffree as u64
+        #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
+        return self.f_ffree;
+        #[cfg(all(not(target_os = "freebsd"), not(target_pointer_width = "64")))]
+        return self.f_ffree.into();
+        #[cfg(target_os = "freebsd")]
+        return self.f_ffree.try_into().unwrap();
     }
     #[cfg(any(
         target_os = "linux",
@@ -614,7 +676,26 @@ impl FsMeta for StatFs {
         target_os = "freebsd"
     ))]
     fn fs_type(&self) -> i64 {
-        self.f_type as i64
+        #[cfg(all(
+            not(target_env = "musl"),
+            not(target_vendor = "apple"),
+            not(target_os = "android"),
+            not(target_os = "freebsd"),
+            target_pointer_width = "64"
+        ))]
+        return self.f_type;
+        #[cfg(all(
+            not(target_env = "musl"),
+            any(
+                target_vendor = "apple",
+                target_os = "android",
+                target_os = "freebsd",
+                not(target_pointer_width = "64")
+            )
+        ))]
+        return self.f_type.into();
+        #[cfg(target_env = "musl")]
+        return self.f_type.try_into().unwrap();
     }
     #[cfg(not(any(
         target_os = "linux",
@@ -633,7 +714,10 @@ impl FsMeta for StatFs {
     }
     #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "netbsd"))]
     fn io_size(&self) -> u64 {
-        self.f_iosize as u64
+        #[cfg(target_os = "freebsd")]
+        return self.f_iosize;
+        #[cfg(not(target_os = "freebsd"))]
+        return self.f_iosize as u64;
     }
     // XXX: dunno if this is right
     #[cfg(not(any(

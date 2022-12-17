@@ -143,7 +143,7 @@ impl Stat {
             path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
-            blocks: metadata.blocks() as u64,
+            blocks: metadata.blocks(),
             inodes: 1,
             inode: Some(file_info),
             created: birth_u64(&metadata),
@@ -188,7 +188,7 @@ fn birth_u64(meta: &Metadata) -> Option<u64> {
     meta.created()
         .ok()
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|e| e.as_secs() as u64)
+        .map(|e| e.as_secs())
 }
 
 #[cfg(windows)]
@@ -807,7 +807,7 @@ pub fn uu_app() -> Command {
         //         .short('P')
         //         .long("no-dereference")
         //         .help("don't follow any symbolic links (this is the default)")
-        //         .action(ArgAction::SetTrue),        
+        //         .action(ArgAction::SetTrue),
         // )
         .arg(
             Arg::new(options::BLOCK_SIZE_1M)

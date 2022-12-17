@@ -195,7 +195,7 @@ impl SubParser {
         // into min_width, second_field, field_char
         for ch in it {
             self.text_so_far.push(ch);
-            match ch as char {
+            match ch {
                 '-' | '*' | '0'..='9' => {
                     if !self.past_decimal {
                         if self.min_width_is_asterisk || self.specifiers_found {
@@ -421,7 +421,7 @@ impl Sub {
                 "{}",
                 match field.min_width {
                     Some(min_width) => {
-                        let diff: isize = min_width.abs() as isize - pre_min_width.len() as isize;
+                        let diff: isize = min_width.abs() - pre_min_width.len() as isize;
                         if diff > 0 {
                             let mut final_str = String::new();
                             // definitely more efficient ways

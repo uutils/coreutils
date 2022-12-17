@@ -27,7 +27,7 @@ const fn generate_crc_table() -> [u32; CRC_TABLE_LEN] {
 
     let mut i = 0;
     while i < CRC_TABLE_LEN {
-        table[i] = crc_entry(i as u8) as u32;
+        table[i] = crc_entry(i as u8);
 
         i += 1;
     }

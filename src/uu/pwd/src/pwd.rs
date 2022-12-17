@@ -147,7 +147,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(Into::into)
         .unwrap_or(cwd);
 
-    println_verbatim(&cwd).map_err_context(|| "failed to print current directory".to_owned())?;
+    println_verbatim(cwd).map_err_context(|| "failed to print current directory".to_owned())?;
 
     Ok(())
 }

@@ -259,7 +259,7 @@ fn resolve_path(
 
     let abs = process_relative(abs, relative_base, relative_to);
 
-    print_verbatim(&abs)?;
+    print_verbatim(abs)?;
     stdout().write_all(&[line_ending])?;
     Ok(())
 }

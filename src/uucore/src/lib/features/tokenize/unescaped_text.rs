@@ -217,7 +217,7 @@ impl UnescapedText {
                 if !addchar {
                     addchar = true;
                 }
-                match ch as char {
+                match ch {
                     x if x != '\\' && x != '%' => {
                         // lazy branch eval
                         // remember this fn could be called

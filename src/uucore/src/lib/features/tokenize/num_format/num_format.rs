@@ -61,11 +61,11 @@ fn get_provided(str_in_opt: Option<&String>) -> Option<u8> {
                                 if !ignored.is_empty() {
                                     warn_char_constant_ign(&ignored);
                                 }
-                                second_byte as u8
+                                second_byte
                             }
                             // no byte after quote
                             None => {
-                                let so_far = (ch as u8 as char).to_string();
+                                let so_far = (ch as char).to_string();
                                 warn_expected_numeric(&so_far);
                                 0_u8
                             }

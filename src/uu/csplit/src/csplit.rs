@@ -228,7 +228,7 @@ impl<'a> SplitWriter<'a> {
     /// The creation of the split file may fail with some [`io::Error`].
     fn new_writer(&mut self) -> io::Result<()> {
         let file_name = self.options.split_name.get(self.counter);
-        let file = File::create(&file_name)?;
+        let file = File::create(file_name)?;
         self.current_writer = Some(BufWriter::new(file));
         self.counter += 1;
         self.size = 0;

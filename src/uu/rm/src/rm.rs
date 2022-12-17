@@ -520,6 +520,7 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
     let mode = metadata.permissions().mode();
     // Check if directory has user write permissions
     // Why is S_IWUSR showing up as a u16 on macos?
+    #[allow(clippy::unnecessary_cast)]
     let user_writable = (mode & (libc::S_IWUSR as u32)) != 0;
     if !user_writable {
         prompt_yes!("remove write-protected directory {}?", path.quote())

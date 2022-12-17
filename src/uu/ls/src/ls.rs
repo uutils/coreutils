@@ -2702,7 +2702,8 @@ fn file_is_executable(md: &Metadata) -> bool {
     // S_IXUSR -> user has execute permission
     // S_IXGRP -> group has execute permission
     // S_IXOTH -> other users have execute permission
-    md.mode() & ((S_IXUSR | S_IXGRP | S_IXOTH) as u32) != 0
+    #[allow(clippy::unnecessary_cast)]
+    return md.mode() & ((S_IXUSR | S_IXGRP | S_IXOTH) as u32) != 0;
 }
 
 fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {

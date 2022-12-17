@@ -160,7 +160,10 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
     proc_uptime.unwrap_or_else(|| match boot_time {
         Some(t) => {
             let now = Local::now().timestamp();
-            let boottime = t as i64;
+            #[cfg(target_pointer_width = "64")]
+            let boottime: i64 = t;
+            #[cfg(not(target_pointer_width = "64"))]
+            let boottime: i64 = t.into();
             now - boottime
         }
         None => -1,
