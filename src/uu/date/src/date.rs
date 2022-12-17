@@ -8,6 +8,7 @@
 
 // spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
 
+use chrono::format::{Item, StrftimeItems};
 use chrono::{DateTime, FixedOffset, Local, Offset, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
@@ -243,6 +244,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Ok(date) => {
                     // GNU `date` uses `%N` for nano seconds, however crate::chrono uses `%f`
                     let format_string = &format_string.replace("%N", "%f");
+                    //Hack to work around panic in chrony,
+                    //TODO - removed when a fix for https://github.com/chronotope/chrono/issues/623 is released
+                    if StrftimeItems::new(format_string).any(|i| i == Item::Error) {
+                        return Err(USimpleError::new(
+                            1,
+                            format!("invalid format {}", format_string.replace("%f", "%N")),
+                        ));
+                    }
                     let formatted = date.format(format_string).to_string().replace("%f", "%N");
                     println!("{}", formatted);
                 }
