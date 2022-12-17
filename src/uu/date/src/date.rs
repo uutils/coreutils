@@ -244,7 +244,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Ok(date) => {
                     // GNU `date` uses `%N` for nano seconds, however crate::chrono uses `%f`
                     let format_string = &format_string.replace("%N", "%f");
-                    //Hack to work around panic in chrony,
+                    //Hack to work around panic in chrono,
                     //TODO - removed when a fix for https://github.com/chronotope/chrono/issues/623 is released
                     if StrftimeItems::new(format_string).any(|i| i == Item::Error) {
                         return Err(USimpleError::new(
