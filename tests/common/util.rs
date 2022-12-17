@@ -36,11 +36,6 @@ use std::{env, hint, thread};
 use tempfile::{Builder, TempDir};
 use uucore::Args;
 
-#[cfg(windows)]
-static PROGNAME: &str = concat!(env!("CARGO_PKG_NAME"), ".exe");
-#[cfg(not(windows))]
-static PROGNAME: &str = env!("CARGO_PKG_NAME");
-
 static TESTS_DIR: &str = "tests";
 static FIXTURES_DIR: &str = "fixtures";
 
@@ -1101,13 +1096,7 @@ impl TestScenario {
     pub fn new(util_name: &str) -> Self {
         let tmpd = Rc::new(TempDir::new().unwrap());
         let ts = Self {
-            bin_path: {
-                // Instead of hard coding the path relative to the current
-                // directory, use Cargo's OUT_DIR to find path to executable.
-                // This allows tests to be run using profiles other than debug.
-                let target_dir = path_concat!(env!("OUT_DIR"), "..", "..", "..", PROGNAME);
-                PathBuf::from(AtPath::new(Path::new(&target_dir)).root_dir_resolved())
-            },
+            bin_path: PathBuf::from(env!("CARGO_BIN_EXE_coreutils")),
             util_name: String::from(util_name),
             fixtures: AtPath::new(tmpd.as_ref().path()),
             tmpd,
