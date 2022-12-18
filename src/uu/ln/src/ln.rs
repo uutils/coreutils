@@ -438,7 +438,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         } else {
             source.to_path_buf()
         };
-        fs::hard_link(&p, dst).map_err_context(|| {
+        fs::hard_link(p, dst).map_err_context(|| {
             format!(
                 "failed to create hard link {} => {}",
                 source.quote(),

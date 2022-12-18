@@ -2385,6 +2385,7 @@ fn test_reflink_never_sparse_always() {
 
 /// Test for preserving attributes of a hard link in a directory.
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_preserve_hardlink_attributes_in_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2413,7 +2414,7 @@ fn test_preserve_hardlink_attributes_in_directory() {
 }
 
 #[test]
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "android")))]
 fn test_hard_link_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("src");

@@ -52,7 +52,7 @@ mod platform {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub unsafe fn do_syncfs(files: Vec<String>) -> isize {
         for path in files {
-            let f = File::open(&path).unwrap();
+            let f = File::open(path).unwrap();
             let fd = f.as_raw_fd();
             libc::syscall(libc::SYS_syncfs, fd);
         }
@@ -62,7 +62,7 @@ mod platform {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub unsafe fn do_fdatasync(files: Vec<String>) -> isize {
         for path in files {
-            let f = File::open(&path).unwrap();
+            let f = File::open(path).unwrap();
             let fd = f.as_raw_fd();
             libc::syscall(libc::SYS_fdatasync, fd);
         }

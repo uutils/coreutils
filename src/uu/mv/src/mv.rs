@@ -564,7 +564,7 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     let path_symlink_points_to = fs::read_link(from)?;
     #[cfg(unix)]
     {
-        unix::fs::symlink(&path_symlink_points_to, to).and_then(|_| fs::remove_file(from))?;
+        unix::fs::symlink(path_symlink_points_to, to).and_then(|_| fs::remove_file(from))?;
     }
     #[cfg(windows)]
     {

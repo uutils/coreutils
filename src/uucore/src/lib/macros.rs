@@ -41,7 +41,7 @@ use std::sync::atomic::AtomicBool;
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-/// Whether we were called as a multicall binary ("coreutils <utility>")
+/// Whether we were called as a multicall binary (`coreutils <utility>`)
 pub static UTILITY_IS_SECOND_ARG: AtomicBool = AtomicBool::new(false);
 
 //====

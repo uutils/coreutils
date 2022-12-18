@@ -439,7 +439,7 @@ fn get_output_chunks(
 ) -> (String, String, String, String) {
     // Chunk size logics are mostly copied from the GNU ptx source.
     // https://github.com/MaiZure/coreutils-8.3/blob/master/src/ptx.c#L1234
-    let half_line_size = (config.line_width / 2) as usize;
+    let half_line_size = config.line_width / 2;
     let max_before_size = cmp::max(half_line_size as isize - config.gap_size as isize, 0) as usize;
     let max_after_size = cmp::max(
         half_line_size as isize
@@ -500,7 +500,7 @@ fn get_output_chunks(
     let (tail_beg, _) = trim_idx(all_after, after_end, all_after.len());
 
     // end = begin + max length
-    let tail_end = cmp::min(all_after.len(), tail_beg + max_tail_size) as usize;
+    let tail_end = cmp::min(all_after.len(), tail_beg + max_tail_size);
     // in case that falls in the middle of a word, trim away the word.
     let tail_end = trim_broken_word_right(all_after, tail_beg, tail_end);
 
