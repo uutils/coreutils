@@ -225,3 +225,10 @@ fn test_date_set_valid_4() {
         assert!(result.stderr_str().starts_with("date: invalid date "));
     }
 }
+
+#[test]
+fn test_invalid_format_string() {
+    let result = new_ucmd!().arg("+%!").fails();
+    result.no_stdout();
+    assert!(result.stderr_str().starts_with("date: invalid format "));
+}
