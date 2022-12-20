@@ -55,28 +55,26 @@ fn od_format_type(type_char: FormatType, byte_size: u8) -> Option<FormatterItemI
 
         (FormatType::DecimalInt, 1) => Some(FORMAT_ITEM_DEC8S),
         (FormatType::DecimalInt, 2) => Some(FORMAT_ITEM_DEC16S),
-        (FormatType::DecimalInt, 0) | (FormatType::DecimalInt, 4) => Some(FORMAT_ITEM_DEC32S),
+        (FormatType::DecimalInt, 0 | 4) => Some(FORMAT_ITEM_DEC32S),
         (FormatType::DecimalInt, 8) => Some(FORMAT_ITEM_DEC64S),
 
         (FormatType::OctalInt, 1) => Some(FORMAT_ITEM_OCT8),
         (FormatType::OctalInt, 2) => Some(FORMAT_ITEM_OCT16),
-        (FormatType::OctalInt, 0) | (FormatType::OctalInt, 4) => Some(FORMAT_ITEM_OCT32),
+        (FormatType::OctalInt, 0 | 4) => Some(FORMAT_ITEM_OCT32),
         (FormatType::OctalInt, 8) => Some(FORMAT_ITEM_OCT64),
 
         (FormatType::UnsignedInt, 1) => Some(FORMAT_ITEM_DEC8U),
         (FormatType::UnsignedInt, 2) => Some(FORMAT_ITEM_DEC16U),
-        (FormatType::UnsignedInt, 0) | (FormatType::UnsignedInt, 4) => Some(FORMAT_ITEM_DEC32U),
+        (FormatType::UnsignedInt, 0 | 4) => Some(FORMAT_ITEM_DEC32U),
         (FormatType::UnsignedInt, 8) => Some(FORMAT_ITEM_DEC64U),
 
         (FormatType::HexadecimalInt, 1) => Some(FORMAT_ITEM_HEX8),
         (FormatType::HexadecimalInt, 2) => Some(FORMAT_ITEM_HEX16),
-        (FormatType::HexadecimalInt, 0) | (FormatType::HexadecimalInt, 4) => {
-            Some(FORMAT_ITEM_HEX32)
-        }
+        (FormatType::HexadecimalInt, 0 | 4) => Some(FORMAT_ITEM_HEX32),
         (FormatType::HexadecimalInt, 8) => Some(FORMAT_ITEM_HEX64),
 
         (FormatType::Float, 2) => Some(FORMAT_ITEM_F16),
-        (FormatType::Float, 0) | (FormatType::Float, 4) => Some(FORMAT_ITEM_F32),
+        (FormatType::Float, 0 | 4) => Some(FORMAT_ITEM_F32),
         (FormatType::Float, 8) => Some(FORMAT_ITEM_F64),
 
         _ => None,

@@ -135,7 +135,7 @@ impl FromStr for FormatOptions {
         }
 
         // GNU numfmt allows to mix the characters " ", "'", and "0" in any way, so we do the same
-        while matches!(iter.peek(), Some(' ') | Some('\'') | Some('0')) {
+        while matches!(iter.peek(), Some(' ' | '\'' | '0')) {
             match iter.next().unwrap() {
                 ' ' => (),
                 '\'' => options.grouping = true,
@@ -178,7 +178,7 @@ impl FromStr for FormatOptions {
         if let Some('.') = iter.peek() {
             iter.next();
 
-            if matches!(iter.peek(), Some(' ') | Some('+') | Some('-')) {
+            if matches!(iter.peek(), Some(' ' | '+' | '-')) {
                 return Err(format!("invalid precision in format '{}'", s));
             }
 

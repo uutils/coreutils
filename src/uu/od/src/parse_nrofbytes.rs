@@ -20,11 +20,11 @@ pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
             multiply = 512;
             len -= 1;
         }
-        Some('k') | Some('K') => {
+        Some('k' | 'K') => {
             multiply = 1024;
             len -= 1;
         }
-        Some('m') | Some('M') => {
+        Some('m' | 'M') => {
             multiply = 1024 * 1024;
             len -= 1;
         }
@@ -50,8 +50,8 @@ pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
         Some('B') if radix != 16 => {
             len -= 2;
             multiply = match ends_with.next() {
-                Some('k') | Some('K') => 1000,
-                Some('m') | Some('M') => 1000 * 1000,
+                Some('k' | 'K') => 1000,
+                Some('m' | 'M') => 1000 * 1000,
                 Some('G') => 1000 * 1000 * 1000,
                 #[cfg(target_pointer_width = "64")]
                 Some('T') => 1000 * 1000 * 1000 * 1000,
