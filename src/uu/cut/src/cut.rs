@@ -357,24 +357,22 @@ fn cut_fields_whitespace<R: Read>(
 fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> UResult<()> {
     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
     match opts.delimiter {
-        Delimiter::Whitespace => {
-            return cut_fields_whitespace(
-                reader,
-                ranges,
-                opts.only_delimited,
-                newline_char,
-                match opts.out_delimiter {
-                    Some(ref delim) => delim,
-                    _ => "\t",
-                },
-            )
-        }
+        Delimiter::Whitespace => cut_fields_whitespace(
+            reader,
+            ranges,
+            opts.only_delimited,
+            newline_char,
+            match opts.out_delimiter {
+                Some(ref delim) => delim,
+                _ => "\t",
+            },
+        ),
         Delimiter::String(ref delimiter) => {
             if let Some(ref o_delim) = opts.out_delimiter {
                 return cut_fields_delimiter(
                     reader,
                     ranges,
-                    &delimiter,
+                    delimiter,
                     opts.only_delimited,
                     newline_char,
                     o_delim,
