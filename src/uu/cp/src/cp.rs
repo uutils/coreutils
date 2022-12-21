@@ -799,14 +799,8 @@ impl Options {
         };
 
         #[cfg(not(feature = "feat_selinux"))]
-        if let Preserve::Yes { required } = attributes.context {
-            let selinux_disabled_error =
-                Error::Error("SELinux was not enabled during the compile time!".to_string());
-            if required {
-                return Err(selinux_disabled_error);
-            } else {
-                show_error_if_needed(&selinux_disabled_error);
-            }
+        if let Preserve::Yes { required : true } = attributes.context {
+            show_warning!("The context attribute will not be copied, because cp was compiled without SELinux support!");
         }
 
         let options = Self {
