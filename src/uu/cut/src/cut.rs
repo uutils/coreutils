@@ -353,7 +353,6 @@ fn cut_fields_whitespace<R: Read>(
     Ok(())
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> UResult<()> {
     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
     match opts.delimiter {
@@ -362,7 +361,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> URes
             ranges,
             opts.only_delimited,
             newline_char,
-            opts.out_delimiter.as_deref().unwrap_or("\t")
+            opts.out_delimiter.as_deref().unwrap_or("\t"),
         ),
         Delimiter::String(ref delimiter) => {
             if let Some(ref o_delim) = opts.out_delimiter {
