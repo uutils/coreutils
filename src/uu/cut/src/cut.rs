@@ -120,7 +120,7 @@ struct Options {
 
 enum Delimiter {
     Whitespace,
-    String(String), // one char long, String because of UTF8 representation
+    String(String), // FIXME: use char?
 }
 
 struct FieldOptions {
