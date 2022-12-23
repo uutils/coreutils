@@ -10,7 +10,7 @@
 
 use crate::common::util::*;
 
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 #[path = "../../src/uu/factor/sieve.rs"]
 mod sieve;
@@ -35,7 +35,7 @@ fn test_invalid_arg() {
 fn test_parallel() {
     use hex_literal::hex;
     use sha1::{Digest, Sha1};
-    use std::fs::OpenOptions;
+    use std::{fs::OpenOptions, time::Duration};
     use tempfile::TempDir;
     // factor should only flush the buffer at line breaks
     let n_integers = 100_000;
@@ -55,6 +55,7 @@ fn test_parallel() {
     for child in (0..10)
         .map(|_| {
             new_ucmd!()
+                .timeout(Duration::from_secs(240))
                 .set_stdout(output.try_clone().unwrap())
                 .pipe_in(input_string.clone())
                 .run_no_wait()
@@ -275,6 +276,7 @@ fn run(input_string: &[u8], output_string: &[u8]) {
     );
     // now run factor
     new_ucmd!()
+        .timeout(Duration::from_secs(240))
         .pipe_in(input_string)
         .run()
         .stdout_is(String::from_utf8(output_string.to_owned()).unwrap());
