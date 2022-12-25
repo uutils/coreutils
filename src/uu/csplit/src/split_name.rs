@@ -81,18 +81,16 @@ impl SplitName {
                                      * zero padding
                                      */
                                     // decimal
-                                    ("0", "d") | ("0", "i") | ("0", "u") => {
-                                        Box::new(move |n: usize| -> String {
-                                            format!(
-                                                "{}{}{:0width$}{}",
-                                                prefix,
-                                                before,
-                                                n,
-                                                after,
-                                                width = n_digits
-                                            )
-                                        })
-                                    }
+                                    ("0", "d" | "i" | "u") => Box::new(move |n: usize| -> String {
+                                        format!(
+                                            "{}{}{:0width$}{}",
+                                            prefix,
+                                            before,
+                                            n,
+                                            after,
+                                            width = n_digits
+                                        )
+                                    }),
                                     // octal
                                     ("0", "o") => Box::new(move |n: usize| -> String {
                                         format!(
@@ -168,18 +166,16 @@ impl SplitName {
                                      * Left adjusted
                                      */
                                     // decimal
-                                    ("-", "d") | ("-", "i") | ("-", "u") => {
-                                        Box::new(move |n: usize| -> String {
-                                            format!(
-                                                "{}{}{:<#width$}{}",
-                                                prefix,
-                                                before,
-                                                n,
-                                                after,
-                                                width = n_digits
-                                            )
-                                        })
-                                    }
+                                    ("-", "d" | "i" | "u") => Box::new(move |n: usize| -> String {
+                                        format!(
+                                            "{}{}{:<#width$}{}",
+                                            prefix,
+                                            before,
+                                            n,
+                                            after,
+                                            width = n_digits
+                                        )
+                                    }),
                                     // octal
                                     ("-", "o") => Box::new(move |n: usize| -> String {
                                         format!(

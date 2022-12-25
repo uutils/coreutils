@@ -67,7 +67,7 @@ impl FloatAnalysis {
         let mut pos_before_first_nonzero_after_decimal: Option<usize> = None;
         for c in str_it {
             match c {
-                e @ '0'..='9' | e @ 'A'..='F' | e @ 'a'..='f' => {
+                e @ ('0'..='9' | 'A'..='F' | 'a'..='f') => {
                     if !hex_input {
                         match e {
                             '0'..='9' => {}

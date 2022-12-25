@@ -1201,7 +1201,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             matches
                 .get_one::<String>(options::check::CHECK)
                 .map(|s| s.as_str()),
-            Some(options::check::SILENT) | Some(options::check::QUIET)
+            Some(options::check::SILENT | options::check::QUIET)
         )
     {
         settings.check_silent = true;
@@ -1695,7 +1695,7 @@ fn get_leading_gen(input: &str) -> Range<usize> {
 
     let first = char_indices.peek();
 
-    if matches!(first, Some((_, NEGATIVE)) | Some((_, POSITIVE))) {
+    if matches!(first, Some((_, NEGATIVE) | (_, POSITIVE))) {
         char_indices.next();
     }
 

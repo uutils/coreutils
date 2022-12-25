@@ -233,9 +233,7 @@ fn open(
             Err(f) => {
                 show_error!("{}: {}", name.maybe_quote(), f);
                 match output_error {
-                    Some(OutputErrorMode::Exit) | Some(OutputErrorMode::ExitNoPipe) => {
-                        return Err(f)
-                    }
+                    Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) => return Err(f),
                     _ => Box::new(sink()),
                 }
             }
