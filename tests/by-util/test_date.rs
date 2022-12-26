@@ -232,3 +232,10 @@ fn test_invalid_format_string() {
     result.no_stdout();
     assert!(result.stderr_str().starts_with("date: invalid format "));
 }
+
+#[test]
+fn test_unsuported_format() {
+    let result = new_ucmd!().arg("+%#z").fails();
+    result.no_stdout();
+    assert!(result.stderr_str().starts_with("date: do not use '%#z'"));
+}
