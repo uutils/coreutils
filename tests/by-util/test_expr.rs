@@ -3,6 +3,34 @@
 use crate::common::util::*;
 
 #[test]
+fn test_simple_values() {
+    // null or 0 => EXIT_VALUE == 1
+    new_ucmd!()
+        .args(&[""])
+        .fails()
+        .status_code(1)
+        .stdout_only("\n");
+    new_ucmd!()
+        .args(&["0"])
+        .fails()
+        .status_code(1)
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["00"])
+        .fails()
+        .status_code(1)
+        .stdout_only("00\n");
+    new_ucmd!()
+        .args(&["-0"])
+        .fails()
+        .status_code(1)
+        .stdout_only("-0\n");
+
+    // non-null and non-0 => EXIT_VALUE = 0
+    new_ucmd!().args(&["1"]).succeeds().stdout_only("1\n");
+}
+
+#[test]
 fn test_simple_arithmetic() {
     new_ucmd!()
         .args(&["1", "+", "1"])
