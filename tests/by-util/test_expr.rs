@@ -98,6 +98,31 @@ fn test_and() {
 }
 
 #[test]
+fn test_index() {
+    new_ucmd!()
+        .args(&["index", "αbcdef", "x"])
+        .fails()
+        .status_code(1)
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["index", "αbcdef", "α"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["index", "αbcdef", "fb"])
+        .succeeds()
+        .stdout_only("2\n");
+    new_ucmd!()
+        .args(&["index", "αbcdef", "f"])
+        .succeeds()
+        .stdout_only("6\n");
+    new_ucmd!()
+        .args(&["index", "αbcdef_f", "f"])
+        .succeeds()
+        .stdout_only("6\n");
+}
+
+#[test]
 fn test_length_fail() {
     new_ucmd!().args(&["length", "αbcdef", "1"]).fails();
 }
