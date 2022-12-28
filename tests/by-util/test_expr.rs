@@ -109,6 +109,14 @@ fn test_index() {
         .succeeds()
         .stdout_only("1\n");
     new_ucmd!()
+        .args(&["index", "αbc_δef", "δ"])
+        .succeeds()
+        .stdout_only("5\n");
+    new_ucmd!()
+        .args(&["index", "αbc_δef", "δf"])
+        .succeeds()
+        .stdout_only("5\n");
+    new_ucmd!()
         .args(&["index", "αbcdef", "fb"])
         .succeeds()
         .stdout_only("2\n");
