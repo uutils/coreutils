@@ -1,4 +1,4 @@
-// spell-checker:ignore αbcdef
+// spell-checker:ignore αbcdef ; (people) kkos
 
 use crate::common::util::*;
 
@@ -177,6 +177,27 @@ fn test_length_mb() {
         .args(&["length", "αbcdef"])
         .succeeds()
         .stdout_only("6\n");
+}
+
+#[test]
+fn test_regex() {
+    // FixME: [2022-12-19; rivy] test disabled as it currently fails due to 'oniguruma' bug (see GH:kkos/oniguruma/issues/279)
+    // new_ucmd!()
+    //     .args(&["a^b", ":", "a^b"])
+    //     .succeeds()
+    //     .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["a^b", ":", "a\\^b"])
+        .succeeds()
+        .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["a$b", ":", "a\\$b"])
+        .succeeds()
+        .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["-5", ":", "-\\{0,1\\}[0-9]*$"])
+        .succeeds()
+        .stdout_only("2\n");
 }
 
 #[test]
