@@ -17,6 +17,7 @@ pub const NUMBER: &str = "NUMBER";
 pub const PADDING: &str = "padding";
 pub const ROUND: &str = "round";
 pub const SUFFIX: &str = "suffix";
+pub const INVALID: &str = "invalid";
 pub const TO: &str = "to";
 pub const TO_DEFAULT: &str = "none";
 pub const TO_UNIT: &str = "to-unit";
@@ -29,6 +30,15 @@ pub struct TransformOptions {
     pub to_unit: usize,
 }
 
+#[derive(Debug, Default, PartialEq, Eq)]
+pub enum InvalidModes {
+    #[default]
+    Abort,
+    Fail,
+    Warn,
+    Ignore,
+}
+
 pub struct NumfmtOptions {
     pub transform: TransformOptions,
     pub padding: isize,
@@ -38,6 +48,7 @@ pub struct NumfmtOptions {
     pub round: RoundMethod,
     pub suffix: Option<String>,
     pub format: FormatOptions,
+    pub invalid: InvalidModes,
 }
 
 #[derive(Clone, Copy)]
@@ -227,6 +238,20 @@ impl FromStr for FormatOptions {
     }
 }
 
+impl FromStr for InvalidModes {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "abort" => Ok(InvalidModes::Abort),
+            "fail" => Ok(InvalidModes::Fail),
+            "warn" => Ok(InvalidModes::Warn),
+            "ignore" => Ok(InvalidModes::Ignore),
+            unknown => Err(format!("Unknown invalid mode: {}", unknown)),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -336,4 +361,23 @@ mod tests {
         assert_eq!(expected_options, "%0'0'0'f".parse().unwrap());
         assert_eq!(expected_options, "%'0'0'0f".parse().unwrap());
     }
+
+
+    #[test]
+    fn test_set_invalid_mode() {
+        assert_eq!(InvalidModes::Abort, InvalidModes::from_str("abort").unwrap());
+        assert_eq!(InvalidModes::Abort, InvalidModes::from_str("ABORT").unwrap());
+
+        assert_eq!(InvalidModes::Fail, InvalidModes::from_str("fail").unwrap());
+        assert_eq!(InvalidModes::Fail, InvalidModes::from_str("FAIL").unwrap());
+
+        assert_eq!(InvalidModes::Ignore, InvalidModes::from_str("ignore").unwrap());
+        assert_eq!(InvalidModes::Ignore, InvalidModes::from_str("IGNORE").unwrap());
+
+        assert_eq!(InvalidModes::Warn, InvalidModes::from_str("warn").unwrap());
+        assert_eq!(InvalidModes::Warn, InvalidModes::from_str("WARN").unwrap());
+
+        assert!(InvalidModes::from_str("something unknown").is_err());
+    }
+
 }

@@ -201,6 +201,8 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         .get_one::<String>(options::SUFFIX)
         .map(|s| s.to_owned());
 
+
+    let invalid = InvalidModes::Abort;
     Ok(NumfmtOptions {
         transform,
         padding,
@@ -210,6 +212,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         round,
         suffix,
         format,
+        invalid
     })
 }
 
@@ -358,6 +361,17 @@ pub fn uu_app() -> Command {
                 .value_name("SUFFIX"),
         )
         .arg(
+            Arg::new(options::INVALID)
+                .long(options::INVALID)
+                .help(
+                    "set the failure mode for invalid input; \
+                    valid options are abort, fail, warn or ignore",
+                )
+                .default_value("abort")
+                .value_parser(["abort", "fail", "warn", "ignore"])
+                .value_name("INVALID"),
+        )
+        .arg(
             Arg::new(options::NUMBER)
                 .hide(true)
                 .action(ArgAction::Append),
@@ -368,7 +382,7 @@ pub fn uu_app() -> Command {
 mod tests {
     use super::{
         handle_buffer, parse_unit_size, parse_unit_size_suffix, FormatOptions, NumfmtOptions,
-        Range, RoundMethod, TransformOptions, Unit,
+        Range, RoundMethod, TransformOptions, Unit, InvalidModes
     };
     use std::io::{BufReader, Error, ErrorKind, Read};
     struct MockBuffer {}
@@ -394,6 +408,7 @@ mod tests {
             round: RoundMethod::Nearest,
             suffix: None,
             format: FormatOptions::default(),
+            invalid: InvalidModes::Abort
         }
     }
 
