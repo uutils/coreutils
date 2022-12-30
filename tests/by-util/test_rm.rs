@@ -554,3 +554,19 @@ fn test_prompt_write_protected_no() {
     scene.ucmd().arg(file_2).pipe_in("n").succeeds();
     assert!(at.file_exists(file_2));
 }
+
+#[test]
+#[cfg(not(windows))]
+fn test_fifo_removal() {
+    use std::time::Duration;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkfifo("some_fifo");
+
+    scene
+        .ucmd()
+        .arg("some_fifo")
+        .timeout(Duration::from_secs(2))
+        .succeeds();
+}
