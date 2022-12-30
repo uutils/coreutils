@@ -478,7 +478,7 @@ fn prefix_operator_index(values: &[String]) -> String {
     for (current_idx, ch_h) in haystack.chars().enumerate() {
         for ch_n in needles.chars() {
             if ch_n == ch_h {
-                return current_idx.to_string();
+                return (current_idx + 1).to_string();
             }
         }
     }

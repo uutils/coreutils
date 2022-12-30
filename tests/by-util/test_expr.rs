@@ -1,6 +1,34 @@
-// spell-checker:ignore αbcdef
+// spell-checker:ignore αbcdef ; (people) kkos
 
 use crate::common::util::*;
+
+#[test]
+fn test_simple_values() {
+    // null or 0 => EXIT_VALUE == 1
+    new_ucmd!()
+        .args(&[""])
+        .fails()
+        .status_code(1)
+        .stdout_only("\n");
+    new_ucmd!()
+        .args(&["0"])
+        .fails()
+        .status_code(1)
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["00"])
+        .fails()
+        .status_code(1)
+        .stdout_only("00\n");
+    new_ucmd!()
+        .args(&["-0"])
+        .fails()
+        .status_code(1)
+        .stdout_only("-0\n");
+
+    // non-null and non-0 => EXIT_VALUE = 0
+    new_ucmd!().args(&["1"]).succeeds().stdout_only("1\n");
+}
 
 #[test]
 fn test_simple_arithmetic() {
@@ -98,6 +126,39 @@ fn test_and() {
 }
 
 #[test]
+fn test_index() {
+    new_ucmd!()
+        .args(&["index", "αbcdef", "x"])
+        .fails()
+        .status_code(1)
+        .stdout_only("0\n");
+    new_ucmd!()
+        .args(&["index", "αbcdef", "α"])
+        .succeeds()
+        .stdout_only("1\n");
+    new_ucmd!()
+        .args(&["index", "αbc_δef", "δ"])
+        .succeeds()
+        .stdout_only("5\n");
+    new_ucmd!()
+        .args(&["index", "αbc_δef", "δf"])
+        .succeeds()
+        .stdout_only("5\n");
+    new_ucmd!()
+        .args(&["index", "αbcdef", "fb"])
+        .succeeds()
+        .stdout_only("2\n");
+    new_ucmd!()
+        .args(&["index", "αbcdef", "f"])
+        .succeeds()
+        .stdout_only("6\n");
+    new_ucmd!()
+        .args(&["index", "αbcdef_f", "f"])
+        .succeeds()
+        .stdout_only("6\n");
+}
+
+#[test]
 fn test_length_fail() {
     new_ucmd!().args(&["length", "αbcdef", "1"]).fails();
 }
@@ -116,6 +177,27 @@ fn test_length_mb() {
         .args(&["length", "αbcdef"])
         .succeeds()
         .stdout_only("6\n");
+}
+
+#[test]
+fn test_regex() {
+    // FixME: [2022-12-19; rivy] test disabled as it currently fails due to 'oniguruma' bug (see GH:kkos/oniguruma/issues/279)
+    // new_ucmd!()
+    //     .args(&["a^b", ":", "a^b"])
+    //     .succeeds()
+    //     .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["a^b", ":", "a\\^b"])
+        .succeeds()
+        .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["a$b", ":", "a\\$b"])
+        .succeeds()
+        .stdout_only("3\n");
+    new_ucmd!()
+        .args(&["-5", ":", "-\\{0,1\\}[0-9]*$"])
+        .succeeds()
+        .stdout_only("2\n");
 }
 
 #[test]
