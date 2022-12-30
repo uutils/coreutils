@@ -201,7 +201,6 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         .get_one::<String>(options::SUFFIX)
         .map(|s| s.to_owned());
 
-
     let invalid = InvalidModes::Abort;
     Ok(NumfmtOptions {
         transform,
@@ -212,7 +211,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         round,
         suffix,
         format,
-        invalid
+        invalid,
     })
 }
 
@@ -254,7 +253,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     match result {
         Err(e) => {
             std::io::stdout().flush().expect("error flushing stdout");
-            Err(e)
+            match &options.invalid {
+                InvalidModes::Abort | InvalidModes::Fail => Err(e),
+                InvalidModes::Ignore | InvalidModes::Warn => Ok(()),
+            }
         }
         _ => Ok(()),
     }
@@ -381,8 +383,8 @@ pub fn uu_app() -> Command {
 #[cfg(test)]
 mod tests {
     use super::{
-        handle_buffer, parse_unit_size, parse_unit_size_suffix, FormatOptions, NumfmtOptions,
-        Range, RoundMethod, TransformOptions, Unit, InvalidModes
+        handle_buffer, parse_unit_size, parse_unit_size_suffix, FormatOptions, InvalidModes,
+        NumfmtOptions, Range, RoundMethod, TransformOptions, Unit,
     };
     use std::io::{BufReader, Error, ErrorKind, Read};
     struct MockBuffer {}
@@ -408,7 +410,7 @@ mod tests {
             round: RoundMethod::Nearest,
             suffix: None,
             format: FormatOptions::default(),
-            invalid: InvalidModes::Abort
+            invalid: InvalidModes::Abort,
         }
     }
 
