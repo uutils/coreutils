@@ -67,7 +67,7 @@ where
 
                 if format_result.is_err() {
                     match options.invalid {
-                        InvalidModes::Abort => return format_result,
+                        InvalidModes::Abort => {return format_result;},
                         InvalidModes::Fail => has_failed_flag = true,
                         _ => {}
                     }
@@ -503,7 +503,7 @@ mod tests {
 
     #[test]
     fn warn_returns_ok_for_invalid_input() {
-        let input_value = b"4Q\n";
+        let input_value = b"5\n4Q\n";
         let mut options = get_valid_options();
         options.invalid = InvalidModes::Warn;
         let result = handle_buffer(BufReader::new(&input_value[..]), &options);
@@ -512,7 +512,7 @@ mod tests {
 
     #[test]
     fn ignore_returns_ok_for_invalid_input() {
-        let input_value = b"4Q\n";
+        let input_value = b"5\n4Q\n";
         let mut options = get_valid_options();
         options.invalid = InvalidModes::Ignore;
         let result = handle_buffer(BufReader::new(&input_value[..]), &options);
@@ -521,7 +521,7 @@ mod tests {
 
     #[test]
     fn fail_returns_status_2_for_invalid_input() {
-        let input_value = b"4Q\n";
+        let input_value = b"5\n4Q\n";
         let mut options = get_valid_options();
         options.invalid = InvalidModes::Fail;
         let result = handle_buffer(BufReader::new(&input_value[..]), &options);
@@ -530,7 +530,7 @@ mod tests {
 
     #[test]
     fn abort_returns_status_2_for_invalid_input() {
-        let input_value = b"4Q\n";
+        let input_value = b"5\n4Q\n";
         let mut options = get_valid_options();
         options.invalid = InvalidModes::Abort;
         let result = handle_buffer(BufReader::new(&input_value[..]), &options);
