@@ -15,9 +15,9 @@ use std::str::FromStr;
 
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
-use uucore::error::UResult;
+use uucore::error::{UError, UResult};
 use uucore::ranges::Range;
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::{format_usage, help_about, help_section, help_usage, show, show_error};
 
 pub mod errors;
 pub mod format;
@@ -29,25 +29,15 @@ const AFTER_HELP: &str = help_section!("after help", "numfmt.md");
 const USAGE: &str = help_usage!("numfmt.md");
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions) -> UResult<()> {
-    let mut has_failed_flag = false;
     for l in args {
         let format_result = format_and_handle_validation(l, options);
-        if format_result.is_err() {
-            match options.invalid {
-                InvalidModes::Abort => return format_result,
-                InvalidModes::Fail => {
-                    has_failed_flag = true;
-                }
-                _ => {}
-            };
+
+        if format_result.is_err() && options.invalid == InvalidModes::Abort {
+            return format_result;
         }
-    }
-    if has_failed_flag {
-        return Err(Box::new(NumfmtError::FailModeError()));
     }
     Ok(())
 }
-
 fn handle_buffer<R>(input: R, options: &NumfmtOptions) -> UResult<()>
 where
     R: BufRead,
@@ -61,31 +51,20 @@ where
         };
     }
 
-    let mut has_failed_flag = false;
-
     for line_result in lines.by_ref() {
-        match line_result {
-            Ok(line) => {
-                let format_result = format_and_handle_validation(&line, options);
+        if let Err(err) = line_result {
+            return Err(Box::new(NumfmtError::IoError(err.to_string())));
+        };
 
-                if format_result.is_err() {
-                    match options.invalid {
-                        InvalidModes::Abort => {
-                            return format_result;
-                        }
-                        InvalidModes::Fail => has_failed_flag = true,
-                        _ => {}
-                    }
-                }
-            }
-            Err(e) => {
-                return Err(Box::new(NumfmtError::IoError(e.to_string())));
-            }
+        let format_result = format_and_handle_validation(line_result.unwrap().as_ref(), options);
+
+        if format_result.is_ok() {
+            continue;
         }
-    }
 
-    if has_failed_flag {
-        return Err(Box::new(NumfmtError::FailModeError()));
+        if options.invalid == InvalidModes::Abort {
+            return format_result;
+        }
     }
 
     Ok(())
@@ -100,15 +79,14 @@ fn format_and_handle_validation(input_line: &str, options: &NumfmtOptions) -> UR
                 return Err(Box::new(NumfmtError::FormattingError(error_message)));
             }
             InvalidModes::Fail => {
-                eprintln!("numfmt: {}", error_message);
+                show!(NumfmtError::FormattingError(error_message));
                 println!("{}", input_line);
-                return Err(Box::new(NumfmtError::FormattingError(error_message)));
             }
             InvalidModes::Ignore => {
                 println!("{}", input_line);
             }
             InvalidModes::Warn => {
-                eprintln!("numfmt: {}", error_message);
+                show_error!("{}", error_message);
                 println!("{}", input_line);
             }
         };

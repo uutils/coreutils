@@ -14,7 +14,6 @@ pub enum NumfmtError {
     IoError(String),
     IllegalArgument(String),
     FormattingError(String),
-    FailModeError(),
 }
 
 impl UError for NumfmtError {
@@ -23,7 +22,6 @@ impl UError for NumfmtError {
             Self::IoError(_) => 1,
             Self::IllegalArgument(_) => 1,
             Self::FormattingError(_) => 2,
-            Self::FailModeError() => 2,
         }
     }
 }
@@ -35,10 +33,6 @@ impl Display for NumfmtError {
         match self {
             Self::IoError(s) | Self::IllegalArgument(s) | Self::FormattingError(s) => {
                 write!(f, "{s}")
-            }
-            Self::FailModeError() => {
-                // nothing to do here, the message should already have been printed here
-                Ok(())
             }
         }
     }
