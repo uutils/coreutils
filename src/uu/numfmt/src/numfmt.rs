@@ -62,9 +62,7 @@ where
             continue;
         }
 
-        if options.invalid == InvalidModes::Abort {
-            return format_result;
-        }
+        return format_result;
     }
 
     Ok(())
