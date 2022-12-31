@@ -362,22 +362,20 @@ mod tests {
         assert_eq!(expected_options, "%'0'0'0f".parse().unwrap());
     }
 
-
     #[test]
     fn test_set_invalid_mode() {
-        assert_eq!(InvalidModes::Abort, InvalidModes::from_str("abort").unwrap());
-        assert_eq!(InvalidModes::Abort, InvalidModes::from_str("ABORT").unwrap());
+        assert_eq!(Ok(InvalidModes::Abort), InvalidModes::from_str("abort"));
+        assert_eq!(Ok(InvalidModes::Abort), InvalidModes::from_str("ABORT"));
 
-        assert_eq!(InvalidModes::Fail, InvalidModes::from_str("fail").unwrap());
-        assert_eq!(InvalidModes::Fail, InvalidModes::from_str("FAIL").unwrap());
+        assert_eq!(Ok(InvalidModes::Fail), InvalidModes::from_str("fail"));
+        assert_eq!(Ok(InvalidModes::Fail), InvalidModes::from_str("FAIL"));
 
-        assert_eq!(InvalidModes::Ignore, InvalidModes::from_str("ignore").unwrap());
-        assert_eq!(InvalidModes::Ignore, InvalidModes::from_str("IGNORE").unwrap());
+        assert_eq!(Ok(InvalidModes::Ignore), InvalidModes::from_str("ignore"));
+        assert_eq!(Ok(InvalidModes::Ignore), InvalidModes::from_str("IGNORE"));
 
-        assert_eq!(InvalidModes::Warn, InvalidModes::from_str("warn").unwrap());
-        assert_eq!(InvalidModes::Warn, InvalidModes::from_str("WARN").unwrap());
+        assert_eq!(Ok(InvalidModes::Warn), InvalidModes::from_str("warn"));
+        assert_eq!(Ok(InvalidModes::Warn), InvalidModes::from_str("WARN"));
 
         assert!(InvalidModes::from_str("something unknown").is_err());
     }
-
 }

@@ -37,11 +37,11 @@ fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions)
                 InvalidModes::Abort => return format_result,
                 InvalidModes::Fail => {
                     has_failed_flag = true;
-                },
-                _ => {},
+                }
+                _ => {}
             };
         }
-    };
+    }
     if has_failed_flag {
         return Err(Box::new(NumfmtError::FailModeError()));
     }
@@ -72,7 +72,7 @@ where
                         _ => {}
                     }
                 }
-            },
+            }
             Err(e) => {
                 return Err(Box::new(NumfmtError::IoError(e.to_string())));
             }

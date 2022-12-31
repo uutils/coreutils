@@ -14,7 +14,7 @@ pub enum NumfmtError {
     IoError(String),
     IllegalArgument(String),
     FormattingError(String),
-    FailModeError()
+    FailModeError(),
 }
 
 impl UError for NumfmtError {
