@@ -417,6 +417,8 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
+    use uucore::error::get_exit_code;
+
     use super::{
         handle_args, handle_buffer, parse_unit_size, parse_unit_size_suffix, FormatOptions,
         InvalidModes, NumfmtOptions, Range, RoundMethod, TransformOptions, Unit,
@@ -516,12 +518,15 @@ mod tests {
     }
 
     #[test]
-    fn fail_returns_status_2_for_invalid_input() {
+    fn buffer_fail_returns_status_2_for_invalid_input() {
         let input_value = b"5\n4Q\n";
         let mut options = get_valid_options();
         options.invalid = InvalidModes::Fail;
-        let result = handle_buffer(BufReader::new(&input_value[..]), &options);
-        assert!(result.is_err(), "did not return err for invalid input");
+        handle_buffer(BufReader::new(&input_value[..]), &options).unwrap();
+        assert!(
+            get_exit_code() == 2,
+            "should set exit code 2 for formatting errors"
+        );
     }
 
     #[test]
@@ -538,8 +543,11 @@ mod tests {
         let input_value = ["5", "4Q"].into_iter();
         let mut options = get_valid_options();
         options.invalid = InvalidModes::Fail;
-        let result = handle_args(input_value, &options);
-        assert!(result.is_err(), "did not return err for invalid input");
+        handle_args(input_value, &options).unwrap();
+        assert!(
+            get_exit_code() == 2,
+            "should set exit code 2 for formatting errors"
+        );
     }
 
     #[test]
