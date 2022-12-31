@@ -441,8 +441,8 @@ pub fn uu_app() -> Command {
 #[cfg(test)]
 mod tests {
     use super::{
-        handle_buffer, parse_unit_size, parse_unit_size_suffix, FormatOptions, InvalidModes,
-        NumfmtOptions, Range, RoundMethod, TransformOptions, Unit,
+        handle_args, handle_buffer, parse_unit_size, parse_unit_size_suffix, FormatOptions,
+        InvalidModes, NumfmtOptions, Range, RoundMethod, TransformOptions, Unit,
     };
     use std::io::{BufReader, Error, ErrorKind, Read};
     struct MockBuffer {}
@@ -479,6 +479,20 @@ mod tests {
             .expect_err("returned Ok after receiving IO error");
         let result_debug = format!("{result:?}");
         let result_display = format!("{result}");
+        assert_eq!(result_debug, "IoError(\"broken pipe\")");
+        assert_eq!(result_display, "broken pipe");
+        assert_eq!(result.code(), 1);
+    }
+
+    #[test]
+    fn broken_buffer_returns_io_error_after_header() {
+        let mock_buffer = MockBuffer {};
+        let mut options = get_valid_options();
+        options.header = 0;
+        let result = handle_buffer(BufReader::new(mock_buffer), &options)
+            .expect_err("returned Ok after receiving IO error");
+        let result_debug = format!("{:?}", result);
+        let result_display = format!("{}", result);
         assert_eq!(result_debug, "IoError(\"broken pipe\")");
         assert_eq!(result_display, "broken pipe");
         assert_eq!(result.code(), 1);
@@ -540,6 +554,24 @@ mod tests {
         options.invalid = InvalidModes::Abort;
         let result = handle_buffer(BufReader::new(&input_value[..]), &options);
         assert!(result.is_err(), "did not return err for invalid input");
+    }
+
+    #[test]
+    fn args_fail_returns_status_2_for_invalid_input() {
+        let input_value = ["5", "4Q"].into_iter();
+        let mut options = get_valid_options();
+        options.invalid = InvalidModes::Fail;
+        let result = handle_args(input_value, &options);
+        assert!(result.is_err(), "did not return err for invalid input");
+    }
+
+    #[test]
+    fn args_warn_returns_status_0_for_invalid_input() {
+        let input_value = ["5", "4Q"].into_iter();
+        let mut options = get_valid_options();
+        options.invalid = InvalidModes::Warn;
+        let result = handle_args(input_value, &options);
+        assert!(result.is_ok(), "did not return ok for invalid input");
     }
 
     #[test]
