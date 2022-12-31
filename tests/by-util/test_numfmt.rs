@@ -668,22 +668,42 @@ fn test_invalid_stdin_number_in_middle_of_input() {
 
 #[test]
 fn test_invalid_stdin_number_with_warn_returns_status_0() {
-    new_ucmd!().args(&["--invalid=warn"]).pipe_in("4Q").succeeds();
+    new_ucmd!()
+    .args(&["--invalid=warn"])
+    .pipe_in("4Q")
+    .succeeds()
+    .stdout_is("4Q\n")
+    .stderr_is("numfmt: invalid suffix in input: '4Q'\n");
 }
 
 #[test]
 fn test_invalid_stdin_number_with_ignore_returns_status_0() {
-    new_ucmd!().args(&["--invalid=ignore"]).pipe_in("4Q").succeeds();
+    new_ucmd!()
+    .args(&["--invalid=ignore"])
+    .pipe_in("4Q")
+    .succeeds()
+    .stdout_only("4Q\n");
 }
 
 #[test]
 fn test_invalid_stdin_number_with_abort_returns_status_2() {
-    new_ucmd!().args(&["--invalid=abort"]).pipe_in("4Q").fails().code_is(2);
+    new_ucmd!()
+    .args(&["--invalid=abort"])
+    .pipe_in("4Q")
+    .fails()
+    .code_is(2)
+    .stderr_only("numfmt: invalid suffix in input: '4Q'\n");
 }
 
 #[test]
 fn test_invalid_stdin_number_with_fail_returns_status_2() {
-    new_ucmd!().args(&["--invalid=fail"]).pipe_in("4Q").fails().code_is(2);
+    new_ucmd!()
+    .args(&["--invalid=fail"])
+    .pipe_in("4Q")
+    .fails()
+    .code_is(2)
+    .stdout_is("4Q\n")
+    .stderr_is("numfmt: invalid suffix in input: '4Q'\n");
 }
 
 #[test]
