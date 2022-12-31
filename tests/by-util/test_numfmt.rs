@@ -665,9 +665,25 @@ fn test_invalid_stdin_number_in_middle_of_input() {
     new_ucmd!().pipe_in("100\nhello\n200").fails().code_is(2);
 }
 
+
 #[test]
-fn test_invalid_argument_number_returns_status_2() {
-    new_ucmd!().args(&["hello"]).fails().code_is(2);
+fn test_invalid_stdin_number_with_warn_returns_status_0() {
+    new_ucmd!().args(&["--invalid=warn"]).pipe_in("4Q").succeeds();
+}
+
+#[test]
+fn test_invalid_stdin_number_with_ignore_returns_status_0() {
+    new_ucmd!().args(&["--invalid=ignore"]).pipe_in("4Q").succeeds();
+}
+
+#[test]
+fn test_invalid_stdin_number_with_abort_returns_status_2() {
+    new_ucmd!().args(&["--invalid=abort"]).pipe_in("4Q").fails().code_is(2);
+}
+
+#[test]
+fn test_invalid_stdin_number_with_fail_returns_status_2() {
+    new_ucmd!().args(&["--invalid=fail"]).pipe_in("4Q").fails().code_is(2);
 }
 
 #[test]

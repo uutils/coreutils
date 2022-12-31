@@ -11,6 +11,8 @@ use crate::options::*;
 use crate::units::{Result, Unit};
 use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
 use std::io::{BufRead, Write};
+use std::str::FromStr;
+
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
@@ -27,13 +29,22 @@ const AFTER_HELP: &str = help_section!("after help", "numfmt.md");
 const USAGE: &str = help_usage!("numfmt.md");
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions) -> UResult<()> {
+    let mut has_failed_flag = false;
     for l in args {
-        match format_and_print(l, options) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(NumfmtError::FormattingError(e.to_string())),
-        }?;
+        let format_result = format_and_handle_validation(l, options);
+        if format_result.is_err() {
+            match options.invalid {
+                InvalidModes::Abort => return format_result,
+                InvalidModes::Fail => {
+                    has_failed_flag = true;
+                },
+                _ => {},
+            };
+        }
+    };
+    if has_failed_flag {
+        return Err(Box::new(NumfmtError::FailModeError()));
     }
-
     Ok(())
 }
 
@@ -42,19 +53,63 @@ where
     R: BufRead,
 {
     let mut lines = input.lines();
-    for (idx, line) in lines.by_ref().enumerate() {
-        match line {
-            Ok(l) if idx < options.header => {
-                println!("{l}");
-                Ok(())
-            }
-            Ok(l) => match format_and_print(&l, options) {
-                Ok(_) => Ok(()),
-                Err(e) => Err(NumfmtError::FormattingError(e.to_string())),
+    lines
+        .by_ref()
+        .take(options.header)
+        .for_each(|line| println!("{}", line.unwrap()));
+
+    let mut has_failed_flag = false;
+
+    for line_result in lines.by_ref() {
+        match line_result {
+            Ok(line) => {
+                let format_result = format_and_handle_validation(&line, options);
+
+                if format_result.is_err() {
+                    match options.invalid {
+                        InvalidModes::Abort => return format_result,
+                        InvalidModes::Fail => has_failed_flag = true,
+                        _ => {}
+                    }
+                }
             },
-            Err(e) => Err(NumfmtError::IoError(e.to_string())),
-        }?;
+            Err(e) => {
+                return Err(Box::new(NumfmtError::IoError(e.to_string())));
+            }
+        }
     }
+
+    if has_failed_flag {
+        return Err(Box::new(NumfmtError::FailModeError()));
+    }
+
+    Ok(())
+}
+
+fn format_and_handle_validation(input_line: &str, options: &NumfmtOptions) -> UResult<()> {
+    let handled_line = format_and_print(&input_line, options);
+
+    if handled_line.is_err() {
+        let error_message = handled_line.unwrap_err();
+        match options.invalid {
+            InvalidModes::Abort => {
+                return Err(Box::new(NumfmtError::FormattingError(error_message)));
+            }
+            InvalidModes::Fail => {
+                eprintln!("numfmt: {}", error_message);
+                println!("{}", input_line);
+                return Err(Box::new(NumfmtError::FormattingError(error_message)));
+            }
+            InvalidModes::Ignore => {
+                println!("{}", input_line);
+            }
+            InvalidModes::Warn => {
+                eprintln!("numfmt: {}", error_message);
+                println!("{}", input_line);
+            }
+        };
+    }
+
     Ok(())
 }
 
@@ -201,7 +256,9 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         .get_one::<String>(options::SUFFIX)
         .map(|s| s.to_owned());
 
-    let invalid = InvalidModes::Abort;
+    let invalid =
+        InvalidModes::from_str(args.get_one::<String>(options::INVALID).unwrap()).unwrap();
+
     Ok(NumfmtOptions {
         transform,
         padding,
@@ -446,6 +503,42 @@ mod tests {
         let input_value = b"165\n100\n300\n500";
         let result = handle_buffer(BufReader::new(&input_value[..]), &get_valid_options());
         assert!(result.is_ok(), "did not return Ok for valid input");
+    }
+
+    #[test]
+    fn warn_returns_ok_for_invalid_input() {
+        let input_value = b"4Q\n";
+        let mut options = get_valid_options();
+        options.invalid = InvalidModes::Warn;
+        let result = handle_buffer(BufReader::new(&input_value[..]), &options);
+        assert!(result.is_ok(), "did not return Ok for valid input");
+    }
+
+    #[test]
+    fn ignore_returns_ok_for_invalid_input() {
+        let input_value = b"4Q\n";
+        let mut options = get_valid_options();
+        options.invalid = InvalidModes::Ignore;
+        let result = handle_buffer(BufReader::new(&input_value[..]), &options);
+        assert!(result.is_ok(), "did not return Ok for valid input");
+    }
+
+    #[test]
+    fn fail_returns_status_2_for_invalid_input() {
+        let input_value = b"4Q\n";
+        let mut options = get_valid_options();
+        options.invalid = InvalidModes::Fail;
+        let result = handle_buffer(BufReader::new(&input_value[..]), &options);
+        assert!(result.is_err(), "did not return err for invalid input");
+    }
+
+    #[test]
+    fn abort_returns_status_2_for_invalid_input() {
+        let input_value = b"4Q\n";
+        let mut options = get_valid_options();
+        options.invalid = InvalidModes::Abort;
+        let result = handle_buffer(BufReader::new(&input_value[..]), &options);
+        assert!(result.is_err(), "did not return err for invalid input");
     }
 
     #[test]
