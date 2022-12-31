@@ -87,10 +87,9 @@ where
 }
 
 fn format_and_handle_validation(input_line: &str, options: &NumfmtOptions) -> UResult<()> {
-    let handled_line = format_and_print(&input_line, options);
+    let handled_line = format_and_print(input_line, options);
 
-    if handled_line.is_err() {
-        let error_message = handled_line.unwrap_err();
+    if let Err(error_message) = handled_line {
         match options.invalid {
             InvalidModes::Abort => {
                 return Err(Box::new(NumfmtError::FormattingError(error_message)));

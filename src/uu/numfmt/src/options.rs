@@ -30,9 +30,8 @@ pub struct TransformOptions {
     pub to_unit: usize,
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum InvalidModes {
-    #[default]
     Abort,
     Fail,
     Warn,
@@ -243,10 +242,10 @@ impl FromStr for InvalidModes {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "abort" => Ok(InvalidModes::Abort),
-            "fail" => Ok(InvalidModes::Fail),
-            "warn" => Ok(InvalidModes::Warn),
-            "ignore" => Ok(InvalidModes::Ignore),
+            "abort" => Ok(Self::Abort),
+            "fail" => Ok(Self::Fail),
+            "warn" => Ok(Self::Warn),
+            "ignore" => Ok(Self::Ignore),
             unknown => Err(format!("Unknown invalid mode: {}", unknown)),
         }
     }
