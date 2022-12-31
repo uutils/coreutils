@@ -53,10 +53,13 @@ where
     R: BufRead,
 {
     let mut lines = input.lines();
-    lines
-        .by_ref()
-        .take(options.header)
-        .for_each(|line| println!("{}", line.unwrap()));
+
+    for line in lines.by_ref().take(options.header) {
+        match line {
+            Ok(l) => println!("{}\n", l),
+            Err(e) => return Err(Box::new(NumfmtError::IoError(e.to_string()))),
+        };
+    }
 
     let mut has_failed_flag = false;
 
