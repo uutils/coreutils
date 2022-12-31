@@ -56,7 +56,7 @@ where
 
     for line in lines.by_ref().take(options.header) {
         match line {
-            Ok(l) => println!("{}\n", l),
+            Ok(l) => println!("{}", l),
             Err(e) => return Err(Box::new(NumfmtError::IoError(e.to_string()))),
         };
     }
