@@ -310,10 +310,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     match result {
         Err(e) => {
             std::io::stdout().flush().expect("error flushing stdout");
-            match &options.invalid {
-                InvalidModes::Abort | InvalidModes::Fail => Err(e),
-                InvalidModes::Ignore | InvalidModes::Warn => Ok(()),
-            }
+            Err(e)
         }
         _ => Ok(()),
     }
