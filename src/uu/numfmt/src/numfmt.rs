@@ -67,7 +67,9 @@ where
 
                 if format_result.is_err() {
                     match options.invalid {
-                        InvalidModes::Abort => {return format_result;},
+                        InvalidModes::Abort => {
+                            return format_result;
+                        }
                         InvalidModes::Fail => has_failed_flag = true,
                         _ => {}
                     }
