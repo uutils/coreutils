@@ -38,6 +38,7 @@ fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions)
     }
     Ok(())
 }
+
 fn handle_buffer<R>(input: R, options: &NumfmtOptions) -> UResult<()>
 where
     R: BufRead,
