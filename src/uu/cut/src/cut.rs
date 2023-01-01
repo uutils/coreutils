@@ -16,14 +16,16 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 
 use self::searcher::Searcher;
+use self::whitespace_searcher::WhitespaceSearcher;
 use uucore::ranges::Range;
 use uucore::{format_usage, show, show_error, show_if_err};
 
 mod searcher;
+mod whitespace_searcher;
 
 static NAME: &str = "cut";
 static USAGE: &str =
-    "{} [-d] [-s] [-z] [--output-delimiter] ((-f|-b|-c) {{sequence}}) {{sourcefile}}+";
+    "{} [-d|-w] [-s] [-z] [--output-delimiter] ((-f|-b|-c) {{sequence}}) {{sourcefile}}+";
 static ABOUT: &str =
     "Prints specified byte or field columns from each line of stdin or the input files";
 static LONG_HELP: &str = "
@@ -85,6 +87,11 @@ static LONG_HELP: &str = "
         --delimiter (-d) option. Setting the delimiter is optional.
         If not set, a default delimiter of Tab will be used.
 
+        If the -w option is provided, fields will be separated by any number
+        of whitespace characters (Space and Tab). The output delimiter will
+        be a Tab unless explicitly specified. Only one of -d or -w option can be specified.
+        This is an extension adopted from FreeBSD.
+
     Optionally Filter based on delimiter
         If the --only-delimited (-s) flag is provided, only lines which
         contain the delimiter will be printed
@@ -111,8 +118,13 @@ struct Options {
     zero_terminated: bool,
 }
 
+enum Delimiter {
+    Whitespace,
+    String(String), // FIXME: use char?
+}
+
 struct FieldOptions {
-    delimiter: String, // one char long, String because of UTF8 representation
+    delimiter: Delimiter,
     out_delimiter: Option<String>,
     only_delimited: bool,
     zero_terminated: bool,
@@ -256,32 +268,24 @@ fn cut_fields_delimiter<R: Read>(
     Ok(())
 }
 
-#[allow(clippy::cognitive_complexity)]
-fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> UResult<()> {
-    let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
-    if let Some(ref o_delim) = opts.out_delimiter {
-        return cut_fields_delimiter(
-            reader,
-            ranges,
-            &opts.delimiter,
-            opts.only_delimited,
-            newline_char,
-            o_delim,
-        );
-    }
-
+fn cut_fields_whitespace<R: Read>(
+    reader: R,
+    ranges: &[Range],
+    only_delimited: bool,
+    newline_char: u8,
+    out_delim: &str,
+) -> UResult<()> {
     let mut buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
-    let delim_len = opts.delimiter.len();
 
     let result = buf_in.for_byte_record_with_terminator(newline_char, |line| {
         let mut fields_pos = 1;
         let mut low_idx = 0;
-        let mut delim_search = Searcher::new(line, opts.delimiter.as_bytes()).peekable();
+        let mut delim_search = WhitespaceSearcher::new(line).peekable();
         let mut print_delim = false;
 
         if delim_search.peek().is_none() {
-            if !opts.only_delimited {
+            if !only_delimited {
                 out.write_all(line)?;
                 if line[line.len() - 1] != newline_char {
                     out.write_all(&[newline_char])?;
@@ -290,42 +294,54 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> URes
 
             return Ok(true);
         }
-
+        // The logic is identical to `cut_fields_delimiter` function above, which uses
+        // `Searcher` that iterates over and returns the first position of the delimiter character.
+        // The main difference is that `WhitespaceSearcher` returns a pair of the first and last
+        // delimiter character positions, since each delimiter sequence length can vary.
         for &Range { low, high } in ranges {
             if low - fields_pos > 0 {
-                if let Some(delim_pos) = delim_search.nth(low - fields_pos - 1) {
-                    low_idx = if print_delim {
-                        delim_pos
-                    } else {
-                        delim_pos + delim_len
-                    }
-                } else {
-                    break;
-                }
+                // current field is not in the range, so jump to the field corresponding to the
+                // beginning of the range if any
+                low_idx = match delim_search.nth(low - fields_pos - 1) {
+                    Some((_, last)) => last,
+                    None => break,
+                };
             }
 
-            match delim_search.nth(high - low) {
-                Some(high_idx) => {
-                    let segment = &line[low_idx..high_idx];
-
-                    out.write_all(segment)?;
-
+            // at this point, current field is the first in the range
+            for _ in 0..=high - low {
+                // skip printing delimiter if this is the first matching field for this line
+                if print_delim {
+                    out.write_all(out_delim.as_bytes())?;
+                } else {
                     print_delim = true;
-                    low_idx = high_idx;
-                    fields_pos = high + 1;
                 }
-                None => {
-                    let segment = &line[low_idx..line.len()];
 
-                    out.write_all(segment)?;
+                match delim_search.next() {
+                    // print the current field up to the next whitespace
+                    Some((first, last)) => {
+                        let segment = &line[low_idx..first];
 
-                    if line[line.len() - 1] == newline_char {
-                        return Ok(true);
+                        out.write_all(segment)?;
+
+                        low_idx = last;
+                        fields_pos = high + 1;
                     }
-                    break;
+                    None => {
+                        // this is the last field in the line, so print the rest
+                        let segment = &line[low_idx..];
+
+                        out.write_all(segment)?;
+
+                        if line[line.len() - 1] == newline_char {
+                            return Ok(true);
+                        }
+                        break;
+                    }
                 }
             }
         }
+
         out.write_all(&[newline_char])?;
         Ok(true)
     });
@@ -335,6 +351,97 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> URes
     }
 
     Ok(())
+}
+
+fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> UResult<()> {
+    let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
+    match opts.delimiter {
+        Delimiter::Whitespace => cut_fields_whitespace(
+            reader,
+            ranges,
+            opts.only_delimited,
+            newline_char,
+            opts.out_delimiter.as_deref().unwrap_or("\t"),
+        ),
+        Delimiter::String(ref delimiter) => {
+            if let Some(ref o_delim) = opts.out_delimiter {
+                return cut_fields_delimiter(
+                    reader,
+                    ranges,
+                    delimiter,
+                    opts.only_delimited,
+                    newline_char,
+                    o_delim,
+                );
+            }
+
+            let mut buf_in = BufReader::new(reader);
+            let mut out = stdout_writer();
+            let delim_len = delimiter.len();
+
+            let result = buf_in.for_byte_record_with_terminator(newline_char, |line| {
+                let mut fields_pos = 1;
+                let mut low_idx = 0;
+                let mut delim_search = Searcher::new(line, delimiter.as_bytes()).peekable();
+                let mut print_delim = false;
+
+                if delim_search.peek().is_none() {
+                    if !opts.only_delimited {
+                        out.write_all(line)?;
+                        if line[line.len() - 1] != newline_char {
+                            out.write_all(&[newline_char])?;
+                        }
+                    }
+
+                    return Ok(true);
+                }
+
+                for &Range { low, high } in ranges {
+                    if low - fields_pos > 0 {
+                        if let Some(delim_pos) = delim_search.nth(low - fields_pos - 1) {
+                            low_idx = if print_delim {
+                                delim_pos
+                            } else {
+                                delim_pos + delim_len
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+
+                    match delim_search.nth(high - low) {
+                        Some(high_idx) => {
+                            let segment = &line[low_idx..high_idx];
+
+                            out.write_all(segment)?;
+
+                            print_delim = true;
+                            low_idx = high_idx;
+                            fields_pos = high + 1;
+                        }
+                        None => {
+                            let segment = &line[low_idx..line.len()];
+
+                            out.write_all(segment)?;
+
+                            if line[line.len() - 1] == newline_char {
+                                return Ok(true);
+                            }
+                            break;
+                        }
+                    }
+                }
+                out.write_all(&[newline_char])?;
+                Ok(true)
+            });
+
+            if let Err(e) = result {
+                return Err(USimpleError::new(1, e.to_string()));
+            }
+
+            Ok(())
+        }
+    }
 }
 
 fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
@@ -387,6 +494,7 @@ mod options {
     pub const ZERO_TERMINATED: &str = "zero-terminated";
     pub const ONLY_DELIMITED: &str = "only-delimited";
     pub const OUTPUT_DELIMITER: &str = "output-delimiter";
+    pub const WHITESPACE_DELIMITED: &str = "whitespace-delimited";
     pub const COMPLEMENT: &str = "complement";
     pub const FILE: &str = "file";
 }
@@ -449,9 +557,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 };
 
                 let only_delimited = matches.get_flag(options::ONLY_DELIMITED);
+                let whitespace_delimited = matches.get_flag(options::WHITESPACE_DELIMITED);
                 let zero_terminated = matches.get_flag(options::ZERO_TERMINATED);
 
                 match matches.get_one::<String>(options::DELIMITER).map(|s| s.as_str()) {
+                    Some(_) if whitespace_delimited => {
+                            Err("invalid input: Only one of --delimiter (-d) or -w option can be specified".into())
+                        }
                     Some(mut delim) => {
                         // GNU's `cut` supports `-d=` to set the delimiter to `=`.
                         // Clap parsing is limited in this situation, see:
@@ -474,7 +586,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             Ok(Mode::Fields(
                                 ranges,
                                 FieldOptions {
-                                    delimiter: delim,
+                                    delimiter: Delimiter::String(delim),
                                     out_delimiter: out_delim,
                                     only_delimited,
                                     zero_terminated,
@@ -485,7 +597,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     None => Ok(Mode::Fields(
                         ranges,
                         FieldOptions {
-                            delimiter: "\t".to_owned(),
+                            delimiter: match whitespace_delimited {
+                                true => Delimiter::Whitespace,
+                                false => Delimiter::String("\t".to_owned()),
+                            },
                             out_delimiter: out_delim,
                             only_delimited,
                             zero_terminated,
@@ -507,6 +622,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 if matches.contains_id(options::DELIMITER) =>
             {
                 Err("invalid input: The '--delimiter' ('-d') option only usable if printing a sequence of fields".into())
+            }
+            Mode::Bytes(_, _) | Mode::Characters(_, _)
+                if matches.get_flag(options::WHITESPACE_DELIMITED) =>
+            {
+                Err("invalid input: The '-w' option only usable if printing a sequence of fields".into())
             }
             Mode::Bytes(_, _) | Mode::Characters(_, _)
                 if matches.get_flag(options::ONLY_DELIMITED) =>
@@ -562,6 +682,13 @@ pub fn uu_app() -> Command {
                 .long(options::DELIMITER)
                 .help("specify the delimiter character that separates fields in the input source. Defaults to Tab.")
                 .value_name("DELIM"),
+        )
+        .arg(
+            Arg::new(options::WHITESPACE_DELIMITED)
+                .short('w')
+                .help("Use any number of whitespace (Space, Tab) to separate fields in the input source (FreeBSD extension).")
+                .value_name("WHITESPACE")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FIELDS)
