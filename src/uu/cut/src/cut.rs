@@ -16,12 +16,12 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 
 use self::searcher::Searcher;
-use self::whitespace_searcher::WhitespaceSearcher;
+use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
 use uucore::ranges::Range;
 use uucore::{format_usage, show, show_error, show_if_err};
 
+mod matcher;
 mod searcher;
-mod whitespace_searcher;
 
 static USAGE: &str =
     "{} [-d|-w] [-s] [-z] [--output-delimiter] ((-f|-b|-c) {{sequence}}) {{sourcefile}}+";
@@ -188,23 +188,22 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()
     Ok(())
 }
 
-#[allow(clippy::cognitive_complexity)]
-fn cut_fields_delimiter<R: Read>(
+// Output delimiter is explicitly specified
+fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
     reader: R,
+    matcher: &M,
     ranges: &[Range],
-    delim: &str,
     only_delimited: bool,
     newline_char: u8,
     out_delim: &str,
 ) -> UResult<()> {
     let mut buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
-    let input_delim_len = delim.len();
 
     let result = buf_in.for_byte_record_with_terminator(newline_char, |line| {
         let mut fields_pos = 1;
         let mut low_idx = 0;
-        let mut delim_search = Searcher::new(line, delim.as_bytes()).peekable();
+        let mut delim_search = Searcher::new(matcher, line).peekable();
         let mut print_delim = false;
 
         if delim_search.peek().is_none() {
@@ -218,85 +217,6 @@ fn cut_fields_delimiter<R: Read>(
             return Ok(true);
         }
 
-        for &Range { low, high } in ranges {
-            if low - fields_pos > 0 {
-                low_idx = match delim_search.nth(low - fields_pos - 1) {
-                    Some(index) => index + input_delim_len,
-                    None => break,
-                };
-            }
-
-            for _ in 0..=high - low {
-                if print_delim {
-                    out.write_all(out_delim.as_bytes())?;
-                } else {
-                    print_delim = true;
-                }
-
-                match delim_search.next() {
-                    Some(high_idx) => {
-                        let segment = &line[low_idx..high_idx];
-
-                        out.write_all(segment)?;
-
-                        low_idx = high_idx + input_delim_len;
-                        fields_pos = high + 1;
-                    }
-                    None => {
-                        let segment = &line[low_idx..];
-
-                        out.write_all(segment)?;
-
-                        if line[line.len() - 1] == newline_char {
-                            return Ok(true);
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-
-        out.write_all(&[newline_char])?;
-        Ok(true)
-    });
-
-    if let Err(e) = result {
-        return Err(USimpleError::new(1, e.to_string()));
-    }
-
-    Ok(())
-}
-
-fn cut_fields_whitespace<R: Read>(
-    reader: R,
-    ranges: &[Range],
-    only_delimited: bool,
-    newline_char: u8,
-    out_delim: &str,
-) -> UResult<()> {
-    let mut buf_in = BufReader::new(reader);
-    let mut out = stdout_writer();
-
-    let result = buf_in.for_byte_record_with_terminator(newline_char, |line| {
-        let mut fields_pos = 1;
-        let mut low_idx = 0;
-        let mut delim_search = WhitespaceSearcher::new(line).peekable();
-        let mut print_delim = false;
-
-        if delim_search.peek().is_none() {
-            if !only_delimited {
-                out.write_all(line)?;
-                if line[line.len() - 1] != newline_char {
-                    out.write_all(&[newline_char])?;
-                }
-            }
-
-            return Ok(true);
-        }
-        // The logic is identical to `cut_fields_delimiter` function above, which uses
-        // `Searcher` that iterates over and returns the first position of the delimiter character.
-        // The main difference is that `WhitespaceSearcher` returns a pair of the first and last
-        // delimiter character positions, since each delimiter sequence length can vary.
         for &Range { low, high } in ranges {
             if low - fields_pos > 0 {
                 // current field is not in the range, so jump to the field corresponding to the
@@ -317,7 +237,7 @@ fn cut_fields_whitespace<R: Read>(
                 }
 
                 match delim_search.next() {
-                    // print the current field up to the next whitespace
+                    // print the current field up to the next field delim
                     Some((first, last)) => {
                         let segment = &line[low_idx..first];
 
@@ -352,93 +272,110 @@ fn cut_fields_whitespace<R: Read>(
     Ok(())
 }
 
+// Output delimiter is the same as input delimiter
+fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
+    reader: R,
+    matcher: &M,
+    ranges: &[Range],
+    only_delimited: bool,
+    newline_char: u8,
+) -> UResult<()> {
+    let mut buf_in = BufReader::new(reader);
+    let mut out = stdout_writer();
+
+    let result = buf_in.for_byte_record_with_terminator(newline_char, |line| {
+        let mut fields_pos = 1;
+        let mut low_idx = 0;
+        let mut delim_search = Searcher::new(matcher, line).peekable();
+        let mut print_delim = false;
+
+        if delim_search.peek().is_none() {
+            if !only_delimited {
+                out.write_all(line)?;
+                if line[line.len() - 1] != newline_char {
+                    out.write_all(&[newline_char])?;
+                }
+            }
+
+            return Ok(true);
+        }
+
+        for &Range { low, high } in ranges {
+            if low - fields_pos > 0 {
+                if let Some((first, last)) = delim_search.nth(low - fields_pos - 1) {
+                    low_idx = if print_delim { first } else { last }
+                } else {
+                    break;
+                }
+            }
+
+            match delim_search.nth(high - low) {
+                Some((first, _)) => {
+                    let segment = &line[low_idx..first];
+
+                    out.write_all(segment)?;
+
+                    print_delim = true;
+                    low_idx = first;
+                    fields_pos = high + 1;
+                }
+                None => {
+                    let segment = &line[low_idx..line.len()];
+
+                    out.write_all(segment)?;
+
+                    if line[line.len() - 1] == newline_char {
+                        return Ok(true);
+                    }
+                    break;
+                }
+            }
+        }
+        out.write_all(&[newline_char])?;
+        Ok(true)
+    });
+
+    if let Err(e) = result {
+        return Err(USimpleError::new(1, e.to_string()));
+    }
+
+    Ok(())
+}
+
 fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> UResult<()> {
     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
     match opts.delimiter {
-        Delimiter::Whitespace => cut_fields_whitespace(
-            reader,
-            ranges,
-            opts.only_delimited,
-            newline_char,
-            opts.out_delimiter.as_deref().unwrap_or("\t"),
-        ),
-        Delimiter::String(ref delimiter) => {
-            if let Some(ref o_delim) = opts.out_delimiter {
-                return cut_fields_delimiter(
+        Delimiter::String(ref delim) => {
+            let matcher = ExactMatcher::new(delim.as_bytes());
+            match opts.out_delimiter {
+                Some(ref out_delim) => cut_fields_explicit_out_delim(
                     reader,
+                    &matcher,
                     ranges,
-                    delimiter,
                     opts.only_delimited,
                     newline_char,
-                    o_delim,
-                );
+                    out_delim,
+                ),
+                None => cut_fields_implicit_out_delim(
+                    reader,
+                    &matcher,
+                    ranges,
+                    opts.only_delimited,
+                    newline_char,
+                ),
             }
-
-            let mut buf_in = BufReader::new(reader);
-            let mut out = stdout_writer();
-            let delim_len = delimiter.len();
-
-            let result = buf_in.for_byte_record_with_terminator(newline_char, |line| {
-                let mut fields_pos = 1;
-                let mut low_idx = 0;
-                let mut delim_search = Searcher::new(line, delimiter.as_bytes()).peekable();
-                let mut print_delim = false;
-
-                if delim_search.peek().is_none() {
-                    if !opts.only_delimited {
-                        out.write_all(line)?;
-                        if line[line.len() - 1] != newline_char {
-                            out.write_all(&[newline_char])?;
-                        }
-                    }
-
-                    return Ok(true);
-                }
-
-                for &Range { low, high } in ranges {
-                    if low - fields_pos > 0 {
-                        if let Some(delim_pos) = delim_search.nth(low - fields_pos - 1) {
-                            low_idx = if print_delim {
-                                delim_pos
-                            } else {
-                                delim_pos + delim_len
-                            }
-                        } else {
-                            break;
-                        }
-                    }
-
-                    match delim_search.nth(high - low) {
-                        Some(high_idx) => {
-                            let segment = &line[low_idx..high_idx];
-
-                            out.write_all(segment)?;
-
-                            print_delim = true;
-                            low_idx = high_idx;
-                            fields_pos = high + 1;
-                        }
-                        None => {
-                            let segment = &line[low_idx..line.len()];
-
-                            out.write_all(segment)?;
-
-                            if line[line.len() - 1] == newline_char {
-                                return Ok(true);
-                            }
-                            break;
-                        }
-                    }
-                }
-                out.write_all(&[newline_char])?;
-                Ok(true)
-            });
-
-            if let Err(e) = result {
-                return Err(USimpleError::new(1, e.to_string()));
-            }
-
-            Ok(())
+        }
+        Delimiter::Whitespace => {
+            let matcher = WhitespaceMatcher {};
+            let out_delim = opts.out_delimiter.as_deref().unwrap_or("\t");
+            cut_fields_explicit_out_delim(
+                reader,
+                &matcher,
+                ranges,
+                opts.only_delimited,
+                newline_char,
+                out_delim,
+            )
         }
     }
 }
