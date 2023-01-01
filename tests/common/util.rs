@@ -155,6 +155,7 @@ impl CmdResult {
             .expect("Program must be run first or has not finished, yet")
     }
 
+    #[track_caller]
     pub fn code_is(&self, expected_code: i32) -> &Self {
         assert_eq!(self.code(), expected_code);
         self
@@ -175,6 +176,7 @@ impl CmdResult {
     }
 
     /// asserts that the command resulted in a success (zero) status code
+    #[track_caller]
     pub fn success(&self) -> &Self {
         assert!(
             self.success,
@@ -186,6 +188,7 @@ impl CmdResult {
     }
 
     /// asserts that the command resulted in a failure (non-zero) status code
+    #[track_caller]
     pub fn failure(&self) -> &Self {
         assert!(
             !self.success,
@@ -207,6 +210,7 @@ impl CmdResult {
     /// but you might find yourself using this function if
     /// 1.  you can not know exactly what stdout will be or
     /// 2.  you know that stdout will also be empty
+    #[track_caller]
     pub fn no_stderr(&self) -> &Self {
         assert!(
             self.stderr.is_empty(),
@@ -222,6 +226,7 @@ impl CmdResult {
     /// but you might find yourself using this function if
     /// 1.  you can not know exactly what stderr will be or
     /// 2.  you know that stderr will also be empty
+    #[track_caller]
     pub fn no_stdout(&self) -> &Self {
         assert!(
             self.stdout.is_empty(),
@@ -232,6 +237,7 @@ impl CmdResult {
     }
 
     /// Assert that there is output to neither stderr nor stdout.
+    #[track_caller]
     pub fn no_output(&self) -> &Self {
         self.no_stdout().no_stderr()
     }
@@ -239,12 +245,14 @@ impl CmdResult {
     /// asserts that the command resulted in stdout stream output that equals the
     /// passed in value, trailing whitespace are kept to force strict comparison (#1235)
     /// `stdout_only()` is a better choice unless stderr may or will be non-empty
+    #[track_caller]
     pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> &Self {
         assert_eq!(self.stdout_str(), String::from(msg.as_ref()));
         self
     }
 
     /// like `stdout_is`, but succeeds if any elements of `expected` matches stdout.
+    #[track_caller]
     pub fn stdout_is_any<T: AsRef<str> + std::fmt::Debug>(&self, expected: &[T]) -> &Self {
         assert!(
             expected.iter().any(|msg| self.stdout_str() == msg.as_ref()),
@@ -256,6 +264,7 @@ impl CmdResult {
     }
 
     /// Like `stdout_is` but newlines are normalized to `\n`.
+    #[track_caller]
     pub fn normalized_newlines_stdout_is<T: AsRef<str>>(&self, msg: T) -> &Self {
         let msg = msg.as_ref().replace("\r\n", "\n");
         assert_eq!(self.stdout_str().replace("\r\n", "\n"), msg);
@@ -264,12 +273,14 @@ impl CmdResult {
 
     /// asserts that the command resulted in stdout stream output,
     /// whose bytes equal those of the passed in slice
+    #[track_caller]
     pub fn stdout_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
         assert_eq!(self.stdout, msg.as_ref());
         self
     }
 
     /// like `stdout_is()`, but expects the contents of the file at the provided relative path
+    #[track_caller]
     pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stdout_is(String::from_utf8(contents).unwrap())
@@ -291,6 +302,7 @@ impl CmdResult {
     ///     new_ucmd!().succeeds().stdout_is_fixture_bytes("expected.bin");
     /// }
     /// ```
+    #[track_caller]
     pub fn stdout_is_fixture_bytes<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stdout_is_bytes(contents)
@@ -298,6 +310,7 @@ impl CmdResult {
 
     /// like `stdout_is_fixture()`, but replaces the data in fixture file based on values provided in `template_vars`
     /// command output
+    #[track_caller]
     pub fn stdout_is_templated_fixture<T: AsRef<OsStr>>(
         &self,
         file_rel_path: T,
@@ -312,6 +325,7 @@ impl CmdResult {
     }
 
     /// like `stdout_is_templated_fixture`, but succeeds if any replacement by `template_vars` results in the actual stdout.
+    #[track_caller]
     pub fn stdout_is_templated_fixture_any<T: AsRef<OsStr>>(
         &self,
         file_rel_path: T,
@@ -331,6 +345,7 @@ impl CmdResult {
     /// asserts that the command resulted in stderr stream output that equals the
     /// passed in value, when both are trimmed of trailing whitespace
     /// `stderr_only` is a better choice unless stdout may or will be non-empty
+    #[track_caller]
     pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> &Self {
         assert_eq!(
             self.stderr_str().trim_end(),
@@ -341,12 +356,14 @@ impl CmdResult {
 
     /// asserts that the command resulted in stderr stream output,
     /// whose bytes equal those of the passed in slice
+    #[track_caller]
     pub fn stderr_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
         assert_eq!(self.stderr, msg.as_ref());
         self
     }
 
     /// Like `stdout_is_fixture`, but for stderr
+    #[track_caller]
     pub fn stderr_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stderr_is(String::from_utf8(contents).unwrap())
@@ -356,6 +373,7 @@ impl CmdResult {
     /// 1.  the command resulted in stdout stream output that equals the
     ///     passed in value
     /// 2.  the command resulted in empty (zero-length) stderr stream output
+    #[track_caller]
     pub fn stdout_only<T: AsRef<str>>(&self, msg: T) -> &Self {
         self.no_stderr().stdout_is(msg)
     }
@@ -364,11 +382,13 @@ impl CmdResult {
     /// 1.  the command resulted in a stdout stream whose bytes
     ///     equal those of the passed in value
     /// 2.  the command resulted in an empty stderr stream
+    #[track_caller]
     pub fn stdout_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
         self.no_stderr().stdout_is_bytes(msg)
     }
 
     /// like `stdout_only()`, but expects the contents of the file at the provided relative path
+    #[track_caller]
     pub fn stdout_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stdout_only_bytes(contents)
@@ -378,6 +398,7 @@ impl CmdResult {
     /// 1.  the command resulted in stderr stream output that equals the
     ///     passed in value, when both are trimmed of trailing whitespace
     /// 2.  the command resulted in empty (zero-length) stdout stream output
+    #[track_caller]
     pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> &Self {
         self.no_stdout().stderr_is(msg)
     }
@@ -386,10 +407,12 @@ impl CmdResult {
     /// 1.  the command resulted in a stderr stream whose bytes equal the ones
     ///     of the passed value
     /// 2.  the command resulted in an empty stdout stream
+    #[track_caller]
     pub fn stderr_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
         self.no_stdout().stderr_is_bytes(msg)
     }
 
+    #[track_caller]
     pub fn fails_silently(&self) -> &Self {
         assert!(!self.success);
         assert!(self.stderr.is_empty());
@@ -404,6 +427,7 @@ impl CmdResult {
     ///     `msg` should be the same as the one provided to `UUsageError::new` or `show_error!`
     ///
     /// 2.  the command resulted in empty (zero-length) stdout stream output
+    #[track_caller]
     pub fn usage_error<T: AsRef<str>>(&self, msg: T) -> &Self {
         self.stderr_only(format!(
             "{0}: {2}\nTry '{1} {0} --help' for more information.",
@@ -413,6 +437,7 @@ impl CmdResult {
         ))
     }
 
+    #[track_caller]
     pub fn stdout_contains<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(
             self.stdout_str().contains(cmp.as_ref()),
@@ -423,6 +448,7 @@ impl CmdResult {
         self
     }
 
+    #[track_caller]
     pub fn stderr_contains<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(
             self.stderr_str().contains(cmp.as_ref()),
@@ -433,6 +459,7 @@ impl CmdResult {
         self
     }
 
+    #[track_caller]
     pub fn stdout_does_not_contain<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(
             !self.stdout_str().contains(cmp.as_ref()),
@@ -443,11 +470,13 @@ impl CmdResult {
         self
     }
 
+    #[track_caller]
     pub fn stderr_does_not_contain<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(!self.stderr_str().contains(cmp.as_ref()));
         self
     }
 
+    #[track_caller]
     pub fn stdout_matches(&self, regex: &regex::Regex) -> &Self {
         assert!(
             regex.is_match(self.stdout_str().trim()),
@@ -457,6 +486,7 @@ impl CmdResult {
         self
     }
 
+    #[track_caller]
     pub fn stdout_does_not_match(&self, regex: &regex::Regex) -> &Self {
         assert!(
             !regex.is_match(self.stdout_str().trim()),
@@ -1218,6 +1248,7 @@ impl UCommand {
 
     /// Spawns the command, feeds the stdin if any, waits for the result,
     /// asserts success, and returns a command result.
+    #[track_caller]
     pub fn succeeds(&mut self) -> CmdResult {
         let cmd_result = self.run();
         cmd_result.success();
@@ -1226,6 +1257,7 @@ impl UCommand {
 
     /// Spawns the command, feeds the stdin if any, waits for the result,
     /// asserts failure, and returns a command result.
+    #[track_caller]
     pub fn fails(&mut self) -> CmdResult {
         let cmd_result = self.run();
         cmd_result.failure();
@@ -1415,6 +1447,7 @@ impl<'a> UChildAssertion<'a> {
     }
 
     // Assert that the child process is alive
+    #[track_caller]
     pub fn is_alive(&mut self) -> &mut Self {
         match self
             .uchild
@@ -1436,6 +1469,7 @@ impl<'a> UChildAssertion<'a> {
     }
 
     // Assert that the child process has exited
+    #[track_caller]
     pub fn is_not_alive(&mut self) -> &mut Self {
         match self
             .uchild
