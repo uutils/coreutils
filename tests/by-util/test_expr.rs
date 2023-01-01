@@ -5,25 +5,21 @@ use crate::common::util::*;
 #[test]
 fn test_simple_values() {
     // null or 0 => EXIT_VALUE == 1
-    new_ucmd!()
-        .args(&[""])
-        .fails()
-        .status_code(1)
-        .stdout_only("\n");
+    new_ucmd!().args(&[""]).fails().code_is(1).stdout_only("\n");
     new_ucmd!()
         .args(&["0"])
         .fails()
-        .status_code(1)
+        .code_is(1)
         .stdout_only("0\n");
     new_ucmd!()
         .args(&["00"])
         .fails()
-        .status_code(1)
+        .code_is(1)
         .stdout_only("00\n");
     new_ucmd!()
         .args(&["-0"])
         .fails()
-        .status_code(1)
+        .code_is(1)
         .stdout_only("-0\n");
 
     // non-null and non-0 => EXIT_VALUE = 0
@@ -40,7 +36,7 @@ fn test_simple_arithmetic() {
     new_ucmd!()
         .args(&["1", "-", "1"])
         .fails()
-        .status_code(1)
+        .code_is(1)
         .stdout_only("0\n");
 
     new_ucmd!()
@@ -130,7 +126,7 @@ fn test_index() {
     new_ucmd!()
         .args(&["index", "αbcdef", "x"])
         .fails()
-        .status_code(1)
+        .code_is(1)
         .stdout_only("0\n");
     new_ucmd!()
         .args(&["index", "αbcdef", "α"])
@@ -213,18 +209,18 @@ fn test_invalid_substr() {
     new_ucmd!()
         .args(&["substr", "abc", "0", "1"])
         .fails()
-        .status_code(1)
+        .code_is(1)
         .stdout_only("\n");
 
     new_ucmd!()
         .args(&["substr", "abc", &(std::usize::MAX.to_string() + "0"), "1"])
         .fails()
-        .status_code(1)
+        .code_is(1)
         .stdout_only("\n");
 
     new_ucmd!()
         .args(&["substr", "abc", "0", &(std::usize::MAX.to_string() + "0")])
         .fails()
-        .status_code(1)
+        .code_is(1)
         .stdout_only("\n");
 }

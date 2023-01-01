@@ -461,7 +461,7 @@ fn test_oversized_bs_32_bit() {
             .run()
             .no_stdout()
             .failure()
-            .status_code(1)
+            .code_is(1)
             .stderr_is(format!("dd: {}=N cannot fit into memory\n", bs_param));
     }
 }

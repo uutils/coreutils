@@ -199,12 +199,6 @@ impl CmdResult {
         self
     }
 
-    /// asserts that the command's exit code is the same as the given one
-    pub fn status_code(&self, code: i32) -> &Self {
-        assert_eq!(self.code, Some(code));
-        self
-    }
-
     /// asserts that the command resulted in empty (zero-length) stderr stream output
     /// generally, it's better to use `stdout_only()` instead,
     /// but you might find yourself using this function if
