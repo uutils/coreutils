@@ -75,44 +75,52 @@ mod matcher_tests {
     #[test]
     fn test_exact_matcher_single_byte() {
         let matcher = ExactMatcher::new(":".as_bytes());
+        // spell-checker:disable
         assert_eq!(matcher.next_match("".as_bytes()), None);
         assert_eq!(matcher.next_match(":".as_bytes()), Some((0, 1)));
         assert_eq!(matcher.next_match(":abcxyz".as_bytes()), Some((0, 1)));
         assert_eq!(matcher.next_match("abc:xyz".as_bytes()), Some((3, 4)));
         assert_eq!(matcher.next_match("abcxyz:".as_bytes()), Some((6, 7)));
         assert_eq!(matcher.next_match("abcxyz".as_bytes()), None);
+        // spell-checker:enable
     }
 
     #[test]
     fn test_exact_matcher_multi_bytes() {
         let matcher = ExactMatcher::new("<>".as_bytes());
+        // spell-checker:disable
         assert_eq!(matcher.next_match("".as_bytes()), None);
         assert_eq!(matcher.next_match("<>".as_bytes()), Some((0, 2)));
         assert_eq!(matcher.next_match("<>abcxyz".as_bytes()), Some((0, 2)));
         assert_eq!(matcher.next_match("abc<>xyz".as_bytes()), Some((3, 5)));
         assert_eq!(matcher.next_match("abcxyz<>".as_bytes()), Some((6, 8)));
         assert_eq!(matcher.next_match("abcxyz".as_bytes()), None);
+        // spell-checker:enable
     }
 
     #[test]
     fn test_whitespace_matcher_single_space() {
         let matcher = WhitespaceMatcher {};
+        // spell-checker:disable
         assert_eq!(matcher.next_match("".as_bytes()), None);
         assert_eq!(matcher.next_match(" ".as_bytes()), Some((0, 1)));
         assert_eq!(matcher.next_match("\tabcxyz".as_bytes()), Some((0, 1)));
         assert_eq!(matcher.next_match("abc\txyz".as_bytes()), Some((3, 4)));
         assert_eq!(matcher.next_match("abcxyz ".as_bytes()), Some((6, 7)));
         assert_eq!(matcher.next_match("abcxyz".as_bytes()), None);
+        // spell-checker:enable
     }
 
     #[test]
     fn test_whitespace_matcher_multi_spaces() {
         let matcher = WhitespaceMatcher {};
+        // spell-checker:disable
         assert_eq!(matcher.next_match("".as_bytes()), None);
         assert_eq!(matcher.next_match(" \t ".as_bytes()), Some((0, 3)));
         assert_eq!(matcher.next_match("\t\tabcxyz".as_bytes()), Some((0, 2)));
         assert_eq!(matcher.next_match("abc \txyz".as_bytes()), Some((3, 5)));
         assert_eq!(matcher.next_match("abcxyz  ".as_bytes()), Some((6, 8)));
         assert_eq!(matcher.next_match("abcxyz".as_bytes()), None);
+        // spell-checker:enable
     }
 }
