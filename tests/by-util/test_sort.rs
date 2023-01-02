@@ -844,7 +844,7 @@ fn test_nonexistent_file() {
     new_ucmd!()
         .arg("nonexistent.txt")
         .fails()
-        .status_code(2)
+        .code_is(2)
         .stderr_only(
             #[cfg(not(windows))]
             "sort: cannot read: nonexistent.txt: No such file or directory",
@@ -1015,7 +1015,7 @@ fn test_verifies_out_file() {
             .pipe_in(input)
             .ignore_stdin_write_error()
             .fails()
-            .status_code(2)
+            .code_is(2)
             .stderr_only(
                 #[cfg(not(windows))]
                 "sort: open failed: nonexistent_dir/nonexistent_file: No such file or directory",
@@ -1036,7 +1036,7 @@ fn test_verifies_files_after_keys() {
             "nonexistent_dir/input_file",
         ])
         .fails()
-        .status_code(2)
+        .code_is(2)
         .stderr_contains("failed to parse key");
 }
 
@@ -1046,7 +1046,7 @@ fn test_verifies_input_files() {
     new_ucmd!()
         .args(&["/dev/random", "nonexistent_file"])
         .fails()
-        .status_code(2)
+        .code_is(2)
         .stderr_is("sort: cannot read: nonexistent_file: No such file or directory");
 }
 
@@ -1104,7 +1104,7 @@ fn test_wrong_args_exit_code() {
     new_ucmd!()
         .arg("--misspelled")
         .fails()
-        .status_code(2)
+        .code_is(2)
         .stderr_contains("--misspelled");
 }
 
