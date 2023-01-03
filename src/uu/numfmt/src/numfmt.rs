@@ -30,11 +30,7 @@ const USAGE: &str = help_usage!("numfmt.md");
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions) -> UResult<()> {
     for l in args {
-        let format_result = format_and_handle_validation(l, options);
-
-        if format_result.is_err() && options.invalid == InvalidModes::Abort {
-            return format_result;
-        }
+        format_and_handle_validation(l, options)?;
     }
     Ok(())
 }
@@ -43,29 +39,16 @@ fn handle_buffer<R>(input: R, options: &NumfmtOptions) -> UResult<()>
 where
     R: BufRead,
 {
-    let mut lines = input.lines();
-
-    for line in lines.by_ref().take(options.header) {
-        match line {
-            Ok(l) => println!("{}", l),
-            Err(e) => return Err(Box::new(NumfmtError::IoError(e.to_string()))),
-        };
+    for (idx, line_result) in input.lines().by_ref().enumerate() {
+        match line_result {
+            Ok(line) if idx < options.header => {
+                println!("{}", line);
+                Ok(())
+            }
+            Ok(line) => format_and_handle_validation(line.as_ref(), options),
+            Err(err) => return Err(Box::new(NumfmtError::IoError(err.to_string()))),
+        }?;
     }
-
-    for line_result in lines.by_ref() {
-        if let Err(err) = line_result {
-            return Err(Box::new(NumfmtError::IoError(err.to_string())));
-        };
-
-        let format_result = format_and_handle_validation(line_result.unwrap().as_ref(), options);
-
-        if format_result.is_ok() {
-            continue;
-        }
-
-        return format_result;
-    }
-
     Ok(())
 }
 
