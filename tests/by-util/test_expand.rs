@@ -353,7 +353,17 @@ fn test_ignore_initial_plus_slash_combination() {
 fn test_comma_with_plus_and_multi_character_values() {
     new_ucmd!()
         .args(&["--tabs=3,+6"])
-        .pipe_in("\taaa\tbbbb\tcccc")
+        .pipe_in("\taaa\tbbb\tccc")
+        .succeeds()
+        //               01234567890
+        .stdout_is("   aaa   bbb   ccc");
+}
+
+#[test]
+fn test_comma_with_plus_and_multi_character_values() {
+    new_ucmd!()
+        .args(&["--tabs=3,+6"])
+        .pipe_in("\taaa\tbbb\tccc")
         .succeeds()
         //               01234567890
         .stdout_is("   aaa   bbb   ccc");

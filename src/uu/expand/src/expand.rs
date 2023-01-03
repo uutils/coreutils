@@ -348,7 +348,16 @@ fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) 
     match remaining_mode {
         RemainingMode::Plus => match tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
             Some(t) => t - col,
-            None => tabstops[num_tabstops - 1] - 1,
+            None => {
+                let step_size = tabstops[num_tabstops - 1];
+                let last_before_repeating = tabstops[num_tabstops-2];
+                let mut r = last_before_repeating+step_size;
+
+                while col >= r {
+                    r += step_size;
+                }
+                r - col
+            }
         },
         RemainingMode::Slash => match tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
             Some(t) => t - col,
@@ -376,7 +385,7 @@ enum CharType {
 
 fn expand(options: &Options) -> std::io::Result<()> {
     use self::CharType::*;
-    println!("{:?}", options);
+    
     let mut output = BufWriter::new(stdout());
     let ts = options.tabstops.as_ref();
     let mut buf = Vec::new();
