@@ -275,7 +275,7 @@ fn test_tabs_shortcut() {
         .args(&["-2", "-5", "-7"])
         .pipe_in("\ta\tb\tc")
         .succeeds()
-        //          01234567890
+        //               01234567890
         .stdout_is("  a  b c");
 }
 
@@ -285,7 +285,7 @@ fn test_comma_separated_tabs_shortcut() {
         .args(&["-2,5", "-7"])
         .pipe_in("\ta\tb\tc")
         .succeeds()
-        //          01234567890
+        //               01234567890
         .stdout_is("  a  b c");
 }
 
@@ -295,6 +295,66 @@ fn test_tabs_and_tabs_shortcut_mixed() {
         .args(&["-2", "--tabs=5", "-7"])
         .pipe_in("\ta\tb\tc")
         .succeeds()
-        //          01234567890
+        //               01234567890
         .stdout_is("  a  b c");
+}
+
+#[test]
+fn test_ignore_initial_plus() {
+    new_ucmd!()
+        .args(&["--tabs=+3"])
+        .pipe_in("\ta\tb\tc")
+        .succeeds()
+        //               01234567890
+        .stdout_is("   a  b  c");
+}
+
+#[test]
+fn test_ignore_initial_pluses() {
+    new_ucmd!()
+        .args(&["--tabs=++3"])
+        .pipe_in("\ta\tb\tc")
+        .succeeds()
+        //               01234567890
+        .stdout_is("   a  b  c");
+}
+
+#[test]
+fn test_ignore_initial_slash() {
+    new_ucmd!()
+        .args(&["--tabs=/3"])
+        .pipe_in("\ta\tb\tc")
+        .succeeds()
+        //               01234567890
+        .stdout_is("   a  b  c");
+}
+
+#[test]
+fn test_ignore_initial_slashes() {
+    new_ucmd!()
+        .args(&["--tabs=//3"])
+        .pipe_in("\ta\tb\tc")
+        .succeeds()
+        //               01234567890
+        .stdout_is("   a  b  c");
+}
+
+#[test]
+fn test_ignore_initial_plus_slash_combination() {
+    new_ucmd!()
+        .args(&["--tabs=+/3"])
+        .pipe_in("\ta\tb\tc")
+        .succeeds()
+        //               01234567890
+        .stdout_is("   a  b  c");
+}
+
+#[test]
+fn test_comma_with_plus_and_multi_character_values() {
+    new_ucmd!()
+        .args(&["--tabs=3,+6"])
+        .pipe_in("\taaa\tbbbb\tcccc")
+        .succeeds()
+        //               01234567890
+        .stdout_is("   aaa   bbb   ccc");
 }

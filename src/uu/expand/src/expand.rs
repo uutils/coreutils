@@ -38,7 +38,7 @@ static DEFAULT_TABSTOP: usize = 8;
 
 /// The mode to use when replacing tabs beyond the last one specified in
 /// the `--tabs` argument.
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum RemainingMode {
     None,
     Slash,
@@ -126,12 +126,8 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
         let bytes = word.as_bytes();
         for i in 0..bytes.len() {
             match bytes[i] {
-                b'+' => {
-                    remaining_mode = RemainingMode::Plus;
-                }
-                b'/' => {
-                    remaining_mode = RemainingMode::Slash;
-                }
+                b'+' => remaining_mode = RemainingMode::Plus,
+                b'/' => remaining_mode = RemainingMode::Slash,
                 _ => {
                     // Parse a number from the byte sequence.
                     let s = from_utf8(&bytes[i..]).unwrap();
@@ -190,10 +186,16 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
     // then just use the default tabstops.
     if nums.is_empty() {
         nums = vec![DEFAULT_TABSTOP];
+        remaining_mode = RemainingMode::None;
+    }
+
+    if nums.len() == 1 {
+        remaining_mode = RemainingMode::None;
     }
     Ok((remaining_mode, nums))
 }
 
+#[derive(Debug)]
 struct Options {
     files: Vec<String>,
     tabstops: Vec<usize>,
@@ -374,7 +376,7 @@ enum CharType {
 
 fn expand(options: &Options) -> std::io::Result<()> {
     use self::CharType::*;
-
+    println!("{:?}", options);
     let mut output = BufWriter::new(stdout());
     let ts = options.tabstops.as_ref();
     let mut buf = Vec::new();
