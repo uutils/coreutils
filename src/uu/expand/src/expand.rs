@@ -338,11 +338,6 @@ fn open(path: &str) -> BufReader<Box<dyn Read + 'static>> {
 /// in the `tabstops` slice is interpreted as a relative number of
 /// spaces, which this function will return for every input value of
 /// `col` beyond the end of the second-to-last element of `tabstops`.
-///
-/// If `remaining_mode` is [`RemainingMode::Plus`], then the last entry
-/// in the `tabstops` slice is interpreted as a relative number of
-/// spaces, which this function will return for every input value of
-/// `col` beyond the end of the second-to-last element of `tabstops`.
 fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) -> usize {
     let num_tabstops = tabstops.len();
     match remaining_mode {
@@ -350,13 +345,11 @@ fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) 
             Some(t) => t - col,
             None => {
                 let step_size = tabstops[num_tabstops - 1];
-                let last_before_repeating = tabstops[num_tabstops-2];
-                let mut r = last_before_repeating+step_size;
+                let last_fixed_tabstop = tabstops[num_tabstops-2];
+                let characters_since_last_tabstop = col-last_fixed_tabstop;
 
-                while col >= r {
-                    r += step_size;
-                }
-                r - col
+                let steps_required = 1 + characters_since_last_tabstop/step_size;
+                steps_required*step_size-characters_since_last_tabstop
             }
         },
         RemainingMode::Slash => match tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
@@ -498,8 +491,8 @@ mod tests {
     #[test]
     fn test_next_tabstop_remaining_mode_plus() {
         assert_eq!(next_tabstop(&[1, 5], 0, &RemainingMode::Plus), 1);
-        assert_eq!(next_tabstop(&[1, 5], 3, &RemainingMode::Plus), 4);
-        assert_eq!(next_tabstop(&[1, 5], 6, &RemainingMode::Plus), 4);
+        assert_eq!(next_tabstop(&[1, 5], 3, &RemainingMode::Plus), 3);
+        assert_eq!(next_tabstop(&[1, 5], 6, &RemainingMode::Plus), 5);
     }
 
     #[test]
