@@ -275,7 +275,7 @@ fn test_tabs_shortcut() {
         .args(&["-2", "-5", "-7"])
         .pipe_in("\ta\tb\tc")
         .succeeds()
-        //               01234567890
+        //          01234567890
         .stdout_is("  a  b c");
 }
 
@@ -285,7 +285,7 @@ fn test_comma_separated_tabs_shortcut() {
         .args(&["-2,5", "-7"])
         .pipe_in("\ta\tb\tc")
         .succeeds()
-        //               01234567890
+        //          01234567890
         .stdout_is("  a  b c");
 }
 
@@ -295,7 +295,7 @@ fn test_tabs_and_tabs_shortcut_mixed() {
         .args(&["-2", "--tabs=5", "-7"])
         .pipe_in("\ta\tb\tc")
         .succeeds()
-        //               01234567890
+        //          01234567890
         .stdout_is("  a  b c");
 }
 
@@ -305,7 +305,7 @@ fn test_ignore_initial_plus() {
         .args(&["--tabs=+3"])
         .pipe_in("\ta\tb\tc")
         .succeeds()
-        //               01234567890
+        //          01234567890
         .stdout_is("   a  b  c");
 }
 
@@ -315,7 +315,7 @@ fn test_ignore_initial_pluses() {
         .args(&["--tabs=++3"])
         .pipe_in("\ta\tb\tc")
         .succeeds()
-        //               01234567890
+        //          01234567890
         .stdout_is("   a  b  c");
 }
 
@@ -325,7 +325,7 @@ fn test_ignore_initial_slash() {
         .args(&["--tabs=/3"])
         .pipe_in("\ta\tb\tc")
         .succeeds()
-        //               01234567890
+        //          01234567890
         .stdout_is("   a  b  c");
 }
 
@@ -335,7 +335,7 @@ fn test_ignore_initial_slashes() {
         .args(&["--tabs=//3"])
         .pipe_in("\ta\tb\tc")
         .succeeds()
-        //               01234567890
+        //          01234567890
         .stdout_is("   a  b  c");
 }
 
@@ -345,7 +345,7 @@ fn test_ignore_initial_plus_slash_combination() {
         .args(&["--tabs=+/3"])
         .pipe_in("\ta\tb\tc")
         .succeeds()
-        //               01234567890
+        //          01234567890
         .stdout_is("   a  b  c");
 }
 
@@ -355,7 +355,7 @@ fn test_comma_with_plus_1() {
         .args(&["--tabs=3,+6"])
         .pipe_in("\t111\t222\t333")
         .succeeds()
-        //               01234567890
+        //          01234567890
         .stdout_is("   111   222   333");
 }
 
@@ -365,7 +365,7 @@ fn test_comma_with_plus_2() {
         .args(&["--tabs=1,+5"])
         .pipe_in("\ta\tb\tc")
         .succeeds()
-        //               01234567890
+        //          01234567890
         .stdout_is(" a    b    c");
 }
 
@@ -375,7 +375,7 @@ fn test_comma_with_plus_3() {
         .args(&["--tabs=2,+5"])
         .pipe_in("a\tb\tc")
         .succeeds()
-        //               01234567890
+        //          01234567890
         .stdout_is("a b    c");
 }
 
@@ -385,6 +385,6 @@ fn test_comma_with_plus_4() {
         .args(&["--tabs=1,3,+5"])
         .pipe_in("a\tb\tc")
         .succeeds()
-        //               01234567890
+        //          01234567890
         .stdout_is("a  b    c");
 }

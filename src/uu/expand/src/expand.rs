@@ -38,7 +38,7 @@ static DEFAULT_TABSTOP: usize = 8;
 
 /// The mode to use when replacing tabs beyond the last one specified in
 /// the `--tabs` argument.
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq)]
 enum RemainingMode {
     None,
     Slash,
@@ -195,7 +195,6 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
     Ok((remaining_mode, nums))
 }
 
-#[derive(Debug)]
 struct Options {
     files: Vec<String>,
     tabstops: Vec<usize>,
@@ -345,11 +344,11 @@ fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) 
             Some(t) => t - col,
             None => {
                 let step_size = tabstops[num_tabstops - 1];
-                let last_fixed_tabstop = tabstops[num_tabstops-2];
-                let characters_since_last_tabstop = col-last_fixed_tabstop;
+                let last_fixed_tabstop = tabstops[num_tabstops - 2];
+                let characters_since_last_tabstop = col - last_fixed_tabstop;
 
-                let steps_required = 1 + characters_since_last_tabstop/step_size;
-                steps_required*step_size-characters_since_last_tabstop
+                let steps_required = 1 + characters_since_last_tabstop / step_size;
+                steps_required * step_size - characters_since_last_tabstop
             }
         },
         RemainingMode::Slash => match tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
@@ -378,7 +377,7 @@ enum CharType {
 
 fn expand(options: &Options) -> std::io::Result<()> {
     use self::CharType::*;
-    
+
     let mut output = BufWriter::new(stdout());
     let ts = options.tabstops.as_ref();
     let mut buf = Vec::new();
