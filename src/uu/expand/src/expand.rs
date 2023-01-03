@@ -186,10 +186,9 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
     // then just use the default tabstops.
     if nums.is_empty() {
         nums = vec![DEFAULT_TABSTOP];
-        remaining_mode = RemainingMode::None;
     }
 
-    if nums.len() == 1 {
+    if nums.len() < 2 {
         remaining_mode = RemainingMode::None;
     }
     Ok((remaining_mode, nums))
