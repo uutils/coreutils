@@ -470,7 +470,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 fn recreate_arguments(args: &[String]) -> Vec<String> {
     let column_page_option = Regex::new(r"^[-+]\d+.*").unwrap();
     let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
-    //let a_file: Regex = Regex::new(r"^[^-+].*").unwrap();
     let n_regex = Regex::new(r"^-n\s*$").unwrap();
     let mut arguments = args.to_owned();
     let num_option = args.iter().find_position(|x| n_regex.is_match(x.trim()));
