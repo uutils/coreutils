@@ -25,7 +25,7 @@ use std::os::windows::fs::{symlink_dir, symlink_file};
 #[cfg(windows)]
 use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Output, Stdio};
+use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::rc::Rc;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread::{sleep, JoinHandle};
@@ -73,10 +73,7 @@ pub struct CmdResult {
     //tmpd is used for convenience functions for asserts against fixtures
     tmpd: Option<Rc<TempDir>>,
     /// exit status for command (if there is one)
-    code: Option<i32>,
-    /// zero-exit from running the Command?
-    /// see [`success`]
-    success: bool,
+    exit_status: Option<ExitStatus>,
     /// captured standard output after running the Command
     stdout: Vec<u8>,
     /// captured standard error after running the Command
@@ -88,8 +85,7 @@ impl CmdResult {
         bin_path: String,
         util_name: Option<String>,
         tmpd: Option<Rc<TempDir>>,
-        code: Option<i32>,
-        success: bool,
+        exit_status: Option<ExitStatus>,
         stdout: T,
         stderr: U,
     ) -> Self
@@ -101,8 +97,7 @@ impl CmdResult {
             bin_path,
             util_name,
             tmpd,
-            code,
-            success,
+            exit_status,
             stdout: stdout.into(),
             stderr: stderr.into(),
         }
@@ -117,8 +112,7 @@ impl CmdResult {
             self.bin_path.clone(),
             self.util_name.clone(),
             self.tmpd.clone(),
-            self.code,
-            self.success,
+            self.exit_status,
             function(&self.stdout),
             self.stderr.as_slice(),
         )
@@ -133,8 +127,7 @@ impl CmdResult {
             self.bin_path.clone(),
             self.util_name.clone(),
             self.tmpd.clone(),
-            self.code,
-            self.success,
+            self.exit_status,
             function(self.stdout_str()),
             self.stderr.as_slice(),
         )
@@ -149,8 +142,7 @@ impl CmdResult {
             self.bin_path.clone(),
             self.util_name.clone(),
             self.tmpd.clone(),
-            self.code,
-            self.success,
+            self.exit_status,
             self.stdout.as_slice(),
             function(&self.stderr),
         )
@@ -165,8 +157,7 @@ impl CmdResult {
             self.bin_path.clone(),
             self.util_name.clone(),
             self.tmpd.clone(),
-            self.code,
-            self.success,
+            self.exit_status,
             self.stdout.as_slice(),
             function(self.stderr_str()),
         )
@@ -219,8 +210,10 @@ impl CmdResult {
     /// Returns the program's exit code
     /// Panics if not run or has not finished yet for example when run with `run_no_wait()`
     pub fn code(&self) -> i32 {
-        self.code
+        self.exit_status
             .expect("Program must be run first or has not finished, yet")
+            .code()
+            .unwrap()
     }
 
     #[track_caller]
@@ -240,14 +233,14 @@ impl CmdResult {
 
     /// Returns whether the program succeeded
     pub fn succeeded(&self) -> bool {
-        self.success
+        self.exit_status.map_or(true, |e| e.success())
     }
 
     /// asserts that the command resulted in a success (zero) status code
     #[track_caller]
     pub fn success(&self) -> &Self {
         assert!(
-            self.success,
+            self.succeeded(),
             "Command was expected to succeed.\nstdout = {}\n stderr = {}",
             self.stdout_str(),
             self.stderr_str()
@@ -259,7 +252,7 @@ impl CmdResult {
     #[track_caller]
     pub fn failure(&self) -> &Self {
         assert!(
-            !self.success,
+            !self.succeeded(),
             "Command was expected to fail.\nstdout = {}\n stderr = {}",
             self.stdout_str(),
             self.stderr_str()
@@ -476,7 +469,7 @@ impl CmdResult {
 
     #[track_caller]
     pub fn fails_silently(&self) -> &Self {
-        assert!(!self.success);
+        assert!(!self.succeeded());
         assert!(self.stderr.is_empty());
         self
     }
@@ -1447,12 +1440,10 @@ impl<'a> UChildAssertion<'a> {
     }
 
     fn with_output(&mut self, mode: AssertionMode) -> CmdResult {
-        let (code, success) = match self.uchild.is_alive() {
-            true => (None, true),
-            false => {
-                let status = self.uchild.raw.wait().unwrap();
-                (status.code(), status.success())
-            }
+        let exit_status = if self.uchild.is_alive() {
+            None
+        } else {
+            Some(self.uchild.raw.wait().unwrap())
         };
         let (stdout, stderr) = match mode {
             AssertionMode::All => (
@@ -1469,8 +1460,7 @@ impl<'a> UChildAssertion<'a> {
             bin_path: self.uchild.bin_path.clone(),
             util_name: self.uchild.util_name.clone(),
             tmpd: self.uchild.tmpd.clone(),
-            code,
-            success,
+            exit_status,
             stdout,
             stderr,
         }
@@ -1699,8 +1689,7 @@ impl UChild {
             bin_path,
             util_name,
             tmpd,
-            code: output.status.code(),
-            success: output.status.success(),
+            exit_status: Some(output.status),
             stdout: output.stdout,
             stderr: output.stderr,
         })
@@ -2233,8 +2222,7 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
         ts.bin_path.as_os_str().to_str().unwrap().to_string(),
         Some(ts.util_name.clone()),
         Some(result.tmpd()),
-        Some(result.code()),
-        result.succeeded(),
+        result.exit_status,
         stdout.as_bytes(),
         stderr.as_bytes(),
     ))
@@ -2309,152 +2297,156 @@ pub fn run_ucmd_as_root(
 mod tests {
     // spell-checker:ignore (tests) asdfsadfa
     use super::*;
+    use tempfile::tempdir;
+
+    #[cfg(windows)]
+    fn run_cmd(cmd: &str) -> CmdResult {
+        UCommand::new_from_tmp::<&str, String>("cmd", &None, Rc::new(tempdir().unwrap()), true)
+            .arg("/C")
+            .arg(cmd)
+            .run()
+    }
+    #[cfg(not(windows))]
+    fn run_cmd(cmd: &str) -> CmdResult {
+        return UCommand::new_from_tmp::<&str, String>(
+            "sh",
+            &None,
+            Rc::new(tempdir().unwrap()),
+            true,
+        )
+        .arg("-c")
+        .arg(cmd)
+        .run();
+    }
 
     #[test]
-    fn test_code_is() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: Some(32),
-            success: false,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.code_is(32);
+    fn test_command_result_when_no_output_with_exit_32() {
+        let result = run_cmd("exit 32");
+
+        if cfg!(windows) {
+            std::assert!(result.bin_path.ends_with("cmd"));
+        } else {
+            std::assert!(result.bin_path.ends_with("sh"));
+        }
+
+        std::assert!(result.util_name.is_none());
+        std::assert!(result.tmpd.is_some());
+
+        assert!(result.exit_status.is_some());
+        std::assert_eq!(result.code(), 32);
+        result.code_is(32);
+        assert!(!result.succeeded());
+        result.failure();
+        result.fails_silently();
+        assert!(result.stderr.is_empty());
+        assert!(result.stdout.is_empty());
+        result.no_output();
+        result.no_stderr();
+        result.no_stdout();
     }
 
     #[test]
     #[should_panic]
-    fn test_code_is_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: Some(32),
-            success: false,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.code_is(1);
+    fn test_command_result_when_exit_32_then_success_panic() {
+        run_cmd("exit 32").success();
     }
 
     #[test]
-    fn test_failure() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: false,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.failure();
+    fn test_command_result_when_no_output_with_exit_0() {
+        let result = run_cmd("exit 0");
+
+        assert!(result.exit_status.is_some());
+        std::assert_eq!(result.code(), 0);
+        result.code_is(0);
+        assert!(result.succeeded());
+        result.success();
+        assert!(result.stderr.is_empty());
+        assert!(result.stdout.is_empty());
+        result.no_output();
+        result.no_stderr();
+        result.no_stdout();
     }
 
     #[test]
     #[should_panic]
-    fn test_failure_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.failure();
-    }
-
-    #[test]
-    fn test_success() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.success();
+    fn test_command_result_when_exit_0_then_failure_panics() {
+        run_cmd("exit 0").failure();
     }
 
     #[test]
     #[should_panic]
-    fn test_success_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: false,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.success();
+    fn test_command_result_when_exit_0_then_silent_failure_panics() {
+        run_cmd("exit 0").fails_silently();
     }
 
     #[test]
-    fn test_no_stderr_output() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.no_stderr();
-        res.no_stdout();
+    fn test_command_result_when_stdout_with_exit_0() {
+        #[cfg(windows)]
+        let (result, vector, string) = (
+            run_cmd("echo hello& exit 0"),
+            vec![b'h', b'e', b'l', b'l', b'o', b'\r', b'\n'],
+            "hello\r\n",
+        );
+        #[cfg(not(windows))]
+        let (result, vector, string) = (
+            run_cmd("echo hello; exit 0"),
+            vec![b'h', b'e', b'l', b'l', b'o', b'\n'],
+            "hello\n",
+        );
+
+        assert!(result.exit_status.is_some());
+        std::assert_eq!(result.code(), 0);
+        result.code_is(0);
+        assert!(result.succeeded());
+        result.success();
+        assert!(result.stderr.is_empty());
+        std::assert_eq!(result.stdout, vector);
+        result.no_stderr();
+        result.stdout_is(string);
+        result.stdout_is_bytes(&vector);
+        result.stdout_only(string);
+        result.stdout_only_bytes(&vector);
     }
 
     #[test]
-    #[should_panic]
-    fn test_no_stderr_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "".into(),
-            stderr: "asdfsadfa".into(),
-        };
+    fn test_command_result_when_stderr_with_exit_0() {
+        #[cfg(windows)]
+        let (result, vector, string) = (
+            run_cmd("echo hello>&2& exit 0"),
+            vec![b'h', b'e', b'l', b'l', b'o', b'\r', b'\n'],
+            "hello\r\n",
+        );
+        #[cfg(not(windows))]
+        let (result, vector, string) = (
+            run_cmd("echo hello >&2; exit 0"),
+            vec![b'h', b'e', b'l', b'l', b'o', b'\n'],
+            "hello\n",
+        );
 
-        res.no_stderr();
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_no_stdout_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "asdfsadfa".into(),
-            stderr: "".into(),
-        };
-
-        res.no_stdout();
+        assert!(result.exit_status.is_some());
+        std::assert_eq!(result.code(), 0);
+        result.code_is(0);
+        assert!(result.succeeded());
+        result.success();
+        assert!(result.stdout.is_empty());
+        result.no_stdout();
+        std::assert_eq!(result.stderr, vector);
+        result.stderr_is(string);
+        result.stderr_is_bytes(&vector);
+        result.stderr_only(string);
+        result.stderr_only_bytes(&vector);
     }
 
     #[test]
     fn test_std_does_not_contain() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "This is a likely error message\n".into(),
-            stderr: "This is a likely error message\n".into(),
-        };
+        #[cfg(windows)]
+        let res = run_cmd(
+            "(echo This is a likely error message& echo This is a likely error message>&2) & exit 0",
+        );
+        #[cfg(not(windows))]
+        let res = run_cmd(
+            "echo This is a likely error message; echo This is a likely error message >&2; exit 0",
+        );
         res.stdout_does_not_contain("unlikely");
         res.stderr_does_not_contain("unlikely");
     }
@@ -2462,15 +2454,10 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_stdout_does_not_contain_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "This is a likely error message\n".into(),
-            stderr: "".into(),
-        };
+        #[cfg(windows)]
+        let res = run_cmd("echo This is a likely error message& exit 0");
+        #[cfg(not(windows))]
+        let res = run_cmd("echo This is a likely error message; exit 0");
 
         res.stdout_does_not_contain("likely");
     }
@@ -2478,30 +2465,25 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_stderr_does_not_contain_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "".into(),
-            stderr: "This is a likely error message\n".into(),
-        };
+        #[cfg(windows)]
+        let res = run_cmd("echo This is a likely error message>&2 & exit 0");
+        #[cfg(not(windows))]
+        let res = run_cmd("echo This is a likely error message >&2; exit 0");
 
         res.stderr_does_not_contain("likely");
     }
 
     #[test]
     fn test_stdout_matches() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "This is a likely error message\n".into(),
-            stderr: "This is a likely error message\n".into(),
-        };
+        #[cfg(windows)]
+        let res = run_cmd(
+            "(echo This is a likely error message& echo This is a likely error message>&2 ) & exit 0",
+        );
+        #[cfg(not(windows))]
+        let res = run_cmd(
+            "echo This is a likely error message; echo This is a likely error message >&2; exit 0",
+        );
+
         let positive = regex::Regex::new(".*likely.*").unwrap();
         let negative = regex::Regex::new(".*unlikely.*").unwrap();
         res.stdout_matches(&positive);
@@ -2511,66 +2493,52 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_stdout_matches_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "This is a likely error message\n".into(),
-            stderr: "This is a likely error message\n".into(),
-        };
-        let negative = regex::Regex::new(".*unlikely.*").unwrap();
+        #[cfg(windows)]
+        let res = run_cmd(
+            "(echo This is a likely error message& echo This is a likely error message>&2) & exit 0",
+        );
+        #[cfg(not(windows))]
+        let res = run_cmd(
+            "echo This is a likely error message; echo This is a likely error message >&2; exit 0",
+        );
 
+        let negative = regex::Regex::new(".*unlikely.*").unwrap();
         res.stdout_matches(&negative);
     }
 
     #[test]
     #[should_panic]
     fn test_stdout_not_matches_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "This is a likely error message\n".into(),
-            stderr: "This is a likely error message\n".into(),
-        };
-        let positive = regex::Regex::new(".*likely.*").unwrap();
+        #[cfg(windows)]
+        let res = run_cmd(
+            "(echo This is a likely error message& echo This is a likely error message>&2) & exit 0",
+        );
+        #[cfg(not(windows))]
+        let res = run_cmd(
+            "echo This is a likely error message; echo This is a likely error message >&2; exit 0",
+        );
 
+        let positive = regex::Regex::new(".*likely.*").unwrap();
         res.stdout_does_not_match(&positive);
     }
 
+    #[cfg(feature = "echo")]
     #[test]
     fn test_normalized_newlines_stdout_is() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "A\r\nB\nC".into(),
-            stderr: "".into(),
-        };
+        let ts = TestScenario::new("echo");
+        let res = ts.ucmd().args(&["-ne", "A\r\nB\nC"]).run();
 
         res.normalized_newlines_stdout_is("A\r\nB\nC");
         res.normalized_newlines_stdout_is("A\nB\nC");
         res.normalized_newlines_stdout_is("A\nB\r\nC");
     }
 
+    #[cfg(feature = "echo")]
     #[test]
     #[should_panic]
     fn test_normalized_newlines_stdout_is_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "A\r\nB\nC".into(),
-            stderr: "".into(),
-        };
+        let ts = TestScenario::new("echo");
+        let res = ts.ucmd().args(&["-ne", "A\r\nB\nC"]).run();
 
         res.normalized_newlines_stdout_is("A\r\nB\nC\n");
     }
