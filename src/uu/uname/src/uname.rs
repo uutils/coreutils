@@ -33,27 +33,6 @@ pub mod options {
     pub static OS: &str = "operating-system";
 }
 
-#[cfg(all(target_os = "linux", any(target_env = "gnu", target_env = "")))]
-const HOST_OS: &str = "GNU/Linux";
-#[cfg(all(target_os = "linux", not(any(target_env = "gnu", target_env = ""))))]
-const HOST_OS: &str = "Linux";
-#[cfg(target_os = "android")]
-const HOST_OS: &str = "Android";
-#[cfg(target_os = "windows")]
-const HOST_OS: &str = "Windows NT";
-#[cfg(target_os = "freebsd")]
-const HOST_OS: &str = "FreeBSD";
-#[cfg(target_os = "netbsd")]
-const HOST_OS: &str = "NetBSD";
-#[cfg(target_os = "openbsd")]
-const HOST_OS: &str = "OpenBSD";
-#[cfg(target_vendor = "apple")]
-const HOST_OS: &str = "Darwin";
-#[cfg(target_os = "fuchsia")]
-const HOST_OS: &str = "Fuchsia";
-#[cfg(target_os = "redox")]
-const HOST_OS: &str = "Redox";
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
@@ -108,7 +87,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     if os || all {
-        output.push_str(HOST_OS);
+        output.push_str(&uname.osname());
         output.push(' ');
     }
 
