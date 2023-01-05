@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-//spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured
+//spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd
 
 #![allow(dead_code)]
 
@@ -105,6 +105,7 @@ impl CmdResult {
         }
     }
 
+    /// Apply a function to `stdout` as bytes and return a new [`CmdResult`]
     pub fn stdout_apply<'a, F, R>(&'a self, function: F) -> Self
     where
         F: Fn(&'a [u8]) -> R,
@@ -120,6 +121,7 @@ impl CmdResult {
         )
     }
 
+    /// Apply a function to `stdout` as `&str` and return a new [`CmdResult`]
     pub fn stdout_str_apply<'a, F, R>(&'a self, function: F) -> Self
     where
         F: Fn(&'a str) -> R,
@@ -135,6 +137,7 @@ impl CmdResult {
         )
     }
 
+    /// Apply a function to `stderr` as bytes and return a new [`CmdResult`]
     pub fn stderr_apply<'a, F, R>(&'a self, function: F) -> Self
     where
         F: Fn(&'a [u8]) -> R,
@@ -150,6 +153,7 @@ impl CmdResult {
         )
     }
 
+    /// Apply a function to `stderr` as `&str` and return a new [`CmdResult`]
     pub fn stderr_str_apply<'a, F, R>(&'a self, function: F) -> Self
     where
         F: Fn(&'a str) -> R,
@@ -163,6 +167,66 @@ impl CmdResult {
             self.stdout.as_slice(),
             function(self.stderr_str()),
         )
+    }
+
+    /// Assert `stdout` as bytes with a predicate function returning a `bool`.
+    #[track_caller]
+    pub fn stdout_check<'a, F>(&'a self, predicate: F) -> &Self
+    where
+        F: Fn(&'a [u8]) -> bool,
+    {
+        assert!(
+            predicate(&self.stdout),
+            "Predicate for stdout as `bytes` evaluated to false.\nstdout='{:?}'\nstderr='{:?}'\n",
+            &self.stdout,
+            &self.stderr
+        );
+        self
+    }
+
+    /// Assert `stdout` as `&str` with a predicate function returning a `bool`.
+    #[track_caller]
+    pub fn stdout_str_check<'a, F>(&'a self, predicate: F) -> &Self
+    where
+        F: Fn(&'a str) -> bool,
+    {
+        assert!(
+            predicate(self.stdout_str()),
+            "Predicate for stdout as `str` evaluated to false.\nstdout='{}'\nstderr='{}'\n",
+            self.stdout_str(),
+            self.stderr_str()
+        );
+        self
+    }
+
+    /// Assert `stderr` as bytes with a predicate function returning a `bool`.
+    #[track_caller]
+    pub fn stderr_check<'a, F>(&'a self, predicate: F) -> &Self
+    where
+        F: Fn(&'a [u8]) -> bool,
+    {
+        assert!(
+            predicate(&self.stderr),
+            "Predicate for stderr as `bytes` evaluated to false.\nstdout='{:?}'\nstderr='{:?}'\n",
+            &self.stdout,
+            &self.stderr
+        );
+        self
+    }
+
+    /// Assert `stderr` as `&str` with a predicate function returning a `bool`.
+    #[track_caller]
+    pub fn stderr_str_check<'a, F>(&'a self, predicate: F) -> &Self
+    where
+        F: Fn(&'a str) -> bool,
+    {
+        assert!(
+            predicate(self.stderr_str()),
+            "Predicate for stderr as `str` evaluated to false.\nstdout='{}'\nstderr='{}'\n",
+            self.stdout_str(),
+            self.stderr_str()
+        );
+        self
     }
 
     /// Return the exit status of the child process, if any.
@@ -2377,26 +2441,31 @@ pub fn run_ucmd_as_root(
 mod tests {
     // spell-checker:ignore (tests) asdfsadfa
     use super::*;
-    use tempfile::tempdir;
 
-    #[cfg(windows)]
-    fn run_cmd(cmd: &str) -> CmdResult {
-        UCommand::new_from_tmp::<&str, String>("cmd", &None, Rc::new(tempdir().unwrap()), true)
-            .arg("/C")
-            .arg(cmd)
-            .run()
-    }
-    #[cfg(not(windows))]
-    fn run_cmd(cmd: &str) -> CmdResult {
-        return UCommand::new_from_tmp::<&str, String>(
+    #[cfg(unix)]
+    pub fn run_cmd<T: AsRef<OsStr>>(cmd: T) -> CmdResult {
+        let mut ucmd = UCommand::new_from_tmp::<&str, String>(
             "sh",
             &None,
-            Rc::new(tempdir().unwrap()),
+            Rc::new(tempfile::tempdir().unwrap()),
             true,
-        )
-        .arg("-c")
-        .arg(cmd)
-        .run();
+        );
+        ucmd.arg("-c");
+        ucmd.arg(cmd);
+        ucmd.run()
+    }
+
+    #[cfg(windows)]
+    pub fn run_cmd<T: AsRef<OsStr>>(cmd: T) -> CmdResult {
+        let mut ucmd = UCommand::new_from_tmp::<&str, String>(
+            "cmd",
+            &None,
+            Rc::new(tempfile::tempdir().unwrap()),
+            true,
+        );
+        ucmd.arg("/C");
+        ucmd.arg(cmd);
+        ucmd.run()
     }
 
     #[test]
@@ -2621,6 +2690,71 @@ mod tests {
         let res = ts.ucmd().args(&["-ne", "A\r\nB\nC"]).run();
 
         res.normalized_newlines_stdout_is("A\r\nB\nC\n");
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    fn test_cmd_result_stdout_check_and_stdout_str_check() {
+        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
+
+        result.stdout_str_check(|stdout| stdout.ends_with("world\n"));
+        result.stdout_check(|stdout| stdout.get(0..2).unwrap().eq(&[b'H', b'e']));
+        result.no_stderr();
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    fn test_cmd_result_stderr_check_and_stderr_str_check() {
+        let ts = TestScenario::new("echo");
+        let result = run_cmd(format!(
+            "{} {} Hello world >&2",
+            ts.bin_path.display(),
+            ts.util_name
+        ));
+
+        result.stderr_str_check(|stderr| stderr.ends_with("world\n"));
+        result.stderr_check(|stderr| stderr.get(0..2).unwrap().eq(&[b'H', b'e']));
+        result.no_stdout();
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    #[should_panic]
+    fn test_cmd_result_stdout_str_check_when_false_then_panics() {
+        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
+        result.stdout_str_check(str::is_empty);
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    #[should_panic]
+    fn test_cmd_result_stdout_check_when_false_then_panics() {
+        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
+        result.stdout_check(|s| s.is_empty());
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    #[should_panic]
+    fn test_cmd_result_stderr_str_check_when_false_then_panics() {
+        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
+        result.stderr_str_check(|s| !s.is_empty());
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    #[should_panic]
+    fn test_cmd_result_stderr_check_when_false_then_panics() {
+        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
+        result.stderr_check(|s| !s.is_empty());
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    #[should_panic]
+    fn test_cmd_result_stdout_check_when_predicate_panics_then_panic() {
+        let result = TestScenario::new("echo").ucmd().run();
+        result.stdout_str_check(|_| panic!("Just testing"));
     }
 
     #[cfg(feature = "echo")]
