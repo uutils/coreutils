@@ -20,6 +20,8 @@ use std::fs::{self, hard_link, remove_file, File, OpenOptions};
 use std::io::{self, BufWriter, Read, Result, Write};
 #[cfg(unix)]
 use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file, PermissionsExt};
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 #[cfg(windows)]
@@ -163,6 +165,87 @@ impl CmdResult {
         )
     }
 
+    /// Return the exit status of the child process, if any.
+    ///
+    /// Returns None if the child process is still running or hasn't been started.
+    pub fn try_exit_status(&self) -> Option<ExitStatus> {
+        self.exit_status
+    }
+
+    /// Return the exit status of the child process.
+    ///
+    /// # Panics
+    ///
+    /// If the child process is still running or hasn't been started.
+    pub fn exit_status(&self) -> ExitStatus {
+        self.try_exit_status()
+            .expect("Program must be run first or has not finished, yet")
+    }
+
+    /// Return the signal the child process received if any.
+    ///
+    /// # Platform specific behavior
+    ///
+    /// This method is only available on unix systems.
+    #[cfg(unix)]
+    pub fn signal(&self) -> Option<i32> {
+        self.exit_status().signal()
+    }
+
+    /// Assert that the given signal `value` equals the signal the child process received.
+    ///
+    /// See also [`std::os::unix::process::ExitStatusExt::signal`].
+    ///
+    /// # Platform specific behavior
+    ///
+    /// This assertion method is only available on unix systems.
+    #[cfg(unix)]
+    #[track_caller]
+    pub fn signal_is(&self, value: i32) -> &Self {
+        let actual = self.signal().unwrap_or_else(|| {
+            panic!(
+                "Expected process to be terminated by the '{}' signal, but exit status is: '{}'",
+                value,
+                self.try_exit_status()
+                    .map_or("Not available".to_string(), |e| e.to_string())
+            )
+        });
+
+        assert_eq!(actual, value);
+        self
+    }
+
+    /// Assert that the given signal `name` equals the signal the child process received.
+    ///
+    /// Strings like `SIGINT`, `INT` or a number like `15` are all valid names.  See also
+    /// [`std::os::unix::process::ExitStatusExt::signal`] and
+    /// [`uucore::signals::signal_by_name_or_value`]
+    ///
+    /// # Platform specific behavior
+    ///
+    /// This assertion method is only available on unix systems.
+    #[cfg(unix)]
+    #[track_caller]
+    pub fn signal_name_is(&self, name: &str) -> &Self {
+        use uucore::signals::signal_by_name_or_value;
+        let expected: i32 = signal_by_name_or_value(name)
+            .unwrap_or_else(|| panic!("Invalid signal name or value: '{}'", name))
+            .try_into()
+            .unwrap();
+
+        let actual = self.signal().unwrap_or_else(|| {
+            panic!(
+                "Expected process to be terminated by the '{}' signal, but exit status is: '{}'",
+                name,
+                self.try_exit_status()
+                    .map_or("Not available".to_string(), |e| e.to_string())
+            )
+        });
+
+        assert_eq!(actual, expected);
+        self
+    }
+
     /// Returns a reference to the program's standard output as a slice of bytes
     pub fn stdout(&self) -> &[u8] {
         &self.stdout
@@ -210,10 +293,7 @@ impl CmdResult {
     /// Returns the program's exit code
     /// Panics if not run or has not finished yet for example when run with `run_no_wait()`
     pub fn code(&self) -> i32 {
-        self.exit_status
-            .expect("Program must be run first or has not finished, yet")
-            .code()
-            .unwrap()
+        self.exit_status().code().unwrap()
     }
 
     #[track_caller]
@@ -2541,6 +2621,73 @@ mod tests {
         let res = ts.ucmd().args(&["-ne", "A\r\nB\nC"]).run();
 
         res.normalized_newlines_stdout_is("A\r\nB\nC\n");
+    }
+
+    #[cfg(feature = "echo")]
+    #[cfg(unix)]
+    #[test]
+    fn test_cmd_result_signal_when_normal_exit_then_no_signal() {
+        let result = TestScenario::new("echo").ucmd().run();
+        assert!(result.signal().is_none());
+    }
+
+    #[cfg(feature = "sleep")]
+    #[cfg(unix)]
+    #[test]
+    #[should_panic = "Program must be run first or has not finished"]
+    fn test_cmd_result_signal_when_still_running_then_panic() {
+        let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+
+        child
+            .make_assertion()
+            .is_alive()
+            .with_current_output()
+            .signal();
+    }
+
+    #[cfg(feature = "sleep")]
+    #[cfg(unix)]
+    #[test]
+    fn test_cmd_result_signal_when_kill_then_signal() {
+        let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+
+        child.kill();
+        child
+            .make_assertion()
+            .is_not_alive()
+            .with_current_output()
+            .signal_is(9)
+            .signal_name_is("SIGKILL")
+            .signal_name_is("KILL")
+            .signal_name_is("9")
+            .signal()
+            .expect("Signal was none");
+
+        let result = child.wait().unwrap();
+        result
+            .signal_is(9)
+            .signal_name_is("SIGKILL")
+            .signal_name_is("KILL")
+            .signal_name_is("9")
+            .signal()
+            .expect("Signal was none");
+    }
+
+    #[cfg(feature = "sleep")]
+    #[cfg(unix)]
+    #[rstest]
+    #[case::signal_full_name_lower_case("sigkill")]
+    #[case::signal_short_name_lower_case("kill")]
+    #[case::signal_only_part_of_name("IGKILL")] // spell-checker: disable-line
+    #[case::signal_just_sig("SIG")]
+    #[case::signal_value_too_high("100")]
+    #[case::signal_value_negative("-1")]
+    #[should_panic = "Invalid signal name or value"]
+    fn test_cmd_result_signal_when_invalid_signal_name_then_panic(#[case] signal_name: &str) {
+        let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+        child.kill();
+        let result = child.wait().unwrap();
+        result.signal_name_is(signal_name);
     }
 
     #[test]

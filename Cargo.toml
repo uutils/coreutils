@@ -400,7 +400,7 @@ sha1 = { version="0.10", features=["std"] }
 tempfile = "3"
 time = {version="0.3", features=["local-offset"]}
 unindent = "0.1"
-uucore = { version=">=0.0.17", package="uucore", path="src/uucore", features=["entries", "process"] }
+uucore = { version=">=0.0.17", package="uucore", path="src/uucore", features=["entries", "process", "signals"] }
 walkdir = "2.2"
 atty = "0.2"
 hex-literal = "0.3.1"
