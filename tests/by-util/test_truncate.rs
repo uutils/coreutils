@@ -308,13 +308,13 @@ fn test_truncate_bytes_size() {
         .args(&["--size", "1024R", "file"])
         .fails()
         .code_is(1)
-        .stderr_only("truncate: Invalid number: '1024R'");
+        .stderr_only("truncate: Invalid number: '1024R'\n");
     #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["--size", "1Y", "file"])
         .fails()
         .code_is(1)
-        .stderr_only("truncate: Invalid number: '1Y': Value too large for defined data type");
+        .stderr_only("truncate: Invalid number: '1Y': Value too large for defined data type\n");
 }
 
 /// Test that truncating a non-existent file creates that file.

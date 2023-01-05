@@ -57,7 +57,7 @@ fn test_rmdir_nonempty_directory_no_parents() {
 
     ucmd.arg(DIR)
         .fails()
-        .stderr_is(format!("rmdir: failed to remove 'dir': {}", NOT_EMPTY));
+        .stderr_is(format!("rmdir: failed to remove 'dir': {}\n", NOT_EMPTY));
 
     assert!(at.dir_exists(DIR));
 }
@@ -70,7 +70,7 @@ fn test_rmdir_nonempty_directory_with_parents() {
     at.touch(NESTED_DIR_FILE);
 
     ucmd.arg("-p").arg(NESTED_DIR).fails().stderr_is(format!(
-        "rmdir: failed to remove 'dir/ect/ory': {}",
+        "rmdir: failed to remove 'dir/ect/ory': {}\n",
         NOT_EMPTY
     ));
 
@@ -119,7 +119,7 @@ fn test_rmdir_not_a_directory() {
         .fails()
         .no_stdout()
         .stderr_is(format!(
-            "rmdir: failed to remove 'file': {}",
+            "rmdir: failed to remove 'file': {}\n",
             NOT_A_DIRECTORY
         ));
 }
@@ -152,7 +152,7 @@ fn test_verbose_multi() {
              rmdir: removing directory, 'dir'\n",
         )
         .stderr_is(format!(
-            "rmdir: failed to remove 'does_not_exist': {}",
+            "rmdir: failed to remove 'does_not_exist': {}\n",
             NOT_FOUND
         ));
 }
@@ -171,7 +171,10 @@ fn test_verbose_nested_failure() {
             "rmdir: removing directory, 'dir/ect/ory'\n\
              rmdir: removing directory, 'dir/ect'\n",
         )
-        .stderr_is(format!("rmdir: failed to remove 'dir/ect': {}", NOT_EMPTY));
+        .stderr_is(format!(
+            "rmdir: failed to remove 'dir/ect': {}\n",
+            NOT_EMPTY
+        ));
 }
 
 #[cfg(unix)]
@@ -211,7 +214,7 @@ fn test_rmdir_remove_symlink_file() {
     at.symlink_file("file", "fl");
 
     ucmd.arg("fl/").fails().stderr_is(format!(
-        "rmdir: failed to remove 'fl/': {}",
+        "rmdir: failed to remove 'fl/': {}\n",
         NOT_A_DIRECTORY
     ));
 }
@@ -227,7 +230,7 @@ fn test_rmdir_remove_symlink_dir() {
 
     ucmd.arg("dl/")
         .fails()
-        .stderr_is("rmdir: failed to remove 'dl/': Symbolic link not followed");
+        .stderr_is("rmdir: failed to remove 'dl/': Symbolic link not followed\n");
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -239,5 +242,5 @@ fn test_rmdir_remove_symlink_dangling() {
 
     ucmd.arg("dl/")
         .fails()
-        .stderr_is("rmdir: failed to remove 'dl/': Symbolic link not followed");
+        .stderr_is("rmdir: failed to remove 'dl/': Symbolic link not followed\n");
 }

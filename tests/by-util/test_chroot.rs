@@ -43,7 +43,7 @@ fn test_no_such_directory() {
 
     ucmd.arg("a")
         .fails()
-        .stderr_is("chroot: cannot change root directory to 'a': no such directory")
+        .stderr_is("chroot: cannot change root directory to 'a': no such directory\n")
         .code_is(125);
 }
 

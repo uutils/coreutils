@@ -503,9 +503,7 @@ fn test_rm_force_prompts_order() {
     child.try_write_in(yes.as_bytes()).unwrap();
 
     let result = child.wait().unwrap();
-    result
-        .stderr_str_apply(str::trim)
-        .stderr_only("rm: remove regular empty file 'empty'?");
+    result.stderr_only("rm: remove regular empty file 'empty'? ");
 
     assert!(!at.file_exists(empty_file));
 

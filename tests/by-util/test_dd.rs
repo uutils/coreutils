@@ -325,7 +325,7 @@ fn test_nocreat_causes_failure_when_outfile_not_present() {
         .pipe_in("")
         .fails()
         .stderr_only(
-            "dd: failed to open 'this-file-does-not-exist.txt': No such file or directory",
+            "dd: failed to open 'this-file-does-not-exist.txt': No such file or directory\n",
         );
     assert!(!fix.file_exists(fname));
 }
@@ -1286,12 +1286,12 @@ fn test_invalid_number_arg_gnu_compatibility() {
         new_ucmd!()
             .args(&[format!("{}=", command)])
             .fails()
-            .stderr_is("dd: invalid number: ‘’");
+            .stderr_is("dd: invalid number: ‘’\n");
 
         new_ucmd!()
             .args(&[format!("{}=29d", command)])
             .fails()
-            .stderr_is("dd: invalid number: ‘29d’");
+            .stderr_is("dd: invalid number: ‘29d’\n");
     }
 }
 
@@ -1317,19 +1317,19 @@ fn test_invalid_file_arg_gnu_compatibility() {
     new_ucmd!()
         .args(&["if="])
         .fails()
-        .stderr_is("dd: failed to open '': No such file or directory");
+        .stderr_is("dd: failed to open '': No such file or directory\n");
 
     new_ucmd!()
         .args(&["if=81as9bn8as9g302az8ns9.pdf.zip.pl.com"])
         .fails()
         .stderr_is(
-            "dd: failed to open '81as9bn8as9g302az8ns9.pdf.zip.pl.com': No such file or directory",
+            "dd: failed to open '81as9bn8as9g302az8ns9.pdf.zip.pl.com': No such file or directory\n",
         );
 
     new_ucmd!()
         .args(&["of="])
         .fails()
-        .stderr_is("dd: failed to open '': No such file or directory");
+        .stderr_is("dd: failed to open '': No such file or directory\n");
 
     new_ucmd!()
         .args(&["of=81as9bn8as9g302az8ns9.pdf.zip.pl.com"])

@@ -541,15 +541,13 @@ impl CmdResult {
         self.stdout_is_any(&possible_values.collect::<Vec<_>>());
     }
 
-    /// asserts that the command resulted in stderr stream output that equals the
-    /// passed in value, when both are trimmed of trailing whitespace
+    /// assert that the command resulted in stderr stream output that equals the
+    /// passed in value.
+    ///
     /// `stderr_only` is a better choice unless stdout may or will be non-empty
     #[track_caller]
     pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> &Self {
-        assert_eq!(
-            self.stderr_str().trim_end(),
-            String::from(msg.as_ref()).trim_end()
-        );
+        assert_eq!(self.stderr_str(), msg.as_ref());
         self
     }
 
@@ -629,7 +627,7 @@ impl CmdResult {
     #[track_caller]
     pub fn usage_error<T: AsRef<str>>(&self, msg: T) -> &Self {
         self.stderr_only(format!(
-            "{0}: {2}\nTry '{1} {0} --help' for more information.",
+            "{0}: {2}\nTry '{1} {0} --help' for more information.\n",
             self.util_name.as_ref().unwrap(), // This shouldn't be called using a normal command
             self.bin_path,
             msg.as_ref()

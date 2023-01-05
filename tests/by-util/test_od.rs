@@ -854,7 +854,7 @@ fn test_od_invalid_bytes() {
             .fails()
             .code_is(1)
             .stderr_only(format!(
-                "od: invalid {} argument '{}'",
+                "od: invalid {} argument '{}'\n",
                 option, INVALID_SIZE
             ));
 
@@ -864,7 +864,7 @@ fn test_od_invalid_bytes() {
             .fails()
             .code_is(1)
             .stderr_only(format!(
-                "od: invalid suffix in {} argument '{}'",
+                "od: invalid suffix in {} argument '{}'\n",
                 option, INVALID_SUFFIX
             ));
 
@@ -874,6 +874,9 @@ fn test_od_invalid_bytes() {
             .arg("file")
             .fails()
             .code_is(1)
-            .stderr_only(format!("od: {} argument '{}' too large", option, BIG_SIZE));
+            .stderr_only(format!(
+                "od: {} argument '{}' too large\n",
+                option, BIG_SIZE
+            ));
     }
 }

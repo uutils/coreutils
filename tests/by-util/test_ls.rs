@@ -685,7 +685,7 @@ fn test_ls_width() {
             .args(&option.split(' ').collect::<Vec<_>>())
             .arg("-C")
             .fails()
-            .stderr_only("ls: invalid line width: '1a'");
+            .stderr_only("ls: invalid line width: '1a'\n");
     }
 }
 
@@ -736,7 +736,7 @@ fn test_ls_columns() {
             .arg("-C")
             .succeeds()
             .stdout_is("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n")
-            .stderr_is("ls: ignoring invalid width in environment variable COLUMNS: 'garbage'");
+            .stderr_is("ls: ignoring invalid width in environment variable COLUMNS: 'garbage'\n");
     }
     scene
         .ucmd()
