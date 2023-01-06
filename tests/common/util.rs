@@ -474,7 +474,11 @@ impl CmdResult {
     /// whose bytes equal those of the passed in slice
     #[track_caller]
     pub fn stdout_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
-        assert_eq!(self.stdout, msg.as_ref());
+        assert_eq!(self.stdout, msg.as_ref(),
+            "stdout as bytes wasn't equal to expected bytes. Result as strings:\nstdout  ='{:?}'\nexpected='{:?}'",
+            std::str::from_utf8(&self.stdout),
+            std::str::from_utf8(msg.as_ref()),
+        );
         self
     }
 
@@ -555,7 +559,13 @@ impl CmdResult {
     /// whose bytes equal those of the passed in slice
     #[track_caller]
     pub fn stderr_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
-        assert_eq!(self.stderr, msg.as_ref());
+        assert_eq!(
+            &self.stderr,
+            msg.as_ref(),
+            "stderr as bytes wasn't equal to expected bytes. Result as strings:\nstderr  ='{:?}'\nexpected='{:?}'",
+            std::str::from_utf8(&self.stderr),
+            std::str::from_utf8(msg.as_ref())
+        );
         self
     }
 
