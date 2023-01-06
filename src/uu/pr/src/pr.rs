@@ -1200,11 +1200,10 @@ fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: us
             format!(
                 "{:>width$}{}",
                 &line_str[line_str.len() - width..],
-                separator,
-                width = width
+                separator
             )
         } else {
-            format!("{:>width$}{}", line_str, separator, width = width)
+            format!("{:>width$}{}", line_str, separator)
         }
     } else {
         String::new()
