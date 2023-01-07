@@ -55,7 +55,7 @@ impl SplitName {
                         let all = captures.name("ALL").unwrap();
                         let before = custom[0..all.start()].to_owned();
                         let after = custom[all.end()..].to_owned();
-                        let n_digits = match captures.name("WIDTH") {
+                        let width = match captures.name("WIDTH") {
                             None => 0,
                             Some(m) => m.as_str().parse::<usize>().unwrap(),
                         };
@@ -82,47 +82,19 @@ impl SplitName {
                                      */
                                     // decimal
                                     ("0", "d" | "i" | "u") => Box::new(move |n: usize| -> String {
-                                        format!(
-                                            "{}{}{:0width$}{}",
-                                            prefix,
-                                            before,
-                                            n,
-                                            after,
-                                            width = n_digits
-                                        )
+                                        format!("{}{}{:0width$}{}", prefix, before, n, after)
                                     }),
                                     // octal
                                     ("0", "o") => Box::new(move |n: usize| -> String {
-                                        format!(
-                                            "{}{}{:0width$o}{}",
-                                            prefix,
-                                            before,
-                                            n,
-                                            after,
-                                            width = n_digits
-                                        )
+                                        format!("{}{}{:0width$o}{}", prefix, before, n, after)
                                     }),
                                     // lower hexadecimal
                                     ("0", "x") => Box::new(move |n: usize| -> String {
-                                        format!(
-                                            "{}{}{:0width$x}{}",
-                                            prefix,
-                                            before,
-                                            n,
-                                            after,
-                                            width = n_digits
-                                        )
+                                        format!("{}{}{:0width$x}{}", prefix, before, n, after)
                                     }),
                                     // upper hexadecimal
                                     ("0", "X") => Box::new(move |n: usize| -> String {
-                                        format!(
-                                            "{}{}{:0width$X}{}",
-                                            prefix,
-                                            before,
-                                            n,
-                                            after,
-                                            width = n_digits
-                                        )
+                                        format!("{}{}{:0width$X}{}", prefix, before, n, after)
                                     }),
 
                                     /*
@@ -130,36 +102,15 @@ impl SplitName {
                                      */
                                     // octal
                                     ("#", "o") => Box::new(move |n: usize| -> String {
-                                        format!(
-                                            "{}{}{:>#width$o}{}",
-                                            prefix,
-                                            before,
-                                            n,
-                                            after,
-                                            width = n_digits
-                                        )
+                                        format!("{}{}{:>#width$o}{}", prefix, before, n, after)
                                     }),
                                     // lower hexadecimal
                                     ("#", "x") => Box::new(move |n: usize| -> String {
-                                        format!(
-                                            "{}{}{:>#width$x}{}",
-                                            prefix,
-                                            before,
-                                            n,
-                                            after,
-                                            width = n_digits
-                                        )
+                                        format!("{}{}{:>#width$x}{}", prefix, before, n, after)
                                     }),
                                     // upper hexadecimal
                                     ("#", "X") => Box::new(move |n: usize| -> String {
-                                        format!(
-                                            "{}{}{:>#width$X}{}",
-                                            prefix,
-                                            before,
-                                            n,
-                                            after,
-                                            width = n_digits
-                                        )
+                                        format!("{}{}{:>#width$X}{}", prefix, before, n, after)
                                     }),
 
                                     /*
@@ -167,47 +118,19 @@ impl SplitName {
                                      */
                                     // decimal
                                     ("-", "d" | "i" | "u") => Box::new(move |n: usize| -> String {
-                                        format!(
-                                            "{}{}{:<#width$}{}",
-                                            prefix,
-                                            before,
-                                            n,
-                                            after,
-                                            width = n_digits
-                                        )
+                                        format!("{}{}{:<#width$}{}", prefix, before, n, after)
                                     }),
                                     // octal
                                     ("-", "o") => Box::new(move |n: usize| -> String {
-                                        format!(
-                                            "{}{}{:<#width$o}{}",
-                                            prefix,
-                                            before,
-                                            n,
-                                            after,
-                                            width = n_digits
-                                        )
+                                        format!("{}{}{:<#width$o}{}", prefix, before, n, after)
                                     }),
                                     // lower hexadecimal
                                     ("-", "x") => Box::new(move |n: usize| -> String {
-                                        format!(
-                                            "{}{}{:<#width$x}{}",
-                                            prefix,
-                                            before,
-                                            n,
-                                            after,
-                                            width = n_digits
-                                        )
+                                        format!("{}{}{:<#width$x}{}", prefix, before, n, after)
                                     }),
                                     // upper hexadecimal
                                     ("-", "X") => Box::new(move |n: usize| -> String {
-                                        format!(
-                                            "{}{}{:<#width$X}{}",
-                                            prefix,
-                                            before,
-                                            n,
-                                            after,
-                                            width = n_digits
-                                        )
+                                        format!("{}{}{:<#width$X}{}", prefix, before, n, after)
                                     }),
 
                                     _ => return Err(CsplitError::SuffixFormatIncorrect),
