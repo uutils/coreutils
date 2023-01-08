@@ -1303,12 +1303,12 @@ fn test_invalid_flag_arg_gnu_compatibility() {
         new_ucmd!()
             .args(&[format!("{}=", command)])
             .fails()
-            .stderr_is("dd: invalid input flag: ‘’\nTry 'dd --help' for more information.");
+            .usage_error("invalid input flag: ‘’");
 
         new_ucmd!()
             .args(&[format!("{}=29d", command)])
             .fails()
-            .stderr_is("dd: invalid input flag: ‘29d’\nTry 'dd --help' for more information.");
+            .usage_error("invalid input flag: ‘29d’");
     }
 }
 
