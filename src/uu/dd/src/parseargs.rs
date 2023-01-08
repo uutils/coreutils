@@ -415,8 +415,9 @@ impl std::fmt::Display for ParseError {
                 // Additional message about 'dd --help' is displayed only in this situation.
                 write!(
                     f,
-                    "invalid input flag: ‘{}’\nTry 'dd --help' for more information.",
-                    arg
+                    "invalid input flag: ‘{}’\nTry '{} --help' for more information.",
+                    arg,
+                    uucore::execution_phrase()
                 )
             }
             Self::ConvFlagNoMatch(arg) => {
