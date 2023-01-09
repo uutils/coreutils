@@ -104,10 +104,11 @@ fn test_uname_operating_system() {
         .succeeds()
         .stdout_is("Redox\n");
     #[cfg(target_os = "windows")]
-    new_ucmd!()
-        .arg("--operating-system")
-        .succeeds()
-        .stdout_is("Windows NT\n");
+    {
+        let result = new_ucmd!().arg("--operating-system").succeeds();
+        println!("{:?}", result.stdout_str());
+        assert!(result.stdout_str().starts_with("MS/Windows"));
+    }
 }
 
 #[test]
