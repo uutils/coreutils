@@ -67,7 +67,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     if nodename || all {
-        output.push_str(&uname.nodename());
+        // maint: [2023-01-14; rivy] remove `.trim_end_matches('\0')` when platform-info nodename-NUL bug is fixed (see GH:uutils/platform-info/issues/32)
+        output.push_str(uname.nodename().trim_end_matches('\0'));
         output.push(' ');
     }
 
