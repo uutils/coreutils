@@ -8,7 +8,7 @@
 
 // last synced with: uname (GNU coreutils) 8.21
 
-// spell-checker:ignore (ToDO) nodename kernelname kernelrelease kernelversion sysname hwplatform mnrsv
+// spell-checker:ignore (API) nodename osname sysname (options) mnrsv mnrsvo
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use platform_info::*;
