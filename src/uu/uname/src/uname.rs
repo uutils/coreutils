@@ -121,7 +121,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ALL)
                 .short('a')
                 .long(options::ALL)
-                .help("Behave as though all of the options -mnrsv were specified.")
+                .help("Behave as though all of the options -mnrsvo were specified.")
                 .action(ArgAction::SetTrue),
         )
         .arg(
