@@ -118,3 +118,11 @@ fn test_uname_help() {
         .succeeds()
         .stdout_contains("system information");
 }
+
+#[test]
+fn test_uname_output_for_invisible_chars() {
+    // let re = regex::Regex::new("[^[[:print:]]]").unwrap(); // matches invisible (and emojis)
+    let re = regex::Regex::new("[^[[:print:]]\\p{Other_Symbol}]").unwrap(); // matches invisible (not emojis)
+    let result = new_ucmd!().arg("--all").succeeds();
+    assert_eq!(re.find(result.stdout_str().trim_end()), None);
+}
