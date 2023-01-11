@@ -701,20 +701,18 @@ impl Attributes {
     }
 
     /// Tries to match string containing a parameter to preserve with the corresponding entry in the
-    /// Attributes struct. The values are maximized, which means that, when the Attributes are
-    /// initialized with some preserve levels, and later found in the `--preserve=...` values, they
-    /// are updated to maximum of the one set already and the one found in the string from the user.
+    /// Attributes struct.
     fn try_set_from_string(&mut self, value: &str) -> Result<(), Error> {
         let preserve_yes_required = Preserve::Yes { required: true };
 
         match &*value.to_lowercase() {
-            "mode" => self.mode = self.mode.max(preserve_yes_required),
+            "mode" => self.mode = preserve_yes_required,
             #[cfg(unix)]
-            "ownership" => self.ownership = self.ownership.max(preserve_yes_required),
-            "timestamps" => self.timestamps = self.timestamps.max(preserve_yes_required),
-            "context" => self.context = self.context.max(preserve_yes_required),
-            "links" => self.links = self.links.max(preserve_yes_required),
-            "xattr" => self.xattr = self.xattr.max(preserve_yes_required),
+            "ownership" => self.ownership = preserve_yes_required,
+            "timestamps" => self.timestamps = preserve_yes_required,
+            "context" => self.context = preserve_yes_required,
+            "links" => self.links = preserve_yes_required,
+            "xattr" => self.xattr = preserve_yes_required,
             _ => {
                 return Err(Error::InvalidArgument(format!(
                     "invalid attribute {}",
