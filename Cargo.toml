@@ -30,6 +30,20 @@ windows = [ "feat_os_windows" ]
 ## project-specific feature shortcodes
 nightly = []
 test_unimplemented = []
+# * only build `uudoc` when `--feature uudoc` is activated
+uudoc = ["zip"]
+## features
+# "feat_acl" == enable support for ACLs (access control lists; by using`--features feat_acl`)
+# NOTE:
+# * On linux, the posix-acl/acl-sys crate requires `libacl` headers and shared library to be accessible in the C toolchain at compile time.
+# * On FreeBSD and macOS this is not required.
+feat_acl = ["cp/feat_acl"]
+# "feat_selinux" == enable support for SELinux Security Context (by using `--features feat_selinux`)
+# NOTE:
+# * The selinux(-sys) crate requires `libselinux` headers and shared library to be accessible in the C toolchain at compile time.
+# * Running a uutils compiled with `feat_selinux` requires an SELinux enabled Kernel at run time.
+feat_selinux = ["cp/selinux", "id/selinux", "ls/selinux", "selinux", "feat_require_selinux"]
+##
 ## feature sets
 ## (common/core and Tier1) feature sets
 # "feat_common_core" == baseline core set of utilities which can be built/run on most targets
@@ -122,7 +136,8 @@ feat_Tier1 = [
 # "feat_os_macos" == set of utilities which can be built/run on the MacOS platform
 feat_os_macos = [
     "feat_os_unix", ## == a modern/usual *nix platform
-    "feat_require_hostid",
+    #
+    "feat_require_unix_hostid",
 ]
 # "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms
 feat_os_unix = [
@@ -142,31 +157,21 @@ feat_os_unix_gnueabihf = [
     "feat_Tier1",
     #
     "feat_require_unix",
+    "feat_require_unix_hostid",
     "feat_require_unix_utmpx",
-    "feat_require_hostid",
 ]
 # "feat_os_unix_musl" == set of utilities which can be built/run on targets binding to the "musl" library (ref: <https://musl.libc.org/about.html>)
 feat_os_unix_musl = [
     "feat_Tier1",
     #
     "feat_require_unix",
-    "feat_require_hostid",
+    "feat_require_unix_hostid",
 ]
 feat_os_unix_android = [
     "feat_Tier1",
     #
     "feat_require_unix",
 ]
-# "feat_selinux" == set of utilities providing support for SELinux Security Context if enabled with `--features feat_selinux`.
-# NOTE:
-# The selinux(-sys) crate requires `libselinux` headers and shared library to be accessible in the C toolchain at compile time.
-# Running a uutils compiled with `feat_selinux` requires an SELinux enabled Kernel at run time.
-feat_selinux = ["cp/selinux", "id/selinux", "ls/selinux", "selinux", "feat_require_selinux"]
-# "feat_acl" == set of utilities providing support for acl (access control lists) if enabled with `--features feat_acl`.
-# NOTE:
-# On linux, the posix-acl/acl-sys crate requires `libacl` headers and shared library to be accessible in the C toolchain at compile time.
-# On FreeBSD and macOS this is not required.
-feat_acl = ["cp/feat_acl"]
 ## feature sets with requirements (restricting cross-platform availability)
 #
 # ** NOTE: these `feat_require_...` sets should be minimized as much as possible to encourage cross-platform availability of utilities
@@ -204,8 +209,8 @@ feat_require_unix_utmpx = [
     "users",
     "who",
 ]
-# "feat_require_hostid" == set of utilities requiring gethostid in libc (only some unixes provide)
-feat_require_hostid = [
+# "feat_require_unix_hostid" == set of utilities requiring gethostid in libc (only some unixes provide)
+feat_require_unix_hostid = [
     "hostid",
 ]
 # "feat_require_selinux" == set of utilities depending on SELinux.
@@ -256,7 +261,6 @@ feat_os_windows_legacy = [
 ##
 # * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)
 test = [ "uu_test" ]
-uudoc = [ "zip" ]
 
 [workspace]
 
@@ -369,7 +373,7 @@ uniq     = { optional=true, version="0.0.16", package="uu_uniq", path="src/uu/un
 unlink   = { optional=true, version="0.0.16", package="uu_unlink", path="src/uu/unlink" }
 uptime   = { optional=true, version="0.0.16", package="uu_uptime", path="src/uu/uptime" }
 users    = { optional=true, version="0.0.16", package="uu_users", path="src/uu/users" }
-vdir      = { optional=true, version="0.0.16", package="uu_vdir", path="src/uu/vdir" }
+vdir     = { optional=true, version="0.0.16", package="uu_vdir", path="src/uu/vdir" }
 wc       = { optional=true, version="0.0.16", package="uu_wc", path="src/uu/wc" }
 who      = { optional=true, version="0.0.16", package="uu_who", path="src/uu/who" }
 whoami   = { optional=true, version="0.0.16", package="uu_whoami", path="src/uu/whoami" }
