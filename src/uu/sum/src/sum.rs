@@ -17,8 +17,8 @@ use uucore::{format_usage, show};
 
 static NAME: &str = "sum";
 static USAGE: &str = "{} [OPTION]... [FILE]...";
-static ABOUT: &str = r#"Checksum and count the blocks in a file.
-                        With no FILE, or when  FILE is -, read standard input."#;
+static ABOUT: &str = "Checksum and count the blocks in a file.\n\n\
+                      With no FILE, or when FILE is -, read standard input.";
 
 // This can be replaced with usize::div_ceil once it is stabilized.
 // This implementation approach is optimized for when `b` is a constant,
