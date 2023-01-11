@@ -188,6 +188,8 @@ pub enum Preserve {
 }
 
 impl Preserve {
+    /// Preservation level should only increase, with no preservation being the lowest option,
+    /// preserve but don't require - middle, and preserve and require - top.
     pub(crate) fn max(&self, other: Self) -> Self {
         match (self, other) {
             (Self::Yes { required: true }, _) | (_, Self::Yes { required: true }) => {
@@ -698,6 +700,10 @@ impl Attributes {
         }
     }
 
+    /// Tries to match string containing a parameter to preserve with the corresponding entry in the
+    /// Attributes struct. The values are maximized, which means that, when the Attributes are
+    /// initialized with some preserve levels, and later found in the `--preserve=...` values, they
+    /// are updated to maximum of the one set already and the one found in the string from the user.
     fn try_set_from_string(&mut self, value: &str) -> Result<(), Error> {
         let preserve_yes_required = Preserve::Yes { required: true };
 
@@ -1011,6 +1017,8 @@ fn preserve_hardlinks(
     Ok(found_hard_link)
 }
 
+/// When handling errors, we don't always want to show them to the user. This function handles that.
+/// If the error is printed, returns true, false otherwise.
 fn show_error_if_needed(error: &Error) -> bool {
     match error {
         // When using --no-clobber, we don't want to show
@@ -1167,6 +1175,9 @@ impl OverwriteMode {
     }
 }
 
+/// Handles errors for attributes preservation. If the attribute is not required, and
+/// errored, tries to show error (see `show_error_if_needed` for additional behaviour details).
+/// If it's required, then the error is thrown.
 fn handle_preserve<F: Fn() -> CopyResult<()>>(p: &Preserve, f: F) -> CopyResult<()> {
     match p {
         Preserve::No => {}
