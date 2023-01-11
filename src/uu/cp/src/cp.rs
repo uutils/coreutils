@@ -1174,7 +1174,7 @@ impl OverwriteMode {
 }
 
 /// Handles errors for attributes preservation. If the attribute is not required, and
-/// errored, tries to show error (see `show_error_if_needed` for additional behaviour details).
+/// errored, tries to show error (see `show_error_if_needed` for additional behavior details).
 /// If it's required, then the error is thrown.
 fn handle_preserve<F: Fn() -> CopyResult<()>>(p: &Preserve, f: F) -> CopyResult<()> {
     match p {
