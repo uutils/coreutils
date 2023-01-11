@@ -210,19 +210,9 @@ fn write_value_float(
 ) -> std::io::Result<()> {
     let value_as_str =
         if *value == ExtendedBigDecimal::Infinity || *value == ExtendedBigDecimal::MinusInfinity {
-            format!(
-                "{value:>width$.precision$}",
-                value = value,
-                width = width,
-                precision = precision,
-            )
+            format!("{value:>width$.precision$}")
         } else {
-            format!(
-                "{value:>0width$.precision$}",
-                value = value,
-                width = width,
-                precision = precision,
-            )
+            format!("{value:>0width$.precision$}")
         };
     write!(writer, "{}", value_as_str)
 }
@@ -237,9 +227,9 @@ fn write_value_int(
 ) -> std::io::Result<()> {
     let value_as_str = if pad {
         if *value == ExtendedBigInt::MinusZero && is_first_iteration {
-            format!("-{value:>0width$}", value = value, width = width - 1,)
+            format!("-{value:>0width$}", width = width - 1)
         } else {
-            format!("{value:>0width$}", value = value, width = width,)
+            format!("{value:>0width$}")
         }
     } else if *value == ExtendedBigInt::MinusZero && is_first_iteration {
         format!("-{}", value)
