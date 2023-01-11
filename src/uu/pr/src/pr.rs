@@ -305,8 +305,8 @@ pub fn uu_app() -> Command {
                 .short('W')
                 .long(options::PAGE_WIDTH)
                 .help(
-                    "set page width to PAGE_WIDTH (72) characters always,
-                truncate lines, except -J option is set, no interference
+                    "set page width to PAGE_WIDTH (72) characters always, \
+                truncate lines, except -J option is set, no interference \
                 with -S or -s",
                 )
                 .value_name("width"),
@@ -385,7 +385,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::JOIN_LINES)
                 .short('J')
                 .help(
-                    "merge full lines, turns off -W line truncation, no column
+                    "merge full lines, turns off -W line truncation, no column \
                 alignment, --sep-string[=STRING] sets separators",
                 )
                 .action(ArgAction::SetTrue),
