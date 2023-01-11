@@ -1105,6 +1105,7 @@ impl UCommand {
             "{}",
             MULTIPLE_STDIN_MEANINGLESS
         );
+        self.set_stdin(Stdio::piped());
         self.bytes_into_stdin = Some(input.into());
         self
     }
@@ -1170,8 +1171,7 @@ impl UCommand {
 
             let command = self
                 .raw
-                // TODO: use Stdio::null() as default to avoid accidental deadlocks ?
-                .stdin(self.stdin.take().unwrap_or_else(Stdio::piped))
+                .stdin(self.stdin.take().unwrap_or_else(Stdio::null))
                 .stdout(Stdio::from(output.try_clone().unwrap()))
                 .stderr(Stdio::from(output.try_clone().unwrap()));
             captured_stdout = Some(output);
@@ -1197,8 +1197,7 @@ impl UCommand {
             };
 
             self.raw
-                // TODO: use Stdio::null() as default to avoid accidental deadlocks ?
-                .stdin(self.stdin.take().unwrap_or_else(Stdio::piped))
+                .stdin(self.stdin.take().unwrap_or_else(Stdio::null))
                 .stdout(stdout)
                 .stderr(stderr)
         };
@@ -2696,7 +2695,7 @@ mod tests {
     #[test]
     fn test_uchild_when_pipe_in() {
         let ts = TestScenario::new("cat");
-        let mut child = ts.ucmd().run_no_wait();
+        let mut child = ts.ucmd().set_stdin(Stdio::piped()).run_no_wait();
         child.pipe_in("content");
         child.wait().unwrap().stdout_only("content").success();
 
@@ -2721,6 +2720,7 @@ mod tests {
 
         let mut child = ts
             .ucmd()
+            .set_stdin(Stdio::piped())
             .stderr_to_stdout()
             .args(&["-riv", "a"])
             .run_no_wait();

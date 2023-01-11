@@ -111,7 +111,7 @@ mod linux_only {
     use crate::common::util::*;
 
     use std::fs::File;
-    use std::process::Output;
+    use std::process::{Output, Stdio};
 
     fn make_broken_pipe() -> File {
         use libc::c_int;
@@ -135,6 +135,7 @@ mod linux_only {
         #[allow(deprecated)]
         let output = proc
             .ignore_stdin_write_error()
+            .set_stdin(Stdio::piped())
             .run_no_wait()
             .pipe_in_and_wait_with_output(content.as_bytes());
 
