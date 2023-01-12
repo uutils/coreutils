@@ -190,6 +190,8 @@ pub fn uu_app() -> Command {
                 .short('n')
                 .long(options::ADJUSTMENT)
                 .help("add N to the niceness (default is 10)")
+                .action(ArgAction::Set)
+                .overrides_with(options::ADJUSTMENT)
                 .allow_hyphen_values(true),
         )
         .arg(
