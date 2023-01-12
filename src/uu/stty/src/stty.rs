@@ -30,7 +30,6 @@ use uucore::format_usage;
 use flags::BAUD_RATES;
 use flags::{CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
 
-const NAME: &str = "stty";
 const USAGE: &str = "\
     {} [-F DEVICE | --file=DEVICE] [SETTING]...
     {} [-F DEVICE | --file=DEVICE] [-a|--all]
@@ -324,7 +323,6 @@ fn apply_flag<T: TermiosFlag>(
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(SUMMARY)

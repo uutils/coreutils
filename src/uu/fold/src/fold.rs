@@ -17,7 +17,6 @@ use uucore::format_usage;
 
 const TAB_WIDTH: usize = 8;
 
-static NAME: &str = "fold";
 static USAGE: &str = "{} [OPTION]... [FILE]...";
 static ABOUT: &str = "Writes each file (or standard input if no files are given)
  to standard output whilst breaking long lines";
@@ -63,7 +62,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)

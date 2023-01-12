@@ -12,7 +12,6 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, show};
 
-static NAME: &str = "mkfifo";
 static USAGE: &str = "{} [OPTION]... NAME...";
 static ABOUT: &str = "Create a FIFO with the given name.";
 
@@ -67,7 +66,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)

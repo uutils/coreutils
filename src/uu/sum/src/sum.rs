@@ -15,7 +15,6 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::{format_usage, show};
 
-static NAME: &str = "sum";
 static USAGE: &str = "{} [OPTION]... [FILE]...";
 static ABOUT: &str = "Checksum and count the blocks in a file.\n\n\
                       With no FILE, or when FILE is -, read standard input.";
@@ -148,7 +147,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
