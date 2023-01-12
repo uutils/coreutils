@@ -25,7 +25,6 @@ enum Mode {
     InputRange((usize, usize)),
 }
 
-static NAME: &str = "shuf";
 static USAGE: &str = "\
     {} [OPTION]... [FILE]
     {} -e [OPTION]... [ARG]...
@@ -127,7 +126,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .about(ABOUT)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))

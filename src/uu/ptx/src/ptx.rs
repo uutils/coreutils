@@ -21,7 +21,6 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::format_usage;
 
-static NAME: &str = "ptx";
 const USAGE: &str = "\
     {} [OPTION]... [INPUT]...
     {} -G [OPTION]... [INPUT [OUTPUT]]";
@@ -747,7 +746,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .about(ABOUT)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))

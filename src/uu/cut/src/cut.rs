@@ -23,7 +23,6 @@ use uucore::{format_usage, show, show_error, show_if_err};
 mod searcher;
 mod whitespace_searcher;
 
-static NAME: &str = "cut";
 static USAGE: &str =
     "{} [-d|-w] [-s] [-z] [--output-delimiter] ((-f|-b|-c) {{sequence}}) {{sourcefile}}+";
 static ABOUT: &str =
@@ -654,7 +653,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)

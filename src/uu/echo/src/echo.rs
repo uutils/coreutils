@@ -13,7 +13,6 @@ use std::str::Chars;
 use uucore::error::{FromIo, UResult};
 use uucore::format_usage;
 
-const NAME: &str = "echo";
 const ABOUT: &str = "display a line of text";
 const USAGE: &str = "{} [OPTIONS]... [STRING]...";
 const AFTER_HELP: &str = r#"
@@ -129,7 +128,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         // TrailingVarArg specifies the final positional argument is a VarArg
         // and it doesn't attempts the parse any further args.
         // Final argument must have multiple(true) or the usage string equivalent.
