@@ -284,12 +284,12 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
 
             if target.is_dir() {
                 if b.no_target_dir {
-                    if !source.is_dir() {
-                        Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
-                    } else {
+                    if source.is_dir() {
                         rename(source, target, b, None).map_err_context(|| {
                             format!("cannot move {} to {}", source.quote(), target.quote())
                         })
+                    } else {
+                        Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
                     }
                 } else {
                     move_files_into_dir(&[source.clone()], target, b)
