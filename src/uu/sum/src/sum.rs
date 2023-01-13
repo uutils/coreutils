@@ -116,11 +116,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let sysv = matches.get_flag(options::SYSTEM_V_COMPATIBLE);
 
-    let print_names = if sysv {
-        files.len() > 1 || files[0] != "-"
-    } else {
-        files.len() > 1
-    };
+    let print_names = files.len() > 1 || files[0] != "-";
+    let width = if sysv { 1 } else { 5 };
 
     for file in &files {
         let reader = match open(file) {
@@ -137,9 +134,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         };
 
         if print_names {
-            println!("{} {} {}", sum, blocks, file);
+            println!("{:0width$} {:width$} {}", sum, blocks, file);
         } else {
-            println!("{} {}", sum, blocks);
+            println!("{:0width$} {:width$}", sum, blocks);
         }
     }
     Ok(())
