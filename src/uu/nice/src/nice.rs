@@ -9,13 +9,13 @@
 
 use libc::{c_char, c_int, execvp, PRIO_PROCESS};
 use std::ffi::{CString, OsString};
-use std::io::Error;
+use std::io::{Error, Write};
 use std::ptr;
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::{
     error::{set_exit_code, UClapError, UResult, USimpleError, UUsageError},
-    format_usage, show_error, show_warning,
+    format_usage, show_error,
 };
 
 pub mod options {
@@ -152,8 +152,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     niceness += adjustment;
-    if unsafe { libc::setpriority(PRIO_PROCESS, 0, niceness) } == -1 {
-        show_warning!("setpriority: {}", Error::last_os_error());
+    // We can't use `show_warning` because that will panic if stderr
+    // isn't writable. The GNU test suite checks specifically that the
+    // exit code when failing to write the advisory is 125, but Rust
+    // will produce an exit code of 101 when it panics.
+    if unsafe { libc::setpriority(PRIO_PROCESS, 0, niceness) } == -1
+        && write!(
+            std::io::stderr(),
+            "{}: warning: setpriority: {}",
+            uucore::util_name(),
+            Error::last_os_error()
+        )
+        .is_err()
+    {
+        set_exit_code(125);
+        return Ok(());
     }
 
     let cstrs: Vec<CString> = matches
