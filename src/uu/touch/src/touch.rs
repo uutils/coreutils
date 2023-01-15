@@ -71,8 +71,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let files = matches.get_many::<OsString>(ARG_FILES).ok_or_else(|| {
         USimpleError::new(
             1,
-            r##"missing file operand
-Try 'touch --help' for more information."##,
+            format!(
+                "missing file operand\nTry '{} --help' for more information.",
+                uucore::execution_phrase()
+            ),
         )
     })?;
     let (mut atime, mut mtime) =

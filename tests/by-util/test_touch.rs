@@ -763,10 +763,7 @@ fn test_touch_permission_denied_error_msg() {
 #[test]
 fn test_touch_no_args() {
     let mut ucmd = new_ucmd!();
-    ucmd.fails().stderr_only(
-        r##"touch: missing file operand
-Try 'touch --help' for more information."##,
-    );
+    ucmd.fails().no_stdout().usage_error("missing file operand");
 }
 
 #[test]

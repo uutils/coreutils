@@ -673,11 +673,7 @@ fn test_mktemp_with_posixly_correct() {
         .env("POSIXLY_CORRECT", "1")
         .args(&["aXXXX", "--suffix=b"])
         .fails()
-        .stderr_is(&format!(
-            "mktemp: too many templates\nTry '{} {} --help' for more information.\n",
-            scene.bin_path.to_string_lossy(),
-            scene.util_name
-        ));
+        .usage_error("too many templates");
 
     scene
         .ucmd()

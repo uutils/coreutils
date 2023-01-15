@@ -1257,16 +1257,14 @@ fn test_install_missing_arguments() {
         .ucmd()
         .fails()
         .code_is(1)
-        .stderr_contains("install: missing file operand")
-        .stderr_contains("install --help' for more information.");
+        .usage_error("missing file operand");
 
     scene
         .ucmd()
         .arg("-D")
         .arg(format!("-t {}", no_target_dir))
         .fails()
-        .stderr_contains("install: missing file operand")
-        .stderr_contains("install --help' for more information.");
+        .usage_error("missing file operand");
     assert!(!at.dir_exists(no_target_dir));
 }
 
@@ -1282,27 +1280,17 @@ fn test_install_missing_destination() {
     at.mkdir(dir_1);
 
     // will fail and also print some info on correct usage
-    scene
-        .ucmd()
-        .arg(file_1)
-        .fails()
-        .stderr_contains(format!(
-            "install: missing destination file operand after '{}'",
-            file_1
-        ))
-        .stderr_contains("install --help' for more information.");
+    scene.ucmd().arg(file_1).fails().usage_error(format!(
+        "missing destination file operand after '{}'",
+        file_1
+    ));
 
     // GNU's install will check for correct num of arguments and then fail
     // and it does not recognize, that the source is not a file but a directory.
-    scene
-        .ucmd()
-        .arg(dir_1)
-        .fails()
-        .stderr_contains(format!(
-            "install: missing destination file operand after '{}'",
-            dir_1
-        ))
-        .stderr_contains("install --help' for more information.");
+    scene.ucmd().arg(dir_1).fails().usage_error(format!(
+        "missing destination file operand after '{}'",
+        dir_1
+    ));
 }
 
 #[test]
