@@ -227,7 +227,7 @@ impl Display for PtxError {
 }
 
 fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
-    let mut config: Config = Default::default();
+    let mut config = Config::default();
     let err_msg = "parsing options failed";
     if matches.get_flag(options::TRADITIONAL) {
         config.gnu_ext = false;

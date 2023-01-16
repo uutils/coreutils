@@ -226,7 +226,7 @@ pub fn get_primitive_dec(
     last_dec_place: usize,
     sci_mode: Option<bool>,
 ) -> FormatPrimitive {
-    let mut f: FormatPrimitive = Default::default();
+    let mut f = FormatPrimitive::default();
 
     // add negative sign section
     if initial_prefix.sign == -1 {

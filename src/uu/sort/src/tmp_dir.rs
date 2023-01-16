@@ -31,7 +31,7 @@ impl TmpDirWrapper {
             parent_path: path,
             size: 0,
             temp_dir: None,
-            lock: Default::default(),
+            lock: Arc::default(),
         }
     }
 

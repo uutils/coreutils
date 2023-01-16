@@ -676,7 +676,7 @@ impl<'a> Line<'a> {
                 || settings
                     .selectors
                     .last()
-                    .map_or(true, |selector| selector != &Default::default()))
+                    .map_or(true, |selector| selector != &FieldSelector::default()))
         {
             // A last resort comparator is in use, underline the whole line.
             if self.line.is_empty() {
@@ -1049,7 +1049,7 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: &'static str) -> Ar
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
-    let mut settings: GlobalSettings = Default::default();
+    let mut settings = GlobalSettings::default();
 
     let matches = match uu_app().try_get_matches_from(args) {
         Ok(t) => t,
@@ -1761,7 +1761,7 @@ fn get_rand_string() -> [u8; 16] {
 }
 
 fn get_hash<T: Hash>(t: &T) -> u64 {
-    let mut s: FnvHasher = Default::default();
+    let mut s = FnvHasher::default();
     t.hash(&mut s);
     s.finish()
 }
