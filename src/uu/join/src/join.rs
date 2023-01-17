@@ -24,8 +24,6 @@ use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UError, UResult, USimpleError};
 use uucore::{crash, crash_if_err};
 
-static NAME: &str = "join";
-
 #[derive(Debug)]
 enum JoinError {
     IOError(std::io::Error),
@@ -699,7 +697,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(NAME)
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(
             "For each pair of input lines with identical join fields, write a line to
