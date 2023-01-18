@@ -1,6 +1,11 @@
 name: GnuTests
 
-# spell-checker:ignore (names) gnulib ; (jargon) submodules ; (people) Dawid Dziurla * dawidd ; (utils) autopoint chksum gperf pyinotify shopt texinfo ; (vars) FILESET SUBDIRS XPASS
+# spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests
+# spell-checker:ignore (jargon) submodules
+# spell-checker:ignore (libs/utils) autopoint chksum gperf lcov libexpect pyinotify shopt texinfo valgrind
+# spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
+# spell-checker:ignore (people) Dawid Dziurla * dawidd
+# spell-checker:ignore (vars) FILESET SUBDIRS XPASS
 
 # * note: to run a single test => `REPO/util/run-gnu-test.sh PATH/TO/TEST/SCRIPT`
 
