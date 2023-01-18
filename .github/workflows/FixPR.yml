@@ -38,6 +38,7 @@ jobs:
         outputs RUST_MIN_SRV
     - name: Install `rust` toolchain (v${{ steps.vars.outputs.RUST_MIN_SRV }})
       run: |
+        ## Install `rust` toolchain (v${{ steps.vars.outputs.RUST_MIN_SRV }})
         rustup toolchain install ${{ steps.vars.outputs.RUST_MIN_SRV }} --profile minimal
         rustup default ${{ steps.vars.outputs.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
@@ -102,6 +103,7 @@ jobs:
         outputs CARGO_FEATURES_OPTION
     - name: Install `rust` toolchain
       run: |
+        ## Install `rust` toolchain
         rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
         rustup toolchain install stable -c rustfmt --profile minimal
         rustup default stable

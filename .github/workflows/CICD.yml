@@ -116,6 +116,7 @@ jobs:
         outputs CARGO_FEATURES_OPTION
     - name: Install `rust` toolchain
       run: |
+        ## Install `rust` toolchain
         rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
         rustup toolchain install stable -c rustfmt --profile minimal
         rustup default stable
@@ -170,11 +171,13 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
+        ## Install/setup prerequisites
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for show-utils.sh
         esac
     - name: Install `rust` toolchain
       run: |
+        ## Install `rust` toolchain
         rustup toolchain install stable -c clippy --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
@@ -276,6 +279,7 @@ jobs:
         outputs CARGO_UTILITY_LIST_OPTIONS
     - name: Install `rust` toolchain
       run: |
+        ## Install `rust` toolchain
         rustup toolchain install stable -c clippy --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
@@ -307,6 +311,7 @@ jobs:
         outputs CARGO_FEATURES_OPTION
     - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
       run: |
+        ## Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
         rustup toolchain install ${{ env.RUST_MIN_SRV }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
@@ -361,6 +366,7 @@ jobs:
     - uses: actions/checkout@v3
     - name: Install `rust` toolchain
       run: |
+        ## Install `rust` toolchain
         rustup toolchain install stable --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
@@ -384,6 +390,7 @@ jobs:
     - uses: actions/checkout@v3
     - name: Install `rust` toolchain
       run: |
+        ## Install `rust` toolchain
         rustup toolchain install stable --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
@@ -415,6 +422,7 @@ jobs:
     - uses: actions/checkout@v3
     - name: Install `rust` toolchain
       run: |
+        ## Install `rust` toolchain
         rustup toolchain install stable --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
@@ -439,6 +447,7 @@ jobs:
     - uses: actions/checkout@v3
     - name: Install `rust` toolchain
       run: |
+        ## Install `rust` toolchain
         rustup toolchain install nightly --profile minimal
         rustup default nightly
     - uses: Swatinem/rust-cache@v2
@@ -466,19 +475,22 @@ jobs:
         sudo apt-get install jq
     - name: Install `rust` toolchain
       run: |
+        ## Install `rust` toolchain
         rustup toolchain install stable --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`make install`"
       shell: bash
       run: |
+        ## `make install`
         make install DESTDIR=target/size-release/
         make install MULTICALL=y DESTDIR=target/size-multi-release/
         # strip the results
         strip target/size*/usr/local/bin/*
-    - name: "Compute sizes"
+    - name: Compute uutil release sizes
       shell: bash
       run: |
+        ## Compute uutil release sizes
         SIZE=$(du -s target/size-release/usr/local/bin/|awk '{print $1}')
         SIZEMULTI=$(du -s target/size-multi-release/usr/local/bin/|awk '{print $1}')
         jq -n \
@@ -652,6 +664,7 @@ jobs:
         esac
     - name: rust toolchain ~ install
       run: |
+        ## rust toolchain ~ install
         rustup toolchain install ${{ env.RUST_MIN_SRV }} -t ${{ matrix.job.target }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
@@ -694,11 +707,13 @@ jobs:
     - name: Build
       shell: bash
       run: |
+        ## Build
         ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} build --release \
         --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
     - name: Test
       shell: bash
       run: |
+        ## Test
         ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} test --target=${{ matrix.job.target }} \
         ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
@@ -706,6 +721,7 @@ jobs:
     - name: Test individual utilities
       shell: bash
       run: |
+        ## Test individual utilities
         ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} test --target=${{ matrix.job.target }} \
         ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
       env:
@@ -782,10 +798,11 @@ jobs:
       run: |
         ## Install/setup prerequisites
         make prepare-busytest
-    - name: "Run BusyBox test suite"
+    - name: Run BusyBox test suite
       id: summary
       shell: bash
       run: |
+        ## Run BusyBox test suite
         set -v
         cp .busybox-config target/debug/.config
         ## Run BusyBox test suite
@@ -853,11 +870,13 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: rust toolchain ~ install
       run: |
+        ## rust toolchain ~ install
         rustup toolchain install ${{ env.RUST_MIN_SRV }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
-    - name: "Build coreutils as multiple binaries"
+    - name: Build coreutils as multiple binaries
       shell: bash
       run: |
+        ## Build individual uutil binaries
         set -v
         make
     - name: Install/setup prerequisites
@@ -865,12 +884,12 @@ jobs:
       run: |
         ## Install/setup prerequisites
         make toybox-src
-    - name: "Run Toybox test suite"
+    - name: Run Toybox test suite
       id: summary
       shell: bash
       run: |
-        set -v
         ## Run Toybox test suite
+        set -v
         cd tmp/toybox-*/
         make defconfig
         make tests &> tmp.log || true
@@ -1107,6 +1126,7 @@ jobs:
         esac
     - name: rust toolchain ~ install
       run: |
+        ## rust toolchain ~ install
         rustup toolchain install ${{ steps.vars.outputs.TOOLCHAIN }} --profile minimal
         rustup default ${{ steps.vars.outputs.TOOLCHAIN }}
     - uses: Swatinem/rust-cache@v2
