@@ -846,7 +846,9 @@ jobs:
       shell: bash
       run: |
         ## VARs setup
-        echo "TEST_SUMMARY_FILE=toybox-result.json" >> $GITHUB_OUTPUT
+        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        TEST_SUMMARY_FILE="toybox-result.json"
+        outputs TEST_SUMMARY_FILE
     - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v2
     - name: rust toolchain ~ install
