@@ -492,12 +492,12 @@ jobs:
       run: |
         ## Compute uutil release sizes
         SIZE=$(du -s target/size-release/usr/local/bin/|awk '{print $1}')
-        SIZEMULTI=$(du -s target/size-multi-release/usr/local/bin/|awk '{print $1}')
+        SIZE_MULTI=$(du -s target/size-multi-release/usr/local/bin/|awk '{print $1}')
         jq -n \
               --arg date "$(date --rfc-email)" \
               --arg sha "$GITHUB_SHA" \
               --arg size "$SIZE" \
-              --arg multisize "$SIZEMULTI" \
+              --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
     - uses: actions/upload-artifact@v3
       with:
