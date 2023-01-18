@@ -552,7 +552,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             clap::error::ErrorKind::DisplayHelp => {
                 app.print_help()?;
             }
-            clap::error::ErrorKind::DisplayVersion => println!("{}", app.render_version()),
+            clap::error::ErrorKind::DisplayVersion => print!("{}", app.render_version()),
             _ => return Err(Box::new(e.with_exit_code(1))),
         };
     } else if let Ok(matches) = matches {
