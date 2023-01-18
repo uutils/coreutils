@@ -16,6 +16,7 @@ use std::os::windows::fs::symlink_file;
 #[cfg(not(windows))]
 use std::path::Path;
 
+use crate::common::testfs::util::{testfs_mount, testfs_unmount};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use filetime::FileTime;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -916,7 +917,6 @@ fn test_cp_preserve_all() {
     #[cfg(unix)]
     at.set_mode(src_file, 0o0500);
 
-    // TODO: create a destination that does not allow copying of xattr and context
     // Copy
     ucmd.arg(src_file)
         .arg(dst_file)
@@ -948,7 +948,6 @@ fn test_cp_preserve_xattr() {
     // Sleep so that the time stats are different
     sleep(Duration::from_secs(1));
 
-    // TODO: create a destination that does not allow copying of xattr and context
     // Copy
     ucmd.arg(src_file)
         .arg(dst_file)
@@ -988,6 +987,90 @@ fn test_cp_preserve_xattr_fails_on_android() {
         .arg(TEST_HELLO_WORLD_DEST)
         .arg("--preserve=xattr")
         .fails();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_preserve_all_xattr_testfs() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let mount_point_dir = "mnt";
+
+    at.mkdir(mount_point_dir);
+    let mount_point_path =
+        String::from(at.subdir.to_str().expect("to_str failed")) + "/" + mount_point_dir;
+    let session = testfs_mount(mount_point_path.clone()).expect("testfs_mount failed");
+
+    let src_file = String::from(&mount_point_path) + "/a_xattr_allow";
+    let dst_file = String::from(&mount_point_path) + "/b_xattr_deny";
+
+    at.touch(&src_file);
+
+    new_ucmd!()
+        .arg(&src_file)
+        .arg(&dst_file)
+        .arg("--preserve=all")
+        .succeeds();
+
+    testfs_unmount(mount_point_path);
+    session.join();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_preserve_xattr_deny() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let mount_point_dir = "mnt";
+
+    at.mkdir(mount_point_dir);
+    let mount_point_path =
+        String::from(at.subdir.to_str().expect("to_str failed")) + "/" + mount_point_dir;
+    let session = testfs_mount(mount_point_path.clone()).expect("testfs_mount failed");
+
+    let src_file = String::from(&mount_point_path) + "/a_xattr_allow";
+    let dst_file = String::from(&mount_point_path) + "/b_xattr_deny";
+
+    at.touch(&src_file);
+
+    new_ucmd!()
+        .arg(&src_file)
+        .arg(&dst_file)
+        .arg("--preserve=xattr")
+        .fails();
+
+    testfs_unmount(mount_point_path);
+    session.join();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_preserve_xattr_allow() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let mount_point_dir = "mnt";
+
+    at.mkdir(mount_point_dir);
+    let mount_point_path =
+        String::from(at.subdir.to_str().expect("to_str failed")) + "/" + mount_point_dir;
+    let session = testfs_mount(mount_point_path.clone()).expect("testfs_mount failed");
+
+    let src_file = String::from(&mount_point_path) + "/a_xattr_allow";
+    let dst_file = String::from(&mount_point_path) + "/b_xattr_allow";
+
+    at.touch(&src_file);
+
+    new_ucmd!()
+        .arg(&src_file)
+        .arg(&dst_file)
+        .arg("--preserve=xattr")
+        .succeeds();
+
+    testfs_unmount(mount_point_path);
+    session.join();
 }
 
 #[test]
