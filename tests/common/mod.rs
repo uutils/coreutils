@@ -1,3 +1,5 @@
+//spell-checker: ignore testfs
+
 #[macro_use]
 pub mod macros;
 pub mod random;
