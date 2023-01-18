@@ -40,6 +40,8 @@ pub fn testfs_mount(mount_point: String) -> std::io::Result<BackgroundSession> {
 }
 
 pub fn testfs_unmount(mount_point: String) {
+    log_testfs!("mount_point: {}", mount_point);
+
     let mount_point_c_string = CString::new(mount_point).expect("CString::new failed");
     unsafe {
         libc::umount(mount_point_c_string.as_ptr());
