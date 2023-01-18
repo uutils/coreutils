@@ -149,7 +149,7 @@ impl Mode {
                 Ok(Self::FirstLines(n))
             }
         } else {
-            Ok(Default::default())
+            Ok(Self::default())
         }
     }
 }

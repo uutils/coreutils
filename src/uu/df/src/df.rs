@@ -105,11 +105,11 @@ impl Default for Options {
         Self {
             show_local_fs: Default::default(),
             show_all_fs: Default::default(),
-            block_size: Default::default(),
-            human_readable: Default::default(),
-            header_mode: Default::default(),
-            include: Default::default(),
-            exclude: Default::default(),
+            block_size: BlockSize::default(),
+            human_readable: Option::default(),
+            header_mode: HeaderMode::default(),
+            include: Option::default(),
+            exclude: Option::default(),
             sync: Default::default(),
             show_total: Default::default(),
             columns: vec![

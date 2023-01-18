@@ -604,7 +604,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let key1 = parse_field_number_option(matches.get_one::<String>("1").map(|s| s.as_str()))?;
     let key2 = parse_field_number_option(matches.get_one::<String>("2").map(|s| s.as_str()))?;
 
-    let mut settings: Settings = Default::default();
+    let mut settings = Settings::default();
 
     let v_values = matches.get_many::<String>("v");
     if v_values.is_some() {

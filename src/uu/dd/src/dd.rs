@@ -491,8 +491,8 @@ impl<'a> Output<'a> {
         // These objects are counters, initialized to zero. After each
         // iteration of the main loop, each will be incremented by the
         // number of blocks read and written, respectively.
-        let mut rstat = Default::default();
-        let mut wstat = Default::default();
+        let mut rstat = ReadStat::default();
+        let mut wstat = WriteStat::default();
 
         // The time at which the main loop starts executing.
         //

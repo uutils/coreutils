@@ -121,7 +121,7 @@ impl Intf {
     // get a FormatPrimitive of the maximum value for the field char
     //  and given sign
     fn get_max(field_char: char, sign: i8) -> FormatPrimitive {
-        let mut fmt_primitive: FormatPrimitive = Default::default();
+        let mut fmt_primitive = FormatPrimitive::default();
         fmt_primitive.pre_decimal = Some(String::from(match field_char {
             'd' | 'i' => match sign {
                 1 => "9223372036854775807",
@@ -160,7 +160,7 @@ impl Intf {
         match field_char {
             'i' | 'd' => match i64::from_str_radix(segment, radix_in as u32) {
                 Ok(i) => {
-                    let mut fmt_prim: FormatPrimitive = Default::default();
+                    let mut fmt_prim = FormatPrimitive::default();
                     if sign == -1 {
                         fmt_prim.prefix = Some(String::from("-"));
                     }
@@ -171,7 +171,7 @@ impl Intf {
             },
             _ => match u64::from_str_radix(segment, radix_in as u32) {
                 Ok(u) => {
-                    let mut fmt_prim: FormatPrimitive = Default::default();
+                    let mut fmt_prim = FormatPrimitive::default();
                     let u_f = if sign == -1 { u64::MAX - (u - 1) } else { u };
                     fmt_prim.pre_decimal = Some(match field_char {
                         'X' => format!("{:X}", u_f),
@@ -235,7 +235,7 @@ impl Formatter for Intf {
                 )
             } else {
                 // otherwise just do a straight string copy.
-                let mut fmt_prim: FormatPrimitive = Default::default();
+                let mut fmt_prim = FormatPrimitive::default();
 
                 // this is here and not earlier because
                 // zero doesn't get a sign, and conv_from_segment

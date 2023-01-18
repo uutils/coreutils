@@ -218,7 +218,7 @@ pub fn num_format(field: &FormatField, in_str_opt: Option<&String>) -> Option<St
         // if we can get an assumed value from looking at the first
         // few characters, use that value to create the FormatPrimitive
         if let Some(provided_num) = get_provided(in_str_opt) {
-            let mut tmp : FormatPrimitive = Default::default();
+            let mut tmp = FormatPrimitive::default();
             match field_char {
                 'u' | 'i' | 'd' => {
                     tmp.pre_decimal = Some(
