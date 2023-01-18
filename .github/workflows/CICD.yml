@@ -62,6 +62,12 @@ jobs:
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        case '${{ matrix.job.os }}' in
+          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse libfuse-dev pkg-config ;; # needed for fuser 
+        esac
     ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
     ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
     - name: Install `rust` toolchain
@@ -114,6 +120,12 @@ jobs:
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        case '${{ matrix.job.os }}' in
+          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse libfuse-dev pkg-config ;; # needed for fuser 
+        esac
     - name: Install `rust` toolchain
       run: |
         rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
@@ -655,6 +667,9 @@ jobs:
             # We also create a couple optional files pinky looks for
             touch /home/runner/.project
             echo "foo" > /home/runner/.plan
+            # needed for fuser 
+            sudo apt-get -y update
+            sudo apt-get -y install fuse libfuse-dev pkg-config 
             ;;
         esac
     - name: rust toolchain ~ install
@@ -1108,6 +1123,9 @@ jobs:
             # We also create a couple optional files pinky looks for
             touch /home/runner/.project
             echo "foo" > /home/runner/.plan
+            # needed for fuser 
+            sudo apt-get -y update
+            sudo apt-get -y install fuse libfuse-dev pkg-config 
             ;;
         esac
     - name: rust toolchain ~ install
