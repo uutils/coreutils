@@ -12,7 +12,7 @@ use std::sync::MutexGuard;
 use std::time::{Duration, SystemTime};
 
 use crate::common::testfs::util::log_testfs;
-use fuser::FileType;
+use fuser::{FileType, ReplyData};
 use fuser::Filesystem;
 use fuser::KernelConfig;
 use fuser::ReplyAttr;
@@ -349,5 +349,20 @@ impl Filesystem for TestFs {
                 }
             }
         }
+    }
+
+    fn read(
+        &mut self,
+        _req: &Request<'_>,
+        inode: Inode,
+        _fh: u64,
+        _offset: i64,
+        _size: u32,
+        _flags: i32,
+        _lock_owner: Option<u64>,
+        reply: ReplyData,
+    ) {
+        log_testfs!("inode({})", inode);
+        reply.data("".as_bytes());
     }
 }
