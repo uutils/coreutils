@@ -2,7 +2,7 @@
 
 [package]
 name = "uu_tac"
-version = "0.0.16"
+version = "0.0.17"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tac ~ (uutils) concatenate and display input lines in reverse order"
@@ -21,7 +21,7 @@ memchr = "2"
 memmap2 = "0.5"
 regex = "1"
 clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.17", package="uucore", path="../../uucore" }
 
 [[bin]]
 name = "tac"

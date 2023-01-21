@@ -1,6 +1,6 @@
 [package]
 name = "uu_chmod"
-version = "0.0.16"
+version = "0.0.17"
 authors = ["uutils developers"]
 license = "MIT"
 description = "chmod ~ (uutils) change mode of FILE"
@@ -17,7 +17,7 @@ path = "src/chmod.rs"
 [dependencies]
 clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 libc = "0.2.137"
-uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["fs", "mode"] }
+uucore = { version=">=0.0.17", package="uucore", path="../../uucore", features=["fs", "mode"] }
 
 [[bin]]
 name = "chmod"

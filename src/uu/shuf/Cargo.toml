@@ -1,6 +1,6 @@
 [package]
 name = "uu_shuf"
-version = "0.0.16"
+version = "0.0.17"
 authors = ["uutils developers"]
 license = "MIT"
 description = "shuf ~ (uutils) display random permutations of input lines"
@@ -19,7 +19,7 @@ clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 memchr = "2.5.0"
 rand = "0.8"
 rand_core = "0.6"
-uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.17", package="uucore", path="../../uucore" }
 
 [[bin]]
 name = "shuf"
