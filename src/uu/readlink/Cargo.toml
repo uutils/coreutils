@@ -1,6 +1,6 @@
 [package]
 name = "uu_readlink"
-version = "0.0.16"
+version = "0.0.17"
 authors = ["uutils developers"]
 license = "MIT"
 description = "readlink ~ (uutils) display resolved path of PATHNAME"
@@ -16,7 +16,7 @@ path = "src/readlink.rs"
 
 [dependencies]
 clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["fs"] }
+uucore = { version=">=0.0.17", package="uucore", path="../../uucore", features=["fs"] }
 
 [[bin]]
 name = "readlink"
