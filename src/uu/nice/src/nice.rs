@@ -8,14 +8,14 @@
 // spell-checker:ignore (ToDO) getpriority execvp setpriority nstr PRIO cstrs ENOENT
 
 use libc::{c_char, c_int, execvp, PRIO_PROCESS};
-use std::ffi::CString;
-use std::io::Error;
+use std::ffi::{CString, OsString};
+use std::io::{Error, Write};
 use std::ptr;
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::{
     error::{set_exit_code, UClapError, UResult, USimpleError, UUsageError},
-    format_usage, show_error, show_warning,
+    format_usage, show_error,
 };
 
 pub mod options {
@@ -30,8 +30,89 @@ const ABOUT: &str = "\
     process).";
 const USAGE: &str = "{} [OPTIONS] [COMMAND [ARGS]]";
 
+fn is_prefix_of(maybe_prefix: &str, target: &str, min_match: usize) -> bool {
+    if maybe_prefix.len() < min_match || maybe_prefix.len() > target.len() {
+        return false;
+    }
+
+    &target[0..maybe_prefix.len()] == maybe_prefix
+}
+
+/// Transform legacy arguments into a standardized form.
+///
+/// The following are all legal argument sequences to GNU nice:
+/// - "-1"
+/// - "-n1"
+/// - "-+1"
+/// - "--1"
+/// - "-n -1"
+///
+/// It looks initially like we could add handling for "-{i}", "--{i}"
+/// and "-+{i}" for integers {i} and process them normally using clap.
+/// However, the meaning of "-1", for example, changes depending on
+/// its context with legacy argument parsing. clap will not prioritize
+/// hyphenated values to previous arguments over matching a known
+/// argument.  So "-n" "-1" in this case is picked up as two
+/// arguments, not one argument with a value.
+///
+/// Given this context dependency, and the deep hole we end up digging
+/// with clap in this case, it's much simpler to just normalize the
+/// arguments to nice before clap starts work. Here, we insert a
+/// prefix of "-n" onto all arguments of the form "-{i}", "--{i}" and
+/// "-+{i}" which are not already preceded by "-n".
+fn standardize_nice_args(mut args: impl uucore::Args) -> impl uucore::Args {
+    let mut v = Vec::<OsString>::new();
+    let mut saw_n = false;
+    let mut saw_command = false;
+    if let Some(cmd) = args.next() {
+        v.push(cmd);
+    }
+    for s in args {
+        if saw_command {
+            v.push(s);
+        } else if saw_n {
+            let mut new_arg: OsString = "-n".into();
+            new_arg.push(s);
+            v.push(new_arg);
+            saw_n = false;
+        } else if s.to_str() == Some("-n")
+            || s.to_str()
+                .map(|s| is_prefix_of(s, "--adjustment", "--a".len()))
+                .unwrap_or_default()
+        {
+            saw_n = true;
+        } else if let Ok(s) = s.clone().into_string() {
+            if let Some(stripped) = s.strip_prefix('-') {
+                match stripped.parse::<i64>() {
+                    Ok(ix) => {
+                        let mut new_arg: OsString = "-n".into();
+                        new_arg.push(ix.to_string());
+                        v.push(new_arg);
+                    }
+                    Err(_) => {
+                        v.push(s.into());
+                    }
+                }
+            } else {
+                saw_command = true;
+                v.push(s.into());
+            }
+        } else {
+            saw_command = true;
+            v.push(s);
+        }
+    }
+    if saw_n {
+        v.push("-n".into());
+    }
+
+    v.into_iter()
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let args = standardize_nice_args(args);
+
     let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
 
     nix::errno::Errno::clear();
@@ -71,8 +152,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     niceness += adjustment;
-    if unsafe { libc::setpriority(PRIO_PROCESS, 0, niceness) } == -1 {
-        show_warning!("setpriority: {}", Error::last_os_error());
+    // We can't use `show_warning` because that will panic if stderr
+    // isn't writable. The GNU test suite checks specifically that the
+    // exit code when failing to write the advisory is 125, but Rust
+    // will produce an exit code of 101 when it panics.
+    if unsafe { libc::setpriority(PRIO_PROCESS, 0, niceness) } == -1
+        && write!(
+            std::io::stderr(),
+            "{}: warning: setpriority: {}",
+            uucore::util_name(),
+            Error::last_os_error()
+        )
+        .is_err()
+    {
+        set_exit_code(125);
+        return Ok(());
     }
 
     let cstrs: Vec<CString> = matches
@@ -109,6 +203,8 @@ pub fn uu_app() -> Command {
                 .short('n')
                 .long(options::ADJUSTMENT)
                 .help("add N to the niceness (default is 10)")
+                .action(ArgAction::Set)
+                .overrides_with(options::ADJUSTMENT)
                 .allow_hyphen_values(true),
         )
         .arg(
