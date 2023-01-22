@@ -48,15 +48,12 @@ fn run_single_test(test: &TestCase, at: &AtPath, mut ucmd: UCommand) {
     let r = ucmd.run();
     if !r.succeeded() {
         println!("{}", r.stderr_str());
-        panic!("{:?}: failed", ucmd.raw);
+        panic!("{}: failed", ucmd);
     }
 
     let perms = at.metadata(TEST_FILE).permissions().mode();
     if perms != test.after {
-        panic!(
-            "{:?}: expected: {:o} got: {:o}",
-            ucmd.raw, test.after, perms
-        );
+        panic!("{}: expected: {:o} got: {:o}", ucmd, test.after, perms);
     }
 }
 

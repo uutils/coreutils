@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-//spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd
+//spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL
 
 #![allow(dead_code)]
 
@@ -15,7 +15,7 @@ use rstest::rstest;
 use std::borrow::Cow;
 #[cfg(not(windows))]
 use std::ffi::CString;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fs::{self, hard_link, remove_file, File, OpenOptions};
 use std::io::{self, BufWriter, Read, Result, Write};
 #[cfg(unix)]
@@ -34,7 +34,6 @@ use std::thread::{sleep, JoinHandle};
 use std::time::{Duration, Instant};
 use std::{env, hint, thread};
 use tempfile::{Builder, TempDir};
-use uucore::Args;
 
 static TESTS_DIR: &str = "tests";
 static FIXTURES_DIR: &str = "fixtures";
@@ -45,6 +44,8 @@ static ALREADY_RUN: &str = " you have already run this UCommand, if you want to 
 static MULTIPLE_STDIN_MEANINGLESS: &str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
 static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is no stdin";
+
+pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
 
 /// Test if the program is running under CI
 pub fn is_ci() -> bool {
@@ -1096,7 +1097,7 @@ impl TestScenario {
     pub fn new(util_name: &str) -> Self {
         let tmpd = Rc::new(TempDir::new().unwrap());
         let ts = Self {
-            bin_path: PathBuf::from(env!("CARGO_BIN_EXE_coreutils")),
+            bin_path: PathBuf::from(TESTS_BINARY),
             util_name: String::from(util_name),
             fixtures: AtPath::new(tmpd.as_ref().path()),
             tmpd,
@@ -1127,13 +1128,13 @@ impl TestScenario {
         util_name: T,
         env_clear: bool,
     ) -> UCommand {
-        UCommand::new_from_tmp(bin, &Some(util_name), self.tmpd.clone(), env_clear)
+        UCommand::new_from_tmp(bin, Some(util_name), self.tmpd.clone(), env_clear)
     }
 
     /// Returns builder for invoking any system command. Paths given are treated
     /// relative to the environment's unique temporary test directory.
     pub fn cmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        UCommand::new_from_tmp::<S, S>(bin, &None, self.tmpd.clone(), true)
+        UCommand::new_from_tmp::<S, S>(bin, None, self.tmpd.clone(), true)
     }
 
     /// Returns builder for invoking any uutils command. Paths given are treated
@@ -1153,7 +1154,7 @@ impl TestScenario {
     /// Differs from the builder returned by `cmd` in that `cmd_keepenv` does not call
     /// `Command::env_clear` (Clears the entire environment map for the child process.)
     pub fn cmd_keepenv<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        UCommand::new_from_tmp::<S, S>(bin, &None, self.tmpd.clone(), false)
+        UCommand::new_from_tmp::<S, S>(bin, None, self.tmpd.clone(), false)
     }
 }
 
@@ -1165,16 +1166,19 @@ impl TestScenario {
 /// 3. it provides convenience construction arguments to set the Command working directory and/or clear its environment.
 #[derive(Debug)]
 pub struct UCommand {
-    pub raw: Command,
-    comm_string: String,
-    bin_path: String,
-    util_name: Option<String>,
+    args: Vec<OsString>,
+    env_vars: Vec<(OsString, OsString)>,
+    current_dir: Option<PathBuf>,
+    env_clear: bool,
+    bin_path: Option<PathBuf>,
+    util_name: Option<OsString>,
     has_run: bool,
     ignore_stdin_write_error: bool,
     stdin: Option<Stdio>,
     stdout: Option<Stdio>,
     stderr: Option<Stdio>,
     bytes_into_stdin: Option<Vec<u8>>,
+    // TODO: Why android?
     #[cfg(any(target_os = "linux", target_os = "android"))]
     limits: Vec<(rlimit::Resource, u64, u64)>,
     stderr_to_stdout: bool,
@@ -1183,72 +1187,49 @@ pub struct UCommand {
 }
 
 impl UCommand {
-    pub fn new<T: AsRef<OsStr>, S: AsRef<OsStr>, U: AsRef<OsStr>>(
-        bin_path: T,
-        util_name: &Option<S>,
-        curdir: U,
-        env_clear: bool,
-    ) -> Self {
-        let bin_path = bin_path.as_ref();
-        let util_name = util_name.as_ref().map(std::convert::AsRef::as_ref);
-
-        let mut ucmd = Self {
+    pub fn new() -> Self {
+        Self {
             tmpd: None,
             has_run: false,
-            raw: {
-                let mut cmd = Command::new(bin_path);
-                cmd.current_dir(curdir.as_ref());
-                if env_clear {
-                    cmd.env_clear();
-                    if cfg!(windows) {
-                        // spell-checker:ignore (dll) rsaenh
-                        // %SYSTEMROOT% is required on Windows to initialize crypto provider
-                        // ... and crypto provider is required for std::rand
-                        // From `procmon`: RegQueryValue HKLM\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Microsoft Strong Cryptographic Provider\Image Path
-                        // SUCCESS  Type: REG_SZ, Length: 66, Data: %SystemRoot%\system32\rsaenh.dll"
-                        if let Some(systemroot) = env::var_os("SYSTEMROOT") {
-                            cmd.env("SYSTEMROOT", systemroot);
-                        }
-                    } else {
-                        // if someone is setting LD_PRELOAD, there's probably a good reason for it
-                        if let Some(ld_preload) = env::var_os("LD_PRELOAD") {
-                            cmd.env("LD_PRELOAD", ld_preload);
-                        }
-                    }
-                }
-                cmd
-            },
-            comm_string: String::from(bin_path.to_str().unwrap()),
-            bin_path: bin_path.to_str().unwrap().to_string(),
-            util_name: util_name.map(|un| un.to_str().unwrap().to_string()),
+            bin_path: None,
+            current_dir: None,
+            args: vec![],
+            env_clear: true,
+            env_vars: vec![],
+            util_name: None,
             ignore_stdin_write_error: false,
             bytes_into_stdin: None,
             stdin: None,
             stdout: None,
             stderr: None,
+            // TODO: Why android?
             #[cfg(any(target_os = "linux", target_os = "android"))]
             limits: vec![],
             stderr_to_stdout: false,
             timeout: Some(Duration::from_secs(30)),
-        };
-
-        if let Some(un) = util_name {
-            ucmd.arg(un);
         }
-
-        ucmd
     }
 
     pub fn new_from_tmp<T: AsRef<OsStr>, S: AsRef<OsStr>>(
         bin_path: T,
-        util_name: &Option<S>,
+        util_name: Option<S>,
         tmpd: Rc<TempDir>,
         env_clear: bool,
     ) -> Self {
-        let tmpd_path_buf = String::from(tmpd.as_ref().path().to_str().unwrap());
-        let mut ucmd: Self = Self::new(bin_path, util_name, tmpd_path_buf, env_clear);
+        let mut ucmd: Self = Self::new();
+        ucmd.bin_path = Some(PathBuf::from(bin_path.as_ref()));
+        ucmd.util_name = util_name.map(|s| s.as_ref().to_os_string());
         ucmd.tmpd = Some(tmpd);
+        ucmd.env_clear = env_clear;
         ucmd
+    }
+
+    pub fn current_dir<T>(&mut self, current_dir: T) -> &mut Self
+    where
+        T: AsRef<Path>,
+    {
+        self.current_dir = Some(current_dir.as_ref().into());
+        self
     }
 
     pub fn set_stdin<T: Into<Stdio>>(&mut self, stdin: T) -> &mut Self {
@@ -1274,29 +1255,14 @@ impl UCommand {
     /// Add a parameter to the invocation. Path arguments are treated relative
     /// to the test environment directory.
     pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> &mut Self {
-        assert!(!self.has_run, "{}", ALREADY_RUN);
-        self.comm_string.push(' ');
-        self.comm_string
-            .push_str(arg.as_ref().to_str().unwrap_or_default());
-        self.raw.arg(arg.as_ref());
+        self.args.push(arg.as_ref().into());
         self
     }
 
     /// Add multiple parameters to the invocation. Path arguments are treated relative
     /// to the test environment directory.
     pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> &mut Self {
-        assert!(!self.has_run, "{}", MULTIPLE_STDIN_MEANINGLESS);
-        let strings = args
-            .iter()
-            .map(|s| s.as_ref().to_os_string())
-            .collect_ignore();
-
-        for s in strings {
-            self.comm_string.push(' ');
-            self.comm_string.push_str(&s);
-        }
-
-        self.raw.args(args.as_ref());
+        self.args.extend(args.iter().map(|s| s.as_ref().into()));
         self
     }
 
@@ -1331,11 +1297,12 @@ impl UCommand {
         K: AsRef<OsStr>,
         V: AsRef<OsStr>,
     {
-        assert!(!self.has_run, "{}", ALREADY_RUN);
-        self.raw.env(key, val);
+        self.env_vars
+            .push((key.as_ref().into(), val.as_ref().into()));
         self
     }
 
+    // TODO: Why android?
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn with_limit(
         &mut self,
@@ -1359,26 +1326,85 @@ impl UCommand {
         self
     }
 
-    /// Spawns the command, feeds the stdin if any, and returns the
-    /// child process immediately.
-    pub fn run_no_wait(&mut self) -> UChild {
-        assert!(!self.has_run, "{}", ALREADY_RUN);
-        self.has_run = true;
-        log_info("run", &self.comm_string);
+    // TODO: make public?
+    fn build(&mut self) -> (Command, Option<CapturedOutput>, Option<CapturedOutput>) {
+        if self.bin_path.is_some() {
+            if let Some(util_name) = &self.util_name {
+                self.args.insert(0, OsString::from(util_name));
+            }
+        } else if let Some(util_name) = &self.util_name {
+            self.bin_path = Some(PathBuf::from(TESTS_BINARY));
+            self.args.insert(0, OsString::from(util_name));
+        } else if cfg!(unix) {
+            let bin_path = if cfg!(target_os = "android") {
+                PathBuf::from("/system/bin/sh")
+            } else {
+                PathBuf::from("/bin/sh")
+            };
+            self.bin_path = Some(bin_path);
+            let c_arg = OsString::from("-c");
+            if !self.args.contains(&c_arg) {
+                self.args.insert(0, c_arg);
+            }
+        } else {
+            self.bin_path = Some(PathBuf::from("cmd"));
+            let c_arg = OsString::from("/C");
+            let k_arg = OsString::from("/K");
+            if !self
+                .args
+                .iter()
+                .any(|s| s.eq_ignore_ascii_case(&c_arg) || s.eq_ignore_ascii_case(&k_arg))
+            {
+                self.args.insert(0, c_arg);
+            }
+        };
+
+        let mut command = Command::new(self.bin_path.as_ref().unwrap());
+        command.args(&self.args);
+
+        if self.tmpd.is_none() {
+            self.tmpd = Some(Rc::new(tempfile::tempdir().unwrap()));
+        }
+
+        if let Some(current_dir) = &self.current_dir {
+            command.current_dir(current_dir);
+        } else {
+            command.current_dir(self.tmpd.as_ref().unwrap().path());
+        }
+
+        if self.env_clear {
+            command.env_clear();
+            if cfg!(windows) {
+                // spell-checker:ignore (dll) rsaenh
+                // %SYSTEMROOT% is required on Windows to initialize crypto provider
+                // ... and crypto provider is required for std::rand
+                // From `procmon`: RegQueryValue HKLM\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Microsoft Strong Cryptographic Provider\Image Path
+                // SUCCESS  Type: REG_SZ, Length: 66, Data: %SystemRoot%\system32\rsaenh.dll"
+                if let Some(systemroot) = env::var_os("SYSTEMROOT") {
+                    command.env("SYSTEMROOT", systemroot);
+                }
+            } else {
+                // if someone is setting LD_PRELOAD, there's probably a good reason for it
+                if let Some(ld_preload) = env::var_os("LD_PRELOAD") {
+                    command.env("LD_PRELOAD", ld_preload);
+                }
+            }
+        }
+
+        for (key, value) in &self.env_vars {
+            command.env(key, value);
+        }
 
         let mut captured_stdout = None;
         let mut captured_stderr = None;
-        let command = if self.stderr_to_stdout {
+        if self.stderr_to_stdout {
             let mut output = CapturedOutput::default();
 
-            let command = self
-                .raw
+            command
                 .stdin(self.stdin.take().unwrap_or_else(Stdio::null))
                 .stdout(Stdio::from(output.try_clone().unwrap()))
                 .stderr(Stdio::from(output.try_clone().unwrap()));
             captured_stdout = Some(output);
-
-            command
         } else {
             let stdout = if self.stdout.is_some() {
                 self.stdout.take().unwrap()
@@ -1398,11 +1424,24 @@ impl UCommand {
                 stdio
             };
 
-            self.raw
+            command
                 .stdin(self.stdin.take().unwrap_or_else(Stdio::null))
                 .stdout(stdout)
-                .stderr(stderr)
+                .stderr(stderr);
         };
+
+        (command, captured_stdout, captured_stderr)
+    }
+
+    /// Spawns the command, feeds the stdin if any, and returns the
+    /// child process immediately.
+    pub fn run_no_wait(&mut self) -> UChild {
+        // TODO: remove?
+        assert!(!self.has_run, "{}", ALREADY_RUN);
+        self.has_run = true;
+
+        let (mut command, captured_stdout, captured_stderr) = self.build();
+        log_info("run", self.to_string());
 
         let child = command.spawn().unwrap();
 
@@ -1462,6 +1501,17 @@ impl UCommand {
     pub fn get_full_fixture_path(&self, file_rel_path: &str) -> String {
         let tmpdir_path = self.tmpd.as_ref().unwrap().path();
         format!("{}/{file_rel_path}", tmpdir_path.to_str().unwrap())
+    }
+}
+
+impl std::fmt::Display for UCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut comm_string: Vec<String> = vec![self
+            .bin_path
+            .as_ref()
+            .map_or("".to_string(), |p| p.display().to_string())];
+        comm_string.extend(self.args.iter().map(|s| s.to_string_lossy().to_string()));
+        f.write_str(&comm_string.join(" "))
     }
 }
 
@@ -1704,8 +1754,11 @@ impl UChild {
     ) -> Self {
         Self {
             raw: child,
-            bin_path: ucommand.bin_path.clone(),
-            util_name: ucommand.util_name.clone(),
+            bin_path: ucommand.bin_path.as_ref().unwrap().display().to_string(),
+            util_name: ucommand
+                .util_name
+                .clone()
+                .map(|s| s.to_string_lossy().to_string()),
             captured_stdout,
             captured_stderr,
             ignore_stdin_write_error: ucommand.ignore_stdin_write_error,
@@ -2443,7 +2496,7 @@ mod tests {
     pub fn run_cmd<T: AsRef<OsStr>>(cmd: T) -> CmdResult {
         let mut ucmd = UCommand::new_from_tmp::<&str, String>(
             "sh",
-            &None,
+            None,
             Rc::new(tempfile::tempdir().unwrap()),
             true,
         );
@@ -2456,7 +2509,7 @@ mod tests {
     pub fn run_cmd<T: AsRef<OsStr>>(cmd: T) -> CmdResult {
         let mut ucmd = UCommand::new_from_tmp::<&str, String>(
             "cmd",
-            &None,
+            None,
             Rc::new(tempfile::tempdir().unwrap()),
             true,
         );
@@ -3199,5 +3252,26 @@ mod tests {
     fn test_ucommand_when_run_with_timeout_higher_then_execution_time_then_no_panic() {
         let ts = TestScenario::new("sleep");
         ts.ucmd().timeout(Duration::from_secs(60)).arg("1.0").run();
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    fn test_ucommand_when_default() {
+        let shell_cmd = format!("{} echo -n hello", TESTS_BINARY);
+
+        let mut command = UCommand::new();
+        command.arg(&shell_cmd).succeeds().stdout_is("hello");
+
+        #[cfg(target_os = "android")]
+        let (expected_bin, expected_arg) = (PathBuf::from("/system/bin/sh"), OsString::from("-c"));
+        #[cfg(all(unix, not(target_os = "android")))]
+        let (expected_bin, expected_arg) = (PathBuf::from("/bin/sh"), OsString::from("-c"));
+        #[cfg(windows)]
+        let (expected_bin, expected_arg) = (PathBuf::from("cmd"), OsString::from("/C"));
+
+        std::assert_eq!(&expected_bin, command.bin_path.as_ref().unwrap());
+        assert!(command.util_name.is_none());
+        std::assert_eq!(command.args, &[expected_arg, OsString::from(&shell_cmd)]);
+        assert!(command.tmpd.is_some());
     }
 }
