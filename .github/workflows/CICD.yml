@@ -1,11 +1,11 @@
 name: CICD
 
-# spell-checker:ignore (acronyms) CICD MSVC musl
+# spell-checker:ignore (abbrev/names) CICD CodeCOV MacOS MinGW MSVC musl 
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain
-# spell-checker:ignore (names) CodeCOV MacOS MinGW Peltoche rivy
-# spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rsync rustc rustfmt rustup shopt xargs
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend pell runtest tempfile testsuite uutils DESTDIR multisize Swatinem
+# spell-checker:ignore (people) Peltoche rivy
+# spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot fdesc fdescfs gmake grcov halium lcov libssl mkdir popd printf pushd rsync rustc rustfmt rustup shopt utmpdump xargs
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos gnueabihf issuecomment maint multisize nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils 
 
 env:
   PROJECT_NAME: coreutils
@@ -50,7 +50,7 @@ jobs:
       shell: bash
       run: |
         ## VARs setup
-        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # failure mode
         unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
           ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
@@ -102,7 +102,7 @@ jobs:
       shell: bash
       run: |
         ## VARs setup
-        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # failure mode
         unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
           ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
@@ -116,6 +116,7 @@ jobs:
         outputs CARGO_FEATURES_OPTION
     - name: Install `rust` toolchain
       run: |
+        ## Install `rust` toolchain
         rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
         rustup toolchain install stable -c rustfmt --profile minimal
         rustup default stable
@@ -150,7 +151,7 @@ jobs:
       shell: bash
       run: |
         ## VARs setup
-        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # failure mode
         unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
           ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
@@ -170,11 +171,13 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
+        ## Install/setup prerequisites
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for show-utils.sh
         esac
     - name: Install `rust` toolchain
       run: |
+        ## Install `rust` toolchain
         rustup toolchain install stable -c clippy --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
@@ -206,7 +209,7 @@ jobs:
       shell: bash
       run: |
         ## VARs setup
-        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # failure mode
         unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
           ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
@@ -257,7 +260,7 @@ jobs:
       shell: bash
       run: |
         ## VARs setup
-        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # failure mode
         unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
           ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
@@ -276,6 +279,7 @@ jobs:
         outputs CARGO_UTILITY_LIST_OPTIONS
     - name: Install `rust` toolchain
       run: |
+        ## Install `rust` toolchain
         rustup toolchain install stable -c clippy --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
@@ -299,7 +303,7 @@ jobs:
       shell: bash
       run: |
         ## VARs setup
-        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # target-specific options
         # * CARGO_FEATURES_OPTION
         unset CARGO_FEATURES_OPTION
@@ -307,6 +311,7 @@ jobs:
         outputs CARGO_FEATURES_OPTION
     - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
       run: |
+        ## Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
         rustup toolchain install ${{ env.RUST_MIN_SRV }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
@@ -361,6 +366,7 @@ jobs:
     - uses: actions/checkout@v3
     - name: Install `rust` toolchain
       run: |
+        ## Install `rust` toolchain
         rustup toolchain install stable --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
@@ -384,6 +390,7 @@ jobs:
     - uses: actions/checkout@v3
     - name: Install `rust` toolchain
       run: |
+        ## Install `rust` toolchain
         rustup toolchain install stable --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
@@ -415,6 +422,7 @@ jobs:
     - uses: actions/checkout@v3
     - name: Install `rust` toolchain
       run: |
+        ## Install `rust` toolchain
         rustup toolchain install stable --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
@@ -439,6 +447,7 @@ jobs:
     - uses: actions/checkout@v3
     - name: Install `rust` toolchain
       run: |
+        ## Install `rust` toolchain
         rustup toolchain install nightly --profile minimal
         rustup default nightly
     - uses: Swatinem/rust-cache@v2
@@ -466,26 +475,29 @@ jobs:
         sudo apt-get install jq
     - name: Install `rust` toolchain
       run: |
+        ## Install `rust` toolchain
         rustup toolchain install stable --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`make install`"
       shell: bash
       run: |
+        ## `make install`
         make install DESTDIR=target/size-release/
         make install MULTICALL=y DESTDIR=target/size-multi-release/
         # strip the results
         strip target/size*/usr/local/bin/*
-    - name: "Compute sizes"
+    - name: Compute uutil release sizes
       shell: bash
       run: |
+        ## Compute uutil release sizes
         SIZE=$(du -s target/size-release/usr/local/bin/|awk '{print $1}')
-        SIZEMULTI=$(du -s target/size-multi-release/usr/local/bin/|awk '{print $1}')
+        SIZE_MULTI=$(du -s target/size-multi-release/usr/local/bin/|awk '{print $1}')
         jq -n \
               --arg date "$(date --rfc-email)" \
               --arg sha "$GITHUB_SHA" \
               --arg size "$SIZE" \
-              --arg multisize "$SIZEMULTI" \
+              --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
     - uses: actions/upload-artifact@v3
       with:
@@ -533,7 +545,7 @@ jobs:
       shell: bash
       run: |
         ## VARs setup
-        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # toolchain
         TOOLCHAIN="stable" ## default to "stable" toolchain
         # * specify alternate/non-default TOOLCHAIN for *-pc-windows-gnu targets; gnu targets on Windows are broken for the standard *-pc-windows-msvc toolchain (refs: GH:rust-lang/rust#47048, GH:rust-lang/rust#53454, GH:rust-lang/cargo#6754)
@@ -553,7 +565,7 @@ jobs:
         REF_NAME=${GITHUB_REF#refs/*/}
         unset REF_BRANCH ; case "${GITHUB_REF}" in refs/heads/*) REF_BRANCH=${GITHUB_REF#refs/heads/} ;; esac;
         unset REF_TAG ; case "${GITHUB_REF}" in refs/tags/*) REF_TAG=${GITHUB_REF#refs/tags/} ;; esac;
-        REF_SHAS=${GITHUB_SHA:0:8}
+        REF_SHAS=${GITHUB_SHA:0:10}
         outputs REF_NAME REF_BRANCH REF_TAG REF_SHAS
         # parse target
         unset TARGET_ARCH
@@ -652,6 +664,7 @@ jobs:
         esac
     - name: rust toolchain ~ install
       run: |
+        ## rust toolchain ~ install
         rustup toolchain install ${{ env.RUST_MIN_SRV }} -t ${{ matrix.job.target }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
@@ -662,7 +675,7 @@ jobs:
       shell: bash
       run: |
         ## Dependent VARs setup
-        outputs() { step_id="dep_vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # * determine sub-crate utility list
         UTILITY_LIST="$(./util/show-utils.sh ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }})"
         echo UTILITY_LIST=${UTILITY_LIST}
@@ -694,11 +707,13 @@ jobs:
     - name: Build
       shell: bash
       run: |
+        ## Build
         ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} build --release \
         --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
     - name: Test
       shell: bash
       run: |
+        ## Test
         ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} test --target=${{ matrix.job.target }} \
         ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
@@ -706,6 +721,7 @@ jobs:
     - name: Test individual utilities
       shell: bash
       run: |
+        ## Test individual utilities
         ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} test --target=${{ matrix.job.target }} \
         ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
       env:
@@ -782,10 +798,11 @@ jobs:
       run: |
         ## Install/setup prerequisites
         make prepare-busytest
-    - name: "Run BusyBox test suite"
+    - name: Run BusyBox test suite
       id: summary
       shell: bash
       run: |
+        ## Run BusyBox test suite
         set -v
         cp .busybox-config target/debug/.config
         ## Run BusyBox test suite
@@ -846,16 +863,20 @@ jobs:
       shell: bash
       run: |
         ## VARs setup
-        echo "TEST_SUMMARY_FILE=toybox-result.json" >> $GITHUB_OUTPUT
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        TEST_SUMMARY_FILE="toybox-result.json"
+        outputs TEST_SUMMARY_FILE
     - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v2
     - name: rust toolchain ~ install
       run: |
+        ## rust toolchain ~ install
         rustup toolchain install ${{ env.RUST_MIN_SRV }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
-    - name: "Build coreutils as multiple binaries"
+    - name: Build coreutils as multiple binaries
       shell: bash
       run: |
+        ## Build individual uutil binaries
         set -v
         make
     - name: Install/setup prerequisites
@@ -863,12 +884,12 @@ jobs:
       run: |
         ## Install/setup prerequisites
         make toybox-src
-    - name: "Run Toybox test suite"
+    - name: Run Toybox test suite
       id: summary
       shell: bash
       run: |
-        set -v
         ## Run Toybox test suite
+        set -v
         cd tmp/toybox-*/
         make defconfig
         make tests &> tmp.log || true
@@ -1062,7 +1083,7 @@ jobs:
       shell: bash
       run: |
         ## VARs setup
-        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # toolchain
         TOOLCHAIN="nightly" ## default to "nightly" toolchain (required for certain required unstable compiler flags) ## !maint: refactor when stable channel has needed support
         # * specify gnu-type TOOLCHAIN for windows; `grcov` requires gnu-style code coverage data files
@@ -1105,6 +1126,7 @@ jobs:
         esac
     - name: rust toolchain ~ install
       run: |
+        ## rust toolchain ~ install
         rustup toolchain install ${{ steps.vars.outputs.TOOLCHAIN }} --profile minimal
         rustup default ${{ steps.vars.outputs.TOOLCHAIN }}
     - uses: Swatinem/rust-cache@v2
@@ -1113,7 +1135,7 @@ jobs:
       shell: bash
       run: |
         ## Dependent VARs setup
-        outputs() { step_id="dep_vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # * determine sub-crate utility list
         UTILITY_LIST="$(./util/show-utils.sh ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }})"
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
