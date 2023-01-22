@@ -15,7 +15,7 @@ edition = "2021"
 path = "src/id.rs"
 
 [dependencies]
-clap = { version = "4.0", features = ["wrap_help", "cargo"] }
+clap = { version = "4.1", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.17", package="uucore", path="../../uucore", features=["entries", "process"] }
 selinux = { version="0.3", optional = true }
 

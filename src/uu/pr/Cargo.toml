@@ -15,7 +15,7 @@ edition = "2021"
 path = "src/pr.rs"
 
 [dependencies]
-clap = { version = "4.0", features = ["wrap_help", "cargo"] }
+clap = { version = "4.1", features = ["wrap_help", "cargo"] }
 time = { version = "0.3", features = ["local-offset", "macros", "formatting"] }
 uucore = { version=">=0.0.17", package="uucore", path="../../uucore", features=["entries"] }
 quick-error = "2.0.1"

@@ -16,7 +16,7 @@ path = "src/ls.rs"
 
 [dependencies]
 chrono = { version="^0.4.23", default-features=false, features=["std", "alloc", "clock"]}
-clap = { version = "4.0", features = ["wrap_help", "cargo", "env"] }
+clap = { version = "4.1", features = ["wrap_help", "cargo", "env"] }
 unicode-width = "0.1.8"
 number_prefix = "0.4"
 term_grid = "0.1.5"
