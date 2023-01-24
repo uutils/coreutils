@@ -619,6 +619,7 @@ impl FsMeta for StatFs {
             not(target_vendor = "apple"),
             not(target_os = "android"),
             not(target_os = "freebsd"),
+            not(target_arch = "s390x"),
             target_pointer_width = "64"
         ))]
         return self.f_bsize;
@@ -626,6 +627,7 @@ impl FsMeta for StatFs {
             not(target_env = "musl"),
             not(target_os = "freebsd"),
             any(
+                target_arch = "s390x",
                 target_vendor = "apple",
                 target_os = "android",
                 not(target_pointer_width = "64")
@@ -681,6 +683,7 @@ impl FsMeta for StatFs {
             not(target_vendor = "apple"),
             not(target_os = "android"),
             not(target_os = "freebsd"),
+            not(target_arch = "s390x"),
             target_pointer_width = "64"
         ))]
         return self.f_type;
@@ -690,6 +693,7 @@ impl FsMeta for StatFs {
                 target_vendor = "apple",
                 target_os = "android",
                 target_os = "freebsd",
+                target_arch = "s390x",
                 not(target_pointer_width = "64")
             )
         ))]
