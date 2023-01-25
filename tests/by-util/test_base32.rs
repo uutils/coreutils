@@ -121,5 +121,5 @@ fn test_base32_file_not_found() {
     new_ucmd!()
         .arg("a.txt")
         .fails()
-        .stderr_only("base32: a.txt: No such file or directory");
+        .stderr_only("base32: a.txt: No such file or directory\n");
 }

@@ -601,7 +601,7 @@ fn test_cp_backup_simple_protect_source() {
         .arg(TEST_HELLO_WORLD_SOURCE)
         .fails()
         .stderr_only(format!(
-            "cp: backing up '{}' might destroy source;  '{}' not copied",
+            "cp: backing up '{}' might destroy source;  '{}' not copied\n",
             TEST_HELLO_WORLD_SOURCE, source,
         ));
 
@@ -1524,7 +1524,7 @@ fn test_cp_reflink_insufficient_permission() {
         .arg("unreadable")
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied (os error 13)");
+        .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied (os error 13)\n");
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -1863,9 +1863,9 @@ fn test_copy_through_just_created_symlink() {
             .arg("c")
             .fails()
             .stderr_only(if cfg!(not(target_os = "windows")) {
-                "cp: will not copy 'b/1' through just-created symlink 'c/1'"
+                "cp: will not copy 'b/1' through just-created symlink 'c/1'\n"
             } else {
-                "cp: will not copy 'b/1' through just-created symlink 'c\\1'"
+                "cp: will not copy 'b/1' through just-created symlink 'c\\1'\n"
             });
         if create_t {
             assert_eq!(at.read("a/1"), "world");
@@ -1881,7 +1881,7 @@ fn test_copy_through_dangling_symlink() {
     ucmd.arg("file")
         .arg("target")
         .fails()
-        .stderr_only("cp: not writing through dangling symlink 'target'");
+        .stderr_only("cp: not writing through dangling symlink 'target'\n");
 }
 
 #[test]
@@ -1933,7 +1933,7 @@ fn test_copy_through_dangling_symlink_no_dereference_2() {
     at.symlink_file("nonexistent", "target");
     ucmd.args(&["-P", "file", "target"])
         .fails()
-        .stderr_only("cp: not writing through dangling symlink 'target'");
+        .stderr_only("cp: not writing through dangling symlink 'target'\n");
 }
 
 /// Test that copy through a dangling symbolic link fails, even with --force.
@@ -1945,7 +1945,7 @@ fn test_copy_through_dangling_symlink_force() {
     at.symlink_file("no-such-file", "dest");
     ucmd.args(&["--force", "src", "dest"])
         .fails()
-        .stderr_only("cp: not writing through dangling symlink 'dest'");
+        .stderr_only("cp: not writing through dangling symlink 'dest'\n");
     assert!(!at.file_exists("dest"));
 }
 
@@ -1958,7 +1958,7 @@ fn test_cp_archive_on_nonexistent_file() {
         .arg(TEST_EXISTING_FILE)
         .fails()
         .stderr_only(
-            "cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)",
+            "cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)\n",
         );
 }
 
@@ -2043,7 +2043,7 @@ fn test_cp_dir_vs_file() {
         .arg(TEST_COPY_FROM_FOLDER)
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_only("cp: cannot overwrite non-directory with directory");
+        .stderr_only("cp: cannot overwrite non-directory with directory\n");
 }
 
 #[test]
@@ -2285,9 +2285,9 @@ fn test_copy_directory_to_itself_disallowed() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("d");
     #[cfg(not(windows))]
-    let expected = "cp: cannot copy a directory, 'd', into itself, 'd/d'";
+    let expected = "cp: cannot copy a directory, 'd', into itself, 'd/d'\n";
     #[cfg(windows)]
-    let expected = "cp: cannot copy a directory, 'd', into itself, 'd\\d'";
+    let expected = "cp: cannot copy a directory, 'd', into itself, 'd\\d'\n";
     ucmd.args(&["-R", "d", "d"]).fails().stderr_only(expected);
 }
 
@@ -2299,9 +2299,9 @@ fn test_copy_nested_directory_to_itself_disallowed() {
     at.mkdir("a/b");
     at.mkdir("a/b/c");
     #[cfg(not(windows))]
-    let expected = "cp: cannot copy a directory, 'a/b', into itself, 'a/b/c/b'";
+    let expected = "cp: cannot copy a directory, 'a/b', into itself, 'a/b/c/b'\n";
     #[cfg(windows)]
-    let expected = "cp: cannot copy a directory, 'a/b', into itself, 'a/b/c\\b'";
+    let expected = "cp: cannot copy a directory, 'a/b', into itself, 'a/b/c\\b'\n";
     ucmd.args(&["-R", "a/b", "a/b/c"])
         .fails()
         .stderr_only(expected);
@@ -2361,7 +2361,7 @@ fn test_copy_dir_preserve_permissions_inaccessible_file() {
     ucmd.args(&["-p", "-R", "d1", "d2"])
         .fails()
         .code_is(1)
-        .stderr_only("cp: cannot open 'd1/f' for reading: Permission denied");
+        .stderr_only("cp: cannot open 'd1/f' for reading: Permission denied\n");
     assert!(at.dir_exists("d2"));
     assert!(!at.file_exists("d2/f"));
 
@@ -2378,7 +2378,7 @@ fn test_same_file_backup() {
     at.touch("f");
     ucmd.args(&["--backup", "f", "f"])
         .fails()
-        .stderr_only("cp: 'f' and 'f' are the same file");
+        .stderr_only("cp: 'f' and 'f' are the same file\n");
     assert!(!at.file_exists("f~"));
 }
 
@@ -2390,7 +2390,7 @@ fn test_same_file_force() {
     at.touch("f");
     ucmd.args(&["--force", "f", "f"])
         .fails()
-        .stderr_only("cp: 'f' and 'f' are the same file");
+        .stderr_only("cp: 'f' and 'f' are the same file\n");
     assert!(!at.file_exists("f~"));
 }
 

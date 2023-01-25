@@ -163,7 +163,7 @@ fn test_with_valid_page_ranges() {
     scenario
         .args(&["--pages=20:5", test_file_path])
         .fails()
-        .stderr_is("pr: invalid --pages argument '20:5'")
+        .stderr_is("pr: invalid --pages argument '20:5'\n")
         .stdout_is("");
     new_ucmd!()
         .args(&["--pages=1:5", test_file_path])
@@ -172,17 +172,17 @@ fn test_with_valid_page_ranges() {
     new_ucmd!()
         .args(&["--pages=-1:5", test_file_path])
         .fails()
-        .stderr_is("pr: invalid --pages argument '-1:5'")
+        .stderr_is("pr: invalid --pages argument '-1:5'\n")
         .stdout_is("");
     new_ucmd!()
         .args(&["--pages=1:-5", test_file_path])
         .fails()
-        .stderr_is("pr: invalid --pages argument '1:-5'")
+        .stderr_is("pr: invalid --pages argument '1:-5'\n")
         .stdout_is("");
     new_ucmd!()
         .args(&["--pages=5:1", test_file_path])
         .fails()
-        .stderr_is("pr: invalid --pages argument '5:1'")
+        .stderr_is("pr: invalid --pages argument '5:1'\n")
         .stdout_is("");
 }
 
@@ -364,13 +364,13 @@ fn test_with_mpr_and_column_options() {
     new_ucmd!()
         .args(&["--column=2", "-m", "-n", test_file_path])
         .fails()
-        .stderr_is("pr: cannot specify number of columns when printing in parallel")
+        .stderr_is("pr: cannot specify number of columns when printing in parallel\n")
         .stdout_is("");
 
     new_ucmd!()
         .args(&["-a", "-m", "-n", test_file_path])
         .fails()
-        .stderr_is("pr: cannot specify both printing across and printing in parallel")
+        .stderr_is("pr: cannot specify both printing across and printing in parallel\n")
         .stdout_is("");
 }
 

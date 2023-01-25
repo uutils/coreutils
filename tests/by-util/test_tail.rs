@@ -269,7 +269,7 @@ fn test_follow_redirect_stdin_name_retry() {
             .args(&args)
             .fails()
             .no_stdout()
-            .stderr_is("tail: cannot follow '-' by name")
+            .stderr_is("tail: cannot follow '-' by name\n")
             .code_is(1);
         args.pop();
     }
@@ -295,14 +295,14 @@ fn test_stdin_redirect_dir() {
         .set_stdin(File::open(at.plus("dir")).unwrap())
         .fails()
         .no_stdout()
-        .stderr_is("tail: error reading 'standard input': Is a directory")
+        .stderr_is("tail: error reading 'standard input': Is a directory\n")
         .code_is(1);
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
         .arg("-")
         .fails()
         .no_stdout()
-        .stderr_is("tail: error reading 'standard input': Is a directory")
+        .stderr_is("tail: error reading 'standard input': Is a directory\n")
         .code_is(1);
 }
 
@@ -328,14 +328,14 @@ fn test_stdin_redirect_dir_when_target_os_is_macos() {
         .set_stdin(File::open(at.plus("dir")).unwrap())
         .fails()
         .no_stdout()
-        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory")
+        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n")
         .code_is(1);
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
         .arg("-")
         .fails()
         .no_stdout()
-        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory")
+        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n")
         .code_is(1);
 }
 
@@ -371,7 +371,7 @@ fn test_follow_stdin_name_retry() {
             .args(&args)
             .run()
             .no_stdout()
-            .stderr_is("tail: cannot follow '-' by name")
+            .stderr_is("tail: cannot follow '-' by name\n")
             .code_is(1);
         args.pop();
     }
@@ -827,7 +827,7 @@ fn test_multiple_input_files_missing() {
         .stdout_is_fixture("foobar_follow_multiple.expected")
         .stderr_is(
             "tail: cannot open 'missing1' for reading: No such file or directory\n\
-                tail: cannot open 'missing2' for reading: No such file or directory",
+                tail: cannot open 'missing2' for reading: No such file or directory\n",
         )
         .code_is(1);
 }
@@ -845,7 +845,7 @@ fn test_follow_missing() {
             .no_stdout()
             .stderr_is(
                 "tail: cannot open 'missing' for reading: No such file or directory\n\
-                    tail: no files remaining",
+                    tail: no files remaining\n",
             )
             .code_is(1);
     }
@@ -861,7 +861,7 @@ fn test_follow_name_stdin() {
         .arg("--follow=name")
         .arg("-")
         .run()
-        .stderr_is("tail: cannot follow '-' by name")
+        .stderr_is("tail: cannot follow '-' by name\n")
         .code_is(1);
     ts.ucmd()
         .arg("--follow=name")
@@ -869,7 +869,7 @@ fn test_follow_name_stdin() {
         .arg("-")
         .arg("FILE2")
         .run()
-        .stderr_is("tail: cannot follow '-' by name")
+        .stderr_is("tail: cannot follow '-' by name\n")
         .code_is(1);
 }
 
@@ -2523,7 +2523,7 @@ fn test_no_such_file() {
     new_ucmd!()
         .arg("missing")
         .fails()
-        .stderr_is("tail: cannot open 'missing' for reading: No such file or directory")
+        .stderr_is("tail: cannot open 'missing' for reading: No such file or directory\n")
         .no_stdout()
         .code_is(1);
 }
@@ -3448,7 +3448,7 @@ fn test_when_argument_file_is_a_directory() {
     let at = &ts.fixtures;
     at.mkdir("dir");
 
-    let expected = "tail: error reading 'dir': Is a directory";
+    let expected = "tail: error reading 'dir': Is a directory\n";
     ts.ucmd()
         .arg("dir")
         .fails()
@@ -3486,7 +3486,7 @@ fn test_when_argument_file_is_a_symlink() {
 
     at.symlink_file("dir", "dir_link");
 
-    let expected = "tail: error reading 'dir_link': Is a directory";
+    let expected = "tail: error reading 'dir_link': Is a directory\n";
     ts.ucmd()
         .arg("dir_link")
         .fails()
@@ -3504,7 +3504,7 @@ fn test_when_argument_file_is_a_symlink_to_directory_then_error() {
     at.mkdir("dir");
     at.symlink_file("dir", "dir_link");
 
-    let expected = "tail: error reading 'dir_link': Is a directory";
+    let expected = "tail: error reading 'dir_link': Is a directory\n";
     ts.ucmd()
         .arg("dir_link")
         .fails()
@@ -3562,17 +3562,17 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
 
     #[cfg(all(not(target_os = "freebsd"), not(target_os = "macos")))]
     let expected_stderr = format!(
-        "tail: cannot open '{}' for reading: No such device or address",
+        "tail: cannot open '{}' for reading: No such device or address\n",
         socket
     );
     #[cfg(target_os = "freebsd")]
     let expected_stderr = format!(
-        "tail: cannot open '{}' for reading: Operation not supported",
+        "tail: cannot open '{}' for reading: Operation not supported\n",
         socket
     );
     #[cfg(target_os = "macos")]
     let expected_stderr = format!(
-        "tail: cannot open '{}' for reading: Operation not supported on socket",
+        "tail: cannot open '{}' for reading: Operation not supported on socket\n",
         socket
     );
 

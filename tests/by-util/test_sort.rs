@@ -63,14 +63,14 @@ fn test_invalid_buffer_size() {
         .arg("asd")
         .fails()
         .code_is(2)
-        .stderr_only("sort: invalid --buffer-size argument 'asd'");
+        .stderr_only("sort: invalid --buffer-size argument 'asd'\n");
 
     new_ucmd!()
         .arg("-S")
         .arg("100f")
         .fails()
         .code_is(2)
-        .stderr_only("sort: invalid suffix in --buffer-size argument '100f'");
+        .stderr_only("sort: invalid suffix in --buffer-size argument '100f'\n");
 
     #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
@@ -80,7 +80,7 @@ fn test_invalid_buffer_size() {
         .arg("ext_sort.txt")
         .fails()
         .code_is(2)
-        .stderr_only("sort: --buffer-size argument '1Y' too large");
+        .stderr_only("sort: --buffer-size argument '1Y' too large\n");
 
     #[cfg(target_pointer_width = "32")]
     {
@@ -94,7 +94,7 @@ fn test_invalid_buffer_size() {
                 .fails()
                 .code_is(2)
                 .stderr_only(format!(
-                    "sort: --buffer-size argument '{}' too large",
+                    "sort: --buffer-size argument '{}' too large\n",
                     buffer_size
                 ));
         }
@@ -529,7 +529,7 @@ fn test_keys_invalid_field() {
     new_ucmd!()
         .args(&["-k", "1."])
         .fails()
-        .stderr_only("sort: failed to parse key '1.': failed to parse character index '': cannot parse integer from empty string");
+        .stderr_only("sort: failed to parse key '1.': failed to parse character index '': cannot parse integer from empty string\n");
 }
 
 #[test]
@@ -537,7 +537,7 @@ fn test_keys_invalid_field_option() {
     new_ucmd!()
         .args(&["-k", "1.1x"])
         .fails()
-        .stderr_only("sort: failed to parse key '1.1x': invalid option: 'x'");
+        .stderr_only("sort: failed to parse key '1.1x': invalid option: 'x'\n");
 }
 
 #[test]
@@ -545,7 +545,7 @@ fn test_keys_invalid_field_zero() {
     new_ucmd!()
         .args(&["-k", "0.1"])
         .fails()
-        .stderr_only("sort: failed to parse key '0.1': field index can not be 0");
+        .stderr_only("sort: failed to parse key '0.1': field index can not be 0\n");
 }
 
 #[test]
@@ -553,7 +553,7 @@ fn test_keys_invalid_char_zero() {
     new_ucmd!()
         .args(&["-k", "1.0"])
         .fails()
-        .stderr_only("sort: failed to parse key '1.0': invalid character index 0 for the start position of a field");
+        .stderr_only("sort: failed to parse key '1.0': invalid character index 0 for the start position of a field\n");
 }
 
 #[test]
@@ -801,7 +801,7 @@ fn test_check_unique() {
         .pipe_in("A\nA\n")
         .fails()
         .code_is(1)
-        .stderr_only("sort: -:2: disorder: A");
+        .stderr_only("sort: -:2: disorder: A\n");
 }
 
 #[test]
@@ -847,9 +847,9 @@ fn test_nonexistent_file() {
         .code_is(2)
         .stderr_only(
             #[cfg(not(windows))]
-            "sort: cannot read: nonexistent.txt: No such file or directory",
+            "sort: cannot read: nonexistent.txt: No such file or directory\n",
             #[cfg(windows)]
-            "sort: cannot read: nonexistent.txt: The system cannot find the file specified.",
+            "sort: cannot read: nonexistent.txt: The system cannot find the file specified.\n",
         );
 }
 
@@ -928,7 +928,7 @@ fn test_compress_fail() {
             "10",
         ])
         .fails()
-        .stderr_only("sort: couldn't execute compress program: errno 2");
+        .stderr_only("sort: couldn't execute compress program: errno 2\n");
     // With coverage, it fails with a different error:
     // "thread 'main' panicked at 'called `Option::unwrap()` on ...
     // So, don't check the output
@@ -1018,9 +1018,9 @@ fn test_verifies_out_file() {
             .code_is(2)
             .stderr_only(
                 #[cfg(not(windows))]
-                "sort: open failed: nonexistent_dir/nonexistent_file: No such file or directory",
+                "sort: open failed: nonexistent_dir/nonexistent_file: No such file or directory\n",
                 #[cfg(windows)]
-                "sort: open failed: nonexistent_dir/nonexistent_file: The system cannot find the path specified.",
+                "sort: open failed: nonexistent_dir/nonexistent_file: The system cannot find the path specified.\n",
             );
     }
 }
@@ -1047,7 +1047,7 @@ fn test_verifies_input_files() {
         .args(&["/dev/random", "nonexistent_file"])
         .fails()
         .code_is(2)
-        .stderr_is("sort: cannot read: nonexistent_file: No such file or directory");
+        .stderr_is("sort: cannot read: nonexistent_file: No such file or directory\n");
 }
 
 #[test]

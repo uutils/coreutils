@@ -239,7 +239,7 @@ fn test_realpath_when_symlink_is_absolute_and_enoent() {
         .run()
         .stdout_contains("\\dir2\\bar\n")
         .stdout_contains("\\dir2\\baz\n")
-        .stderr_is("realpath: dir1/foo2: No such file or directory");
+        .stderr_is("realpath: dir1/foo2: No such file or directory\n");
 }
 
 #[test]

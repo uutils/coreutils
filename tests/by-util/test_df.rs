@@ -321,13 +321,13 @@ fn test_include_exclude_same_type() {
     new_ucmd!()
         .args(&["-t", "ext4", "-x", "ext4"])
         .fails()
-        .stderr_is("df: file system type 'ext4' both selected and excluded");
+        .stderr_is("df: file system type 'ext4' both selected and excluded\n");
     new_ucmd!()
         .args(&["-t", "ext4", "-x", "ext4", "-t", "ext3", "-x", "ext3"])
         .fails()
         .stderr_is(
             "df: file system type 'ext4' both selected and excluded\n\
-             df: file system type 'ext3' both selected and excluded",
+             df: file system type 'ext3' both selected and excluded\n",
         );
 }
 
@@ -853,7 +853,7 @@ fn test_nonexistent_file() {
     new_ucmd!()
         .arg("does-not-exist")
         .fails()
-        .stderr_only("df: does-not-exist: No such file or directory");
+        .stderr_only("df: does-not-exist: No such file or directory\n");
     new_ucmd!()
         .args(&["--output=file", "does-not-exist", "."])
         .fails()

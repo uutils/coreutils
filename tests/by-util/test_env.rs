@@ -90,7 +90,7 @@ fn test_unset_invalid_variables() {
     // with this error: Error { kind: InvalidInput, message: "nul byte found in provided data" }
     for var in ["", "a=b"] {
         new_ucmd!().arg("-u").arg(var).run().stderr_only(format!(
-            "env: cannot unset {}: Invalid argument",
+            "env: cannot unset {}: Invalid argument\n",
             var.quote()
         ));
     }
@@ -130,7 +130,7 @@ fn test_empty_name() {
         .arg("-i")
         .arg("=xyz")
         .run()
-        .stderr_only("env: warning: no name specified for value 'xyz'");
+        .stderr_only("env: warning: no name specified for value 'xyz'\n");
 }
 
 #[test]

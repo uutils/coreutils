@@ -216,7 +216,7 @@ fn test_chmod_ugoa() {
         .fails()
         .code_is(1)
         // spell-checker:disable-next-line
-        .stderr_is("chmod: file: new permissions are r-xrwxrwx, not r-xr-xr-x");
+        .stderr_is("chmod: file: new permissions are r-xrwxrwx, not r-xr-xr-x\n");
     assert_eq!(
         metadata(at.plus("file")).unwrap().permissions().mode(),
         0o100577
@@ -314,7 +314,7 @@ fn test_permission_denied() {
         .arg("o=r")
         .arg("d")
         .fails()
-        .stderr_is("chmod: 'd/no-x/y': Permission denied");
+        .stderr_is("chmod: 'd/no-x/y': Permission denied\n");
 }
 
 #[test]
@@ -341,7 +341,7 @@ fn test_chmod_recursive() {
         .arg("a")
         .arg("z")
         .fails()
-        .stderr_is("chmod: Permission denied");
+        .stderr_is("chmod: Permission denied\n");
 
     assert_eq!(at.metadata("z/y").permissions().mode(), 0o100444);
     assert_eq!(at.metadata("a/a").permissions().mode(), 0o100444);

@@ -60,7 +60,7 @@ fn test_from_iec_i_requires_suffix() {
             .fails()
             .code_is(2)
             .stderr_is(format!(
-                "numfmt: missing 'i' suffix in input: '{}' (e.g Ki/Mi/Gi)",
+                "numfmt: missing 'i' suffix in input: '{}' (e.g Ki/Mi/Gi)\n",
                 number
             ));
     }
@@ -151,7 +151,7 @@ fn test_header_error_if_non_numeric() {
     new_ucmd!()
         .args(&["--header=two"])
         .run()
-        .stderr_is("numfmt: invalid header value 'two'");
+        .stderr_is("numfmt: invalid header value 'two'\n");
 }
 
 #[test]
@@ -159,7 +159,7 @@ fn test_header_error_if_0() {
     new_ucmd!()
         .args(&["--header=0"])
         .run()
-        .stderr_is("numfmt: invalid header value '0'");
+        .stderr_is("numfmt: invalid header value '0'\n");
 }
 
 #[test]
@@ -167,7 +167,7 @@ fn test_header_error_if_negative() {
     new_ucmd!()
         .args(&["--header=-3"])
         .run()
-        .stderr_is("numfmt: invalid header value '-3'");
+        .stderr_is("numfmt: invalid header value '-3'\n");
 }
 
 #[test]
@@ -458,7 +458,7 @@ fn test_delimiter_must_not_be_more_than_one_character() {
     new_ucmd!()
         .args(&["--delimiter", "sad"])
         .fails()
-        .stderr_is("numfmt: the delimiter must be a single character");
+        .stderr_is("numfmt: the delimiter must be a single character\n");
 }
 
 #[test]

@@ -182,7 +182,7 @@ fn test_directory() {
     s.ucmd()
         .args(&["test_directory"])
         .fails()
-        .stderr_is("cat: test_directory: Is a directory");
+        .stderr_is("cat: test_directory: Is a directory\n");
 }
 
 #[test]
@@ -194,7 +194,7 @@ fn test_directory_and_file() {
         s.ucmd()
             .args(&["test_directory2", fixture])
             .fails()
-            .stderr_is("cat: test_directory2: Is a directory")
+            .stderr_is("cat: test_directory2: Is a directory\n")
             .stdout_is_fixture(fixture);
     }
 }
@@ -527,7 +527,7 @@ fn test_write_to_self() {
         .arg("second_file")
         .fails()
         .code_is(2)
-        .stderr_only("cat: first_file: input file is output file\ncat: first_file: input file is output file");
+        .stderr_only("cat: first_file: input file is output file\ncat: first_file: input file is output file\n");
 
     assert_eq!(
         s.fixtures.read("first_file"),

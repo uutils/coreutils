@@ -275,7 +275,7 @@ fn test_mv_same_file_not_dot_dir() {
 
     at.mkdir(dir);
     ucmd.arg(dir).arg(dir).fails().stderr_is(format!(
-        "mv: cannot move '{d}' to a subdirectory of itself, '{d}/{d}'",
+        "mv: cannot move '{d}' to a subdirectory of itself, '{d}/{d}'\n",
         d = dir,
     ));
 }

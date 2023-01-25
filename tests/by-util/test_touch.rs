@@ -712,7 +712,7 @@ fn test_touch_no_such_file_error_msg() {
     let path_str = path.to_str().unwrap();
 
     new_ucmd!().arg(&path).fails().stderr_only(format!(
-        "touch: cannot touch '{}': No such file or directory",
+        "touch: cannot touch '{}': No such file or directory\n",
         path_str
     ));
 }
@@ -755,7 +755,7 @@ fn test_touch_permission_denied_error_msg() {
 
     let full_path = at.plus_as_string(path_str);
     ucmd.arg(&full_path).fails().stderr_only(format!(
-        "touch: cannot touch '{}': Permission denied",
+        "touch: cannot touch '{}': Permission denied\n",
         &full_path
     ));
 }
