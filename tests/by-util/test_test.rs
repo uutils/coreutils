@@ -836,6 +836,15 @@ fn test_or_as_filename() {
 }
 
 #[test]
+#[ignore = "TODO: Busybox has this working"]
+fn test_filename_or_with_equal() {
+    new_ucmd!()
+        .args(&["-f", "=", "a", "-o", "b"])
+        .run()
+        .code_is(0);
+}
+
+#[test]
 #[ignore = "GNU considers this an error"]
 fn test_string_length_and_nothing() {
     new_ucmd!().args(&["-n", "a", "-a"]).run().code_is(2);

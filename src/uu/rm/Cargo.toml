@@ -1,6 +1,6 @@
 [package]
 name = "uu_rm"
-version = "0.0.16"
+version = "0.0.17"
 authors = ["uutils developers"]
 license = "MIT"
 description = "rm ~ (uutils) remove PATHNAME"
@@ -18,7 +18,7 @@ path = "src/rm.rs"
 clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 walkdir = "2.2"
 remove_dir_all = "0.7.0"
-uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["fs"] }
+uucore = { version=">=0.0.17", package="uucore", path="../../uucore", features=["fs"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.137"

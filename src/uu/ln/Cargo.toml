@@ -1,6 +1,6 @@
 [package]
 name = "uu_ln"
-version = "0.0.16"
+version = "0.0.17"
 authors = ["uutils developers"]
 license = "MIT"
 description = "ln ~ (uutils) create a (file system) link to TARGET"
@@ -16,7 +16,7 @@ path = "src/ln.rs"
 
 [dependencies]
 clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["fs"] }
+uucore = { version=">=0.0.17", package="uucore", path="../../uucore", features=["fs"] }
 
 [[bin]]
 name = "ln"

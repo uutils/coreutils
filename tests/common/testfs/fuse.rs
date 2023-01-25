@@ -12,7 +12,6 @@ use std::sync::MutexGuard;
 use std::time::{Duration, SystemTime};
 
 use crate::common::testfs::util::log_testfs;
-use fuser::{FileType, ReplyData};
 use fuser::Filesystem;
 use fuser::KernelConfig;
 use fuser::ReplyAttr;
@@ -23,6 +22,7 @@ use fuser::ReplyOpen;
 use fuser::Request;
 use fuser::FUSE_ROOT_ID;
 use fuser::{FileAttr, ReplyXattr, TimeOrNow};
+use fuser::{FileType, ReplyData};
 use libc;
 use libc::c_int;
 use nix::errno::Errno;
