@@ -1545,7 +1545,7 @@ fn test_closes_file_descriptors() {
         .arg("--reflink=auto")
         .arg("dir_with_10_files/")
         .arg("dir_with_10_files_new/")
-        .with_limit(Resource::NOFILE, limit_fd, limit_fd)
+        .limit(Resource::NOFILE, limit_fd, limit_fd)
         .succeeds();
 }
 
@@ -1692,7 +1692,8 @@ fn test_cp_reflink_always_override() {
         .succeeds();
 
     if !scene
-        .cmd_keepenv("env")
+        .cmd("env")
+        .keep_env()
         .args(&["mkfs.btrfs", "--rootdir", ROOTDIR, DISK])
         .run()
         .succeeded()
@@ -1704,7 +1705,8 @@ fn test_cp_reflink_always_override() {
     scene.fixtures.mkdir(MOUNTPOINT);
 
     let mount = scene
-        .cmd_keepenv("sudo")
+        .cmd("sudo")
+        .keep_env()
         .args(&["-E", "--non-interactive", "mount", DISK, MOUNTPOINT])
         .run();
 
@@ -1730,7 +1732,8 @@ fn test_cp_reflink_always_override() {
         .succeeds();
 
     scene
-        .cmd_keepenv("sudo")
+        .cmd("sudo")
+        .keep_env()
         .args(&["-E", "--non-interactive", "umount", MOUNTPOINT])
         .succeeds();
 }

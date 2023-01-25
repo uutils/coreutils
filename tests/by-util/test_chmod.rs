@@ -48,7 +48,7 @@ fn run_single_test(test: &TestCase, at: &AtPath, mut ucmd: UCommand) {
     let r = ucmd.run();
     if !r.succeeded() {
         println!("{}", r.stderr_str());
-        panic!("{}: failed", ucmd);
+        panic!("{ucmd}: failed");
     }
 
     let perms = at.metadata(TEST_FILE).permissions().mode();
