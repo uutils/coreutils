@@ -383,6 +383,12 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        case '${{ matrix.job.os }}' in
+          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse libfuse-dev pkg-config ;; # needed for fuser 
+        esac
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
@@ -412,6 +418,12 @@ jobs:
         ## Install `rust` toolchain
         rustup toolchain install stable --profile minimal
         rustup default stable
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        case '${{ matrix.job.os }}' in
+          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse libfuse-dev pkg-config ;; # needed for fuser 
+        esac
     - uses: Swatinem/rust-cache@v2
     - name: "`make build`"
       shell: bash
@@ -444,6 +456,12 @@ jobs:
         ## Install `rust` toolchain
         rustup toolchain install stable --profile minimal
         rustup default stable
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        case '${{ matrix.job.os }}' in
+          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse libfuse-dev pkg-config ;; # needed for fuser 
+        esac
     - uses: Swatinem/rust-cache@v2
     - name: Test
       run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
@@ -469,6 +487,12 @@ jobs:
         ## Install `rust` toolchain
         rustup toolchain install nightly --profile minimal
         rustup default nightly
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        case '${{ matrix.job.os }}' in
+          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse libfuse-dev pkg-config ;; # needed for fuser 
+        esac
     - uses: Swatinem/rust-cache@v2
     - name: Test
       run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
@@ -681,7 +705,7 @@ jobs:
             echo "foo" > /home/runner/.plan
             # needed for fuser 
             sudo apt-get -y update
-            sudo apt-get -y install fuse libfuse-dev pkg-config 
+            sudo apt-get -y install fuse libfuse-dev pkg-config
             ;;
         esac
     - name: rust toolchain ~ install
@@ -689,6 +713,12 @@ jobs:
         ## rust toolchain ~ install
         rustup toolchain install ${{ env.RUST_MIN_SRV }} -t ${{ matrix.job.target }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
+    - name: Install/setup prerequisites for fuser
+      shell: bash
+      run: |
+        case '${{ matrix.job.os }}' in
+          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse libfuse-dev pkg-config ;; # needed for fuser 
+        esac
     - uses: Swatinem/rust-cache@v2
       with:
         key: ${{ matrix.job.os }}-${{ matrix.job.target }}
