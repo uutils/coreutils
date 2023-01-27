@@ -58,8 +58,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
     match Settings::from(&matches) {
         Ok(settings) => split(&settings),
-        Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{}", e))),
-        Err(e) => Err(USimpleError::new(1, format!("{}", e))),
+        Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{e}"))),
+        Err(e) => Err(USimpleError::new(1, format!("{e}"))),
     }
 }
 
@@ -343,13 +343,13 @@ enum StrategyError {
 impl fmt::Display for StrategyError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Lines(e) => write!(f, "invalid number of lines: {}", e),
-            Self::Bytes(e) => write!(f, "invalid number of bytes: {}", e),
+            Self::Lines(e) => write!(f, "invalid number of lines: {e}"),
+            Self::Bytes(e) => write!(f, "invalid number of bytes: {e}"),
             Self::NumberType(NumberTypeError::NumberOfChunks(s)) => {
-                write!(f, "invalid number of chunks: {}", s)
+                write!(f, "invalid number of chunks: {s}")
             }
             Self::NumberType(NumberTypeError::ChunkNumber(s)) => {
-                write!(f, "invalid chunk number: {}", s)
+                write!(f, "invalid chunk number: {s}")
             }
             Self::MultipleWays => write!(f, "cannot split in more than one way"),
         }
@@ -478,7 +478,7 @@ impl fmt::Display for SettingsError {
         match self {
             Self::Strategy(e) => e.fmt(f),
             Self::SuffixNotParsable(s) => write!(f, "invalid suffix length: {}", s.quote()),
-            Self::SuffixTooSmall(i) => write!(f, "the suffix length needs to be at least {}", i),
+            Self::SuffixTooSmall(i) => write!(f, "the suffix length needs to be at least {i}"),
             Self::SuffixContainsSeparator(s) => write!(
                 f,
                 "invalid suffix {}, contains directory separator",
@@ -487,8 +487,7 @@ impl fmt::Display for SettingsError {
             #[cfg(windows)]
             Self::NotSupported => write!(
                 f,
-                "{} is currently not supported in this platform",
-                OPT_FILTER
+                "{OPT_FILTER} is currently not supported in this platform"
             ),
         }
     }
@@ -547,7 +546,7 @@ impl Settings {
         if platform::paths_refer_to_same_file(&self.input, filename) {
             return Err(io::Error::new(
                 ErrorKind::Other,
-                format!("'{}' would overwrite input; aborting", filename),
+                format!("'{filename}' would overwrite input; aborting"),
             ));
         }
 
@@ -1305,7 +1304,7 @@ fn split(settings: &Settings) -> UResult<()> {
                     // allowable filenames, we use `ErrorKind::Other` to
                     // indicate that. A special error message needs to be
                     // printed in that case.
-                    ErrorKind::Other => Err(USimpleError::new(1, format!("{}", e))),
+                    ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
                     ErrorKind::BrokenPipe => Ok(()),
                     _ => Err(uio_error!(e, "input/output error")),
                 },
@@ -1324,7 +1323,7 @@ fn split(settings: &Settings) -> UResult<()> {
                     // allowable filenames, we use `ErrorKind::Other` to
                     // indicate that. A special error message needs to be
                     // printed in that case.
-                    ErrorKind::Other => Err(USimpleError::new(1, format!("{}", e))),
+                    ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
                     ErrorKind::BrokenPipe => Ok(()),
                     _ => Err(uio_error!(e, "input/output error")),
                 },
@@ -1343,7 +1342,7 @@ fn split(settings: &Settings) -> UResult<()> {
                     // allowable filenames, we use `ErrorKind::Other` to
                     // indicate that. A special error message needs to be
                     // printed in that case.
-                    ErrorKind::Other => Err(USimpleError::new(1, format!("{}", e))),
+                    ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
                     ErrorKind::BrokenPipe => Ok(()),
                     _ => Err(uio_error!(e, "input/output error")),
                 },

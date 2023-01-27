@@ -70,7 +70,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 return Err(r.into());
             }
 
-            return Err(UUsageError::new(libc::EXIT_FAILURE, format!("{}.\n", r)));
+            return Err(UUsageError::new(libc::EXIT_FAILURE, format!("{r}.\n")));
         }
     };
 

@@ -41,7 +41,7 @@ impl Error for JoinError {}
 impl Display for JoinError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::IOError(e) => write!(f, "io error: {}", e),
+            Self::IOError(e) => write!(f, "io error: {e}"),
             Self::UnorderedInput(e) => f.write_str(e),
         }
     }
@@ -692,7 +692,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match exec(file1, file2, settings) {
         Ok(_) => Ok(()),
-        Err(e) => Err(USimpleError::new(1, format!("{}", e))),
+        Err(e) => Err(USimpleError::new(1, format!("{e}"))),
     }
 }
 

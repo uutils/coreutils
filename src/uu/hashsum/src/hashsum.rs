@@ -520,13 +520,12 @@ where
             // where `n` is the number of bytes.
             let bytes = options.digest.output_bits() / 4;
             let modifier = if bytes > 0 {
-                format!("{{{}}}", bytes)
+                format!("{{{bytes}}}")
             } else {
                 "+".to_string()
             };
             let gnu_re = Regex::new(&format!(
-                r"^(?P<digest>[a-fA-F0-9]{}) (?P<binary>[ \*])(?P<fileName>.*)",
-                modifier,
+                r"^(?P<digest>[a-fA-F0-9]{modifier}) (?P<binary>[ \*])(?P<fileName>.*)",
             ))
             .map_err(|_| HashsumError::InvalidRegex)?;
             let bsd_re = Regex::new(&format!(
@@ -579,7 +578,7 @@ where
                             uucore::util_name(),
                             ck_filename
                         );
-                        println!("{}: FAILED open or read", ck_filename);
+                        println!("{ck_filename}: FAILED open or read");
                         continue;
                     }
                     Ok(file) => file,
@@ -604,11 +603,11 @@ where
                 // easier (and more important) on Unix than on Windows.
                 if sum == real_sum {
                     if !options.quiet {
-                        println!("{}: OK", ck_filename);
+                        println!("{ck_filename}: OK");
                     }
                 } else {
                     if !options.status {
-                        println!("{}: FAILED", ck_filename);
+                        println!("{ck_filename}: FAILED");
                     }
                     failed_cksum += 1;
                 }
@@ -624,7 +623,7 @@ where
             if options.tag {
                 println!("{} ({}) = {}", options.algoname, filename.display(), sum);
             } else if options.nonames {
-                println!("{}", sum);
+                println!("{sum}");
             } else {
                 println!("{} {}{}", sum, binary_marker, filename.display());
             }

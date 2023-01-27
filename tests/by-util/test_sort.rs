@@ -12,17 +12,17 @@ use crate::common::util::*;
 fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {
         new_ucmd!()
-            .arg(format!("{}.txt", file_name))
+            .arg(format!("{file_name}.txt"))
             .args(&args.split_whitespace().collect::<Vec<&str>>())
             .succeeds()
-            .stdout_is_fixture(format!("{}.expected", file_name));
+            .stdout_is_fixture(format!("{file_name}.expected"));
 
         new_ucmd!()
-            .arg(format!("{}.txt", file_name))
+            .arg(format!("{file_name}.txt"))
             .arg("--debug")
             .args(&args.split_whitespace().collect::<Vec<&str>>())
             .succeeds()
-            .stdout_is_fixture(format!("{}.expected.debug", file_name));
+            .stdout_is_fixture(format!("{file_name}.expected.debug"));
     }
 }
 
@@ -810,21 +810,21 @@ fn test_dictionary_and_nonprinting_conflicts() {
     for restricted_arg in ["d", "i"] {
         for conflicting_arg in &conflicting_args {
             new_ucmd!()
-                .arg(&format!("-{}{}", restricted_arg, conflicting_arg))
+                .arg(&format!("-{restricted_arg}{conflicting_arg}"))
                 .fails();
         }
         for conflicting_arg in &conflicting_args {
             new_ucmd!()
                 .args(&[
-                    format!("-{}", restricted_arg).as_str(),
+                    format!("-{restricted_arg}").as_str(),
                     "-k",
-                    &format!("1,1{}", conflicting_arg),
+                    &format!("1,1{conflicting_arg}"),
                 ])
                 .succeeds();
         }
         for conflicting_arg in &conflicting_args {
             new_ucmd!()
-                .args(&["-k", &format!("1{},1{}", restricted_arg, conflicting_arg)])
+                .args(&["-k", &format!("1{restricted_arg},1{conflicting_arg}")])
                 .fails();
         }
     }

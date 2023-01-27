@@ -212,7 +212,7 @@ impl Uniq {
         }
 
         if self.show_counts {
-            writer.write_all(format!("{:7} {}", count, line).as_bytes())
+            writer.write_all(format!("{count:7} {line}").as_bytes())
         } else {
             writer.write_all(line.as_bytes())
         }
@@ -225,7 +225,7 @@ impl Uniq {
 fn get_line_string(io_line: io::Result<Vec<u8>>) -> UResult<String> {
     let line_bytes = io_line.map_err_context(|| "failed to split lines".to_string())?;
     String::from_utf8(line_bytes)
-        .map_err(|e| USimpleError::new(1, format!("failed to convert line to utf8: {}", e)))
+        .map_err(|e| USimpleError::new(1, format!("failed to convert line to utf8: {e}")))
 }
 
 fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> UResult<Option<T>> {

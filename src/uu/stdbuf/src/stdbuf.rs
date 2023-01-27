@@ -120,8 +120,7 @@ fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramO
                 |m| {
                     Ok(BufferType::Size(m.try_into().map_err(|_| {
                         ProgramOptionsError(format!(
-                            "invalid mode '{}': Value too large for defined data type",
-                            x
+                            "invalid mode '{x}': Value too large for defined data type"
                         ))
                     })?))
                 },

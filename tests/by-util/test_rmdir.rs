@@ -57,7 +57,7 @@ fn test_rmdir_nonempty_directory_no_parents() {
 
     ucmd.arg(DIR)
         .fails()
-        .stderr_is(format!("rmdir: failed to remove 'dir': {}\n", NOT_EMPTY));
+        .stderr_is(format!("rmdir: failed to remove 'dir': {NOT_EMPTY}\n"));
 
     assert!(at.dir_exists(DIR));
 }
@@ -70,8 +70,7 @@ fn test_rmdir_nonempty_directory_with_parents() {
     at.touch(NESTED_DIR_FILE);
 
     ucmd.arg("-p").arg(NESTED_DIR).fails().stderr_is(format!(
-        "rmdir: failed to remove 'dir/ect/ory': {}\n",
-        NOT_EMPTY
+        "rmdir: failed to remove 'dir/ect/ory': {NOT_EMPTY}\n"
     ));
 
     assert!(at.dir_exists(NESTED_DIR));
@@ -119,8 +118,7 @@ fn test_rmdir_not_a_directory() {
         .fails()
         .no_stdout()
         .stderr_is(format!(
-            "rmdir: failed to remove 'file': {}\n",
-            NOT_A_DIRECTORY
+            "rmdir: failed to remove 'file': {NOT_A_DIRECTORY}\n"
         ));
 }
 
@@ -152,8 +150,7 @@ fn test_verbose_multi() {
              rmdir: removing directory, 'dir'\n",
         )
         .stderr_is(format!(
-            "rmdir: failed to remove 'does_not_exist': {}\n",
-            NOT_FOUND
+            "rmdir: failed to remove 'does_not_exist': {NOT_FOUND}\n"
         ));
 }
 
@@ -171,10 +168,7 @@ fn test_verbose_nested_failure() {
             "rmdir: removing directory, 'dir/ect/ory'\n\
              rmdir: removing directory, 'dir/ect'\n",
         )
-        .stderr_is(format!(
-            "rmdir: failed to remove 'dir/ect': {}\n",
-            NOT_EMPTY
-        ));
+        .stderr_is(format!("rmdir: failed to remove 'dir/ect': {NOT_EMPTY}\n"));
 }
 
 #[cfg(unix)]
@@ -214,8 +208,7 @@ fn test_rmdir_remove_symlink_file() {
     at.symlink_file("file", "fl");
 
     ucmd.arg("fl/").fails().stderr_is(format!(
-        "rmdir: failed to remove 'fl/': {}\n",
-        NOT_A_DIRECTORY
+        "rmdir: failed to remove 'fl/': {NOT_A_DIRECTORY}\n"
     ));
 }
 

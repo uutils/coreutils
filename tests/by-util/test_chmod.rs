@@ -414,10 +414,9 @@ fn test_chmod_symlink_non_existing_file() {
     let non_existing = "test_chmod_symlink_non_existing_file";
     let test_symlink = "test_chmod_symlink_non_existing_file_symlink";
     let expected_stdout = &format!(
-        "failed to change mode of '{}' from 0000 (---------) to 0000 (---------)",
-        test_symlink
+        "failed to change mode of '{test_symlink}' from 0000 (---------) to 0000 (---------)"
     );
-    let expected_stderr = &format!("cannot operate on dangling symlink '{}'", test_symlink);
+    let expected_stderr = &format!("cannot operate on dangling symlink '{test_symlink}'");
 
     at.symlink_file(non_existing, test_symlink);
 
@@ -455,10 +454,7 @@ fn test_chmod_symlink_non_existing_file_recursive() {
     let test_directory = "test_chmod_symlink_non_existing_file_directory";
 
     at.mkdir(test_directory);
-    at.symlink_file(
-        non_existing,
-        &format!("{}/{}", test_directory, test_symlink),
-    );
+    at.symlink_file(non_existing, &format!("{test_directory}/{test_symlink}"));
 
     // this should succeed
     scene
@@ -472,8 +468,7 @@ fn test_chmod_symlink_non_existing_file_recursive() {
 
     let expected_stdout = &format!(
         // spell-checker:disable-next-line
-        "mode of '{}' retained as 0755 (rwxr-xr-x)",
-        test_directory
+        "mode of '{test_directory}' retained as 0755 (rwxr-xr-x)"
     );
 
     // '-v': this should succeed without stderr

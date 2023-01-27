@@ -47,7 +47,7 @@ fn format_flo32(f: f32) -> String {
 
     if f.classify() == FpCategory::Subnormal {
         // subnormal numbers will be normal as f64, so will print with a wrong precision
-        format!("{:width$e}", f) // subnormal numbers
+        format!("{f:width$e}") // subnormal numbers
     } else {
         format_float(f64::from(f), width, precision)
     }
@@ -63,9 +63,9 @@ fn format_float(f: f64, width: usize, precision: usize) -> String {
             return format!("{:>width$}", "-0");
         }
         if f == 0.0 || !f.is_finite() {
-            return format!("{:width$}", f);
+            return format!("{f:width$}");
         }
-        return format!("{:width$e}", f); // subnormal numbers
+        return format!("{f:width$e}"); // subnormal numbers
     }
 
     let mut l = f.abs().log10().floor() as i32;
@@ -79,7 +79,7 @@ fn format_float(f: f64, width: usize, precision: usize) -> String {
     if l >= 0 && l <= (precision as i32 - 1) {
         format!("{:width$.dec$}", f, dec = (precision - 1) - l as usize)
     } else if l == -1 {
-        format!("{:width$.dec$}", f, dec = precision)
+        format!("{f:width$.precision$}")
     } else {
         format!("{:width$.dec$e}", f, dec = precision - 1)
     }

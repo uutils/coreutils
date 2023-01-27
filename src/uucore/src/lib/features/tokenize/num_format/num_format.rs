@@ -222,18 +222,18 @@ pub fn num_format(field: &FormatField, in_str_opt: Option<&String>) -> Option<St
             match field_char {
                 'u' | 'i' | 'd' => {
                     tmp.pre_decimal = Some(
-                        format!("{}", provided_num));
+                        format!("{provided_num}"));
                 },
                 'x' | 'X' => {
                     tmp.pre_decimal = Some(
-                        format!("{:x}", provided_num));
+                        format!("{provided_num:x}"));
                 },
                 'o' => {
                     tmp.pre_decimal = Some(
-                        format!("{:o}", provided_num));
+                        format!("{provided_num:o}"));
                 },
                 'e' | 'E' | 'g' | 'G' => {
-                    let as_str = format!("{}", provided_num);
+                    let as_str = format!("{provided_num}");
                     let initial_prefix = get_initial_prefix(
                         &as_str,
                         field.field_type
@@ -243,7 +243,7 @@ pub fn num_format(field: &FormatField, in_str_opt: Option<&String>) -> Option<St
                 },
                 _ => {
                     tmp.pre_decimal = Some(
-                        format!("{}", provided_num));
+                        format!("{provided_num}"));
                     tmp.post_decimal = Some(String::from("0"));
                 }
             }

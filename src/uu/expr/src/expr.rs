@@ -73,7 +73,7 @@ fn process_expr(token_strings: &[&str]) -> Result<String, String> {
 }
 
 fn print_expr_ok(expr_result: &str) -> UResult<()> {
-    println!("{}", expr_result);
+    println!("{expr_result}");
     if expr_result.parse::<i32>() == Ok(0) || expr_result.is_empty() {
         Err(1.into())
     } else {

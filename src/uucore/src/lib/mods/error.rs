@@ -439,9 +439,9 @@ impl Display for UIoError {
             &message
         };
         if let Some(ctx) = &self.context {
-            write!(f, "{}: {}", ctx, message)
+            write!(f, "{ctx}: {message}")
         } else {
-            write!(f, "{}", message)
+            write!(f, "{message}")
         }
     }
 }

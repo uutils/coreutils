@@ -29,8 +29,8 @@ fn test_canonicalize() {
     let (at, mut ucmd) = at_and_ucmd!();
     let actual = ucmd.arg("-f").arg(".").run().stdout_move_str();
     let expect = at.root_dir_resolved() + "\n";
-    println!("actual: {:?}", actual);
-    println!("expect: {:?}", expect);
+    println!("actual: {actual:?}");
+    println!("expect: {expect:?}");
     assert_eq!(actual, expect);
 }
 
@@ -39,8 +39,8 @@ fn test_canonicalize_existing() {
     let (at, mut ucmd) = at_and_ucmd!();
     let actual = ucmd.arg("-e").arg(".").run().stdout_move_str();
     let expect = at.root_dir_resolved() + "\n";
-    println!("actual: {:?}", actual);
-    println!("expect: {:?}", expect);
+    println!("actual: {actual:?}");
+    println!("expect: {expect:?}");
     assert_eq!(actual, expect);
 }
 
@@ -49,8 +49,8 @@ fn test_canonicalize_missing() {
     let (at, mut ucmd) = at_and_ucmd!();
     let actual = ucmd.arg("-m").arg(GIBBERISH).run().stdout_move_str();
     let expect = path_concat!(at.root_dir_resolved(), GIBBERISH) + "\n";
-    println!("actual: {:?}", actual);
-    println!("expect: {:?}", expect);
+    println!("actual: {actual:?}");
+    println!("expect: {expect:?}");
     assert_eq!(actual, expect);
 }
 
@@ -61,8 +61,8 @@ fn test_long_redirection_to_current_dir() {
     let dir = path_concat!(".", ..128);
     let actual = ucmd.arg("-n").arg("-m").arg(dir).run().stdout_move_str();
     let expect = at.root_dir_resolved();
-    println!("actual: {:?}", actual);
-    println!("expect: {:?}", expect);
+    println!("actual: {actual:?}");
+    println!("expect: {expect:?}");
     assert_eq!(actual, expect);
 }
 
@@ -77,8 +77,8 @@ fn test_long_redirection_to_root() {
         .run()
         .stdout_move_str();
     let expect = get_root_path();
-    println!("actual: {:?}", actual);
-    println!("expect: {:?}", expect);
+    println!("actual: {actual:?}");
+    println!("expect: {expect:?}");
     assert_eq!(actual, expect);
 }
 
@@ -214,21 +214,21 @@ fn test_canonicalize_trailing_slash_regfile() {
             .stdout_contains("regfile");
         scene
             .ucmd()
-            .args(&["-fv", &format!("./{}/", name)])
+            .args(&["-fv", &format!("./{name}/")])
             .fails()
             .code_is(1)
             .stderr_contains(NOT_A_DIRECTORY)
             .no_stdout();
         scene
             .ucmd()
-            .args(&["-fv", &format!("{}/more", name)])
+            .args(&["-fv", &format!("{name}/more")])
             .fails()
             .code_is(1)
             .stderr_contains(NOT_A_DIRECTORY)
             .no_stdout();
         scene
             .ucmd()
-            .args(&["-fv", &format!("./{}/more/", name)])
+            .args(&["-fv", &format!("./{name}/more/")])
             .fails()
             .code_is(1)
             .stderr_contains(NOT_A_DIRECTORY)
@@ -250,28 +250,28 @@ fn test_canonicalize_trailing_slash_subdir() {
             .stdout_contains("subdir");
         scene
             .ucmd()
-            .args(&["-f", &format!("./{}/", name)])
+            .args(&["-f", &format!("./{name}/")])
             .succeeds()
             .stdout_contains("subdir");
         scene
             .ucmd()
-            .args(&["-f", &format!("{}/more", name)])
+            .args(&["-f", &format!("{name}/more")])
             .succeeds()
             .stdout_contains(path_concat!("subdir", "more"));
         scene
             .ucmd()
-            .args(&["-f", &format!("./{}/more/", name)])
+            .args(&["-f", &format!("./{name}/more/")])
             .succeeds()
             .stdout_contains(path_concat!("subdir", "more"));
         scene
             .ucmd()
-            .args(&["-f", &format!("{}/more/more2", name)])
+            .args(&["-f", &format!("{name}/more/more2")])
             .fails()
             .code_is(1)
             .no_stdout();
         scene
             .ucmd()
-            .args(&["-f", &format!("./{}/more/more2/", name)])
+            .args(&["-f", &format!("./{name}/more/more2/")])
             .fails()
             .code_is(1)
             .no_stdout();
@@ -291,18 +291,18 @@ fn test_canonicalize_trailing_slash_missing() {
             .stdout_contains("missing");
         scene
             .ucmd()
-            .args(&["-f", &format!("./{}/", name)])
+            .args(&["-f", &format!("./{name}/")])
             .succeeds()
             .stdout_contains("missing");
         scene
             .ucmd()
-            .args(&["-f", &format!("{}/more", name)])
+            .args(&["-f", &format!("{name}/more")])
             .fails()
             .code_is(1)
             .no_stdout();
         scene
             .ucmd()
-            .args(&["-f", &format!("./{}/more/", name)])
+            .args(&["-f", &format!("./{name}/more/")])
             .fails()
             .code_is(1)
             .no_stdout();

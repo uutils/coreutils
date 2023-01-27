@@ -293,7 +293,7 @@ impl CmdResult {
     pub fn signal_name_is(&self, name: &str) -> &Self {
         use uucore::signals::signal_by_name_or_value;
         let expected: i32 = signal_by_name_or_value(name)
-            .unwrap_or_else(|| panic!("Invalid signal name or value: '{}'", name))
+            .unwrap_or_else(|| panic!("Invalid signal name or value: '{name}'"))
             .try_into()
             .unwrap();
 
@@ -2223,7 +2223,7 @@ pub fn host_name_for(util_name: &str) -> Cow<str> {
         if util_name.starts_with('g') && util_name != "groups" {
             util_name.into()
         } else {
-            format!("g{}", util_name).into()
+            format!("g{util_name}").into()
         }
     }
     #[cfg(target_os = "linux")]
@@ -3146,10 +3146,7 @@ mod tests {
             Err(error) if error.kind() == io::ErrorKind::Other => {
                 std::assert_eq!(error.to_string(), "wait: Timeout of '1s' reached");
             }
-            Err(error) => panic!(
-                "Assertion failed: Expected error with timeout but was: {}",
-                error
-            ),
+            Err(error) => panic!("Assertion failed: Expected error with timeout but was: {error}"),
             Ok(_) => panic!("Assertion failed: Expected timeout of `wait`."),
         }
     }
@@ -3178,10 +3175,7 @@ mod tests {
             Err(error) if error.kind() == io::ErrorKind::Other => {
                 std::assert_eq!(error.to_string(), "kill: Timeout of '0s' reached");
             }
-            Err(error) => panic!(
-                "Assertion failed: Expected error with timeout but was: {}",
-                error
-            ),
+            Err(error) => panic!("Assertion failed: Expected error with timeout but was: {error}"),
             Ok(_) => panic!("Assertion failed: Expected timeout of `try_kill`."),
         }
     }

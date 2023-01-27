@@ -466,7 +466,7 @@ fn simple_backup_path(path: &Path, suffix: &str) -> PathBuf {
 fn numbered_backup_path(path: &Path) -> PathBuf {
     let mut i: u64 = 1;
     loop {
-        let new_path = simple_backup_path(path, &format!(".~{}~", i));
+        let new_path = simple_backup_path(path, &format!(".~{i}~"));
         if !new_path.exists() {
             return new_path;
         }

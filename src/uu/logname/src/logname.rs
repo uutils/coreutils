@@ -38,7 +38,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let _ = uu_app().try_get_matches_from(args)?;
 
     match get_userlogin() {
-        Some(userlogin) => println!("{}", userlogin),
+        Some(userlogin) => println!("{userlogin}"),
         None => show_error!("no login name"),
     }
 

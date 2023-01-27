@@ -170,7 +170,7 @@ impl WordFilter {
                             .unwrap()
                             .into_iter()
                             .map(|c| if REGEX_CHARCLASS.contains(c) {
-                                format!("\\{}", c)
+                                format!("\\{c}")
                             } else {
                                 c.to_string()
                             })
@@ -220,7 +220,7 @@ impl Display for PtxError {
             Self::DumbFormat => {
                 write!(f, "There is no dumb format with GNU extensions disabled")
             }
-            Self::NotImplemented(s) => write!(f, "{} not implemented yet", s),
+            Self::NotImplemented(s) => write!(f, "{s} not implemented yet"),
             Self::ParseError(e) => e.fmt(f),
         }
     }
@@ -553,8 +553,8 @@ fn get_output_chunks(
 fn tex_mapper(x: char) -> String {
     match x {
         '\\' => "\\backslash{}".to_owned(),
-        '$' | '%' | '#' | '&' | '_' => format!("\\{}", x),
-        '}' | '{' => format!("$\\{}$", x),
+        '$' | '%' | '#' | '&' | '_' => format!("\\{x}"),
+        '}' | '{' => format!("$\\{x}$"),
         _ => x.to_string(),
     }
 }
@@ -696,7 +696,7 @@ fn write_traditional_output(
                 return Err(PtxError::DumbFormat.into());
             }
         };
-        writeln!(writer, "{}", output_line).map_err_context(String::new)?;
+        writeln!(writer, "{output_line}").map_err_context(String::new)?;
     }
     Ok(())
 }

@@ -79,10 +79,10 @@ pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>
                             Some(n) => n,
                             None => return Some(Err(ParseError::Overflow)),
                         };
-                        options.push(OsString::from(format!("{}", num)));
+                        options.push(OsString::from(format!("{num}")));
                     } else {
                         options.push(OsString::from("-n"));
-                        options.push(OsString::from(format!("{}", num)));
+                        options.push(OsString::from(format!("{num}")));
                     }
                     Some(Ok(options.into_iter()))
                 }

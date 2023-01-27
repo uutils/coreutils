@@ -746,7 +746,7 @@ impl Options {
         let recursive = matches.get_flag(options::RECURSIVE) || matches.get_flag(options::ARCHIVE);
 
         let backup_mode = match backup_control::determine_backup_mode(matches) {
-            Err(e) => return Err(Error::Backup(format!("{}", e))),
+            Err(e) => return Err(Error::Backup(format!("{e}"))),
             Ok(mode) => mode,
         };
 
@@ -865,8 +865,7 @@ impl Options {
                         "never" => SparseMode::Never,
                         _ => {
                             return Err(Error::InvalidArgument(format!(
-                                "invalid argument {} for \'sparse\'",
-                                val
+                                "invalid argument {val} for \'sparse\'"
                             )));
                         }
                     }
@@ -1857,7 +1856,7 @@ mod tests {
 
     #[test]
     fn test_aligned_ancestors() {
-        let actual = aligned_ancestors(&Path::new("a/b/c"), &Path::new("d/a/b/c"));
+        let actual = aligned_ancestors(Path::new("a/b/c"), Path::new("d/a/b/c"));
         let expected = vec![
             (Path::new("a"), Path::new("d/a")),
             (Path::new("a/b"), Path::new("d/a/b")),

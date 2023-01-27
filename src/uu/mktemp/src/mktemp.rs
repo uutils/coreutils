@@ -313,7 +313,7 @@ impl Params {
         // the template is "XXXabc", then `suffix` is "abc.txt".
         let suffix_from_option = options.suffix.unwrap_or_default();
         let suffix_from_template = &options.template[j..];
-        let suffix = format!("{}{}", suffix_from_template, suffix_from_option);
+        let suffix = format!("{suffix_from_template}{suffix_from_option}");
         if suffix.contains(MAIN_SEPARATOR) {
             return Err(MkTempError::SuffixContainsDirSeparator(suffix));
         }

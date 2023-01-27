@@ -176,11 +176,11 @@ pub fn uu_app() -> Command {
 fn show(path: &Path, no_trailing_delimiter: bool, use_zero: bool) -> std::io::Result<()> {
     let path = path.to_str().unwrap();
     if no_trailing_delimiter {
-        print!("{}", path);
+        print!("{path}");
     } else if use_zero {
-        print!("{}\0", path);
+        print!("{path}\0");
     } else {
-        println!("{}", path);
+        println!("{path}");
     }
     stdout().flush()
 }

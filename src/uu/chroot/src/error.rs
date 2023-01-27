@@ -77,8 +77,8 @@ impl Display for ChrootError {
                 "cannot change root directory to {}: no such directory",
                 s.quote(),
             ),
-            Self::SetGidFailed(s, e) => write!(f, "cannot set gid to {}: {}", s, e),
-            Self::SetGroupsFailed(e) => write!(f, "cannot set groups: {}", e),
+            Self::SetGidFailed(s, e) => write!(f, "cannot set gid to {s}: {e}"),
+            Self::SetGroupsFailed(e) => write!(f, "cannot set groups: {e}"),
             Self::SetUserFailed(s, e) => {
                 write!(f, "cannot set user to {}: {}", s.maybe_quote(), e)
             }

@@ -75,7 +75,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let modes = matches.get_one::<String>(options::MODE).unwrap(); // should always be Some because required
     let cmode = if mode_had_minus_prefix {
         // clap parsing is finished, now put prefix back
-        format!("-{}", modes)
+        format!("-{modes}")
     } else {
         modes.to_string()
     };

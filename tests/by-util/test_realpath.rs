@@ -255,8 +255,8 @@ fn test_realpath_when_symlink_part_is_missing() {
     at.relative_symlink_file("../dir2/baz", "dir1/foo3");
     at.symlink_file("dir3/bar", "dir1/foo4");
 
-    let expect1 = format!("dir2{}bar", MAIN_SEPARATOR);
-    let expect2 = format!("dir2{}baz", MAIN_SEPARATOR);
+    let expect1 = format!("dir2{MAIN_SEPARATOR}bar");
+    let expect2 = format!("dir2{MAIN_SEPARATOR}baz");
 
     ucmd.args(&["dir1/foo1", "dir1/foo2", "dir1/foo3", "dir1/foo4"])
         .run()

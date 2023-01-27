@@ -142,7 +142,7 @@ fn expand_shortcuts(args: &[String]) -> Vec<String> {
             arg[1..]
                 .split(',')
                 .filter(|s| !s.is_empty())
-                .for_each(|s| processed_args.push(format!("--tabs={}", s)));
+                .for_each(|s| processed_args.push(format!("--tabs={s}")));
             has_shortcuts = true;
         } else {
             processed_args.push(arg.to_string());

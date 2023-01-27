@@ -52,7 +52,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 match r.kind() {
                     clap::error::ErrorKind::DisplayHelp
                     | clap::error::ErrorKind::DisplayVersion => {
-                        println!("{}", r);
+                        println!("{r}");
                         return Ok(());
                     }
                     _ => {}
@@ -60,7 +60,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             return Err(UUsageError::new(
                 error_exit_status::ANOTHER_ERROR,
-                format!("{}", r),
+                format!("{r}"),
             ));
         }
     };
@@ -264,7 +264,7 @@ fn print_current_context() -> Result<()> {
 
     if let Some(context) = context {
         let context = context.as_ref().to_str()?;
-        println!("{}", context);
+        println!("{context}");
     } else {
         println!();
     }

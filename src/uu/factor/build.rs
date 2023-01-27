@@ -46,7 +46,7 @@ fn main() {
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(DEFAULT_SIZE);
 
-    write!(file, "{}", PREAMBLE).unwrap();
+    write!(file, "{PREAMBLE}").unwrap();
     let mut cols = 3;
 
     // we want a total of n + 1 values
@@ -60,10 +60,10 @@ fn main() {
         // format the table
         let output = format!("({}, {}, {}),", x, modular_inverse(x), std::u64::MAX / x);
         if cols + output.len() > MAX_WIDTH {
-            write!(file, "\n    {}", output).unwrap();
+            write!(file, "\n    {output}").unwrap();
             cols = 4 + output.len();
         } else {
-            write!(file, " {}", output).unwrap();
+            write!(file, " {output}").unwrap();
             cols += 1 + output.len();
         }
 
@@ -72,8 +72,7 @@ fn main() {
 
     write!(
         file,
-        "\n];\n\n#[allow(dead_code)]\npub const NEXT_PRIME: u64 = {};\n",
-        x
+        "\n];\n\n#[allow(dead_code)]\npub const NEXT_PRIME: u64 = {x};\n"
     )
     .unwrap();
 }

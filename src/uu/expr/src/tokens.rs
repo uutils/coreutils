@@ -122,7 +122,7 @@ fn maybe_dump_tokens_acc(tokens_acc: &[(usize, Token)]) {
         if debug_var == "1" {
             println!("EXPR_DEBUG_TOKENS");
             for token in tokens_acc {
-                println!("\t{:?}", token);
+                println!("\t{token:?}");
             }
         }
     }

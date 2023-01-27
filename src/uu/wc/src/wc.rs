@@ -185,7 +185,7 @@ impl Display for WcError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::FilesDisabled(message) | Self::StdinReprNotAllowed(message) => {
-                write!(f, "{}", message)
+                write!(f, "{message}")
             }
         }
     }
@@ -613,7 +613,7 @@ fn wc(inputs: &[Input], settings: &Settings) -> UResult<()> {
         if let Err(err) = print_stats(settings, &total_result, number_width) {
             show!(USimpleError::new(
                 1,
-                format!("failed to print total: {}", err)
+                format!("failed to print total: {err}")
             ));
         }
     }

@@ -21,7 +21,7 @@ pub fn instantiate_current_writer(
             .map_err(|_| {
                 Error::new(
                     ErrorKind::Other,
-                    format!("'{}' would overwrite input; aborting", filename),
+                    format!("'{filename}' would overwrite input; aborting"),
                 )
             })?,
     ) as Box<dyn Write>))

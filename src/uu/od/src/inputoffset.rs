@@ -50,7 +50,7 @@ impl InputOffset {
             (Radix::Octal, None) => format!("{:07o}", self.byte_pos),
             (Radix::Octal, Some(l)) => format!("{:07o} ({:07o})", self.byte_pos, l),
             (Radix::NoPrefix, None) => String::new(),
-            (Radix::NoPrefix, Some(l)) => format!("({:07o})", l),
+            (Radix::NoPrefix, Some(l)) => format!("({l:07o})"),
         }
     }
 

@@ -117,7 +117,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         val => {
                             return Err(USimpleError::new(
                                 1,
-                                format!("Invalid argument to interactive ({})", val),
+                                format!("Invalid argument to interactive ({val})"),
                             ))
                         }
                     }

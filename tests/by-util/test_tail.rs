@@ -621,8 +621,7 @@ fn test_follow_invalid_pid() {
         .fails()
         .no_stdout()
         .stderr_is(format!(
-            "tail: invalid PID: '{}': number too large to fit in target type\n",
-            max_pid
+            "tail: invalid PID: '{max_pid}': number too large to fit in target type\n"
         ));
 }
 
@@ -649,7 +648,7 @@ fn test_follow_with_pid() {
 
     let mut child = ucmd
         .arg("-f")
-        .arg(format!("--pid={}", pid))
+        .arg(format!("--pid={pid}"))
         .arg(FOOBAR_TXT)
         .arg(FOOBAR_2_TXT)
         .run_no_wait();
@@ -706,17 +705,17 @@ fn test_single_big_args() {
 
     let mut big_input = at.make_file(FILE);
     for i in 0..LINES {
-        writeln!(big_input, "Line {}", i).expect("Could not write to FILE");
+        writeln!(big_input, "Line {i}").expect("Could not write to FILE");
     }
     big_input.flush().expect("Could not flush FILE");
 
     let mut big_expected = at.make_file(EXPECTED_FILE);
     for i in (LINES - N_ARG)..LINES {
-        writeln!(big_expected, "Line {}", i).expect("Could not write to EXPECTED_FILE");
+        writeln!(big_expected, "Line {i}").expect("Could not write to EXPECTED_FILE");
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
-    ucmd.arg(FILE).arg("-n").arg(format!("{}", N_ARG)).run();
+    ucmd.arg(FILE).arg("-n").arg(format!("{N_ARG}")).run();
     // .stdout_is(at.read(EXPECTED_FILE));
 }
 
@@ -753,21 +752,21 @@ fn test_bytes_big() {
     let mut big_input = at.make_file(FILE);
     for i in 0..BYTES {
         let digit = from_digit((i % 10) as u32, 10).unwrap();
-        write!(big_input, "{}", digit).expect("Could not write to FILE");
+        write!(big_input, "{digit}").expect("Could not write to FILE");
     }
     big_input.flush().expect("Could not flush FILE");
 
     let mut big_expected = at.make_file(EXPECTED_FILE);
     for i in (BYTES - N_ARG)..BYTES {
         let digit = from_digit((i % 10) as u32, 10).unwrap();
-        write!(big_expected, "{}", digit).expect("Could not write to EXPECTED_FILE");
+        write!(big_expected, "{digit}").expect("Could not write to EXPECTED_FILE");
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
     let result = ucmd
         .arg(FILE)
         .arg("-c")
-        .arg(format!("{}", N_ARG))
+        .arg(format!("{N_ARG}"))
         .succeeds()
         .stdout_move_str();
     let expected = at.read(EXPECTED_FILE);
@@ -789,13 +788,13 @@ fn test_lines_with_size_suffix() {
 
     let mut big_input = at.make_file(FILE);
     for i in 0..LINES {
-        writeln!(big_input, "Line {}", i).expect("Could not write to FILE");
+        writeln!(big_input, "Line {i}").expect("Could not write to FILE");
     }
     big_input.flush().expect("Could not flush FILE");
 
     let mut big_expected = at.make_file(EXPECTED_FILE);
     for i in (LINES - N_ARG)..LINES {
-        writeln!(big_expected, "Line {}", i).expect("Could not write to EXPECTED_FILE");
+        writeln!(big_expected, "Line {i}").expect("Could not write to EXPECTED_FILE");
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
@@ -1549,13 +1548,12 @@ fn test_retry9() {
         "\
             tail: 'parent_dir/watched_file' has become inaccessible: No such file or directory\n\
             tail: directory containing watched file was removed\n\
-            tail: {} cannot be used, reverting to polling\n\
+            tail: {BACKEND} cannot be used, reverting to polling\n\
             tail: 'parent_dir/watched_file' has appeared;  following new file\n\
             tail: 'parent_dir/watched_file' has become inaccessible: No such file or directory\n\
             tail: 'parent_dir/watched_file' has appeared;  following new file\n\
             tail: 'parent_dir/watched_file' has become inaccessible: No such file or directory\n\
-            tail: 'parent_dir/watched_file' has appeared;  following new file\n",
-        BACKEND
+            tail: 'parent_dir/watched_file' has appeared;  following new file\n"
     );
     let expected_stdout = "foo\nbar\nfoo\nbar\n";
 
@@ -2281,9 +2279,8 @@ fn test_follow_name_move2() {
     let file2 = "file2";
 
     let expected_stdout = format!(
-        "==> {0} <==\n{0}_content\n\n==> {1} <==\n{1}_content\n{0}_content\n\
-            more_{1}_content\n\n==> {0} <==\nmore_{0}_content\n",
-        file1, file2
+        "==> {file1} <==\n{file1}_content\n\n==> {file2} <==\n{file2}_content\n{file1}_content\n\
+            more_{file2}_content\n\n==> {file1} <==\nmore_{file1}_content\n"
     );
     let mut expected_stderr = format!(
         "{0}: {1}: No such file or directory\n\
@@ -2438,9 +2435,8 @@ fn test_follow_name_move_retry2() {
     let file2 = "b";
 
     let expected_stdout = format!(
-        "==> {0} <==\n\n==> {1} <==\n\n==> {0} <==\nx\n\n==> {1} <==\
-            \nx\n\n==> {0} <==\nx2\n\n==> {1} <==\ny\n\n==> {0} <==\nz\n",
-        file1, file2
+        "==> {file1} <==\n\n==> {file2} <==\n\n==> {file1} <==\nx\n\n==> {file2} <==\
+            \nx\n\n==> {file1} <==\nx2\n\n==> {file2} <==\ny\n\n==> {file1} <==\nz\n"
     );
     let mut expected_stderr = format!(
         "{0}: '{1}' has become inaccessible: No such file or directory\n\
@@ -3851,8 +3847,7 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
 
     let expected_stdout = format!(
         "tail: warning: --retry ignored; --retry is useful only when following\n\
-        {}",
-        file_data
+        {file_data}"
     );
     scene
         .ucmd()
@@ -3864,8 +3859,7 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
 
     let expected_stdout = format!(
         "tail: warning: --retry only effective for the initial open\n\
-        {}",
-        file_data
+        {file_data}"
     );
     let mut child = scene
         .ucmd()
@@ -3882,8 +3876,7 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
 
     let expected_stdout = format!(
         "tail: warning: PID ignored; --pid=PID is useful only when following\n\
-        {}",
-        file_data
+        {file_data}"
     );
     scene
         .ucmd()
@@ -3896,8 +3889,7 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
     let expected_stdout = format!(
         "tail: warning: --retry ignored; --retry is useful only when following\n\
         tail: warning: PID ignored; --pid=PID is useful only when following\n\
-        {}",
-        file_data
+        {file_data}"
     );
     scene
         .ucmd()
@@ -3963,9 +3955,8 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
     let expected_stdout = format!(
         "tail: warning: following standard input indefinitely is ineffective\n\
         ==> data <==\n\
-        {}\n\
-        ==> standard input <==\n",
-        file_data
+        {file_data}\n\
+        ==> standard input <==\n"
     );
     // tail -f data - < /dev/ptmx
     let mut child = scene
@@ -4055,10 +4046,9 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
     let pipe_data = "pipe data";
     let expected_stdout = format!(
         "==> standard input <==\n\
-        {}\n\
-        ==> {} <==\n\
-        {}",
-        pipe_data, file_name, file_data
+        {pipe_data}\n\
+        ==> {file_name} <==\n\
+        {file_data}"
     );
     let mut child = scene
         .ucmd()
@@ -4087,10 +4077,9 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
     {
         let expected_stdout = format!(
             "==> standard input <==\n\
-        {}\n\
-        ==> {} <==\n\
-        {}",
-            fifo_data, file_name, file_data
+        {fifo_data}\n\
+        ==> {file_name} <==\n\
+        {file_data}"
         );
         let mut child = scene
             .ucmd()
@@ -4108,10 +4097,9 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
 
         let expected_stdout = format!(
             "==> standard input <==\n\
-        {}\n\
-        ==> {} <==\n\
-        {}",
-            fifo_data, file_name, file_data
+        {fifo_data}\n\
+        ==> {file_name} <==\n\
+        {file_data}"
         );
         let mut child = scene
             .ucmd()

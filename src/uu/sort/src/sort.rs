@@ -220,13 +220,13 @@ impl Display for SortError {
                 write!(f, "failed to open temporary file: {}", strip_errno(error))
             }
             Self::CompressProgExecutionFailed { code } => {
-                write!(f, "couldn't execute compress program: errno {}", code)
+                write!(f, "couldn't execute compress program: errno {code}")
             }
             Self::CompressProgTerminatedAbnormally { prog } => {
                 write!(f, "{} terminated abnormally", prog.quote())
             }
             Self::TmpDirCreationFailed => write!(f, "could not create temporary directory"),
-            Self::Uft8Error { error } => write!(f, "{}", error),
+            Self::Uft8Error { error } => write!(f, "{error}"),
         }
     }
 }
@@ -351,10 +351,7 @@ impl GlobalSettings {
             .parse(input.trim())?;
 
         usize::try_from(size).map_err(|_| {
-            ParseSizeError::SizeTooBig(format!(
-                "Buffer size {} does not fit in address space",
-                size
-            ))
+            ParseSizeError::SizeTooBig(format!("Buffer size {size} does not fit in address space"))
         })
     }
 
@@ -563,7 +560,7 @@ impl<'a> Line<'a> {
         // optimizations here.
 
         let line = self.line.replace('\t', ">");
-        writeln!(writer, "{}", line)?;
+        writeln!(writer, "{line}")?;
 
         let mut fields = vec![];
         tokenize(self.line, settings.separator, &mut fields);
@@ -866,7 +863,7 @@ impl FieldSelector {
                     'R' => key_settings.set_sort_mode(SortMode::Random)?,
                     'r' => key_settings.reverse = true,
                     'V' => key_settings.set_sort_mode(SortMode::Version)?,
-                    c => return Err(format!("invalid option: '{}'", c)),
+                    c => return Err(format!("invalid option: '{c}'")),
                 }
             }
             Ok(ignore_blanks)
@@ -942,7 +939,7 @@ impl FieldSelector {
 
     /// Look up the range in the line that corresponds to this selector.
     /// If needs_fields returned false, tokens must be None.
-    fn get_range<'a>(&self, line: &'a str, tokens: Option<&[Field]>) -> Range<usize> {
+    fn get_range(&self, line: &str, tokens: Option<&[Field]>) -> Range<usize> {
         enum Resolution {
             // The start index of the resolved character, inclusive
             StartOfChar(usize),

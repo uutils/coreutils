@@ -170,7 +170,7 @@ fn stty(opts: &Options) -> UResult<()> {
             if let ControlFlow::Break(false) = apply_setting(&mut termios, setting) {
                 return Err(USimpleError::new(
                     1,
-                    format!("invalid argument '{}'", setting),
+                    format!("invalid argument '{setting}'"),
                 ));
             }
         }
@@ -195,7 +195,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    print!("speed {} baud; ", speed);
+    print!("speed {speed} baud; ");
 
     // Other platforms need to use the baud rate enum, so printing the right value
     // becomes slightly more complicated.
@@ -209,7 +209,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
     )))]
     for (text, baud_rate) in BAUD_RATES {
         if *baud_rate == speed {
-            print!("speed {} baud; ", text);
+            print!("speed {text} baud; ");
             break;
         }
     }
@@ -226,7 +226,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
         // so we get the underlying libc::termios struct to get that information.
         let libc_termios: nix::libc::termios = termios.clone().into();
         let line = libc_termios.c_line;
-        print!("line = {};", line);
+        print!("line = {line};");
     }
 
     println!();
@@ -258,14 +258,14 @@ fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<
         let val = flag.is_in(termios, group);
         if group.is_some() {
             if val && (!sane || opts.all) {
-                print!("{} ", name);
+                print!("{name} ");
                 printed = true;
             }
         } else if opts.all || val != sane {
             if !val {
                 print!("-");
             }
-            print!("{} ", name);
+            print!("{name} ");
             printed = true;
         }
     }

@@ -76,7 +76,7 @@ fn test_2files() {
     let file2 = tmpdir.join("test2");
 
     for (n, a) in [(1, "a"), (2, "b")] {
-        println!("number: {} letter:{}", n, a);
+        println!("number: {n} letter:{a}");
     }
 
     // spell-checker:disable-next-line
@@ -849,34 +849,27 @@ fn test_od_invalid_bytes() {
     ];
     for option in &options {
         new_ucmd!()
-            .arg(format!("{}={}", option, INVALID_SIZE))
+            .arg(format!("{option}={INVALID_SIZE}"))
             .arg("file")
             .fails()
             .code_is(1)
-            .stderr_only(format!(
-                "od: invalid {} argument '{}'\n",
-                option, INVALID_SIZE
-            ));
+            .stderr_only(format!("od: invalid {option} argument '{INVALID_SIZE}'\n"));
 
         new_ucmd!()
-            .arg(format!("{}={}", option, INVALID_SUFFIX))
+            .arg(format!("{option}={INVALID_SUFFIX}"))
             .arg("file")
             .fails()
             .code_is(1)
             .stderr_only(format!(
-                "od: invalid suffix in {} argument '{}'\n",
-                option, INVALID_SUFFIX
+                "od: invalid suffix in {option} argument '{INVALID_SUFFIX}'\n"
             ));
 
         #[cfg(not(target_pointer_width = "128"))]
         new_ucmd!()
-            .arg(format!("{}={}", option, BIG_SIZE))
+            .arg(format!("{option}={BIG_SIZE}"))
             .arg("file")
             .fails()
             .code_is(1)
-            .stderr_only(format!(
-                "od: {} argument '{}' too large\n",
-                option, BIG_SIZE
-            ));
+            .stderr_only(format!("od: {option} argument '{BIG_SIZE}' too large\n"));
     }
 }
