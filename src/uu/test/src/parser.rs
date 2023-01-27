@@ -142,7 +142,7 @@ impl Parser {
     fn expect(&mut self, value: &str) {
         match self.next_token() {
             Symbol::Literal(s) if s == value => (),
-            _ => panic!("expected ‘{}’", value),
+            _ => panic!("expected ‘{value}’"),
         }
     }
 
@@ -383,7 +383,7 @@ impl Parser {
             let op = self.next_token();
 
             match self.next_token() {
-                Symbol::None => panic!("missing argument after {:?}", op),
+                Symbol::None => panic!("missing argument after {op:?}"),
                 token => self.stack.push(token.into_literal()),
             }
 

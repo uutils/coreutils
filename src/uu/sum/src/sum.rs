@@ -134,9 +134,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         };
 
         if print_names {
-            println!("{:0width$} {:width$} {}", sum, blocks, file);
+            println!("{sum:0width$} {blocks:width$} {file}");
         } else {
-            println!("{:0width$} {:width$}", sum, blocks);
+            println!("{sum:0width$} {blocks:width$}");
         }
     }
     Ok(())

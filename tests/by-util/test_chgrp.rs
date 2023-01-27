@@ -118,7 +118,7 @@ fn test_preserve_root_symlink() {
     at.symlink_file("///dev", file);
     ucmd.arg("--preserve-root")
         .arg("-HR")
-        .arg("bin").arg(format!(".//{}/..//..//../../", file))
+        .arg("bin").arg(format!(".//{file}/..//..//../../"))
         .fails()
         .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe\n");
 

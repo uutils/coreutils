@@ -435,44 +435,43 @@ fn test_ls_io_errors() {
 
         // on the mac and in certain Linux containers bad fds are typed as dirs,
         // however sometimes bad fds are typed as links and directory entry on links won't fail
-        if PathBuf::from(format!("/dev/fd/{fd}", fd = fd2)).is_dir() {
+        if PathBuf::from(format!("/dev/fd/{fd2}")).is_dir() {
             scene
                 .ucmd()
                 .arg("-alR")
-                .arg(format!("/dev/fd/{fd}", fd = fd2))
+                .arg(format!("/dev/fd/{fd2}"))
                 .fails()
                 .stderr_contains(format!(
-                    "cannot open directory '/dev/fd/{fd}': Bad file descriptor",
-                    fd = fd2
+                    "cannot open directory '/dev/fd/{fd2}': Bad file descriptor"
                 ))
-                .stdout_does_not_contain(format!("{fd}:\n", fd = fd2));
+                .stdout_does_not_contain(format!("{fd2}:\n"));
 
             scene
                 .ucmd()
                 .arg("-RiL")
-                .arg(format!("/dev/fd/{fd}", fd = fd2))
+                .arg(format!("/dev/fd/{fd2}"))
                 .fails()
-                .stderr_contains(format!("cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2))
+                .stderr_contains(format!("cannot open directory '/dev/fd/{fd2}': Bad file descriptor"))
                 // don't double print bad fd errors
-                .stderr_does_not_contain(format!("ls: cannot open directory '/dev/fd/{fd}': Bad file descriptor\nls: cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2));
+                .stderr_does_not_contain(format!("ls: cannot open directory '/dev/fd/{fd2}': Bad file descriptor\nls: cannot open directory '/dev/fd/{fd2}': Bad file descriptor"));
         } else {
             scene
                 .ucmd()
                 .arg("-alR")
-                .arg(format!("/dev/fd/{fd}", fd = fd2))
+                .arg(format!("/dev/fd/{fd2}"))
                 .succeeds();
 
             scene
                 .ucmd()
                 .arg("-RiL")
-                .arg(format!("/dev/fd/{fd}", fd = fd2))
+                .arg(format!("/dev/fd/{fd2}"))
                 .succeeds();
         }
 
         scene
             .ucmd()
             .arg("-alL")
-            .arg(format!("/dev/fd/{fd}", fd = fd2))
+            .arg(format!("/dev/fd/{fd2}"))
             .succeeds();
 
         let _ = close(fd2);
@@ -1932,10 +1931,7 @@ fn test_ls_color() {
         .arg("-w=15")
         .arg("-C")
         .succeeds()
-        .stdout_only(format!(
-            "{}  test-color\nb  {}\n",
-            a_with_colors, z_with_colors
-        ));
+        .stdout_only(format!("{a_with_colors}  test-color\nb  {z_with_colors}\n"));
 }
 
 #[cfg(unix)]
@@ -2041,7 +2037,7 @@ fn test_ls_indicator_style() {
         // Verify that classify and file-type both contain indicators for symlinks.
         scene
             .ucmd()
-            .arg(format!("--indicator-style={}", opt))
+            .arg(format!("--indicator-style={opt}"))
             .succeeds()
             .stdout_contains("@")
             .stdout_contains("|");
@@ -2091,7 +2087,7 @@ fn test_ls_indicator_style() {
         // Verify that classify and file-type both contain indicators for symlinks.
         scene
             .ucmd()
-            .arg(format!("--indicator-style={}", opt))
+            .arg(format!("--indicator-style={opt}"))
             .succeeds()
             .stdout_contains("/");
     }
@@ -2108,7 +2104,7 @@ fn test_ls_indicator_style() {
         // Verify that classify and file-type both contain indicators for symlinks.
         scene
             .ucmd()
-            .arg(format!("--indicator-style={}", opt))
+            .arg(format!("--indicator-style={opt}"))
             .succeeds()
             .stdout_contains("@");
     }
@@ -2389,7 +2385,7 @@ fn test_ls_quoting_style() {
                 .arg(arg)
                 .arg("one\ntwo")
                 .succeeds()
-                .stdout_only(format!("{}\n", correct));
+                .stdout_only(format!("{correct}\n"));
         }
 
         for (arg, correct) in [
@@ -2405,7 +2401,7 @@ fn test_ls_quoting_style() {
                 .arg("--show-control-chars")
                 .arg("one\ntwo")
                 .succeeds()
-                .stdout_only(format!("{}\n", correct));
+                .stdout_only(format!("{correct}\n"));
         }
 
         for (arg, correct) in [
@@ -2427,7 +2423,7 @@ fn test_ls_quoting_style() {
                 .arg(arg)
                 .arg("one\\two")
                 .succeeds()
-                .stdout_only(format!("{}\n", correct));
+                .stdout_only(format!("{correct}\n"));
         }
 
         // Tests for a character that forces quotation in shell-style escaping
@@ -2443,7 +2439,7 @@ fn test_ls_quoting_style() {
                 .arg(arg)
                 .arg("one\n&two")
                 .succeeds()
-                .stdout_only(format!("{}\n", correct));
+                .stdout_only(format!("{correct}\n"));
         }
     }
 
@@ -2474,7 +2470,7 @@ fn test_ls_quoting_style() {
             .arg(arg)
             .arg("one two")
             .succeeds()
-            .stdout_only(format!("{}\n", correct));
+            .stdout_only(format!("{correct}\n"));
     }
 
     scene.ucmd().arg("one").succeeds().stdout_only("one\n");
@@ -2498,7 +2494,7 @@ fn test_ls_quoting_style() {
             .arg(arg)
             .arg("one")
             .succeeds()
-            .stdout_only(format!("{}\n", correct));
+            .stdout_only(format!("{correct}\n"));
     }
 }
 
@@ -3028,31 +3024,31 @@ fn test_ls_path() {
     let file1 = "file1";
     let file2 = "file2";
     let dir = "dir";
-    let path = &format!("{}/{}", dir, file2);
+    let path = &format!("{dir}/{file2}");
 
     at.mkdir(dir);
     at.touch(file1);
     at.touch(path);
 
-    let expected_stdout = &format!("{}\n", path);
+    let expected_stdout = &format!("{path}\n");
     scene.ucmd().arg(path).run().stdout_is(expected_stdout);
 
-    let expected_stdout = &format!("./{}\n", path);
+    let expected_stdout = &format!("./{path}\n");
     scene
         .ucmd()
-        .arg(format!("./{}", path))
+        .arg(format!("./{path}"))
         .run()
         .stdout_is(expected_stdout);
 
     let abs_path = format!("{}/{}", at.as_string(), path);
     let expected_stdout = if cfg!(windows) {
-        format!("\'{}\'\n", abs_path)
+        format!("\'{abs_path}\'\n")
     } else {
-        format!("{}\n", abs_path)
+        format!("{abs_path}\n")
     };
     scene.ucmd().arg(&abs_path).run().stdout_is(expected_stdout);
 
-    let expected_stdout = format!("{}\n{}\n", path, file1);
+    let expected_stdout = format!("{path}\n{file1}\n");
     scene
         .ucmd()
         .arg(file1)

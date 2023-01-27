@@ -16,7 +16,6 @@ use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::prelude::*;
-use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
@@ -424,7 +423,7 @@ fn pass_name(pass_type: PassType) -> String {
             let mut s: String = String::new();
             while s.len() < 6 {
                 for b in bytes {
-                    let readable: String = format!("{:x}", b);
+                    let readable: String = format!("{b:x}");
                     s.push_str(&readable);
                 }
             }
@@ -560,7 +559,7 @@ fn do_pass<'a>(
     generator_type: PassType<'a>,
     given_file_size: Option<u64>,
 ) -> Result<(), io::Error> {
-    file.seek(SeekFrom::Start(0))?;
+    file.rewind()?;
 
     // Use the given size or the whole file if not specified
     let size: u64 = given_file_size.unwrap_or(get_file_size(path)?);

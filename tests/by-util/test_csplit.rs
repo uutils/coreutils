@@ -4,7 +4,7 @@ use glob::glob;
 /// Returns a string of numbers with the given range, each on a new line.
 /// The upper bound is not included.
 fn generate(from: u32, to: u32) -> String {
-    (from..to).fold(String::new(), |acc, v| format!("{}{}\n", acc, v))
+    (from..to).fold(String::new(), |acc, v| format!("{acc}{v}\n"))
 }
 
 #[test]

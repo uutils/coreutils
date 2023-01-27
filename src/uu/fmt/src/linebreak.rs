@@ -27,7 +27,7 @@ struct BreakArgs<'a> {
 }
 
 impl<'a> BreakArgs<'a> {
-    fn compute_width<'b>(&self, winfo: &WordInfo<'b>, posn: usize, fresh: bool) -> usize {
+    fn compute_width(&self, winfo: &WordInfo, posn: usize, fresh: bool) -> usize {
         if fresh {
             0
         } else {

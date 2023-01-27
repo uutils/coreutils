@@ -245,7 +245,7 @@ impl Display for FixedWidthNumber {
             .iter()
             .map(|d| map_digit(self.radix, *d))
             .collect();
-        write!(f, "{}", digits)
+        write!(f, "{digits}")
     }
 }
 

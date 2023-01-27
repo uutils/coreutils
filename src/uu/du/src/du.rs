@@ -389,7 +389,7 @@ fn convert_size_human(size: u64, multiplier: u64, _block_size: u64) -> String {
     if size == 0 {
         return "0".to_string();
     }
-    format!("{}B", size)
+    format!("{size}B")
 }
 
 fn convert_size_b(size: u64, _multiplier: u64, _block_size: u64) -> String {
@@ -448,7 +448,7 @@ Try '{} --help' for more information.",
 'birth' and 'creation' arguments are not supported on this platform.",
                 s.quote()
             ),
-            Self::InvalidGlob(s) => write!(f, "Invalid exclude syntax: {}", s),
+            Self::InvalidGlob(s) => write!(f, "Invalid exclude syntax: {s}"),
         }
     }
 }
@@ -650,12 +650,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         let time_str = tm.format(time_format_str).to_string();
                         print!("{}\t{}\t", convert_size(size), time_str);
                         print_verbatim(stat.path).unwrap();
-                        print!("{}", line_separator);
+                        print!("{line_separator}");
                     }
                 } else if !summarize || index == len - 1 {
                     print!("{}\t", convert_size(size));
                     print_verbatim(stat.path).unwrap();
-                    print!("{}", line_separator);
+                    print!("{line_separator}");
                 }
                 if options.total && index == (len - 1) {
                     // The last element will be the total size of the the path under
@@ -674,7 +674,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if options.total {
         print!("{}\ttotal", convert_size(grand_total));
-        print!("{}", line_separator);
+        print!("{line_separator}");
     }
 
     Ok(())

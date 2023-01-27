@@ -48,7 +48,7 @@ impl Display for BadSequence {
                 writeln!(f, "the [c*] repeat construct may not appear in string1")
             }
             Self::InvalidRepeatCount(count) => {
-                writeln!(f, "invalid repeat count '{}' in [c*n] construct", count)
+                writeln!(f, "invalid repeat count '{count}' in [c*n] construct")
             }
             Self::EmptySet2WhenNotTruncatingSet1 => {
                 writeln!(f, "when not truncating set1, string2 must be non-empty")

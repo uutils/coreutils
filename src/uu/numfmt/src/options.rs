@@ -128,9 +128,9 @@ impl FromStr for FormatOptions {
 
         if iter.peek().is_none() {
             return if options.prefix == s {
-                Err(format!("format '{}' has no % directive", s))
+                Err(format!("format '{s}' has no % directive"))
             } else {
-                Err(format!("format '{}' ends in %", s))
+                Err(format!("format '{s}' ends in %"))
             };
         }
 
@@ -151,8 +151,7 @@ impl FromStr for FormatOptions {
                 Some(c) if c.is_ascii_digit() => padding.push('-'),
                 _ => {
                     return Err(format!(
-                        "invalid format '{}', directive must be %[0]['][-][N][.][N]f",
-                        s
+                        "invalid format '{s}', directive must be %[0]['][-][N][.][N]f"
                     ))
                 }
             }
@@ -171,7 +170,7 @@ impl FromStr for FormatOptions {
             if let Ok(p) = padding.parse() {
                 options.padding = Some(p);
             } else {
-                return Err(format!("invalid format '{}' (width overflow)", s));
+                return Err(format!("invalid format '{s}' (width overflow)"));
             }
         }
 
@@ -179,7 +178,7 @@ impl FromStr for FormatOptions {
             iter.next();
 
             if matches!(iter.peek(), Some(' ' | '+' | '-')) {
-                return Err(format!("invalid precision in format '{}'", s));
+                return Err(format!("invalid precision in format '{s}'"));
             }
 
             while let Some(c) = iter.peek() {
@@ -195,7 +194,7 @@ impl FromStr for FormatOptions {
                 if let Ok(p) = precision.parse() {
                     options.precision = Some(p);
                 } else {
-                    return Err(format!("invalid precision in format '{}'", s));
+                    return Err(format!("invalid precision in format '{s}'"));
                 }
             } else {
                 options.precision = Some(0);
@@ -206,8 +205,7 @@ impl FromStr for FormatOptions {
             iter.next();
         } else {
             return Err(format!(
-                "invalid format '{}', directive must be %[0]['][-][N][.][N]f",
-                s
+                "invalid format '{s}', directive must be %[0]['][-][N][.][N]f"
             ));
         }
 
@@ -222,7 +220,7 @@ impl FromStr for FormatOptions {
                 }
                 iter.next();
             } else {
-                return Err(format!("format '{}' has too many % directives", s));
+                return Err(format!("format '{s}' has too many % directives"));
             }
         }
 

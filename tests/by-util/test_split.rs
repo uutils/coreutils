@@ -425,7 +425,7 @@ fn test_numeric_dynamic_suffix_length() {
     ucmd.args(&["-d", "-b", "1", "ninetyonebytes.txt"])
         .succeeds();
     for i in 0..90 {
-        let filename = format!("x{:02}", i);
+        let filename = format!("x{i:02}");
         let contents = file_read(&at, &filename);
         assert_eq!(contents, "a");
     }
@@ -447,7 +447,7 @@ fn test_hex_dynamic_suffix_length() {
     ucmd.args(&["-x", "-b", "1", "twohundredfortyonebytes.txt"])
         .succeeds();
     for i in 0..240 {
-        let filename = format!("x{:02x}", i);
+        let filename = format!("x{i:02x}");
         let contents = file_read(&at, &filename);
         assert_eq!(contents, "a");
     }

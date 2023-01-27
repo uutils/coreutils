@@ -380,7 +380,7 @@ pub(crate) fn copy_directory(
     // the target directory.
     let context = match Context::new(root, target) {
         Ok(c) => c,
-        Err(e) => return Err(format!("failed to get current directory {}", e).into()),
+        Err(e) => return Err(format!("failed to get current directory {e}").into()),
     };
 
     // Traverse the contents of the directory, copying each one.

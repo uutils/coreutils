@@ -53,8 +53,8 @@ fn test_terse_normal_format() {
     let ts = TestScenario::new(util_name!());
     let actual = ts.ucmd().args(&args).succeeds().stdout_move_str();
     let expect = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
-    println!("actual: {:?}", actual);
-    println!("expect: {:?}", expect);
+    println!("actual: {actual:?}");
+    println!("expect: {expect:?}");
     let v_actual: Vec<&str> = actual.trim().split(' ').collect();
     let mut v_expect: Vec<&str> = expect.trim().split(' ').collect();
     assert!(!v_expect.is_empty());
@@ -83,8 +83,8 @@ fn test_format_created_time() {
     let ts = TestScenario::new(util_name!());
     let actual = ts.ucmd().args(&args).succeeds().stdout_move_str();
     let expect = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
-    println!("actual: {:?}", actual);
-    println!("expect: {:?}", expect);
+    println!("actual: {actual:?}");
+    println!("expect: {expect:?}");
     // note: using a regex instead of `split_whitespace()` in order to detect whitespace differences
     let re = regex::Regex::new(r"\s").unwrap();
     let v_actual: Vec<&str> = re.split(&actual).collect();
@@ -108,8 +108,8 @@ fn test_format_created_seconds() {
     let ts = TestScenario::new(util_name!());
     let actual = ts.ucmd().args(&args).succeeds().stdout_move_str();
     let expect = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
-    println!("actual: {:?}", actual);
-    println!("expect: {:?}", expect);
+    println!("actual: {actual:?}");
+    println!("expect: {expect:?}");
     // note: using a regex instead of `split_whitespace()` in order to detect whitespace differences
     let re = regex::Regex::new(r"\s").unwrap();
     let v_actual: Vec<&str> = re.split(&actual).collect();

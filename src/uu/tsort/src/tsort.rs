@@ -76,12 +76,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if !g.is_acyclic() {
         return Err(USimpleError::new(
             1,
-            format!("{}, input contains a loop:", input),
+            format!("{input}, input contains a loop:"),
         ));
     }
 
     for x in &g.result {
-        println!("{}", x);
+        println!("{x}");
     }
 
     Ok(())

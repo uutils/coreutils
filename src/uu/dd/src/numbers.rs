@@ -80,7 +80,7 @@ pub(crate) fn to_magnitude_and_suffix(n: u128, suffix_type: SuffixType) -> Strin
     //
     let quotient = (n as f64) / (base as f64);
     if quotient < 10.0 {
-        format!("{:.1} {}", quotient, suffix)
+        format!("{quotient:.1} {suffix}")
     } else {
         format!("{} {}", quotient.round(), suffix)
     }

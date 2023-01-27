@@ -491,7 +491,7 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
 
 fn print_error(matches: &ArgMatches, err: &PrError) {
     if !matches.get_flag(options::NO_FILE_WARNINGS) {
-        eprintln!("{}", err);
+        eprintln!("{err}");
     }
 }
 
@@ -505,7 +505,7 @@ fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>
     };
     matches
         .get_one::<String>(opt)
-        .map(|i| (i.to_string(), format!("-{}", opt)))
+        .map(|i| (i.to_string(), format!("-{opt}")))
         .map(from_parse_error_to_pr_error)
 }
 
@@ -668,8 +668,7 @@ fn build_options(
     if let Some(end_page) = end_page {
         if start_page > end_page {
             return Err(PrError::EncounteredErrors(format!(
-                "invalid --pages argument '{}:{}'",
-                start_page, end_page
+                "invalid --pages argument '{start_page}:{end_page}'"
             )));
         }
     }
@@ -1203,7 +1202,7 @@ fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: us
                 separator
             )
         } else {
-            format!("{:>width$}{}", line_str, separator)
+            format!("{line_str:>width$}{separator}")
         }
     } else {
         String::new()

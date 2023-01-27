@@ -186,7 +186,7 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
                     return Ok(true);
                 }
                 _ => {
-                    return Err(format!("missing argument after '{:?}'", op));
+                    return Err(format!("missing argument after '{op:?}'"));
                 }
             };
 

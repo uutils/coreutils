@@ -832,7 +832,7 @@ pub fn pretty_time(sec: i64, nsec: i64) -> String {
     let tm = match time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos) {
         Ok(tm) => tm,
         Err(e) => {
-            panic!("error: {}", e);
+            panic!("error: {e}");
         }
     };
 
@@ -842,7 +842,7 @@ pub fn pretty_time(sec: i64, nsec: i64) -> String {
     let local_offset = match UtcOffset::local_offset_at(tm) {
         Ok(lo) => lo,
         Err(e) => {
-            panic!("error: {}", e);
+            panic!("error: {e}");
         }
     };
 
@@ -997,7 +997,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x5846_5342 => "xfs".into(),
         0x012F_D16D => "xia".into(),
         0x2FC1_2FC1 => "zfs".into(),
-        other => format!("UNKNOWN ({:#x})", other).into(),
+        other => format!("UNKNOWN ({other:#x})").into(),
     }
     // spell-checker:enable
 }

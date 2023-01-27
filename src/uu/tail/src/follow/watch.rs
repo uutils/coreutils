@@ -566,11 +566,11 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                     format!("{} resources exhausted", text::BACKEND),
                 ))
             }
-            Ok(Err(e)) => return Err(USimpleError::new(1, format!("NotifyError: {}", e))),
+            Ok(Err(e)) => return Err(USimpleError::new(1, format!("NotifyError: {e}"))),
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 _timeout_counter += 1;
             }
-            Err(e) => return Err(USimpleError::new(1, format!("RecvTimeoutError: {}", e))),
+            Err(e) => return Err(USimpleError::new(1, format!("RecvTimeoutError: {e}"))),
         }
 
         if observer.use_polling && settings.follow.is_some() {

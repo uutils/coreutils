@@ -43,7 +43,7 @@ fn test_normal_compare_env() {
     if whoami == "nobody" {
         println!("test skipped:");
     } else if !is_ci() {
-        new_ucmd!().succeeds().stdout_is(format!("{}\n", whoami));
+        new_ucmd!().succeeds().stdout_is(format!("{whoami}\n"));
     } else {
         println!("test skipped:");
     }

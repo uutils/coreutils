@@ -441,9 +441,9 @@ pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> 
             '-'
         };
 
-        format!("{0}r{1}xr{1}xr{1}x", file_type, write)
+        format!("{file_type}r{write}xr{write}xr{write}x")
     } else {
-        format!("r{0}xr{0}xr{0}x", write)
+        format!("r{write}xr{write}xr{write}x")
     }
 }
 

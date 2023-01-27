@@ -46,7 +46,7 @@ fn to_local(tm: time::PrimitiveDateTime) -> time::OffsetDateTime {
     let offset = match time::OffsetDateTime::now_local() {
         Ok(lo) => lo.offset(),
         Err(e) => {
-            panic!("error: {}", e);
+            panic!("error: {e}");
         }
     };
     tm.assume_offset(offset)
@@ -438,7 +438,7 @@ fn parse_date(s: &str) -> UResult<FileTime> {
         return Ok(local_dt_to_filetime(diff));
     }
 
-    Err(USimpleError::new(1, format!("Unable to parse date: {}", s)))
+    Err(USimpleError::new(1, format!("Unable to parse date: {s}")))
 }
 
 fn parse_timestamp(s: &str) -> UResult<FileTime> {
@@ -558,7 +558,7 @@ fn pathbuf_from_stdout() -> UResult<PathBuf> {
             ERROR_PATH_NOT_FOUND | ERROR_NOT_ENOUGH_MEMORY | ERROR_INVALID_PARAMETER => {
                 return Err(USimpleError::new(
                     1,
-                    format!("GetFinalPathNameByHandleW failed with code {}", ret),
+                    format!("GetFinalPathNameByHandleW failed with code {ret}"),
                 ))
             }
             e if e == 0 => {

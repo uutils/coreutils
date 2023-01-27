@@ -164,7 +164,7 @@ impl Intf {
                     if sign == -1 {
                         fmt_prim.prefix = Some(String::from("-"));
                     }
-                    fmt_prim.pre_decimal = Some(format!("{}", i));
+                    fmt_prim.pre_decimal = Some(format!("{i}"));
                     fmt_prim
                 }
                 Err(_) => Self::get_max(field_char, sign),
@@ -174,10 +174,10 @@ impl Intf {
                     let mut fmt_prim = FormatPrimitive::default();
                     let u_f = if sign == -1 { u64::MAX - (u - 1) } else { u };
                     fmt_prim.pre_decimal = Some(match field_char {
-                        'X' => format!("{:X}", u_f),
-                        'x' => format!("{:x}", u_f),
-                        'o' => format!("{:o}", u_f),
-                        _ => format!("{}", u_f),
+                        'X' => format!("{u_f:X}"),
+                        'x' => format!("{u_f:x}"),
+                        'o' => format!("{u_f:o}"),
+                        _ => format!("{u_f}"),
                     });
                     fmt_prim
                 }

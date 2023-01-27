@@ -132,7 +132,7 @@ impl FileExtTail for File {
     /// Test if File is seekable.
     /// Set the current position offset to `current_offset`.
     fn is_seekable(&mut self, current_offset: u64) -> bool {
-        self.seek(SeekFrom::Current(0)).is_ok()
+        self.stream_position().is_ok()
             && self.seek(SeekFrom::End(0)).is_ok()
             && self.seek(SeekFrom::Start(current_offset)).is_ok()
     }

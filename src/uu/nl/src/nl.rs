@@ -349,7 +349,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
             // want to print one in the first place, or it is a blank
             // line but we are still collecting more blank lines via
             // the option --join-blank-lines.
-            println!("{}", line);
+            println!("{line}");
             continue;
         }
         // If we make it here, then either we are printing a non-empty

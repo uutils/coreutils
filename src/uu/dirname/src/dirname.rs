@@ -63,7 +63,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     }
                 }
             }
-            print!("{}", separator);
+            print!("{separator}");
         }
     } else {
         return Err(UUsageError::new(1, "missing operand"));

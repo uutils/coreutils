@@ -136,7 +136,7 @@ impl<'a> MemoryDecoder<'a> {
             2 => u64::from(self.byte_order.read_u16(&self.data[start..start + 2])),
             4 => u64::from(self.byte_order.read_u32(&self.data[start..start + 4])),
             8 => self.byte_order.read_u64(&self.data[start..start + 8]),
-            _ => panic!("Invalid byte_size: {}", byte_size),
+            _ => panic!("Invalid byte_size: {byte_size}"),
         }
     }
 
@@ -148,7 +148,7 @@ impl<'a> MemoryDecoder<'a> {
             )),
             4 => f64::from(self.byte_order.read_f32(&self.data[start..start + 4])),
             8 => self.byte_order.read_f64(&self.data[start..start + 8]),
-            _ => panic!("Invalid byte_size: {}", byte_size),
+            _ => panic!("Invalid byte_size: {byte_size}"),
         }
     }
 }

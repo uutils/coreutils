@@ -278,7 +278,7 @@ fn write<I: WriteableTmpFile>(
     tmp_file.finished_writing()
 }
 
-fn write_lines<'a, T: Write>(lines: &[Line<'a>], writer: &mut T, separator: u8) {
+fn write_lines<T: Write>(lines: &[Line], writer: &mut T, separator: u8) {
     for s in lines {
         writer.write_all(s.line.as_bytes()).unwrap();
         writer.write_all(&[separator]).unwrap();

@@ -26,7 +26,7 @@ fn test_count_bytes_large_stdin() {
         128 * 1024,
     ] {
         let data = vec_of_size(n);
-        let expected = format!("{}\n", n);
+        let expected = format!("{n}\n");
         new_ucmd!()
             .args(&["-c"])
             .pipe_in(data)

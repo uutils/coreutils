@@ -43,7 +43,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     match exec(bytes) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
-        Err(err) => Err(USimpleError::new(1, format!("standard output: {}", err))),
+        Err(err) => Err(USimpleError::new(1, format!("standard output: {err}"))),
     }
 }
 

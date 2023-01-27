@@ -35,7 +35,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if variables.is_empty() {
         for (env_var, value) in env::vars() {
-            print!("{}={}{}", env_var, value, separator);
+            print!("{env_var}={value}{separator}");
         }
         return Ok(());
     }
@@ -48,7 +48,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             continue;
         }
         if let Ok(var) = env::var(env_var) {
-            print!("{}{}", var, separator);
+            print!("{var}{separator}");
         } else {
             error_found = true;
         }
