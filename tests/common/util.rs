@@ -686,7 +686,7 @@ impl CmdResult {
     #[track_caller]
     pub fn stdout_matches(&self, regex: &regex::Regex) -> &Self {
         assert!(
-            regex.is_match(self.stdout_str().trim()),
+            regex.is_match(self.stdout_str()),
             "Stdout does not match regex:\n{}",
             self.stdout_str()
         );
@@ -696,7 +696,7 @@ impl CmdResult {
     #[track_caller]
     pub fn stdout_does_not_match(&self, regex: &regex::Regex) -> &Self {
         assert!(
-            !regex.is_match(self.stdout_str().trim()),
+            !regex.is_match(self.stdout_str()),
             "Stdout matches regex:\n{}",
             self.stdout_str()
         );
