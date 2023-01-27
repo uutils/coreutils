@@ -69,12 +69,7 @@ impl FilterMode {
         let mode = if let Some(arg) = matches.get_one::<String>(options::BYTES) {
             match parse_num(arg) {
                 Ok(signum) => Self::Bytes(signum),
-                Err(e) => {
-                    return Err(UUsageError::new(
-                        1,
-                        format!("invalid number of bytes: {}", e),
-                    ))
-                }
+                Err(e) => return Err(UUsageError::new(1, format!("invalid number of bytes: {e}"))),
             }
         } else if let Some(arg) = matches.get_one::<String>(options::LINES) {
             match parse_num(arg) {
@@ -82,12 +77,7 @@ impl FilterMode {
                     let delimiter = if zero_term { 0 } else { b'\n' };
                     Self::Lines(signum, delimiter)
                 }
-                Err(e) => {
-                    return Err(UUsageError::new(
-                        1,
-                        format!("invalid number of lines: {}", e),
-                    ))
-                }
+                Err(e) => return Err(UUsageError::new(1, format!("invalid number of lines: {e}"))),
             }
         } else if zero_term {
             Self::default_zero()

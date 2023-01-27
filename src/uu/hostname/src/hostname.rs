@@ -164,7 +164,7 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
             }
         }
 
-        println!("{}", hostname);
+        println!("{hostname}");
 
         Ok(())
     }

@@ -153,8 +153,7 @@ mod tests {
         for p in odd_primes() {
             assert!(
                 test(Montgomery::<A>::new(p)).is_prime(),
-                "{} reported composite",
-                p
+                "{p} reported composite"
             );
         }
     }
@@ -173,7 +172,7 @@ mod tests {
     fn first_composites() {
         for (p, q) in primes().zip(odd_primes()) {
             for i in p + 1..q {
-                assert!(!is_prime(i), "{} reported prime", i);
+                assert!(!is_prime(i), "{i} reported prime");
             }
         }
     }
@@ -192,7 +191,7 @@ mod tests {
             for q in odd_primes().take_while(|q| *q <= p) {
                 let n = p * q;
                 let m = Montgomery::<A>::new(n);
-                assert!(!test(m).is_prime(), "{} = {} × {} reported prime", n, p, q);
+                assert!(!test(m).is_prime(), "{n} = {p} × {q} reported prime");
             }
         }
     }

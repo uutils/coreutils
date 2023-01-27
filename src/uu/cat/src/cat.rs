@@ -35,7 +35,6 @@ use std::os::unix::fs::FileTypeExt;
 use std::os::unix::net::UnixStream;
 use uucore::format_usage;
 
-static NAME: &str = "cat";
 static USAGE: &str = "{} [OPTION]... [FILE]...";
 static ABOUT: &str = "Concatenate FILE(s), or standard input, to standard output
 With no FILE, or when FILE is -, read standard input.";
@@ -236,7 +235,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
@@ -426,7 +424,7 @@ fn get_input_type(path: &str) -> CatResult<InputType> {
         ft if ft.is_file() => Ok(InputType::File),
         ft if ft.is_symlink() => Ok(InputType::SymLink),
         _ => Err(CatError::UnknownFiletype {
-            ft_debug: format!("{:?}", ft),
+            ft_debug: format!("{ft:?}"),
         }),
     }
 }

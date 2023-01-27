@@ -33,3 +33,7 @@ We provide a simple implementation of `more`, which is not part of GNU
 coreutils. We do not aim for full compatibility with the `more` utility from
 `util-linux`. Features from more modern pagers (like `less` and `bat`) are
 therefore welcomed.
+
+## `cut`
+
+`cut` can separate fields by whitespace (Space and Tab) with `-w` flag. This feature is adopted from [FreeBSD](https://www.freebsd.org/cgi/man.cgi?cut).

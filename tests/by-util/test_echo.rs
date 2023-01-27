@@ -176,7 +176,7 @@ fn test_disable_escapes() {
         .arg("-E")
         .arg(input_str)
         .succeeds()
-        .stdout_only(format!("{}\n", input_str));
+        .stdout_only(format!("{input_str}\n"));
 }
 
 #[test]

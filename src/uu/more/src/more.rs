@@ -383,9 +383,7 @@ impl<'a> Pager<'a> {
             .take(self.content_rows.into());
 
         for line in displayed_lines {
-            stdout
-                .write_all(format!("\r{}\n", line).as_bytes())
-                .unwrap();
+            stdout.write_all(format!("\r{line}\n").as_bytes()).unwrap();
         }
     }
 
@@ -399,15 +397,14 @@ impl<'a> Pager<'a> {
             )
         };
 
-        let status = format!("--More--({})", status_inner);
+        let status = format!("--More--({status_inner})");
 
         let banner = match (self.silent, wrong_key) {
             (true, Some(key)) => format!(
-                "{} [Unknown key: '{}'. Press 'h' for instructions. (unimplemented)]",
-                status, key
+                "{status} [Unknown key: '{key}'. Press 'h' for instructions. (unimplemented)]"
             ),
-            (true, None) => format!("{}[Press space to continue, 'q' to quit.]", status),
-            (false, Some(_)) => format!("{}{}", status, BELL),
+            (true, None) => format!("{status}[Press space to continue, 'q' to quit.]"),
+            (false, Some(_)) => format!("{status}{BELL}"),
             (false, None) => status,
         };
 

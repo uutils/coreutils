@@ -52,7 +52,7 @@ fn str_to_filetime(format: &str, s: &str) -> FileTime {
     let d = match time::OffsetDateTime::now_local() {
         Ok(now) => now,
         Err(e) => {
-            panic!("Error {} retrieving the OffsetDateTime::now_local", e);
+            panic!("Error {e} retrieving the OffsetDateTime::now_local");
         }
     };
     let offset_dt = tm.assume_offset(d.offset());
@@ -654,7 +654,7 @@ fn get_dst_switch_hour() -> Option<String> {
     let now = match time::OffsetDateTime::now_local() {
         Ok(now) => now,
         Err(e) => {
-            panic!("Error {} retrieving the OffsetDateTime::now_local", e);
+            panic!("Error {e} retrieving the OffsetDateTime::now_local");
         }
     };
 
@@ -712,8 +712,7 @@ fn test_touch_no_such_file_error_msg() {
     let path_str = path.to_str().unwrap();
 
     new_ucmd!().arg(&path).fails().stderr_only(format!(
-        "touch: cannot touch '{}': No such file or directory",
-        path_str
+        "touch: cannot touch '{path_str}': No such file or directory\n"
     ));
 }
 
@@ -755,7 +754,7 @@ fn test_touch_permission_denied_error_msg() {
 
     let full_path = at.plus_as_string(path_str);
     ucmd.arg(&full_path).fails().stderr_only(format!(
-        "touch: cannot touch '{}': Permission denied",
+        "touch: cannot touch '{}': Permission denied\n",
         &full_path
     ));
 }
@@ -763,10 +762,7 @@ fn test_touch_permission_denied_error_msg() {
 #[test]
 fn test_touch_no_args() {
     let mut ucmd = new_ucmd!();
-    ucmd.fails().stderr_only(
-        r##"touch: missing file operand
-Try 'touch --help' for more information."##,
-    );
+    ucmd.fails().no_stdout().usage_error("missing file operand");
 }
 
 #[test]

@@ -215,7 +215,7 @@ fn signal_by_short_name() {
 fn signal_by_long_name() {
     for (value, signal) in ALL_SIGNALS.iter().enumerate() {
         assert_eq!(
-            signal_by_name_or_value(&format!("SIG{}", signal)),
+            signal_by_name_or_value(&format!("SIG{signal}")),
             Some(value)
         );
     }

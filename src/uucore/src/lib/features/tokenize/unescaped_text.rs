@@ -88,12 +88,9 @@ impl UnescapedText {
         } else {
             4
         };
-        let err_msg = format!(
-            "invalid universal character name {0}{1:02$x}",
-            preface, val, leading_zeros
-        );
+        let err_msg = format!("invalid universal character name {preface}{val:0leading_zeros$x}");
         if (val < 159 && (val != 36 && val != 64 && val != 96)) || (val > 55296 && val < 57343) {
-            println!("{}", err_msg); //todo stderr
+            println!("{err_msg}"); //todo stderr
             exit(EXIT_ERR);
         }
     }

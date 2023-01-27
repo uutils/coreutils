@@ -184,7 +184,7 @@ fn get_mode(matches: &ArgMatches) -> Result<mode_t, String> {
     match matches.get_one::<String>("mode") {
         None => Ok(MODE_RW_UGO),
         Some(str_mode) => uucore::mode::parse_mode(str_mode)
-            .map_err(|e| format!("invalid mode ({})", e))
+            .map_err(|e| format!("invalid mode ({e})"))
             .and_then(|mode| {
                 if mode > 0o777 {
                     Err("mode must specify only file permission bits".to_string())

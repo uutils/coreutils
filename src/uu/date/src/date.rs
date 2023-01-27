@@ -117,7 +117,7 @@ impl<'a> From<&'a str> for Iso8601Format {
             NS => Self::Ns,
             DATE => Self::Date,
             // Should be caught by clap
-            _ => panic!("Invalid format: {}", s),
+            _ => panic!("Invalid format: {s}"),
         }
     }
 }
@@ -135,7 +135,7 @@ impl<'a> From<&'a str> for Rfc3339Format {
             SECONDS | SECOND => Self::Seconds,
             NS => Self::Ns,
             // Should be caught by clap
-            _ => panic!("Invalid format: {}", s),
+            _ => panic!("Invalid format: {s}"),
         }
     }
 }
@@ -257,7 +257,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         .format_with_items(format_items)
                         .to_string()
                         .replace("%f", "%N");
-                    println!("{}", formatted);
+                    println!("{formatted}");
                 }
                 Err((input, _err)) => show_error!("invalid date {}", input.quote()),
             }

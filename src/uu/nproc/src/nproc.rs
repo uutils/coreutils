@@ -92,7 +92,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         cores -= ignore;
     }
-    println!("{}", cores);
+    println!("{cores}");
     Ok(())
 }
 

@@ -305,8 +305,8 @@ pub fn uu_app() -> Command {
                 .short('W')
                 .long(options::PAGE_WIDTH)
                 .help(
-                    "set page width to PAGE_WIDTH (72) characters always,
-                truncate lines, except -J option is set, no interference
+                    "set page width to PAGE_WIDTH (72) characters always, \
+                truncate lines, except -J option is set, no interference \
                 with -S or -s",
                 )
                 .value_name("width"),
@@ -385,7 +385,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::JOIN_LINES)
                 .short('J')
                 .help(
-                    "merge full lines, turns off -W line truncation, no column
+                    "merge full lines, turns off -W line truncation, no column \
                 alignment, --sep-string[=STRING] sets separators",
                 )
                 .action(ArgAction::SetTrue),
@@ -470,7 +470,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 fn recreate_arguments(args: &[String]) -> Vec<String> {
     let column_page_option = Regex::new(r"^[-+]\d+.*").unwrap();
     let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
-    //let a_file: Regex = Regex::new(r"^[^-+].*").unwrap();
     let n_regex = Regex::new(r"^-n\s*$").unwrap();
     let mut arguments = args.to_owned();
     let num_option = args.iter().find_position(|x| n_regex.is_match(x.trim()));
@@ -492,7 +491,7 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
 
 fn print_error(matches: &ArgMatches, err: &PrError) {
     if !matches.get_flag(options::NO_FILE_WARNINGS) {
-        eprintln!("{}", err);
+        eprintln!("{err}");
     }
 }
 
@@ -506,7 +505,7 @@ fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>
     };
     matches
         .get_one::<String>(opt)
-        .map(|i| (i.to_string(), format!("-{}", opt)))
+        .map(|i| (i.to_string(), format!("-{opt}")))
         .map(from_parse_error_to_pr_error)
 }
 
@@ -669,8 +668,7 @@ fn build_options(
     if let Some(end_page) = end_page {
         if start_page > end_page {
             return Err(PrError::EncounteredErrors(format!(
-                "invalid --pages argument '{}:{}'",
-                start_page, end_page
+                "invalid --pages argument '{start_page}:{end_page}'"
             )));
         }
     }
@@ -1201,11 +1199,10 @@ fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: us
             format!(
                 "{:>width$}{}",
                 &line_str[line_str.len() - width..],
-                separator,
-                width = width
+                separator
             )
         } else {
-            format!("{:>width$}{}", line_str, separator, width = width)
+            format!("{line_str:>width$}{separator}")
         }
     } else {
         String::new()

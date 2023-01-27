@@ -103,7 +103,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ),
             ));
         }
-        println!("{}", INTERNAL_DB);
+        println!("{INTERNAL_DB}");
         return Ok(());
     }
 
@@ -157,7 +157,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match result {
         Ok(s) => {
-            println!("{}", s);
+            println!("{s}");
             Ok(())
         }
         Err(s) => {
@@ -368,23 +368,23 @@ where
             if state != ParseState::Pass {
                 if key.starts_with('.') {
                     if *fmt == OutputFmt::Display {
-                        result.push_str(format!("\x1b[{1}m*{0}\t{1}\x1b[0m\n", key, val).as_str());
+                        result.push_str(format!("\x1b[{val}m*{key}\t{val}\x1b[0m\n").as_str());
                     } else {
-                        result.push_str(format!("*{}={}:", key, val).as_str());
+                        result.push_str(format!("*{key}={val}:").as_str());
                     }
                 } else if key.starts_with('*') {
                     if *fmt == OutputFmt::Display {
-                        result.push_str(format!("\x1b[{1}m{0}\t{1}\x1b[0m\n", key, val).as_str());
+                        result.push_str(format!("\x1b[{val}m{key}\t{val}\x1b[0m\n").as_str());
                     } else {
-                        result.push_str(format!("{}={}:", key, val).as_str());
+                        result.push_str(format!("{key}={val}:").as_str());
                     }
                 } else if lower == "options" || lower == "color" || lower == "eightbit" {
                     // Slackware only. Ignore
                 } else if let Some(s) = table.get(lower.as_str()) {
                     if *fmt == OutputFmt::Display {
-                        result.push_str(format!("\x1b[{1}m{0}\t{1}\x1b[0m\n", s, val).as_str());
+                        result.push_str(format!("\x1b[{val}m{s}\t{val}\x1b[0m\n").as_str());
                     } else {
-                        result.push_str(format!("{}={}:", s, val).as_str());
+                        result.push_str(format!("{s}={val}:").as_str());
                     }
                 } else {
                     return Err(format!(

@@ -326,7 +326,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if default_format {
             id_print(&mut state, &groups);
         }
-        print!("{}", line_ending);
+        print!("{line_ending}");
 
         if i + 1 >= users.len() {
             break;
@@ -468,11 +468,11 @@ fn pretty(possible_pw: Option<Passwd>) {
         let rid = getuid();
         if let Ok(p) = Passwd::locate(rid) {
             if login == p.name {
-                println!("login\t{}", login);
+                println!("login\t{login}");
             }
             println!("uid\t{}", p.name);
         } else {
-            println!("uid\t{}", rid);
+            println!("uid\t{rid}");
         }
 
         let eid = getegid();
@@ -480,7 +480,7 @@ fn pretty(possible_pw: Option<Passwd>) {
             if let Ok(p) = Passwd::locate(eid) {
                 println!("euid\t{}", p.name);
             } else {
-                println!("euid\t{}", eid);
+                println!("euid\t{eid}");
             }
         }
 
@@ -489,7 +489,7 @@ fn pretty(possible_pw: Option<Passwd>) {
             if let Ok(g) = Group::locate(rid) {
                 println!("euid\t{}", g.name);
             } else {
-                println!("euid\t{}", rid);
+                println!("euid\t{rid}");
             }
         }
 

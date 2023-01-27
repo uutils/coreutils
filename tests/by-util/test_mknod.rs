@@ -77,14 +77,14 @@ fn test_mknod_character_device_requires_major_and_minor() {
         .arg("test_file")
         .arg("c")
         .fails()
-        .status_code(1)
+        .code_is(1)
         .stderr_contains("Special files require major and minor device numbers.");
     new_ucmd!()
         .arg("test_file")
         .arg("c")
         .arg("1")
         .fails()
-        .status_code(1)
+        .code_is(1)
         .stderr_contains("Special files require major and minor device numbers.");
     new_ucmd!()
         .arg("test_file")
@@ -122,6 +122,6 @@ fn test_mknod_invalid_mode() {
         .arg("p")
         .fails()
         .no_stdout()
-        .status_code(1)
+        .code_is(1)
         .stderr_contains("invalid mode");
 }

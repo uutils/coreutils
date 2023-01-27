@@ -50,5 +50,5 @@ fn hostid() {
     let mask = 0xffff_ffff;
 
     result &= mask;
-    println!("{:0>8x}", result);
+    println!("{result:0>8x}");
 }

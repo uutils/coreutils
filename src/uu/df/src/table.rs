@@ -438,7 +438,7 @@ impl fmt::Display for Table {
                     Alignment::Left => {
                         if is_last_col {
                             // no trailing spaces in last column
-                            write!(f, "{}", elem)?;
+                            write!(f, "{elem}")?;
                         } else {
                             write!(f, "{:<width$}", elem, width = self.widths[i])?;
                         }

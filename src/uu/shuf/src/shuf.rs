@@ -25,7 +25,6 @@ enum Mode {
     InputRange((usize, usize)),
 }
 
-static NAME: &str = "shuf";
 static USAGE: &str = "\
     {} [OPTION]... [FILE]
     {} -e [OPTION]... [ARG]...
@@ -110,7 +109,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             shuf_bytes(&mut evec, options)?;
         }
         Mode::InputRange((b, e)) => {
-            let rvec = (b..e).map(|x| format!("{}", x)).collect::<Vec<String>>();
+            let rvec = (b..e).map(|x| format!("{x}")).collect::<Vec<String>>();
             let mut rvec = rvec.iter().map(String::as_bytes).collect::<Vec<&[u8]>>();
             shuf_bytes(&mut rvec, options)?;
         }
@@ -127,7 +126,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .about(ABOUT)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))

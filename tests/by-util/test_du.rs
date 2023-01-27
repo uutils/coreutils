@@ -95,24 +95,24 @@ fn test_du_invalid_size() {
     let ts = TestScenario::new(util_name!());
     for s in args {
         ts.ucmd()
-            .arg(format!("--{}=1fb4t", s))
+            .arg(format!("--{s}=1fb4t"))
             .arg("/tmp")
             .fails()
             .code_is(1)
-            .stderr_only(format!("du: invalid suffix in --{} argument '1fb4t'", s));
+            .stderr_only(format!("du: invalid suffix in --{s} argument '1fb4t'\n"));
         ts.ucmd()
-            .arg(format!("--{}=x", s))
+            .arg(format!("--{s}=x"))
             .arg("/tmp")
             .fails()
             .code_is(1)
-            .stderr_only(format!("du: invalid --{} argument 'x'", s));
+            .stderr_only(format!("du: invalid --{s} argument 'x'\n"));
         #[cfg(not(target_pointer_width = "128"))]
         ts.ucmd()
-            .arg(format!("--{}=1Y", s))
+            .arg(format!("--{s}=1Y"))
             .arg("/tmp")
             .fails()
             .code_is(1)
-            .stderr_only(format!("du: --{} argument '1Y' too large", s));
+            .stderr_only(format!("du: --{s} argument '1Y' too large\n"));
     }
 }
 
@@ -511,13 +511,13 @@ fn test_du_threshold() {
     let threshold = if cfg!(windows) { "7K" } else { "10K" };
 
     ts.ucmd()
-        .arg(format!("--threshold={}", threshold))
+        .arg(format!("--threshold={threshold}"))
         .succeeds()
         .stdout_contains("links")
         .stdout_does_not_contain("deeper_dir");
 
     ts.ucmd()
-        .arg(format!("--threshold=-{}", threshold))
+        .arg(format!("--threshold=-{threshold}"))
         .succeeds()
         .stdout_does_not_contain("links")
         .stdout_contains("deeper_dir");

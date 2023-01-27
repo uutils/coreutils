@@ -134,7 +134,7 @@ impl Mode {
     fn from(matches: &ArgMatches) -> Result<Self, String> {
         if let Some(v) = matches.get_one::<String>(options::BYTES_NAME) {
             let (n, all_but_last) =
-                parse::parse_num(v).map_err(|err| format!("invalid number of bytes: {}", err))?;
+                parse::parse_num(v).map_err(|err| format!("invalid number of bytes: {err}"))?;
             if all_but_last {
                 Ok(Self::AllButLastBytes(n))
             } else {
@@ -142,14 +142,14 @@ impl Mode {
             }
         } else if let Some(v) = matches.get_one::<String>(options::LINES_NAME) {
             let (n, all_but_last) =
-                parse::parse_num(v).map_err(|err| format!("invalid number of lines: {}", err))?;
+                parse::parse_num(v).map_err(|err| format!("invalid number of lines: {err}"))?;
             if all_but_last {
                 Ok(Self::AllButLastLines(n))
             } else {
                 Ok(Self::FirstLines(n))
             }
         } else {
-            Ok(Default::default())
+            Ok(Self::default())
         }
     }
 }
@@ -387,13 +387,13 @@ where
             }
             // if it were just `n`,
             if lines == n + 1 {
-                input.seek(SeekFrom::Start(0))?;
+                input.rewind()?;
                 return Ok(size - i);
             }
             i += 1;
         }
         if size - i == 0 {
-            input.seek(SeekFrom::Start(0))?;
+            input.rewind()?;
             return Ok(0);
         }
     }
@@ -459,7 +459,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     if let Err(e) = usize::try_from(n) {
                         show!(USimpleError::new(
                             1,
-                            format!("{}: number of bytes is too large", e)
+                            format!("{e}: number of bytes is too large")
                         ));
                         continue;
                     };
@@ -493,7 +493,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     if !first {
                         println!();
                     }
-                    println!("==> {} <==", name);
+                    println!("==> {name} <==");
                 }
                 head_file(&mut file, options)
             }
@@ -506,7 +506,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
             };
             show!(USimpleError::new(
                 1,
-                format!("error reading {}: Input/output error", name)
+                format!("error reading {name}: Input/output error")
             ));
         }
         first = false;

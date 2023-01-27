@@ -18,7 +18,6 @@ use uucore::{format_usage, show};
 const CRC_TABLE_LEN: usize = 256;
 const CRC_TABLE: [u32; CRC_TABLE_LEN] = generate_crc_table();
 
-const NAME: &str = "cksum";
 const USAGE: &str = "{} [OPTIONS] [FILE]...";
 const ABOUT: &str = "Print CRC and size for each file";
 
@@ -124,13 +123,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if files.is_empty() {
         let (crc, size) = cksum("-")?;
-        println!("{} {}", crc, size);
+        println!("{crc} {size}");
         return Ok(());
     }
 
     for fname in &files {
         match cksum(fname.as_ref()).map_err_context(|| format!("{}", fname.maybe_quote())) {
-            Ok((crc, size)) => println!("{} {} {}", crc, size, fname),
+            Ok((crc, size)) => println!("{crc} {size} {fname}"),
             Err(err) => show!(err),
         };
     }
@@ -139,7 +138,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))

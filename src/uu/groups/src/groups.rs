@@ -49,7 +49,7 @@ impl Display for GroupsError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::GetGroupsFailed => write!(f, "failed to fetch groups"),
-            Self::GroupNotFound(gid) => write!(f, "cannot find name for group ID {}", gid),
+            Self::GroupNotFound(gid) => write!(f, "cannot find name for group ID {gid}"),
             Self::UserNotFound(user) => write!(f, "{}: no such user", user.quote()),
         }
     }

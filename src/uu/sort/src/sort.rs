@@ -46,7 +46,7 @@ use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
-use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::parse_size::{ParseSizeError, Parser};
 use uucore::version_cmp::version_cmp;
 
 use crate::tmp_dir::TmpDirWrapper;
@@ -220,13 +220,13 @@ impl Display for SortError {
                 write!(f, "failed to open temporary file: {}", strip_errno(error))
             }
             Self::CompressProgExecutionFailed { code } => {
-                write!(f, "couldn't execute compress program: errno {}", code)
+                write!(f, "couldn't execute compress program: errno {code}")
             }
             Self::CompressProgTerminatedAbnormally { prog } => {
                 write!(f, "{} terminated abnormally", prog.quote())
             }
             Self::TmpDirCreationFailed => write!(f, "could not create temporary directory"),
-            Self::Uft8Error { error } => write!(f, "{}", error),
+            Self::Uft8Error { error } => write!(f, "{error}"),
         }
     }
 }
@@ -342,30 +342,17 @@ impl GlobalSettings {
     fn parse_byte_count(input: &str) -> Result<usize, ParseSizeError> {
         // GNU sort (8.32)   valid: 1b,        k, K, m, M, g, G, t, T, P, E, Z, Y
         // GNU sort (8.32) invalid:  b, B, 1B,                         p, e, z, y
-        const ALLOW_LIST: &[char] = &[
-            'b', 'k', 'K', 'm', 'M', 'g', 'G', 't', 'T', 'P', 'E', 'Z', 'Y',
-        ];
-        let mut size_string = input.trim().to_string();
+        let size = Parser::default()
+            .with_allow_list(&[
+                "b", "k", "K", "m", "M", "g", "G", "t", "T", "P", "E", "Z", "Y",
+            ])
+            .with_default_unit("K")
+            .with_b_byte_count(true)
+            .parse(input.trim())?;
 
-        if size_string.ends_with(|c: char| ALLOW_LIST.contains(&c) || c.is_ascii_digit()) {
-            // b 1, K 1024 (default)
-            if size_string.ends_with(|c: char| c.is_ascii_digit()) {
-                size_string.push('K');
-            } else if size_string.ends_with('b') {
-                size_string.pop();
-            }
-            let size = parse_size(&size_string)?;
-            usize::try_from(size).map_err(|_| {
-                ParseSizeError::SizeTooBig(format!(
-                    "Buffer size {} does not fit in address space",
-                    size
-                ))
-            })
-        } else if size_string.starts_with(|c: char| c.is_ascii_digit()) {
-            Err(ParseSizeError::InvalidSuffix("invalid suffix".to_string()))
-        } else {
-            Err(ParseSizeError::ParseFailure("parse failure".to_string()))
-        }
+        usize::try_from(size).map_err(|_| {
+            ParseSizeError::SizeTooBig(format!("Buffer size {size} does not fit in address space"))
+        })
     }
 
     /// Precompute some data needed for sorting.
@@ -573,7 +560,7 @@ impl<'a> Line<'a> {
         // optimizations here.
 
         let line = self.line.replace('\t', ">");
-        writeln!(writer, "{}", line)?;
+        writeln!(writer, "{line}")?;
 
         let mut fields = vec![];
         tokenize(self.line, settings.separator, &mut fields);
@@ -686,7 +673,7 @@ impl<'a> Line<'a> {
                 || settings
                     .selectors
                     .last()
-                    .map_or(true, |selector| selector != &Default::default()))
+                    .map_or(true, |selector| selector != &FieldSelector::default()))
         {
             // A last resort comparator is in use, underline the whole line.
             if self.line.is_empty() {
@@ -876,7 +863,7 @@ impl FieldSelector {
                     'R' => key_settings.set_sort_mode(SortMode::Random)?,
                     'r' => key_settings.reverse = true,
                     'V' => key_settings.set_sort_mode(SortMode::Version)?,
-                    c => return Err(format!("invalid option: '{}'", c)),
+                    c => return Err(format!("invalid option: '{c}'")),
                 }
             }
             Ok(ignore_blanks)
@@ -952,7 +939,7 @@ impl FieldSelector {
 
     /// Look up the range in the line that corresponds to this selector.
     /// If needs_fields returned false, tokens must be None.
-    fn get_range<'a>(&self, line: &'a str, tokens: Option<&[Field]>) -> Range<usize> {
+    fn get_range(&self, line: &str, tokens: Option<&[Field]>) -> Range<usize> {
         enum Resolution {
             // The start index of the resolved character, inclusive
             StartOfChar(usize),
@@ -1059,7 +1046,7 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: &'static str) -> Ar
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
-    let mut settings: GlobalSettings = Default::default();
+    let mut settings = GlobalSettings::default();
 
     let matches = match uu_app().try_get_matches_from(args) {
         Ok(t) => t,
@@ -1771,7 +1758,7 @@ fn get_rand_string() -> [u8; 16] {
 }
 
 fn get_hash<T: Hash>(t: &T) -> u64 {
-    let mut s: FnvHasher = Default::default();
+    let mut s = FnvHasher::default();
     t.hash(&mut s);
     s.finish()
 }

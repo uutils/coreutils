@@ -24,8 +24,6 @@ use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UError, UResult, USimpleError};
 use uucore::{crash, crash_if_err};
 
-static NAME: &str = "join";
-
 #[derive(Debug)]
 enum JoinError {
     IOError(std::io::Error),
@@ -43,7 +41,7 @@ impl Error for JoinError {}
 impl Display for JoinError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::IOError(e) => write!(f, "io error: {}", e),
+            Self::IOError(e) => write!(f, "io error: {e}"),
             Self::UnorderedInput(e) => f.write_str(e),
         }
     }
@@ -606,7 +604,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let key1 = parse_field_number_option(matches.get_one::<String>("1").map(|s| s.as_str()))?;
     let key2 = parse_field_number_option(matches.get_one::<String>("2").map(|s| s.as_str()))?;
 
-    let mut settings: Settings = Default::default();
+    let mut settings = Settings::default();
 
     let v_values = matches.get_many::<String>("v");
     if v_values.is_some() {
@@ -694,12 +692,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match exec(file1, file2, settings) {
         Ok(_) => Ok(()),
-        Err(e) => Err(USimpleError::new(1, format!("{}", e))),
+        Err(e) => Err(USimpleError::new(1, format!("{e}"))),
     }
 }
 
 pub fn uu_app() -> Command {
-    Command::new(NAME)
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(
             "For each pair of input lines with identical join fields, write a line to

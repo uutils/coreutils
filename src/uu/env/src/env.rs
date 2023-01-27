@@ -210,7 +210,7 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
             Err(error) => {
                 return Err(USimpleError::new(
                     125,
-                    format!("cannot change directory to \"{}\": {}", d, error),
+                    format!("cannot change directory to \"{d}\": {error}"),
                 ));
             }
         };

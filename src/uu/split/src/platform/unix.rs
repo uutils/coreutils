@@ -121,7 +121,7 @@ pub fn instantiate_current_writer(
                 .map_err(|_| {
                     Error::new(
                         ErrorKind::Other,
-                        format!("unable to open '{}'; aborting", filename),
+                        format!("unable to open '{filename}'; aborting"),
                     )
                 })?,
         ) as Box<dyn Write>)),

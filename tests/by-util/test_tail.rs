@@ -169,14 +169,12 @@ fn test_nc_0_wo_follow() {
 
     let ts = TestScenario::new(util_name!());
     ts.ucmd()
-        .set_stdin(Stdio::null())
         .args(&["-n0", "missing"])
         .run()
         .no_stderr()
         .no_stdout()
         .succeeded();
     ts.ucmd()
-        .set_stdin(Stdio::null())
         .args(&["-c0", "missing"])
         .run()
         .no_stderr()
@@ -198,14 +196,12 @@ fn test_nc_0_wo_follow2() {
         .unwrap();
 
     ts.ucmd()
-        .set_stdin(Stdio::null())
         .args(&["-n0", "unreadable"])
         .run()
         .no_stderr()
         .no_stdout()
         .succeeded();
     ts.ucmd()
-        .set_stdin(Stdio::null())
         .args(&["-c0", "unreadable"])
         .run()
         .no_stderr()
@@ -226,7 +222,6 @@ fn test_permission_denied() {
         .unwrap();
 
     ts.ucmd()
-        .set_stdin(Stdio::null())
         .arg("unreadable")
         .fails()
         .stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n")
@@ -250,7 +245,6 @@ fn test_permission_denied_multiple() {
         .unwrap();
 
     ts.ucmd()
-        .set_stdin(Stdio::null())
         .args(&["file1", "unreadable", "file2"])
         .fails()
         .stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n")
@@ -275,7 +269,7 @@ fn test_follow_redirect_stdin_name_retry() {
             .args(&args)
             .fails()
             .no_stdout()
-            .stderr_is("tail: cannot follow '-' by name")
+            .stderr_is("tail: cannot follow '-' by name\n")
             .code_is(1);
         args.pop();
     }
@@ -301,14 +295,14 @@ fn test_stdin_redirect_dir() {
         .set_stdin(File::open(at.plus("dir")).unwrap())
         .fails()
         .no_stdout()
-        .stderr_is("tail: error reading 'standard input': Is a directory")
+        .stderr_is("tail: error reading 'standard input': Is a directory\n")
         .code_is(1);
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
         .arg("-")
         .fails()
         .no_stdout()
-        .stderr_is("tail: error reading 'standard input': Is a directory")
+        .stderr_is("tail: error reading 'standard input': Is a directory\n")
         .code_is(1);
 }
 
@@ -334,14 +328,14 @@ fn test_stdin_redirect_dir_when_target_os_is_macos() {
         .set_stdin(File::open(at.plus("dir")).unwrap())
         .fails()
         .no_stdout()
-        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory")
+        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n")
         .code_is(1);
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
         .arg("-")
         .fails()
         .no_stdout()
-        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory")
+        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n")
         .code_is(1);
 }
 
@@ -351,7 +345,11 @@ fn test_follow_stdin_descriptor() {
 
     let mut args = vec!["-f", "-"];
     for _ in 0..2 {
-        let mut p = ts.ucmd().args(&args).run_no_wait();
+        let mut p = ts
+            .ucmd()
+            .set_stdin(Stdio::piped())
+            .args(&args)
+            .run_no_wait();
         p.make_assertion_with_delay(500).is_alive();
         p.kill()
             .make_assertion()
@@ -373,7 +371,7 @@ fn test_follow_stdin_name_retry() {
             .args(&args)
             .run()
             .no_stdout()
-            .stderr_is("tail: cannot follow '-' by name")
+            .stderr_is("tail: cannot follow '-' by name\n")
             .code_is(1);
         args.pop();
     }
@@ -430,11 +428,7 @@ fn test_null_default() {
 fn test_follow_single() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let mut child = ucmd
-        .set_stdin(Stdio::null())
-        .arg("-f")
-        .arg(FOOBAR_TXT)
-        .run_no_wait();
+    let mut child = ucmd.arg("-f").arg(FOOBAR_TXT).run_no_wait();
 
     let expected_fixture = "foobar_single_default.expected";
 
@@ -464,11 +458,7 @@ fn test_follow_single() {
 fn test_follow_non_utf8_bytes() {
     // Tail the test file and start following it.
     let (at, mut ucmd) = at_and_ucmd!();
-    let mut child = ucmd
-        .arg("-f")
-        .set_stdin(Stdio::null())
-        .arg(FOOBAR_TXT)
-        .run_no_wait();
+    let mut child = ucmd.arg("-f").arg(FOOBAR_TXT).run_no_wait();
 
     child
         .make_assertion_with_delay(500)
@@ -504,7 +494,6 @@ fn test_follow_non_utf8_bytes() {
 fn test_follow_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut child = ucmd
-        .set_stdin(Stdio::null())
         .arg("-f")
         .arg(FOOBAR_TXT)
         .arg(FOOBAR_2_TXT)
@@ -541,7 +530,6 @@ fn test_follow_multiple() {
 fn test_follow_name_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut child = ucmd
-        .set_stdin(Stdio::null())
         .arg("--follow=name")
         .arg(FOOBAR_TXT)
         .arg(FOOBAR_2_TXT)
@@ -595,8 +583,7 @@ fn test_follow_multiple_untailable() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("DIR1");
     at.mkdir("DIR2");
-    ucmd.set_stdin(Stdio::null())
-        .arg("-f")
+    ucmd.arg("-f")
         .arg("DIR1")
         .arg("DIR2")
         .fails()
@@ -634,8 +621,7 @@ fn test_follow_invalid_pid() {
         .fails()
         .no_stdout()
         .stderr_is(format!(
-            "tail: invalid PID: '{}': number too large to fit in target type\n",
-            max_pid
+            "tail: invalid PID: '{max_pid}': number too large to fit in target type\n"
         ));
 }
 
@@ -657,15 +643,12 @@ fn test_follow_with_pid() {
     #[cfg(windows)]
     let dummy_cmd = "cmd";
 
-    let mut dummy = Command::new(dummy_cmd)
-        .stdout(Stdio::null())
-        .spawn()
-        .unwrap();
+    let mut dummy = Command::new(dummy_cmd).spawn().unwrap();
     let pid = dummy.id();
 
     let mut child = ucmd
         .arg("-f")
-        .arg(format!("--pid={}", pid))
+        .arg(format!("--pid={pid}"))
         .arg(FOOBAR_TXT)
         .arg(FOOBAR_2_TXT)
         .run_no_wait();
@@ -722,17 +705,17 @@ fn test_single_big_args() {
 
     let mut big_input = at.make_file(FILE);
     for i in 0..LINES {
-        writeln!(big_input, "Line {}", i).expect("Could not write to FILE");
+        writeln!(big_input, "Line {i}").expect("Could not write to FILE");
     }
     big_input.flush().expect("Could not flush FILE");
 
     let mut big_expected = at.make_file(EXPECTED_FILE);
     for i in (LINES - N_ARG)..LINES {
-        writeln!(big_expected, "Line {}", i).expect("Could not write to EXPECTED_FILE");
+        writeln!(big_expected, "Line {i}").expect("Could not write to EXPECTED_FILE");
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
-    ucmd.arg(FILE).arg("-n").arg(format!("{}", N_ARG)).run();
+    ucmd.arg(FILE).arg("-n").arg(format!("{N_ARG}")).run();
     // .stdout_is(at.read(EXPECTED_FILE));
 }
 
@@ -769,21 +752,21 @@ fn test_bytes_big() {
     let mut big_input = at.make_file(FILE);
     for i in 0..BYTES {
         let digit = from_digit((i % 10) as u32, 10).unwrap();
-        write!(big_input, "{}", digit).expect("Could not write to FILE");
+        write!(big_input, "{digit}").expect("Could not write to FILE");
     }
     big_input.flush().expect("Could not flush FILE");
 
     let mut big_expected = at.make_file(EXPECTED_FILE);
     for i in (BYTES - N_ARG)..BYTES {
         let digit = from_digit((i % 10) as u32, 10).unwrap();
-        write!(big_expected, "{}", digit).expect("Could not write to EXPECTED_FILE");
+        write!(big_expected, "{digit}").expect("Could not write to EXPECTED_FILE");
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
     let result = ucmd
         .arg(FILE)
         .arg("-c")
-        .arg(format!("{}", N_ARG))
+        .arg(format!("{N_ARG}"))
         .succeeds()
         .stdout_move_str();
     let expected = at.read(EXPECTED_FILE);
@@ -805,13 +788,13 @@ fn test_lines_with_size_suffix() {
 
     let mut big_input = at.make_file(FILE);
     for i in 0..LINES {
-        writeln!(big_input, "Line {}", i).expect("Could not write to FILE");
+        writeln!(big_input, "Line {i}").expect("Could not write to FILE");
     }
     big_input.flush().expect("Could not flush FILE");
 
     let mut big_expected = at.make_file(EXPECTED_FILE);
     for i in (LINES - N_ARG)..LINES {
-        writeln!(big_expected, "Line {}", i).expect("Could not write to EXPECTED_FILE");
+        writeln!(big_expected, "Line {i}").expect("Could not write to EXPECTED_FILE");
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
@@ -825,7 +808,6 @@ fn test_lines_with_size_suffix() {
 #[test]
 fn test_multiple_input_files() {
     new_ucmd!()
-        .set_stdin(Stdio::null())
         .arg(FOOBAR_TXT)
         .arg(FOOBAR_2_TXT)
         .run()
@@ -836,7 +818,6 @@ fn test_multiple_input_files() {
 #[test]
 fn test_multiple_input_files_missing() {
     new_ucmd!()
-        .set_stdin(Stdio::null())
         .arg(FOOBAR_TXT)
         .arg("missing1")
         .arg(FOOBAR_2_TXT)
@@ -845,7 +826,7 @@ fn test_multiple_input_files_missing() {
         .stdout_is_fixture("foobar_follow_multiple.expected")
         .stderr_is(
             "tail: cannot open 'missing1' for reading: No such file or directory\n\
-                tail: cannot open 'missing2' for reading: No such file or directory",
+                tail: cannot open 'missing2' for reading: No such file or directory\n",
         )
         .code_is(1);
 }
@@ -857,14 +838,13 @@ fn test_follow_missing() {
     // file to appear.
     for follow_mode in &["--follow=descriptor", "--follow=name"] {
         new_ucmd!()
-            .set_stdin(Stdio::null())
             .arg(follow_mode)
             .arg("missing")
             .run()
             .no_stdout()
             .stderr_is(
                 "tail: cannot open 'missing' for reading: No such file or directory\n\
-                    tail: no files remaining",
+                    tail: no files remaining\n",
             )
             .code_is(1);
     }
@@ -880,7 +860,7 @@ fn test_follow_name_stdin() {
         .arg("--follow=name")
         .arg("-")
         .run()
-        .stderr_is("tail: cannot follow '-' by name")
+        .stderr_is("tail: cannot follow '-' by name\n")
         .code_is(1);
     ts.ucmd()
         .arg("--follow=name")
@@ -888,7 +868,7 @@ fn test_follow_name_stdin() {
         .arg("-")
         .arg("FILE2")
         .run()
-        .stderr_is("tail: cannot follow '-' by name")
+        .stderr_is("tail: cannot follow '-' by name\n")
         .code_is(1);
 }
 
@@ -930,7 +910,6 @@ fn test_dir_follow() {
     at.mkdir("DIR");
     for mode in &["--follow=descriptor", "--follow=name"] {
         ts.ucmd()
-            .set_stdin(Stdio::null())
             .arg(mode)
             .arg("DIR")
             .run()
@@ -950,7 +929,6 @@ fn test_dir_follow_retry() {
     let at = &ts.fixtures;
     at.mkdir("DIR");
     ts.ucmd()
-        .set_stdin(Stdio::null())
         .arg("--follow=descriptor")
         .arg("--retry")
         .arg("DIR")
@@ -1207,12 +1185,7 @@ fn test_retry2() {
     let ts = TestScenario::new(util_name!());
     let missing = "missing";
 
-    let result = ts
-        .ucmd()
-        .set_stdin(Stdio::null())
-        .arg(missing)
-        .arg("--retry")
-        .run();
+    let result = ts.ucmd().arg(missing).arg("--retry").run();
     result
         .stderr_is(
             "tail: warning: --retry ignored; --retry is useful only when following\n\
@@ -1243,7 +1216,7 @@ fn test_retry3() {
     let mut delay = 1500;
     let mut args = vec!["--follow=name", "--retry", missing, "--use-polling"];
     for _ in 0..2 {
-        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+        let mut p = ts.ucmd().args(&args).run_no_wait();
 
         p.make_assertion_with_delay(delay).is_alive();
 
@@ -1296,7 +1269,7 @@ fn test_retry4() {
     ];
     let mut delay = 1500;
     for _ in 0..2 {
-        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+        let mut p = ts.ucmd().args(&args).run_no_wait();
 
         p.make_assertion_with_delay(delay).is_alive();
 
@@ -1345,7 +1318,7 @@ fn test_retry5() {
     let mut delay = 1500;
     let mut args = vec!["--follow=descriptor", "--retry", missing, "--use-polling"];
     for _ in 0..2 {
-        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+        let mut p = ts.ucmd().args(&args).run_no_wait();
 
         p.make_assertion_with_delay(delay).is_alive();
 
@@ -1386,7 +1359,6 @@ fn test_retry6() {
 
     let mut p = ts
         .ucmd()
-        .set_stdin(Stdio::null())
         .arg("--follow=descriptor")
         .arg("missing")
         .arg("existing")
@@ -1444,7 +1416,7 @@ fn test_retry7() {
     for _ in 0..2 {
         at.mkdir(untailable);
 
-        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+        let mut p = ts.ucmd().args(&args).run_no_wait();
 
         p.make_assertion_with_delay(delay).is_alive();
 
@@ -1516,7 +1488,6 @@ fn test_retry8() {
 
     let mut p = ts
         .ucmd()
-        .set_stdin(Stdio::null())
         .arg("-F")
         .arg("-s.1")
         .arg("--max-unchanged-stats=1")
@@ -1577,13 +1548,12 @@ fn test_retry9() {
         "\
             tail: 'parent_dir/watched_file' has become inaccessible: No such file or directory\n\
             tail: directory containing watched file was removed\n\
-            tail: {} cannot be used, reverting to polling\n\
+            tail: {BACKEND} cannot be used, reverting to polling\n\
             tail: 'parent_dir/watched_file' has appeared;  following new file\n\
             tail: 'parent_dir/watched_file' has become inaccessible: No such file or directory\n\
             tail: 'parent_dir/watched_file' has appeared;  following new file\n\
             tail: 'parent_dir/watched_file' has become inaccessible: No such file or directory\n\
-            tail: 'parent_dir/watched_file' has appeared;  following new file\n",
-        BACKEND
+            tail: 'parent_dir/watched_file' has appeared;  following new file\n"
     );
     let expected_stdout = "foo\nbar\nfoo\nbar\n";
 
@@ -1593,7 +1563,6 @@ fn test_retry9() {
     at.truncate(user_path, "foo\n");
     let mut p = ts
         .ucmd()
-        .set_stdin(Stdio::null())
         .arg("-F")
         .arg("-s.1")
         .arg("--max-unchanged-stats=1")
@@ -1666,7 +1635,7 @@ fn test_follow_descriptor_vs_rename1() {
     for _ in 0..2 {
         at.touch(file_a);
 
-        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+        let mut p = ts.ucmd().args(&args).run_no_wait();
 
         p.make_assertion_with_delay(delay).is_alive();
 
@@ -1726,7 +1695,7 @@ fn test_follow_descriptor_vs_rename2() {
     for _ in 0..2 {
         at.touch(file_a);
         at.touch(file_b);
-        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+        let mut p = ts.ucmd().args(&args).run_no_wait();
 
         p.make_assertion_with_delay(delay).is_alive();
 
@@ -1788,7 +1757,7 @@ fn test_follow_name_retry_headers() {
 
     let mut delay = 1500;
     for _ in 0..2 {
-        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+        let mut p = ts.ucmd().args(&args).run_no_wait();
 
         p.make_assertion_with_delay(delay).is_alive();
 
@@ -1850,7 +1819,7 @@ fn test_follow_name_remove() {
     for i in 0..2 {
         at.copy(source, source_copy);
 
-        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+        let mut p = ts.ucmd().args(&args).run_no_wait();
 
         p.make_assertion_with_delay(delay).is_alive();
 
@@ -1898,7 +1867,7 @@ fn test_follow_name_truncate1() {
     let expected_stderr = format!("{}: {}: file truncated\n", ts.util_name, source);
 
     let args = ["--follow=name", source];
-    let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+    let mut p = ts.ucmd().args(&args).run_no_wait();
     let delay = 1000;
     p.make_assertion().is_alive();
 
@@ -1940,7 +1909,7 @@ fn test_follow_name_truncate2() {
     let expected_stderr = format!("{}: {}: file truncated\n", ts.util_name, source);
 
     let args = ["--follow=name", source];
-    let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+    let mut p = ts.ucmd().args(&args).run_no_wait();
 
     let delay = 1000;
     p.make_assertion().is_alive();
@@ -1983,7 +1952,7 @@ fn test_follow_name_truncate3() {
     let expected_stdout = "x\n";
 
     let args = ["--follow=name", source];
-    let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+    let mut p = ts.ucmd().args(&args).run_no_wait();
 
     let delay = 1000;
     p.make_assertion_with_delay(delay).is_alive();
@@ -2012,7 +1981,7 @@ fn test_follow_name_truncate4() {
     for i in 0..2 {
         at.append("file", "foobar\n");
 
-        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+        let mut p = ts.ucmd().args(&args).run_no_wait();
 
         p.make_assertion_with_delay(delay).is_alive();
 
@@ -2061,7 +2030,7 @@ fn test_follow_truncate_fast() {
 
             at.truncate("f", "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n");
 
-            let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+            let mut p = ts.ucmd().args(&args).run_no_wait();
             p.make_assertion_with_delay(delay).is_alive();
 
             at.truncate("f", "11\n12\n13\n14\n15\n");
@@ -2118,7 +2087,7 @@ fn test_follow_name_move_create1() {
     let delay = 500;
     let args = ["--follow=name", source];
 
-    let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+    let mut p = ts.ucmd().args(&args).run_no_wait();
 
     p.make_assertion_with_delay(delay).is_alive();
 
@@ -2171,7 +2140,7 @@ fn test_follow_name_move_create2() {
 
     let mut delay = 500;
     for i in 0..2 {
-        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+        let mut p = ts.ucmd().args(&args).run_no_wait();
 
         p.make_assertion_with_delay(delay).is_alive();
 
@@ -2246,7 +2215,7 @@ fn test_follow_name_move1() {
     let mut delay = 500;
     #[allow(clippy::needless_range_loop)]
     for i in 0..2 {
-        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+        let mut p = ts.ucmd().args(&args).run_no_wait();
 
         p.make_assertion_with_delay(delay).is_alive();
 
@@ -2310,9 +2279,8 @@ fn test_follow_name_move2() {
     let file2 = "file2";
 
     let expected_stdout = format!(
-        "==> {0} <==\n{0}_content\n\n==> {1} <==\n{1}_content\n{0}_content\n\
-            more_{1}_content\n\n==> {0} <==\nmore_{0}_content\n",
-        file1, file2
+        "==> {file1} <==\n{file1}_content\n\n==> {file2} <==\n{file2}_content\n{file1}_content\n\
+            more_{file2}_content\n\n==> {file1} <==\nmore_{file1}_content\n"
     );
     let mut expected_stderr = format!(
         "{0}: {1}: No such file or directory\n\
@@ -2328,7 +2296,7 @@ fn test_follow_name_move2() {
         at.truncate(file1, "file1_content\n");
         at.truncate(file2, "file2_content\n");
 
-        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+        let mut p = ts.ucmd().args(&args).run_no_wait();
         p.make_assertion_with_delay(delay).is_alive();
 
         at.rename(file1, file2);
@@ -2392,7 +2360,7 @@ fn test_follow_name_move_retry1() {
     let mut delay = 1500;
     for _ in 0..2 {
         at.touch(source);
-        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+        let mut p = ts.ucmd().args(&args).run_no_wait();
 
         p.make_assertion_with_delay(delay).is_alive();
 
@@ -2467,9 +2435,8 @@ fn test_follow_name_move_retry2() {
     let file2 = "b";
 
     let expected_stdout = format!(
-        "==> {0} <==\n\n==> {1} <==\n\n==> {0} <==\nx\n\n==> {1} <==\
-            \nx\n\n==> {0} <==\nx2\n\n==> {1} <==\ny\n\n==> {0} <==\nz\n",
-        file1, file2
+        "==> {file1} <==\n\n==> {file2} <==\n\n==> {file1} <==\nx\n\n==> {file2} <==\
+            \nx\n\n==> {file1} <==\nx2\n\n==> {file2} <==\ny\n\n==> {file1} <==\nz\n"
     );
     let mut expected_stderr = format!(
         "{0}: '{1}' has become inaccessible: No such file or directory\n\
@@ -2485,7 +2452,7 @@ fn test_follow_name_move_retry2() {
         at.touch(file1);
         at.touch(file2);
 
-        let mut p = ts.ucmd().set_stdin(Stdio::null()).args(&args).run_no_wait();
+        let mut p = ts.ucmd().args(&args).run_no_wait();
         p.make_assertion_with_delay(delay).is_alive();
 
         at.truncate(file1, "x\n");
@@ -2537,12 +2504,7 @@ fn test_follow_inotify_only_regular() {
 
     let ts = TestScenario::new(util_name!());
 
-    let mut p = ts
-        .ucmd()
-        .set_stdin(Stdio::null())
-        .arg("-f")
-        .arg("/dev/null")
-        .run_no_wait();
+    let mut p = ts.ucmd().arg("-f").arg("/dev/null").run_no_wait();
 
     p.make_assertion_with_delay(200).is_alive();
     p.kill()
@@ -2555,10 +2517,9 @@ fn test_follow_inotify_only_regular() {
 #[test]
 fn test_no_such_file() {
     new_ucmd!()
-        .set_stdin(Stdio::null())
         .arg("missing")
         .fails()
-        .stderr_is("tail: cannot open 'missing' for reading: No such file or directory")
+        .stderr_is("tail: cannot open 'missing' for reading: No such file or directory\n")
         .no_stdout()
         .code_is(1);
 }
@@ -3483,7 +3444,7 @@ fn test_when_argument_file_is_a_directory() {
     let at = &ts.fixtures;
     at.mkdir("dir");
 
-    let expected = "tail: error reading 'dir': Is a directory";
+    let expected = "tail: error reading 'dir': Is a directory\n";
     ts.ucmd()
         .arg("dir")
         .fails()
@@ -3521,7 +3482,7 @@ fn test_when_argument_file_is_a_symlink() {
 
     at.symlink_file("dir", "dir_link");
 
-    let expected = "tail: error reading 'dir_link': Is a directory";
+    let expected = "tail: error reading 'dir_link': Is a directory\n";
     ts.ucmd()
         .arg("dir_link")
         .fails()
@@ -3539,7 +3500,7 @@ fn test_when_argument_file_is_a_symlink_to_directory_then_error() {
     at.mkdir("dir");
     at.symlink_file("dir", "dir_link");
 
-    let expected = "tail: error reading 'dir_link': Is a directory";
+    let expected = "tail: error reading 'dir_link': Is a directory\n";
     ts.ucmd()
         .arg("dir_link")
         .fails()
@@ -3597,17 +3558,17 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
 
     #[cfg(all(not(target_os = "freebsd"), not(target_os = "macos")))]
     let expected_stderr = format!(
-        "tail: cannot open '{}' for reading: No such device or address",
+        "tail: cannot open '{}' for reading: No such device or address\n",
         socket
     );
     #[cfg(target_os = "freebsd")]
     let expected_stderr = format!(
-        "tail: cannot open '{}' for reading: Operation not supported",
+        "tail: cannot open '{}' for reading: Operation not supported\n",
         socket
     );
     #[cfg(target_os = "macos")]
     let expected_stderr = format!(
-        "tail: cannot open '{}' for reading: Operation not supported on socket",
+        "tail: cannot open '{}' for reading: Operation not supported on socket\n",
         socket
     );
 
@@ -3886,8 +3847,7 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
 
     let expected_stdout = format!(
         "tail: warning: --retry ignored; --retry is useful only when following\n\
-        {}",
-        file_data
+        {file_data}"
     );
     scene
         .ucmd()
@@ -3899,8 +3859,7 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
 
     let expected_stdout = format!(
         "tail: warning: --retry only effective for the initial open\n\
-        {}",
-        file_data
+        {file_data}"
     );
     let mut child = scene
         .ucmd()
@@ -3917,8 +3876,7 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
 
     let expected_stdout = format!(
         "tail: warning: PID ignored; --pid=PID is useful only when following\n\
-        {}",
-        file_data
+        {file_data}"
     );
     scene
         .ucmd()
@@ -3931,8 +3889,7 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
     let expected_stdout = format!(
         "tail: warning: --retry ignored; --retry is useful only when following\n\
         tail: warning: PID ignored; --pid=PID is useful only when following\n\
-        {}",
-        file_data
+        {file_data}"
     );
     scene
         .ucmd()
@@ -3998,9 +3955,8 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
     let expected_stdout = format!(
         "tail: warning: following standard input indefinitely is ineffective\n\
         ==> data <==\n\
-        {}\n\
-        ==> standard input <==\n",
-        file_data
+        {file_data}\n\
+        ==> standard input <==\n"
     );
     // tail -f data - < /dev/ptmx
     let mut child = scene
@@ -4090,10 +4046,9 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
     let pipe_data = "pipe data";
     let expected_stdout = format!(
         "==> standard input <==\n\
-        {}\n\
-        ==> {} <==\n\
-        {}",
-        pipe_data, file_name, file_data
+        {pipe_data}\n\
+        ==> {file_name} <==\n\
+        {file_data}"
     );
     let mut child = scene
         .ucmd()
@@ -4122,10 +4077,9 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
     {
         let expected_stdout = format!(
             "==> standard input <==\n\
-        {}\n\
-        ==> {} <==\n\
-        {}",
-            fifo_data, file_name, file_data
+        {fifo_data}\n\
+        ==> {file_name} <==\n\
+        {file_data}"
         );
         let mut child = scene
             .ucmd()
@@ -4143,10 +4097,9 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
 
         let expected_stdout = format!(
             "==> standard input <==\n\
-        {}\n\
-        ==> {} <==\n\
-        {}",
-            fifo_data, file_name, file_data
+        {fifo_data}\n\
+        ==> {file_name} <==\n\
+        {file_data}"
         );
         let mut child = scene
             .ucmd()

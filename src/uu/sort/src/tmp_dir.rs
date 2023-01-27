@@ -31,7 +31,7 @@ impl TmpDirWrapper {
             parent_path: path,
             size: 0,
             temp_dir: None,
-            lock: Default::default(),
+            lock: Arc::default(),
         }
     }
 
@@ -56,7 +56,7 @@ impl TmpDirWrapper {
             }
             std::process::exit(2)
         })
-        .map_err(|e| USimpleError::new(2, format!("failed to set up signal handler: {}", e)))
+        .map_err(|e| USimpleError::new(2, format!("failed to set up signal handler: {e}")))
     }
 
     pub fn next_file(&mut self) -> UResult<(File, PathBuf)> {

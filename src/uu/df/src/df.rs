@@ -105,11 +105,11 @@ impl Default for Options {
         Self {
             show_local_fs: Default::default(),
             show_all_fs: Default::default(),
-            block_size: Default::default(),
-            human_readable: Default::default(),
-            header_mode: Default::default(),
-            include: Default::default(),
-            exclude: Default::default(),
+            block_size: BlockSize::default(),
+            human_readable: Option::default(),
+            header_mode: HeaderMode::default(),
+            include: Option::default(),
+            exclude: Option::default(),
             sync: Default::default(),
             show_total: Default::default(),
             columns: vec![
@@ -146,10 +146,10 @@ impl fmt::Display for OptionsError {
             }
             // TODO This needs to vary based on whether `--block-size`
             // or `-B` were provided.
-            Self::InvalidBlockSize(s) => write!(f, "invalid --block-size argument {}", s),
+            Self::InvalidBlockSize(s) => write!(f, "invalid --block-size argument {s}"),
             // TODO This needs to vary based on whether `--block-size`
             // or `-B` were provided.
-            Self::InvalidSuffix(s) => write!(f, "invalid suffix in --block-size argument {}", s),
+            Self::InvalidSuffix(s) => write!(f, "invalid suffix in --block-size argument {s}"),
             Self::ColumnError(ColumnError::MultipleColumns(s)) => write!(
                 f,
                 "option --output: field {} used more than once",

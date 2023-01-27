@@ -179,5 +179,5 @@ fn test_no_such_file() {
     new_ucmd!()
         .args(&["bogus_file_1", "bogus_file_2"])
         .fails()
-        .stderr_only("comm: bogus_file_1: No such file or directory");
+        .stderr_only("comm: bogus_file_1: No such file or directory\n");
 }

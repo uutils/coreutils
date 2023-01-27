@@ -198,7 +198,7 @@ fn tail_stdin(
                 // Save the current seek position/offset of a stdin redirected file.
                 // This is needed to pass "gnu/tests/tail-2/start-middle.sh"
                 if let Ok(mut stdin_handle) = Handle::stdin() {
-                    if let Ok(offset) = stdin_handle.as_file_mut().seek(SeekFrom::Current(0)) {
+                    if let Ok(offset) = stdin_handle.as_file_mut().stream_position() {
                         stdin_offset = offset;
                     }
                 }

@@ -21,10 +21,9 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::{crash, crash_if_err, format_usage};
 
-static NAME: &str = "unexpand";
 static USAGE: &str = "{} [OPTION]... [FILE]...";
-static ABOUT: &str = r#"Convert blanks in each FILE to tabs, writing to standard output.
-                        With no FILE, or when FILE is -, read standard input."#;
+static ABOUT: &str = "Convert blanks in each FILE to tabs, writing to standard output.\n\n\
+                      With no FILE, or when FILE is -, read standard input.";
 
 const DEFAULT_TABSTOP: usize = 8;
 
@@ -143,7 +142,7 @@ fn expand_shortcuts(args: &[String]) -> Vec<String> {
             arg[1..]
                 .split(',')
                 .filter(|s| !s.is_empty())
-                .for_each(|s| processed_args.push(format!("--tabs={}", s)));
+                .for_each(|s| processed_args.push(format!("--tabs={s}")));
             has_shortcuts = true;
         } else {
             processed_args.push(arg.to_string());
@@ -172,7 +171,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)

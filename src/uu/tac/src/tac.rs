@@ -23,7 +23,6 @@ use uucore::{format_usage, show};
 
 use crate::error::TacError;
 
-static NAME: &str = "tac";
 static USAGE: &str = "{} [OPTION]... [FILE]...";
 static ABOUT: &str = "Write each file to standard output, last line first.";
 
@@ -62,7 +61,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)

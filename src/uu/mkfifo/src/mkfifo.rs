@@ -12,7 +12,6 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, show};
 
-static NAME: &str = "mkfifo";
 static USAGE: &str = "{} [OPTION]... NAME...";
 static ABOUT: &str = "Create a FIFO with the given name.";
 
@@ -39,7 +38,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mode = match matches.get_one::<String>(options::MODE) {
         Some(m) => match usize::from_str_radix(m, 8) {
             Ok(m) => m,
-            Err(e) => return Err(USimpleError::new(1, format!("invalid mode: {}", e))),
+            Err(e) => return Err(USimpleError::new(1, format!("invalid mode: {e}"))),
         },
         None => 0o666,
     };
@@ -67,7 +66,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)

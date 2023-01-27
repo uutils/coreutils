@@ -249,7 +249,7 @@ impl Utmpx {
                         return Ok(if display.is_empty() {
                             ai_canonname
                         } else {
-                            format!("{}:{}", ai_canonname, display)
+                            format!("{ai_canonname}:{display}")
                         });
                     }
                 }

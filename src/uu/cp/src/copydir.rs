@@ -380,7 +380,7 @@ pub(crate) fn copy_directory(
     // the target directory.
     let context = match Context::new(root, target) {
         Ok(c) => c,
-        Err(e) => return Err(format!("failed to get current directory {}", e).into()),
+        Err(e) => return Err(format!("failed to get current directory {e}").into()),
     };
 
     // Traverse the contents of the directory, copying each one.
@@ -405,7 +405,7 @@ pub(crate) fn copy_directory(
         }
     }
     // Copy the attributes from the root directory to the target directory.
-    copy_attributes(root, target, &options.preserve_attributes)?;
+    copy_attributes(root, target, &options.attributes)?;
     Ok(())
 }
 

@@ -535,7 +535,7 @@ impl Stater {
 
                     for t in tokens.iter() {
                         match *t {
-                            Token::Char(c) => print!("{}", c),
+                            Token::Char(c) => print!("{c}"),
                             Token::Directive {
                                 flag,
                                 width,
@@ -588,7 +588,7 @@ impl Stater {
                                             let dst = match fs::read_link(&file) {
                                                 Ok(path) => path,
                                                 Err(e) => {
-                                                    println!("{}", e);
+                                                    println!("{e}");
                                                     return 1;
                                                 }
                                             };
@@ -668,7 +668,7 @@ impl Stater {
 
                     for t in tokens.iter() {
                         match *t {
-                            Token::Char(c) => print!("{}", c),
+                            Token::Char(c) => print!("{c}"),
                             Token::Directive {
                                 flag,
                                 width,

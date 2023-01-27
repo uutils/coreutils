@@ -231,7 +231,7 @@ fn truncate_reference_and_size(
     create: bool,
 ) -> UResult<()> {
     let mode = match parse_mode_and_size(size_string) {
-        Err(e) => return Err(USimpleError::new(1, format!("Invalid number: {}", e))),
+        Err(e) => return Err(USimpleError::new(1, format!("Invalid number: {e}"))),
         Ok(TruncateMode::Absolute(_)) => {
             return Err(USimpleError::new(
                 1,
@@ -338,7 +338,7 @@ fn truncate_reference_file_only(
 /// If at least one file is a named pipe (also known as a fifo).
 fn truncate_size_only(size_string: &str, filenames: &[String], create: bool) -> UResult<()> {
     let mode = parse_mode_and_size(size_string)
-        .map_err(|e| USimpleError::new(1, format!("Invalid number: {}", e)))?;
+        .map_err(|e| USimpleError::new(1, format!("Invalid number: {e}")))?;
     if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = mode {
         return Err(USimpleError::new(1, "division by zero"));
     }

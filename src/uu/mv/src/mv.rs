@@ -91,8 +91,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         app.error(
             ErrorKind::TooFewValues,
             format!(
-                "The argument '<{}>...' requires at least 2 values, but only 1 was provided",
-                ARG_FILES
+                "The argument '<{ARG_FILES}>...' requires at least 2 values, but only 1 was provided"
             ),
         )
         .exit();
@@ -284,12 +283,12 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
 
             if target.is_dir() {
                 if b.no_target_dir {
-                    if !source.is_dir() {
-                        Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
-                    } else {
+                    if source.is_dir() {
                         rename(source, target, b, None).map_err_context(|| {
                             format!("cannot move {} to {}", source.quote(), target.quote())
                         })
+                    } else {
+                        Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
                     }
                 } else {
                     move_files_into_dir(&[source.clone()], target, b)
@@ -310,7 +309,7 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
                 )
                 .into())
             } else {
-                rename(source, target, b, None).map_err(|e| USimpleError::new(1, format!("{}", e)))
+                rename(source, target, b, None).map_err(|e| USimpleError::new(1, format!("{e}")))
             }
         }
         _ => {
@@ -473,9 +472,9 @@ fn rename(
 
         match multi_progress {
             Some(pb) => pb.suspend(|| {
-                println!("{}", message);
+                println!("{message}");
             }),
-            None => println!("{}", message),
+            None => println!("{message}"),
         };
     }
     Ok(())
@@ -547,7 +546,7 @@ fn rename_with_fallback(
                         io::ErrorKind::PermissionDenied,
                         "Permission denied",
                     )),
-                    _ => Err(io::Error::new(io::ErrorKind::Other, format!("{:?}", err))),
+                    _ => Err(io::Error::new(io::ErrorKind::Other, format!("{err:?}"))),
                 };
             }
         } else {

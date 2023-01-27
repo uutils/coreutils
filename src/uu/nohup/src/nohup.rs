@@ -65,7 +65,7 @@ impl Display for NohupError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             Self::CannotDetach => write!(f, "Cannot detach from console"),
-            Self::CannotReplace(s, e) => write!(f, "Cannot replace {}: {}", s, e),
+            Self::CannotReplace(s, e) => write!(f, "Cannot replace {s}: {e}"),
             Self::OpenFailed(_, e) => {
                 write!(f, "failed to open {}: {}", NOHUP_OUT.quote(), e)
             }

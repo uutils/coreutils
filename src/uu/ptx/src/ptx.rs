@@ -21,7 +21,6 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::format_usage;
 
-static NAME: &str = "ptx";
 const USAGE: &str = "\
     {} [OPTION]... [INPUT]...
     {} -G [OPTION]... [INPUT [OUTPUT]]";
@@ -171,7 +170,7 @@ impl WordFilter {
                             .unwrap()
                             .into_iter()
                             .map(|c| if REGEX_CHARCLASS.contains(c) {
-                                format!("\\{}", c)
+                                format!("\\{c}")
                             } else {
                                 c.to_string()
                             })
@@ -221,14 +220,14 @@ impl Display for PtxError {
             Self::DumbFormat => {
                 write!(f, "There is no dumb format with GNU extensions disabled")
             }
-            Self::NotImplemented(s) => write!(f, "{} not implemented yet", s),
+            Self::NotImplemented(s) => write!(f, "{s} not implemented yet"),
             Self::ParseError(e) => e.fmt(f),
         }
     }
 }
 
 fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
-    let mut config: Config = Default::default();
+    let mut config = Config::default();
     let err_msg = "parsing options failed";
     if matches.get_flag(options::TRADITIONAL) {
         config.gnu_ext = false;
@@ -554,8 +553,8 @@ fn get_output_chunks(
 fn tex_mapper(x: char) -> String {
     match x {
         '\\' => "\\backslash{}".to_owned(),
-        '$' | '%' | '#' | '&' | '_' => format!("\\{}", x),
-        '}' | '{' => format!("$\\{}$", x),
+        '$' | '%' | '#' | '&' | '_' => format!("\\{x}"),
+        '}' | '{' => format!("$\\{x}$"),
         _ => x.to_string(),
     }
 }
@@ -697,7 +696,7 @@ fn write_traditional_output(
                 return Err(PtxError::DumbFormat.into());
             }
         };
-        writeln!(writer, "{}", output_line).map_err_context(String::new)?;
+        writeln!(writer, "{output_line}").map_err_context(String::new)?;
     }
     Ok(())
 }
@@ -747,7 +746,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .about(ABOUT)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))

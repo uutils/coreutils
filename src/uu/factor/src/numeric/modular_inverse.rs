@@ -13,7 +13,7 @@ use super::traits::Int;
 pub(crate) fn modular_inverse<T: Int>(a: T) -> T {
     let zero = T::zero();
     let one = T::one();
-    debug_assert!(a % (one + one) == one, "{:?} is not odd", a);
+    debug_assert!(a % (one + one) == one, "{a:?} is not odd");
 
     let mut t = zero;
     let mut new_t = one;

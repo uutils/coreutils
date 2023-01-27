@@ -18,7 +18,6 @@ use uucore::format_usage;
 
 mod helper;
 
-static NAME: &str = "nl";
 static ABOUT: &str = "number lines of files";
 static USAGE: &str = "{} [OPTION]... [FILE]...";
 
@@ -141,7 +140,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .about(ABOUT)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
@@ -351,7 +349,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
             // want to print one in the first place, or it is a blank
             // line but we are still collecting more blank lines via
             // the option --join-blank-lines.
-            println!("{}", line);
+            println!("{line}");
             continue;
         }
         // If we make it here, then either we are printing a non-empty

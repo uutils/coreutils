@@ -100,7 +100,7 @@ impl ProgUpdate {
         match self.read_stat.records_truncated {
             0 => {}
             1 => writeln!(w, "1 truncated record")?,
-            n => writeln!(w, "{} truncated records", n)?,
+            n => writeln!(w, "{n} truncated records")?,
         }
         Ok(())
     }
@@ -154,29 +154,19 @@ impl ProgUpdate {
         match btotal {
             1 => write!(
                 w,
-                "{}{} byte copied, {:.1} s, {}/s{}",
-                carriage_return, btotal, duration, transfer_rate, newline,
+                "{carriage_return}{btotal} byte copied, {duration:.1} s, {transfer_rate}/s{newline}",
             ),
             0..=999 => write!(
                 w,
-                "{}{} bytes copied, {:.1} s, {}/s{}",
-                carriage_return, btotal, duration, transfer_rate, newline,
+                "{carriage_return}{btotal} bytes copied, {duration:.1} s, {transfer_rate}/s{newline}",
             ),
             1000..=1023 => write!(
                 w,
-                "{}{} bytes ({}) copied, {:.1} s, {}/s{}",
-                carriage_return, btotal, btotal_metric, duration, transfer_rate, newline,
+                "{carriage_return}{btotal} bytes ({btotal_metric}) copied, {duration:.1} s, {transfer_rate}/s{newline}",
             ),
             _ => write!(
                 w,
-                "{}{} bytes ({}, {}) copied, {:.1} s, {}/s{}",
-                carriage_return,
-                btotal,
-                btotal_metric,
-                btotal_bin,
-                duration,
-                transfer_rate,
-                newline,
+                "{carriage_return}{btotal} bytes ({btotal_metric}, {btotal_bin}) copied, {duration:.1} s, {transfer_rate}/s{newline}",
             ),
         }
     }
@@ -455,10 +445,7 @@ pub(crate) fn gen_prog_updater(
 
         register_linux_signal_handler(sigval.clone()).unwrap_or_else(|e| {
             if Some(StatusLevel::None) != print_level {
-                eprintln!(
-                    "Internal dd Warning: Unable to register signal handler \n\t{}",
-                    e
-                );
+                eprintln!("Internal dd Warning: Unable to register signal handler \n\t{e}");
             }
         });
 

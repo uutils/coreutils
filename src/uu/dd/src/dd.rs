@@ -491,8 +491,8 @@ impl<'a> Output<'a> {
         // These objects are counters, initialized to zero. After each
         // iteration of the main loop, each will be incremented by the
         // number of blocks read and written, respectively.
-        let mut rstat = Default::default();
-        let mut wstat = Default::default();
+        let mut rstat = ReadStat::default();
+        let mut wstat = WriteStat::default();
 
         // The time at which the main loop starts executing.
         //
@@ -772,9 +772,7 @@ fn is_stdout_redirected_to_seekable_file() -> bool {
     let p = Path::new(&s);
     match File::open(p) {
         Ok(mut f) => {
-            f.seek(SeekFrom::Current(0)).is_ok()
-                && f.seek(SeekFrom::End(0)).is_ok()
-                && f.seek(SeekFrom::Start(0)).is_ok()
+            f.stream_position().is_ok() && f.seek(SeekFrom::End(0)).is_ok() && f.rewind().is_ok()
         }
         Err(_) => false,
     }
