@@ -246,7 +246,7 @@ impl FromStr for InvalidModes {
             "fail" => Ok(Self::Fail),
             "warn" => Ok(Self::Warn),
             "ignore" => Ok(Self::Ignore),
-            unknown => Err(format!("Unknown invalid mode: {}", unknown)),
+            unknown => Err(format!("Unknown invalid mode: {unknown}")),
         }
     }
 }
