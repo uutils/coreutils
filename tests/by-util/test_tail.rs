@@ -626,11 +626,14 @@ fn test_follow_invalid_pid() {
 }
 
 // FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort')  This test also breaks tty settings under bash requiring a 'stty sane' or reset. // spell-checker:disable-line
+// FIXME: FreeBSD: See issue https://github.com/uutils/coreutils/issues/4306
+//        Fails intermittently in the CI, but couldn't reproduce the failure locally.
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "windows"),
-    not(target_os = "android")
+    not(target_os = "android"),
+    not(target_os = "freebsd")
 ))] // FIXME: for currently not working platforms
 fn test_follow_with_pid() {
     use std::process::Command;
