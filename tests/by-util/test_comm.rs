@@ -56,6 +56,22 @@ fn empty_empty() {
 }
 
 #[test]
+fn total() {
+    new_ucmd!()
+        .args(&["--total", "a", "b"])
+        .succeeds()
+        .stdout_is_fixture("ab_total.expected");
+}
+
+#[test]
+fn total_with_suppressed_regular_output() {
+    new_ucmd!()
+        .args(&["--total", "-123", "a", "b"])
+        .succeeds()
+        .stdout_is_fixture("ab_total_suppressed_regular_output.expected");
+}
+
+#[test]
 fn output_delimiter() {
     new_ucmd!()
         .args(&["--output-delimiter=word", "a", "b"])
