@@ -42,7 +42,7 @@ where
     for (idx, line_result) in input.lines().by_ref().enumerate() {
         match line_result {
             Ok(line) if idx < options.header => {
-                println!("{}", line);
+                println!("{line}");
                 Ok(())
             }
             Ok(line) => format_and_handle_validation(line.as_ref(), options),
@@ -62,14 +62,14 @@ fn format_and_handle_validation(input_line: &str, options: &NumfmtOptions) -> UR
             }
             InvalidModes::Fail => {
                 show!(NumfmtError::FormattingError(error_message));
-                println!("{}", input_line);
+                println!("{input_line}");
             }
             InvalidModes::Ignore => {
-                println!("{}", input_line);
+                println!("{input_line}");
             }
             InvalidModes::Warn => {
                 show_error!("{}", error_message);
-                println!("{}", input_line);
+                println!("{input_line}");
             }
         };
     }
