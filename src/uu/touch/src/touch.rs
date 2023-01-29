@@ -43,8 +43,8 @@ static ARG_FILES: &str = "files";
 
 // Convert a date/time to a date with a TZ offset
 fn to_local(tm: time::PrimitiveDateTime) -> time::OffsetDateTime {
-    let offset = match time::OffsetDateTime::now_local() {
-        Ok(lo) => lo.offset(),
+    let offset = match time::UtcOffset::local_offset_at(tm.assume_utc()) {
+        Ok(lo) => lo,
         Err(e) => {
             panic!("error: {e}");
         }
