@@ -8,7 +8,7 @@
 #![allow(dead_code)]
 
 use pretty_assertions::assert_eq;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::prlimit;
 use rstest::rstest;
 #[cfg(unix)]
@@ -1406,7 +1406,7 @@ impl UCommand {
 
         let child = command.spawn().unwrap();
 
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "android"))]
         for &(resource, soft_limit, hard_limit) in &self.limits {
             prlimit(
                 child.id() as i32,
