@@ -15,7 +15,7 @@ edition = "2021"
 path = "src/mktemp.rs"
 
 [dependencies]
-clap = { version = "4.0", features = ["wrap_help", "cargo"] }
+clap = { version = "4.1", features = ["wrap_help", "cargo"] }
 rand = "0.8"
 tempfile = "3"
 uucore = { version=">=0.0.17", package="uucore", path="../../uucore" }

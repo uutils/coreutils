@@ -265,7 +265,7 @@ test = [ "uu_test" ]
 [workspace]
 
 [dependencies]
-clap = { version = "4.0", features = ["wrap_help", "cargo"] }
+clap = { version = "4.1", features = ["wrap_help", "cargo"] }
 clap_complete = "4.0"
 once_cell = "1.13.1"
 phf = "0.11.1"
