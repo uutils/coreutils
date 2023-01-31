@@ -1,4 +1,4 @@
-// spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime
+// spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime CEST
 
 // This test relies on
 // --cfg unsound_local_offset
