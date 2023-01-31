@@ -72,6 +72,14 @@ fn total_with_suppressed_regular_output() {
 }
 
 #[test]
+fn total_with_output_delimiter() {
+    new_ucmd!()
+        .args(&["--total", "--output-delimiter=word", "a", "b"])
+        .succeeds()
+        .stdout_is_fixture("ab_total_delimiter_word.expected");
+}
+
+#[test]
 fn output_delimiter() {
     new_ucmd!()
         .args(&["--output-delimiter=word", "a", "b"])

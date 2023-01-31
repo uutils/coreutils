@@ -32,21 +32,12 @@ mod options {
     pub const TOTAL: &str = "total";
 }
 
-fn mkdelim(col: usize, opts: &ArgMatches) -> String {
-    let mut s = String::new();
-    let delim = match opts.get_one::<String>(options::DELIMITER).unwrap().as_str() {
-        "" => "\0",
-        delim => delim,
-    };
-
-    if col > 1 && !opts.get_flag(options::COLUMN_1) {
-        s.push_str(delim.as_ref());
+fn column_width(col: &str, opts: &ArgMatches) -> usize {
+    if opts.get_flag(col) {
+        0
+    } else {
+        1
     }
-    if col > 2 && !opts.get_flag(options::COLUMN_2) {
-        s.push_str(delim.as_ref());
-    }
-
-    s
 }
 
 fn ensure_nl(line: &mut String) {
@@ -70,7 +61,16 @@ impl LineReader {
 }
 
 fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
-    let delim: Vec<String> = (0..4).map(|col| mkdelim(col, opts)).collect();
+    let delim = match opts.get_one::<String>(options::DELIMITER).unwrap().as_str() {
+        "" => "\0",
+        delim => delim,
+    };
+
+    let width_col_1 = column_width(options::COLUMN_1, opts);
+    let width_col_2 = column_width(options::COLUMN_2, opts);
+
+    let delim_col_2 = delim.repeat(width_col_1);
+    let delim_col_3 = delim.repeat(width_col_1 + width_col_2);
 
     let ra = &mut String::new();
     let mut na = a.read_line(ra);
@@ -98,7 +98,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
             Ordering::Less => {
                 if !opts.get_flag(options::COLUMN_1) {
                     ensure_nl(ra);
-                    print!("{}{}", delim[1], ra);
+                    print!("{ra}");
                 }
                 ra.clear();
                 na = a.read_line(ra);
@@ -107,7 +107,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
             Ordering::Greater => {
                 if !opts.get_flag(options::COLUMN_2) {
                     ensure_nl(rb);
-                    print!("{}{}", delim[2], rb);
+                    print!("{delim_col_2}{rb}");
                 }
                 rb.clear();
                 nb = b.read_line(rb);
@@ -116,7 +116,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
             Ordering::Equal => {
                 if !opts.get_flag(options::COLUMN_3) {
                     ensure_nl(ra);
-                    print!("{}{}", delim[3], ra);
+                    print!("{delim_col_3}{ra}");
                 }
                 ra.clear();
                 rb.clear();
@@ -128,7 +128,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
     }
 
     if opts.get_flag(options::TOTAL) {
-        println!("{total_col_1}\t{total_col_2}\t{total_col_3}\ttotal");
+        println!("{total_col_1}{delim}{total_col_2}{delim}{total_col_3}{delim}total");
     }
 }
 
