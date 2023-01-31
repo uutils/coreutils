@@ -841,3 +841,35 @@ fn test_touch_trailing_slash_no_create() {
     at.relative_symlink_dir("dir2", "link2");
     ucmd.args(&["-c", "link2/"]).succeeds();
 }
+
+// We test with the CET timezone because it exhibits DST
+// Check:
+//   If the date is July -> We are in CEST -> UTC offset should be +2
+//   If the date is January -> We are in CET -> UTC offset should be +1
+#[test]
+fn test_touch_tz_crosses_dst() {
+    std::env::set_var("TZ", "CET");
+    let file = "test_touch_tz_crosses_dst_file";
+
+    let t1 = datetime!(2023-01-01 00:00).assume_utc().unix_timestamp();
+
+    // CET time
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-t", "202301010000", "-a", file])
+        .succeeds()
+        .no_stderr();
+    assert!(at.file_exists(file));
+    let (atime_cet, _) = get_file_times(&at, file);
+    assert!(t1 == atime_cet.seconds() + 60 * 60);
+
+    let t2 = datetime!(2023-07-01 00:00).assume_utc().unix_timestamp();
+
+    // CEST time
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-t", "202307010000", "-a", file])
+        .succeeds()
+        .no_stderr();
+    assert!(at.file_exists(file));
+    let (atime_cest, _) = get_file_times(&at, file);
+    assert!(t2 == atime_cest.seconds() + 2 * 60 * 60);
+}
