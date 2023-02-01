@@ -321,13 +321,13 @@ fn test_include_exclude_same_type() {
     new_ucmd!()
         .args(&["-t", "ext4", "-x", "ext4"])
         .fails()
-        .stderr_is("df: file system type 'ext4' both selected and excluded");
+        .stderr_is("df: file system type 'ext4' both selected and excluded\n");
     new_ucmd!()
         .args(&["-t", "ext4", "-x", "ext4", "-t", "ext3", "-x", "ext3"])
         .fails()
         .stderr_is(
             "df: file system type 'ext4' both selected and excluded\n\
-             df: file system type 'ext3' both selected and excluded",
+             df: file system type 'ext3' both selected and excluded\n",
         );
 }
 
@@ -519,7 +519,7 @@ fn test_default_block_size_in_posix_portability_mode() {
 fn test_block_size_1024() {
     fn get_header(block_size: u64) -> String {
         let output = new_ucmd!()
-            .args(&["-B", &format!("{}", block_size), "--output=size"])
+            .args(&["-B", &format!("{block_size}"), "--output=size"])
             .succeeds()
             .stdout_move_str();
         output.lines().next().unwrap().trim().to_string()
@@ -693,9 +693,9 @@ fn test_ignore_block_size_from_env_in_posix_portability_mode() {
 fn test_too_large_block_size() {
     fn run_command(size: &str) {
         new_ucmd!()
-            .arg(format!("--block-size={}", size))
+            .arg(format!("--block-size={size}"))
             .fails()
-            .stderr_contains(format!("--block-size argument '{}' too large", size));
+            .stderr_contains(format!("--block-size argument '{size}' too large"));
     }
 
     let too_large_sizes = vec!["1Y", "1Z"];
@@ -853,7 +853,7 @@ fn test_nonexistent_file() {
     new_ucmd!()
         .arg("does-not-exist")
         .fails()
-        .stderr_only("df: does-not-exist: No such file or directory");
+        .stderr_only("df: does-not-exist: No such file or directory\n");
     new_ucmd!()
         .args(&["--output=file", "does-not-exist", "."])
         .fails()

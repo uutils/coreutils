@@ -87,7 +87,7 @@ impl Error for InstallError {}
 impl Display for InstallError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Unimplemented(opt) => write!(f, "Unimplemented feature: {}", opt),
+            Self::Unimplemented(opt) => write!(f, "Unimplemented feature: {opt}"),
             Self::DirNeedsArg() => {
                 write!(
                     f,
@@ -115,7 +115,7 @@ impl Display for InstallError {
                 &uio_error!(e, "cannot install {} to {}", from.quote(), to.quote()),
                 f,
             ),
-            Self::StripProgramFailed(msg) => write!(f, "strip program failed: {}", msg),
+            Self::StripProgramFailed(msg) => write!(f, "strip program failed: {msg}"),
             Self::MetadataFailed(e) => Display::fmt(&uio_error!(e, ""), f),
             Self::NoSuchUser(user) => write!(f, "no such user: {}", user.maybe_quote()),
             Self::NoSuchGroup(group) => write!(f, "no such group: {}", group.maybe_quote()),

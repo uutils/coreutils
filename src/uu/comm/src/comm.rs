@@ -29,6 +29,7 @@ mod options {
     pub const DELIMITER_DEFAULT: &str = "\t";
     pub const FILE_1: &str = "FILE1";
     pub const FILE_2: &str = "FILE2";
+    pub const TOTAL: &str = "total";
 }
 
 fn mkdelim(col: usize, opts: &ArgMatches) -> String {
@@ -76,6 +77,10 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
     let rb = &mut String::new();
     let mut nb = b.read_line(rb);
 
+    let mut total_col_1 = 0;
+    let mut total_col_2 = 0;
+    let mut total_col_3 = 0;
+
     while na.is_ok() || nb.is_ok() {
         let ord = match (na.is_ok(), nb.is_ok()) {
             (false, true) => Ordering::Greater,
@@ -97,6 +102,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
                 }
                 ra.clear();
                 na = a.read_line(ra);
+                total_col_1 += 1;
             }
             Ordering::Greater => {
                 if !opts.get_flag(options::COLUMN_2) {
@@ -105,6 +111,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
                 }
                 rb.clear();
                 nb = b.read_line(rb);
+                total_col_2 += 1;
             }
             Ordering::Equal => {
                 if !opts.get_flag(options::COLUMN_3) {
@@ -115,8 +122,13 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
                 rb.clear();
                 na = a.read_line(ra);
                 nb = b.read_line(rb);
+                total_col_3 += 1;
             }
         }
+    }
+
+    if opts.get_flag(options::TOTAL) {
+        println!("{total_col_1}\t{total_col_2}\t{total_col_3}\ttotal");
     }
 }
 
@@ -186,5 +198,11 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE_2)
                 .required(true)
                 .value_hint(clap::ValueHint::FilePath),
+        )
+        .arg(
+            Arg::new(options::TOTAL)
+                .long(options::TOTAL)
+                .help("output a summary")
+                .action(ArgAction::SetTrue),
         )
 }

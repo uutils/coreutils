@@ -110,5 +110,5 @@ fn test_base64_file_not_found() {
     new_ucmd!()
         .arg("a.txt")
         .fails()
-        .stderr_only("base64: a.txt: No such file or directory");
+        .stderr_only("base64: a.txt: No such file or directory\n");
 }

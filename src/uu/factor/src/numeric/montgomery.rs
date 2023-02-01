@@ -192,7 +192,7 @@ mod tests {
                 let m_x = m.to_mod(x);
                 for y in 0..=x {
                     let m_y = m.to_mod(y);
-                    println!("{n:?}, {x:?}, {y:?}", n = n, x = x, y = y);
+                    println!("{n:?}, {x:?}, {y:?}");
                     assert_eq!((x + y) % n, m.to_u64(m.add(m_x, m_y)));
                 }
             }

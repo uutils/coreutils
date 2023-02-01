@@ -123,13 +123,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if files.is_empty() {
         let (crc, size) = cksum("-")?;
-        println!("{} {}", crc, size);
+        println!("{crc} {size}");
         return Ok(());
     }
 
     for fname in &files {
         match cksum(fname.as_ref()).map_err_context(|| format!("{}", fname.maybe_quote())) {
-            Ok((crc, size)) => println!("{} {} {}", crc, size, fname),
+            Ok((crc, size)) => println!("{crc} {size} {fname}"),
             Err(err) => show!(err),
         };
     }

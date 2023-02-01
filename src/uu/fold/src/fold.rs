@@ -188,9 +188,9 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
             let at_eol = i >= len;
 
             if at_eol {
-                print!("{}", slice);
+                print!("{slice}");
             } else {
-                println!("{}", slice);
+                println!("{slice}");
             }
         }
 
@@ -285,7 +285,7 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> URe
         }
 
         if !output.is_empty() {
-            print!("{}", output);
+            print!("{output}");
             output.truncate(0);
         }
 

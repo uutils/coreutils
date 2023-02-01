@@ -31,7 +31,7 @@ pub enum SubError {
 impl Display for SubError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
-            Self::InvalidSpec(s) => write!(f, "%{}: invalid conversion specification", s),
+            Self::InvalidSpec(s) => write!(f, "%{s}: invalid conversion specification"),
         }
     }
 }

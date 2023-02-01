@@ -25,8 +25,7 @@ fn test_rm_failed() {
     let file = "test_rm_one_file"; // Doesn't exist
 
     ucmd.arg(file).fails().stderr_contains(&format!(
-        "cannot remove '{}': No such file or directory",
-        file
+        "cannot remove '{file}': No such file or directory"
     ));
 }
 
@@ -136,7 +135,7 @@ fn test_rm_empty_directory_verbose() {
         .arg("-v")
         .arg(dir)
         .succeeds()
-        .stdout_only(format!("removed directory '{}'\n", dir));
+        .stdout_only(format!("removed directory '{dir}'\n"));
 
     assert!(!at.dir_exists(dir));
 }
@@ -145,7 +144,7 @@ fn test_rm_empty_directory_verbose() {
 fn test_rm_non_empty_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_non_empty_dir";
-    let file_a = &format!("{}/test_rm_non_empty_file_a", dir);
+    let file_a = &format!("{dir}/test_rm_non_empty_file_a");
 
     at.mkdir(dir);
     at.touch(file_a);
@@ -153,7 +152,7 @@ fn test_rm_non_empty_directory() {
     ucmd.arg("-d")
         .arg(dir)
         .fails()
-        .stderr_contains(&format!("cannot remove '{}': Directory not empty", dir));
+        .stderr_contains(&format!("cannot remove '{dir}': Directory not empty"));
     assert!(at.file_exists(file_a));
     assert!(at.dir_exists(dir));
 }
@@ -208,7 +207,7 @@ fn test_rm_directory_without_flag() {
 
     ucmd.arg(dir)
         .fails()
-        .stderr_contains(&format!("cannot remove '{}': Is a directory", dir));
+        .stderr_contains(&format!("cannot remove '{dir}': Is a directory"));
 }
 
 #[test]
@@ -224,7 +223,7 @@ fn test_rm_verbose() {
         .arg(file_a)
         .arg(file_b)
         .succeeds()
-        .stdout_only(format!("removed '{}'\nremoved '{}'\n", file_a, file_b));
+        .stdout_only(format!("removed '{file_a}'\nremoved '{file_b}'\n"));
 }
 
 #[test]
@@ -259,7 +258,7 @@ fn test_rm_symlink_dir() {
         .ucmd()
         .arg(link)
         .fails()
-        .stderr_contains(&format!("cannot remove '{}': Is a directory", link));
+        .stderr_contains(&format!("cannot remove '{link}': Is a directory"));
 
     assert!(at.dir_exists(link));
 
@@ -293,7 +292,7 @@ fn test_rm_no_operand() {
 fn test_rm_verbose_slash() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_verbose_slash_directory";
-    let file_a = &format!("{}/test_rm_verbose_slash_file_a", dir);
+    let file_a = &format!("{dir}/test_rm_verbose_slash_file_a");
 
     at.mkdir(dir);
     at.touch(file_a);
@@ -307,11 +306,10 @@ fn test_rm_verbose_slash() {
     ucmd.arg("-r")
         .arg("-f")
         .arg("-v")
-        .arg(&format!("{}///", dir))
+        .arg(&format!("{dir}///"))
         .succeeds()
         .stdout_only(format!(
-            "removed '{}'\nremoved directory '{}'\n",
-            file_a_normalized, dir
+            "removed '{file_a_normalized}'\nremoved directory '{dir}'\n"
         ));
 
     assert!(!at.dir_exists(dir));
@@ -359,7 +357,7 @@ fn test_rm_descend_directory() {
     // Needed for talking with stdin on platforms where CRLF or LF matters
     const END_OF_LINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
 
-    let yes = format!("y{}", END_OF_LINE);
+    let yes = format!("y{END_OF_LINE}");
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -414,7 +412,7 @@ fn test_rm_prompts() {
 
     answers.sort();
 
-    let yes = format!("y{}", END_OF_LINE);
+    let yes = format!("y{END_OF_LINE}");
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -463,7 +461,7 @@ fn test_rm_prompts() {
     let mut trimmed_output = Vec::new();
     for string in result.stderr_str().split("rm: ") {
         if !string.is_empty() {
-            let trimmed_string = format!("rm: {}", string).trim().to_string();
+            let trimmed_string = format!("rm: {string}").trim().to_string();
             trimmed_output.push(trimmed_string);
         }
     }
@@ -484,7 +482,7 @@ fn test_rm_force_prompts_order() {
     // Needed for talking with stdin on platforms where CRLF or LF matters
     const END_OF_LINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
 
-    let yes = format!("y{}", END_OF_LINE);
+    let yes = format!("y{END_OF_LINE}");
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -503,11 +501,8 @@ fn test_rm_force_prompts_order() {
     child.try_write_in(yes.as_bytes()).unwrap();
 
     let result = child.wait().unwrap();
-    let string_output = result.stderr_str();
-    assert_eq!(
-        string_output.trim(),
-        "rm: remove regular empty file 'empty'?"
-    );
+    result.stderr_only("rm: remove regular empty file 'empty'? ");
+
     assert!(!at.file_exists(empty_file));
 
     at.touch(empty_file);

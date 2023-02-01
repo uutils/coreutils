@@ -44,8 +44,8 @@ fn test_heading() {
         //   specifically number of TABs between "TIME" and "COMMENT" may be variant
         let actual = ts.ucmd().arg(opt).succeeds().stdout_move_str();
         let expect = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
-        println!("actual: {:?}", actual);
-        println!("expect: {:?}", expect);
+        println!("actual: {actual:?}");
+        println!("expect: {expect:?}");
         let v_actual: Vec<&str> = actual.split_whitespace().collect();
         let v_expect: Vec<&str> = expect.split_whitespace().collect();
         assert_eq!(v_actual, v_expect);
@@ -165,8 +165,8 @@ fn test_users() {
     for opt in ["-u", "--users", "--us"] {
         let actual = ts.ucmd().arg(opt).succeeds().stdout_move_str();
         let expect = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
-        println!("actual: {:?}", actual);
-        println!("expect: {:?}", expect);
+        println!("actual: {actual:?}");
+        println!("expect: {expect:?}");
 
         let mut v_actual: Vec<&str> = actual.split_whitespace().collect();
         let mut v_expect: Vec<&str> = expect.split_whitespace().collect();

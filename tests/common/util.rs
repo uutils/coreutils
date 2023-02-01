@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-//spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured
+//spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd
 
 #![allow(dead_code)]
 
@@ -20,12 +20,14 @@ use std::fs::{self, hard_link, remove_file, File, OpenOptions};
 use std::io::{self, BufWriter, Read, Result, Write};
 #[cfg(unix)]
 use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file, PermissionsExt};
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 #[cfg(windows)]
 use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Output, Stdio};
+use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::rc::Rc;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread::{sleep, JoinHandle};
@@ -73,10 +75,7 @@ pub struct CmdResult {
     //tmpd is used for convenience functions for asserts against fixtures
     tmpd: Option<Rc<TempDir>>,
     /// exit status for command (if there is one)
-    code: Option<i32>,
-    /// zero-exit from running the Command?
-    /// see [`success`]
-    success: bool,
+    exit_status: Option<ExitStatus>,
     /// captured standard output after running the Command
     stdout: Vec<u8>,
     /// captured standard error after running the Command
@@ -84,24 +83,231 @@ pub struct CmdResult {
 }
 
 impl CmdResult {
-    pub fn new(
+    pub fn new<T, U>(
         bin_path: String,
         util_name: Option<String>,
         tmpd: Option<Rc<TempDir>>,
-        code: Option<i32>,
-        success: bool,
-        stdout: &[u8],
-        stderr: &[u8],
-    ) -> Self {
+        exit_status: Option<ExitStatus>,
+        stdout: T,
+        stderr: U,
+    ) -> Self
+    where
+        T: Into<Vec<u8>>,
+        U: Into<Vec<u8>>,
+    {
         Self {
             bin_path,
             util_name,
             tmpd,
-            code,
-            success,
-            stdout: stdout.to_vec(),
-            stderr: stderr.to_vec(),
+            exit_status,
+            stdout: stdout.into(),
+            stderr: stderr.into(),
         }
+    }
+
+    /// Apply a function to `stdout` as bytes and return a new [`CmdResult`]
+    pub fn stdout_apply<'a, F, R>(&'a self, function: F) -> Self
+    where
+        F: Fn(&'a [u8]) -> R,
+        R: Into<Vec<u8>>,
+    {
+        Self::new(
+            self.bin_path.clone(),
+            self.util_name.clone(),
+            self.tmpd.clone(),
+            self.exit_status,
+            function(&self.stdout),
+            self.stderr.as_slice(),
+        )
+    }
+
+    /// Apply a function to `stdout` as `&str` and return a new [`CmdResult`]
+    pub fn stdout_str_apply<'a, F, R>(&'a self, function: F) -> Self
+    where
+        F: Fn(&'a str) -> R,
+        R: Into<Vec<u8>>,
+    {
+        Self::new(
+            self.bin_path.clone(),
+            self.util_name.clone(),
+            self.tmpd.clone(),
+            self.exit_status,
+            function(self.stdout_str()),
+            self.stderr.as_slice(),
+        )
+    }
+
+    /// Apply a function to `stderr` as bytes and return a new [`CmdResult`]
+    pub fn stderr_apply<'a, F, R>(&'a self, function: F) -> Self
+    where
+        F: Fn(&'a [u8]) -> R,
+        R: Into<Vec<u8>>,
+    {
+        Self::new(
+            self.bin_path.clone(),
+            self.util_name.clone(),
+            self.tmpd.clone(),
+            self.exit_status,
+            self.stdout.as_slice(),
+            function(&self.stderr),
+        )
+    }
+
+    /// Apply a function to `stderr` as `&str` and return a new [`CmdResult`]
+    pub fn stderr_str_apply<'a, F, R>(&'a self, function: F) -> Self
+    where
+        F: Fn(&'a str) -> R,
+        R: Into<Vec<u8>>,
+    {
+        Self::new(
+            self.bin_path.clone(),
+            self.util_name.clone(),
+            self.tmpd.clone(),
+            self.exit_status,
+            self.stdout.as_slice(),
+            function(self.stderr_str()),
+        )
+    }
+
+    /// Assert `stdout` as bytes with a predicate function returning a `bool`.
+    #[track_caller]
+    pub fn stdout_check<'a, F>(&'a self, predicate: F) -> &Self
+    where
+        F: Fn(&'a [u8]) -> bool,
+    {
+        assert!(
+            predicate(&self.stdout),
+            "Predicate for stdout as `bytes` evaluated to false.\nstdout='{:?}'\nstderr='{:?}'\n",
+            &self.stdout,
+            &self.stderr
+        );
+        self
+    }
+
+    /// Assert `stdout` as `&str` with a predicate function returning a `bool`.
+    #[track_caller]
+    pub fn stdout_str_check<'a, F>(&'a self, predicate: F) -> &Self
+    where
+        F: Fn(&'a str) -> bool,
+    {
+        assert!(
+            predicate(self.stdout_str()),
+            "Predicate for stdout as `str` evaluated to false.\nstdout='{}'\nstderr='{}'\n",
+            self.stdout_str(),
+            self.stderr_str()
+        );
+        self
+    }
+
+    /// Assert `stderr` as bytes with a predicate function returning a `bool`.
+    #[track_caller]
+    pub fn stderr_check<'a, F>(&'a self, predicate: F) -> &Self
+    where
+        F: Fn(&'a [u8]) -> bool,
+    {
+        assert!(
+            predicate(&self.stderr),
+            "Predicate for stderr as `bytes` evaluated to false.\nstdout='{:?}'\nstderr='{:?}'\n",
+            &self.stdout,
+            &self.stderr
+        );
+        self
+    }
+
+    /// Assert `stderr` as `&str` with a predicate function returning a `bool`.
+    #[track_caller]
+    pub fn stderr_str_check<'a, F>(&'a self, predicate: F) -> &Self
+    where
+        F: Fn(&'a str) -> bool,
+    {
+        assert!(
+            predicate(self.stderr_str()),
+            "Predicate for stderr as `str` evaluated to false.\nstdout='{}'\nstderr='{}'\n",
+            self.stdout_str(),
+            self.stderr_str()
+        );
+        self
+    }
+
+    /// Return the exit status of the child process, if any.
+    ///
+    /// Returns None if the child process is still running or hasn't been started.
+    pub fn try_exit_status(&self) -> Option<ExitStatus> {
+        self.exit_status
+    }
+
+    /// Return the exit status of the child process.
+    ///
+    /// # Panics
+    ///
+    /// If the child process is still running or hasn't been started.
+    pub fn exit_status(&self) -> ExitStatus {
+        self.try_exit_status()
+            .expect("Program must be run first or has not finished, yet")
+    }
+
+    /// Return the signal the child process received if any.
+    ///
+    /// # Platform specific behavior
+    ///
+    /// This method is only available on unix systems.
+    #[cfg(unix)]
+    pub fn signal(&self) -> Option<i32> {
+        self.exit_status().signal()
+    }
+
+    /// Assert that the given signal `value` equals the signal the child process received.
+    ///
+    /// See also [`std::os::unix::process::ExitStatusExt::signal`].
+    ///
+    /// # Platform specific behavior
+    ///
+    /// This assertion method is only available on unix systems.
+    #[cfg(unix)]
+    #[track_caller]
+    pub fn signal_is(&self, value: i32) -> &Self {
+        let actual = self.signal().unwrap_or_else(|| {
+            panic!(
+                "Expected process to be terminated by the '{}' signal, but exit status is: '{}'",
+                value,
+                self.try_exit_status()
+                    .map_or("Not available".to_string(), |e| e.to_string())
+            )
+        });
+
+        assert_eq!(actual, value);
+        self
+    }
+
+    /// Assert that the given signal `name` equals the signal the child process received.
+    ///
+    /// Strings like `SIGINT`, `INT` or a number like `15` are all valid names.  See also
+    /// [`std::os::unix::process::ExitStatusExt::signal`] and
+    /// [`uucore::signals::signal_by_name_or_value`]
+    ///
+    /// # Platform specific behavior
+    ///
+    /// This assertion method is only available on unix systems.
+    #[cfg(unix)]
+    #[track_caller]
+    pub fn signal_name_is(&self, name: &str) -> &Self {
+        use uucore::signals::signal_by_name_or_value;
+        let expected: i32 = signal_by_name_or_value(name)
+            .unwrap_or_else(|| panic!("Invalid signal name or value: '{name}'"))
+            .try_into()
+            .unwrap();
+
+        let actual = self.signal().unwrap_or_else(|| {
+            panic!(
+                "Expected process to be terminated by the '{}' signal, but exit status is: '{}'",
+                name,
+                self.try_exit_status()
+                    .map_or("Not available".to_string(), |e| e.to_string())
+            )
+        });
+
+        assert_eq!(actual, expected);
+        self
     }
 
     /// Returns a reference to the program's standard output as a slice of bytes
@@ -151,8 +357,7 @@ impl CmdResult {
     /// Returns the program's exit code
     /// Panics if not run or has not finished yet for example when run with `run_no_wait()`
     pub fn code(&self) -> i32 {
-        self.code
-            .expect("Program must be run first or has not finished, yet")
+        self.exit_status().code().unwrap()
     }
 
     #[track_caller]
@@ -172,14 +377,14 @@ impl CmdResult {
 
     /// Returns whether the program succeeded
     pub fn succeeded(&self) -> bool {
-        self.success
+        self.exit_status.map_or(true, |e| e.success())
     }
 
     /// asserts that the command resulted in a success (zero) status code
     #[track_caller]
     pub fn success(&self) -> &Self {
         assert!(
-            self.success,
+            self.succeeded(),
             "Command was expected to succeed.\nstdout = {}\n stderr = {}",
             self.stdout_str(),
             self.stderr_str()
@@ -191,7 +396,7 @@ impl CmdResult {
     #[track_caller]
     pub fn failure(&self) -> &Self {
         assert!(
-            !self.success,
+            !self.succeeded(),
             "Command was expected to fail.\nstdout = {}\n stderr = {}",
             self.stdout_str(),
             self.stderr_str()
@@ -269,7 +474,11 @@ impl CmdResult {
     /// whose bytes equal those of the passed in slice
     #[track_caller]
     pub fn stdout_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
-        assert_eq!(self.stdout, msg.as_ref());
+        assert_eq!(self.stdout, msg.as_ref(),
+            "stdout as bytes wasn't equal to expected bytes. Result as strings:\nstdout  ='{:?}'\nexpected='{:?}'",
+            std::str::from_utf8(&self.stdout),
+            std::str::from_utf8(msg.as_ref()),
+        );
         self
     }
 
@@ -336,15 +545,13 @@ impl CmdResult {
         self.stdout_is_any(&possible_values.collect::<Vec<_>>());
     }
 
-    /// asserts that the command resulted in stderr stream output that equals the
-    /// passed in value, when both are trimmed of trailing whitespace
+    /// assert that the command resulted in stderr stream output that equals the
+    /// passed in value.
+    ///
     /// `stderr_only` is a better choice unless stdout may or will be non-empty
     #[track_caller]
     pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> &Self {
-        assert_eq!(
-            self.stderr_str().trim_end(),
-            String::from(msg.as_ref()).trim_end()
-        );
+        assert_eq!(self.stderr_str(), msg.as_ref());
         self
     }
 
@@ -352,7 +559,13 @@ impl CmdResult {
     /// whose bytes equal those of the passed in slice
     #[track_caller]
     pub fn stderr_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
-        assert_eq!(self.stderr, msg.as_ref());
+        assert_eq!(
+            &self.stderr,
+            msg.as_ref(),
+            "stderr as bytes wasn't equal to expected bytes. Result as strings:\nstderr  ='{:?}'\nexpected='{:?}'",
+            std::str::from_utf8(&self.stderr),
+            std::str::from_utf8(msg.as_ref())
+        );
         self
     }
 
@@ -408,7 +621,7 @@ impl CmdResult {
 
     #[track_caller]
     pub fn fails_silently(&self) -> &Self {
-        assert!(!self.success);
+        assert!(!self.succeeded());
         assert!(self.stderr.is_empty());
         self
     }
@@ -424,7 +637,7 @@ impl CmdResult {
     #[track_caller]
     pub fn usage_error<T: AsRef<str>>(&self, msg: T) -> &Self {
         self.stderr_only(format!(
-            "{0}: {2}\nTry '{1} {0} --help' for more information.",
+            "{0}: {2}\nTry '{1} {0} --help' for more information.\n",
             self.util_name.as_ref().unwrap(), // This shouldn't be called using a normal command
             self.bin_path,
             msg.as_ref()
@@ -1379,12 +1592,10 @@ impl<'a> UChildAssertion<'a> {
     }
 
     fn with_output(&mut self, mode: AssertionMode) -> CmdResult {
-        let (code, success) = match self.uchild.is_alive() {
-            true => (None, true),
-            false => {
-                let status = self.uchild.raw.wait().unwrap();
-                (status.code(), status.success())
-            }
+        let exit_status = if self.uchild.is_alive() {
+            None
+        } else {
+            Some(self.uchild.raw.wait().unwrap())
         };
         let (stdout, stderr) = match mode {
             AssertionMode::All => (
@@ -1401,8 +1612,7 @@ impl<'a> UChildAssertion<'a> {
             bin_path: self.uchild.bin_path.clone(),
             util_name: self.uchild.util_name.clone(),
             tmpd: self.uchild.tmpd.clone(),
-            code,
-            success,
+            exit_status,
             stdout,
             stderr,
         }
@@ -1631,8 +1841,7 @@ impl UChild {
             bin_path,
             util_name,
             tmpd,
-            code: output.status.code(),
-            success: output.status.success(),
+            exit_status: Some(output.status),
             stdout: output.stdout,
             stderr: output.stderr,
         })
@@ -2014,7 +2223,7 @@ pub fn host_name_for(util_name: &str) -> Cow<str> {
         if util_name.starts_with('g') && util_name != "groups" {
             util_name.into()
         } else {
-            format!("g{}", util_name).into()
+            format!("g{util_name}").into()
         }
     }
     #[cfg(target_os = "linux")]
@@ -2165,8 +2374,7 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
         ts.bin_path.as_os_str().to_str().unwrap().to_string(),
         Some(ts.util_name.clone()),
         Some(result.tmpd()),
-        Some(result.code()),
-        result.succeeded(),
+        result.exit_status,
         stdout.as_bytes(),
         stderr.as_bytes(),
     ))
@@ -2242,151 +2450,160 @@ mod tests {
     // spell-checker:ignore (tests) asdfsadfa
     use super::*;
 
+    #[cfg(unix)]
+    pub fn run_cmd<T: AsRef<OsStr>>(cmd: T) -> CmdResult {
+        let mut ucmd = UCommand::new_from_tmp::<&str, String>(
+            "sh",
+            &None,
+            Rc::new(tempfile::tempdir().unwrap()),
+            true,
+        );
+        ucmd.arg("-c");
+        ucmd.arg(cmd);
+        ucmd.run()
+    }
+
+    #[cfg(windows)]
+    pub fn run_cmd<T: AsRef<OsStr>>(cmd: T) -> CmdResult {
+        let mut ucmd = UCommand::new_from_tmp::<&str, String>(
+            "cmd",
+            &None,
+            Rc::new(tempfile::tempdir().unwrap()),
+            true,
+        );
+        ucmd.arg("/C");
+        ucmd.arg(cmd);
+        ucmd.run()
+    }
+
     #[test]
-    fn test_code_is() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: Some(32),
-            success: false,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.code_is(32);
+    fn test_command_result_when_no_output_with_exit_32() {
+        let result = run_cmd("exit 32");
+
+        if cfg!(windows) {
+            std::assert!(result.bin_path.ends_with("cmd"));
+        } else {
+            std::assert!(result.bin_path.ends_with("sh"));
+        }
+
+        std::assert!(result.util_name.is_none());
+        std::assert!(result.tmpd.is_some());
+
+        assert!(result.exit_status.is_some());
+        std::assert_eq!(result.code(), 32);
+        result.code_is(32);
+        assert!(!result.succeeded());
+        result.failure();
+        result.fails_silently();
+        assert!(result.stderr.is_empty());
+        assert!(result.stdout.is_empty());
+        result.no_output();
+        result.no_stderr();
+        result.no_stdout();
     }
 
     #[test]
     #[should_panic]
-    fn test_code_is_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: Some(32),
-            success: false,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.code_is(1);
+    fn test_command_result_when_exit_32_then_success_panic() {
+        run_cmd("exit 32").success();
     }
 
     #[test]
-    fn test_failure() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: false,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.failure();
+    fn test_command_result_when_no_output_with_exit_0() {
+        let result = run_cmd("exit 0");
+
+        assert!(result.exit_status.is_some());
+        std::assert_eq!(result.code(), 0);
+        result.code_is(0);
+        assert!(result.succeeded());
+        result.success();
+        assert!(result.stderr.is_empty());
+        assert!(result.stdout.is_empty());
+        result.no_output();
+        result.no_stderr();
+        result.no_stdout();
     }
 
     #[test]
     #[should_panic]
-    fn test_failure_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.failure();
-    }
-
-    #[test]
-    fn test_success() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.success();
+    fn test_command_result_when_exit_0_then_failure_panics() {
+        run_cmd("exit 0").failure();
     }
 
     #[test]
     #[should_panic]
-    fn test_success_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: false,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.success();
+    fn test_command_result_when_exit_0_then_silent_failure_panics() {
+        run_cmd("exit 0").fails_silently();
     }
 
     #[test]
-    fn test_no_stderr_output() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.no_stderr();
-        res.no_stdout();
+    fn test_command_result_when_stdout_with_exit_0() {
+        #[cfg(windows)]
+        let (result, vector, string) = (
+            run_cmd("echo hello& exit 0"),
+            vec![b'h', b'e', b'l', b'l', b'o', b'\r', b'\n'],
+            "hello\r\n",
+        );
+        #[cfg(not(windows))]
+        let (result, vector, string) = (
+            run_cmd("echo hello; exit 0"),
+            vec![b'h', b'e', b'l', b'l', b'o', b'\n'],
+            "hello\n",
+        );
+
+        assert!(result.exit_status.is_some());
+        std::assert_eq!(result.code(), 0);
+        result.code_is(0);
+        assert!(result.succeeded());
+        result.success();
+        assert!(result.stderr.is_empty());
+        std::assert_eq!(result.stdout, vector);
+        result.no_stderr();
+        result.stdout_is(string);
+        result.stdout_is_bytes(&vector);
+        result.stdout_only(string);
+        result.stdout_only_bytes(&vector);
     }
 
     #[test]
-    #[should_panic]
-    fn test_no_stderr_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "".into(),
-            stderr: "asdfsadfa".into(),
-        };
+    fn test_command_result_when_stderr_with_exit_0() {
+        #[cfg(windows)]
+        let (result, vector, string) = (
+            run_cmd("echo hello>&2& exit 0"),
+            vec![b'h', b'e', b'l', b'l', b'o', b'\r', b'\n'],
+            "hello\r\n",
+        );
+        #[cfg(not(windows))]
+        let (result, vector, string) = (
+            run_cmd("echo hello >&2; exit 0"),
+            vec![b'h', b'e', b'l', b'l', b'o', b'\n'],
+            "hello\n",
+        );
 
-        res.no_stderr();
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_no_stdout_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "asdfsadfa".into(),
-            stderr: "".into(),
-        };
-
-        res.no_stdout();
+        assert!(result.exit_status.is_some());
+        std::assert_eq!(result.code(), 0);
+        result.code_is(0);
+        assert!(result.succeeded());
+        result.success();
+        assert!(result.stdout.is_empty());
+        result.no_stdout();
+        std::assert_eq!(result.stderr, vector);
+        result.stderr_is(string);
+        result.stderr_is_bytes(&vector);
+        result.stderr_only(string);
+        result.stderr_only_bytes(&vector);
     }
 
     #[test]
     fn test_std_does_not_contain() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "This is a likely error message\n".into(),
-            stderr: "This is a likely error message\n".into(),
-        };
+        #[cfg(windows)]
+        let res = run_cmd(
+            "(echo This is a likely error message& echo This is a likely error message>&2) & exit 0",
+        );
+        #[cfg(not(windows))]
+        let res = run_cmd(
+            "echo This is a likely error message; echo This is a likely error message >&2; exit 0",
+        );
         res.stdout_does_not_contain("unlikely");
         res.stderr_does_not_contain("unlikely");
     }
@@ -2394,15 +2611,10 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_stdout_does_not_contain_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "This is a likely error message\n".into(),
-            stderr: "".into(),
-        };
+        #[cfg(windows)]
+        let res = run_cmd("echo This is a likely error message& exit 0");
+        #[cfg(not(windows))]
+        let res = run_cmd("echo This is a likely error message; exit 0");
 
         res.stdout_does_not_contain("likely");
     }
@@ -2410,30 +2622,25 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_stderr_does_not_contain_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "".into(),
-            stderr: "This is a likely error message\n".into(),
-        };
+        #[cfg(windows)]
+        let res = run_cmd("echo This is a likely error message>&2 & exit 0");
+        #[cfg(not(windows))]
+        let res = run_cmd("echo This is a likely error message >&2; exit 0");
 
         res.stderr_does_not_contain("likely");
     }
 
     #[test]
     fn test_stdout_matches() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "This is a likely error message\n".into(),
-            stderr: "This is a likely error message\n".into(),
-        };
+        #[cfg(windows)]
+        let res = run_cmd(
+            "(echo This is a likely error message& echo This is a likely error message>&2 ) & exit 0",
+        );
+        #[cfg(not(windows))]
+        let res = run_cmd(
+            "echo This is a likely error message; echo This is a likely error message >&2; exit 0",
+        );
+
         let positive = regex::Regex::new(".*likely.*").unwrap();
         let negative = regex::Regex::new(".*unlikely.*").unwrap();
         res.stdout_matches(&positive);
@@ -2443,68 +2650,186 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_stdout_matches_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "This is a likely error message\n".into(),
-            stderr: "This is a likely error message\n".into(),
-        };
-        let negative = regex::Regex::new(".*unlikely.*").unwrap();
+        #[cfg(windows)]
+        let res = run_cmd(
+            "(echo This is a likely error message& echo This is a likely error message>&2) & exit 0",
+        );
+        #[cfg(not(windows))]
+        let res = run_cmd(
+            "echo This is a likely error message; echo This is a likely error message >&2; exit 0",
+        );
 
+        let negative = regex::Regex::new(".*unlikely.*").unwrap();
         res.stdout_matches(&negative);
     }
 
     #[test]
     #[should_panic]
     fn test_stdout_not_matches_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "This is a likely error message\n".into(),
-            stderr: "This is a likely error message\n".into(),
-        };
-        let positive = regex::Regex::new(".*likely.*").unwrap();
+        #[cfg(windows)]
+        let res = run_cmd(
+            "(echo This is a likely error message& echo This is a likely error message>&2) & exit 0",
+        );
+        #[cfg(not(windows))]
+        let res = run_cmd(
+            "echo This is a likely error message; echo This is a likely error message >&2; exit 0",
+        );
 
+        let positive = regex::Regex::new(".*likely.*").unwrap();
         res.stdout_does_not_match(&positive);
     }
 
+    #[cfg(feature = "echo")]
     #[test]
     fn test_normalized_newlines_stdout_is() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "A\r\nB\nC".into(),
-            stderr: "".into(),
-        };
+        let ts = TestScenario::new("echo");
+        let res = ts.ucmd().args(&["-ne", "A\r\nB\nC"]).run();
 
         res.normalized_newlines_stdout_is("A\r\nB\nC");
         res.normalized_newlines_stdout_is("A\nB\nC");
         res.normalized_newlines_stdout_is("A\nB\r\nC");
     }
 
+    #[cfg(feature = "echo")]
     #[test]
     #[should_panic]
     fn test_normalized_newlines_stdout_is_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "A\r\nB\nC".into(),
-            stderr: "".into(),
-        };
+        let ts = TestScenario::new("echo");
+        let res = ts.ucmd().args(&["-ne", "A\r\nB\nC"]).run();
 
         res.normalized_newlines_stdout_is("A\r\nB\nC\n");
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    fn test_cmd_result_stdout_check_and_stdout_str_check() {
+        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
+
+        result.stdout_str_check(|stdout| stdout.ends_with("world\n"));
+        result.stdout_check(|stdout| stdout.get(0..2).unwrap().eq(&[b'H', b'e']));
+        result.no_stderr();
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    fn test_cmd_result_stderr_check_and_stderr_str_check() {
+        let ts = TestScenario::new("echo");
+        let result = run_cmd(format!(
+            "{} {} Hello world >&2",
+            ts.bin_path.display(),
+            ts.util_name
+        ));
+
+        result.stderr_str_check(|stderr| stderr.ends_with("world\n"));
+        result.stderr_check(|stderr| stderr.get(0..2).unwrap().eq(&[b'H', b'e']));
+        result.no_stdout();
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    #[should_panic]
+    fn test_cmd_result_stdout_str_check_when_false_then_panics() {
+        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
+        result.stdout_str_check(str::is_empty);
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    #[should_panic]
+    fn test_cmd_result_stdout_check_when_false_then_panics() {
+        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
+        result.stdout_check(|s| s.is_empty());
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    #[should_panic]
+    fn test_cmd_result_stderr_str_check_when_false_then_panics() {
+        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
+        result.stderr_str_check(|s| !s.is_empty());
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    #[should_panic]
+    fn test_cmd_result_stderr_check_when_false_then_panics() {
+        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
+        result.stderr_check(|s| !s.is_empty());
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    #[should_panic]
+    fn test_cmd_result_stdout_check_when_predicate_panics_then_panic() {
+        let result = TestScenario::new("echo").ucmd().run();
+        result.stdout_str_check(|_| panic!("Just testing"));
+    }
+
+    #[cfg(feature = "echo")]
+    #[cfg(unix)]
+    #[test]
+    fn test_cmd_result_signal_when_normal_exit_then_no_signal() {
+        let result = TestScenario::new("echo").ucmd().run();
+        assert!(result.signal().is_none());
+    }
+
+    #[cfg(feature = "sleep")]
+    #[cfg(unix)]
+    #[test]
+    #[should_panic = "Program must be run first or has not finished"]
+    fn test_cmd_result_signal_when_still_running_then_panic() {
+        let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+
+        child
+            .make_assertion()
+            .is_alive()
+            .with_current_output()
+            .signal();
+    }
+
+    #[cfg(feature = "sleep")]
+    #[cfg(unix)]
+    #[test]
+    fn test_cmd_result_signal_when_kill_then_signal() {
+        let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+
+        child.kill();
+        child
+            .make_assertion()
+            .is_not_alive()
+            .with_current_output()
+            .signal_is(9)
+            .signal_name_is("SIGKILL")
+            .signal_name_is("KILL")
+            .signal_name_is("9")
+            .signal()
+            .expect("Signal was none");
+
+        let result = child.wait().unwrap();
+        result
+            .signal_is(9)
+            .signal_name_is("SIGKILL")
+            .signal_name_is("KILL")
+            .signal_name_is("9")
+            .signal()
+            .expect("Signal was none");
+    }
+
+    #[cfg(feature = "sleep")]
+    #[cfg(unix)]
+    #[rstest]
+    #[case::signal_full_name_lower_case("sigkill")]
+    #[case::signal_short_name_lower_case("kill")]
+    #[case::signal_only_part_of_name("IGKILL")] // spell-checker: disable-line
+    #[case::signal_just_sig("SIG")]
+    #[case::signal_value_too_high("100")]
+    #[case::signal_value_negative("-1")]
+    #[should_panic = "Invalid signal name or value"]
+    fn test_cmd_result_signal_when_invalid_signal_name_then_panic(#[case] signal_name: &str) {
+        let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+        child.kill();
+        let result = child.wait().unwrap();
+        result.signal_name_is(signal_name);
     }
 
     #[test]
@@ -2821,10 +3146,7 @@ mod tests {
             Err(error) if error.kind() == io::ErrorKind::Other => {
                 std::assert_eq!(error.to_string(), "wait: Timeout of '1s' reached");
             }
-            Err(error) => panic!(
-                "Assertion failed: Expected error with timeout but was: {}",
-                error
-            ),
+            Err(error) => panic!("Assertion failed: Expected error with timeout but was: {error}"),
             Ok(_) => panic!("Assertion failed: Expected timeout of `wait`."),
         }
     }
@@ -2853,10 +3175,7 @@ mod tests {
             Err(error) if error.kind() == io::ErrorKind::Other => {
                 std::assert_eq!(error.to_string(), "kill: Timeout of '0s' reached");
             }
-            Err(error) => panic!(
-                "Assertion failed: Expected error with timeout but was: {}",
-                error
-            ),
+            Err(error) => panic!("Assertion failed: Expected error with timeout but was: {error}"),
             Ok(_) => panic!("Assertion failed: Expected timeout of `try_kill`."),
         }
     }

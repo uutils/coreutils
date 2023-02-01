@@ -314,7 +314,7 @@ fn timeout(
                 // FIXME: this may not be 100% correct...
                 126
             };
-            USimpleError::new(status_code, format!("failed to execute process: {}", err))
+            USimpleError::new(status_code, format!("failed to execute process: {err}"))
         })?;
     unblock_sigchld();
     // Wait for the child process for the specified time period.
@@ -355,7 +355,7 @@ fn timeout(
                         Ok(status) => Err(status.into()),
                         Err(e) => Err(USimpleError::new(
                             ExitStatus::TimeoutFailed.into(),
-                            format!("{}", e),
+                            format!("{e}"),
                         )),
                     }
                 }
@@ -365,9 +365,9 @@ fn timeout(
             // We're going to return ERR_EXIT_STATUS regardless of
             // whether `send_signal()` succeeds or fails, so just
             // ignore the return value.
-            process.send_signal(signal).map_err(|e| {
-                USimpleError::new(ExitStatus::TimeoutFailed.into(), format!("{}", e))
-            })?;
+            process
+                .send_signal(signal)
+                .map_err(|e| USimpleError::new(ExitStatus::TimeoutFailed.into(), format!("{e}")))?;
             Err(ExitStatus::TimeoutFailed.into())
         }
     }

@@ -109,7 +109,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             shuf_bytes(&mut evec, options)?;
         }
         Mode::InputRange((b, e)) => {
-            let rvec = (b..e).map(|x| format!("{}", x)).collect::<Vec<String>>();
+            let rvec = (b..e).map(|x| format!("{x}")).collect::<Vec<String>>();
             let mut rvec = rvec.iter().map(String::as_bytes).collect::<Vec<&[u8]>>();
             shuf_bytes(&mut rvec, options)?;
         }

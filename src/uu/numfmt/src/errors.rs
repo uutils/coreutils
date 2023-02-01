@@ -32,7 +32,7 @@ impl Display for NumfmtError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::IoError(s) | Self::IllegalArgument(s) | Self::FormattingError(s) => {
-                write!(f, "{}", s)
+                write!(f, "{s}")
             }
         }
     }

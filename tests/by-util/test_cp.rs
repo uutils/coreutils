@@ -93,7 +93,7 @@ fn test_cp_existing_target() {
     assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
 
     // No backup should have been created
-    assert!(!at.file_exists(&format!("{}~", TEST_EXISTING_FILE)));
+    assert!(!at.file_exists(&format!("{TEST_EXISTING_FILE}~")));
 }
 
 #[test]
@@ -213,7 +213,7 @@ fn test_cp_target_directory_is_file() {
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg(TEST_HELLO_WORLD_SOURCE)
         .fails()
-        .stderr_contains(format!("'{}' is not a directory", TEST_HOW_ARE_YOU_SOURCE));
+        .stderr_contains(format!("'{TEST_HOW_ARE_YOU_SOURCE}' is not a directory"));
 }
 
 #[test]
@@ -376,7 +376,7 @@ fn test_cp_arg_backup() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
         "How are you?\n"
     );
 }
@@ -392,7 +392,7 @@ fn test_cp_arg_backup_with_other_args() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
         "How are you?\n"
     );
 }
@@ -408,7 +408,7 @@ fn test_cp_arg_backup_arg_first() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
         "How are you?\n"
     );
 }
@@ -426,7 +426,7 @@ fn test_cp_arg_suffix() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}.bak", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}.bak")),
         "How are you?\n"
     );
 }
@@ -444,7 +444,7 @@ fn test_cp_arg_suffix_hyphen_value() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}-v", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}-v")),
         "How are you?\n"
     );
 }
@@ -463,7 +463,7 @@ fn test_cp_custom_backup_suffix_via_env() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}{}", TEST_HOW_ARE_YOU_SOURCE, suffix)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}{suffix}")),
         "How are you?\n"
     );
 }
@@ -480,7 +480,7 @@ fn test_cp_backup_numbered_with_t() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}.~1~")),
         "How are you?\n"
     );
 }
@@ -497,7 +497,7 @@ fn test_cp_backup_numbered() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}.~1~")),
         "How are you?\n"
     );
 }
@@ -514,7 +514,7 @@ fn test_cp_backup_existing() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
         "How are you?\n"
     );
 }
@@ -531,7 +531,7 @@ fn test_cp_backup_nil() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
         "How are you?\n"
     );
 }
@@ -539,7 +539,7 @@ fn test_cp_backup_nil() {
 #[test]
 fn test_cp_numbered_if_existing_backup_existing() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let existing_backup = &format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE);
+    let existing_backup = &format!("{TEST_HOW_ARE_YOU_SOURCE}.~1~");
     at.touch(existing_backup);
 
     ucmd.arg("--backup=existing")
@@ -551,7 +551,7 @@ fn test_cp_numbered_if_existing_backup_existing() {
     assert!(at.file_exists(TEST_HOW_ARE_YOU_SOURCE));
     assert!(at.file_exists(existing_backup));
     assert_eq!(
-        at.read(&format!("{}.~2~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}.~2~")),
         "How are you?\n"
     );
 }
@@ -559,7 +559,7 @@ fn test_cp_numbered_if_existing_backup_existing() {
 #[test]
 fn test_cp_numbered_if_existing_backup_nil() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let existing_backup = &format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE);
+    let existing_backup = &format!("{TEST_HOW_ARE_YOU_SOURCE}.~1~");
 
     at.touch(existing_backup);
     ucmd.arg("--backup=nil")
@@ -571,7 +571,7 @@ fn test_cp_numbered_if_existing_backup_nil() {
     assert!(at.file_exists(TEST_HOW_ARE_YOU_SOURCE));
     assert!(at.file_exists(existing_backup));
     assert_eq!(
-        at.read(&format!("{}.~2~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}.~2~")),
         "How are you?\n"
     );
 }
@@ -588,7 +588,7 @@ fn test_cp_backup_simple() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
         "How are you?\n"
     );
 }
@@ -596,15 +596,14 @@ fn test_cp_backup_simple() {
 #[test]
 fn test_cp_backup_simple_protect_source() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let source = format!("{}~", TEST_HELLO_WORLD_SOURCE);
+    let source = format!("{TEST_HELLO_WORLD_SOURCE}~");
     at.touch(&source);
     ucmd.arg("--backup=simple")
         .arg(&source)
         .arg(TEST_HELLO_WORLD_SOURCE)
         .fails()
         .stderr_only(format!(
-            "cp: backing up '{}' might destroy source;  '{}' not copied",
-            TEST_HELLO_WORLD_SOURCE, source,
+            "cp: backing up '{TEST_HELLO_WORLD_SOURCE}' might destroy source;  '{source}' not copied\n",
         ));
 
     assert_eq!(at.read(TEST_HELLO_WORLD_SOURCE), "Hello, World!\n");
@@ -623,7 +622,7 @@ fn test_cp_backup_never() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
         "How are you?\n"
     );
 }
@@ -639,7 +638,7 @@ fn test_cp_backup_none() {
         .no_stderr();
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
-    assert!(!at.file_exists(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)));
+    assert!(!at.file_exists(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")));
 }
 
 #[test]
@@ -653,7 +652,7 @@ fn test_cp_backup_off() {
         .no_stderr();
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
-    assert!(!at.file_exists(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)));
+    assert!(!at.file_exists(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")));
 }
 
 #[test]
@@ -803,7 +802,7 @@ fn test_cp_strip_trailing_slashes() {
 
     //using --strip-trailing-slashes option
     ucmd.arg("--strip-trailing-slashes")
-        .arg(format!("{}/", TEST_HELLO_WORLD_SOURCE))
+        .arg(format!("{TEST_HELLO_WORLD_SOURCE}/"))
         .arg(TEST_HELLO_WORLD_DEST)
         .succeeds();
 
@@ -822,8 +821,7 @@ fn test_cp_parents() {
 
     assert_eq!(
         at.read(&format!(
-            "{}/{}",
-            TEST_COPY_TO_FOLDER, TEST_COPY_FROM_FOLDER_FILE
+            "{TEST_COPY_TO_FOLDER}/{TEST_COPY_FROM_FOLDER_FILE}"
         )),
         "Hello, World!\n"
     );
@@ -841,16 +839,12 @@ fn test_cp_parents_multiple_files() {
 
     assert_eq!(
         at.read(&format!(
-            "{}/{}",
-            TEST_COPY_TO_FOLDER, TEST_COPY_FROM_FOLDER_FILE
+            "{TEST_COPY_TO_FOLDER}/{TEST_COPY_FROM_FOLDER_FILE}"
         )),
         "Hello, World!\n"
     );
     assert_eq!(
-        at.read(&format!(
-            "{}/{}",
-            TEST_COPY_TO_FOLDER, TEST_HOW_ARE_YOU_SOURCE
-        )),
+        at.read(&format!("{TEST_COPY_TO_FOLDER}/{TEST_HOW_ARE_YOU_SOURCE}")),
         "How are you?\n"
     );
 }
@@ -1434,7 +1428,7 @@ fn test_cp_no_preserve_timestamps() {
     let result = scene2.cmd("ls").arg("-al").arg(at.subdir).run();
 
     println!("ls dest {}", result.stdout_str());
-    println!("creation {:?} / {:?}", creation, creation2);
+    println!("creation {creation:?} / {creation2:?}");
 
     assert_ne!(creation, creation2);
     let res = creation.elapsed().unwrap() - creation2.elapsed().unwrap();
@@ -1608,7 +1602,7 @@ fn test_cp_reflink_insufficient_permission() {
         .arg("unreadable")
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied (os error 13)");
+        .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied (os error 13)\n");
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -1947,9 +1941,9 @@ fn test_copy_through_just_created_symlink() {
             .arg("c")
             .fails()
             .stderr_only(if cfg!(not(target_os = "windows")) {
-                "cp: will not copy 'b/1' through just-created symlink 'c/1'"
+                "cp: will not copy 'b/1' through just-created symlink 'c/1'\n"
             } else {
-                "cp: will not copy 'b/1' through just-created symlink 'c\\1'"
+                "cp: will not copy 'b/1' through just-created symlink 'c\\1'\n"
             });
         if create_t {
             assert_eq!(at.read("a/1"), "world");
@@ -1965,7 +1959,7 @@ fn test_copy_through_dangling_symlink() {
     ucmd.arg("file")
         .arg("target")
         .fails()
-        .stderr_only("cp: not writing through dangling symlink 'target'");
+        .stderr_only("cp: not writing through dangling symlink 'target'\n");
 }
 
 #[test]
@@ -2017,7 +2011,7 @@ fn test_copy_through_dangling_symlink_no_dereference_2() {
     at.symlink_file("nonexistent", "target");
     ucmd.args(&["-P", "file", "target"])
         .fails()
-        .stderr_only("cp: not writing through dangling symlink 'target'");
+        .stderr_only("cp: not writing through dangling symlink 'target'\n");
 }
 
 /// Test that copy through a dangling symbolic link fails, even with --force.
@@ -2029,7 +2023,7 @@ fn test_copy_through_dangling_symlink_force() {
     at.symlink_file("no-such-file", "dest");
     ucmd.args(&["--force", "src", "dest"])
         .fails()
-        .stderr_only("cp: not writing through dangling symlink 'dest'");
+        .stderr_only("cp: not writing through dangling symlink 'dest'\n");
     assert!(!at.file_exists("dest"));
 }
 
@@ -2042,7 +2036,7 @@ fn test_cp_archive_on_nonexistent_file() {
         .arg(TEST_EXISTING_FILE)
         .fails()
         .stderr_only(
-            "cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)",
+            "cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)\n",
         );
 }
 
@@ -2127,7 +2121,7 @@ fn test_cp_dir_vs_file() {
         .arg(TEST_COPY_FROM_FOLDER)
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_only("cp: cannot overwrite non-directory with directory");
+        .stderr_only("cp: cannot overwrite non-directory with directory\n");
 }
 
 #[test]
@@ -2369,9 +2363,9 @@ fn test_copy_directory_to_itself_disallowed() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("d");
     #[cfg(not(windows))]
-    let expected = "cp: cannot copy a directory, 'd', into itself, 'd/d'";
+    let expected = "cp: cannot copy a directory, 'd', into itself, 'd/d'\n";
     #[cfg(windows)]
-    let expected = "cp: cannot copy a directory, 'd', into itself, 'd\\d'";
+    let expected = "cp: cannot copy a directory, 'd', into itself, 'd\\d'\n";
     ucmd.args(&["-R", "d", "d"]).fails().stderr_only(expected);
 }
 
@@ -2383,9 +2377,9 @@ fn test_copy_nested_directory_to_itself_disallowed() {
     at.mkdir("a/b");
     at.mkdir("a/b/c");
     #[cfg(not(windows))]
-    let expected = "cp: cannot copy a directory, 'a/b', into itself, 'a/b/c/b'";
+    let expected = "cp: cannot copy a directory, 'a/b', into itself, 'a/b/c/b'\n";
     #[cfg(windows)]
-    let expected = "cp: cannot copy a directory, 'a/b', into itself, 'a/b/c\\b'";
+    let expected = "cp: cannot copy a directory, 'a/b', into itself, 'a/b/c\\b'\n";
     ucmd.args(&["-R", "a/b", "a/b/c"])
         .fails()
         .stderr_only(expected);
@@ -2445,7 +2439,7 @@ fn test_copy_dir_preserve_permissions_inaccessible_file() {
     ucmd.args(&["-p", "-R", "d1", "d2"])
         .fails()
         .code_is(1)
-        .stderr_only("cp: cannot open 'd1/f' for reading: Permission denied");
+        .stderr_only("cp: cannot open 'd1/f' for reading: Permission denied\n");
     assert!(at.dir_exists("d2"));
     assert!(!at.file_exists("d2/f"));
 
@@ -2462,7 +2456,7 @@ fn test_same_file_backup() {
     at.touch("f");
     ucmd.args(&["--backup", "f", "f"])
         .fails()
-        .stderr_only("cp: 'f' and 'f' are the same file");
+        .stderr_only("cp: 'f' and 'f' are the same file\n");
     assert!(!at.file_exists("f~"));
 }
 
@@ -2474,7 +2468,7 @@ fn test_same_file_force() {
     at.touch("f");
     ucmd.args(&["--force", "f", "f"])
         .fails()
-        .stderr_only("cp: 'f' and 'f' are the same file");
+        .stderr_only("cp: 'f' and 'f' are the same file\n");
     assert!(!at.file_exists("f~"));
 }
 

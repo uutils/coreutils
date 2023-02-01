@@ -288,7 +288,7 @@ fn test_float_inequality_is_error() {
         .args(&["123.45", "-ge", "6"])
         .run()
         .code_is(2)
-        .stderr_is("test: invalid integer '123.45'");
+        .stderr_is("test: invalid integer '123.45'\n");
 }
 
 #[test]
@@ -306,7 +306,7 @@ fn test_invalid_utf8_integer_compare() {
 
     cmd.run()
         .code_is(2)
-        .stderr_is("test: invalid integer $'fo\\x80o'");
+        .stderr_is("test: invalid integer $'fo\\x80o'\n");
 
     let mut cmd = new_ucmd!();
     cmd.raw.arg(arg);
@@ -314,7 +314,7 @@ fn test_invalid_utf8_integer_compare() {
 
     cmd.run()
         .code_is(2)
-        .stderr_is("test: invalid integer $'fo\\x80o'");
+        .stderr_is("test: invalid integer $'fo\\x80o'\n");
 }
 
 #[test]
@@ -827,7 +827,7 @@ fn test_erroneous_parenthesized_expression() {
         .args(&["a", "!=", "(", "b", "-a", "b", ")", "!=", "c"])
         .run()
         .code_is(2)
-        .stderr_is("test: extra argument 'b'");
+        .stderr_is("test: extra argument 'b'\n");
 }
 
 #[test]
@@ -875,7 +875,7 @@ fn test_bracket_syntax_missing_right_bracket() {
     ucmd.args(&["1", "-eq"])
         .run()
         .code_is(2)
-        .stderr_is("[: missing ']'");
+        .stderr_is("[: missing ']'\n");
 }
 
 #[test]

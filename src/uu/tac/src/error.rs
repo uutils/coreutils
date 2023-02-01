@@ -44,7 +44,7 @@ impl Error for TacError {}
 impl Display for TacError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidRegex(e) => write!(f, "invalid regular expression: {}", e),
+            Self::InvalidRegex(e) => write!(f, "invalid regular expression: {e}"),
             Self::InvalidArgument(s) => {
                 write!(f, "{}: read error: Invalid argument", s.maybe_quote())
             }
@@ -53,8 +53,8 @@ impl Display for TacError {
                 "failed to open {} for reading: No such file or directory",
                 s.quote()
             ),
-            Self::ReadError(s, e) => write!(f, "failed to read from {}: {}", s, e),
-            Self::WriteError(e) => write!(f, "failed to write to stdout: {}", e),
+            Self::ReadError(s, e) => write!(f, "failed to read from {s}: {e}"),
+            Self::WriteError(e) => write!(f, "failed to write to stdout: {e}"),
         }
     }
 }

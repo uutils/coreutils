@@ -41,7 +41,7 @@ fn test_parallel() {
     let n_integers = 100_000;
     let mut input_string = String::new();
     for i in 0..=n_integers {
-        input_string.push_str(&(format!("{} ", i))[..]);
+        input_string.push_str(&(format!("{i} "))[..]);
     }
 
     let tmp_dir = TempDir::new().unwrap();
@@ -87,10 +87,10 @@ fn test_first_1000_integers() {
     let n_integers = 1000;
     let mut input_string = String::new();
     for i in 0..=n_integers {
-        input_string.push_str(&(format!("{} ", i))[..]);
+        input_string.push_str(&(format!("{i} "))[..]);
     }
 
-    println!("STDIN='{}'", input_string);
+    println!("STDIN='{input_string}'");
     let result = new_ucmd!().pipe_in(input_string.as_bytes()).succeeds();
 
     // `seq 0 1000 | factor | sha1sum` => "c734327bd18b90fca5762f671672b5eda19f7dca"
@@ -126,7 +126,7 @@ fn test_random() {
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    println!("rng_seed={:?}", rng_seed);
+    println!("rng_seed={rng_seed:?}");
     let mut rng = SmallRng::seed_from_u64(rng_seed);
 
     let mut rand_gt = move |min: u64| {
@@ -162,11 +162,11 @@ fn test_random() {
     let mut output_string = String::new();
     for _ in 0..NUM_TESTS {
         let (product, factors) = rand_gt(1 << 63);
-        input_string.push_str(&(format!("{} ", product))[..]);
+        input_string.push_str(&(format!("{product} "))[..]);
 
-        output_string.push_str(&(format!("{}:", product))[..]);
+        output_string.push_str(&(format!("{product}:"))[..]);
         for factor in factors {
-            output_string.push_str(&(format!(" {}", factor))[..]);
+            output_string.push_str(&(format!(" {factor}"))[..]);
         }
         output_string.push('\n');
     }
@@ -180,7 +180,7 @@ fn test_random_big() {
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    println!("rng_seed={:?}", rng_seed);
+    println!("rng_seed={rng_seed:?}");
     let mut rng = SmallRng::seed_from_u64(rng_seed);
 
     let bit_range_1 = Uniform::new(14_usize, 51);
@@ -244,11 +244,11 @@ fn test_random_big() {
     let mut output_string = String::new();
     for _ in 0..NUM_TESTS {
         let (product, factors) = rand_64();
-        input_string.push_str(&(format!("{} ", product))[..]);
+        input_string.push_str(&(format!("{product} "))[..]);
 
-        output_string.push_str(&(format!("{}:", product))[..]);
+        output_string.push_str(&(format!("{product}:"))[..]);
         for factor in factors {
-            output_string.push_str(&(format!(" {}", factor))[..]);
+            output_string.push_str(&(format!(" {factor}"))[..]);
         }
         output_string.push('\n');
     }
@@ -261,8 +261,8 @@ fn test_big_primes() {
     let mut input_string = String::new();
     let mut output_string = String::new();
     for prime in PRIMES64 {
-        input_string.push_str(&(format!("{} ", prime))[..]);
-        output_string.push_str(&(format!("{0}: {0}\n", prime))[..]);
+        input_string.push_str(&(format!("{prime} "))[..]);
+        output_string.push_str(&(format!("{prime}: {prime}\n"))[..]);
     }
 
     run(input_string.as_bytes(), output_string.as_bytes());

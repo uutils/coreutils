@@ -276,8 +276,8 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
                 .collect();
 
             match quotes {
-                Quotes::Single => format!("'{}'", escaped_str),
-                Quotes::Double => format!("\"{}\"", escaped_str),
+                Quotes::Single => format!("'{escaped_str}'"),
+                Quotes::Double => format!("\"{escaped_str}\""),
                 Quotes::None => escaped_str,
             }
         }
@@ -304,8 +304,8 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
             };
 
             match (must_quote | contains_quote_chars, quotes) {
-                (true, Quotes::Single) => format!("'{}'", escaped_str),
-                (true, Quotes::Double) => format!("\"{}\"", escaped_str),
+                (true, Quotes::Single) => format!("'{escaped_str}'"),
+                (true, Quotes::Double) => format!("\"{escaped_str}\""),
                 _ => escaped_str,
             }
         }

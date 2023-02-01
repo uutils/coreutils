@@ -132,10 +132,7 @@ fn check_basic(path: &[String]) -> bool {
     if total_len > POSIX_PATH_MAX {
         writeln!(
             std::io::stderr(),
-            "limit {} exceeded by length {} of file name {}",
-            POSIX_PATH_MAX,
-            total_len,
-            joined_path
+            "limit {POSIX_PATH_MAX} exceeded by length {total_len} of file name {joined_path}"
         );
         return false;
     } else if total_len == 0 {
@@ -226,7 +223,7 @@ fn check_searchable(path: &str) -> bool {
             if e.kind() == ErrorKind::NotFound {
                 true
             } else {
-                writeln!(std::io::stderr(), "{}", e);
+                writeln!(std::io::stderr(), "{e}");
                 false
             }
         }

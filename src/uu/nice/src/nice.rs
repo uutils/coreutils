@@ -137,14 +137,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err(e) => {
                     return Err(USimpleError::new(
                         125,
-                        format!("\"{}\" is not a valid number: {}", nstr, e),
+                        format!("\"{nstr}\" is not a valid number: {e}"),
                     ))
                 }
             }
         }
         None => {
             if !matches.contains_id(options::COMMAND) {
-                println!("{}", niceness);
+                println!("{niceness}");
                 return Ok(());
             }
             10_i32

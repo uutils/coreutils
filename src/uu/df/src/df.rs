@@ -146,10 +146,10 @@ impl fmt::Display for OptionsError {
             }
             // TODO This needs to vary based on whether `--block-size`
             // or `-B` were provided.
-            Self::InvalidBlockSize(s) => write!(f, "invalid --block-size argument {}", s),
+            Self::InvalidBlockSize(s) => write!(f, "invalid --block-size argument {s}"),
             // TODO This needs to vary based on whether `--block-size`
             // or `-B` were provided.
-            Self::InvalidSuffix(s) => write!(f, "invalid suffix in --block-size argument {}", s),
+            Self::InvalidSuffix(s) => write!(f, "invalid suffix in --block-size argument {s}"),
             Self::ColumnError(ColumnError::MultipleColumns(s)) => write!(
                 f,
                 "option --output: field {} used more than once",

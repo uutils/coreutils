@@ -107,8 +107,8 @@ fn get_argument(input: &[TokenTree], index: usize, name: &str) -> String {
     // Multiply by two to ignore the `','` in between the arguments
     let string = match &input.get(index * 2) {
         Some(TokenTree::Literal(lit)) => lit.to_string(),
-        Some(_) => panic!("Argument {} should be a string literal.", index),
-        None => panic!("Missing argument at index {} for {}", index, name),
+        Some(_) => panic!("Argument {index} should be a string literal."),
+        None => panic!("Missing argument at index {index} for {name}"),
     };
 
     string
@@ -152,8 +152,7 @@ fn parse_help_section(section: &str, content: &str) -> String {
     // a nice error message.
     if content.lines().all(|l| !is_section_header(l, section)) {
         panic!(
-            "The section '{}' could not be found in the help file. Maybe it is spelled wrong?",
-            section
+            "The section '{section}' could not be found in the help file. Maybe it is spelled wrong?"
         )
     }
 
@@ -183,7 +182,7 @@ fn parse_usage(content: &str) -> String {
             // Replace the util name (assumed to be the first word) with "{}"
             // to be replaced with the runtime value later.
             if let Some((_util, args)) = l.split_once(' ') {
-                format!("{{}} {}\n", args)
+                format!("{{}} {args}\n")
             } else {
                 "{}\n".to_string()
             }

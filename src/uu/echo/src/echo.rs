@@ -103,7 +103,7 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
 
         // because printing char slices is apparently not available in the standard library
         for ch in &buffer[start..] {
-            write!(output, "{}", ch)?;
+            write!(output, "{ch}")?;
         }
     }
 
@@ -173,7 +173,7 @@ fn execute(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<()> {
                 break;
             }
         } else {
-            write!(output, "{}", input)?;
+            write!(output, "{input}")?;
         }
     }
 

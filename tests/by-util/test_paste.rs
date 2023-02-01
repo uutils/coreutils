@@ -162,7 +162,7 @@ fn test_data() {
         let (at, mut ucmd) = at_and_ucmd!();
         let mut ins = vec![];
         for (i, _in) in example.ins.iter().enumerate() {
-            let file = format!("in{}", i);
+            let file = format!("in{i}");
             at.write(&file, _in);
             ins.push(file);
         }

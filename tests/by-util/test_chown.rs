@@ -138,7 +138,7 @@ fn test_chown_only_owner_colon() {
 
     scene
         .ucmd()
-        .arg(format!("{}:", user_name))
+        .arg(format!("{user_name}:"))
         .arg("--verbose")
         .arg(file1)
         .succeeds()
@@ -146,7 +146,7 @@ fn test_chown_only_owner_colon() {
 
     scene
         .ucmd()
-        .arg(format!("{}.", user_name))
+        .arg(format!("{user_name}."))
         .arg("--verbose")
         .arg(file1)
         .succeeds()
@@ -244,7 +244,7 @@ fn test_chown_owner_group() {
 
     let result = scene
         .ucmd()
-        .arg(format!("{}:{}", user_name, group_name))
+        .arg(format!("{user_name}:{group_name}"))
         .arg("--verbose")
         .arg(file1)
         .run();
@@ -309,7 +309,7 @@ fn test_chown_various_input() {
 
     let result = scene
         .ucmd()
-        .arg(format!("{}:{}", user_name, group_name))
+        .arg(format!("{user_name}:{group_name}"))
         .arg("--verbose")
         .arg(file1)
         .run();
@@ -321,7 +321,7 @@ fn test_chown_various_input() {
     // check that username.groupname is understood
     let result = scene
         .ucmd()
-        .arg(format!("{}.{}", user_name, group_name))
+        .arg(format!("{user_name}.{group_name}"))
         .arg("--verbose")
         .arg(file1)
         .run();
@@ -365,7 +365,7 @@ fn test_chown_only_group() {
 
     let result = scene
         .ucmd()
-        .arg(format!(":{}", user_name))
+        .arg(format!(":{user_name}"))
         .arg("--verbose")
         .arg(file1)
         .run();
@@ -442,14 +442,14 @@ fn test_chown_fail_id() {
 
     scene
         .ucmd()
-        .arg(format!("{}:", user_id))
+        .arg(format!("{user_id}:"))
         .arg(file1)
         .fails()
         .stderr_contains("invalid spec");
 
     scene
         .ucmd()
-        .arg(format!("{}.", user_id))
+        .arg(format!("{user_id}."))
         .arg(file1)
         .fails()
         .stderr_contains("invalid spec");
@@ -499,7 +499,7 @@ fn test_chown_only_group_id() {
 
     let result = scene
         .ucmd()
-        .arg(format!(":{}", group_id))
+        .arg(format!(":{group_id}"))
         .arg("--verbose")
         .arg(file1)
         .run();
@@ -570,7 +570,7 @@ fn test_chown_owner_group_id() {
 
     let result = scene
         .ucmd()
-        .arg(format!("{}:{}", user_id, group_id))
+        .arg(format!("{user_id}:{group_id}"))
         .arg("--verbose")
         .arg(file1)
         .run();
@@ -583,7 +583,7 @@ fn test_chown_owner_group_id() {
 
     let result = scene
         .ucmd()
-        .arg(format!("{}.{}", user_id, group_id))
+        .arg(format!("{user_id}.{group_id}"))
         .arg("--verbose")
         .arg(file1)
         .run();
@@ -631,7 +631,7 @@ fn test_chown_owner_group_mix() {
 
     let result = scene
         .ucmd()
-        .arg(format!("{}:{}", user_id, group_name))
+        .arg(format!("{user_id}:{group_name}"))
         .arg("--verbose")
         .arg(file1)
         .run();

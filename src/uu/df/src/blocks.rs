@@ -91,12 +91,12 @@ pub(crate) fn to_magnitude_and_suffix(n: u128, suffix_type: SuffixType) -> Strin
     let suffix = suffixes[i];
 
     if rem == 0 {
-        format!("{}{}", quot, suffix)
+        format!("{quot}{suffix}")
     } else {
         let tenths_place = rem / (bases[i] / 10);
 
         if rem % (bases[i] / 10) == 0 {
-            format!("{}.{}{}", quot, tenths_place, suffix)
+            format!("{quot}.{tenths_place}{suffix}")
         } else if tenths_place + 1 == 10 || quot >= 10 {
             format!("{}{}", quot + 1, suffix)
         } else {
@@ -205,7 +205,7 @@ impl fmt::Display for BlockSize {
                     to_magnitude_and_suffix(*n as u128, SuffixType::Si)
                 };
 
-                write!(f, "{}", s)
+                write!(f, "{s}")
             }
         }
     }

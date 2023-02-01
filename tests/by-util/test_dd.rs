@@ -211,35 +211,35 @@ fn test_x_multiplier() {
 fn test_zero_multiplier_warning() {
     for arg in ["count", "seek", "skip"] {
         new_ucmd!()
-            .args(&[format!("{}=0", arg).as_str(), "status=none"])
+            .args(&[format!("{arg}=0").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
             .no_stdout()
             .no_stderr();
 
         new_ucmd!()
-            .args(&[format!("{}=00x1", arg).as_str(), "status=none"])
+            .args(&[format!("{arg}=00x1").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
             .no_stdout()
             .no_stderr();
 
         new_ucmd!()
-            .args(&[format!("{}=0x1", arg).as_str(), "status=none"])
+            .args(&[format!("{arg}=0x1").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
             .no_stdout()
             .stderr_contains("warning: '0x' is a zero multiplier; use '00x' if that is intended");
 
         new_ucmd!()
-            .args(&[format!("{}=0x0x1", arg).as_str(), "status=none"])
+            .args(&[format!("{arg}=0x0x1").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
             .no_stdout()
             .stderr_is("dd: warning: '0x' is a zero multiplier; use '00x' if that is intended\ndd: warning: '0x' is a zero multiplier; use '00x' if that is intended\n");
 
         new_ucmd!()
-            .args(&[format!("{}=1x0x1", arg).as_str(), "status=none"])
+            .args(&[format!("{arg}=1x0x1").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
             .no_stdout()
@@ -325,7 +325,7 @@ fn test_nocreat_causes_failure_when_outfile_not_present() {
         .pipe_in("")
         .fails()
         .stderr_only(
-            "dd: failed to open 'this-file-does-not-exist.txt': No such file or directory",
+            "dd: failed to open 'this-file-does-not-exist.txt': No such file or directory\n",
         );
     assert!(!fix.file_exists(fname));
 }
@@ -496,7 +496,7 @@ fn test_ascii_10k_to_stdout() {
 #[test]
 fn test_zeros_to_file() {
     let tname = "zero-256k";
-    let test_fn = format!("{}.txt", tname);
+    let test_fn = format!("{tname}.txt");
     let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
     assert_fixture_exists!(test_fn);
 
@@ -516,7 +516,7 @@ fn test_zeros_to_file() {
 #[test]
 fn test_to_file_with_ibs_obs() {
     let tname = "zero-256k";
-    let test_fn = format!("{}.txt", tname);
+    let test_fn = format!("{tname}.txt");
     let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
     assert_fixture_exists!(test_fn);
 
@@ -608,7 +608,7 @@ fn test_self_transfer() {
 #[test]
 fn test_unicode_filenames() {
     let tname = "😎💚🦊";
-    let test_fn = format!("{}.txt", tname);
+    let test_fn = format!("{tname}.txt");
     let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
     assert_fixture_exists!(test_fn);
 
@@ -1284,14 +1284,14 @@ fn test_invalid_number_arg_gnu_compatibility() {
 
     for command in commands {
         new_ucmd!()
-            .args(&[format!("{}=", command)])
+            .args(&[format!("{command}=")])
             .fails()
-            .stderr_is("dd: invalid number: ‘’");
+            .stderr_is("dd: invalid number: ‘’\n");
 
         new_ucmd!()
-            .args(&[format!("{}=29d", command)])
+            .args(&[format!("{command}=29d")])
             .fails()
-            .stderr_is("dd: invalid number: ‘29d’");
+            .stderr_is("dd: invalid number: ‘29d’\n");
     }
 }
 
@@ -1301,12 +1301,12 @@ fn test_invalid_flag_arg_gnu_compatibility() {
 
     for command in commands {
         new_ucmd!()
-            .args(&[format!("{}=", command)])
+            .args(&[format!("{command}=")])
             .fails()
             .usage_error("invalid input flag: ‘’");
 
         new_ucmd!()
-            .args(&[format!("{}=29d", command)])
+            .args(&[format!("{command}=29d")])
             .fails()
             .usage_error("invalid input flag: ‘29d’");
     }
@@ -1317,19 +1317,19 @@ fn test_invalid_file_arg_gnu_compatibility() {
     new_ucmd!()
         .args(&["if="])
         .fails()
-        .stderr_is("dd: failed to open '': No such file or directory");
+        .stderr_is("dd: failed to open '': No such file or directory\n");
 
     new_ucmd!()
         .args(&["if=81as9bn8as9g302az8ns9.pdf.zip.pl.com"])
         .fails()
         .stderr_is(
-            "dd: failed to open '81as9bn8as9g302az8ns9.pdf.zip.pl.com': No such file or directory",
+            "dd: failed to open '81as9bn8as9g302az8ns9.pdf.zip.pl.com': No such file or directory\n",
         );
 
     new_ucmd!()
         .args(&["of="])
         .fails()
-        .stderr_is("dd: failed to open '': No such file or directory");
+        .stderr_is("dd: failed to open '': No such file or directory\n");
 
     new_ucmd!()
         .args(&["of=81as9bn8as9g302az8ns9.pdf.zip.pl.com"])

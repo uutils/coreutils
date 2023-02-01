@@ -131,7 +131,7 @@ impl OdOptions {
                 _ => {
                     return Err(USimpleError::new(
                         1,
-                        format!("Invalid argument --endian={}", s),
+                        format!("Invalid argument --endian={s}"),
                     ))
                 }
             }
@@ -155,7 +155,7 @@ impl OdOptions {
         let mut label: Option<u64> = None;
 
         let parsed_input = parse_inputs(matches)
-            .map_err(|e| USimpleError::new(1, format!("Invalid inputs: {}", e)))?;
+            .map_err(|e| USimpleError::new(1, format!("Invalid inputs: {e}")))?;
         let input_strings = match parsed_input {
             CommandLineInputs::FileNames(v) => v,
             CommandLineInputs::FileAndOffset((f, s, l)) => {
@@ -173,7 +173,7 @@ impl OdOptions {
                 if matches.value_source(options::WIDTH) == Some(ValueSource::CommandLine) {
                     match parse_number_of_bytes(s) {
                         Ok(n) => usize::try_from(n)
-                            .map_err(|_| USimpleError::new(1, format!("‘{}‘ is too large", s)))?,
+                            .map_err(|_| USimpleError::new(1, format!("‘{s}‘ is too large")))?,
                         Err(e) => {
                             return Err(USimpleError::new(
                                 1,
@@ -625,15 +625,15 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
         }
 
         if first {
-            print!("{}", prefix); // print offset
-                                  // if printing in multiple formats offset is printed only once
+            print!("{prefix}"); // print offset
+                                // if printing in multiple formats offset is printed only once
             first = false;
         } else {
             // this takes the space of the file offset on subsequent
             // lines of multi-format rasters.
             print!("{:>width$}", "", width = prefix.chars().count());
         }
-        println!("{}", output_text);
+        println!("{output_text}");
     }
 }
 

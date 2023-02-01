@@ -47,7 +47,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|s| s.as_str())
         .collect::<Vec<_>>();
 
-    return sleep(&numbers);
+    sleep(&numbers)
 }
 
 pub fn uu_app() -> Command {

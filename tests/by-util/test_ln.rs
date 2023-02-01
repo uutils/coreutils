@@ -153,7 +153,7 @@ fn test_symlink_simple_backup() {
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
 
-    let backup = &format!("{}~", link);
+    let backup = &format!("{link}~");
     assert!(at.is_symlink(backup));
     assert_eq!(at.resolve_link(backup), file);
 }
@@ -171,7 +171,7 @@ fn test_symlink_custom_backup_suffix() {
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
 
-    let arg = &format!("--suffix={}", suffix);
+    let arg = &format!("--suffix={suffix}");
     ucmd.args(&["-b", arg, "-s", file, link])
         .succeeds()
         .no_stderr();
@@ -180,7 +180,7 @@ fn test_symlink_custom_backup_suffix() {
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
 
-    let backup = &format!("{}{}", link, suffix);
+    let backup = &format!("{link}{suffix}");
     assert!(at.is_symlink(backup));
     assert_eq!(at.resolve_link(backup), file);
 }
@@ -198,7 +198,7 @@ fn test_symlink_custom_backup_suffix_hyphen_value() {
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
 
-    let arg = &format!("--suffix={}", suffix);
+    let arg = &format!("--suffix={suffix}");
     ucmd.args(&["-b", arg, "-s", file, link])
         .succeeds()
         .no_stderr();
@@ -207,7 +207,7 @@ fn test_symlink_custom_backup_suffix_hyphen_value() {
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
 
-    let backup = &format!("{}{}", link, suffix);
+    let backup = &format!("{link}{suffix}");
     assert!(at.is_symlink(backup));
     assert_eq!(at.resolve_link(backup), file);
 }
@@ -232,7 +232,7 @@ fn test_symlink_backup_numbering() {
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file);
 
-    let backup = &format!("{}.~1~", link);
+    let backup = &format!("{link}.~1~");
     assert!(at.is_symlink(backup));
     assert_eq!(at.resolve_link(backup), file);
 }
@@ -285,11 +285,11 @@ fn test_symlink_target_dir() {
         .succeeds()
         .no_stderr();
 
-    let file_a_link = &format!("{}/{}", dir, file_a);
+    let file_a_link = &format!("{dir}/{file_a}");
     assert!(at.is_symlink(file_a_link));
     assert_eq!(at.resolve_link(file_a_link), file_a);
 
-    let file_b_link = &format!("{}/{}", dir, file_b);
+    let file_b_link = &format!("{dir}/{file_b}");
     assert!(at.is_symlink(file_b_link));
     assert_eq!(at.resolve_link(file_b_link), file_b);
 }
@@ -301,8 +301,8 @@ fn test_symlink_target_dir_from_dir() {
     let from_dir = "test_ln_target_dir_from_dir";
     let filename_a = "test_ln_target_dir_file_a";
     let filename_b = "test_ln_target_dir_file_b";
-    let file_a = &format!("{}/{}", from_dir, filename_a);
-    let file_b = &format!("{}/{}", from_dir, filename_b);
+    let file_a = &format!("{from_dir}/{filename_a}");
+    let file_b = &format!("{from_dir}/{filename_b}");
 
     at.mkdir(from_dir);
     at.touch(file_a);
@@ -313,11 +313,11 @@ fn test_symlink_target_dir_from_dir() {
         .succeeds()
         .no_stderr();
 
-    let file_a_link = &format!("{}/{}", dir, filename_a);
+    let file_a_link = &format!("{dir}/{filename_a}");
     assert!(at.is_symlink(file_a_link));
     assert_eq!(&at.resolve_link(file_a_link), file_a);
 
-    let file_b_link = &format!("{}/{}", dir, filename_b);
+    let file_b_link = &format!("{dir}/{filename_b}");
     assert!(at.is_symlink(file_b_link));
     assert_eq!(&at.resolve_link(file_b_link), file_b);
 }
@@ -367,7 +367,7 @@ fn test_symlink_verbose() {
         .ucmd()
         .args(&["-s", "-v", file_a, file_b])
         .succeeds()
-        .stdout_only(format!("'{}' -> '{}'\n", file_b, file_a));
+        .stdout_only(format!("'{file_b}' -> '{file_a}'\n"));
 
     at.touch(file_b);
 
@@ -375,10 +375,7 @@ fn test_symlink_verbose() {
         .ucmd()
         .args(&["-s", "-v", "-b", file_a, file_b])
         .succeeds()
-        .stdout_only(format!(
-            "'{}' -> '{}' (backup: '{}~')\n",
-            file_b, file_a, file_b
-        ));
+        .stdout_only(format!("'{file_b}' -> '{file_a}' (backup: '{file_b}~')\n"));
 }
 
 #[test]
@@ -421,7 +418,7 @@ fn test_symlink_to_dir_2args() {
     let filename = "test_symlink_to_dir_2args_file";
     let from_file = &format!("{}/{}", at.as_string(), filename);
     let to_dir = "test_symlink_to_dir_2args_to_dir";
-    let to_file = &format!("{}/{}", to_dir, filename);
+    let to_file = &format!("{to_dir}/{filename}");
 
     at.mkdir(to_dir);
     at.touch(from_file);
@@ -441,8 +438,7 @@ fn test_symlink_missing_destination() {
     at.touch(file);
 
     ucmd.args(&["-s", "-T", file]).fails().stderr_is(format!(
-        "ln: missing destination file operand after '{}'",
-        file
+        "ln: missing destination file operand after '{file}'\n"
     ));
 }
 
@@ -475,7 +471,7 @@ fn test_symlink_relative_path() {
     // Thanks to -r, all the ../ should be resolved to a single file
     ucmd.args(&["-r", "-s", "-v", &p.to_string_lossy(), link])
         .succeeds()
-        .stdout_only(format!("'{}' -> '{}'\n", link, file_a));
+        .stdout_only(format!("'{link}' -> '{file_a}'\n"));
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file_a);
 

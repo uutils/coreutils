@@ -197,7 +197,7 @@ impl Display for LsError {
                 )
             }
             Self::InvalidLineWidth(s) => write!(f, "invalid line width: {}", s.quote()),
-            Self::IOError(e) => write!(f, "general io error: {}", e),
+            Self::IOError(e) => write!(f, "general io error: {e}"),
             Self::IOErrorContext(e, p, _) => {
                 let error_kind = e.kind();
                 let errno = e.raw_os_error().unwrap_or(1i32);
@@ -2067,11 +2067,11 @@ fn display_dir_entry_size(
 }
 
 fn pad_left(string: &str, count: usize) -> String {
-    format!("{:>width$}", string, width = count)
+    format!("{string:>count$}")
 }
 
 fn pad_right(string: &str, count: usize) -> String {
-    format!("{:<width$}", string, width = count)
+    format!("{string:<count$}")
 }
 
 fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) -> UResult<()> {
@@ -2118,7 +2118,7 @@ fn display_additional_leading_info(
         };
         // extra space is insert to align the sizes, as needed for all formats, except for the comma format.
         if config.format == Format::Commas {
-            write!(result, "{} ", s).unwrap();
+            write!(result, "{s} ").unwrap();
         } else {
             write!(result, "{} ", pad_left(&s, padding.block_size)).unwrap();
         };
@@ -2139,13 +2139,13 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             if config.inode || config.alloc_size {
                 let more_info =
                     display_additional_leading_info(item, &padding_collection, config, out)?;
-                write!(out, "{}", more_info)?;
+                write!(out, "{more_info}")?;
             }
             #[cfg(not(unix))]
             if config.alloc_size {
                 let more_info =
                     display_additional_leading_info(item, &padding_collection, config, out)?;
-                write!(out, "{}", more_info)?;
+                write!(out, "{more_info}")?;
             }
             display_item_long(item, &padding_collection, config, out)?;
         }
@@ -2276,7 +2276,7 @@ fn display_grid(
 
         match grid.fit_into_width(width as usize) {
             Some(output) => {
-                write!(out, "{}", output)?;
+                write!(out, "{output}")?;
             }
             // Width is too small for the grid, so we fit it in one column
             None => {
@@ -2440,7 +2440,7 @@ fn display_item_long(
         write!(
             out,
             "{}{} {}",
-            format_args!("{}?????????", leading_char),
+            format_args!("{leading_char}?????????"),
             if item.security_context.len() > 1 {
                 // GNU `ls` uses a "." character to indicate a file with a security context,
                 // but not other alternate access method.
@@ -2875,7 +2875,7 @@ fn display_file_name(
             } else {
                 path.security_context.to_owned()
             };
-            name = format!("{} {}", security_context, name);
+            name = format!("{security_context} {name}");
             width += security_context.len() + 1;
         }
     }

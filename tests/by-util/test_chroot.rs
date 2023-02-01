@@ -43,7 +43,7 @@ fn test_no_such_directory() {
 
     ucmd.arg("a")
         .fails()
-        .stderr_is("chroot: cannot change root directory to 'a': no such directory")
+        .stderr_is("chroot: cannot change root directory to 'a': no such directory\n")
         .code_is(125);
 }
 
@@ -94,7 +94,7 @@ fn test_preference_of_userspec() {
         .arg("fake")
         .arg("-G")
         .arg("ABC,DEF")
-        .arg(format!("--userspec={}:{}", username, group_name))
+        .arg(format!("--userspec={username}:{group_name}"))
         .fails();
 
     result.code_is(125);
@@ -113,10 +113,7 @@ fn test_default_shell() {
     at.mkdir(dir);
 
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-    let expected = format!(
-        "chroot: failed to run command '{}': No such file or directory",
-        shell
-    );
+    let expected = format!("chroot: failed to run command '{shell}': No such file or directory");
 
     if let Ok(result) = run_ucmd_as_root(&ts, &[dir]) {
         result.stderr_contains(expected);

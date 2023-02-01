@@ -772,9 +772,7 @@ fn is_stdout_redirected_to_seekable_file() -> bool {
     let p = Path::new(&s);
     match File::open(p) {
         Ok(mut f) => {
-            f.seek(SeekFrom::Current(0)).is_ok()
-                && f.seek(SeekFrom::End(0)).is_ok()
-                && f.seek(SeekFrom::Start(0)).is_ok()
+            f.stream_position().is_ok() && f.seek(SeekFrom::End(0)).is_ok() && f.rewind().is_ok()
         }
         Err(_) => false,
     }

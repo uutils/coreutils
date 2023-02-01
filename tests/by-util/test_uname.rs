@@ -28,8 +28,11 @@ fn test_uname_processor() {
 
 #[test]
 fn test_uname_hardware_platform() {
-    let result = new_ucmd!().arg("-i").succeeds();
-    assert_eq!(result.stdout_str().trim_end(), "unknown");
+    new_ucmd!()
+        .arg("-i")
+        .succeeds()
+        .stdout_str_apply(str::trim_end)
+        .stdout_only("unknown");
 }
 
 #[test]

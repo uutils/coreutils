@@ -424,7 +424,7 @@ fn get_input_type(path: &str) -> CatResult<InputType> {
         ft if ft.is_file() => Ok(InputType::File),
         ft if ft.is_symlink() => Ok(InputType::SymLink),
         _ => Err(CatError::UnknownFiletype {
-            ft_debug: format!("{:?}", ft),
+            ft_debug: format!("{ft:?}"),
         }),
     }
 }
