@@ -37,6 +37,7 @@ pub(crate) struct Filesystem {
     pub usage: FsUsage,
 }
 
+#[derive(PartialEq)]
 pub(crate) enum FsError {
     Overmounted,
     NoMountFound,
@@ -181,7 +182,7 @@ mod tests {
 
         use uucore::fsext::MountInfo;
 
-        use crate::filesystem::mount_info_from_path;
+        use crate::filesystem::{is_over_mounted, mount_info_from_path, Filesystem, FsError};
 
         // Create a fake `MountInfo` with the given directory name.
         fn mount_info(mount_dir: &str) -> MountInfo {
@@ -254,6 +255,31 @@ mod tests {
             let mounts = [mount_info];
             let actual = mount_info_from_path(&mounts, "/dev/sda2", false).unwrap();
             assert!(mount_info_eq(actual, &mounts[0]));
+        }
+
+        #[test]
+        fn test_over_mount() {
+            let mut mount_info1 = mount_info("/foo");
+            mount_info1.dev_name = String::from("dev_name_1");
+            let mut mount_info2 = mount_info("/foo");
+            mount_info2.dev_name = String::from("dev_name_2");
+            let mounts = [mount_info1, mount_info2];
+            assert!(is_over_mounted(&mounts, &mounts[0]));
+        }
+
+        #[test]
+        fn test_from_mount_over_mounted() {
+            let mut mount_info1 = mount_info("/foo");
+            mount_info1.dev_name = String::from("dev_name_1");
+            let mut mount_info2 = mount_info("/foo");
+            mount_info2.dev_name = String::from("dev_name_2");
+
+            let mounts = [mount_info1, mount_info2];
+
+            assert!(
+                Filesystem::from_mount(&mounts, &mounts[0], None).unwrap_err()
+                    == FsError::Overmounted
+            );
         }
     }
 }
