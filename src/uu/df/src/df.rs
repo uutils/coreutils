@@ -31,6 +31,7 @@ use std::path::Path;
 use crate::blocks::{read_block_size, BlockSize};
 use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
+use crate::filesystem::FsError;
 use crate::table::Table;
 
 const ABOUT: &str = help_about!("df.md");
@@ -357,8 +358,9 @@ fn get_all_filesystems(opt: &Options) -> Result<Vec<Filesystem>, std::io::Error>
     // Convert each `MountInfo` into a `Filesystem`, which contains
     // both the mount information and usage information.
     Ok(mounts
+        .clone()
         .into_iter()
-        .filter_map(|m| Filesystem::new(m, None))
+        .filter_map(|m| Filesystem::from_mount(&mounts, &m, None).ok())
         .filter(|fs| opt.show_all_fs || fs.usage.blocks > 0)
         .collect())
 }
@@ -391,8 +393,8 @@ where
     // both the mount information and usage information.
     for path in paths {
         match Filesystem::from_path(&mounts, path) {
-            Some(fs) => result.push(fs),
-            None => {
+            Ok(fs) => result.push(fs),
+            Err(FsError::NoMountFound) => {
                 // this happens if specified file system type != file system type of the file
                 if path.as_ref().exists() {
                     show!(USimpleError::new(1, "no file systems processed"));
@@ -402,6 +404,15 @@ where
                         format!("{}: No such file or directory", path.as_ref().display())
                     ));
                 }
+            }
+            Err(FsError::Overmounted) => {
+                show!(USimpleError::new(
+                    1,
+                    format!(
+                        "cannot access {}: over-mounted by another device",
+                        path.as_ref().display()
+                    )
+                ));
             }
         }
     }

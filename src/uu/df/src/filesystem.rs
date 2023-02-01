@@ -37,6 +37,29 @@ pub(crate) struct Filesystem {
     pub usage: FsUsage,
 }
 
+pub(crate) enum FsError {
+    Overmounted,
+    NoMountFound,
+}
+
+/// Check whether `mount` has been overmounted.
+///
+/// `mount` is considered overmounted if it there is an element in
+/// `mounts` after mount that has the same mount_dir.
+fn is_over_mounted(mounts: &[MountInfo], mount: &MountInfo) -> bool {
+    let last_mount_for_dir = mounts
+        .iter()
+        .filter(|m| m.mount_dir == mount.mount_dir)
+        .last();
+
+    if let Some(lmi) = last_mount_for_dir {
+        lmi.dev_name != mount.dev_name
+    } else {
+        // Should be unreachable if `mount` is in `mounts`
+        false
+    }
+}
+
 /// Find the mount info that best matches a given filesystem path.
 ///
 /// This function returns the element of `mounts` on which `path` is
@@ -107,6 +130,20 @@ impl Filesystem {
         })
     }
 
+    /// Find and create the filesystem from the given mount
+    /// after checking that the it hasn't been overmounted
+    pub(crate) fn from_mount(
+        mounts: &[MountInfo],
+        mount: &MountInfo,
+        file: Option<String>,
+    ) -> Result<Self, FsError> {
+        if is_over_mounted(mounts, mount) {
+            Err(FsError::Overmounted)
+        } else {
+            Self::new(mount.clone(), file).ok_or(FsError::NoMountFound)
+        }
+    }
+
     /// Find and create the filesystem that best matches a given path.
     ///
     /// This function returns a new `Filesystem` derived from the
@@ -123,16 +160,17 @@ impl Filesystem {
     /// * [`Path::canonicalize`]
     /// * [`MountInfo::mount_dir`]
     ///
-    pub(crate) fn from_path<P>(mounts: &[MountInfo], path: P) -> Option<Self>
+    pub(crate) fn from_path<P>(mounts: &[MountInfo], path: P) -> Result<Self, FsError>
     where
         P: AsRef<Path>,
     {
         let file = path.as_ref().display().to_string();
         let canonicalize = true;
-        let mount_info = mount_info_from_path(mounts, path, canonicalize)?;
-        // TODO Make it so that we do not need to clone the `mount_info`.
-        let mount_info = (*mount_info).clone();
-        Self::new(mount_info, Some(file))
+
+        match mount_info_from_path(mounts, path, canonicalize) {
+            Some(mount_info) => Self::from_mount(mounts, mount_info, Some(file)),
+            None => Err(FsError::NoMountFound),
+        }
     }
 }
 
