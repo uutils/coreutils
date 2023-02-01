@@ -66,7 +66,7 @@ jobs:
       shell: bash
       run: |
         case '${{ matrix.job.os }}' in
-          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse libfuse-dev pkg-config ;; # install fuser for tests using testfs (ex. cp xattr tests) 
+          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse3 libfuse3-dev pkg-config ;; # install fuser for tests using testfs (ex. cp xattr tests) 
         esac
     ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
     ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
@@ -124,7 +124,7 @@ jobs:
       shell: bash
       run: |
         case '${{ matrix.job.os }}' in
-          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse libfuse-dev pkg-config ;; # install fuser for tests using testfs (ex. cp xattr tests) 
+          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse3 libfuse3-dev pkg-config ;; # install fuser for tests using testfs (ex. cp xattr tests) 
         esac
     - name: Install `rust` toolchain
       run: |
@@ -185,7 +185,7 @@ jobs:
       run: |
         ## Install/setup prerequisites
         case '${{ matrix.job.os }}' in
-          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse libfuse-dev pkg-config ;; # install fuser for tests using testfs (ex. cp xattr tests) 
+          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse3 libfuse3-dev pkg-config ;; # install fuser for tests using testfs (ex. cp xattr tests) 
           macos-latest) brew install coreutils ;; # needed for show-utils.sh
         esac
     - name: Install `rust` toolchain
@@ -236,7 +236,7 @@ jobs:
         # * pin installed cspell to v4.2.8 (cspell v5+ is broken for NodeJS < v12)
         ## maint: [2021-11-10; rivy] `cspell` version may be advanced to v5 when used with NodeJS >= v12
         sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell@4.2.8 -g ;
-        sudo apt-get -y install fuse libfuse-dev pkg-config ; # install fuser for tests using testfs (ex. cp xattr tests)
+        sudo apt-get -y install fuse3 libfuse3-dev pkg-config ; # install fuser for tests using testfs (ex. cp xattr tests)
     - name: Run `cspell`
       shell: bash
       run: |
@@ -327,7 +327,7 @@ jobs:
       shell: bash
       run: |
         ## Install/setup prerequisites
-        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo apt-get -y install fuse libfuse-dev pkg-config ; # install fuser for tests using testfs (ex. cp xattr tests)
+        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo apt-get -y install fuse3 libfuse3-dev pkg-config ; # install fuser for tests using testfs (ex. cp xattr tests)
     - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
       run: |
         ## Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
@@ -387,7 +387,7 @@ jobs:
       shell: bash
       run: |
         case '${{ matrix.job.os }}' in
-          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse libfuse-dev pkg-config ;; # install fuser for tests using testfs (ex. cp xattr tests) 
+          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse3 libfuse3-dev pkg-config ;; # install fuser for tests using testfs (ex. cp xattr tests) 
         esac
     - name: Install `rust` toolchain
       run: |
@@ -422,7 +422,7 @@ jobs:
       shell: bash
       run: |
         case '${{ matrix.job.os }}' in
-          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse libfuse-dev pkg-config ;; # install fuser for tests using testfs (ex. cp xattr tests) 
+          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse3 libfuse3-dev pkg-config ;; # install fuser for tests using testfs (ex. cp xattr tests) 
         esac
     - uses: Swatinem/rust-cache@v2
     - name: "`make build`"
@@ -460,7 +460,7 @@ jobs:
       shell: bash
       run: |
         case '${{ matrix.job.os }}' in
-          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse libfuse-dev pkg-config ;; # install fuser for tests using testfs (ex. cp xattr tests) 
+          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse3 libfuse3-dev pkg-config ;; # install fuser for tests using testfs (ex. cp xattr tests) 
         esac
     - uses: Swatinem/rust-cache@v2
     - name: Test
@@ -491,7 +491,7 @@ jobs:
       shell: bash
       run: |
         case '${{ matrix.job.os }}' in
-          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse libfuse-dev pkg-config ;; # install fuser for tests using testfs (ex. cp xattr tests) 
+          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install fuse3 libfuse3-dev pkg-config ;; # install fuser for tests using testfs (ex. cp xattr tests) 
         esac
     - uses: Swatinem/rust-cache@v2
     - name: Test
@@ -716,10 +716,10 @@ jobs:
           ubuntu-latest) 
           # install fuser for tests using testfs (ex. cp xattr tests)
           sudo apt-get -y update
-          sudo apt-get -y install fuse libfuse-dev pkg-config
+          sudo apt-get -y install fuse3 libfuse3-dev pkg-config
           # ** pass fuse installation intp `cross` container (iff `cross` not already configured via "Cross.toml")
           if [ "${CARGO_CMD}" = 'cross' ] ; then
-            printf "[build]\npre-build = [\"apt-get -y update\", \"apt-get -y install fuse libfuse-dev pkg-config\"]\n" >> Cross.toml
+            printf "[build]\npre-build = [\"apt-get -y update\", \"apt-get -y install fuse3 libfuse3-dev pkg-config\"]\n" >> Cross.toml
           fi
           ;;
         esac
@@ -1180,7 +1180,7 @@ jobs:
             echo "foo" > /home/runner/.plan
             # install fuser for tests using testfs (ex. cp xattr tests) 
             sudo apt-get -y update
-            sudo apt-get -y install fuse libfuse-dev pkg-config 
+            sudo apt-get -y install fuse3 libfuse3-dev pkg-config 
             ;;
         esac
     - name: rust toolchain ~ install
