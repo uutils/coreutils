@@ -196,6 +196,22 @@ fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
     }
 }
 
+fn send_signal(process: &mut Child, signal: usize, foreground: bool) {
+    // NOTE: GNU timeout doesn't check for errors of signal.
+    // The subprocess might have exited just after the timeout.
+    // Sending a signal now would return "No such process", but we should still try to kill the children.
+    _ = process.send_signal(signal);
+    if !foreground {
+        _ = process.send_signal_group(signal);
+        let kill_signal = signal_by_name_or_value("KILL").unwrap();
+        let continued_signal = signal_by_name_or_value("CONT").unwrap();
+        if signal != kill_signal && signal != continued_signal {
+            _ = process.send_signal(continued_signal);
+            _ = process.send_signal_group(continued_signal);
+        }
+    }
+}
+
 /// Wait for a child process and send a kill signal if it does not terminate.
 ///
 /// This function waits for the child `process` for the time period
@@ -217,10 +233,11 @@ fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
 /// If there is a problem sending the `SIGKILL` signal or waiting for
 /// the process after that signal is sent.
 fn wait_or_kill_process(
-    mut process: Child,
+    process: &mut Child,
     cmd: &str,
     duration: Duration,
     preserve_status: bool,
+    foreground: bool,
     verbose: bool,
 ) -> std::io::Result<i32> {
     match process.wait_or_timeout(duration) {
@@ -234,7 +251,7 @@ fn wait_or_kill_process(
         Ok(None) => {
             let signal = signal_by_name_or_value("KILL").unwrap();
             report_if_verbose(signal, cmd, verbose);
-            process.send_signal(signal)?;
+            send_signal(process, signal, foreground);
             process.wait()?;
             Ok(ExitStatus::SignalSent(signal).into())
         }
@@ -300,7 +317,7 @@ fn timeout(
 
     enable_pipe_errors()?;
 
-    let mut process = process::Command::new(&cmd[0])
+    let process = &mut process::Command::new(&cmd[0])
         .args(&cmd[1..])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
@@ -335,7 +352,7 @@ fn timeout(
             .into()),
         Ok(None) => {
             report_if_verbose(signal, &cmd[0], verbose);
-            process.send_signal(signal)?;
+            send_signal(process, signal, foreground);
             match kill_after {
                 None => {
                     if preserve_status {
@@ -350,6 +367,7 @@ fn timeout(
                         &cmd[0],
                         kill_after,
                         preserve_status,
+                        foreground,
                         verbose,
                     ) {
                         Ok(status) => Err(status.into()),
@@ -363,11 +381,8 @@ fn timeout(
         }
         Err(_) => {
             // We're going to return ERR_EXIT_STATUS regardless of
-            // whether `send_signal()` succeeds or fails, so just
-            // ignore the return value.
-            process
-                .send_signal(signal)
-                .map_err(|e| USimpleError::new(ExitStatus::TimeoutFailed.into(), format!("{e}")))?;
+            // whether `send_signal()` succeeds or fails
+            send_signal(process, signal, foreground);
             Err(ExitStatus::TimeoutFailed.into())
         }
     }
