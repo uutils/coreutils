@@ -40,7 +40,8 @@ pub(crate) struct Filesystem {
 #[derive(PartialEq)]
 pub(crate) enum FsError {
     Overmounted,
-    NoMountFound,
+    InvalidPath,
+    MountMissing,
 }
 
 /// Check whether `mount` has been overmounted.
@@ -80,14 +81,16 @@ fn mount_info_from_path<P>(
     path: P,
     // This is really only used for testing purposes.
     canonicalize: bool,
-) -> Option<&MountInfo>
+) -> Result<&MountInfo, FsError>
 where
     P: AsRef<Path>,
 {
     // TODO Refactor this function with `Stater::find_mount_point()`
     // in the `stat` crate.
     let path = if canonicalize {
-        path.as_ref().canonicalize().ok()?
+        path.as_ref()
+            .canonicalize()
+            .map_err(|_| FsError::InvalidPath)?
     } else {
         path.as_ref().to_path_buf()
     };
@@ -96,12 +99,14 @@ where
         .iter()
         .find(|mi| mi.dev_name.eq(&path.to_string_lossy()));
 
-    maybe_mount_point.or_else(|| {
-        mounts
-            .iter()
-            .filter(|mi| path.starts_with(&mi.mount_dir))
-            .max_by_key(|mi| mi.mount_dir.len())
-    })
+    maybe_mount_point
+        .or_else(|| {
+            mounts
+                .iter()
+                .filter(|mi| path.starts_with(&mi.mount_dir))
+                .max_by_key(|mi| mi.mount_dir.len())
+        })
+        .ok_or(FsError::MountMissing)
 }
 
 impl Filesystem {
@@ -141,7 +146,7 @@ impl Filesystem {
         if is_over_mounted(mounts, mount) {
             Err(FsError::Overmounted)
         } else {
-            Self::new(mount.clone(), file).ok_or(FsError::NoMountFound)
+            Self::new(mount.clone(), file).ok_or(FsError::MountMissing)
         }
     }
 
@@ -168,10 +173,8 @@ impl Filesystem {
         let file = path.as_ref().display().to_string();
         let canonicalize = true;
 
-        match mount_info_from_path(mounts, path, canonicalize) {
-            Some(mount_info) => Self::from_mount(mounts, mount_info, Some(file)),
-            None => Err(FsError::NoMountFound),
-        }
+        mount_info_from_path(mounts, path, canonicalize)
+            .and_then(|mount_info| Self::from_mount(mounts, mount_info, Some(file)))
     }
 }
 

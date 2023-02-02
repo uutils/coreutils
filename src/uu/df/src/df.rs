@@ -394,16 +394,14 @@ where
     for path in paths {
         match Filesystem::from_path(&mounts, path) {
             Ok(fs) => result.push(fs),
-            Err(FsError::NoMountFound) => {
-                // this happens if specified file system type != file system type of the file
-                if path.as_ref().exists() {
-                    show!(USimpleError::new(1, "no file systems processed"));
-                } else {
-                    show!(USimpleError::new(
-                        1,
-                        format!("{}: No such file or directory", path.as_ref().display())
-                    ));
-                }
+            Err(FsError::InvalidPath) => {
+                show!(USimpleError::new(
+                    1,
+                    format!("{}: No such file or directory", path.as_ref().display())
+                ));
+            }
+            Err(FsError::MountMissing) => {
+                show!(USimpleError::new(1, "no file systems processed"));
             }
             Err(FsError::Overmounted) => {
                 show!(USimpleError::new(
