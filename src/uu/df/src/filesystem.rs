@@ -37,7 +37,7 @@ pub(crate) struct Filesystem {
     pub usage: FsUsage,
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum FsError {
     Overmounted,
     InvalidPath,
@@ -215,7 +215,19 @@ mod tests {
 
         #[test]
         fn test_empty_mounts() {
-            assert!(mount_info_from_path(&[], "/", false).is_none());
+            assert_eq!(
+                mount_info_from_path(&[], "/", false).unwrap_err(),
+                FsError::MountMissing
+            );
+        }
+
+        #[test]
+        fn test_bad_path() {
+            assert_eq!(
+                // This path better not exist....
+                mount_info_from_path(&[], "/ksjhdkljflksdjfklsdjfksdjlkfjsd", true).unwrap_err(),
+                FsError::InvalidPath
+            );
         }
 
         #[test]
@@ -242,13 +254,19 @@ mod tests {
         #[test]
         fn test_no_match() {
             let mounts = [mount_info("/foo")];
-            assert!(mount_info_from_path(&mounts, "/bar", false).is_none());
+            assert_eq!(
+                mount_info_from_path(&mounts, "/bar", false).unwrap_err(),
+                FsError::MountMissing
+            );
         }
 
         #[test]
         fn test_partial_match() {
             let mounts = [mount_info("/foo/bar")];
-            assert!(mount_info_from_path(&mounts, "/foo/baz", false).is_none());
+            assert_eq!(
+                mount_info_from_path(&mounts, "/foo/baz", false).unwrap_err(),
+                FsError::MountMissing
+            );
         }
 
         #[test]
@@ -279,9 +297,9 @@ mod tests {
 
             let mounts = [mount_info1, mount_info2];
 
-            assert!(
-                Filesystem::from_mount(&mounts, &mounts[0], None).unwrap_err()
-                    == FsError::Overmounted
+            assert_eq!(
+                Filesystem::from_mount(&mounts, &mounts[0], None).unwrap_err(),
+                FsError::Overmounted
             );
         }
     }
