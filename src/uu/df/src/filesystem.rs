@@ -180,26 +180,30 @@ impl Filesystem {
 
 #[cfg(test)]
 mod tests {
+    use uucore::fsext::MountInfo;
+
+    fn mount_info_with_dev_name(mount_dir: &str, dev_name: Option<&str>) -> MountInfo {
+        MountInfo {
+            dev_id: Default::default(),
+            dev_name: dev_name.map(|s| String::from(s)).unwrap_or_default(),
+            fs_type: Default::default(),
+            mount_dir: String::from(mount_dir),
+            mount_option: Default::default(),
+            mount_root: Default::default(),
+            remote: Default::default(),
+            dummy: Default::default(),
+        }
+    }
+    // Create a fake `MountInfo` with the given directory name.
+    fn mount_info(mount_dir: &str) -> MountInfo {
+        mount_info_with_dev_name(mount_dir, None)
+    }
 
     mod mount_info_from_path {
 
         use uucore::fsext::MountInfo;
 
-        use crate::filesystem::{is_over_mounted, mount_info_from_path, Filesystem, FsError};
-
-        // Create a fake `MountInfo` with the given directory name.
-        fn mount_info(mount_dir: &str) -> MountInfo {
-            MountInfo {
-                dev_id: Default::default(),
-                dev_name: Default::default(),
-                fs_type: Default::default(),
-                mount_dir: String::from(mount_dir),
-                mount_option: Default::default(),
-                mount_root: Default::default(),
-                remote: Default::default(),
-                dummy: Default::default(),
-            }
-        }
+        use crate::filesystem::{mount_info_from_path, tests::mount_info, FsError};
 
         // Check whether two `MountInfo` instances are equal.
         fn mount_info_eq(m1: &MountInfo, m2: &MountInfo) -> bool {
@@ -277,23 +281,34 @@ mod tests {
             let actual = mount_info_from_path(&mounts, "/dev/sda2", false).unwrap();
             assert!(mount_info_eq(actual, &mounts[0]));
         }
+    }
+
+    mod over_mount {
+
+        use crate::filesystem::{
+            is_over_mounted, tests::mount_info_with_dev_name, Filesystem, FsError,
+        };
 
         #[test]
         fn test_over_mount() {
-            let mut mount_info1 = mount_info("/foo");
-            mount_info1.dev_name = String::from("dev_name_1");
-            let mut mount_info2 = mount_info("/foo");
-            mount_info2.dev_name = String::from("dev_name_2");
+            let mount_info1 = mount_info_with_dev_name("/foo", Some("dev_name_1"));
+            let mount_info2 = mount_info_with_dev_name("/foo", Some("dev_name_2"));
             let mounts = [mount_info1, mount_info2];
             assert!(is_over_mounted(&mounts, &mounts[0]));
         }
 
         #[test]
+        fn test_over_mount_not_over_mounted() {
+            let mount_info1 = mount_info_with_dev_name("/foo", Some("dev_name_1"));
+            let mount_info2 = mount_info_with_dev_name("/foo", Some("dev_name_2"));
+            let mounts = [mount_info1, mount_info2];
+            assert!(!is_over_mounted(&mounts, &mounts[1]));
+        }
+
+        #[test]
         fn test_from_mount_over_mounted() {
-            let mut mount_info1 = mount_info("/foo");
-            mount_info1.dev_name = String::from("dev_name_1");
-            let mut mount_info2 = mount_info("/foo");
-            mount_info2.dev_name = String::from("dev_name_2");
+            let mount_info1 = mount_info_with_dev_name("/foo", Some("dev_name_1"));
+            let mount_info2 = mount_info_with_dev_name("/foo", Some("dev_name_2"));
 
             let mounts = [mount_info1, mount_info2];
 
