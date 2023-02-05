@@ -174,8 +174,7 @@ impl WordFilter {
                             } else {
                                 c.to_string()
                             })
-                            .collect::<Vec<String>>()
-                            .join("")
+                            .collect::<String>()
                     )
                 } else if config.gnu_ext {
                     "\\w+".to_owned()
