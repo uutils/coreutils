@@ -54,7 +54,7 @@ fn remove_file_ending(a: &str) -> &str {
     }
 }
 
-pub fn version_cmp(mut a: &str, mut b: &str) -> Ordering {
+pub fn version_cmp(mut a: &str, mut b: &str, trim_leading_zero: bool) -> Ordering {
     let str_cmp = a.cmp(b);
     if str_cmp == Ordering::Equal {
         return str_cmp;
@@ -124,8 +124,18 @@ pub fn version_cmp(mut a: &str, mut b: &str) -> Ordering {
         let a_numerical_end = a.find(|c: char| !c.is_ascii_digit()).unwrap_or(a.len());
         let b_numerical_end = b.find(|c: char| !c.is_ascii_digit()).unwrap_or(b.len());
 
-        let a_str = a[..a_numerical_end].trim_start_matches('0');
-        let b_str = b[..b_numerical_end].trim_start_matches('0');
+        let a_str = if trim_leading_zero {
+            // ls wants to keep the 0
+            // sort wants to remove them
+            a[..a_numerical_end].trim_start_matches('0')
+        } else {
+            &a[..a_numerical_end]
+        };
+        let b_str = if trim_leading_zero {
+            b[..b_numerical_end].trim_start_matches('0')
+        } else {
+            &b[..b_numerical_end]
+        };
 
         match a_str.len().cmp(&b_str.len()) {
             Ordering::Equal => {}
@@ -154,144 +164,174 @@ mod tests {
     #[test]
     fn test_version_cmp() {
         // Identical strings
-        assert_eq!(version_cmp("hello", "hello"), Ordering::Equal);
+        assert_eq!(version_cmp("hello", "hello", true), Ordering::Equal);
 
-        assert_eq!(version_cmp("file12", "file12"), Ordering::Equal);
+        assert_eq!(version_cmp("file12", "file12", true), Ordering::Equal);
 
         assert_eq!(
-            version_cmp("file12-suffix", "file12-suffix"),
+            version_cmp("file12-suffix", "file12-suffix", true),
             Ordering::Equal
         );
 
         assert_eq!(
-            version_cmp("file12-suffix24", "file12-suffix24"),
+            version_cmp("file12-suffix24", "file12-suffix24", true),
             Ordering::Equal
         );
 
         // Shortened names
-        assert_eq!(version_cmp("world", "wo"), Ordering::Greater,);
+        assert_eq!(version_cmp("world", "wo", true), Ordering::Greater,);
 
-        assert_eq!(version_cmp("hello10wo", "hello10world"), Ordering::Less,);
+        assert_eq!(
+            version_cmp("hello10wo", "hello10world", true),
+            Ordering::Less,
+        );
 
         // Simple names
-        assert_eq!(version_cmp("world", "hello"), Ordering::Greater,);
+        assert_eq!(version_cmp("world", "hello", true), Ordering::Greater,);
 
-        assert_eq!(version_cmp("hello", "world"), Ordering::Less);
+        assert_eq!(version_cmp("hello", "world", true), Ordering::Less);
 
-        assert_eq!(version_cmp("apple", "ant"), Ordering::Greater);
+        assert_eq!(version_cmp("apple", "ant", true), Ordering::Greater);
 
-        assert_eq!(version_cmp("ant", "apple"), Ordering::Less);
+        assert_eq!(version_cmp("ant", "apple", true), Ordering::Less);
 
         // Uppercase letters
         assert_eq!(
-            version_cmp("Beef", "apple"),
+            version_cmp("Beef", "apple", true),
             Ordering::Less,
             "Uppercase letters are sorted before all lowercase letters"
         );
 
-        assert_eq!(version_cmp("Apple", "apple"), Ordering::Less);
+        assert_eq!(version_cmp("Apple", "apple", true), Ordering::Less);
 
-        assert_eq!(version_cmp("apple", "aPple"), Ordering::Greater);
+        assert_eq!(version_cmp("apple", "aPple", true), Ordering::Greater);
 
         // Numbers
         assert_eq!(
-            version_cmp("100", "20"),
+            version_cmp("100", "20", true),
             Ordering::Greater,
             "Greater numbers are greater even if they start with a smaller digit",
         );
 
         assert_eq!(
-            version_cmp("20", "20"),
+            version_cmp("20", "20", true),
             Ordering::Equal,
             "Equal numbers are equal"
         );
 
         assert_eq!(
-            version_cmp("15", "200"),
+            version_cmp("15", "200", true),
             Ordering::Less,
             "Small numbers are smaller"
         );
 
         // Comparing numbers with other characters
         assert_eq!(
-            version_cmp("1000", "apple"),
+            version_cmp("1000", "apple", true),
             Ordering::Less,
             "Numbers are sorted before other characters"
         );
 
         assert_eq!(
             // spell-checker:disable-next-line
-            version_cmp("file1000", "fileapple"),
+            version_cmp("file1000", "fileapple", true),
             Ordering::Less,
             "Numbers in the middle of the name are sorted before other characters"
         );
 
         // Leading zeroes
         assert_eq!(
-            version_cmp("012", "12"),
+            version_cmp("012", "12", true),
+            Ordering::Less,
+            "A single leading zero can make a difference"
+        );
+
+        // Leading zeroes but no removal
+        assert_eq!(
+            version_cmp("012", "12", false),
+            Ordering::Greater,
+            "A single leading zero can make a difference"
+        );
+
+        assert_eq!(
+            version_cmp(
+                "string start 5.4.0 end of str",
+                "string start 5.04.0 end of str",
+                false
+            ),
             Ordering::Less,
             "A single leading zero can make a difference"
         );
 
         assert_eq!(
-            version_cmp("000800", "0000800"),
+            version_cmp(
+                "string start 5.4.0 end of str",
+                "string start 5.04.0 end of str",
+                true
+            ),
+            Ordering::Greater,
+            "A single leading zero can make a difference"
+        );
+
+        assert_eq!(
+            version_cmp("000800", "0000800", true),
             Ordering::Greater,
             "Leading number of zeroes is used even if both non-zero number of zeros"
         );
 
         // Numbers and other characters combined
-        assert_eq!(version_cmp("ab10", "aa11"), Ordering::Greater);
+        assert_eq!(version_cmp("ab10", "aa11", true), Ordering::Greater);
 
         assert_eq!(
-            version_cmp("aa10", "aa11"),
+            version_cmp("aa10", "aa11", true),
             Ordering::Less,
             "Numbers after other characters are handled correctly."
         );
 
         assert_eq!(
-            version_cmp("aa2", "aa100"),
+            version_cmp("aa2", "aa100", true),
             Ordering::Less,
             "Numbers after alphabetical characters are handled correctly."
         );
 
         assert_eq!(
-            version_cmp("aa10bb", "aa11aa"),
+            version_cmp("aa10bb", "aa11aa", true),
             Ordering::Less,
             "Number is used even if alphabetical characters after it differ."
         );
 
         assert_eq!(
-            version_cmp("aa10aa0010", "aa11aa1"),
+            version_cmp("aa10aa0010", "aa11aa1", true),
             Ordering::Less,
             "Second number is ignored if the first number differs."
         );
 
         assert_eq!(
-            version_cmp("aa10aa0010", "aa10aa1"),
+            version_cmp("aa10aa0010", "aa10aa1", true),
             Ordering::Greater,
             "Second number is used if the rest is equal."
         );
 
         assert_eq!(
-            version_cmp("aa10aa0010", "aa00010aa1"),
+            version_cmp("aa10aa0010", "aa00010aa1", true),
             Ordering::Greater,
             "Second number is used if the rest is equal up to leading zeroes of the first number."
         );
 
         assert_eq!(
-            version_cmp("aa10aa0022", "aa010aa022"),
+            version_cmp("aa10aa0022", "aa010aa022", true),
             Ordering::Greater,
             "The leading zeroes of the first number has priority."
         );
 
         assert_eq!(
-            version_cmp("aa10aa0022", "aa10aa022"),
+            version_cmp("aa10aa0022", "aa10aa022", true),
             Ordering::Less,
             "The leading zeroes of other numbers than the first are used."
         );
 
         assert_eq!(
-            version_cmp("file-1.4", "file-1.13"),
+            version_cmp("file-1.4", "file-1.13", true),
             Ordering::Less,
             "Periods are handled as normal text, not as a decimal point."
         );
@@ -300,42 +340,50 @@ mod tests {
         // u64 == 18446744073709551615 so this should be plenty:
         //        20000000000000000000000
         assert_eq!(
-            version_cmp("aa2000000000000000000000bb", "aa002000000000000000000001bb"),
+            version_cmp(
+                "aa2000000000000000000000bb",
+                "aa002000000000000000000001bb",
+                true
+            ),
             Ordering::Less,
             "Numbers larger than u64::MAX are handled correctly without crashing"
         );
 
         assert_eq!(
-            version_cmp("aa2000000000000000000000bb", "aa002000000000000000000000bb"),
+            version_cmp(
+                "aa2000000000000000000000bb",
+                "aa002000000000000000000000bb",
+                true
+            ),
             Ordering::Greater,
             "Leading zeroes for numbers larger than u64::MAX are \
             handled correctly without crashing"
         );
 
         assert_eq!(
-            version_cmp("  a", "a"),
+            version_cmp("  a", "a", true),
             Ordering::Greater,
             "Whitespace is after letters because letters are before non-letters"
         );
 
         assert_eq!(
-            version_cmp("a~", "ab"),
+            version_cmp("a~", "ab", true),
             Ordering::Less,
             "A tilde is before other letters"
         );
 
         assert_eq!(
-            version_cmp("a~", "a"),
+            version_cmp("a~", "a", true),
             Ordering::Less,
             "A tilde is before the line end"
         );
         assert_eq!(
-            version_cmp("~", ""),
+            version_cmp("~", "", true),
             Ordering::Greater,
             "A tilde is after the empty string"
         );
         assert_eq!(
-            version_cmp(".f", ".1"),
+            version_cmp(".f", ".1", true),
             Ordering::Greater,
             "if both start with a dot it is ignored for the comparison"
         );
@@ -343,17 +391,17 @@ mod tests {
         // The following tests are incompatible with GNU as of 2021/06.
         // I think that's because of a bug in GNU, reported as https://lists.gnu.org/archive/html/bug-coreutils/2021-06/msg00045.html
         assert_eq!(
-            version_cmp("a..a", "a.+"),
+            version_cmp("a..a", "a.+", true),
             Ordering::Less,
             ".a is stripped before the comparison"
         );
         assert_eq!(
-            version_cmp("a.", "a+"),
+            version_cmp("a.", "a+", true),
             Ordering::Greater,
             ". is not stripped before the comparison"
         );
         assert_eq!(
-            version_cmp("a\0a", "a"),
+            version_cmp("a\0a", "a", true),
             Ordering::Greater,
             "NULL bytes are handled comparison"
         );

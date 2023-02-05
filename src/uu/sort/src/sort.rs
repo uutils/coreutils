@@ -1630,7 +1630,7 @@ fn compare_by<'a>(
                 general_numeric_compare(a_float, b_float)
             }
             SortMode::Month => month_compare(a_str, b_str),
-            SortMode::Version => version_cmp(a_str, b_str),
+            SortMode::Version => version_cmp(a_str, b_str, false),
             SortMode::Default => custom_str_cmp(
                 a_str,
                 b_str,
@@ -1911,7 +1911,7 @@ mod tests {
         let a = "1.2.3-alpha2";
         let b = "1.4.0";
 
-        assert_eq!(Ordering::Less, version_cmp(a, b));
+        assert_eq!(Ordering::Less, version_cmp(a, b, true));
     }
 
     #[test]

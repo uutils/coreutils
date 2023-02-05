@@ -2291,6 +2291,8 @@ fn test_ls_version_sort() {
         "a01.0000001",
         "a01.001",
         "a001.01",
+        "string start 5.4.0 end of str",
+        "string start 5.04.0 end of str",
     ] {
         at.touch(filename);
     }
@@ -2318,6 +2320,8 @@ fn test_ls_version_sort() {
         "b20",
         "b20a",
         "b20b",
+        "'string start 5.04.0 end of str'",
+        "'string start 5.4.0 end of str'",
         "", // because of '\n' at the end of the output
     ];
 

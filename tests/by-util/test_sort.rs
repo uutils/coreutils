@@ -135,6 +135,16 @@ fn test_version_empty_lines() {
 }
 
 #[test]
+fn test_version_stable() {
+    let input = "string start 5.4.0 end of str\nstring start 5.04.0 end of str\n";
+    new_ucmd!()
+        .args(&["--stable", "--sort=version"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(input);
+}
+
+#[test]
 fn test_human_numeric_whitespace() {
     test_helper(
         "human-numeric-whitespace",
