@@ -3,13 +3,14 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) kqueue Signum
+// spell-checker:ignore (ToDO) kqueue Signum fundu
 
 use crate::paths::Input;
 use crate::{parse, platform, Quotable};
 use atty::Stream;
 use clap::crate_version;
 use clap::{parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
+use fundu::DurationParser;
 use same_file::Handle;
 use std::collections::VecDeque;
 use std::ffi::OsString;
@@ -148,16 +149,20 @@ impl Settings {
         settings.retry =
             matches.get_flag(options::RETRY) || matches.get_flag(options::FOLLOW_RETRY);
 
-        if let Some(s) = matches.get_one::<String>(options::SLEEP_INT) {
-            settings.sleep_sec = match s.parse::<f32>() {
-                Ok(s) => Duration::from_secs_f32(s),
-                Err(_) => {
-                    return Err(UUsageError::new(
-                        1,
-                        format!("invalid number of seconds: {}", s.quote()),
-                    ))
-                }
-            }
+        if let Some(source) = matches.get_one::<String>(options::SLEEP_INT) {
+            // Advantage of `fundu` over `Duration::(try_)from_secs_f64(source.parse().unwrap())`:
+            // * doesn't panic on errors like `Duration::from_secs_f64` would.
+            // * no precision loss, rounding errors or other floating point problems.
+            // * evaluates to `Duration::MAX` if the parsed number would have exceeded
+            //   `DURATION::MAX` or `infinity` was given
+            // * not applied here but it supports customizable time units and provides better error
+            //   messages
+            settings.sleep_sec =
+                DurationParser::without_time_units()
+                    .parse(source)
+                    .map_err(|_| {
+                        UUsageError::new(1, format!("invalid number of seconds: '{source}'"))
+                    })?;
         }
 
         settings.use_polling = matches.get_flag(options::USE_POLLING);
