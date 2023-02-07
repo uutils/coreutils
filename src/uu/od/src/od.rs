@@ -50,7 +50,7 @@ use uucore::show_error;
 use uucore::show_warning;
 
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
-static ABOUT: &str = "dump files in octal and other formats";
+static ABOUT: &str = "Dump files in octal and other formats";
 
 static USAGE: &str = "\
     {} [OPTION]... [--] [FILENAME]...

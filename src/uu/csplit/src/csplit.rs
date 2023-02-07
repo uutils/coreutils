@@ -22,7 +22,7 @@ mod split_name;
 use crate::csplit_error::CsplitError;
 use crate::split_name::SplitName;
 
-static ABOUT: &str = "split a file into sections determined by context lines";
+static ABOUT: &str = "Split a file into sections determined by context lines";
 static LONG_HELP: &str = "Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output.";
 const USAGE: &str = "{} [OPTION]... FILE PATTERN...";
 
