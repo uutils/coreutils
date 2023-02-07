@@ -848,6 +848,8 @@ fn test_touch_trailing_slash_no_create() {
 //   If the date is January -> We are in CET -> UTC offset should be +1
 #[test]
 fn test_touch_tz_crosses_dst() {
+    let old_tz = std::env::var("TZ");
+
     std::env::set_var("TZ", "CET");
     let file = "test_touch_tz_crosses_dst_file";
 
@@ -872,4 +874,9 @@ fn test_touch_tz_crosses_dst() {
     assert!(at.file_exists(file));
     let (atime_cest, _) = get_file_times(&at, file);
     assert!(t2 == atime_cest.seconds() + 2 * 60 * 60);
+
+    match old_tz {
+        Ok(old_tz) => std::env::set_var("TZ", old_tz),
+        Err(_) => std::env::remove_var("TZ"),
+    }
 }
