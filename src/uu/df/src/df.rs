@@ -407,7 +407,7 @@ where
                 show!(USimpleError::new(
                     1,
                     format!(
-                        "cannot access {}: over-mounted by another device",
+                        "cannot access '{}': over-mounted by another device",
                         path.as_ref().display()
                     )
                 ));
