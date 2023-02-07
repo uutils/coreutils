@@ -1,11 +1,11 @@
 name: CICD
 
-# spell-checker:ignore (abbrev/names) CICD CodeCOV MacOS MinGW MSVC musl 
+# spell-checker:ignore (abbrev/names) CICD CodeCOV MacOS MinGW MSVC musl
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain
 # spell-checker:ignore (people) Peltoche rivy
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot fdesc fdescfs gmake grcov halium lcov libssl mkdir popd printf pushd rsync rustc rustfmt rustup shopt utmpdump xargs
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos gnueabihf issuecomment maint multisize nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils 
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos gnueabihf issuecomment maint multisize nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils
 
 env:
   PROJECT_NAME: coreutils
@@ -72,7 +72,7 @@ jobs:
     ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
     - name: Install `rust` toolchain
       run: |
-        rustup toolchain install nightly --profile minimal
+        rustup toolchain install nightly --no-self-update --profile minimal
         rustup default nightly
     - uses: Swatinem/rust-cache@v2
     - name: Install `cargo-udeps`
@@ -129,8 +129,7 @@ jobs:
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
-        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
-        rustup toolchain install stable -c rustfmt --profile minimal
+        rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`cargo fmt` testing"
@@ -191,7 +190,7 @@ jobs:
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
-        rustup toolchain install stable -c clippy --profile minimal
+        rustup toolchain install stable --no-self-update -c clippy --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`cargo clippy` lint testing"
@@ -294,7 +293,7 @@ jobs:
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
-        rustup toolchain install stable -c clippy --profile minimal
+        rustup toolchain install stable --no-self-update -c clippy --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`cargo doc` with warnings"
@@ -331,7 +330,7 @@ jobs:
     - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
       run: |
         ## Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
-        rustup toolchain install ${{ env.RUST_MIN_SRV }} --profile minimal
+        rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
     - name: Confirm MinSRV compatible 'Cargo.lock'
@@ -392,7 +391,7 @@ jobs:
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
-        rustup toolchain install stable --profile minimal
+        rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`cargo update` testing"
@@ -416,7 +415,7 @@ jobs:
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
-        rustup toolchain install stable --profile minimal
+        rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
     - name: Install/setup prerequisites
       shell: bash
@@ -454,7 +453,7 @@ jobs:
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
-        rustup toolchain install stable --profile minimal
+        rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
     - name: Install/setup prerequisites
       shell: bash
@@ -485,7 +484,7 @@ jobs:
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
-        rustup toolchain install nightly --profile minimal
+        rustup toolchain install nightly --no-self-update --profile minimal
         rustup default nightly
     - name: Install/setup prerequisites
       shell: bash
@@ -519,7 +518,7 @@ jobs:
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
-        rustup toolchain install stable --profile minimal
+        rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`make install`"
@@ -707,7 +706,7 @@ jobs:
     - name: rust toolchain ~ install
       run: |
         ## rust toolchain ~ install
-        rustup toolchain install ${{ env.RUST_MIN_SRV }} -t ${{ matrix.job.target }} --profile minimal
+        rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} -t ${{ matrix.job.target }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
     - name: Install/setup prerequisites for fuser
       shell: bash
@@ -927,7 +926,7 @@ jobs:
     - name: rust toolchain ~ install
       run: |
         ## rust toolchain ~ install
-        rustup toolchain install ${{ env.RUST_MIN_SRV }} --profile minimal
+        rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
     - name: Build coreutils as multiple binaries
       shell: bash
@@ -1186,7 +1185,7 @@ jobs:
     - name: rust toolchain ~ install
       run: |
         ## rust toolchain ~ install
-        rustup toolchain install ${{ steps.vars.outputs.TOOLCHAIN }} --profile minimal
+        rustup toolchain install ${{ steps.vars.outputs.TOOLCHAIN }} --no-self-update --profile minimal
         rustup default ${{ steps.vars.outputs.TOOLCHAIN }}
     - uses: Swatinem/rust-cache@v2
     - name: Initialize toolchain-dependent workflow variables
