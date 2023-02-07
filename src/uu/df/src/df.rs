@@ -403,7 +403,7 @@ where
             Err(FsError::MountMissing) => {
                 show!(USimpleError::new(1, "no file systems processed"));
             }
-            Err(FsError::Overmounted) => {
+            Err(FsError::OverMounted) => {
                 show!(USimpleError::new(
                     1,
                     format!(

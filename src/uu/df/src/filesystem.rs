@@ -39,14 +39,14 @@ pub(crate) struct Filesystem {
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum FsError {
-    Overmounted,
+    OverMounted,
     InvalidPath,
     MountMissing,
 }
 
-/// Check whether `mount` has been overmounted.
+/// Check whether `mount` has been over-mounted.
 ///
-/// `mount` is considered overmounted if it there is an element in
+/// `mount` is considered over-mounted if it there is an element in
 /// `mounts` after mount that has the same mount_dir.
 fn is_over_mounted(mounts: &[MountInfo], mount: &MountInfo) -> bool {
     let last_mount_for_dir = mounts
@@ -137,14 +137,14 @@ impl Filesystem {
     }
 
     /// Find and create the filesystem from the given mount
-    /// after checking that the it hasn't been overmounted
+    /// after checking that the it hasn't been over-mounted
     pub(crate) fn from_mount(
         mounts: &[MountInfo],
         mount: &MountInfo,
         file: Option<String>,
     ) -> Result<Self, FsError> {
         if is_over_mounted(mounts, mount) {
-            Err(FsError::Overmounted)
+            Err(FsError::OverMounted)
         } else {
             Self::new(mount.clone(), file).ok_or(FsError::MountMissing)
         }
@@ -314,7 +314,7 @@ mod tests {
 
             assert_eq!(
                 Filesystem::from_mount(&mounts, &mounts[0], None).unwrap_err(),
-                FsError::Overmounted
+                FsError::OverMounted
             );
         }
     }
