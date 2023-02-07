@@ -11,7 +11,7 @@ use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
 use uucore::format_usage;
 
-static ABOUT: &str = "strip last component from file name";
+static ABOUT: &str = "Strip last component from file name";
 const USAGE: &str = "{} [OPTION] NAME...";
 
 mod options {

@@ -20,7 +20,7 @@ use std::io::{stdin, Read};
 use uucore::error::UClapError;
 
 static ABOUT: &str = "\
-encode/decode data and print to standard output
+Encode/decode data and print to standard output
 With no FILE, or when FILE is -, read standard input.
 
 When decoding, the input may contain newlines in addition to the bytes of

@@ -13,7 +13,7 @@ use std::str::Chars;
 use uucore::error::{FromIo, UResult};
 use uucore::format_usage;
 
-const ABOUT: &str = "display a line of text";
+const ABOUT: &str = "Display a line of text";
 const USAGE: &str = "{} [OPTIONS]... [STRING]...";
 const AFTER_HELP: &str = r#"
  Echo the STRING(s) to standard output.

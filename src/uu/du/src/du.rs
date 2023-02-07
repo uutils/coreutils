@@ -73,7 +73,7 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-const ABOUT: &str = "estimate file space usage";
+const ABOUT: &str = "Estimate file space usage";
 const LONG_HELP: &str = "
 Display values are in units of the first available SIZE from --block-size,
 and the DU_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environment variables.

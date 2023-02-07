@@ -18,7 +18,7 @@ use uucore::format_usage;
 
 mod helper;
 
-static ABOUT: &str = "number lines of files";
+static ABOUT: &str = "Number lines of files";
 static USAGE: &str = "{} [OPTION]... [FILE]...";
 
 // Settings store options used by nl to produce its output.
