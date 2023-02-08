@@ -11,6 +11,7 @@ use crate::common::testfs::fuse::TestFs;
 use fuser::BackgroundSession;
 use fuser::MountOption::FSName;
 use std::ffi::CString;
+use std::fs;
 
 macro_rules! log_testfs {
     ($($arg:tt)*) => {{
@@ -31,6 +32,7 @@ pub(crate) use log_testfs;
 
 pub fn testfs_mount(mount_point: String) -> std::io::Result<BackgroundSession> {
     log_testfs!("mount_point: {}", mount_point);
+    fs::create_dir_all(&mount_point)?;
 
     let options = [FSName(String::from("testfs"))];
 
