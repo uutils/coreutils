@@ -15,7 +15,6 @@ env:
   # * style job configuration
   STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
   CROSS_CONFIG: "Cross.toml"
-  CROSS_CONTAINER_IN_CONTAINER: "true"
 
 on: [push, pull_request]
 
