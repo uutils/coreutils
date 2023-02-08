@@ -1,3 +1,4 @@
+# spell-checker:ignore libfuse
 [build]
 pre-build = ["apt-get -y update", "apt-get -y install fuse libfuse-dev pkg-config"]
 [build.env]
