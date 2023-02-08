@@ -457,7 +457,7 @@ fn prompt_file(path: &Path, options: &Options, is_dir: bool) -> bool {
     }
     if is_dir {
         // We can't use metadata.permissions.readonly for directories because it only works on files
-        // So we have to handle wether a directory is writable on not manually
+        // So we have to handle whether a directory is writable on not manually
         if let Ok(metadata) = fs::metadata(path) {
             handle_writable_directory(path, options, &metadata)
         } else {
