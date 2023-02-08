@@ -560,7 +560,7 @@ jobs:
     runs-on: ${{ matrix.job.os }}
     timeout-minutes: 90
     env:
-      DOCKER_OPTS: '--volume /etc/passwd:/etc/passwd --volume /etc/group:/etc/group'
+      DOCKER_OPTS: '--volume /etc/passwd:/etc/passwd --volume /etc/group:/etc/group --cap-add SYS_ADMIN --device /dev/fuse'
     strategy:
       fail-fast: false
       matrix:
