@@ -657,7 +657,7 @@ jobs:
         outputs CARGO_CMD
         # ** pass needed environment into `cross` container (iff `cross` not already configured via "Cross.toml")
         if [ "${CARGO_CMD}" = 'cross' ] && [ ! -e "Cross.toml" ] ; then
-          cargo install --version 0.2.1 cross
+          cargo install --version 0.2.5 cross
           printf "[build.env]\npassthrough = [\"CI\", \"RUST_BACKTRACE\"]\n" > Cross.toml
         fi
         # * test only library and/or binaries for arm-type targets
@@ -718,7 +718,7 @@ jobs:
           sudo apt-get -y install fuse3 libfuse3-dev pkg-config
           # ** pass fuse installation intp `cross` container (iff `cross` not already configured via "Cross.toml")
           if [ "${CARGO_CMD}" = 'cross' ] ; then
-            printf "[build]\npre-build = [\"apt-get -y update\", \"apt-get -y install fuse3 libfuse3-dev pkg-config\"]\n" >> Cross.toml
+            printf "[build]\npre-build = [\"apt-get -y update\", \"apt-get -y install fuse libfuse-dev pkg-config\"]\n" >> Cross.toml
           fi
           ;;
         esac
