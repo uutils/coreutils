@@ -656,10 +656,8 @@ jobs:
         # * CARGO_CMD
         CARGO_CMD='cross' ; case '${{ matrix.job.use-cross }}' in ''|0|f|false|n|no) CARGO_CMD='cargo' ;; esac;
         outputs CARGO_CMD
-        # ** pass needed environment into `cross` container (iff `cross` not already configured via "Cross.toml")
-        if [ "${CARGO_CMD}" = 'cross' ] && [ ! -e "Cross.toml" ] ; then
+        if [ "${CARGO_CMD}" = 'cross' ] ; then
           cargo install --version 0.2.5 cross
-          printf "[build.env]\npassthrough = [\"CI\", \"RUST_BACKTRACE\"]\n" > Cross.toml
         fi
         # * test only library and/or binaries for arm-type targets
         unset CARGO_TEST_OPTIONS ; case '${{ matrix.job.target }}' in aarch64-* | arm-*) CARGO_TEST_OPTIONS="--bins" ;; esac;
@@ -717,10 +715,6 @@ jobs:
           # install fuser for tests using testfs (ex. cp xattr tests)
           sudo apt-get -y update
           sudo apt-get -y install fuse3 libfuse3-dev pkg-config
-          # ** pass fuse installation intp `cross` container (iff `cross` not already configured via "Cross.toml")
-          if [ "${CARGO_CMD}" = 'cross' ] ; then
-            printf "[build]\npre-build = [\"apt-get -y update\", \"apt-get -y install fuse libfuse-dev pkg-config\"]\n" >> Cross.toml
-          fi
           ;;
         esac
     - uses: Swatinem/rust-cache@v2

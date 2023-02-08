@@ -1,0 +1,4 @@
+[build]
+pre-build = ["apt-get -y update", "apt-get -y install fuse libfuse-dev pkg-config"]
+[build.env]
+passthrough = ["CI", "RUST_BACKTRACE"]
