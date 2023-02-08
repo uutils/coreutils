@@ -85,26 +85,21 @@ impl UError for LnError {
     }
 }
 
-fn long_usage() -> String {
-    String::from(
-        " In the 1st form, create a link to TARGET with the name LINK_NAME.
-        In the 2nd form, create a link to TARGET in the current directory.
-        In the 3rd and 4th forms, create links to each TARGET in DIRECTORY.
-        Create hard links by default, symbolic links with --symbolic.
-        By default, each destination (name of new link) should not already exist.
-        When creating hard links, each TARGET must exist.  Symbolic links
-        can hold arbitrary text; if later resolved, a relative link is
-        interpreted in relation to its parent directory.
-        ",
-    )
-}
-
-static ABOUT: &str = "Change file owner and group";
+const ABOUT: &str = "Change file owner and group";
 const USAGE: &str = "\
-    {} [OPTION]... [-T] TARGET LINK_NAME
-    {} [OPTION]... TARGET
-    {} [OPTION]... TARGET... DIRECTORY
-    {} [OPTION]... -t DIRECTORY TARGET...";
+       {} [OPTION]... [-T] TARGET LINK_NAME
+       {} [OPTION]... TARGET
+       {} [OPTION]... TARGET... DIRECTORY
+       {} [OPTION]... -t DIRECTORY TARGET...";
+const LONG_USAGE: &str = "\
+    In the 1st form, create a link to TARGET with the name LINK_NAME.\n\
+    In the 2nd form, create a link to TARGET in the current directory.\n\
+    In the 3rd and 4th forms, create links to each TARGET in DIRECTORY.\n\
+    Create hard links by default, symbolic links with --symbolic.\n\
+    By default, each destination (name of new link) should not already exist.\n\
+    When creating hard links, each TARGET must exist.  Symbolic links\n\
+    can hold arbitrary text; if later resolved, a relative link is\n\
+    interpreted in relation to its parent directory.";
 
 mod options {
     pub const FORCE: &str = "force";
@@ -124,10 +119,9 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // clap requires a 'static string
     let long_usage = format!(
-        "{}\n{}",
-        long_usage(),
+        "{}\n\n{}",
+        LONG_USAGE,
         backup_control::BACKUP_CONTROL_LONG_HELP
     );
 
