@@ -99,7 +99,7 @@ fn long_usage() -> String {
     )
 }
 
-static ABOUT: &str = "change file owner and group";
+static ABOUT: &str = "Change file owner and group";
 const USAGE: &str = "\
     {} [OPTION]... [-T] TARGET LINK_NAME
     {} [OPTION]... TARGET

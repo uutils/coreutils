@@ -36,7 +36,7 @@ const MINUTE: &str = "minute";
 const SECOND: &str = "second";
 const NS: &str = "ns";
 
-const ABOUT: &str = "print or set the system date and time";
+const ABOUT: &str = "Print or set the system date and time";
 const USAGE: &str = "\
     {} [OPTION]... [+FORMAT]...
     {} [OPTION]... [MMDDhhmm[[CC]YY][.ss]]";

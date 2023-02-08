@@ -22,7 +22,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use std::path::PathBuf;
 use uucore::format_usage;
 
-static ABOUT: &str = "lightweight finger";
+static ABOUT: &str = "Lightweight finger";
 const USAGE: &str = "{} [OPTION]... [USER]...";
 
 mod options {
