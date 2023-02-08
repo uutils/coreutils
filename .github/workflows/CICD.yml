@@ -14,6 +14,7 @@ env:
   RUST_MIN_SRV: "1.60.0" ## MSRV v1.60.0
   # * style job configuration
   STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
+  CROSS_CONFIG: "Cross.toml"
 
 on: [push, pull_request]
 
