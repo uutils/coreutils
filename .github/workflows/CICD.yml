@@ -327,7 +327,10 @@ jobs:
       shell: bash
       run: |
         ## Install/setup prerequisites
-        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo apt-get -y install fuse3 libfuse3-dev pkg-config ; # install fuser for tests using testfs (ex. cp xattr tests)
+        sudo apt-get -y update
+        sudo apt-get -y install npm
+        # install fuser for tests using testfs (ex. cp xattr tests)
+        sudo apt-get -y install fuse3 libfuse3-dev pkg-config
     - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
       run: |
         ## Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
