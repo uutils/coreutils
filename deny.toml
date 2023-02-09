@@ -61,8 +61,6 @@ highlight = "all"
 skip = [
     # blake2d_simd
     { name = "arrayvec", version = "=0.7.2" },
-    # quickcheck
-    { name = "env_logger", version = "=0.8.4" },
     # tempfile
     { name = "remove_dir_all", version = "=0.5.3" },
     # blake2b_simd
