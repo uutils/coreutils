@@ -20,7 +20,7 @@ rust-ini = "0.18.0"
 uucore = { version=">=0.0.17", package="uucore", path="../../uucore", features=["signals"]}
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.25", default-features = false, features = ["signal"] }
+nix = { version = "0.26", default-features = false, features = ["signal"] }
 
 
 [[bin]]

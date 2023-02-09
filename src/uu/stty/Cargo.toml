@@ -17,7 +17,7 @@ path = "src/stty.rs"
 [dependencies]
 clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 uucore = { version=">=0.0.17", package="uucore", path="../../uucore" }
-nix = { version="0.25", features = ["term"] }
+nix = { version="0.26", features = ["term"] }
 
 [[bin]]
 name = "stty"

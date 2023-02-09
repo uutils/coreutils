@@ -65,10 +65,6 @@ skip = [
     { name = "env_logger", version = "=0.8.4" },
     # tempfile
     { name = "remove_dir_all", version = "=0.5.3" },
-    # console (via indicatif)
-    { name = "terminal_size", version = "=0.1.17" },
-    # nix
-    { name = "memoffset", version = "=0.6.5"},
     # blake2b_simd
     { name = "constant_time_eq", version = "=0.1.5"},
 ]

@@ -20,7 +20,7 @@ libc = "0.2.137"
 uucore = { version=">=0.0.17", package="uucore", path="../../uucore", features=["wide"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-nix = "0.25"
+nix = "0.26"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.42.0", default-features = false, features = ["Win32_Storage_FileSystem", "Win32_System_WindowsProgramming", "Win32_Foundation"] }
