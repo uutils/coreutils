@@ -178,16 +178,14 @@ fn unintuitive_default_behavior_1() {
         .stdout_only_fixture("defaultcheck_unintuitive.expected");
 }
 
-#[ignore] //bug? should help be stdout if not called via -h|--help?
 #[test]
 fn no_arguments() {
-    new_ucmd!().fails().no_stdout().no_stderr();
+    new_ucmd!().fails().no_stdout();
 }
 
-#[ignore] //bug? should help be stdout if not called via -h|--help?
 #[test]
 fn one_argument() {
-    new_ucmd!().arg("a").fails().no_stdout().no_stderr();
+    new_ucmd!().arg("a").fails().no_stdout();
 }
 
 #[test]
