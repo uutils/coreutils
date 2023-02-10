@@ -59,12 +59,8 @@ highlight = "all"
 # introduces it.
 # spell-checker: disable
 skip = [
-    # blake2d_simd
-    { name = "arrayvec", version = "=0.7.2" },
     # tempfile
     { name = "remove_dir_all", version = "=0.5.3" },
-    # blake2b_simd
-    { name = "constant_time_eq", version = "=0.1.5"},
 ]
 # spell-checker: enable
 
