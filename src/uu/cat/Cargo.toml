@@ -21,7 +21,7 @@ atty = "0.2"
 uucore = { version=">=0.0.17", package="uucore", path="../../uucore", features=["fs", "pipes"] }
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.25", default-features = false }
+nix = { version = "0.26", default-features = false }
 
 [[bin]]
 name = "cat"

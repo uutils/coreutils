@@ -23,7 +23,7 @@ unicode-width = "0.1.7"
 unicode-segmentation = "1.9.0"
 
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
-nix = { version = "0.25", default-features = false }
+nix = { version = "0.26", default-features = false }
 
 [[bin]]
 name = "more"

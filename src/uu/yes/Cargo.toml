@@ -20,7 +20,7 @@ libc = "0.2.137"
 uucore = { version=">=0.0.17", package="uucore", path="../../uucore", features=["pipes"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-nix = { version = "0.25", default-features = false }
+nix = { version = "0.26", default-features = false }
 
 [[bin]]
 name = "yes"

@@ -22,7 +22,7 @@ utf-8 = "0.7.6"
 unicode-width = "0.1.8"
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.25", default-features = false }
+nix = { version = "0.26", default-features = false }
 libc = "0.2"
 
 [[bin]]

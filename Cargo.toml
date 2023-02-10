@@ -411,7 +411,7 @@ procfs = { version = "0.14", default-features = false }
 rlimit = "0.8.3"
 
 [target.'cfg(unix)'.dev-dependencies]
-nix = { version = "0.25", default-features = false, features = ["process", "signal", "user"] }
+nix = { version = "0.26", default-features = false, features = ["process", "signal", "user"] }
 rust-users = { version="0.11", package="users" }
 rand_pcg = "0.3"
 
