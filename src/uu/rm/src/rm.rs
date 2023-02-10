@@ -8,7 +8,6 @@
 // spell-checker:ignore (path) eacces
 
 use clap::{crate_version, parser::ValueSource, Arg, ArgAction, Command};
-use remove_dir_all::remove_dir_all;
 use std::collections::VecDeque;
 use std::fs::{self, File, Metadata};
 use std::io::ErrorKind;
@@ -298,9 +297,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
         if options.interactive != InteractiveMode::Always && !options.verbose {
-            // we need the extra crate because apparently fs::remove_dir_all() does not function
-            // correctly on Windows
-            if let Err(e) = remove_dir_all(path) {
+            if let Err(e) = fs::remove_dir_all(path) {
                 had_err = true;
                 if e.kind() == std::io::ErrorKind::PermissionDenied {
                     // GNU compatibility (rm/fail-eacces.sh)
