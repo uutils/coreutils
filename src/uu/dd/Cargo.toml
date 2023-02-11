@@ -15,13 +15,13 @@ edition = "2021"
 path = "src/dd.rs"
 
 [dependencies]
-clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-gcd = "2.2"
-libc = "0.2"
-uucore = { version=">=0.0.17", package="uucore", path="../../uucore" }
+clap = { workspace=true }
+gcd = { workspace=true }
+libc = { workspace=true }
+uucore = { workspace=true }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-signal-hook = "0.3.14"
+signal-hook = { workspace=true }
 
 [[bin]]
 name = "dd"

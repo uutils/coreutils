@@ -15,14 +15,14 @@ edition = "2021"
 path = "src/whoami.rs"
 
 [dependencies]
-clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.17", package="uucore", path="../../uucore", features=["entries"] }
+clap = { workspace=true }
+uucore = { workspace=true, features=["entries"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { version = "0.42.0", default-features = false, features = ["Win32_NetworkManagement_NetManagement", "Win32_System_WindowsProgramming", "Win32_Foundation"] }
+windows-sys = { workspace=true, features = ["Win32_NetworkManagement_NetManagement", "Win32_System_WindowsProgramming", "Win32_Foundation"] }
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2.137"
+libc = { workspace=true }
 
 [[bin]]
 name = "whoami"
