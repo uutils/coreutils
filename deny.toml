@@ -58,10 +58,7 @@ highlight = "all"
 # For each duplicate dependency, indicate the name of the dependency which
 # introduces it.
 # spell-checker: disable
-skip = [
-    # tempfile
-    { name = "remove_dir_all", version = "=0.5.3" },
-]
+skip = []
 # spell-checker: enable
 
 # This section is considered when running `cargo deny check sources`.
