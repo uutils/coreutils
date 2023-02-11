@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn test_sprintf_smoke() {
-        assert_eq!(sprintf("", &[]).unwrap(), "".to_string())
+        assert_eq!(sprintf("", &[]).unwrap(), "".to_string());
     }
 
     #[test]
@@ -162,7 +162,7 @@ mod tests {
         assert_eq!(
             sprintf("hello world", &[]).unwrap(),
             "hello world".to_string()
-        )
+        );
     }
 
     #[test]
@@ -170,6 +170,6 @@ mod tests {
         assert_eq!(
             sprintf("hello %s", &["world".to_string()]).unwrap(),
             "hello world".to_string()
-        )
+        );
     }
 }

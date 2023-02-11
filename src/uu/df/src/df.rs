@@ -240,7 +240,7 @@ impl Options {
             }
         }
 
-        (!intersected_types.is_empty()).then(|| intersected_types)
+        (!intersected_types.is_empty()).then_some(intersected_types)
     }
 }
 
