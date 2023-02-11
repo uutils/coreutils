@@ -64,7 +64,12 @@ impl FilterMode {
         let mode = if let Some(arg) = matches.get_one::<String>(options::BYTES) {
             match parse_num(arg) {
                 Ok(signum) => Self::Bytes(signum),
-                Err(e) => return Err(UUsageError::new(1, format!("invalid number of bytes: {e}"))),
+                Err(e) => {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("invalid number of bytes: {e}"),
+                    ))
+                }
             }
         } else if let Some(arg) = matches.get_one::<String>(options::LINES) {
             match parse_num(arg) {
@@ -72,7 +77,12 @@ impl FilterMode {
                     let delimiter = if zero_term { 0 } else { b'\n' };
                     Self::Lines(signum, delimiter)
                 }
-                Err(e) => return Err(UUsageError::new(1, format!("invalid number of lines: {e}"))),
+                Err(e) => {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("invalid number of lines: {e}"),
+                    ))
+                }
             }
         } else if zero_term {
             Self::default_zero()
@@ -307,14 +317,19 @@ pub fn arg_iterate<'a>(
         if let Some(s) = second.to_str() {
             match parse::parse_obsolete(s) {
                 Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
-                Some(Err(e)) => Err(UUsageError::new(
+                Some(Err(e)) => Err(USimpleError::new(
                     1,
                     match e {
-                        parse::ParseError::Syntax => format!("bad argument format: {}", s.quote()),
                         parse::ParseError::Overflow => format!(
                             "invalid argument: {} Value too large for defined datatype",
                             s.quote()
                         ),
+                        parse::ParseError::Context => {
+                            format!(
+                                "option used in invalid context -- {}",
+                                s.chars().nth(1).unwrap_or_default()
+                            )
+                        }
                     },
                 )),
                 None => Ok(Box::new(vec![first, second].into_iter().chain(args))),

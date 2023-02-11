@@ -4475,3 +4475,239 @@ fn test_args_sleep_interval_when_illegal_argument_then_usage_error(#[case] sleep
         .usage_error(format!("invalid number of seconds: '{sleep_interval}'"))
         .code_is(1);
 }
+
+#[test]
+fn test_gnu_args_plus_c() {
+    let scene = TestScenario::new(util_name!());
+
+    // obs-plus-c1
+    scene
+        .ucmd()
+        .arg("+2c")
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_only("bcd");
+    // obs-plus-c2
+    scene
+        .ucmd()
+        .arg("+8c")
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_only("");
+    // obs-plus-x1: same as +10c
+    scene
+        .ucmd()
+        .arg("+c")
+        .pipe_in(format!("x{}z", "y".repeat(10)))
+        .succeeds()
+        .stdout_only("yyz");
+}
+
+#[test]
+fn test_gnu_args_c() {
+    let scene = TestScenario::new(util_name!());
+
+    // obs-c3
+    scene
+        .ucmd()
+        .arg("-1c")
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_only("d");
+    // obs-c4
+    scene
+        .ucmd()
+        .arg("-9c")
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_only("abcd");
+    // obs-c5
+    scene
+        .ucmd()
+        .arg("-12c")
+        .pipe_in(format!("x{}z", "y".repeat(12)))
+        .succeeds()
+        .stdout_only(&format!("{}z", "y".repeat(11)));
+}
+
+#[test]
+fn test_gnu_args_l() {
+    let scene = TestScenario::new(util_name!());
+
+    // obs-l1
+    scene
+        .ucmd()
+        .arg("-1l")
+        .pipe_in("x")
+        .succeeds()
+        .stdout_only("x");
+    // obs-l2
+    scene
+        .ucmd()
+        .arg("-1l")
+        .pipe_in("x\ny\n")
+        .succeeds()
+        .stdout_only("y\n");
+    // obs-l3
+    scene
+        .ucmd()
+        .arg("-1l")
+        .pipe_in("x\ny")
+        .succeeds()
+        .stdout_only("y");
+    // obs-l: same as -10l
+    scene
+        .ucmd()
+        .arg("-l")
+        .pipe_in(format!("x{}z", "y\n".repeat(10)))
+        .succeeds()
+        .stdout_only(&format!("{}z", "y\n".repeat(9)));
+}
+
+#[test]
+fn test_gnu_args_plus_l() {
+    let scene = TestScenario::new(util_name!());
+
+    // obs-plus-l4
+    scene
+        .ucmd()
+        .arg("+1l")
+        .pipe_in("x\ny\n")
+        .succeeds()
+        .stdout_only("x\ny\n");
+    // ops-plus-l5
+    scene
+        .ucmd()
+        .arg("+2l")
+        .pipe_in("x\ny\n")
+        .succeeds()
+        .stdout_only("y\n");
+    // obs-plus-x2: same as +10l
+    scene
+        .ucmd()
+        .arg("+l")
+        .pipe_in(format!("x\n{}z", "y\n".repeat(10)))
+        .succeeds()
+        .stdout_only("y\ny\nz");
+}
+
+#[test]
+fn test_gnu_args_number() {
+    let scene = TestScenario::new(util_name!());
+
+    // obs-1
+    scene
+        .ucmd()
+        .arg("-1")
+        .pipe_in("x")
+        .succeeds()
+        .stdout_only("x");
+    // obs-2
+    scene
+        .ucmd()
+        .arg("-1")
+        .pipe_in("x\ny\n")
+        .succeeds()
+        .stdout_only("y\n");
+    // obs-3
+    scene
+        .ucmd()
+        .arg("-1")
+        .pipe_in("x\ny")
+        .succeeds()
+        .stdout_only("y");
+}
+
+#[test]
+fn test_gnu_args_plus_number() {
+    let scene = TestScenario::new(util_name!());
+
+    // obs-plus-4
+    scene
+        .ucmd()
+        .arg("+1")
+        .pipe_in("x\ny\n")
+        .succeeds()
+        .stdout_only("x\ny\n");
+    // ops-plus-5
+    scene
+        .ucmd()
+        .arg("+2")
+        .pipe_in("x\ny\n")
+        .succeeds()
+        .stdout_only("y\n");
+}
+
+#[test]
+fn test_gnu_args_b() {
+    let scene = TestScenario::new(util_name!());
+
+    // obs-b
+    scene
+        .ucmd()
+        .arg("-b")
+        .pipe_in("x\n".repeat(512 * 10 / 2 + 1))
+        .succeeds()
+        .stdout_only(&"x\n".repeat(512 * 10 / 2));
+}
+
+#[test]
+fn test_gnu_args_err() {
+    let scene = TestScenario::new(util_name!());
+
+    // err-1
+    scene
+        .ucmd()
+        .arg("+cl")
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: cannot open '+cl' for reading: No such file or directory\n")
+        .code_is(1);
+    // err-2
+    scene
+        .ucmd()
+        .arg("-cl")
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: invalid number of bytes: 'l'\n")
+        .code_is(1);
+    // err-3
+    scene
+        .ucmd()
+        .arg("+2cz")
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: cannot open '+2cz' for reading: No such file or directory\n")
+        .code_is(1);
+    // err-4
+    scene
+        .ucmd()
+        .arg("-2cX")
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: option used in invalid context -- 2\n")
+        .code_is(1);
+    // err-5
+    scene
+        .ucmd()
+        .arg("-c99999999999999999999")
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: invalid number of bytes: '99999999999999999999'\n")
+        .code_is(1);
+    // err-6
+    scene
+        .ucmd()
+        .arg("-c --")
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: invalid number of bytes: '-'\n")
+        .code_is(1);
+    scene
+        .ucmd()
+        .arg("-5cz")
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: option used in invalid context -- 5\n")
+        .code_is(1);
+}
