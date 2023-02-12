@@ -523,7 +523,7 @@ pub fn uu_app() -> Command {
                 .long(options::SPARSE)
                 .value_name("WHEN")
                 .value_parser(["never", "auto", "always"])
-                .help("NotImplemented: control creation of sparse files. See below"),
+                .help("control creation of sparse files. See below"),
         )
         // TODO: implement the following args
         .arg(
