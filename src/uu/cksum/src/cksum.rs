@@ -102,6 +102,7 @@ struct Options {
     algo_name: &'static str,
     digest: Box<dyn Digest + 'static>,
     output_bits: usize,
+    reverse: bool,
 }
 
 /// Calculate checksum
@@ -130,36 +131,49 @@ where
                 File::open(filename).map_err_context(|| filename.to_str().unwrap().to_string())?;
             Box::new(file_buf) as Box<dyn Read>
         });
-        let (sum, sz) = digest_read(&mut options.digest, &mut file, options.output_bits)
+        let (mut sum, sz) = digest_read(&mut options.digest, &mut file, options.output_bits)
             .map_err_context(|| "failed to read input".to_string())?;
 
+        if options.reverse {
+            sum = reverse_cksum(&sum);
+        }
         // The BSD checksum output is 5 digit integer
         let bsd_width = 5;
         match (options.algo_name, not_file) {
             (ALGORITHM_OPTIONS_SYSV, true) => println!(
                 "{} {}",
-                sum.parse::<u16>().unwrap(),
+                u16::from_ne_bytes(sum.try_into().unwrap()),
                 div_ceil(sz, options.output_bits)
             ),
             (ALGORITHM_OPTIONS_SYSV, false) => println!(
                 "{} {} {}",
-                sum.parse::<u16>().unwrap(),
+                u16::from_ne_bytes(sum.try_into().unwrap()),
                 div_ceil(sz, options.output_bits),
                 filename.display()
             ),
             (ALGORITHM_OPTIONS_BSD, true) => println!(
                 "{:0bsd_width$} {:bsd_width$}",
-                sum.parse::<u16>().unwrap(),
+                u16::from_ne_bytes(sum.try_into().unwrap()),
                 div_ceil(sz, options.output_bits)
             ),
             (ALGORITHM_OPTIONS_BSD, false) => println!(
                 "{:0bsd_width$} {:bsd_width$} {}",
-                sum.parse::<u16>().unwrap(),
+                u16::from_ne_bytes(sum.try_into().unwrap()),
                 div_ceil(sz, options.output_bits),
                 filename.display()
             ),
-            (_, true) => println!("{sum} {sz}"),
-            (_, false) => println!("{sum} {sz} {}", filename.display()),
+            (ALGORITHM_OPTIONS_CRC, true) => {
+                println!("{} {sz}", u32::from_ne_bytes(sum.try_into().unwrap()));
+            }
+            (ALGORITHM_OPTIONS_CRC, false) => {
+                println!(
+                    "{} {sz} {}",
+                    u32::from_ne_bytes(sum.try_into().unwrap()),
+                    filename.display()
+                );
+            }
+            (_, true) => println!("{} {sz}", encode(sum)),
+            (_, false) => println!("{} {sz} {}", encode(sum), filename.display()),
         }
     }
 
@@ -170,7 +184,7 @@ fn digest_read<T: Read>(
     digest: &mut Box<dyn Digest>,
     reader: &mut BufReader<T>,
     output_bits: usize,
-) -> io::Result<(String, usize)> {
+) -> io::Result<(Vec<u8>, usize)> {
     digest.reset();
 
     // Read bytes from `reader` and write those bytes to `digest`.
@@ -188,21 +202,30 @@ fn digest_read<T: Read>(
     let mut digest_writer = DigestWriter::new(digest, true);
     let output_size = std::io::copy(reader, &mut digest_writer)? as usize;
     digest_writer.finalize();
-
     if digest.output_bits() > 0 {
-        Ok((digest.result_str(), output_size))
+        Ok((digest.result_bytes(), output_size))
     } else {
         // Assume it's SHAKE.  result_str() doesn't work with shake (as of 8/30/2016)
         let mut bytes = Vec::new();
         bytes.resize((output_bits + 7) / 8, 0);
         digest.hash_finalize(&mut bytes);
-        Ok((encode(bytes), output_size))
+        Ok((bytes, output_size))
     }
+}
+
+fn reverse_cksum(checksum: &[u8]) -> Vec<u8> {
+    let sz = checksum.len();
+    let mut ret: Vec<u8> = std::iter::repeat(0).take(sz).collect::<Vec<u8>>();
+    for i in 0..sz {
+        ret[i] = checksum[sz - i - 1].reverse_bits();
+    }
+    ret
 }
 
 mod options {
     pub static FILE: &str = "file";
     pub static ALGORITHM: &str = "algorithm";
+    pub static UNTAGGED: &str = "untagged";
 }
 
 const ALGORITHM_HELP_DESC: &str =
@@ -231,11 +254,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => ALGORITHM_OPTIONS_CRC,
     };
 
+    let untagged: bool = matches.get_flag(options::UNTAGGED);
+
     let (name, algo, bits) = detect_algo(algo_name);
     let opts = Options {
         algo_name: name,
         digest: algo,
         output_bits: bits,
+        reverse: untagged,
     };
 
     match matches.get_many::<String>(options::FILE) {
@@ -277,6 +303,12 @@ pub fn uu_app() -> Command {
                     ALGORITHM_OPTIONS_BLAKE2B,
                     ALGORITHM_OPTIONS_SM3,
                 ]),
+        )
+        .arg(
+            Arg::new(options::UNTAGGED)
+                .long(options::UNTAGGED)
+                .help("create a reversed style checksum, without digest type")
+                .action(clap::ArgAction::SetTrue),
         )
         .after_help(ALGORITHM_HELP_DESC)
 }

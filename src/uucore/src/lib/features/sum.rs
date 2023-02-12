@@ -36,6 +36,11 @@ pub trait Digest {
         self.hash_finalize(&mut buf);
         encode(buf)
     }
+    fn result_bytes(&mut self) -> Vec<u8> {
+        let mut buf: Vec<u8> = vec![0; self.output_bytes()];
+        self.hash_finalize(&mut buf);
+        buf
+    }
 }
 
 pub struct Blake2b(blake2b_simd::State);
@@ -185,12 +190,18 @@ impl Digest for CRC {
         format!("{}", self.state)
     }
 
+    fn result_bytes(&mut self) -> Vec<u8> {
+        let mut out: Vec<u8> = vec![0; 4];
+        self.hash_finalize(&mut out);
+        out.to_vec()
+    }
+
     fn reset(&mut self) {
         *self = Self::new();
     }
 
     fn output_bits(&self) -> usize {
-        256
+        32
     }
 }
 
@@ -226,6 +237,12 @@ impl Digest for BSD {
         format!("{}", self.state)
     }
 
+    fn result_bytes(&mut self) -> Vec<u8> {
+        let mut out: Vec<u8> = vec![0; 2];
+        self.hash_finalize(&mut out);
+        out.to_vec()
+    }
+
     fn reset(&mut self) {
         *self = Self::new();
     }
@@ -259,6 +276,12 @@ impl Digest for SYSV {
         let mut _out: Vec<u8> = vec![0; 2];
         self.hash_finalize(&mut _out);
         format!("{}", self.state)
+    }
+
+    fn result_bytes(&mut self) -> Vec<u8> {
+        let mut out: Vec<u8> = vec![0; 2];
+        self.hash_finalize(&mut out);
+        out.to_vec()
     }
 
     fn reset(&mut self) {

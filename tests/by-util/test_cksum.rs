@@ -16,6 +16,15 @@ fn test_single_file() {
 }
 
 #[test]
+fn test_single_file_untagged() {
+    new_ucmd!()
+        .arg("--untagged")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture("single_file_untagged.expected");
+}
+
+#[test]
 fn test_multiple_files() {
     new_ucmd!()
         .arg("lorem_ipsum.txt")
