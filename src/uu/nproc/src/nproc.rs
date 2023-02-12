@@ -143,5 +143,5 @@ fn num_cpus_all() -> usize {
     target_os = "netbsd"
 )))]
 fn num_cpus_all() -> usize {
-    thread::available_parallelism().get()
+    thread::available_parallelism().unwrap().get()
 }
