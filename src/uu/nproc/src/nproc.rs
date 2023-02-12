@@ -8,7 +8,7 @@
 // spell-checker:ignore (ToDO) NPROCESSORS nprocs numstr threadstr sysconf
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use std::env;
+use std::{env, thread};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
@@ -73,16 +73,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 // If OMP_NUM_THREADS=0, rejects the value
                 let thread: Vec<&str> = threadstr.split_terminator(',').collect();
                 match &thread[..] {
-                    [] => num_cpus::get(),
+                    [] => thread::available_parallelism()?.get(),
                     [s, ..] => match s.parse() {
-                        Ok(0) | Err(_) => num_cpus::get(),
+                        Ok(0) | Err(_) => thread::available_parallelism()?.get(),
                         Ok(n) => n,
                     },
                 }
             }
             // the variable 'OMP_NUM_THREADS' doesn't exist
             // fallback to the regular CPU detection
-            Err(_) => num_cpus::get(),
+            Err(_) => thread::available_parallelism()?.get(),
         }
     };
 
@@ -127,7 +127,7 @@ fn num_cpus_all() -> usize {
     if nprocs == 1 {
         // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
         // However, we want to guarantee that `nproc --all` >= `nproc`.
-        num_cpus::get()
+        thread::available_parallelism().unwrap().get()
     } else if nprocs > 0 {
         nprocs as usize
     } else {
@@ -135,7 +135,7 @@ fn num_cpus_all() -> usize {
     }
 }
 
-// Other platforms (e.g., windows), num_cpus::get() directly.
+// Other platforms (e.g., windows), thread::available_parallelism()?.get() directly.
 #[cfg(not(any(
     target_os = "linux",
     target_vendor = "apple",
@@ -143,5 +143,5 @@ fn num_cpus_all() -> usize {
     target_os = "netbsd"
 )))]
 fn num_cpus_all() -> usize {
-    num_cpus::get()
+    thread::available_parallelism().get()
 }

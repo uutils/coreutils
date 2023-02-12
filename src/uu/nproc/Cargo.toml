@@ -16,7 +16,6 @@ path = "src/nproc.rs"
 
 [dependencies]
 libc = { workspace=true }
-num_cpus = { workspace=true }
 clap = { workspace=true }
 uucore = { workspace=true, features=["fs"] }
 
