@@ -253,10 +253,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             format!("invalid format {}", format_string.replace("%f", "%N")),
                         ));
                     }
-                    let formatted = date
-                        .format_with_items(format_items)
-                        .to_string()
-                        .replace("%f", "%N");
+                    let formatted;
+                    if format_string == DEFAULT_FORMAT {
+                        formatted = libc_strftime::strftime_local(format_string, date.timestamp());
+                    } else {
+                        formatted = date
+                            .format_with_items(format_items)
+                            .to_string()
+                            .replace("%f", "%N");
+                    }
                     println!("{formatted}");
                 }
                 Err((input, _err)) => show_error!("invalid date {}", input.quote()),
@@ -340,6 +345,8 @@ pub fn uu_app() -> Command {
         .arg(Arg::new(OPT_FORMAT))
 }
 
+const DEFAULT_FORMAT: &str = "%a %b %d %I:%M:%S %Z %p %Y";
+
 /// Return the appropriate format string for the given settings.
 fn make_format_string(settings: &Settings) -> &str {
     match settings.format {
@@ -357,7 +364,7 @@ fn make_format_string(settings: &Settings) -> &str {
             Rfc3339Format::Ns => "%F %T.%f%:z",
         },
         Format::Custom(ref fmt) => fmt,
-        Format::Default => "%c",
+        Format::Default => DEFAULT_FORMAT,
     }
 }
 

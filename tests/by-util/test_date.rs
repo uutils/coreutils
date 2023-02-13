@@ -44,6 +44,14 @@ fn test_date_rfc_3339() {
 }
 
 #[test]
+fn test_date_default() {
+    TestScenario::new(util_name!())
+        .ucmd()
+        .succeeds()
+        .stdout_is("");
+}
+
+#[test]
 fn test_date_rfc_8601() {
     for param in ["--iso-8601", "--i"] {
         new_ucmd!().arg(format!("{param}=ns")).succeeds();

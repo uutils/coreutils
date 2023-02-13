@@ -1205,6 +1205,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "201de327520df007757c1f0adce6e827fe8562fbc28bfd9c15571c66ca1f5f79"
 
 [[package]]
+name = "libc-strftime"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3badb12f3d8623017f2cff9de476ff32f426ef45419253366fa088b8df6364cf"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "libloading"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2440,6 +2449,7 @@ dependencies = [
  "chrono",
  "clap",
  "libc",
+ "libc-strftime",
  "uucore",
  "windows-sys",
 ]

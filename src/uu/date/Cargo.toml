@@ -15,9 +15,10 @@ edition = "2021"
 path = "src/date.rs"
 
 [dependencies]
-chrono = { workspace=true }
 clap = { workspace=true }
 uucore = { workspace=true }
+chrono = { workspace=true }
+libc-strftime = { workspace=true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace=true }
