@@ -73,16 +73,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 // If OMP_NUM_THREADS=0, rejects the value
                 let thread: Vec<&str> = threadstr.split_terminator(',').collect();
                 match &thread[..] {
-                    [] => thread::available_parallelism()?.get(),
+                    // In some cases, thread::available_parallelism() may return an Err
+                    // In this case, we will return 1 (like GNU)
+                    [] => match thread::available_parallelism() {
+                        Ok(n) => n.get(),
+                        Err(_) => 1,
+                    },
                     [s, ..] => match s.parse() {
-                        Ok(0) | Err(_) => thread::available_parallelism()?.get(),
+                        Ok(0) | Err(_) => match thread::available_parallelism() {
+                            Ok(n) => n.get(),
+                            Err(_) => 1,
+                        },
                         Ok(n) => n,
                     },
                 }
             }
             // the variable 'OMP_NUM_THREADS' doesn't exist
             // fallback to the regular CPU detection
-            Err(_) => thread::available_parallelism()?.get(),
+            Err(_) => match thread::available_parallelism() {
+                Ok(n) => n.get(),
+                Err(_) => 1,
+            },
         }
     };
 
@@ -127,7 +138,10 @@ fn num_cpus_all() -> usize {
     if nprocs == 1 {
         // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
         // However, we want to guarantee that `nproc --all` >= `nproc`.
-        thread::available_parallelism().unwrap().get()
+        match thread::available_parallelism() {
+            Ok(n) => n.get(),
+            Err(_) => 1,
+        }
     } else if nprocs > 0 {
         nprocs as usize
     } else {
@@ -143,5 +157,8 @@ fn num_cpus_all() -> usize {
     target_os = "netbsd"
 )))]
 fn num_cpus_all() -> usize {
-    thread::available_parallelism().unwrap().get()
+    match thread::available_parallelism() {
+        Ok(n) => n.get(),
+        Err(_) => 1,
+    }
 }
