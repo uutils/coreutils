@@ -192,7 +192,7 @@ fn test_realpath_existing() {
     ucmd.arg("-e")
         .arg(".")
         .succeeds()
-        .stdout_only(at.plus_as_string(&format!("{}\n", at.root_dir_resolved())));
+        .stdout_only(at.plus_as_string(format!("{}\n", at.root_dir_resolved())));
 }
 
 #[test]

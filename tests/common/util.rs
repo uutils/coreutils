@@ -746,14 +746,14 @@ impl AtPath {
         self.subdir.to_str().unwrap().to_owned()
     }
 
-    pub fn plus(&self, name: &str) -> PathBuf {
+    pub fn plus<P: AsRef<Path>>(&self, name: P) -> PathBuf {
         let mut pathbuf = self.subdir.clone();
         pathbuf.push(name);
         pathbuf
     }
 
-    pub fn plus_as_string(&self, name: &str) -> String {
-        String::from(self.plus(name).to_str().unwrap())
+    pub fn plus_as_string<P: AsRef<Path>>(&self, name: P) -> String {
+        self.plus(name).display().to_string()
     }
 
     fn minus(&self, name: &str) -> PathBuf {
@@ -876,7 +876,8 @@ impl AtPath {
         fs::remove_dir(self.plus(dir)).unwrap();
     }
 
-    pub fn mkdir(&self, dir: &str) {
+    pub fn mkdir<P: AsRef<Path>>(&self, dir: P) {
+        let dir = dir.as_ref();
         log_info("mkdir", self.plus_as_string(dir));
         fs::create_dir(self.plus(dir)).unwrap();
     }
@@ -893,7 +894,8 @@ impl AtPath {
         }
     }
 
-    pub fn touch(&self, file: &str) {
+    pub fn touch<P: AsRef<Path>>(&self, file: P) {
+        let file = file.as_ref();
         log_info("touch", self.plus_as_string(file));
         File::create(self.plus(file)).unwrap();
     }
@@ -1016,7 +1018,7 @@ impl AtPath {
         }
     }
 
-    pub fn file_exists(&self, path: &str) -> bool {
+    pub fn file_exists<P: AsRef<Path>>(&self, path: P) -> bool {
         match fs::metadata(self.plus(path)) {
             Ok(m) => m.is_file(),
             Err(_) => false,
