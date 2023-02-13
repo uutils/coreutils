@@ -12,6 +12,8 @@ pub mod lines;
 pub mod memo;
 #[cfg(feature = "ringbuffer")]
 pub mod ringbuffer;
+#[cfg(feature = "sum")]
+pub mod sum;
 #[cfg(feature = "memo")]
 mod tokenize;
 

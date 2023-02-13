@@ -9,11 +9,6 @@
 
 // spell-checker:ignore (ToDO) algo, algoname, regexes, nread, nonames
 
-mod digest;
-
-use self::digest::Digest;
-use self::digest::DigestWriter;
-
 use clap::builder::ValueParser;
 use clap::crate_version;
 use clap::ArgAction;
@@ -36,6 +31,7 @@ use uucore::crash;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::show_warning;
+use uucore::sum::{Digest, DigestWriter};
 
 const NAME: &str = "hashsum";
 
@@ -680,7 +676,7 @@ fn digest_reader<T: Read>(
         // Assume it's SHAKE.  result_str() doesn't work with shake (as of 8/30/2016)
         let mut bytes = Vec::new();
         bytes.resize((output_bits + 7) / 8, 0);
-        digest.result(&mut bytes);
+        digest.hash_finalize(&mut bytes);
         Ok(encode(bytes))
     }
 }

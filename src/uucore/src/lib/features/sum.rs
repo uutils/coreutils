@@ -16,8 +16,8 @@ pub trait Digest {
     fn new() -> Self
     where
         Self: Sized;
-    fn input(&mut self, input: &[u8]);
-    fn result(&mut self, out: &mut [u8]);
+    fn hash_update(&mut self, input: &[u8]);
+    fn hash_finalize(&mut self, out: &mut [u8]);
     fn reset(&mut self);
     fn output_bits(&self) -> usize;
     fn output_bytes(&self) -> usize {
@@ -25,7 +25,7 @@ pub trait Digest {
     }
     fn result_str(&mut self) -> String {
         let mut buf: Vec<u8> = vec![0; self.output_bytes()];
-        self.result(&mut buf);
+        self.hash_finalize(&mut buf);
         encode(buf)
     }
 }
@@ -35,11 +35,11 @@ impl Digest for blake2b_simd::State {
         Self::new()
     }
 
-    fn input(&mut self, input: &[u8]) {
+    fn hash_update(&mut self, input: &[u8]) {
         self.update(input);
     }
 
-    fn result(&mut self, out: &mut [u8]) {
+    fn hash_finalize(&mut self, out: &mut [u8]) {
         let hash_result = &self.finalize();
         out.copy_from_slice(hash_result.as_bytes());
     }
@@ -58,11 +58,11 @@ impl Digest for blake3::Hasher {
         Self::new()
     }
 
-    fn input(&mut self, input: &[u8]) {
+    fn hash_update(&mut self, input: &[u8]) {
         self.update(input);
     }
 
-    fn result(&mut self, out: &mut [u8]) {
+    fn hash_finalize(&mut self, out: &mut [u8]) {
         let hash_result = &self.finalize();
         out.copy_from_slice(hash_result.as_bytes());
     }
@@ -76,6 +76,194 @@ impl Digest for blake3::Hasher {
     }
 }
 
+use sm3::{Digest as SM3_D, Sm3};
+
+impl Digest for Sm3 {
+    fn new() -> Self {
+        <Self as sm3::Digest>::new()
+    }
+
+    fn hash_update(&mut self, input: &[u8]) {
+        self.update(input);
+    }
+
+    fn hash_finalize(&mut self, out: &mut [u8]) {
+        out.copy_from_slice(&self.clone().finalize());
+    }
+
+    fn reset(&mut self) {
+        *self = <Self as sm3::Digest>::new();
+    }
+
+    fn output_bits(&self) -> usize {
+        256
+    }
+}
+
+// NOTE: CRC_TABLE_LEN *must* be <= 256 as we cast 0..CRC_TABLE_LEN to u8
+const CRC_TABLE_LEN: usize = 256;
+
+pub struct CRC {
+    state: u32,
+    size: usize,
+    crc_table: [u32; CRC_TABLE_LEN],
+}
+
+impl CRC {
+    fn generate_crc_table() -> [u32; CRC_TABLE_LEN] {
+        let mut table = [0; CRC_TABLE_LEN];
+
+        for (i, elt) in table.iter_mut().enumerate().take(CRC_TABLE_LEN) {
+            *elt = Self::crc_entry(i as u8);
+        }
+
+        table
+    }
+    fn crc_entry(input: u8) -> u32 {
+        let mut crc = (input as u32) << 24;
+
+        let mut i = 0;
+        while i < 8 {
+            let if_condition = crc & 0x8000_0000;
+            let if_body = (crc << 1) ^ 0x04c1_1db7;
+            let else_body = crc << 1;
+
+            // NOTE: i feel like this is easier to understand than emulating an if statement in bitwise
+            //       ops
+            let condition_table = [else_body, if_body];
+
+            crc = condition_table[(if_condition != 0) as usize];
+            i += 1;
+        }
+
+        crc
+    }
+
+    fn update(&mut self, input: u8) {
+        self.state = (self.state << 8)
+            ^ self.crc_table[((self.state >> 24) as usize ^ input as usize) & 0xFF];
+    }
+}
+
+impl Digest for CRC {
+    fn new() -> Self {
+        Self {
+            state: 0,
+            size: 0,
+            crc_table: Self::generate_crc_table(),
+        }
+    }
+
+    fn hash_update(&mut self, input: &[u8]) {
+        for &elt in input.iter() {
+            self.update(elt);
+        }
+        self.size += input.len();
+    }
+
+    fn hash_finalize(&mut self, out: &mut [u8]) {
+        let mut sz = self.size;
+        while sz != 0 {
+            self.update(sz as u8);
+            sz >>= 8;
+        }
+        self.state = !self.state;
+        out.copy_from_slice(&self.state.to_ne_bytes());
+    }
+
+    fn result_str(&mut self) -> String {
+        let mut _out: Vec<u8> = vec![0; 4];
+        self.hash_finalize(&mut _out);
+        format!("{}", self.state)
+    }
+
+    fn reset(&mut self) {
+        *self = Self::new();
+    }
+
+    fn output_bits(&self) -> usize {
+        256
+    }
+}
+
+// This can be replaced with usize::div_ceil once it is stabilized.
+// This implementation approach is optimized for when `b` is a constant,
+// particularly a power of two.
+pub fn div_ceil(a: usize, b: usize) -> usize {
+    (a + b - 1) / b
+}
+
+pub struct BSD {
+    state: u16,
+}
+
+impl Digest for BSD {
+    fn new() -> Self {
+        Self { state: 0 }
+    }
+
+    fn hash_update(&mut self, input: &[u8]) {
+        for &byte in input.iter() {
+            self.state = (self.state >> 1) + ((self.state & 1) << 15);
+            self.state = self.state.wrapping_add(u16::from(byte));
+        }
+    }
+
+    fn hash_finalize(&mut self, out: &mut [u8]) {
+        out.copy_from_slice(&self.state.to_ne_bytes());
+    }
+
+    fn result_str(&mut self) -> String {
+        let mut _out: Vec<u8> = vec![0; 2];
+        self.hash_finalize(&mut _out);
+        format!("{}", self.state)
+    }
+
+    fn reset(&mut self) {
+        *self = Self::new();
+    }
+
+    fn output_bits(&self) -> usize {
+        128
+    }
+}
+
+pub struct SYSV {
+    state: u32,
+}
+
+impl Digest for SYSV {
+    fn new() -> Self {
+        Self { state: 0 }
+    }
+
+    fn hash_update(&mut self, input: &[u8]) {
+        for &byte in input.iter() {
+            self.state = self.state.wrapping_add(u32::from(byte));
+        }
+    }
+
+    fn hash_finalize(&mut self, out: &mut [u8]) {
+        self.state = (self.state & 0xffff) + (self.state >> 16);
+        self.state = (self.state & 0xffff) + (self.state >> 16);
+        out.copy_from_slice(&(self.state as u16).to_ne_bytes());
+    }
+
+    fn result_str(&mut self) -> String {
+        let mut _out: Vec<u8> = vec![0; 2];
+        self.hash_finalize(&mut _out);
+        format!("{}", self.state)
+    }
+
+    fn reset(&mut self) {
+        *self = Self::new();
+    }
+
+    fn output_bits(&self) -> usize {
+        512
+    }
+}
+
 // Implements the Digest trait for sha2 / sha3 algorithms with fixed output
 macro_rules! impl_digest_common {
     ($type: ty, $size: expr) => {
@@ -84,16 +272,16 @@ macro_rules! impl_digest_common {
                 Self::default()
             }
 
-            fn input(&mut self, input: &[u8]) {
+            fn hash_update(&mut self, input: &[u8]) {
                 digest::Digest::update(self, input);
             }
 
-            fn result(&mut self, out: &mut [u8]) {
+            fn hash_finalize(&mut self, out: &mut [u8]) {
                 digest::Digest::finalize_into_reset(self, out.into());
             }
 
             fn reset(&mut self) {
-                *self = Self::new();
+                *self = <Self as Digest>::new();
             }
 
             fn output_bits(&self) -> usize {
@@ -111,11 +299,11 @@ macro_rules! impl_digest_shake {
                 Self::default()
             }
 
-            fn input(&mut self, input: &[u8]) {
+            fn hash_update(&mut self, input: &[u8]) {
                 digest::Update::update(self, input);
             }
 
-            fn result(&mut self, out: &mut [u8]) {
+            fn hash_finalize(&mut self, out: &mut [u8]) {
                 digest::ExtendableOutputReset::finalize_xof_reset_into(self, out);
             }
 
@@ -148,7 +336,7 @@ impl_digest_shake!(sha3::Shake256);
 ///
 /// This struct wraps a [`Digest`] and provides a [`Write`]
 /// implementation that passes input bytes directly to the
-/// [`Digest::input`].
+/// [`Digest::hash_update`].
 ///
 /// On Windows, if `binary` is `false`, then the [`write`]
 /// implementation replaces instances of "\r\n" with "\n" before passing
@@ -182,7 +370,7 @@ impl<'a> DigestWriter<'a> {
 
     pub fn finalize(&mut self) -> bool {
         if self.was_last_character_carriage_return {
-            self.digest.input(&[b'\r']);
+            self.digest.hash_update(&[b'\r']);
             true
         } else {
             false
@@ -193,14 +381,14 @@ impl<'a> DigestWriter<'a> {
 impl<'a> Write for DigestWriter<'a> {
     #[cfg(not(windows))]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.digest.input(buf);
+        self.digest.hash_update(buf);
         Ok(buf.len())
     }
 
     #[cfg(windows)]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         if self.binary {
-            self.digest.input(buf);
+            self.digest.hash_update(buf);
             return Ok(buf.len());
         }
 
@@ -213,7 +401,7 @@ impl<'a> Write for DigestWriter<'a> {
         // call to `write()`.
         let n = buf.len();
         if self.was_last_character_carriage_return && n > 0 && buf[0] != b'\n' {
-            self.digest.input(&[b'\r']);
+            self.digest.hash_update(&[b'\r']);
         }
 
         // Next, find all occurrences of "\r\n", inputting the slice
@@ -221,7 +409,7 @@ impl<'a> Write for DigestWriter<'a> {
         // the beginning of this "\r\n".
         let mut i_prev = 0;
         for i in memmem::find_iter(buf, b"\r\n") {
-            self.digest.input(&buf[i_prev..i]);
+            self.digest.hash_update(&buf[i_prev..i]);
             i_prev = i + 1;
         }
 
@@ -233,10 +421,10 @@ impl<'a> Write for DigestWriter<'a> {
         // blocks of the input.
         if n > 0 && buf[n - 1] == b'\r' {
             self.was_last_character_carriage_return = true;
-            self.digest.input(&buf[i_prev..n - 1]);
+            self.digest.hash_update(&buf[i_prev..n - 1]);
         } else {
             self.was_last_character_carriage_return = false;
-            self.digest.input(&buf[i_prev..n]);
+            self.digest.hash_update(&buf[i_prev..n]);
         }
 
         // Even though we dropped a "\r" for each "\r\n" we found, we
@@ -272,14 +460,14 @@ mod tests {
         let mut writer_crlf = DigestWriter::new(&mut digest, false);
         writer_crlf.write_all(&[b'\r']).unwrap();
         writer_crlf.write_all(&[b'\n']).unwrap();
-        writer_crlf.finalize();
+        writer_crlf.hash_finalize();
         let result_crlf = digest.result_str();
 
         // We expect "\r\n" to be replaced with "\n" in text mode on Windows.
         let mut digest = Box::new(md5::Md5::new()) as Box<dyn Digest>;
         let mut writer_lf = DigestWriter::new(&mut digest, false);
         writer_lf.write_all(&[b'\n']).unwrap();
-        writer_lf.finalize();
+        writer_lf.hash_finalize();
         let result_lf = digest.result_str();
 
         assert_eq!(result_crlf, result_lf);
