@@ -901,3 +901,63 @@ fn test_t_ensure_tmpdir_has_higher_priority_than_p() {
     println!("stdout = {stdout}");
     assert!(stdout.contains(&pathname));
 }
+
+#[test]
+fn test_missing_xs_tmpdir_template() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .arg("--tmpdir")
+        .arg(TEST_TEMPLATE3)
+        .fails()
+        .no_stdout()
+        .stderr_contains("too few X's in template");
+    scene
+        .ucmd()
+        .arg("--tmpdir=foobar")
+        .fails()
+        .no_stdout()
+        .stderr_contains("failed to create file via template");
+}
+
+#[test]
+fn test_both_tmpdir_flags_present() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .arg("-p")
+        .arg(".")
+        .arg("--tmpdir")
+        .arg("foobarXXXX")
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("/tmp/foobar");
+    scene
+        .ucmd()
+        .arg("-p")
+        .arg(".")
+        .arg("--tmpdir=foobarXXXX")
+        .fails()
+        .no_stdout()
+        .stderr_contains("failed to create file via template");
+    scene
+        .ucmd()
+        .arg("--tmpdir")
+        .arg("foobarXXXX")
+        .arg("-p")
+        .arg(".")
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("./foobar");
+}
+
+#[test]
+fn test_missing_short_tmpdir_flag() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .arg("-p")
+        .fails()
+        .no_stdout()
+        .stderr_contains("a value is required for '-p <DIR>' but none was supplied");
+}

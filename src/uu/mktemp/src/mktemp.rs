@@ -428,6 +428,7 @@ pub fn uu_app() -> Command {
                 .num_args(0..=1)
                 // Require an equals to avoid ambiguity if no tmpdir is supplied
                 .require_equals(true)
+                .overrides_with(OPT_P)
                 .value_parser(ValueParser::path_buf())
                 .value_hint(clap::ValueHint::DirPath),
         )
