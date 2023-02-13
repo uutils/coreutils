@@ -75,25 +75,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 match &thread[..] {
                     // In some cases, thread::available_parallelism() may return an Err
                     // In this case, we will return 1 (like GNU)
-                    [] => match thread::available_parallelism() {
-                        Ok(n) => n.get(),
-                        Err(_) => 1,
-                    },
+                    [] => available_parallelism(),
                     [s, ..] => match s.parse() {
-                        Ok(0) | Err(_) => match thread::available_parallelism() {
-                            Ok(n) => n.get(),
-                            Err(_) => 1,
-                        },
+                        Ok(0) | Err(_) => available_parallelism(),
                         Ok(n) => n,
                     },
                 }
             }
             // the variable 'OMP_NUM_THREADS' doesn't exist
             // fallback to the regular CPU detection
-            Err(_) => match thread::available_parallelism() {
-                Ok(n) => n.get(),
-                Err(_) => 1,
-            },
+            Err(_) => available_parallelism(),
         }
     };
 
@@ -138,10 +129,7 @@ fn num_cpus_all() -> usize {
     if nprocs == 1 {
         // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
         // However, we want to guarantee that `nproc --all` >= `nproc`.
-        match thread::available_parallelism() {
-            Ok(n) => n.get(),
-            Err(_) => 1,
-        }
+        available_parallelism()
     } else if nprocs > 0 {
         nprocs as usize
     } else {
@@ -157,8 +145,14 @@ fn num_cpus_all() -> usize {
     target_os = "netbsd"
 )))]
 fn num_cpus_all() -> usize {
+    available_parallelism()
+}
+
+// In some cases, thread::available_parallelism() may return an Err
+// In this case, we will return 1 (like GNU) 
+fn available_parallelism() -> usize {
     match thread::available_parallelism() {
         Ok(n) => n.get(),
-        Err(_) => 1,
+        Err(_) => 1
     }
 }
