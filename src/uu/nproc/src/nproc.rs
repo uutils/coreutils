@@ -73,8 +73,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 // If OMP_NUM_THREADS=0, rejects the value
                 let thread: Vec<&str> = threadstr.split_terminator(',').collect();
                 match &thread[..] {
-                    // In some cases, thread::available_parallelism() may return an Err
-                    // In this case, we will return 1 (like GNU)
                     [] => available_parallelism(),
                     [s, ..] => match s.parse() {
                         Ok(0) | Err(_) => available_parallelism(),
