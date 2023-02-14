@@ -19,7 +19,7 @@ use crate::operation::DeleteOperation;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 
-static ABOUT: &str = "translate or delete characters";
+static ABOUT: &str = "Translate or delete characters";
 const USAGE: &str = "{} [OPTION]... SET1 [SET2]";
 
 mod options {

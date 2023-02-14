@@ -17,7 +17,7 @@ use uucore::format_usage;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod splice;
 
-const ABOUT: &str = "repeatedly display a line with STRING (or 'y')";
+const ABOUT: &str = "Repeatedly display a line with STRING (or 'y')";
 const USAGE: &str = "{} [STRING]...";
 
 // it's possible that using a smaller or larger buffer might provide better performance on some

@@ -28,7 +28,7 @@ use std::os::unix::prelude::PermissionsExt;
 use rand::Rng;
 use tempfile::Builder;
 
-static ABOUT: &str = "create a temporary file or directory.";
+static ABOUT: &str = "Create a temporary file or directory.";
 const USAGE: &str = "{} [OPTION]... [TEMPLATE]";
 
 static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";

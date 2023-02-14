@@ -5,9 +5,6 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// TODO remove this when https://github.com/rust-lang/rust-clippy/issues/6902 is fixed
-#![allow(clippy::use_self)]
-
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};

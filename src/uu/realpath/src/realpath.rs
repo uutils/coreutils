@@ -23,7 +23,7 @@ use uucore::{
 };
 use uucore::{error::UClapError, show, show_if_err};
 
-static ABOUT: &str = "print the resolved path";
+static ABOUT: &str = "Print the resolved path";
 const USAGE: &str = "{} [OPTION]... FILE...";
 
 static OPT_QUIET: &str = "quiet";

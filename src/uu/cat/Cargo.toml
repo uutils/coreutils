@@ -15,13 +15,13 @@ edition = "2021"
 path = "src/cat.rs"
 
 [dependencies]
-clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-thiserror = "1.0"
-atty = "0.2"
-uucore = { version=">=0.0.17", package="uucore", path="../../uucore", features=["fs", "pipes"] }
+clap = { workspace=true }
+thiserror = { workspace = true }
+atty = { workspace=true }
+uucore = { workspace=true, features=["fs", "pipes"] }
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.25", default-features = false }
+nix = { workspace=true }
 
 [[bin]]
 name = "cat"

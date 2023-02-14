@@ -19,7 +19,7 @@ use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 
-static ABOUT: &str = "change file owner and group";
+static ABOUT: &str = "Change file owner and group";
 
 const USAGE: &str = "\
     {} [OPTION]... [OWNER][:[GROUP]] FILE...

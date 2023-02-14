@@ -771,6 +771,6 @@ mod tests {
                 .map_err_context(|| String::from("test"))
                 .unwrap_err()
                 .to_string()
-        )
+        );
     }
 }

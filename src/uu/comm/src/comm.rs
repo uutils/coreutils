@@ -17,7 +17,7 @@ use uucore::format_usage;
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 
-static ABOUT: &str = "compare two sorted files line by line";
+static ABOUT: &str = "Compare two sorted files line by line";
 static LONG_HELP: &str = "";
 const USAGE: &str = "{} [OPTION]... FILE1 FILE2";
 

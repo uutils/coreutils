@@ -25,7 +25,7 @@ use uucore::display::Quotable;
 use uucore::error::{UClapError, UResult, USimpleError, UUsageError};
 use uucore::{format_usage, show_warning};
 
-const ABOUT: &str = "set each NAME to VALUE in the environment and run COMMAND";
+const ABOUT: &str = "Set each NAME to VALUE in the environment and run COMMAND";
 const USAGE: &str = "{} [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
 const AFTER_HELP: &str = "\
 A mere - implies -i. If no COMMAND, print the resulting environment.
