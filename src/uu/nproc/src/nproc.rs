@@ -135,7 +135,7 @@ fn num_cpus_all() -> usize {
     }
 }
 
-// Other platforms (e.g., windows), thread::available_parallelism()?.get() directly.
+// Other platforms (e.g., windows), available_parallelism() directly.
 #[cfg(not(any(
     target_os = "linux",
     target_vendor = "apple",
