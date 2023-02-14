@@ -147,10 +147,10 @@ fn num_cpus_all() -> usize {
 }
 
 // In some cases, thread::available_parallelism() may return an Err
-// In this case, we will return 1 (like GNU) 
+// In this case, we will return 1 (like GNU)
 fn available_parallelism() -> usize {
     match thread::available_parallelism() {
         Ok(n) => n.get(),
-        Err(_) => 1
+        Err(_) => 1,
     }
 }
