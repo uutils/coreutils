@@ -174,17 +174,12 @@ fn test_verbose_nested_failure() {
 #[cfg(unix)]
 #[test]
 fn test_rmdir_ignore_nonempty_no_permissions() {
-    use std::fs;
-
     let (at, mut ucmd) = at_and_ucmd!();
 
     // We make the *parent* dir read-only to prevent deleting the dir in it.
     at.mkdir_all("dir/ect/ory");
     at.touch("dir/ect/ory/file");
-    let dir_ect = at.plus("dir/ect");
-    let mut perms = fs::metadata(&dir_ect).unwrap().permissions();
-    perms.set_readonly(true);
-    fs::set_permissions(&dir_ect, perms.clone()).unwrap();
+    at.set_mode("dir/ect", 0o555);
 
     // rmdir should now get a permissions error that it interprets as
     // a non-empty error.
@@ -196,8 +191,7 @@ fn test_rmdir_ignore_nonempty_no_permissions() {
     assert!(at.dir_exists("dir/ect/ory"));
 
     // Politely restore permissions for cleanup
-    perms.set_readonly(false);
-    fs::set_permissions(&dir_ect, perms).unwrap();
+    at.set_mode("dir/ect", 0o755);
 }
 
 #[test]
