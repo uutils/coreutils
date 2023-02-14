@@ -466,6 +466,8 @@ fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
                 uucore::error::set_exit_code(1);
                 continue;
             }
+
+            chown_optional_user_group(path, b)?;
         }
         // If the exit code was set, or show! has been called at least once
         // (which sets the exit code as well), function execution will end after
@@ -626,6 +628,62 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
     Ok(())
 }
 
+/// Handle incomplete user/group parings for chown.
+///
+/// Returns a Result type with the Err variant containing the error message.
+///
+/// # Parameters
+///
+/// _path_ must exist.
+///
+/// # Errors
+///
+/// If the owner or group are invalid or copy system call fails, we print a verbose error and
+/// return an empty error value.
+///
+fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
+    let owner = if !b.owner.is_empty() {
+        match usr2uid(&b.owner) {
+            Ok(u) => Some(u),
+            _ => return Err(InstallError::NoSuchUser(b.owner.clone()).into()),
+        }
+    } else {
+        None
+    };
+
+    let group = if !b.group.is_empty() {
+        match grp2gid(&b.group) {
+            Ok(g) => Some(g),
+            _ => return Err(InstallError::NoSuchGroup(b.group.clone()).into()),
+        }
+    } else {
+        None
+    };
+
+    let meta = match fs::metadata(path) {
+        Ok(meta) => meta,
+        Err(e) => return Err(InstallError::MetadataFailed(e).into()),
+    };
+
+    let verbosity = Verbosity {
+        groups_only: owner.is_none(),
+        level: VerbosityLevel::Normal,
+    };
+
+    if owner.is_some() || group.is_some() {
+        match wrap_chown(path, &meta, owner, group, false, verbosity) {
+            Ok(n) => {
+                if !n.is_empty() {
+                    show_error!("{}", n);
+                }
+            }
+            Err(e) => show_error!("{}", e),
+        }
+    }
+
+    Ok(())
+}
+
 /// Copy one file to a new location, changing metadata.
 ///
 /// Returns a Result type with the Err variant containing the error message.
@@ -708,66 +766,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
         return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
     }
 
-    if !b.owner.is_empty() {
-        let meta = match fs::metadata(to) {
-            Ok(meta) => meta,
-            Err(e) => return Err(InstallError::MetadataFailed(e).into()),
-        };
-
-        let owner_id = match usr2uid(&b.owner) {
-            Ok(g) => g,
-            _ => return Err(InstallError::NoSuchUser(b.owner.clone()).into()),
-        };
-        let gid = meta.gid();
-        match wrap_chown(
-            to,
-            &meta,
-            Some(owner_id),
-            Some(gid),
-            false,
-            Verbosity {
-                groups_only: false,
-                level: VerbosityLevel::Normal,
-            },
-        ) {
-            Ok(n) => {
-                if !n.is_empty() {
-                    show_error!("{}", n);
-                }
-            }
-            Err(e) => show_error!("{}", e),
-        }
-    }
-
-    if !b.group.is_empty() {
-        let meta = match fs::metadata(to) {
-            Ok(meta) => meta,
-            Err(e) => return Err(InstallError::MetadataFailed(e).into()),
-        };
-
-        let group_id = match grp2gid(&b.group) {
-            Ok(g) => g,
-            _ => return Err(InstallError::NoSuchGroup(b.group.clone()).into()),
-        };
-        match wrap_chown(
-            to,
-            &meta,
-            Some(group_id),
-            None,
-            false,
-            Verbosity {
-                groups_only: true,
-                level: VerbosityLevel::Normal,
-            },
-        ) {
-            Ok(n) => {
-                if !n.is_empty() {
-                    show_error!("{}", n);
-                }
-            }
-            Err(e) => show_error!("{}", e),
-        }
-    }
+    chown_optional_user_group(to, b)?;
 
     if b.preserve_timestamps {
         let meta = match fs::metadata(from) {
