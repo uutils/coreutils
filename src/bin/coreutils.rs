@@ -41,8 +41,8 @@ fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
     }
 }
 
-fn name(binary_path: &Path) -> &str {
-    binary_path.file_stem().unwrap().to_str().unwrap()
+fn name(binary_path: &Path) -> Option<&str> {
+    binary_path.file_stem()?.to_str()
 }
 
 fn main() {
@@ -52,7 +52,10 @@ fn main() {
     let mut args = uucore::args_os();
 
     let binary = binary_path(&mut args);
-    let binary_as_util = name(&binary);
+    let binary_as_util = name(&binary).unwrap_or_else(|| {
+        usage(&utils, "<unknown binary name>");
+        process::exit(0);
+    });
 
     // binary name equals util name?
     if let Some(&(uumain, _)) = utils.get(binary_as_util) {
