@@ -2807,7 +2807,6 @@ version = "0.0.17"
 dependencies = [
  "clap",
  "libc",
- "num_cpus",
  "uucore",
 ]
 
