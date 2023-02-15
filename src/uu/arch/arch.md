@@ -1,4 +1,3 @@
-<!-- spell-checker:ignore N'th M'th -->
 # arch
 
 ## Usage
@@ -11,7 +10,7 @@ arch
 Display machine architecture
 ```
 
-## Summary
+## After Help
 ```
 Determine architecture name for current machine.
 ```
