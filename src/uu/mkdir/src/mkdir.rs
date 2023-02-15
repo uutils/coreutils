@@ -22,18 +22,16 @@ use uucore::{format_usage, show, show_if_err};
 
 static DEFAULT_PERM: u32 = 0o755;
 
-static ABOUT: &str = "Create the given DIRECTORY(ies) if they do not exist";
+const ABOUT: &str = "Create the given DIRECTORY(ies) if they do not exist";
 const USAGE: &str = "{} [OPTION]... [USER]";
+const LONG_USAGE: &str =
+    "Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.";
 
 mod options {
     pub const MODE: &str = "mode";
     pub const PARENTS: &str = "parents";
     pub const VERBOSE: &str = "verbose";
     pub const DIRS: &str = "dirs";
-}
-
-fn get_long_usage() -> &'static str {
-    "Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'."
 }
 
 #[cfg(windows)]
@@ -92,9 +90,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
-    let matches = uu_app()
-        .after_help(get_long_usage())
-        .try_get_matches_from(args)?;
+    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
 
     let dirs = matches
         .get_many::<OsString>(options::DIRS)

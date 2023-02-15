@@ -73,8 +73,25 @@ impl TruncateMode {
     }
 }
 
-static ABOUT: &str = "Shrink or extend the size of each file to the specified size.";
+const ABOUT: &str = "Shrink or extend the size of each file to the specified size.";
 const USAGE: &str = "{} [OPTION]... [FILE]...";
+const LONG_USAGE: &str = "\
+SIZE is an integer with an optional prefix and optional unit.
+The available units (K, M, G, T, P, E, Z, and Y) use the following format:
+    'KB' =>           1000 (kilobytes)
+    'K'  =>           1024 (kibibytes)
+    'MB' =>      1000*1000 (megabytes)
+    'M'  =>      1024*1024 (mebibytes)
+    'GB' => 1000*1000*1000 (gigabytes)
+    'G'  => 1024*1024*1024 (gibibytes)
+SIZE may also be prefixed by one of the following to adjust the size of each
+file based on its current size:
+    '+'  => extend by
+    '-'  => reduce by
+    '<'  => at most
+    '>'  => at least
+    '/'  => round down to multiple of
+    '%'  => round up to multiple of";
 
 pub mod options {
     pub static IO_BLOCKS: &str = "io-blocks";
@@ -84,32 +101,10 @@ pub mod options {
     pub static ARG_FILES: &str = "files";
 }
 
-fn get_long_usage() -> String {
-    String::from(
-        "
-    SIZE is an integer with an optional prefix and optional unit.
-    The available units (K, M, G, T, P, E, Z, and Y) use the following format:
-        'KB' =>           1000 (kilobytes)
-        'K'  =>           1024 (kibibytes)
-        'MB' =>      1000*1000 (megabytes)
-        'M'  =>      1024*1024 (mebibytes)
-        'GB' => 1000*1000*1000 (gigabytes)
-        'G'  => 1024*1024*1024 (gibibytes)
-    SIZE may also be prefixed by one of the following to adjust the size of each
-    file based on its current size:
-        '+'  => extend by
-        '-'  => reduce by
-        '<'  => at most
-        '>'  => at least
-        '/'  => round down to multiple of
-        '%'  => round up to multiple of",
-    )
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
-        .after_help(get_long_usage())
+        .after_help(LONG_USAGE)
         .try_get_matches_from(args)
         .map_err(|e| {
             e.print().expect("Error writing clap::Error");
