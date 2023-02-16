@@ -598,7 +598,7 @@ impl CmdResult {
 
     /// asserts that
     /// 1.  the command resulted in stderr stream output that equals the
-    ///     passed in value, when both are trimmed of trailing whitespace
+    ///     passed in value
     /// 2.  the command resulted in empty (zero-length) stdout stream output
     #[track_caller]
     pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> &Self {
@@ -623,7 +623,7 @@ impl CmdResult {
 
     /// asserts that
     /// 1.  the command resulted in stderr stream output that equals the
-    ///     the following format when both are trimmed of trailing whitespace
+    ///     the following format
     ///     `"{util_name}: {msg}\nTry '{bin_path} {util_name} --help' for more information."`
     ///     This the expected format when a `UUsageError` is returned or when `show_error!` is called
     ///     `msg` should be the same as the one provided to `UUsageError::new` or `show_error!`
@@ -681,7 +681,7 @@ impl CmdResult {
     #[track_caller]
     pub fn stdout_matches(&self, regex: &regex::Regex) -> &Self {
         assert!(
-            regex.is_match(self.stdout_str().trim()),
+            regex.is_match(self.stdout_str()),
             "Stdout does not match regex:\n{}",
             self.stdout_str()
         );
@@ -691,7 +691,7 @@ impl CmdResult {
     #[track_caller]
     pub fn stdout_does_not_match(&self, regex: &regex::Regex) -> &Self {
         assert!(
-            !regex.is_match(self.stdout_str().trim()),
+            !regex.is_match(self.stdout_str()),
             "Stdout matches regex:\n{}",
             self.stdout_str()
         );
