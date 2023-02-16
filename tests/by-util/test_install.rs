@@ -1370,6 +1370,100 @@ fn test_install_dir_req_verbose() {
 }
 
 #[test]
+fn test_install_chown_file_invalid() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_1 = "source_file1";
+    at.touch(file_1);
+
+    scene
+        .ucmd()
+        .arg("-o")
+        .arg("test_invalid_user")
+        .arg(file_1)
+        .arg("target_file1")
+        .fails()
+        .stderr_contains("install: invalid user: 'test_invalid_user'");
+
+    scene
+        .ucmd()
+        .arg("-g")
+        .arg("test_invalid_group")
+        .arg(file_1)
+        .arg("target_file1")
+        .fails()
+        .stderr_contains("install: invalid group: 'test_invalid_group'");
+
+    scene
+        .ucmd()
+        .arg("-o")
+        .arg("test_invalid_user")
+        .arg("-g")
+        .arg("test_invalid_group")
+        .arg(file_1)
+        .arg("target_file1")
+        .fails()
+        .stderr_contains("install: invalid user: 'test_invalid_user'");
+
+    scene
+        .ucmd()
+        .arg("-g")
+        .arg("test_invalid_group")
+        .arg("-o")
+        .arg("test_invalid_user")
+        .arg(file_1)
+        .arg("target_file1")
+        .fails()
+        .stderr_contains("install: invalid user: 'test_invalid_user'");
+}
+
+#[test]
+fn test_install_chown_directory_invalid() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("-o")
+        .arg("test_invalid_user")
+        .arg("-d")
+        .arg("dir1/dir2")
+        .fails()
+        .stderr_contains("install: invalid user: 'test_invalid_user'");
+
+    scene
+        .ucmd()
+        .arg("-g")
+        .arg("test_invalid_group")
+        .arg("-d")
+        .arg("dir1/dir2")
+        .fails()
+        .stderr_contains("install: invalid group: 'test_invalid_group'");
+
+    scene
+        .ucmd()
+        .arg("-o")
+        .arg("test_invalid_user")
+        .arg("-g")
+        .arg("test_invalid_group")
+        .arg("-d")
+        .arg("dir1/dir2")
+        .fails()
+        .stderr_contains("install: invalid user: 'test_invalid_user'");
+
+    scene
+        .ucmd()
+        .arg("-g")
+        .arg("test_invalid_group")
+        .arg("-o")
+        .arg("test_invalid_user")
+        .arg("-d")
+        .arg("dir1/dir2")
+        .fails()
+        .stderr_contains("install: invalid user: 'test_invalid_user'");
+}
+
+#[test]
 fn test_install_compare_option() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

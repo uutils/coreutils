@@ -41,8 +41,8 @@ pub struct Behavior {
     specified_mode: Option<u32>,
     backup_mode: BackupMode,
     suffix: String,
-    owner: String,
-    group: String,
+    owner_id: Option<u32>,
+    group_id: Option<u32>,
     verbose: bool,
     preserve_timestamps: bool,
     compare: bool,
@@ -64,8 +64,8 @@ enum InstallError {
     InstallFailed(PathBuf, PathBuf, std::io::Error),
     StripProgramFailed(String),
     MetadataFailed(std::io::Error),
-    NoSuchUser(String),
-    NoSuchGroup(String),
+    InvalidUser(String),
+    InvalidGroup(String),
     OmittingDirectory(PathBuf),
 }
 
@@ -117,8 +117,8 @@ impl Display for InstallError {
             ),
             Self::StripProgramFailed(msg) => write!(f, "strip program failed: {msg}"),
             Self::MetadataFailed(e) => Display::fmt(&uio_error!(e, ""), f),
-            Self::NoSuchUser(user) => write!(f, "no such user: {}", user.maybe_quote()),
-            Self::NoSuchGroup(group) => write!(f, "no such group: {}", group.maybe_quote()),
+            Self::InvalidUser(user) => write!(f, "invalid user: {}", user.quote()),
+            Self::InvalidGroup(group) => write!(f, "invalid group: {}", group.quote()),
             Self::OmittingDirectory(dir) => write!(f, "omitting directory {}", dir.quote()),
         }
     }
@@ -391,21 +391,44 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         show_error!("Options --compare and --strip are mutually exclusive");
         return Err(1.into());
     }
+
+    let owner = matches
+            .get_one::<String>(OPT_OWNER)
+            .map(|s| s.as_str())
+            .unwrap_or("")
+            .to_string();
+
+    let owner_id = if !owner.is_empty() {
+        match usr2uid(&owner) {
+            Ok(u) => Some(u),
+            _ => return Err(InstallError::InvalidUser(owner.clone()).into()),
+        }
+    } else {
+        None
+    };
+
+    let group = matches
+            .get_one::<String>(OPT_GROUP)
+            .map(|s| s.as_str())
+            .unwrap_or("")
+            .to_string();
+
+    let group_id = if !group.is_empty() {
+        match grp2gid(&group) {
+            Ok(g) => Some(g),
+            _ => return Err(InstallError::InvalidGroup(group.clone()).into()),
+        }
+    } else {
+        None
+    };
+
     Ok(Behavior {
         main_function,
         specified_mode,
         backup_mode,
         suffix: backup_control::determine_backup_suffix(matches),
-        owner: matches
-            .get_one::<String>(OPT_OWNER)
-            .map(|s| s.as_str())
-            .unwrap_or("")
-            .to_string(),
-        group: matches
-            .get_one::<String>(OPT_GROUP)
-            .map(|s| s.as_str())
-            .unwrap_or("")
-            .to_string(),
+        owner_id,
+        group_id,
         verbose: matches.get_flag(OPT_VERBOSE),
         preserve_timestamps,
         compare,
@@ -467,7 +490,11 @@ fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
                 continue;
             }
 
-            chown_optional_user_group(path, b)?;
+            if chown_optional_user_group(path, b).is_err() {
+                // Error messages are printed by the chown_optional_user_group function!
+                uucore::error::set_exit_code(1);
+                continue;
+            }
         }
         // If the exit code was set, or show! has been called at least once
         // (which sets the exit code as well), function execution will end after
@@ -642,36 +669,18 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
 /// return an empty error value.
 ///
 fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
-    let owner = if !b.owner.is_empty() {
-        match usr2uid(&b.owner) {
-            Ok(u) => Some(u),
-            _ => return Err(InstallError::NoSuchUser(b.owner.clone()).into()),
-        }
-    } else {
-        None
-    };
-
-    let group = if !b.group.is_empty() {
-        match grp2gid(&b.group) {
-            Ok(g) => Some(g),
-            _ => return Err(InstallError::NoSuchGroup(b.group.clone()).into()),
-        }
-    } else {
-        None
-    };
-
     let meta = match fs::metadata(path) {
         Ok(meta) => meta,
         Err(e) => return Err(InstallError::MetadataFailed(e).into()),
     };
 
     let verbosity = Verbosity {
-        groups_only: owner.is_none(),
+        groups_only: b.owner_id.is_none(),
         level: VerbosityLevel::Normal,
     };
 
-    if owner.is_some() || group.is_some() {
-        match wrap_chown(path, &meta, owner, group, false, verbosity) {
+    if b.owner_id.is_some() || b.group_id.is_some() {
+        match wrap_chown(path, &meta, b.owner_id, b.group_id, false, verbosity) {
             Ok(n) => {
                 if !n.is_empty() {
                     show_error!("{}", n);
@@ -846,19 +855,11 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
 
     // TODO: if -P (#1809) and from/to contexts mismatch, return true.
 
-    if !b.owner.is_empty() {
-        let owner_id = match usr2uid(&b.owner) {
-            Ok(id) => id,
-            _ => return Err(InstallError::NoSuchUser(b.owner.clone()).into()),
-        };
+    if let Some(owner_id) = b.owner_id {
         if owner_id != to_meta.uid() {
             return Ok(true);
         }
-    } else if !b.group.is_empty() {
-        let group_id = match grp2gid(&b.group) {
-            Ok(id) => id,
-            _ => return Err(InstallError::NoSuchGroup(b.group.clone()).into()),
-        };
+    } else if let Some(group_id) = b.group_id {
         if group_id != to_meta.gid() {
             return Ok(true);
         }
