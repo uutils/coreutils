@@ -3102,7 +3102,6 @@ dependencies = [
  "fundu",
  "libc",
  "memchr",
- "nix",
  "notify",
  "same-file",
  "uucore",
