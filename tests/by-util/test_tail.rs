@@ -47,6 +47,13 @@ static FOLLOW_NAME_EXP: &str = "follow_name.expected";
 #[cfg(not(windows))]
 const DEFAULT_SLEEP_INTERVAL_MILLIS: u64 = 1000;
 
+// The binary integer "10000000" is *not* a valid UTF-8 encoding
+// of a character: https://en.wikipedia.org/wiki/UTF-8#Encoding
+#[cfg(unix)]
+const INVALID_UTF8: u8 = 0x80;
+#[cfg(windows)]
+const INVALID_UTF16: u16 = 0xD800;
+
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
@@ -469,16 +476,13 @@ fn test_follow_non_utf8_bytes() {
 
     // Now append some bytes that are not valid UTF-8.
     //
-    // The binary integer "10000000" is *not* a valid UTF-8 encoding
-    // of a character: https://en.wikipedia.org/wiki/UTF-8#Encoding
-    //
     // We also write the newline character because our implementation
     // of `tail` is attempting to read a line of input, so the
     // presence of a newline character will force the `follow()`
     // function to conclude reading input bytes and start writing them
     // to output. The newline character is not fundamental to this
     // test, it is just a requirement of the current implementation.
-    let expected = [0b10000000, b'\n'];
+    let expected = [INVALID_UTF8, b'\n'];
     at.append_bytes(FOOBAR_TXT, &expected);
 
     child
@@ -4709,5 +4713,101 @@ fn test_gnu_args_err() {
         .fails()
         .no_stdout()
         .stderr_is("tail: option used in invalid context -- 5\n")
+        .code_is(1);
+    scene
+        .ucmd()
+        .arg("-9999999999999999999b")
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: invalid number: '-9999999999999999999b'\n")
+        .code_is(1);
+    scene
+        .ucmd()
+        .arg("-999999999999999999999b")
+        .fails()
+        .no_stdout()
+        .stderr_is(
+            "tail: invalid number: '-999999999999999999999b': Numerical result out of range\n",
+        )
+        .code_is(1);
+}
+
+#[test]
+fn test_gnu_args_f() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let mut p = scene
+        .ucmd()
+        .set_stdin(Stdio::piped())
+        .arg("+f")
+        .run_no_wait();
+    p.make_assertion_with_delay(500).is_alive();
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .no_stderr()
+        .no_stdout();
+
+    let source = "file";
+    at.touch(source);
+    let mut p = scene.ucmd().args(&["+f", source]).run_no_wait();
+    p.make_assertion_with_delay(500).is_alive();
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .no_stderr()
+        .no_stdout();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_obsolete_encoding_unix() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let invalid_utf8_arg = OsStr::from_bytes(&[b'-', INVALID_UTF8, b'b']);
+    let valid_utf8_arg = OsStr::from_bytes(&[b'-', b'b']);
+
+    scene
+        .ucmd()
+        .arg(invalid_utf8_arg)
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: bad argument encoding: '-�b'\n")
+        .code_is(1);
+    scene
+        .ucmd()
+        .args(&[valid_utf8_arg, invalid_utf8_arg])
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: bad argument encoding\n")
+        .code_is(1);
+}
+
+#[test]
+#[cfg(windows)]
+fn test_obsolete_encoding_windows() {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+
+    let scene = TestScenario::new(util_name!());
+    let invalid_utf16_arg = OsString::from_wide(&['-' as u16, INVALID_UTF16, 'b' as u16]);
+    let valid_utf16_arg = OsString::from("-b");
+
+    scene
+        .ucmd()
+        .arg(&invalid_utf16_arg)
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: bad argument encoding: '-�b'\n")
+        .code_is(1);
+    scene
+        .ucmd()
+        .args(&[&valid_utf16_arg, &invalid_utf16_arg])
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: bad argument encoding\n")
         .code_is(1);
 }

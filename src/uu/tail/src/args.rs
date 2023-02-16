@@ -13,7 +13,6 @@ use fundu::DurationParser;
 use is_terminal::IsTerminal;
 use same_file::Handle;
 use std::collections::VecDeque;
-use std::ffi::OsString;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size, ParseSizeError};
@@ -59,6 +58,19 @@ pub enum FilterMode {
 }
 
 impl FilterMode {
+    fn from_obsolete_args(args: &parse::ObsoleteArgs) -> Self {
+        let signum = if args.plus {
+            Signum::Positive(args.num)
+        } else {
+            Signum::Negative(args.num)
+        };
+        if args.lines {
+            Self::Lines(signum, b'\n')
+        } else {
+            Self::Bytes(signum)
+        }
+    }
+
     fn from(matches: &ArgMatches) -> UResult<Self> {
         let zero_term = matches.get_flag(options::ZERO_TERM);
         let mode = if let Some(arg) = matches.get_one::<String>(options::BYTES) {
@@ -132,6 +144,29 @@ pub struct Settings {
 }
 
 impl Settings {
+    pub fn from_obsolete_args(args: &parse::ObsoleteArgs, name: Option<&str>) -> Self {
+        let mut settings: Self = Self {
+            sleep_sec: Duration::from_secs_f32(1.0),
+            max_unchanged_stats: 5,
+            ..Default::default()
+        };
+        if args.follow {
+            settings.follow = if name.is_some() {
+                Some(FollowMode::Name)
+            } else {
+                Some(FollowMode::Descriptor)
+            };
+        }
+        settings.mode = FilterMode::from_obsolete_args(args);
+        let input = if let Some(name) = name {
+            Input::from(name.to_string())
+        } else {
+            Input::default()
+        };
+        settings.inputs.push_back(input);
+        settings
+    }
+
     pub fn from(matches: &clap::ArgMatches) -> UResult<Self> {
         let mut settings: Self = Self {
             sleep_sec: Duration::from_secs_f32(1.0),
@@ -308,37 +343,24 @@ impl Settings {
     }
 }
 
-pub fn arg_iterate<'a>(
-    mut args: impl uucore::Args + 'a,
-) -> UResult<Box<dyn Iterator<Item = OsString> + 'a>> {
-    // argv[0] is always present
-    let first = args.next().unwrap();
-    if let Some(second) = args.next() {
-        if let Some(s) = second.to_str() {
-            match parse::parse_obsolete(s) {
-                Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
-                Some(Err(e)) => Err(USimpleError::new(
-                    1,
-                    match e {
-                        parse::ParseError::Overflow => format!(
-                            "invalid argument: {} Value too large for defined datatype",
-                            s.quote()
-                        ),
-                        parse::ParseError::Context => {
-                            format!(
-                                "option used in invalid context -- {}",
-                                s.chars().nth(1).unwrap_or_default()
-                            )
-                        }
-                    },
-                )),
-                None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
-            }
-        } else {
-            Err(UUsageError::new(1, "bad argument encoding".to_owned()))
-        }
-    } else {
-        Ok(Box::new(vec![first].into_iter()))
+pub fn parse_obsolete(args: &str) -> UResult<Option<parse::ObsoleteArgs>> {
+    match parse::parse_obsolete(args) {
+        Some(Ok(args)) => Ok(Some(args)),
+        None => Ok(None),
+        Some(Err(e)) => Err(USimpleError::new(
+            1,
+            match e {
+                parse::ParseError::OutOfRange => format!(
+                    "invalid number: {}: Numerical result out of range",
+                    args.quote()
+                ),
+                parse::ParseError::Overflow => format!("invalid number: {}", args.quote()),
+                parse::ParseError::Context => format!(
+                    "option used in invalid context -- {}",
+                    args.chars().nth(1).unwrap_or_default()
+                ),
+            },
+        )),
     }
 }
 
@@ -366,9 +388,29 @@ fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
     })
 }
 
-pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
-    let matches = uu_app().try_get_matches_from(arg_iterate(args)?)?;
-    Settings::from(&matches)
+pub fn parse_args(mut args: impl uucore::Args) -> UResult<Settings> {
+    let first = args.next().unwrap();
+    let second = match args.next() {
+        Some(second) => second,
+        None => return Settings::from(&uu_app().try_get_matches_from(vec![first])?),
+    };
+    let second_str = match second.to_str() {
+        Some(second_str) => second_str,
+        None => {
+            let second_string = second.to_string_lossy();
+            return Err(USimpleError::new(
+                1,
+                format!("bad argument encoding: '{second_string}'"),
+            ));
+        }
+    };
+    match parse_obsolete(second_str)? {
+        Some(obsolete_args) => Ok(Settings::from_obsolete_args(&obsolete_args, args.next())),
+        None => {
+            let args = vec![first, second].into_iter().chain(args);
+            Settings::from(&uu_app().try_get_matches_from(args)?)
+        }
+    }
 }
 
 pub fn uu_app() -> Command {
@@ -497,6 +539,8 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
+    use crate::parse::ObsoleteArgs;
+
     use super::*;
 
     #[test]
@@ -527,5 +571,15 @@ mod tests {
         let result = parse_num("1");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), Signum::Negative(1));
+    }
+
+    #[test]
+    fn test_parse_obsolete_settings_f() {
+        let args = ObsoleteArgs { follow: true, ..Default::default() };
+        let result = Settings::from_obsolete_args(&args, None);
+        assert_eq!(result.follow, Some(FollowMode::Descriptor));
+
+        let result = Settings::from_obsolete_args(&args, Some("test".into()));
+        assert_eq!(result.follow, Some(FollowMode::Name));
     }
 }
