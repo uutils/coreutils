@@ -53,6 +53,18 @@ fn render_markdown(s: &str) -> String {
     s.replace('`', "")
 }
 
+/// Get the about text from the help file.
+///
+/// The about text is assumed to be the text between the first markdown
+/// code block and the next header, if any. It may span multiple lines.
+#[proc_macro]
+pub fn help_about(input: TokenStream) -> TokenStream {
+    let input: Vec<TokenTree> = input.into_iter().collect();
+    let filename = get_argument(&input, 0, "filename");
+    let text: String = parse_about(&read_help(&filename));
+    TokenTree::Literal(Literal::string(&text)).into()
+}
+
 /// Get the usage from the help file.
 ///
 /// The usage is assumed to be surrounded by markdown code fences. It may span
@@ -195,9 +207,25 @@ fn parse_usage(content: &str) -> String {
         .to_string()
 }
 
+/// Parses the text between the first markdown code block and the next header, if any,
+/// into an about string.
+fn parse_about(content: &str) -> String {
+    content
+        .lines()
+        .skip_while(|l| !l.starts_with(MARKDOWN_CODE_FENCES))
+        .skip(1)
+        .skip_while(|l| !l.starts_with(MARKDOWN_CODE_FENCES))
+        .skip(1)
+        .take_while(|l| !l.starts_with('#'))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{parse_help_section, parse_usage};
+    use super::{parse_about, parse_help_section, parse_usage};
 
     #[test]
     fn section_parsing() {
@@ -268,5 +296,39 @@ mod tests {
             This is some section\n";
 
         assert_eq!(parse_usage(input), "{} -a\n{} -b\n{} -c");
+    }
+
+    #[test]
+    fn about_parsing() {
+        let input = "\
+            # ls\n\
+            ```\n\
+            ls -l\n\
+            ```\n\
+            \n\
+            This is the about section\n\
+            \n\
+            ## some section\n\
+            This is some section\n";
+
+        assert_eq!(parse_about(input), "This is the about section");
+    }
+
+    #[test]
+    fn multi_line_about_parsing() {
+        let input = "\
+            # ls\n\
+            ```\n\
+            ls -l\n\
+            ```\n\
+            \n\
+            about a\n\
+            \n\
+            about b\n\
+            \n\
+            ## some section\n\
+            This is some section\n";
+
+        assert_eq!(parse_about(input), "about a\n\nabout b");
     }
 }
