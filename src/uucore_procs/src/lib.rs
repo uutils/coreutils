@@ -61,7 +61,7 @@ fn render_markdown(s: &str) -> String {
 pub fn help_usage(input: TokenStream) -> TokenStream {
     let input: Vec<TokenTree> = input.into_iter().collect();
     let filename = get_argument(&input, 0, "filename");
-    let text: String = parse_usage(&parse_help("usage", &filename));
+    let text: String = parse_usage(&parse_help_section("usage", &read_help(&filename)));
     TokenTree::Literal(Literal::string(&text)).into()
 }
 
@@ -94,7 +94,7 @@ pub fn help_section(input: TokenStream) -> TokenStream {
     let input: Vec<TokenTree> = input.into_iter().collect();
     let section = get_argument(&input, 0, "section");
     let filename = get_argument(&input, 1, "filename");
-    let text = parse_help(&section, &filename);
+    let text = parse_help_section(&section, &read_help(&filename));
     let rendered = render_markdown(&text);
     TokenTree::Literal(Literal::string(&rendered)).into()
 }
@@ -121,13 +121,11 @@ fn get_argument(input: &[TokenTree], index: usize, name: &str) -> String {
         .to_string()
 }
 
-/// Read the help file and extract a section
-fn parse_help(section: &str, filename: &str) -> String {
-    let section = section.to_lowercase();
-    let section = section.trim_matches('"');
+/// Read the help file
+fn read_help(filename: &str) -> String {
     let mut content = String::new();
-    let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
+    let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     path.push(filename);
 
     File::open(path)
@@ -135,7 +133,7 @@ fn parse_help(section: &str, filename: &str) -> String {
         .read_to_string(&mut content)
         .unwrap();
 
-    parse_help_section(section, &content)
+    content
 }
 
 /// Get a single section from content
@@ -146,6 +144,8 @@ fn parse_help_section(section: &str, content: &str) -> String {
         line.strip_prefix("##")
             .map_or(false, |l| l.trim().to_lowercase() == section)
     }
+
+    let section = &section.to_lowercase();
 
     // We cannot distinguish between an empty or non-existing section below,
     // so we do a quick test to check whether the section exists to provide
@@ -207,6 +207,10 @@ mod tests {
 
         assert_eq!(
             parse_help_section("some section", input),
+            "This is some section"
+        );
+        assert_eq!(
+            parse_help_section("SOME SECTION", input),
             "This is some section"
         );
         assert_eq!(
