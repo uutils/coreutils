@@ -36,7 +36,7 @@ use uucore::error::FromIo;
 use uucore::error::{UError, UResult};
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size, ParseSizeError};
-use uucore::{crash, format_usage, show, show_error, show_warning};
+use uucore::{crash, format_usage, help_section, help_usage, show, show_error, show_warning};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
@@ -73,25 +73,9 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-const ABOUT: &str = "Estimate file space usage";
-const LONG_HELP: &str = "
-Display values are in units of the first available SIZE from --block-size,
-and the DU_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environment variables.
-Otherwise, units default to 1024 bytes (or 512 if POSIXLY_CORRECT is set).
-
-SIZE is an integer and optional unit (example: 10M is 10*1024*1024).
-Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB,... (powers
-of 1000).
-
-PATTERN allows some advanced exclusions. For example, the following syntaxes
-are supported:
-? will match only one character
-* will match zero or more characters
-{a,b} will match a or b
-";
-const USAGE: &str = "\
-    {} [OPTION]... [FILE]...
-    {} [OPTION]... --files0-from=F";
+const ABOUT: &str = help_section!("about", "du.md");
+const LONG_HELP: &str = help_section!("long help", "du.md");
+const USAGE: &str = help_usage!("du.md");
 
 // TODO: Support Z & Y (currently limited by size of u64)
 const UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2), ('K', 1)];
