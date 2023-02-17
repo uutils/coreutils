@@ -7,6 +7,8 @@ use std::{fs::File, io::Read, path::PathBuf};
 use proc_macro::{Literal, TokenStream, TokenTree};
 use quote::quote;
 
+const MARKDOWN_CODE_FENCES: &str = "```";
+
 //## rust proc-macro background info
 //* ref: <https://dev.to/naufraghi/procedural-macro-in-rust-101-k3f> @@ <http://archive.is/Vbr5e>
 //* ref: [path construction from LitStr](https://oschwald.github.io/maxminddb-rust/syn/struct.LitStr.html) @@ <http://archive.is/8YDua>
@@ -51,7 +53,7 @@ fn render_markdown(s: &str) -> String {
     s.replace('`', "")
 }
 
-/// Get the usage from the "Usage" section in the help file.
+/// Get the usage from the help file.
 ///
 /// The usage is assumed to be surrounded by markdown code fences. It may span
 /// multiple lines. The first word of each line is assumed to be the name of
@@ -61,7 +63,7 @@ fn render_markdown(s: &str) -> String {
 pub fn help_usage(input: TokenStream) -> TokenStream {
     let input: Vec<TokenTree> = input.into_iter().collect();
     let filename = get_argument(&input, 0, "filename");
-    let text: String = parse_usage(&parse_help_section("usage", &read_help(&filename)));
+    let text: String = parse_usage(&read_help(&filename));
     TokenTree::Literal(Literal::string(&text)).into()
 }
 
@@ -167,17 +169,17 @@ fn parse_help_section(section: &str, content: &str) -> String {
         .to_string()
 }
 
-/// Parses a markdown code block into a usage string
+/// Parses the first markdown code block into a usage string
 ///
 /// The code fences are removed and the name of the util is replaced
 /// with `{}` so that it can be replaced with the appropriate name
 /// at runtime.
 fn parse_usage(content: &str) -> String {
     content
-        .strip_suffix("```")
-        .unwrap()
         .lines()
-        .skip(1) // Skip the "```" of markdown syntax
+        .skip_while(|l| !l.starts_with(MARKDOWN_CODE_FENCES))
+        .skip(1)
+        .take_while(|l| !l.starts_with(MARKDOWN_CODE_FENCES))
         .map(|l| {
             // Replace the util name (assumed to be the first word) with "{}"
             // to be replaced with the runtime value later.
@@ -187,7 +189,10 @@ fn parse_usage(content: &str) -> String {
                 "{}\n".to_string()
             }
         })
-        .collect()
+        .collect::<Vec<_>>()
+        .join("")
+        .trim()
+        .to_string()
 }
 
 #[cfg(test)]
@@ -237,7 +242,6 @@ mod tests {
     fn usage_parsing() {
         let input = "\
             # ls\n\
-            ## Usage\n\
             ```\n\
             ls -l\n\
             ```\n\
@@ -248,17 +252,21 @@ mod tests {
             This is the other section\n\
             with multiple lines\n";
 
-        assert_eq!(parse_usage(&parse_help_section("usage", input)), "{} -l",);
+        assert_eq!(parse_usage(input), "{} -l");
+    }
 
-        assert_eq!(
-            parse_usage(
-                "\
-                ```\n\
-                util [some] [options]\n\
-                ```\
-                "
-            ),
-            "{} [some] [options]"
-        );
+    #[test]
+    fn multi_line_usage_parsing() {
+        let input = "\
+            # ls\n\
+            ```\n\
+            ls -a\n\
+            ls -b\n\
+            ls -c\n\
+            ```\n\
+            ## some section\n\
+            This is some section\n";
+
+        assert_eq!(parse_usage(input), "{} -a\n{} -b\n{} -c");
     }
 }
