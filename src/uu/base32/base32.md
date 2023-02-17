@@ -1,11 +1,8 @@
 # base32
 
-## Usage
 ```
 base32 [OPTION]... [FILE]
 ```
-
-## About
 
 encode/decode data and print to standard output
 With no FILE, or when FILE is -, read standard input.
