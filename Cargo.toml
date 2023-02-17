@@ -263,7 +263,7 @@ feat_os_windows_legacy = [
 test = [ "uu_test" ]
 
 [workspace.dependencies]
-atty = "0.2"
+is-terminal = "0.4.3"
 bigdecimal = "0.3"
 binary-heap-plus = "0.5.0"
 bstr = "1.0"
@@ -476,7 +476,7 @@ time = { workspace=true, features=["local-offset"] }
 unindent = "0.1"
 uucore = { workspace=true, features=["entries", "process", "signals"] }
 walkdir = { workspace=true }
-atty = { workspace=true }
+is-terminal = { workspace=true }
 hex-literal = "0.3.1"
 rstest = "0.16.0"
 

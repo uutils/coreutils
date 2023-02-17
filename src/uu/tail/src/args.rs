@@ -7,7 +7,6 @@
 
 use crate::paths::Input;
 use crate::{parse, platform, Quotable};
-use atty::Stream;
 use clap::crate_version;
 use clap::{parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
 use fundu::DurationParser;
@@ -18,6 +17,7 @@ use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::{format_usage, show_warning};
+use is_terminal::IsTerminal;
 
 const ABOUT: &str = "\
     Print the last 10 lines of each FILE to standard output.\n\
@@ -274,7 +274,7 @@ impl Settings {
                         .map_or(false, |meta| !meta.is_file())
                 });
 
-            if !blocking_stdin && atty::is(Stream::Stdin) {
+            if !blocking_stdin && std::io::stdin().is_terminal() {
                 show_warning!("following standard input indefinitely is ineffective");
             }
         }

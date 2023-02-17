@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult};
 use uucore::{format_usage, show_error};
+use is_terminal::IsTerminal;
 
 static ABOUT: &str = "Run COMMAND ignoring hangup signals.";
 static LONG_HELP: &str = "
@@ -129,7 +130,7 @@ pub fn uu_app() -> Command {
 }
 
 fn replace_fds() -> UResult<()> {
-    if atty::is(atty::Stream::Stdin) {
+    if std::io::stdin().is_terminal() {
         let new_stdin = File::open(Path::new("/dev/null"))
             .map_err(|e| NohupError::CannotReplace("STDIN", e))?;
         if unsafe { dup2(new_stdin.as_raw_fd(), 0) } != 0 {
@@ -137,7 +138,7 @@ fn replace_fds() -> UResult<()> {
         }
     }
 
-    if atty::is(atty::Stream::Stdout) {
+    if std::io::stdout().is_terminal() {
         let new_stdout = find_stdout()?;
         let fd = new_stdout.as_raw_fd();
 
@@ -146,7 +147,7 @@ fn replace_fds() -> UResult<()> {
         }
     }
 
-    if atty::is(atty::Stream::Stderr) && unsafe { dup2(1, 2) } != 2 {
+    if std::io::stderr().is_terminal() && unsafe { dup2(1, 2) } != 2 {
         return Err(NohupError::CannotReplace("STDERR", Error::last_os_error()).into());
     }
     Ok(())

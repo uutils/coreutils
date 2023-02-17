@@ -14,6 +14,7 @@ use std::io::Write;
 use std::os::unix::io::AsRawFd;
 use uucore::error::{set_exit_code, UResult};
 use uucore::format_usage;
+use is_terminal::IsTerminal;
 
 static ABOUT: &str = "Print the file name of the terminal connected to standard input.";
 const USAGE: &str = "{} [OPTION]...";
@@ -30,7 +31,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // If silent, we don't need the name, only whether or not stdin is a tty.
     if silent {
-        return if atty::is(atty::Stream::Stdin) {
+        return if std::io::stdin().is_terminal() {
             Ok(())
         } else {
             Err(1.into())

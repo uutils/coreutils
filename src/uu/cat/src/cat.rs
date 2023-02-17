@@ -18,6 +18,7 @@ use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::fs::FileInformation;
+use is_terminal::IsTerminal;
 
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
@@ -332,7 +333,7 @@ fn cat_path(
             let stdin = io::stdin();
             let mut handle = InputHandle {
                 reader: stdin,
-                is_interactive: atty::is(atty::Stream::Stdin),
+                is_interactive: std::io::stdin().is_terminal(),
             };
             cat_handle(&mut handle, options, state)
         }
