@@ -12,6 +12,7 @@ use clap::{
     crate_version, Arg, ArgAction, Command,
 };
 use glob::{MatchOptions, Pattern};
+use is_terminal::IsTerminal;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
@@ -55,7 +56,6 @@ use uucore::{
     version_cmp::version_cmp,
 };
 use uucore::{parse_glob, show, show_error, show_warning};
-use is_terminal::IsTerminal;
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";

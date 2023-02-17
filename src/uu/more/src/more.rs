@@ -23,11 +23,11 @@ use crossterm::{
     terminal,
 };
 
+use is_terminal::IsTerminal;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use is_terminal::IsTerminal;
 
 const BELL: &str = "\x07";
 

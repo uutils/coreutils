@@ -8,6 +8,7 @@
 // spell-checker:ignore (ToDO) execvp SIGHUP cproc vprocmgr cstrs homeout
 
 use clap::{crate_version, Arg, ArgAction, Command};
+use is_terminal::IsTerminal;
 use libc::{c_char, dup2, execvp, signal};
 use libc::{SIGHUP, SIG_IGN};
 use std::env;
@@ -20,7 +21,6 @@ use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult};
 use uucore::{format_usage, show_error};
-use is_terminal::IsTerminal;
 
 static ABOUT: &str = "Run COMMAND ignoring hangup signals.";
 static LONG_HELP: &str = "

@@ -10,11 +10,11 @@
 // spell-checker:ignore (ToDO) ttyname filedesc
 
 use clap::{crate_version, Arg, ArgAction, Command};
+use is_terminal::IsTerminal;
 use std::io::Write;
 use std::os::unix::io::AsRawFd;
 use uucore::error::{set_exit_code, UResult};
 use uucore::format_usage;
-use is_terminal::IsTerminal;
 
 static ABOUT: &str = "Print the file name of the terminal connected to standard input.";
 const USAGE: &str = "{} [OPTION]...";
